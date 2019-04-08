@@ -1,0 +1,17 @@
+# Since this is just temporary
+startbootstrap-coming-soon-gh-pages
+
+# Optionally embedded repos
+localstack/
+samplerepos/
+scratch/
+
+# Dependency directories
+node_modules/
+jspm_packages/
+__pycache__/
+
+# Any production config
+production.json
+
+

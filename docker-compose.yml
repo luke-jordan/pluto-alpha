@@ -1,0 +1,34 @@
+version: '3.5'
+
+services:
+  localstack:
+    image: localstack/localstack
+    ports:
+      - "4567-4593:4567-4593"
+      - "${PORT_WEB_UI-8080}:${PORT_WEB_UI-8080}"
+    environment:
+      - SERVICES=${SERVICES- }
+      - DEFAULT_REGION=eu-west-1
+      - LAMBDA_EXECUTOR=docker
+      - DEBUG=${DEBUG- }
+      - DATA_DIR=/tmp/localstack/data
+      - PORT_WEB_UI=${PORT_WEB_UI- }
+      - KINESIS_ERROR_PROBABILITY=${KINESIS_ERROR_PROBABILITY- }
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LAMBDA_DOCKER_NETWORK=unnamed_default
+    volumes:
+      - "${TMPDIR:-/tmp/localstack}:/tmp/localstack"
+      - "/var/run/docker.sock:/var/run/docker.sock"
+  rdslocal:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_DB: avalanche
+      POSTGRES_USER: master
+      POSTGRES_PASSWORD: alpineskiing
+    ports:
+      - 5430:5432 # using 5430 in case have a native postgres elsewhere on machine
+
+# networks:
+#   default:
+#     name: avalanche_local

@@ -1,0 +1,25 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Creates the table that holds some critical variables, e.g., shares of interest accrual'
+Resources:
+  systemVariableTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "SystemVariableTable"
+      AttributeDefinitions:
+      -
+        AttributeName: "VariableKey"
+        AttributeType: "S"
+      -
+        AttributeName: "LastUpdatedTimestamp"
+        AttributeType: "N"
+      KeySchema:
+      - AttributeName: "VariableKey"
+        KeyType: HASH
+      - AttributeName: "LastUpdatedTimestamp"
+        KeyType: "RANGE"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  

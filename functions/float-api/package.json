@@ -1,0 +1,23 @@
+{
+  "name": "float-api",
+  "version": "1.0.0",
+  "description": "The API for managing the primary cash float",
+  "main": "handler.js",
+  "scripts": {
+    "test": "DEBUG=u* mocha"
+  },
+  "author": "Luke Jordan",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.437.0",
+    "config": "^3.1.0",
+    "debug": "^4.1.1",
+    "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "chai-uuid": "^1.0.6",
+    "mocha": "^6.1.0",
+    "serverless-localstack": "^0.4.11"
+  }
+}

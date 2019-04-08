@@ -1,0 +1,23 @@
+{
+  "name": "save-transaction-api",
+  "version": "0.0.1",
+  "description": "API for adding savings to a user account",
+  "main": "handler.js",
+  "scripts": {
+    "test": "DEBUG=u:* mocha"
+  },
+  "author": "Luke Jordan",
+  "license": "ISC",
+  "dependencies": {
+    "config": "^3.0.1",
+    "debug": "^4.1.1",
+    "pg": "^7.9.0",
+    "uuid": "^3.3.2"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "chai-uuid": "^1.0.6",
+    "mocha": "^6.0.2",
+    "serverless-localstack": "^0.4.11"
+  }
+}

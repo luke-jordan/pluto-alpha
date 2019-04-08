@@ -1,0 +1,27 @@
+{
+    "aws": {
+        "region": "eu-west-1",
+        "apiVersion": "2012-08-10",
+        "endpoints": {
+            "dynamodb": "http://localhost:4569"
+        }
+    },
+    "tables": {
+        "account": {
+            "dynamodb": "CoreAccountLedger",
+            "rds": "account_data.core_account_ledger"
+        }
+    },
+    "db": {
+        "user": "account_api_worker",
+        "host": "localhost",
+        "database": "avalanche",
+        "password": "pwd_for_account_api",
+        "port" :"5430"
+    },
+    "test": {
+        "nock": {
+            "dynamodb": "http://localhost:4569"
+        }
+    }
+}

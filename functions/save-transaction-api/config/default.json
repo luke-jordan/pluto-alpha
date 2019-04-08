@@ -1,0 +1,15 @@
+{
+    "tables": {
+        "transaction": {
+            "rds": "transaction_data.core_transaction_ledger",
+            "bonus": "transaction_data.core_transaction_ledger"
+        }
+    },
+    "db": {
+        "user": "transaction_api_worker",
+        "host": "localhost",
+        "database": "avalanche",
+        "password": "pwd_for_transaction_api",
+        "port" :"5430"
+    }
+}
