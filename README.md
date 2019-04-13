@@ -1,14 +1,13 @@
-GETTING STARTED: SETTING UP THE LOCAL ENVIRONMENT
-=================================================
+# GETTING STARTED: SETTING UP THE LOCAL ENVIRONMENT
 
 For local development, you need to install:
 
-(1) Docker (along with docker-compose)
-(2) Localstack
-(3) Postgres
-(4) The core languages, Python and Nodejs
-(5) Set up a virtual env
-(6) The core testing frameworks
+1.  Docker (along with docker-compose)
+2.  Localstack
+3.  Postgres
+4.  The core languages, Python and Nodejs
+5.  Set up a virtual env
+6.  The core testing frameworks
 
 These have been grouped together below.
 
@@ -27,7 +26,7 @@ Test that these are all installed correctly by running `docker-compose up` in th
 
 ## STEP 2: Core languages (depending on part of stack)
 
-**Python**
+### Python
 
 1. Downloand and install Anaconda
 2. Create a new virtual env, using Python 3.6:
@@ -41,7 +40,7 @@ Test that these are all installed correctly by running `docker-compose up` in th
 Note: prior to the above you may need to install libpq-dev locally
 Note: make sure to install ipython in your virtual env or you will get module import errors all the time
 
-**NodeJS**
+### NodeJS
 
 1. [Install the latest Node and NPM from repository]
 2. Install the serverless framework:

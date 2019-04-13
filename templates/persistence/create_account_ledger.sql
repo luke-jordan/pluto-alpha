@@ -5,6 +5,7 @@ create schema if not exists account_data;
 
 create table if not exists account_data.core_account_ledger (
     account_id uuid not null,
+    responsible_client_id varchar(50) not null,
     owner_user_id uuid not null,
     opening_user_id uuid not null,
     user_first_name varchar (100) not null,

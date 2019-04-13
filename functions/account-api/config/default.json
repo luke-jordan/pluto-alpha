@@ -15,7 +15,7 @@
     "db": {
         "user": "account_api_worker",
         "host": "localhost",
-        "database": "avalanche",
+        "database": "pluto",
         "password": "pwd_for_account_api",
         "port" :"5430"
     },

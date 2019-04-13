@@ -6,7 +6,7 @@ export PGPASSWORD=alpineskiing
 export PGUSER=master
 export PGHOST=localhost
 export PGPORT=5430
-export PGDATABASE=avalanche
+export PGDATABASE=pluto
 
 echo "Setting up users"
 psql -f ./persistence/create_db_roles.sql

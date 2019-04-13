@@ -8,7 +8,7 @@
     "db": {
         "user": "transaction_api_worker",
         "host": "localhost",
-        "database": "avalanche",
+        "database": "pluto",
         "password": "pwd_for_transaction_api",
         "port" :"5430"
     }

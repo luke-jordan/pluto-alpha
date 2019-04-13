@@ -11,6 +11,9 @@ node_modules/
 jspm_packages/
 __pycache__/
 
+# Coverage directories
+.nyc_output/
+
 # Any production config
 production.json
 

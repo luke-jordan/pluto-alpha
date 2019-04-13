@@ -4,7 +4,7 @@
   "description": "API for creating an account in the ledger",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=u:* mocha"
+    "test": "DEBUG=pluto:* nyc mocha"
   },
   "author": "Luke Jordan",
   "license": "ISC",
@@ -13,13 +13,16 @@
     "chai-uuid": "^1.0.6",
     "mocha": "^6.0.2",
     "nock": "^10.0.6",
+    "nyc": "^13.3.0",
+    "proxyquire": "^2.1.0",
     "serverless-localstack": "^0.4.3"
   },
   "dependencies": {
     "aws-sdk": "^2.418.0",
     "config": "^3.0.1",
     "debug": "^4.1.1",
+    "pg": "^7.8.2",
     "uuid": "^3.3.2",
-    "pg": "^7.8.2"
+    "validator": "^10.11.0"
   }
 }

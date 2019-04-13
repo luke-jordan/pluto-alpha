@@ -23,12 +23,8 @@ services:
     image: postgres
     restart: always
     environment:
-      POSTGRES_DB: avalanche
+      POSTGRES_DB: pluto
       POSTGRES_USER: master
       POSTGRES_PASSWORD: alpineskiing
     ports:
       - 5430:5432 # using 5430 in case have a native postgres elsewhere on machine
-
-# networks:
-#   default:
-#     name: avalanche_local

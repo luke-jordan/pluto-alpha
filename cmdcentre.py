@@ -34,7 +34,7 @@ def open_cmd_in_new_terminal(cmd, folder = None):
 
 def run_psql_query(query_string):
     try:
-        conn = psycopg2.connect("dbname=avalanche user=master password=alpineskiing host=localhost port=5430")
+        conn = psycopg2.connect("dbname=pluto user=master password=alpineskiing host=localhost port=5430")
         curr = conn.cursor()
         dat = sqlio.read_sql_query(query_string, conn)
         return dat
@@ -52,7 +52,7 @@ def launch_docker():
 
 
 def launch_postgres():
-    command = "psql -U master -p 5430 -h localhost -d avalanche"
+    command = "psql -U master -p 5430 -h localhost -d pluto"
     open_cmd_in_new_terminal(command)
 
 

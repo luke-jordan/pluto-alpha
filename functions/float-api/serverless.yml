@@ -29,8 +29,8 @@ provider:
   stage: dev
 
 functions:
-  accrual:
-    handler: handler.hello
+  accrue:
+    handler: handler.accrue
     # events:
     #   - http:
     #       path: save

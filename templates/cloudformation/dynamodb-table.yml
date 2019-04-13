@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Creates the table that holds some critical variables, e.g., shares of interest accrual'
+Description: 'Creates the tables that hold critical system-wide but rarely used variables, e.g., float shares, clients'
 Resources:
   systemVariableTable:
     Type: AWS::DynamoDB::Table
@@ -22,4 +22,19 @@ Resources:
         WriteCapacityUnits: 2
       PointInTimeRecoverySpecification:
         PointInTimeRecoveryEnabled: true
-  
+  responsibleClientsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "ResponsibleClientsTable"
+      AttributeDefinitions:
+      -
+        AttributeName: "ResponsibleClientId"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "ResponsibleClientId"
+        KeyType: PRIMARY
+      ProvisionedThroughput:
+        ReadCapacityUnits: 1
+        WriteCapacityUnits: 1
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true

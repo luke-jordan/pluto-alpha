@@ -15,7 +15,7 @@ sed -i "s/<<FUNCTION_NAME>>/$FUNCTION_NAME/" serverless.yml
 npm init
 
 npm i --sav config debug uuid
-npm i --save-dev chai chai-uuid mocha
+npm i --save-dev chai chai-uuid mocha nyc
 npm i --save-dev serverless-localstack
 
 # npm link serverless-localstack
