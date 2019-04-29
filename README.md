@@ -42,12 +42,12 @@ Note: make sure to install ipython in your virtual env or you will get module im
 
 ### NodeJS
 
-1. [Install the latest Node and NPM from repository]
+1. Install the latest Node and NPM from repository
 2. Install the serverless framework:
 
 `sudo npm install -g serverless`
 
-3. [Unless bug fixed by then - install our, patched version of serverless-localstack]
+3. Unless bug fixed by then - install our, patched version of serverless-localstack
 
 `git pull ...`
 `npm link ...`

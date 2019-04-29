@@ -1,5 +1,5 @@
 {
     "tables": {
-        "systemConfigVars": "SystemVariableTableTest"
+        "clientFloatVars": "ClientFloatTableTest"
     }
 }

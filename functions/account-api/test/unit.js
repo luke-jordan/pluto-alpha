@@ -1,6 +1,6 @@
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:account:test')
+const logger = require('debug')('pluto:account:test');
 const uuid = require('uuid/v4');
 
 const chai = require('chai');
@@ -9,7 +9,7 @@ chai.use(require('chai-uuid'));
 
 const proxyquire = require('proxyquire').noCallThru();
 
-var rdsStub = { }
+var rdsStub = { };
 
 const handler = proxyquire('../handler', { './persistence/rds': rdsStub });
 

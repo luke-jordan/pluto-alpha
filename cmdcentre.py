@@ -1,7 +1,4 @@
-import requests
 import subprocess
-import psutil
-import pprint
 import json
 import os
 import uuid

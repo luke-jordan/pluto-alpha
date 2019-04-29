@@ -4,7 +4,8 @@
   "description": "The API for managing the primary cash float",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:float:test nyc mocha"
+    "test": "DEBUG=pluto:float:* nyc mocha './test/*.unit.test.js'",
+    "test-all": "DEBUG=pluto:float:* nyc mocha"
   },
   "author": "Luke Jordan",
   "license": "ISC",
@@ -13,14 +14,19 @@
     "bignumber.js": "^8.1.1",
     "config": "^3.1.0",
     "debug": "^4.1.1",
+    "pg": "^7.10.0",
+    "pg-pool": "^2.0.6",
     "uuid": "^3.3.2"
   },
   "devDependencies": {
     "chai": "^4.2.0",
     "chai-uuid": "^1.0.6",
-    "mocha": "^6.1.0",
-    "nyc": "^13.3.0",
+    "lodash": "^4.17.11",
+    "mocha": "^6.1.4",
+    "nyc": "^14.0.0",
     "proxyquire": "^2.1.0",
-    "serverless-localstack": "^0.4.11"
+    "serverless-localstack": "^0.4.11",
+    "sinon": "^7.3.2",
+    "sinon-chai": "^3.3.0"
   }
 }

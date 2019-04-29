@@ -1,6 +1,6 @@
-'use strict'
+'use strict';
 
-const logger = require('debug')('u:persistence:dynamodb')
+const logger = require('debug')('u:persistence:dynamodb');
 const config = require('config');
 
 const AWS = require('aws-sdk');

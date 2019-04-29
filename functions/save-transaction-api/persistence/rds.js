@@ -1,6 +1,6 @@
-'use strict'
+'use strict';
 
-const logger = require('debug')('u:transaction:saving:rds')
+const logger = require('debug')('u:transaction:saving:rds');
 const config = require('config');
 const uuid = require('uuid/v4');
 

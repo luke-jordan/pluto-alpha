@@ -7,7 +7,8 @@
         }
     },
     "tables": {
-        "systemConfigVars": "SystemVariableTable"
+        "clientFloatVars": "ClientFloatTable",
+        "floatTransactions": "float_data.float_transaction_ledger"
     },
     "variableKeys": {
         "bonusPoolShare": "bonus_pool_accrual_share",

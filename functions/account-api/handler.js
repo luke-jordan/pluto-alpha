@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:account:handler')
+const logger = require('debug')('pluto:account:handler');
 
 const uuid = require('uuid/v4');
 const validator = require('validator');
@@ -16,7 +16,7 @@ module.exports.create = async (event, context) => {
   if (!requestValid) {
     return {
       statusCode: 400
-    }
+    };
   };
 
   const persistenceResult = await exports.createAccount(request);
@@ -33,7 +33,7 @@ module.exports.create = async (event, context) => {
 module.exports.transformEvent = (event) => {
   const body = event['body'];
   return body ? JSON.parse(body) : event;
-}
+};
 
 // this validates we have the info we need
 module.exports.validateRequest = (creationRequest) => {
@@ -78,15 +78,16 @@ module.exports.createAccount = async (creationRequest = {
     'userFamilyName': creationRequest['userFamilyName']}
   );
   
-  logger("Received from persistence: ", persistenceResult);
+  logger('Received from persistence: ', persistenceResult);
   return { accountId: persistenceResult['account_id'], tags: persistenceResult['tags'], flags: persistenceResult['flags'] };
 }
 
 module.exports.listAccounts = async () => {
   const params = { TableName: 'CoreAccountLedger' };
 
-  const result = await docClient.scan(params).promise();
-  console.log('Result: ', result);
+  // const result = await docClient.scan(params).promise();
+  const result = { };
+  logger('Result: ', result);
 
-  return { 'statusCode': 200 }
+  return { 'statusCode': 200 };
 }

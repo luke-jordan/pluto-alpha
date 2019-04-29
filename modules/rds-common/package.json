@@ -1,0 +1,25 @@
+{
+  "name": "rds-common",
+  "version": "1.0.0",
+  "description": "Common module layer for interfacing with RDS",
+  "main": "index.js",
+  "scripts": {
+    "test": "DEBUG=pluto:rds-common:* nyc mocha"
+  },
+  "author": "Luke Jordan",
+  "license": "ISC",
+  "dependencies": {
+    "config": "^3.1.0",
+    "logger": "0.0.1",
+    "pg": "^7.10.0",
+    "pg-pool": "^2.0.6"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "mocha": "^6.1.4",
+    "nyc": "^14.0.0",
+    "proxyquire": "^2.1.0",
+    "sinon": "^7.3.2",
+    "sinon-chai": "^3.3.0"
+  }
+}

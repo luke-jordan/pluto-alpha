@@ -1,6 +1,6 @@
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('u:account:test')
+const logger = require('debug')('u:account:test');
 const config = require('config');
 
 const chai = require('chai');
@@ -13,23 +13,10 @@ const testAccountId = uuid();
 const testTimeInitiated = Date.now() - 5000;
 const testTimeSettled = Date.now() - 100;
 
-const testAmounts = [ 100, 10, 5, 6.70 ].map(amount => amount * 100)
+const testAmounts = [ 100, 10, 5, 6.70 ].map(amount => amount * 100);
 logger('Setting up, test amounts: ', testAmounts);
 
-const handler = require('../handler')
-
-describe('User just saves (without offer, puzzle, etc)', () => {
-
-    it('Normal saving, happy path', async () => {
-        logger('Second API tests initiating');
-
-        logger('We will use this account UID: ', testAccountId);
-
-        // testAmountSettles();
-        await Promise.all(testAmounts.map(amount => testAmountSettles(amount)));
-    });
-
-});
+const handler = require('../handler');
 
 const testAmountSettles = async (amount = testAmounts[0]) => {
     const testSaveSettlementBase = {
@@ -39,8 +26,21 @@ const testAmountSettles = async (amount = testAmounts[0]) => {
         amount: amount
     };
 
-    saveResult = await handler.storeSettledSaving(testSaveSettlementBase);
+    const saveResult = await handler.storeSettledSaving(testSaveSettlementBase);
     expect(saveResult).to.not.be.undefined;
     expect(saveResult.statusCode).to.equal(200);
     expect(saveResult.entity).to.exist;
 }
+
+describe('User just saves (without offer, puzzle, etc)', () => {
+
+    it('Normal saving, happy path', async () => {
+        logger('Second API tests initiating');
+
+        logger('We will use this account UID: ', testAccountId);
+
+        // testAmountSettles();
+        await Promise.all(testAmounts.map((amount) => testAmountSettles(amount)));
+    });
+
+});

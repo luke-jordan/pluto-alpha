@@ -12,13 +12,14 @@ describe('moneyMktFloatAccrual', () => {
     it('Happy path', async () => {
         const amountAccrued = 737215;
         const accrualRequest = {
+            ClientId: 'zar-savings-co',
             FloatId: 'primary-cash-float',
             AmountAccrued: amountAccrued,
             Currency: 'ZAR',
-            Unit: 'HUNDREDTH-CENT'
+            Unit: 'HUNDREDTH_CENT'
         };
 
-        const response = await handler.accrue(accrualRequest);
+        const response = await handler.accrue(accrualRequest, { });
         expect(response.statusCode).to.equal(200);
         expect(response.entity).to.exist;
 
@@ -33,3 +34,16 @@ describe('moneyMktFloatAccrual', () => {
     });
 
 });
+
+describe('moneyMktFloatApportionment', () => {
+
+    it('Happy path', async () => {
+        const amountAccrued = 3412.2341e4;
+
+        const response = await handler.allocate(allocationRequest, { });
+        expect(response.statusCode).to.equal(200);
+        expect(response.entity).to.exist;
+
+    })
+
+})

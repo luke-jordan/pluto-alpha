@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 const logger = require('debug')('pluto:persistence:rds');
 const config = require('config');

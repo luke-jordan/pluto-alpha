@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('u:transaction:saving:main')
+const logger = require('debug')('u:transaction:saving:main');
 
 const persistence = require('./persistence/rds');
 
