@@ -29,29 +29,13 @@ class RdsConnection {
         logger('Set up connection, ready to initiate connections');
     }
 
-    // todo : validation and error handling
-    async connect() {
-        if (!this._connection) {
-            this._connection = await this._pool.connect();
-            logger('Connected client via PG pool');
-        }
-        return this._connection;
-    }
-
     async testPool() {
         const result = await this._pool.query('SELECT 1');
         logger('Connection in place, result of select 1: ', JSON.stringify(result));
         return result.rows;
     }
 
-    // note: monitor effect of this on number of open connections as Lambdas multiply, hence also endPool
-    async endConnect() {
-        // logger('Ending connection, current state: ', this._connection);
-        if (this._connection) {
-            await this._connection.release();
-        }
-    }
-
+    // note: monitor effect on number of open connections as Lambdas multiply, and how exact mechanics of call to layer will work
     async endPool() {
         await this._pool.end();
         logger('Pool has drained');
@@ -59,7 +43,7 @@ class RdsConnection {
 
     async selectQuery(query = 'SELECT * FROM TABLE WHERE VALUE = $1', values = ['VALUE']) {
         const queryResults = await this._pool.query(query, values);
-        logger('Completed running selection');
+        // logger('Completed running selection, results: ', queryResults);
         return queryResults.rows;
     }
 
