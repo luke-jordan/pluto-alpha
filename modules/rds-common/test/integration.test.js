@@ -36,6 +36,14 @@ const createFreshDb = async (done) => {
     });
 }
 
+const createLedgerTable = async (ledgerName, client) => {
+    if (!client) {
+        client = await pool.connect();
+    }
+    // todo maybe have an option to drop and recreate if exists
+    await client.query(`create table if not exists ${ledgerName} (id serial not null primary key, creation_time timestamp not null default current_timestamp, account_id integer references account(id), amount bigint)`); 
+}
+
 const setupTables = async (done) => {
     const client = await pool.connect();
     await client.query('create table account (id serial not null primary key, creation_time timestamp not null default current_timestamp, name varchar(50), balance int)');
@@ -50,17 +58,9 @@ const setupTables = async (done) => {
     done();
 }
 
-const createLedgerTable = async (ledgerName, client) => {
-    if (!client) {
-        client = await pool.connect();
-    }
-    // todo maybe have an option to drop and recreate if exists
-    await client.query(`create table if not exists ${ledgerName} (id serial not null primary key, creation_time timestamp not null default current_timestamp, account_id integer references account(id), amount bigint)`); 
-}
-
 const endPools = (rdsClient, done) => {
     rdsClient.endPool().then(() => {
-        logger("Finished RDS client, doing next");
+        logger('Finished RDS client, doing next');
         pool.end().then(() => {
             logger('Should be shut down now');
             done();
@@ -81,10 +81,41 @@ describe('Execute all on happy paths', function () {
 
     // ugh, mocha lousiness on async means this is causing all sorts of problems, so removing
     after((done) => {
-        logger('What is happening?');
         // pool.end(done);
         endPools(rdsClient, done);
     });
+
+    const createBunchOfAccounts = async (numAccounts) => {
+        const accountNames = randomWords(numAccounts);
+        const query = 'insert into account (name) values $1 returning id';
+        const values = accountNames.map((word) => ({ name: word }));
+        if (numAccounts < 5) {
+            logger('Value list: ', values);
+        }
+        return await rdsClient.insertRecords(query, values);
+    };
+
+    const insertBatchOfRecords = async (numRecordsPerAccount, referenceAmount, accounts) => {
+        let accountIds;
+        if (!accounts) {
+            const idQueryFetch = await rdsClient.selectQuery('SELECT id FROM account', []);
+            accountIds = idQueryFetch.map((row) => row['id']);
+        } else  {
+            accountIds = accounts;
+        }
+
+        var transValues = Array.from({ length: numRecordsPerAccount}, 
+            () => accountIds.map(id => ({ account_id: id, amount: Math.floor(Math.random() * referenceAmount)})));
+        // logger('Trans values: ', transValues);
+        return transValues;
+    };
+
+    const sumForAccount = (transactionBatches, accountId) => {
+        const extractedAccountAmounts = transactionBatches
+            .map(batch => batch.filter(trans => trans['account_id'] == accountId).map(trans => trans['amount']));
+        const sumOfAmounts = extractedAccountAmounts.map((amount) => amount[0]).reduce((a, b) => a + b, 0);
+        return sumOfAmounts;
+    };
 
     it('Establish a connection properly and perform a basic select', async () => {
         const testResult = await rdsClient.testPool();
@@ -161,7 +192,7 @@ describe('Execute all on happy paths', function () {
         expect(transIds).to.be.an('array');
         expect(transIds.length).to.equal(bigBatchTransactions[0].length);
 
-        const sumOfAmounts = bigBatchTransactions[0].map(trans => trans['amount']).reduce((a, b) => a + b, 0);
+        const sumOfAmounts = bigBatchTransactions[0].map((trans) => trans['amount']).reduce((a, b) => a + b, 0);
         
         const sumResult = await rdsClient.selectQuery('select sum(amount), count(*) from ledger_3', []);
         expect(sumResult[0]['sum']).to.equal(sumOfAmounts);
@@ -196,37 +227,5 @@ describe('Execute all on happy paths', function () {
         expect(revisedConnectionPresent).to.be.false;
 
     });
-
-    const createBunchOfAccounts = async (numAccounts) => {
-        const accountNames = randomWords(numAccounts);
-        const query = 'insert into account (name) values $1 returning id';
-        const values = accountNames.map((word) => ({ name: word }));
-        if (numAccounts < 5) {
-            logger('Value list: ', values);
-        }
-        return await rdsClient.insertRecords(query, values);
-    };
-
-    const insertBatchOfRecords = async (numRecordsPerAccount, referenceAmount, accounts) => {
-        let accountIds;
-        if (!accounts) {
-            const idQueryFetch = await rdsClient.selectQuery('SELECT id FROM account', []);
-            accountIds = idQueryFetch.map(row => row['id']);
-        } else  {
-            accountIds = accounts;
-        }
-
-        var transValues = Array.from({ length: numRecordsPerAccount}, 
-            () => accountIds.map(id => ({ account_id: id, amount: Math.floor(Math.random() * referenceAmount)})));
-        // logger('Trans values: ', transValues);
-        return transValues;
-    }
-
-    const sumForAccount = (transactionBatches, accountId) => {
-        const extractedAccountAmounts = transactionBatches
-            .map(batch => batch.filter(trans => trans['account_id'] == accountId).map(trans => trans['amount']));
-        const sumOfAmounts = extractedAccountAmounts.map(amount => amount[0]).reduce((a, b) => a + b, 0);
-        return sumOfAmounts;
-    }
 
 });

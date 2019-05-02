@@ -33,7 +33,7 @@ describe('Happy path fetches', () => {
                     CompanyShareTracker: common.testValueClientCompanyTracker
                 }
             }}
-        })
+        });
     });
 
     after(() => {
@@ -64,7 +64,7 @@ describe('Error fetches', () => {
     before(() => {
         const invalidClientid = { ClientId: common.testValidClientId + '1', FloatId: common.testValidFloatId };
         const invalidFloatId = { ClientId: common.testValidClientId, FloatId: common.testValidFloatId + '_1' };
-        const invalidBothIds = { ClientId: common.testValidClientId + '1', FloatId: common.testValidFloatId + '_1' }
+        const invalidBothIds = { ClientId: common.testValidClientId + '1', FloatId: common.testValidFloatId + '_1' };
 
         stub.withArgs({TableName: config.get('tables.clientFloatVars'), Key: invalidClientid }).returns({
             promise: () => { throw new ReferenceError(`No entry found for client ${common.testValidClientId + '1'} and float ${common.testValidFloatId}`); } 

@@ -68,7 +68,7 @@ const insertBonusPoolShareOfAccrual = (nextAction) => {
         }
         nextAction();
     });
-}
+};
 
 const insertCompanyShareOfAccrual = (nextAction) => {
     logger('Inserting company share of accrual default value');
@@ -90,7 +90,7 @@ const insertCompanyShareOfAccrual = (nextAction) => {
         
         nextAction();
     });
-}
+};
 
 const dropConfigVarTable = () => {
     const params = {
@@ -100,7 +100,7 @@ const dropConfigVarTable = () => {
     return docClient.describeTable(params).promise().then(_ => {
         return docClient.deleteTable(params).promise().catch(err => logger('Error thrown inside delete table: ', err.message));
     }).catch(err => logger('Table did not exist, not dropping it'));
-}
+};
 
 describe('obtainConfigVars', () => {
 

@@ -37,28 +37,22 @@ module.exports.transformEvent = (event) => {
 
 // this validates we have the info we need
 module.exports.validateRequest = (creationRequest) => {
+  // note: also check for properly formed names, and for a signed 'okay' by onboarding process
   if (!creationRequest['clientId']) {
     logger('Missing ID for intermediary client that this account belongs to');
     return false;
-  }
-
-  if (!creationRequest['ownerUserId']) {
+  } else if (!creationRequest['ownerUserId']) {
     logger('System wide ID for account owner missing, invalid request');
     return false;
-  }
-
-  if (!validator.isUUID(creationRequest['ownerUserId'])) {
+  } else if (!validator.isUUID(creationRequest['ownerUserId'])) {
     logger('Creation request contains an invalid system user id');
     return false;
-  }
-
-  // also check for properly formed names, and for a signed 'okay' by onboarding thing
-  if (!creationRequest['userFirstName'] || !creationRequest['userFamilyName']) {
+  } else if (!creationRequest['userFirstName'] || !creationRequest['userFamilyName']) {
     logger('Account creation request is missting user first name or family name');
     return false;
+  } else {
+    return true;
   }
-
-  return true;
 }
 
 module.exports.createAccount = async (creationRequest = {

@@ -61,7 +61,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         await client.query('rollback');
         throw e;
     } finally {
-        logger.apply()
+        logger('Releasing client');
         client.release();
     }
     
@@ -78,4 +78,4 @@ module.exports.sumCurrentBalance = async (accountId, currency, existingDbClient 
     const { rows } = await client.query(queryString, [accountId, currency]);
     
     return rows[0];
-}
+};

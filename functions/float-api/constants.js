@@ -3,7 +3,7 @@
 module.exports.floatUnits = {
     HUNDREDTH_CENT: 'HUNDREDTH_CENT',
     DEFAULT: 'HUNDREDTH_CENT'
-}
+};
 
 module.exports.floatTransTypes = {
     ACCRUAL: 'ACCRUAL',
@@ -11,6 +11,6 @@ module.exports.floatTransTypes = {
     DEPOSIT: 'DEPOSIT',
     WITHDRAWAL: 'WITHDRAWAL',
     CAPITALIZATION: 'CAPITALIZATION'
-}
+};
 
 Object.freeze(exports.floatUnits);

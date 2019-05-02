@@ -13,7 +13,7 @@ BigNumber.prototype.valueOf = function () {
 
 module.exports.accrue = async (event, context) => {
 
-  event = { client_id: 'something', float_id: 'something_else' }
+  event = { client_id: 'something', float_id: 'something_else' };
 
   return {
     statusCode: 400,
@@ -68,6 +68,10 @@ module.exports.calculateShare = (totalPool = 1.23457e8, shareInPercent = 0.0165,
   return resultAsNumber;
 }
 
+const calculatePercent = (total, account) => {
+  return BigNumber(account).dividedBy(total);
+}
+
 // same reasoning as above for exposing this. note: account totals need to be all ints, else something is wrong upstream
 module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = { 'account-id-1': 563e4 }, appendExcess = true) => {
   const accountBalances = Object.values(accountTotals);
@@ -79,7 +83,7 @@ module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = { 'account
   
   let shareDict = { }; 
   const totalToShare = BigNumber(amountToDivide);
-  Object.keys(accountTotals).forEach(accountId => {
+  Object.keys(accountTotals).forEach((accountId) => {
     shareDict[accountId] = calculatePercent(accountTotal, accountTotals[accountId]).times(totalToShare).integerValue().toNumber();
   });
 
@@ -88,16 +92,13 @@ module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = { 'account
   
   logger(`Finished apportioning balances, handed ${amountToDivide} to divide, divied up ${apportionedAmount}, left with ${excess} excess`);
 
-  if (appendExcess && excess != 0)
+  if (appendExcess && excess !== 0) {
     shareDict['excess'] = excess;
-  else if (excess != 0)
+  } else if (excess !== 0) {
    exports.apportion(excess, accountTotals, false);
-
+  }
+  
   return shareDict;
-}
-
-const calculatePercent = (total, account) => {
-  return BigNumber(account).dividedBy(total);
 }
 
 // leaving here as later documentation of why we are using bignumber instead of integers

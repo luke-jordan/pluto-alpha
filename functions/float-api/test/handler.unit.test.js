@@ -43,8 +43,8 @@ describe('Single apportionment operations', () => {
         shareExamples.push(common.testValueBonusPoolShare);
         shareExamples.push(common.testValueCompanyShare);
 
-        poolExamples.forEach(pool => {
-            shareExamples.forEach(share => {
+        poolExamples.forEach((pool) => {
+            shareExamples.forEach((share) => {
                 const expectedResult = BigNumber(pool).times(BigNumber(share)).integerValue(BigNumber.ROUND_HALF_UP).toNumber();
                 const obtainedResult = handler.calculateShare(pool, share);
                 expect(obtainedResult).to.exist;
@@ -99,7 +99,7 @@ describe('Multiple apportionment operations', () => {
         // logger(`Generated account shares: ${JSON.stringify(testAccountDict)}`);
         logger(`Sum of values (in ZAR): ${sumOfAccounts / 1e4}, vs amount to apportion: ${amountToAportion / 1e4}`);
         
-        const accountShares = accountValues.map(value => (value * 10) / (sumOfAccounts * 10)); // note: FP may result in _above_ 100% (!)
+        const accountShares = accountValues.map((value) => (value * 10) / (sumOfAccounts * 10)); // note: FP may result in _above_ 100% (!)
         const sumOfPercent = accountShares.reduce((a, b) => a + b, 0);
         logger(`Percentage splits amount accounts sums to: ${sumOfPercent}`);
         
@@ -110,8 +110,9 @@ describe('Multiple apportionment operations', () => {
         
         const resultDict = { };
         numberList.forEach(n => resultDict['test-account-' + n] = dividedUpAmounts[n]);
-        if (excess != 0) 
+        if (excess !== 0) { 
             resultDict['excess'] = excess;
+        }
 
         const resultOfApportionment = handler.apportion(amountToAportion, testAccountDict);
 
@@ -177,7 +178,7 @@ describe('Primary allocation lambda', () => {
         const response = await handler.accrue(accrualEvent, { });
 
         expect(fetchBonusShareStub).to.have.been.calledOnce;
-        expect(fetchCompanyShareOfAccrual).to.have.been.calledOnce;
+        expect(fetchCompanyShareStub).to.have.been.calledOnce;
 
         const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
         delete expectedFloatAdjustment['amountAccrued'];
@@ -209,6 +210,6 @@ describe('Primary allocation lambda', () => {
 
         expect(response.entity.recon_job_id).to.exist;
 
-    })
+    });
 
 });
