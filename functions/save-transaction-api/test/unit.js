@@ -13,7 +13,7 @@ const testAccountId = uuid();
 const testTimeInitiated = Date.now() - 5000;
 const testTimeSettled = Date.now() - 100;
 
-const testAmounts = [ 100, 10, 5, 6.70 ].map(amount => amount * 100);
+const testAmounts = [ 100, 10, 5, 6.70 ].map((amount) => amount * 100);
 logger('Setting up, test amounts: ', testAmounts);
 
 const handler = require('../handler');

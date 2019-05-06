@@ -38,7 +38,7 @@ const testAccountOpeningResult = {
 
 rdsStub.insertAccountRecord = function(wellFormedPersistenceReq) { 
     return testAccountOpeningResult; 
-}
+};
 
 describe('transformEvent', () => {
     it('Event comes in from API Gateway', async () => {

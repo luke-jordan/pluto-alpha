@@ -115,7 +115,7 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
 
     const sumForAccount = (transactionBatches, accountId) => {
         const extractedAccountAmounts = transactionBatches
-            .filter(trans => trans['account_id'] == accountId).map(trans => trans['amount']);
+            .filter((trans) => trans['account_id'] === accountId).map((trans) => trans['amount']);
         const sumOfAmounts = extractedAccountAmounts.reduce((a, b) => a + b, 0);
         return sumOfAmounts;
     };
@@ -154,12 +154,12 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
         
         expect(calculationResult1).to.be.an('array');
         expect(calculationResult1[0]).to.have.property('sum');
-        const calcResult = parseInt(calculationResult1[0]['sum']);
+        const calcResult = parseInt(calculationResult1[0]['sum'], 10);
         expect(calcResult).to.equal(sumOfAmounts);
 
         expect(calculationResult2).to.be.an('array');
         expect(calculationResult2[0]).to.have.property('count');
-        const calcResult2 = parseInt(calculationResult2[0]['count']);
+        const calcResult2 = parseInt(calculationResult2[0]['count'], 10);
         expect(calcResult2).to.equal(numAccounts);
     });
 
@@ -207,8 +207,8 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
         const sumOfAmounts = bigBatchTransactions.map((trans) => trans['amount']).reduce((a, b) => a + b, 0);
         
         const sumResult = await rdsClient.selectQuery('select sum(amount), count(*) from ledger_3', []);
-        expect(parseInt(sumResult[0]['sum'])).to.equal(sumOfAmounts);
-        expect(parseInt(sumResult[0]['count'])).to.equal(bigBatchTransactions.length);
+        expect(parseInt(sumResult[0]['sum'], 10)).to.equal(sumOfAmounts);
+        expect(parseInt(sumResult[0]['count'], 10)).to.equal(bigBatchTransactions.length);
     });
 
     it('Run multi-table inserts', async () => {
@@ -255,8 +255,8 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
         const countInsertions2 = await rdsClient.selectQuery('select sum(amount), count(*) from multi_ledger_2', []);
         const countInsertions3 = await rdsClient.selectQuery('select account_id, amount from multi_ledger_master', []);
         
-        expect(parseInt(countInsertions1[0]['count'])).to.equal(numberTrans);
-        expect(parseInt(countInsertions2[0]['count'])).to.equal(numberTrans);
+        expect(parseInt(countInsertions1[0]['count'], 10)).to.equal(numberTrans);
+        expect(parseInt(countInsertions2[0]['count'], 10)).to.equal(numberTrans);
         expect(countInsertions3).to.deep.equal([{ account_id: 1, amount: '1'}]);
     });
 

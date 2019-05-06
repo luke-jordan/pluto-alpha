@@ -62,7 +62,7 @@ const insertBonusPoolShareOfAccrual = (nextAction) => {
 
     docClient.putItem(params, (err, data) => {
         if (err) { 
-            logger('Error thrown inside put bonus share: ', err.message)
+            logger('Error thrown inside put bonus share: ', err.message);
         } else {
             logger('Done! Bonus pool share inserted');
         }
@@ -83,11 +83,11 @@ const insertCompanyShareOfAccrual = (nextAction) => {
     };
 
     return docClient.putItem(params, (err, data) => {
-        if (err)
+        if (err) {
             logger('Error thrown inside put company share: ', err.message);
-        else
+        } else {
             logger('Done! Company share of accrual added');
-        
+        }
         nextAction();
     });
 };
@@ -95,11 +95,11 @@ const insertCompanyShareOfAccrual = (nextAction) => {
 const dropConfigVarTable = () => {
     const params = {
         TableName: config.get('tables.clientFloatVars')
-    }
+    };
 
     return docClient.describeTable(params).promise().then(_ => {
-        return docClient.deleteTable(params).promise().catch(err => logger('Error thrown inside delete table: ', err.message));
-    }).catch(err => logger('Table did not exist, not dropping it'));
+        return docClient.deleteTable(params).promise().catch((err) => logger('Error thrown inside delete table: ', err.message));
+    }).catch((err) => logger('Table did not exist, not dropping it'));
 };
 
 describe('obtainConfigVars', () => {
@@ -130,12 +130,12 @@ describe('obtainConfigVars', () => {
     context('Config variables do not exist', () => {
 
         before(() => {
-            console.log('Inside the before in config vars do not exist, dropping table and recreating, so it is empty');
+            logger('Inside the before in config vars do not exist, dropping table and recreating, so it is empty');
             return dropConfigVarTable();
         });
 
         it('try obtain bonus pool or company share', async () => {
-            expect(floatDynamo.fetchSharesAndTrackersForFloat.bind(dynamo)).to.throw(ReferenceError, 'Float table does not exist!');
+            expect(floatDynamo.fetchSharesAndTrackersForFloat.bind(floatDynamo)).to.throw(ReferenceError, 'Float table does not exist!');
         });
 
     });

@@ -13,16 +13,11 @@ chai.use(sinonChai);
 
 const BigNumber = require('bignumber.js');
 
-// setting up the stubbing, for the dynamo and the postgres dependencies
 // using rather nice patterns from here: https://gist.github.com/StephaneTrebel/0c90fc435b6d93f297f52c72b3fddfb6
-const forceStub = fnName => () => {
-    throw new Error('Please stub this: ', fnName);
-}
-
 const rdsPath = './persistence/rds';
 const dynamoPath = './persistence/dynamodb';
 
-const createStubs = customStubs => _.defaults({}, customStubs, {
+const createStubs = (customStubs) => _.defaults({}, customStubs, {
     [rdsPath]: { },
     [dynamoPath]: { }
 });
@@ -109,7 +104,7 @@ describe('Multiple apportionment operations', () => {
         logger(`Divided up amounts sum to: ${sumCheck}, vs original: ${amountToAportion}, excess: ${excess}`);
         
         const resultDict = { };
-        numberList.forEach(n => resultDict['test-account-' + n] = dividedUpAmounts[n]);
+        numberList.forEach((n) => resultDict['test-account-' + n] = dividedUpAmounts[n]);
         if (excess !== 0) { 
             resultDict['excess'] = excess;
         }
@@ -140,7 +135,7 @@ describe('Primary allocation lambda', () => {
 
     before(() => {
         fetchBonusShareStub = sinon.stub(dynamo, 'fetchBonusPoolShareOfAccrual').returns(common.testValueBonusPoolShare);
-        fetchCompanyShareOfAccrual = sinon.stub(dynamo, 'fetchCompanyShareOfAccrual').returns(common.testValueCompanyShare);
+        fetchCompanyShareStub = sinon.stub(dynamo, 'fetchCompanyShareOfAccrual').returns(common.testValueCompanyShare);
 
         adjustFloatBalanceStub = sinon.spy(rds, 'addOrSubtractFloat');
         allocateFloatBalanceStub = sinon.spy(rds, 'allocateFloat');
@@ -183,8 +178,8 @@ describe('Primary allocation lambda', () => {
         const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
         delete expectedFloatAdjustment['amountAccrued'];
         expectedFloatAdjustment['amount'] = amountAccrued;
-        expect(addOrSubtractFloat).to.have.been.calledOnce;
-        expect(addOrSubtractFloat).to.have.been.calledWith(expectedFloatAdjustment);
+        expect(adjustFloatBalanceStub).to.have.been.calledOnce;
+        expect(adjustFloatBalanceStub).to.have.been.calledWith(expectedFloatAdjustment);
 
         const expectedBonusAllocation = JSON.parse(JSON.stringify(expectedFloatAdjustment));
         expectedBonusAllocation['amount'] = amountAccrued * common.testValueBonusPoolShare;

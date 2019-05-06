@@ -170,6 +170,7 @@ class RdsConnection {
     // todo : _lots_ of error testing
     compileInsertQueryString(columnTemplate, objectArray) {
         const columnNames = this._extractParams(columnTemplate);
+        // todo : also security test names for remote code execution
         const nestedArray = objectArray.map((object) => columnNames.map((column => object[column])));
         logger(this._formatLogString(columnTemplate, objectArray, nestedArray));
         return nestedArray;

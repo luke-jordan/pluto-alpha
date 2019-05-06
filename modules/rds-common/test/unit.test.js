@@ -46,6 +46,34 @@ const RdsConnection = proxyquire('../index', {
     '@noCallThru': true
 });
 
+const expectTxWrapping = (expectedTxEnd) => {
+    expect(queryStub).to.have.been.calledWithExactly('BEGIN');
+    expect(queryStub).to.have.been.calledWithExactly(expectedTxEnd);
+};
+
+const expectQuery = (query, values) => {
+    // use strict comparison here because while selects can take [] (and require it), inserts are safely preformatted then passed without values
+    if (values === null) {
+        expect(queryStub).to.have.been.calledWithExactly(query);
+    } else {
+        expect(queryStub).to.have.been.calledWithExactly(query, values);
+    }
+}
+
+const standardExpectations = (query, values, readOnly, skipTxWrapper, expectedTxEnd) => {
+    expect(connectStub).to.have.been.calledOnce;
+    expect(queryStub).to.have.been.calledWithExactly(readOnly ? 'SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY' : 'SET TRANSACTION READ WRITE');
+    expectQuery(query, values);
+
+    if (!skipTxWrapper) {
+        expectTxWrapping(expectedTxEnd);    
+    }
+
+    const queryCalls = skipTxWrapper ? 2 : 4;
+    expect(queryStub).to.have.been.callCount(queryCalls);
+    expect(releaseStub).to.have.been.calledOnce; 
+};
+
 describe('Basic query pass through', () => {
 
     var rdsClient;
@@ -87,11 +115,7 @@ describe('Basic query pass through', () => {
         expect(rowResult).to.exist;
         expect(rowResult).to.eql(result.rows);
         // use integration tests to make sure these are in right order (ie will fail if not) - and/or find single spy - multi call order checking in Sinon
-        expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.calledTwice;
-        expect(queryStub).to.have.been.calledWithExactly('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
-        expect(queryStub).to.have.been.calledWithExactly(selectQuery, selectValues);
-        expect(releaseStub).to.have.been.calledOnce;
+        standardExpectations(selectQuery, selectValues, true, true);
     });
 
     it('Runs an update query properly', async () => {
@@ -105,13 +129,7 @@ describe('Basic query pass through', () => {
         expect(updateResult).to.exist;
         expect(updateResult).to.eql(result);
         // as above, on ordering; also that default client connection state should be read only
-        expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.callCount(4);
-        expect(queryStub).to.have.been.calledWithExactly('BEGIN');
-        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
-        expect(queryStub).to.have.been.calledWithExactly(updateQuery, updateValues);
-        expect(queryStub).to.have.been.calledWithExactly('COMMIT');
-        expect(releaseStub).to.have.been.calledOnce;
+        standardExpectations(updateQuery, updateValues, false, false, 'COMMIT');
     });
 
 });
@@ -140,13 +158,7 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
         const insertResult = await rdsClient.insertRecords(queryTemplate, columnTemplate, queryValues);
         expect(insertResult).to.exist; // todo : also check for the return of indices
         
-        expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.callCount(4);
-        expect(queryStub).to.have.been.calledWithExactly('BEGIN');
-        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
-        expect(queryStub).to.have.been.calledWithExactly(expectedQuery);
-        expect(queryStub).to.have.been.calledWithExactly('COMMIT');
-        expect(releaseStub).to.have.been.calledOnce;
+        standardExpectations(expectedQuery, null, false, false, 'COMMIT');
     });
 
     it('Sanitizes values properly to prevent injection', async () => {
@@ -240,11 +252,7 @@ describe('Error handling, including connection release, non-parameterized querie
         const expectedMsg = `Query with template ${badSelectionQuery} and values ${JSON.stringify([])} caused an error.`;
         await expect(rdsClient.selectQuery(badSelectionQuery, [])).to.be.rejected
             .and.to.eventually.have.property('message', expectedMsg);
-        expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.calledTwice;
-        expect(queryStub).to.have.been.calledWithExactly('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
-        expect(queryStub).to.have.been.calledWithExactly(badSelectionQuery, []);
-        expect(releaseStub).to.have.been.calledOnce;
+        standardExpectations(badSelectionQuery, [], 'SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY', true);
     });
 
     it('Update transaction calls rollback and release if commit fails', () => {
@@ -253,13 +261,7 @@ describe('Error handling, including connection release, non-parameterized querie
         queryStub.withArgs(badUpdateQuery, mockValues).throws('Bad query'); // as above
 
         expect(rdsClient.updateRecord.bind(rdsClient, badUpdateQuery, mockValues)).to.throw(QueryError);
-        // as above, on ordering; also that default client connection state should be read only
-        expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.calledOnceWithExactly('BEGIN');
-        expect(queryStub).to.have.been.calledOnceWithExactly('SET TRANSACTION READ WRITE');
-        expect(queryStub).to.have.been.calledOnceWithExactly(updateQuery, updateValues);
-        expect(queryStub).to.have.been.calledOnceWithExactly('ROLLBACK');
-        expect(releaseStub).to.have.been.calledOnce;
+        standardExpectations(badUpdateQuery, mockValues, 'SET TRANSACTION READ WRITE', false, 'ROLLBACK');
     });
 
     it('Insert calls throw error if badly templated', () => {
@@ -274,13 +276,8 @@ describe('Error handling, including connection release, non-parameterized querie
         const badInsertQuery = 'INSERT STUFF BADLY IN FALSE WAYS $1';
         const badValues = [{ column_1: 123 }];
 
-        expect(connectStub).to.have.been.calledOnce;
         expect(rdsClient.insertRecords.bind(rdsClient, badInsertQuery, badValues)).to.throw(CommitError);
-        expect(queryStub).to.have.been.calledOnceWithExactly('BEGIN');
-        expect(queryStub).to.have.been.calledOnceWithExactly('SET TRANSACTION READ WRITE');
-        expect(queryStub).to.have.been.calledOnceWithExactly(badInsertQuery, badValues);
-        expect(queryStub).to.have.been.calledOnceWithExactly('ROLLBACK');
-        expect(releaseStub).to.have.been.calledOnce;
+        standardExpectations(badInsertQuery, badValues, 'SET TRANSACTION READ WRITE', false, 'ROLLBACK');
     });
 
     it('Failure to provide parameters on any method throws an error', () => {

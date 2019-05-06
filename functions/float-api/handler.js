@@ -8,7 +8,7 @@ const rds = require('./persistence/rds');
 const BigNumber = require('bignumber.js');
 // make this guy safe for the world
 BigNumber.prototype.valueOf = function () {
-  throw Error('valueOf called!')
+  throw Error('valueOf called!');
 }
 
 module.exports.accrue = async (event, context) => {
@@ -47,14 +47,13 @@ module.exports.calculateShare = (totalPool = 1.23457e8, shareInPercent = 0.0165,
   // we do not want to introduce floating points, because that is bad, so first we check to make sure total pool is effectively an int
   // note: basic logic is that total pool should be expressed in hundredths of a cent, if it is not, this is an error
   // note: bignumber can handle non-integer of course, but that would allow greater laxity than we want in something this important
-  if (!Number.isInteger(totalPool))
+  if (!Number.isInteger(totalPool)) {
     throw new TypeError('Error! Passed a non-integer pool');
-
-  if (typeof shareInPercent !== 'number')
+  } else if (typeof shareInPercent !== 'number') {
     throw new TypeError('Error! Passed a non-number share in percent');
-
-  if (shareInPercent > 1 || shareInPercent < 0)
+  } else if (shareInPercent > 1 || shareInPercent < 0) {
     throw new RangeError('Error! Percentage is not in the right range');
+  }
 
   // now we convert both of these to big numbers, so we can do the multiplication properly
   const pool = new BigNumber(totalPool);
@@ -75,9 +74,10 @@ const calculatePercent = (total, account) => {
 // same reasoning as above for exposing this. note: account totals need to be all ints, else something is wrong upstream
 module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = { 'account-id-1': 563e4 }, appendExcess = true) => {
   const accountBalances = Object.values(accountTotals);
-  if (accountBalances.some(balance => !Number.isInteger(balance)))
-    throw new TypeError("Error! One of the balances is not an integer");
-  
+  if (accountBalances.some(balance => !Number.isInteger(balance))) {
+    throw new TypeError('Error! One of the balances is not an integer');
+  }
+
   // unless our total float itself approaches R100bn, this will not break integer values
   const accountTotal = accountBalances.reduce((a, b) => a + b, 0);
   
@@ -99,7 +99,7 @@ module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = { 'account
   }
   
   return shareDict;
-}
+};
 
 // leaving here as later documentation of why we are using bignumber instead of integers
 

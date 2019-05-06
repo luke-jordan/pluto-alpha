@@ -32,7 +32,7 @@ describe('Happy path fetches', () => {
                     CompanyShare: common.testValueCompanyShare,
                     CompanyShareTracker: common.testValueClientCompanyTracker
                 }
-            }}
+            }};
         });
     });
 

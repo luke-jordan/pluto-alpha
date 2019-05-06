@@ -20,7 +20,7 @@ function activate_venv {
 
 clean_containers=true
 basic_data_setup=true
-# deploy_serverless=true
+deploy_serverless=true
 activate_venv=false
 
 while test $# -gt 0

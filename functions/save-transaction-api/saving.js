@@ -8,7 +8,7 @@ module.exports.save = async (event) => {
   logger('Initiating transaction record to save, environment: ', process.env.NODE_ENV);
 
   logger('Here is our event: ', event);
-  const settlementInformation = !!event['body'] ? JSON.parse(event['body']) : event;
+  const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
   logger('Have a saving request inbound: ', settlementInformation);
 
   // todo : check validity

@@ -190,7 +190,7 @@ describe.only('User account allocation', () => {
     const generateAllocations = (numberOfUsers, maxAllocation) => {
         const allocationAmounts = Array(numberOfUsers).fill().map(_ => Math.round(Math.random() * maxAllocation));
         return generateUserAllocationRequests(allocationAmounts);
-    }
+    };
 
     before(() => {
         queryStub.resolves();
@@ -219,5 +219,5 @@ describe.only('Test integrity check', () => {
     it('Will fail if stub is not properly reset somewhere else in tests', async () => {
         const queryResult = await rds.addOrSubtractFloat();
         expect(queryResult).to.be.undefined;
-    })
-})
+    });
+});
