@@ -5,11 +5,12 @@ const { QueryError, CommitError, NoValuesError } = require('../errors');
 const logger = require('debug')('pluto:rds-common:unit-test');
 const config = require('config');
 
-const sinon = require('sinon');
 const chai = require('chai');
+const sinon = require('sinon');
 const sinonChai = require('sinon-chai');
+const chaiAsPromised = require('chai-as-promised');
+
 const expect = chai.expect;
-chai.use(sinonChai);
 
 const proxyquire = require('proxyquire');
 
@@ -22,13 +23,23 @@ var connectStub = sinon.stub().resolves({
 
 var endStub = sinon.stub();
 
+chai.use(sinonChai);
+chai.use(chaiAsPromised);
+
 class MockPostgres {
-    constructor(any) {
+    constructor(config) {
         this.connect = connectStub;
         this.query = queryStub;
         this.end = endStub;
     }
 }
+
+const clearStubHistory = () => {
+    connectStub.resetHistory();
+    queryStub.resetHistory();
+    releaseStub.resetHistory();
+    endStub.resetHistory();
+};
 
 const RdsConnection = proxyquire('../index', {
     'pg': { Pool: MockPostgres },
@@ -46,9 +57,13 @@ describe('Basic query pass through', () => {
         rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
     });
 
+    afterEach(() => {
+        clearStubHistory();
+    });
+
     after(() => {
         queryStub.reset();
-    })
+    });
     
     it('Executes a test query properly', async () => {
         const queryResult = await rdsClient.testPool();
@@ -73,9 +88,10 @@ describe('Basic query pass through', () => {
         expect(rowResult).to.eql(result.rows);
         // use integration tests to make sure these are in right order (ie will fail if not) - and/or find single spy - multi call order checking in Sinon
         expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.calledOnceWithExactly('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;');
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, selectValues);
-        expect(releaseStub).to.have.been.calledOnce();
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, selectValues);
+        expect(releaseStub).to.have.been.calledOnce;
     });
 
     it('Runs an update query properly', async () => {
@@ -85,41 +101,52 @@ describe('Basic query pass through', () => {
         queryStub.withArgs(updateQuery, updateValues).resolves(result);
 
         const updateResult = await rdsClient.updateRecord(updateQuery, updateValues);
+        logger('Update result ? : ', updateResult);
         expect(updateResult).to.exist;
         expect(updateResult).to.eql(result);
         // as above, on ordering; also that default client connection state should be read only
         expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.calledOnceWithExactly('BEGIN');
-        expect(queryStub).to.have.been.calledOnceWithExactly('SET TRANSACTION READ WRITE');
-        expect(queryStub).to.have.been.calledOnceWithExactly(updateQuery, updateValues);
-        expect(queryStub).to.have.been.calledOnceWithExactly('COMMIT');
-        expect(releaseStub).to.have.been.calledOnce();
+        expect(queryStub).to.have.been.callCount(4);
+        expect(queryStub).to.have.been.calledWithExactly('BEGIN');
+        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
+        expect(queryStub).to.have.been.calledWithExactly(updateQuery, updateValues);
+        expect(queryStub).to.have.been.calledWithExactly('COMMIT');
+        expect(releaseStub).to.have.been.calledOnce;
     });
 
 });
 
-describe('Bulk row insertion', () => {
+describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
 
     var rdsClient;
     before(() => {
         rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
     });
 
+    afterEach(() => {
+        clearStubHistory();
+    });
+
     it('Assembles row insertion properly', async () => {
-        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES $1';
+        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES %L';
+        const columnTemplate = '${column_1}, ${column_2}';
         const queryValues = [ { column_1: 'Hello', column_2: 'World' }, { column_1: 'Something', column_2: 'Else' }];
 
-        const expectedQuery = `INSERT INTO some_schema.some_table (column_1, column_2) VALUES ('Hello', 'World'), ('Something', 'Else')`;
+        const expectedValue = '(\'Hello\', \'World\'), (\'Something\', \'Else\')';
+        const expectedQuery = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES ' + expectedValue;
 
-        const insertResult = await rdsClient.insertRecords(queryTemplate, queryValues);
+        queryStub.withArgs(expectedQuery).returns('Hallelujah');
+
+        const insertResult = await rdsClient.insertRecords(queryTemplate, columnTemplate, queryValues);
         expect(insertResult).to.exist; // todo : also check for the return of indices
-
+        
         expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.calledOnceWithExactly('BEGIN');
-        expect(queryStub).to.have.been.calledOnceWithExactly('SET TRANSACTION READ WRITE');
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery);
-        expect(queryStub).to.have.been.calledOnceWithExactly('COMMIT');
-        expect(releaseStub).to.have.been.calledOnce();
+        expect(queryStub).to.have.callCount(4);
+        expect(queryStub).to.have.been.calledWithExactly('BEGIN');
+        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
+        expect(queryStub).to.have.been.calledWithExactly(expectedQuery);
+        expect(queryStub).to.have.been.calledWithExactly('COMMIT');
+        expect(releaseStub).to.have.been.calledOnce;
     });
 
     it('Sanitizes values properly to prevent injection', async () => {
@@ -150,24 +177,24 @@ describe('Bulk row insertion', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery1);
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery2);
         expect(queryStub).to.have.been.calledOnceWithExactly('COMMIT');
-        expect(releaseStub).to.have.been.calledOnce();
+        expect(releaseStub).to.have.been.calledOnce;
     });
 });
 
 describe('Basic pool and connection management', () => {
     var rdsClient;
+
     before(() => {
         rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
     });
 
-    it('Testing the pool tests the pool', async () => {
-        await rdsClient.testPool();
-        expect(queryStub).to.have.been.calledOnceWithExactly('SELECT 1');
+    afterEach(() => {
+        clearStubHistory();
     });
 
     it('Calling end pool drains it', async () => {
         await rdsClient.endPool();
-        expect(endStub).to.have.been.calledOnceWithExactly();
+        expect(endStub).to.have.been.calledOnce;
     });
 
 });
@@ -175,8 +202,21 @@ describe('Basic pool and connection management', () => {
 describe('Error handling, including connection release, non-parameterized queries, pool exhausted, etc', () => {
 
     var rdsClient;
+
     before(() => {
         rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
+    });
+
+    afterEach(() => {
+        connectStub.resetHistory();
+        queryStub.resetHistory();
+        releaseStub.resetHistory();
+    });
+
+    after(() => {
+        connectStub.reset();
+        queryStub.reset();
+        releaseStub.reset();
     });
 
     it('Error classes function as required', () => {
@@ -192,15 +232,19 @@ describe('Error handling, including connection release, non-parameterized querie
         expect(noValuesError.data.template).to.equal('SELECT 1'); 
     });
 
-    it('Connection release is called if selection query fails', () => {
+    it('Connection release is called if selection query fails', async () => {
         const badSelectionQuery = 'SELECT bad syntax who knows what this person is doing';
-        queryStub.withArgs(badSelectionQuery).throws('Bad query'); // todo : adjust to actual
+        queryStub.withArgs(badSelectionQuery, []).throws('Bad query'); // todo : adjust to actual
         
-        expect(rdsClient.selectQuery.bind(rdsClient, badSelectionQuery, [])).to.throw(QueryError);
-        expect(connectStub).to.have.been.calledOnce();
-        expect(queryStub).to.have.been.calledOnceWithExactly('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY;');
-        expect(queryStub).to.have.been.calledOnceWithExactly(badSelectionQuery, []);
-        expect(releaseStub).to.have.been.calledOnce();
+        // note: deeper checks on error class etc., are failing on JS equality badness, so doing this as equivalent
+        const expectedMsg = `Query with template ${badSelectionQuery} and values ${JSON.stringify([])} caused an error.`;
+        await expect(rdsClient.selectQuery(badSelectionQuery, [])).to.be.rejected
+            .and.to.eventually.have.property('message', expectedMsg);
+        expect(connectStub).to.have.been.calledOnce;
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+        expect(queryStub).to.have.been.calledWithExactly(badSelectionQuery, []);
+        expect(releaseStub).to.have.been.calledOnce;
     });
 
     it('Update transaction calls rollback and release if commit fails', () => {
@@ -236,7 +280,7 @@ describe('Error handling, including connection release, non-parameterized querie
         expect(queryStub).to.have.been.calledOnceWithExactly('SET TRANSACTION READ WRITE');
         expect(queryStub).to.have.been.calledOnceWithExactly(badInsertQuery, badValues);
         expect(queryStub).to.have.been.calledOnceWithExactly('ROLLBACK');
-        expect(releaseStub).to.have.been.calledOnce();
+        expect(releaseStub).to.have.been.calledOnce;
     });
 
     it('Failure to provide parameters on any method throws an error', () => {
