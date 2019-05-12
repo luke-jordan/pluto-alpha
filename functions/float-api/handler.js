@@ -5,22 +5,71 @@ const logger = require('debug')('pluto:float:handler');
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
 
+const constants = require('./constants');
+
 const BigNumber = require('bignumber.js');
 // make this guy safe for the world
 BigNumber.prototype.valueOf = function () {
   throw Error('valueOf called!');
 }
 
+/**
+ * The core function. Receives an instruction that interest (or other return) has been accrued, increases the balance recorded,
+ * and then allocates the amounts to the client's bonus and company shares, and thereafter allocates to all accounts with 
+ * contributions to the float in the past. Expects the following parameters in the lambda invocation or body of the post
+ * @param {string} clientId The system wide ID of the client that handles the float that is receiving the accrual
+ * @param {string} floatId The system wide ID of the float that has received an accrual
+ * @param {number} accrualAmount The amount of the accrual, in the currency and units passed in the other parameters
+ * @param {string} currency The currency of the accrual. If not provided, defaults to the currency of the float.
+ * @param {string} unit The units in which the amount is expressed. If not provided, defaults to float default.
+ * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
+ */
 module.exports.accrue = async (event, context) => {
+  const accrualParameters = event['body'] || event;
+  const clientId = accrualParameters.clientId;
+  const floatId = accrualParameters.floatId;
 
-  event = { client_id: 'something', float_id: 'something_else' };
+  const floatConfig = await dynamo.fetchConfigVarsForFlat(clientId, floatId);
+  
+  const accrualAmount = accrualParameters.accrualAmount;
+  const accrualCurrency = accrualParameters.currency || floatConfig.currency;
+  const accrualUnit = accrualParameters.unit || floatConfig.unit;
+  
+  const allocationBase = {
+    currency: accrualCurrency,
+    unit: accrualUnit,
+    relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
+    relatedEntityId: accrualParameters.backingEntityIdentifier
+  };
+
+  const bonusAllocation = JSON.parse(JSON.stringify(allocationBase));
+  bonusAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.bonusPoolShare);
+  bonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
+  bonusAllocation.allocatedToId = floatConfig.bonusPoolTracker;
+
+  const companyAllocation = JSON.parse(JSON.stringify(allocationBase));
+  companyAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.companyShare);
+  companyAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
+  companyAllocation.allocatedToId = floatConfig.companyShareTracker;
+
+  const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency, unit: accrualUnit });
+  const entityAllocations = await rds.allocateFloat(clientId, floatId, [bonusAllocation, companyAllocation]);
+
+  const remainingAmount = accrualAmount - bonusAllocation.amount - companyAllocation.amount;
+  const userAllocEvent = { clientId, floatId, totalAmount: amount, currency: accrualCurrency, 
+    backingEntityType: constants.entityTypes.ACCRUAL_EVENT, backingEntityIdentifier: backingEntityIdentifier };
+  
+  const userAllocations = await exports.allocate(userAllocEvent);
+
+  const returnBody = {
+    newBalance: newFloatBalance,
+    entityAllocations: entityAllocations,
+    userAllocationTransactions: userAllocations
+  };
 
   return {
-    statusCode: 400,
-    body: JSON.stringify({
-      message: 'Not built yet!',
-      input: event,
-    }),
+    statusCode: 200,
+    body: JSON.stringify(returnBody),
   };
 };
 
@@ -36,7 +85,9 @@ module.exports.allocate = async (event, context) => {
       input: event,
     }),
   };
-}
+};
+
+// todo: add in capitalization at month end (think through how to do that)
 
 // this doesn't necessarily need to be public but (1) we might in a future refactor use it as its own lambda, 
 // and (2) it is easily important enough that we need to have it thoroughly covered on its own, even if it is small,
@@ -72,7 +123,7 @@ const calculatePercent = (total, account) => {
 }
 
 // same reasoning as above for exposing this. note: account totals need to be all ints, else something is wrong upstream
-module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = { 'account-id-1': 563e4 }, appendExcess = true) => {
+module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = new Map(), appendExcess = true) => {
   const accountBalances = Object.values(accountTotals);
   if (accountBalances.some(balance => !Number.isInteger(balance))) {
     throw new TypeError('Error! One of the balances is not an integer');
@@ -83,6 +134,9 @@ module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = { 'account
   
   let shareDict = { }; 
   const totalToShare = BigNumber(amountToDivide);
+  
+  // NOTE: the percentage is of the account relative to all other accounts, not relative to the float at present, hence calculate percent
+  // is called with the total of the prior existing balances, and then multiples the amount to apportion
   Object.keys(accountTotals).forEach((accountId) => {
     shareDict[accountId] = calculatePercent(accountTotal, accountTotals[accountId]).times(totalToShare).integerValue().toNumber();
   });

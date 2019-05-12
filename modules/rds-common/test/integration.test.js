@@ -75,7 +75,7 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
     var rdsClient;
 
     before((done) => {
-        rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
+        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
         createFreshDb(() => setupTables(done));
     });
 

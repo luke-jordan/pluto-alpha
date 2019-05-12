@@ -82,7 +82,7 @@ describe('Basic query pass through', () => {
 
     before(() => {
         queryStub.withArgs('SELECT 1').returns(select1result);
-        rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
+        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
     });
 
     afterEach(() => {
@@ -138,7 +138,7 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
 
     var rdsClient;
     before(() => {
-        rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
+        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
     });
 
     afterEach(() => {
@@ -183,21 +183,23 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
 
         const insertResult = await rdsClient.largeMultiTableInsert([queryDef1, queryDef2]);
 
+        expect(insertResult).to.exist;
+
         expect(connectStub).to.have.been.calledOnce;
-        expect(queryStub).to.have.been.calledOnceWithExactly('BEGIN');
-        expect(queryStub).to.have.been.calledOnceWithExactly('SET TRANSACTION READ WRITE');
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery1);
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery2);
-        expect(queryStub).to.have.been.calledOnceWithExactly('COMMIT');
+        expect(queryStub).to.have.been.calledWithExactly('BEGIN');
+        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
+        expect(queryStub).to.have.been.calledWithExactly(expectedQuery1);
+        expect(queryStub).to.have.been.calledWithExactly(expectedQuery2);
+        expect(queryStub).to.have.been.calledWithExactly('COMMIT');
         expect(releaseStub).to.have.been.calledOnce;
     });
 });
 
-describe('Basic pool and connection management', () => {
+describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
     var rdsClient;
 
     before(() => {
-        rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
+        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
     });
 
     afterEach(() => {
@@ -216,7 +218,7 @@ describe('Error handling, including connection release, non-parameterized querie
     var rdsClient;
 
     before(() => {
-        rdsClient = new RdsConnection(config.get('db.testDb'), config.get('db.testUser'), config.get('db.testPassword'));
+        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
     });
 
     afterEach(() => {

@@ -3,6 +3,7 @@ process.env.NODE_ENV = 'test';
 const logger = require('debug')('pluto:float:test');
 
 const _ = require('lodash');
+const uuid = require('uuid/v4');
 
 const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
@@ -127,39 +128,40 @@ describe('Multiple apportionment operations', () => {
 describe('Primary allocation lambda', () => {
 
     var handler;
-    var fetchBonusShareStub;
-    var fetchCompanyShareStub;
+    var fetchFloatConfigVarsStub;
 
     var adjustFloatBalanceStub;
     var allocateFloatBalanceStub;
 
-    before(() => {
-        fetchBonusShareStub = sinon.stub(dynamo, 'fetchBonusPoolShareOfAccrual').returns(common.testValueBonusPoolShare);
-        fetchCompanyShareStub = sinon.stub(dynamo, 'fetchCompanyShareOfAccrual').returns(common.testValueCompanyShare);
+    const testTxIds = Array(10).fill().map(_ => uuid());
 
+    before(() => {
+        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFlat').returns(common.testValueBonusPoolShare);
+        
         adjustFloatBalanceStub = sinon.spy(rds, 'addOrSubtractFloat');
         allocateFloatBalanceStub = sinon.spy(rds, 'allocateFloat');
-        
+
         handler = proxyquire('../handler', createStubs({
             [dynamoPath]: { 
-                fetchBonusPoolShareOfAccrual: fetchBonusShareStub,
-                fetchCompanyShareOfAccrual: fetchCompanyShareStub 
+                fetchConfigVarsForFlat: fetchFloatConfigVarsStub 
             },
             [rdsPath]: { 
                 addOrSubtractFloat: adjustFloatBalanceStub,
                 allocateFloat: allocateFloatBalanceStub
             }
         }));
+
+        allocationStub = sinon.stub(handler, 'allocate').withArgs(common.testValidClientId, common.testValidFloatId).resolves(testTxIds);
     });
 
     after(() => {
-        dynamo.fetchBonusPoolShareOfAccrual.restore();
-        dynamo.fetchCompanyShareOfAccrual.restore();
+        dynamo.fetchSharesAndTrackersForFloat.restore();
         rds.addOrSubtractFloat.restore();
         rds.allocateFloat.restore();
+        handler.allocate.restore();
     });
 
-    it('Check initial accrual', async () => {
+    it.only('Check initial accrual', async () => {
         const amountAccrued = Math.floor(Math.random() * 1e4 * 1e4);  // thousands of rand, in hundredths of a cent
 
         const accrualEvent = {
@@ -172,15 +174,17 @@ describe('Primary allocation lambda', () => {
 
         const response = await handler.accrue(accrualEvent, { });
 
-        expect(fetchBonusShareStub).to.have.been.calledOnce;
-        expect(fetchCompanyShareStub).to.have.been.calledOnce;
-
+        // expect the config variables to be fetched
+        expect(fetchFloatConfigVarsStub).to.have.been.calledOnce;
+        
+        // expect the float to have its balance adjusted upward
         const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
         delete expectedFloatAdjustment['amountAccrued'];
         expectedFloatAdjustment['amount'] = amountAccrued;
         expect(adjustFloatBalanceStub).to.have.been.calledOnce;
         expect(adjustFloatBalanceStub).to.have.been.calledWith(expectedFloatAdjustment);
 
+        // expect the bonus and company shares to be allocated
         const expectedBonusAllocation = JSON.parse(JSON.stringify(expectedFloatAdjustment));
         expectedBonusAllocation['amount'] = amountAccrued * common.testValueBonusPoolShare;
         expectedBonusAllocation['allocatedTo'] = common.testValueBonusPoolTracker;
@@ -189,21 +193,26 @@ describe('Primary allocation lambda', () => {
         expectedClientCoAllocation['amount'] = amountAccrued * common.testValueCompanyShare;
         expectedClientCoAllocation['allocatedTo'] = common.testValueClientCompanyTracker;
 
-        expect(allocateFloatBalanceStub).to.have.been.calledTwice;
-        expect(allocateFloatBalanceStub).to.have.been.calledWith(expectedBonusAllocation);
-        expect(allocateFloatBalanceStub).to.have.been.calledWith(expectedClientCoAllocation);
+        expect(allocateFloatBalanceStub).to.have.been.calledOnce;
+        expect(allocateFloatBalanceStub).to.have.been.calledWith(sinon.matcher([expectedBonusAllocation, expectedClientCoAllocation]));
 
+        // for now we are going to call this method directly; in future will be easy to change it into a queue or async lambda invocation
+        expect(allocationStub).to.have.been.calledOnce;
+
+        // expect the lambda to then return the correct, well formatted response
         expect(response.statusCode).to.equal(200);
         expect(response.entity).to.exist;
+        const responseEntity = response.entity;
 
-        expect(response.companyShare).to.exist;
+        expect(responseEntity.companyShare).to.exist;
         const companyShare = response.entity.company_share;
         expect(companyShare).to.be.lessThan(amountAccrued);
 
-        expect(response.entity.float_total).to.be.greaterThan(amountAccrued - companyShare);
-        expect(response.entity.bonus_pool).to.be.lessThan(amountAccrued - companyShare);
+        expect(responseEntity.floatTotal).to.be.at.least(amountAccrued);
+        expect(responseEntity.bonusPoolShare).to.be.lessThan(amountAccrued - companyShare);
 
-        expect(response.entity.recon_job_id).to.exist;
+        expect(responseEntity.reconJobId).to.exist;
+        expect(responseEntity.allocationTxIds).to.equal(testTxIds);
 
     });
 

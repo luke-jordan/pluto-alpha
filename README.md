@@ -56,6 +56,10 @@ Note: make sure to install ipython in your virtual env or you will get module im
 
 1. For NodeJS: Mocha and Chai, globals
 
-## STEP 4: Check it's working
+## STEP 4: Link modules
+
+npm link
+
+## STEP 5: Check it's working
 
 In the root folder run ./initiate

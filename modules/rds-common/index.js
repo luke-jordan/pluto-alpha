@@ -1,4 +1,5 @@
 'use strict';
+process.env.SUPPRESS_NO_CONFIG_WARNING = 'y';
 
 const logger = require('debug')('pluto:rds-common:main');
 const config = require('config');
@@ -17,17 +18,29 @@ const { QueryError, CommitError, NoValuesError } = require('./errors');
 class RdsConnection {
     /**
      * Creates a client to the relevant RDS host and initiates work on it
-     * @option options db The relevant DB for this client (host is common and defined globally)
-     * @option options user The user, the remainder of the client assumes this has the  
+     * @param {string} db The relevant DB for this client (host is either specified below or global instance is used)
+     * @param {string} user The user, the remainder of the client assumes this has the correct permissions
+     * @param {string} password Password for the given user
+     * @param {string} host Optional. A specified host, otherwise global default for environment is used.
+     * @param {number} port Optiona. As above.
      */
-    constructor(db = 'relevant_db', user = 'postgres_user', password = 'user_password') {
+    constructor(dbConfigs) {
         const self = this;
+
+        const defaultConfigs = {
+            db: 'plutotest', user: 'plutotest', password: 'verylongpassword', host: 'localhost', port: '5432' 
+        };
+        
+        // pattern is nicely explained here: https://github.com/lorenwest/node-config/wiki/Sub-Module-Configuration
+        config.util.extendDeep(defaultConfigs, dbConfigs);
+        config.util.setModuleDefaults('RdsConnection', defaultConfigs);
+
         self._pool = new Pool({
-            host: config.get('db.host'),
-            port: config.get('db.port'),
-            database: db,
-            user: user,
-            password: password
+            host: config.get('RdsConnection.host'),
+            port: config.get('RdsConnection.port'),
+            database: config.get('RdsConnection.db'),
+            user: config.get('RdsConnection.user'),
+            password: config.get('RdsConnection.password')
         });
         // logger('Set up connection, ready to initiate connections');
     }
