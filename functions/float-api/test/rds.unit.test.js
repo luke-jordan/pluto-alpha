@@ -41,6 +41,68 @@ const common = require('./common');
 const constants = require('../constants');
 
 // todo: think through tests all failure cases (e.g., accrual doesn't execture, accrual does but bonus share doesn't, etc.)
+describe('Float balance add or subtract', () => {
+
+    let balanceStub;
+    const testOpeningBalance = Math.floor(100000 * 100 * 100 * Math.random());
+
+    before(() => {
+        resetStubs();
+        balanceStub = sinon.stub(rds, 'calculateFloatBalance');
+    });
+
+    after(() => {
+        rds.calculateFloatBalance.restore();
+    });
+
+    it('Adds appropriately to float', async () => {
+        const floatBalanceAdjustment = {
+            transactionId: uuid(),
+            clientId: common.testValidClientId,
+            floatId: common.testValidFloatId,
+            transactionType: constants.floatTransTypes.ACCRUAL,
+            amount: Math.floor(1000 * 100 * 100 * Math.random()),
+            currency: 'ZAR',
+            unit: constants.floatUnits.HUNDREDTH_CENT,
+            backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
+            backingEntityIdentifier: uuid()
+        };
+
+        // logger('Huh? : ', config.get('tables.floatTransaction'))
+        const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, currency, unit, `
+            + `amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id`;
+        const columns = common.allocationExpectedColumns;
+        const expectedRow = {
+            'transaction_id': floatBalanceAdjustment.transactionId,
+            'client_id': common.testValidClientId,
+            'float_id': common.testValidFloatId,
+            't_type': constants.floatTransTypes.ACCRUAL,
+            'currency': 'ZAR',
+            'unit': floatBalanceAdjustment.unit,
+            'amount': floatBalanceAdjustment.amount,
+            'allocated_to_type': constants.entityTypes.FLOAT_ITSELF,
+            'allocated_to_id': common.testValidFloatId,
+            'related_entity_type': constants.entityTypes.ACCRUAL_EVENT,
+            'related_entity_id': floatBalanceAdjustment.backingEntityIdentifier
+        };
+
+        insertStub.withArgs(query, columns, sinon.match([expectedRow])).resolves({rows: [{ 'transaction_id': floatBalanceAdjustment.transactionId }] });
+        balanceStub.withArgs(common.testValidFloatId, 'ZAR').resolves({ balance: floatBalanceAdjustment.amount + testOpeningBalance, 
+            unit: constants.floatUnits.DEFAULT }); // leaving off earliest and latest TX as tested below, and not relevant (yet)
+
+        const adjustmentResult = await rds.addOrSubtractFloat(floatBalanceAdjustment);
+        
+        expect(adjustmentResult).to.exist;
+        expect(adjustmentResult).to.deep.equal({
+            updatedBalance: testOpeningBalance + floatBalanceAdjustment.amount,
+            unit: constants.floatUnits.HUNDREDTH_CENT,
+            transactionId: floatBalanceAdjustment.transactionId
+        });
+
+    });
+
+});
+
 
 describe('Accrual happy paths', () => {
 
@@ -64,7 +126,7 @@ describe('Accrual happy paths', () => {
         'transaction_id': stubTransactionId, 
         'client_id': common.testValidClientId, 
         'float_id': common.testValidFloatId, 
-        't_type': constants.floatTransTypes.ACCRUAL,
+        't_type': constants.floatTransTypes.ALLOCATION,
         'amount': testAccrualInstruction.amount,
         'currency': testAccrualInstruction.currency, 
         'unit': testAccrualInstruction.unit, 
@@ -75,7 +137,8 @@ describe('Accrual happy paths', () => {
     }];
 
     before(() => {
-        insertStub.withArgs(expectedQuery, expectedColumns, expectedValues).resolves({rows: [{id: stubTransactionId}]});
+        insertStub.reset();
+        insertStub.withArgs(expectedQuery, expectedColumns, expectedValues).resolves({rows: [{'transaction_id': stubTransactionId}]});
     });
 
     after(() => {
@@ -87,8 +150,7 @@ describe('Accrual happy paths', () => {
         const allocationResult = await rds.allocateFloat(common.testValidClientId, common.testValidFloatId, [testAccrualInstruction]);
         logger('Finished allocation');
         expect(allocationResult).to.exist;
-        expect(allocationResult).to.have.property('rows');
-        expect(allocationResult.rows).to.eql([{id: stubTransactionId}])
+        expect(allocationResult).to.eql([{id: stubTransactionId}]);
         expect(insertStub).to.have.been.calledOnce;
         expect(insertStub).to.have.been.calledWith(expectedQuery, expectedColumns, expectedValues);
     });
@@ -104,6 +166,7 @@ describe('Company and bonus share allocations', () => {
     const bonusTxId = uuid();
 
     const testBonusAllocation = {
+        label: 'BONUS',
         amount: Math.round(common.testValueAccrualSize * common.testValueBonusPoolShare),
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
@@ -117,6 +180,7 @@ describe('Company and bonus share allocations', () => {
     const companyTxId = uuid();
 
     const testCompanyAllocation = {
+        label: 'COMPANY',
         amount: Math.round(common.testValueAccrualSize * common.testValueCompanyShare),
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
@@ -134,7 +198,7 @@ describe('Company and bonus share allocations', () => {
         'transaction_id': bonusTxId, 
         'client_id': common.testValidClientId, 
         'float_id': common.testValidFloatId, 
-        't_type': constants.floatTransTypes.ACCRUAL,
+        't_type': constants.floatTransTypes.ALLOCATION,
         'amount': testBonusAllocation.amount,
         'currency': testBonusAllocation.currency, 
         'unit': testBonusAllocation.unit, 
@@ -148,7 +212,7 @@ describe('Company and bonus share allocations', () => {
         'transaction_id': companyTxId, 
         'client_id': common.testValidClientId, 
         'float_id': common.testValidFloatId, 
-        't_type': constants.floatTransTypes.ACCRUAL,
+        't_type': constants.floatTransTypes.ALLOCATION,
         'amount': testCompanyAllocation.amount,
         'currency': testCompanyAllocation.currency, 
         'unit': testCompanyAllocation.unit, 
@@ -159,9 +223,10 @@ describe('Company and bonus share allocations', () => {
     };
 
     before(() => {
-        insertStub.withArgs(expectedQuery, expectedColumns, [expectedValuesBonus]).resolves({rows: [{id: bonusTxId}]});
-        insertStub.withArgs(expectedQuery, expectedColumns, [expectedValuesCompany]).resolves({rows: [{id: companyTxId}]});
-        insertStub.withArgs(expectedQuery, expectedColumns, [expectedValuesBonus, expectedValuesCompany]).resolves({rows: [{id: bonusTxId}, {id: companyTxId}]});
+        insertStub.withArgs(expectedQuery, expectedColumns, [expectedValuesBonus]).resolves({rows: [{transaction_id: bonusTxId}]});
+        insertStub.withArgs(expectedQuery, expectedColumns, [expectedValuesCompany]).resolves({rows: [{transaction_id: companyTxId}]});
+        insertStub.withArgs(expectedQuery, expectedColumns, [expectedValuesBonus, expectedValuesCompany])
+            .resolves({rows: [{transaction_id: bonusTxId}, {transaction_id: companyTxId}]});
     });
 
     beforeEach(() => {
@@ -177,7 +242,7 @@ describe('Company and bonus share allocations', () => {
         const insertResult = await rds.allocateFloat(common.testValidClientId, common.testValidFloatId, [testBonusAllocation]);
         logger('Completed bonus allocation query, result: ', insertResult);
         expect(insertResult).to.exist;
-        expect(insertResult).to.eql({rows: [{id: bonusTxId}]});
+        expect(insertResult).to.eql([{'BONUS': bonusTxId}]);
         expect(insertStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedColumns, [expectedValuesBonus]);
     });
 
@@ -185,7 +250,7 @@ describe('Company and bonus share allocations', () => {
         const insertResult = await rds.allocateFloat(common.testValidClientId, common.testValidFloatId, [testCompanyAllocation]);
         logger('Completed company allocation query');
         expect(insertResult).to.exist;
-        expect(insertResult).to.eql({ rows: [{id: companyTxId}]});
+        expect(insertResult).to.eql([{'COMPANY': companyTxId}]);
         expect(insertStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedColumns, [expectedValuesCompany]);
     });
 
@@ -193,7 +258,7 @@ describe('Company and bonus share allocations', () => {
         const insertResult = await rds.allocateFloat(common.testValidClientId, common.testValidFloatId, [testBonusAllocation, testCompanyAllocation]);
         logger('Completed dual allocation');
         expect(insertResult).to.exist;
-        expect(insertResult).to.eql({ rows: [{id: bonusTxId}, {id: companyTxId}]});
+        expect(insertResult).to.eql([{'BONUS': bonusTxId}, {'COMPANY': companyTxId}]);
         expect(insertStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedColumns, [expectedValuesBonus, expectedValuesCompany]);
     });
 
@@ -231,7 +296,7 @@ describe('User account allocation', () => {
     };
 
     const generateAllocations = (numberOfUsers, maxAllocation) => {
-        const allocationAmounts = Array(numberOfUsers).fill().map(_ => Math.round(Math.random() * maxAllocation));
+        const allocationAmounts = Array(numberOfUsers).fill().map(() => Math.round(Math.random() * maxAllocation));
         return generateUserAllocationRequests(allocationAmounts);
     };
 
@@ -242,19 +307,19 @@ describe('User account allocation', () => {
 
     const baseAccountAllocationQueryDef = {
         query: `insert into ${config.get('tables.accountTransactions')} (transaction_id, account_id, transaction_type, settlement_status, ` +
-            `amount, currency, unit, float_id, tags) values %L returning transaction_id`,
+            `amount, currency, unit, float_id, tags) values %L returning transaction_id, amount`,
         columns: '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ${float_id}, ${tags}'
     };
 
     it('Persists a large number of allocations correctly', async () => {
         const floatQueryDef = JSON.parse(JSON.stringify(baseFloatAllocationQueryDef));
-        const allocRequests = generateAllocations(1, 1e3 * 1e4); // a hundred rand in hundredth cents (as daily interest, equals ind account of R1m roughly)
+        const allocRequests = generateAllocations(1, 100 * 100 * 100); // a hundred rand in hundredth cents (as daily interest, equals ind account of R1m roughly)
         
         floatQueryDef.rows = allocRequests.map((request) => ({
             'transaction_id': request.floatTxId,
             'client_id':  common.testValidClientId,
             'float_id': common.testValidFloatId,
-            't_type': constants.floatTransTypes.ACCRUAL,
+            't_type': constants.floatTransTypes.ALLOCATION,
             'amount': request.amount,
             'currency': request.currency,
             'unit': request.unit,
@@ -277,8 +342,8 @@ describe('User account allocation', () => {
             'tags': `ARRAY ['ACCRUAL_EVENT::${common.testValidAccrualId}']`
         }));
 
-        const floatTxArray = allocRequests.map((request) => ({ transaction_id: request.floatTxId }));
-        const accountTxArray = allocRequests.map((request) => ({ transaction_id: request.accountTxId }));
+        const floatTxArray = allocRequests.map((request) => ({ 'transaction_id': request.floatTxId }));
+        const accountTxArray = allocRequests.map((request) => ({ 'transaction_id': request.accountTxId, 'amount': request.amount }));
 
         multiTableStub.reset();
         multiTableStub.withArgs(sinon.match([floatQueryDef, accountQueryDef])).resolves([floatTxArray, accountTxArray]);
@@ -299,9 +364,12 @@ describe('User account allocation', () => {
 
 });
 
-describe('Test account summation', () => {
+describe('Test account summation and float balances', () => {
 
-    after(() => resetStubs());
+    const floatTable = config.get('tables.floatTransactions');
+
+    before(() => resetStubs());
+    afterEach(() => resetStubs());
 
     // note : we are here assuming that any save has a corresponding add to float and allocation action
     // further note : this becomes unpredictable in timing when this approaches 10k, but seems due to generating objects
@@ -320,12 +388,11 @@ describe('Test account summation', () => {
         const expectedSumObject = new Map();
         accountIds.forEach((accountId) => {
             expectedSumObject.set(accountId, (wholeCentObject[accountId] * constants.floatUnitTransforms.WHOLE_CENT 
-                + hundredthsObject[accountId] * constants.floatUnitTransforms.HUNDREDTH_CENT))
+                + hundredthsObject[accountId] * constants.floatUnitTransforms.HUNDREDTH_CENT));
         });
 
-        const floatTable = config.get('tables.floatTransactions');
-
         const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
+        // NB : todo : filter on transaction_type (i.e., accruals vs others)
         const sumQuery = `select account_id, sum(amount) from ${floatTable} group by account_id where float_id = $1 and ` + 
             `currency = $2 and unit = $3 and allocated_to_type = $4`;
 
@@ -356,6 +423,88 @@ describe('Test account summation', () => {
         expect(multiTableStub).to.not.have.been.called;
     }).timeout('3000');
 
+    it('Should accurately retrieve current float balances', async () => {
+        // const numberOfAccounts = 1;
+        // const accountIds = Array(numberOfAccounts).fill().map(() => uuid());
+
+        const generateTransactions = (numberOfTxs, unit, baseAmount, tTypes) => Array(numberOfTxs).fill().map(() => ({
+            'transaction_id': uuid(), 
+            'unit': unit,
+            'currency': 'ZAR',
+            'amount': Math.round(Math.random() * baseAmount),
+            'transaction_type': tTypes[Math.floor(Math.random() * tTypes.length)]
+        }));
+        
+        const numberOfPositiveTxs = 1000;
+        const positiveTxTypes = [constants.floatTransTypes.ACCRUAL, constants.floatTransTypes.CAPITALIZATION, 
+            constants.floatTransTypes.DEPOSIT];
+        const positiveTxRows = generateTransactions(numberOfPositiveTxs, constants.floatUnits.HUNDREDTH_CENT,
+            1000 * 100 * 100, positiveTxTypes);
+        const positiveRowSum = positiveTxRows.map((row) => row.amount).reduce((a, b) => a + b, 0);
+        // logger('Positive rows: ', positiveTxRows);
+
+        const numberOfNegativeTxs = 1500;
+        const negativeTxTypes = [constants.floatTransTypes.WITHDRAWAL];
+        const negativeTxRows = generateTransactions(numberOfNegativeTxs, constants.floatUnits.WHOLE_CENT,
+            -1000 * 100, negativeTxTypes);
+        const negativeRowSum = negativeTxRows.map((row) => row.amount).reduce((a, b) => a + b, 0);
+        // logger('Negative rows: ', negativeTxRows);
+        
+        const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 `
+            + `and allocated_to_type = $3`;
+        const unitColumns = [common.testValidFloatId, 'ZAR', constants.entityTypes.FLOAT_ITSELF];
+
+        queryStub.withArgs(unitQuery, sinon.match(unitColumns)).resolves([ { unit: constants.floatUnits.HUNDREDTH_CENT}, { unit: constants.floatUnits.WHOLE_CENT }]);
+        
+        const sumQuery = `select sum(amount) from ${floatTable} where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 ` +
+            `and creation_time between $5 and $6`;
+        const startOfTime = new Date(0);
+        // const currentTime = new Date(); // not used, given matcher below, with rationale
+        
+        // use any date matcher on last param, as 'now' has ticked on a few millis, and alternate prevents testing of defaults
+        const sumParams = (unit) => [common.testValidFloatId, 'ZAR', unit, constants.entityTypes.FLOAT_ITSELF, startOfTime, sinon.match.date];
+        queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.HUNDREDTH_CENT))).resolves([{ 'sum(amount)': positiveRowSum }]);
+        queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.WHOLE_CENT))).resolves([ { 'sum(amount)': negativeRowSum }]);
+
+        const mostCommonUnitQuery = `select unit, count(*) from ${floatTable} group by unit`;
+        queryStub.withArgs(mostCommonUnitQuery, []).resolves([
+            { 'unit': constants.floatUnits.HUNDREDTH_CENT, 'count(*)': numberOfPositiveTxs }, 
+            { 'unit': constants.floatUnits.WHOLE_CENT, 'count(*)': numberOfNegativeTxs } ]);
+
+        const mockEarliestTx = { 'transaction_id': uuid(), 'amount': positiveTxRows[0].amount };
+        const earliestTxQuery = `select transaction_id, amount, currency, unit, related_entity_type, related_entity_id `
+            + `from ${floatTable} where float_id = $1 and currency = $2 and creation_time > $3 order by creation_time asc limit 1`;
+        const earliestTxParams = [common.testValidFloatId, 'ZAR', startOfTime];
+        queryStub.withArgs(earliestTxQuery, sinon.match(earliestTxParams)).resolves([ mockEarliestTx ]);
+
+        const mockLatestTx = { 'transaction_id': uuid(), 'amount': positiveTxRows[numberOfPositiveTxs - 1].amount };
+        const mostRecentTxQuery = `select transaction_id, amount, currency, unit, related_entity_type, related_entity_id ` 
+            + `from ${floatTable} where float_id = $1 and currency = $2 and creation_time < $3 order by creation_time desc limit 1`;
+        const mostRecentTxParams = [common.testValidFloatId, 'ZAR', sinon.match.date];
+        queryStub.withArgs(mostRecentTxQuery, sinon.match(mostRecentTxParams)).resolves([ mockLatestTx ]);
+
+        const floatBalance = await rds.calculateFloatBalance(common.testValidFloatId, 'ZAR');
+        const expectedBalance = positiveRowSum * constants.floatUnitTransforms.HUNDREDTH_CENT + negativeRowSum * constants.floatUnitTransforms.WHOLE_CENT;
+        logger(`Positive sum ${positiveRowSum} in hundredth cent, and ${negativeRowSum} in whole cents, for exp balance ${expectedBalance}`);
+
+        expect(floatBalance).to.exist;
+        expect(floatBalance).to.deep.equal({ 
+            balance: expectedBalance, 
+            unit: constants.floatUnits.HUNDREDTH_CENT, // slightly redundant with most common unit but may want flexibility to define in future
+            earliestTx: mockEarliestTx, 
+            latestTx: mockLatestTx, 
+            mostCommonUnit: constants.floatUnits.HUNDREDTH_CENT
+        });
+        
+        expect(queryStub).to.have.been.calledWith(unitQuery, sinon.match(unitColumns));
+        expect(queryStub).to.have.been.calledWith(sumQuery, sinon.match(sumParams(constants.floatUnits.HUNDREDTH_CENT)));
+        expect(queryStub).to.have.been.calledWith(sumQuery, sinon.match(sumParams(constants.floatUnits.WHOLE_CENT)));
+        expect(queryStub).to.have.been.calledWith(mostCommonUnitQuery, []);
+        expect(queryStub).to.have.been.calledWith(earliestTxQuery, sinon.match(earliestTxParams));
+        expect(queryStub).to.have.been.calledWith(mostRecentTxQuery, sinon.match(mostRecentTxParams));
+        expect(queryStub).to.have.been.callCount(6);
+    });
+
     // todo: test for blanks on each kind of result
     // it('Returns blanks if no results on queries', () => {
 
@@ -365,7 +514,7 @@ describe('Test account summation', () => {
 
 describe('Test integrity check', () => {
     it('Will fail if stub is not properly reset somewhere else in tests', async () => {
-        const queryResult = await rds.addOrSubtractFloat();
+        const queryResult = await rds.debugConnection();
         expect(queryResult).to.be.undefined;
     });
 });

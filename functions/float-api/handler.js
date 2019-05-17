@@ -29,7 +29,7 @@ module.exports.accrue = async (event, context) => {
   const clientId = accrualParameters.clientId;
   const floatId = accrualParameters.floatId;
 
-  const floatConfig = await dynamo.fetchConfigVarsForFlat(clientId, floatId);
+  const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
   
   const accrualAmount = accrualParameters.accrualAmount;
   const accrualCurrency = accrualParameters.currency || floatConfig.currency;
@@ -43,29 +43,45 @@ module.exports.accrue = async (event, context) => {
   };
 
   const bonusAllocation = JSON.parse(JSON.stringify(allocationBase));
+  bonusAllocation.label = 'BONUS';
   bonusAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.bonusPoolShare);
   bonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
   bonusAllocation.allocatedToId = floatConfig.bonusPoolTracker;
 
   const companyAllocation = JSON.parse(JSON.stringify(allocationBase));
+  companyAllocation.label = 'COMPANY';
   companyAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.companyShare);
   companyAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
   companyAllocation.allocatedToId = floatConfig.companyShareTracker;
 
-  const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency, unit: accrualUnit });
-  const entityAllocations = await rds.allocateFloat(clientId, floatId, [bonusAllocation, companyAllocation]);
+  const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
+     unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
+  
+  const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, companyAllocation]);
+  const entityAllocations = {
+    bonusShare: bonusAllocation.amount,
+    bonusTxId: entityAllocationIds.find((row) => Object.keys(row).includes('BONUS')).BONUS,
+    companyShare: companyAllocation.amount,
+    companyTxId: entityAllocationIds.find((row) => Object.keys(row).includes('COMPANY')).COMPANY,
+  };
 
   const remainingAmount = accrualAmount - bonusAllocation.amount - companyAllocation.amount;
-  const userAllocEvent = { clientId, floatId, totalAmount: amount, currency: accrualCurrency, 
-    backingEntityType: constants.entityTypes.ACCRUAL_EVENT, backingEntityIdentifier: backingEntityIdentifier };
+  const userAllocEvent = { clientId, floatId, 
+    totalAmount: remainingAmount, 
+    currency: accrualCurrency, 
+    backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
+    backingEntityIdentifier: accrualParameters.backingEntityIdentifier 
+  };
   
   const userAllocations = await exports.allocate(userAllocEvent);
 
   const returnBody = {
-    newBalance: newFloatBalance,
+    newBalance: newFloatBalance.currentBalance,
     entityAllocations: entityAllocations,
     userAllocationTransactions: userAllocations
   };
+
+  logger('Returning: ', returnBody);
 
   return {
     statusCode: 200,
@@ -78,11 +94,50 @@ module.exports.accrue = async (event, context) => {
 // note: this is generally the heart of things, and will require constant and continuous optimization, it will be 
 // triggered whenever another job detects unallocated amounts in the float, and gets passed: (i) the account totals, and (ii) amount to divide
 module.exports.allocate = async (event, context) => {
+  
+  const params = event.body || event;
+  const currentAllocatedBalanceMap = await rds.obtainAllAccountsWithPriorAllocations(params.floatId, params.currency, 
+    constants.entityTypes.END_USER_ACCOUNT, false);
+
+  const amountToAllocate = params.totalAmount; // || fetch unallocated amount
+  const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
+
+  const shareMap = await exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
+
+  let bonusAllocationResult;
+  if (shareMap.has(constants.EXCESSS_KEY)) {
+    const excessAmount = shareMap.get(constants.EXCESSS_KEY);
+    // store the allocation, store in bonus allocation Tx id
+    const bonusPool = await dynamo.fetchConfigVarsForFloat(params.clientId, params.floatId);
+    const bonusAlloc = { label: 'BONUS', amount: excessAmount, currency: params.currency, unit: unitsToAllocate, 
+      allocatedToType: constants.entityTypes.BONUS_POOL, allocatedToId: bonusPool.bonusPoolTracker };
+    if (params.backingEntityIdentifier && params.backingEntityType) {
+      bonusAlloc.relatedEntityType = params.backingEntityType;
+      bonusAlloc.relatedEntityId = params.backingEntityIdentifier;
+    }
+    bonusAllocationResult = await rds.allocateFloat(params.clientId, params.floatId, [bonusAlloc]);
+    shareMap.delete(constants.EXCESSS_KEY);
+  }
+
+  const allocRequests = [];
+  // todo : add in the backing entity for audits
+  for (const accountId of shareMap.keys()) {
+    allocRequests.push({
+      accountId: accountId,
+      amount: shareMap.get(accountId),
+      currency: params.currency,
+      unit: unitsToAllocate
+    });
+  }
+
+  const resultOfAllocations = await rds.allocateToUsers(params.clientId, params.floatId, allocRequests);
+  logger('Result of allocations: ', resultOfAllocations);
+  
   return {
-    statusCode: 400,
+    statusCode: 200,
     body: JSON.stringify({
-      message: 'Not built yet!',
-      input: event,
+      allocationRecords: resultOfAllocations,
+      bonusAllocation: bonusAllocationResult || { }
     }),
   };
 };
@@ -120,39 +175,54 @@ module.exports.calculateShare = (totalPool = 1.23457e8, shareInPercent = 0.0165,
 
 const calculatePercent = (total, account) => {
   return BigNumber(account).dividedBy(total);
+};
+
+const checkBalancesIntegers = (accountBalances = new Map()) => {
+  for (const balance of accountBalances.values()) {
+    if (!Number.isInteger(balance)) {
+      throw new TypeError('Error! One of the balances is not an integer');
+    }
+  }
+};
+
+const sumUpBalances = (accountBalances = new Map()) => {
+  let amount = 0;
+  for (const balance of accountBalances.values()) {
+    amount += balance;
+  }
+  return amount;
 }
 
-// same reasoning as above for exposing this. note: account totals need to be all ints, else something is wrong upstream
 module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = new Map(), appendExcess = true) => {
-  const accountBalances = Object.values(accountTotals);
-  if (accountBalances.some(balance => !Number.isInteger(balance))) {
-    throw new TypeError('Error! One of the balances is not an integer');
-  }
+  // same reasoning as above for exposing this. note: account totals need to be all ints, else something is wrong upstream
+  checkBalancesIntegers(accountTotals);
 
   // unless our total float itself approaches R100bn, this will not break integer values
-  const accountTotal = accountBalances.reduce((a, b) => a + b, 0);
-  
-  let shareDict = { }; 
+  let shareMap = new Map(); 
+
+  const accountTotal = sumUpBalances(accountTotals);
   const totalToShare = BigNumber(amountToDivide);
   
   // NOTE: the percentage is of the account relative to all other accounts, not relative to the float at present, hence calculate percent
   // is called with the total of the prior existing balances, and then multiples the amount to apportion
-  Object.keys(accountTotals).forEach((accountId) => {
-    shareDict[accountId] = calculatePercent(accountTotal, accountTotals[accountId]).times(totalToShare).integerValue().toNumber();
-  });
+  for (const accountId of accountTotals.keys()) {
+    // logger(`For account ${accountId}, balance is ${accountTotals.get(accountId)}`);
+    shareMap.set(accountId, calculatePercent(accountTotal, accountTotals.get(accountId)).times(totalToShare).integerValue().toNumber());
+  };
 
-  const apportionedAmount = Object.values(shareDict).reduce((a, b) => a + b, 0);
+  const apportionedAmount = sumUpBalances(shareMap);
   const excess = amountToDivide - apportionedAmount;
   
   logger(`Finished apportioning balances, handed ${amountToDivide} to divide, divied up ${apportionedAmount}, left with ${excess} excess`);
 
   if (appendExcess && excess !== 0) {
-    shareDict['excess'] = excess;
+    shareMap.set('excess', excess);
   } else if (excess !== 0) {
-   exports.apportion(excess, accountTotals, false);
+    // this doesn't make sense, revisit it once all in place
+    exports.apportion(excess, accountTotals, false);
   }
   
-  return shareDict;
+  return shareMap;
 };
 
 // leaving here as later documentation of why we are using bignumber instead of integers

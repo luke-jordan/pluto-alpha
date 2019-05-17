@@ -67,10 +67,10 @@ describe('Error fetches', () => {
         const invalidBothIds = { ClientId: common.testValidClientId + '1', FloatId: common.testValidFloatId + '_1' };
 
         stub.withArgs({TableName: config.get('tables.clientFloatVars'), Key: invalidClientid }).returns({
-            promise: () => { throw new ReferenceError(`No entry found for client ${common.testValidClientId + '1'} and float ${common.testValidFloatId}`); } 
+            promise: () => { throw new ReferenceError(`No entry found for client ${common.testValidClientId + '1'} and float ${common.testValidFloatId}`); }
         });
         stub.withArgs({TableName: config.get('tables.clientFloatVars'), Key: invalidFloatId }).returns({
-            promise: () => { throw new ReferenceError(`No entry found for client ${common.testValidClientId} and float ${common.testValidFloatId} + '_1`)} 
+            promise: () => { throw new ReferenceError(`No entry found for client ${common.testValidClientId} and float ${common.testValidFloatId} + '_1`)}
         });
         stub.withArgs({TableName: config.get('tables.clientFloatVars'), Key: invalidBothIds }).returns({
             promise: () => { throw new ReferenceError(`No entry found for client ${common.testValidClientId + '1'} and float ${common.testValidFloatId + '_1'}`)}

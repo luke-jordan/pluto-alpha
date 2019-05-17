@@ -86,10 +86,10 @@ describe('Multiple apportionment operations', () => {
         const numberOfAccounts = 100000; // note this takes 162ms for 10k, and seems to scale linearly, so 1.3secs for 100k. 
         const numberList = Array.from(Array(numberOfAccounts).keys());
         
-        const testAccountDict = { };
+        const testAccountDict = new Map();
         // generate set of numbers representing accounts with ~R10k each
-        const accountValues = numberList.map(_ => Math.floor(Math.random() * 1e9));
-        numberList.forEach((n) => testAccountDict['test-account-' + n] = accountValues[n]);
+        const accountValues = numberList.map(() => Math.floor(Math.random() * 1e9));
+        numberList.forEach((n) => testAccountDict.set('test-account-' + n, accountValues[n]));
         const sumOfAccounts = accountValues.reduce((a, b) => a + b, 0);
 
         // logger(`Generated account shares: ${JSON.stringify(testAccountDict)}`);
@@ -104,17 +104,31 @@ describe('Multiple apportionment operations', () => {
         const excess = amountToAportion - sumCheck; // this gets bigger as we have more accounts, though at rate of 2.85c in ~5 billion 
         logger(`Divided up amounts sum to: ${sumCheck}, vs original: ${amountToAportion}, excess: ${excess}`);
         
-        const resultDict = { };
-        numberList.forEach((n) => resultDict['test-account-' + n] = dividedUpAmounts[n]);
+        const resultMap = new Map();
+        numberList.forEach((n) => resultMap.set('test-account-' + n, dividedUpAmounts[n]));
         if (excess !== 0) { 
-            resultDict['excess'] = excess;
+            resultMap.set('excess', excess);
         }
 
+        logger('Calling apportionment operation, initiating core clock');
         const resultOfApportionment = handler.apportion(amountToAportion, testAccountDict);
+        logger('Obtained result from apportionment');
 
         expect(resultOfApportionment).to.exist;
-        expect(resultOfApportionment).to.eql(resultDict);
-    });
+        expect(resultOfApportionment).to.be.a('map');
+
+        // deep equal comparison on maps is _very_ slow, so pick a random set of numbers, and test with those
+        const sampleSizeToCheck = Math.ceil(numberOfAccounts / 1000);
+        logger('Going to sample ', sampleSizeToCheck, ' accounts');
+        const randomSampleIndices = Array(numberOfAccounts).fill().map(() => Math.round(Math.random() * numberOfAccounts));
+        randomSampleIndices.forEach((n) => {
+            expect(resultOfApportionment.get('test-account-' + n)).to.equal(resultMap.get('test-account-' + n))
+        });
+        
+        if (excess !== 0) {
+            expect(resultOfApportionment.get('excess')).to.equal(resultMap.get('excess'));
+        }
+    }).timeout('4000'); // so we don't get spurious fails if the sample is taking a little time
 
     it('Check that error is thrown if passed non-integer account balances', () => {
         const amountToAportion = Math.floor(Math.random() * 1e6);
@@ -125,7 +139,7 @@ describe('Multiple apportionment operations', () => {
 
 });
 
-describe('Primary allocation lambda', () => {
+describe('Primary allocation of inbound accrual lambda', () => {
 
     var handler;
     var fetchFloatConfigVarsStub;
@@ -133,17 +147,22 @@ describe('Primary allocation lambda', () => {
     var adjustFloatBalanceStub;
     var allocateFloatBalanceStub;
 
-    const testTxIds = Array(10).fill().map(_ => uuid());
+    var allocationStub;
 
     before(() => {
-        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFlat').returns(common.testValueBonusPoolShare);
+        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFloat').withArgs(common.testValidClientId, common.testValidFloatId).resolves({
+            bonusPoolShare: common.testValueBonusPoolShare,
+            bonusPoolTracker: common.testValueBonusPoolTracker,
+            companyShare: common.testValueCompanyShare,
+            companyShareTracker: common.testValueClientCompanyTracker
+        });
         
-        adjustFloatBalanceStub = sinon.spy(rds, 'addOrSubtractFloat');
-        allocateFloatBalanceStub = sinon.spy(rds, 'allocateFloat');
+        adjustFloatBalanceStub = sinon.stub(rds, 'addOrSubtractFloat');
+        allocateFloatBalanceStub = sinon.stub(rds, 'allocateFloat');
 
         handler = proxyquire('../handler', createStubs({
             [dynamoPath]: { 
-                fetchConfigVarsForFlat: fetchFloatConfigVarsStub 
+                fetchConfigVarsForFloat: fetchFloatConfigVarsStub 
             },
             [rdsPath]: { 
                 addOrSubtractFloat: adjustFloatBalanceStub,
@@ -151,26 +170,71 @@ describe('Primary allocation lambda', () => {
             }
         }));
 
-        allocationStub = sinon.stub(handler, 'allocate').withArgs(common.testValidClientId, common.testValidFloatId).resolves(testTxIds);
+        //withArgs(common.testValidClientId, common.testValidFloatId).
+        allocationStub = sinon.stub(handler, 'allocate');
     });
 
     after(() => {
-        dynamo.fetchSharesAndTrackersForFloat.restore();
+        dynamo.fetchConfigVarsForFloat.restore();
         rds.addOrSubtractFloat.restore();
         rds.allocateFloat.restore();
         handler.allocate.restore();
     });
 
-    it.only('Check initial accrual', async () => {
+    it('Check initial accrual', async () => {
         const amountAccrued = Math.floor(Math.random() * 1e4 * 1e4);  // thousands of rand, in hundredths of a cent
+        const testTxIds = Array(10).fill().map(_ => uuid());
 
         const accrualEvent = {
-            clientId: 'za_savings_co',
-            floatId: 'primary_cash_float',
-            amountAccrued: amountAccrued,
+            clientId: common.testValidClientId,
+            floatId: common.testValidFloatId,
+            accrualAmount: amountAccrued,
             currency: 'ZAR',
-            unit: constants.floatUnits.HUNDREDTH_CENT
-        }
+            unit: constants.floatUnits.HUNDREDTH_CENT,
+            backingEntityIdentifier: uuid()
+        };
+
+        const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
+        delete expectedFloatAdjustment.accrualAmount;
+        expectedFloatAdjustment.amount = amountAccrued;
+        adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ currentBalance: 100 + amountAccrued });
+
+        const expectedBonusAllocationAmount = Math.round(amountAccrued * common.testValueBonusPoolShare);
+        const expectedClientCoAmount = Math.round(amountAccrued * common.testValueCompanyShare);
+        const expectedUserAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount;
+
+        const expectedBonusAllocation = JSON.parse(JSON.stringify(expectedFloatAdjustment));
+        delete expectedBonusAllocation.clientId;
+        delete expectedBonusAllocation.floatId;
+        delete expectedBonusAllocation.backingEntityIdentifier;
+        
+        expectedBonusAllocation.label = 'BONUS';
+        expectedBonusAllocation.amount = expectedBonusAllocationAmount;
+        expectedBonusAllocation.allocatedToId = common.testValueBonusPoolTracker;
+        expectedBonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
+        expectedBonusAllocation.relatedEntityId = accrualEvent.backingEntityIdentifier;
+        expectedBonusAllocation.relatedEntityType = constants.entityTypes.ACCRUAL_EVENT;
+
+        const expectedClientCoAllocation = JSON.parse(JSON.stringify(expectedBonusAllocation));
+        expectedClientCoAllocation.label = 'COMPANY';
+        expectedClientCoAllocation.amount = expectedClientCoAmount;
+        expectedClientCoAllocation.allocatedToId = common.testValueClientCompanyTracker;
+        expectedClientCoAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
+
+        const expectedCall = sinon.match([expectedBonusAllocation, expectedClientCoAllocation]);
+        allocateFloatBalanceStub.withArgs(common.testValidClientId, common.testValidFloatId, expectedCall).resolves(
+            [ { 'BONUS': uuid() }, { 'COMPANY': uuid() }]);
+
+        const userAllocEvent = {
+            clientId: common.testValidClientId, floatId: common.testValidFloatId, 
+            totalAmount: expectedUserAmount,
+            currency: 'ZAR',
+            backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
+            backingEntityIdentifier: accrualEvent.backingEntityIdentifier
+        };
+
+        // we test bonus allocation of any fractional amount in the tests below, so here just set to none
+        allocationStub.withArgs(userAllocEvent).resolves({ allocationRecords: testTxIds, bonusAllocation: { } });
 
         const response = await handler.accrue(accrualEvent, { });
 
@@ -178,42 +242,162 @@ describe('Primary allocation lambda', () => {
         expect(fetchFloatConfigVarsStub).to.have.been.calledOnce;
         
         // expect the float to have its balance adjusted upward
-        const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
-        delete expectedFloatAdjustment['amountAccrued'];
-        expectedFloatAdjustment['amount'] = amountAccrued;
         expect(adjustFloatBalanceStub).to.have.been.calledOnce;
         expect(adjustFloatBalanceStub).to.have.been.calledWith(expectedFloatAdjustment);
 
         // expect the bonus and company shares to be allocated
-        const expectedBonusAllocation = JSON.parse(JSON.stringify(expectedFloatAdjustment));
-        expectedBonusAllocation['amount'] = amountAccrued * common.testValueBonusPoolShare;
-        expectedBonusAllocation['allocatedTo'] = common.testValueBonusPoolTracker;
-
-        const expectedClientCoAllocation = JSON.parse(JSON.stringify(expectedBonusAllocation));
-        expectedClientCoAllocation['amount'] = amountAccrued * common.testValueCompanyShare;
-        expectedClientCoAllocation['allocatedTo'] = common.testValueClientCompanyTracker;
-
         expect(allocateFloatBalanceStub).to.have.been.calledOnce;
-        expect(allocateFloatBalanceStub).to.have.been.calledWith(sinon.matcher([expectedBonusAllocation, expectedClientCoAllocation]));
+        expect(allocateFloatBalanceStub).to.have.been.calledWith(common.testValidClientId, common.testValidFloatId, expectedCall);
 
         // for now we are going to call this method directly; in future will be easy to change it into a queue or async lambda invocation
         expect(allocationStub).to.have.been.calledOnce;
+        expect(allocationStub).to.have.been.calledWithExactly(userAllocEvent);
 
         // expect the lambda to then return the correct, well formatted response
         expect(response.statusCode).to.equal(200);
-        expect(response.entity).to.exist;
-        const responseEntity = response.entity;
-
-        expect(responseEntity.companyShare).to.exist;
-        const companyShare = response.entity.company_share;
+        expect(response.body).to.exist;
+        const responseEntity = JSON.parse(response.body);
+        
+        expect(responseEntity.entityAllocations).to.exist;
+        expect(responseEntity.entityAllocations).to.have.keys(['companyShare', 'companyTxId', 'bonusShare', 'bonusTxId']);
+        const companyShare = responseEntity.entityAllocations.companyShare;
         expect(companyShare).to.be.lessThan(amountAccrued);
 
-        expect(responseEntity.floatTotal).to.be.at.least(amountAccrued);
-        expect(responseEntity.bonusPoolShare).to.be.lessThan(amountAccrued - companyShare);
+        expect(responseEntity.newBalance).to.be.at.least(amountAccrued);
+        expect(responseEntity.entityAllocations.bonusShare).to.be.lessThan(amountAccrued - companyShare);
 
-        expect(responseEntity.reconJobId).to.exist;
-        expect(responseEntity.allocationTxIds).to.equal(testTxIds);
+        expect(responseEntity.userAllocationTransactions).to.deep.equal({ allocationRecords: testTxIds, bonusAllocation: { } });
 
     });
+
+});
+
+describe('Primary allocation of unallocated float lamdba', () => {
+
+    let handler;
+
+    let obtainAccountBalancesStub;
+    let allocateFloatStub;
+    let allocateToUsersStub;
+    let apportionStub;
+
+    let fetchFloatConfigVarsStub;
+
+    before(() => {
+        obtainAccountBalancesStub = sinon.stub(rds, 'obtainAllAccountsWithPriorAllocations');
+        allocateFloatStub = sinon.stub(rds, 'allocateFloat');
+        allocateToUsersStub = sinon.stub(rds, 'allocateToUsers');
+
+        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFloat')
+
+        handler = proxyquire('../handler', createStubs({
+            [rdsPath]: { 
+                obtainAllAccountsWithPriorAllocations: obtainAccountBalancesStub,
+                allocateFloat: allocateFloatStub,
+                allocateToUsers: allocateToUsersStub
+            },
+            [dynamoPath]: {
+                fetchConfigVarsForFloat: fetchFloatConfigVarsStub
+            }
+        }));
+
+        apportionStub = sinon.stub(handler, 'apportion');
+    });
+
+    after(() => {
+        rds.obtainAllAccountsWithPriorAllocations.restore();
+        rds.allocateToUsers.restore();
+    });
+
+    afterEach(() => {
+        obtainAccountBalancesStub.reset();
+        allocateToUsersStub.reset();
+        handler.apportion.restore();
+    });
+
+    it('Happy path, when passed a balance to divide', async () => {
+        const numberAccounts = 10000;
+        logger('Initiated, testing with ', numberAccounts, ' accounts');
+
+        const amountToAllocate = 1000 * 100 * 100; // allocating R1k in interest
+        const userAllocEvent = {
+            clientId: common.testValidClientId, 
+            floatId: common.testValidFloatId, 
+            totalAmount: amountToAllocate,
+            currency: 'ZAR',
+            unit: constants.floatUnits.HUNDREDTH_CENT,
+            backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
+            backingEntityIdentifier: uuid()
+        };
+
+
+        const existingBalances = new Map();
+        // this will ensure the total balance is much larger than the amount to allocate, but roughly equal to order of magnitude larger with number accounts
+        Array(numberAccounts).fill().forEach(() => existingBalances.set(uuid(), Math.round(Math.random() * amountToAllocate)));
+        
+        // this gets tested above, and has a whole bunch of logic that would be silly to just mimc here, but we need to ensure excess is tested
+        // so we do not make sure that the allocation is accurate (i.e., totals), we just construct a map and add excess to
+        const apportionedBalances = new Map();
+        const averagePortion = amountToAllocate / numberAccounts;
+        for (const accountId of existingBalances.keys()) {
+            apportionedBalances.set(accountId, Math.round((Math.random() + 0.5) * averagePortion));
+        }
+        apportionedBalances.set(constants.EXCESSS_KEY, -75);
+        apportionStub.withArgs(amountToAllocate, existingBalances, true).returns(apportionedBalances);
+
+        fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves({ bonusPoolTracker: common.testValueBonusPoolTracker });
+        const bonuxTxAlloc = {
+            label: 'BONUS',
+            amount: -75,
+            currency: userAllocEvent.currency,
+            unit: userAllocEvent.unit,
+            allocatedToType: constants.entityTypes.BONUS_POOL,
+            allocatedToId: common.testValueBonusPoolTracker,
+            relatedEntityType: userAllocEvent.backingEntityType,
+            relatedEntityId: userAllocEvent.backingEntityIdentifier
+        };
+        const bonusTxId = uuid();
+
+        const expectedUserAllocsToRds = [];
+        const mockResultFromRds = [];
+        for (const accountId of existingBalances.keys()) {
+            const rdsAlloc = {
+                accountId: accountId,
+                amount: apportionedBalances.get(accountId),
+                currency: 'ZAR',
+                unit: userAllocEvent.unit
+            };
+            expectedUserAllocsToRds.push(rdsAlloc);
+            mockResultFromRds.push({ floatTxId: uuid(), accountTxId: uuid(), amount: apportionedBalances.get(accountId) });
+        }
+
+        const rdsMatcher = sinon.match(expectedUserAllocsToRds);
+        
+        obtainAccountBalancesStub.withArgs(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false)
+            .resolves(existingBalances);
+
+        allocateFloatStub.withArgs(common.testValidClientId, common.testValidFloatId, sinon.match([bonuxTxAlloc]))
+            .resolves({ 'BONUS': bonusTxId });
+        
+        allocateToUsersStub.withArgs(common.testValidClientId, common.testValidFloatId, rdsMatcher)
+            .resolves(mockResultFromRds);
+        
+        
+        const expectedBody = JSON.stringify({ allocationRecords: mockResultFromRds, bonusAllocation: { 'BONUS': bonusTxId } });
+        
+        const allocationResult = await handler.allocate(userAllocEvent, { });
+        expect(allocationResult).to.exist;
+
+        // logger('Actual: ', allocateFloatStub.getCall(0).args);
+        // logger('Expected: ', [common.testValidClientId, common.testValidFloatId, bonuxTxAlloc]);
+        
+        expect(allocationResult).to.deep.equal({ statusCode: 200, body: expectedBody });
+        expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false);
+        expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, rdsMatcher);
+    });
+
+    // it('Happy path, when not given a balance', async () => {
+    //     const allocationResult = await handler.allocate({ clientId: common.testValidClientId, floatId: common.testValidFloatId}, { });
+    // });
 
 });
