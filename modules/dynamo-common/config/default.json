@@ -1,0 +1,6 @@
+{
+    "aws": {
+        "apiVersion": "2012-08-10",
+        "region": "eu-west-1"
+    }
+}

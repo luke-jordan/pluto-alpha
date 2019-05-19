@@ -1,6 +1,6 @@
 {
   "name": "rds-common",
-  "version": "1.0.0",
+  "version": "0.0.1",
   "description": "Common module layer for interfacing with RDS",
   "main": "index.js",
   "scripts": {

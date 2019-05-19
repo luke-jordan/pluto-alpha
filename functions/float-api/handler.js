@@ -48,24 +48,29 @@ module.exports.accrue = async (event, context) => {
   bonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
   bonusAllocation.allocatedToId = floatConfig.bonusPoolTracker;
 
-  const companyAllocation = JSON.parse(JSON.stringify(allocationBase));
-  companyAllocation.label = 'COMPANY';
-  companyAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.companyShare);
-  companyAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
-  companyAllocation.allocatedToId = floatConfig.companyShareTracker;
+  const clientAllocation = JSON.parse(JSON.stringify(allocationBase));
+  clientAllocation.label = 'CLIENT';
+  clientAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.clientCoShare);
+  clientAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
+  clientAllocation.allocatedToId = floatConfig.clientCoShareTracker;
+
+  logger('Company allocation: ', clientAllocation);
 
   const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
      unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
-  
-  const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, companyAllocation]);
+  logger('New float balance: ', newFloatBalance);
+    
+  const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
+  logger('Allocation IDs: ', entityAllocationIds);
+
   const entityAllocations = {
     bonusShare: bonusAllocation.amount,
     bonusTxId: entityAllocationIds.find((row) => Object.keys(row).includes('BONUS')).BONUS,
-    companyShare: companyAllocation.amount,
-    companyTxId: entityAllocationIds.find((row) => Object.keys(row).includes('COMPANY')).COMPANY,
+    clientShare: clientAllocation.amount,
+    clientTxId: entityAllocationIds.find((row) => Object.keys(row).includes('CLIENT')).CLIENT,
   };
 
-  const remainingAmount = accrualAmount - bonusAllocation.amount - companyAllocation.amount;
+  const remainingAmount = accrualAmount - bonusAllocation.amount - clientAllocation.amount;
   const userAllocEvent = { clientId, floatId, 
     totalAmount: remainingAmount, 
     currency: accrualCurrency, 

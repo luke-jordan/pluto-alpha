@@ -7,7 +7,7 @@ const AWS = require('aws-sdk');
 
 AWS.config.update({
     region: config.get('aws.region')
-})
+});
   
   // const ddb = new AWS.DynamoDB({endpoint: config.get('aws.endpoints.dynamodb')});
 const docClient = new AWS.DynamoDB.DocumentClient({
