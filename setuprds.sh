@@ -9,10 +9,13 @@ export PGPORT=5430
 export PGDATABASE=pluto
 
 echo "Setting up users"
-psql -f ./persistence/create_db_roles.sql
+psql -f ./templates/rds/create_db_roles.sql
 
 echo "Setting up account ledger in RDS local"
-psql -f ./persistence/create_account_ledger.sql
+psql -f ./templates/rds/create_account_ledger.sql
 
 echo "Setting up transaction ledger in RDS local"
-psql -f ./persistence/create_transaction_ledger.sql
+psql -f ./templates/rds/create_transaction_ledger.sql
+
+echo "Setting up float ledger in RDS local"
+psql -f ./templates/rds/create_float_ledger.sql

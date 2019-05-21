@@ -11,7 +11,6 @@ chai.use(sinonChai);
 const proxyquire = require('proxyquire');
 
 const common = require('./common');
-const constants = require('../constants');
 
 const fetchStub = sinon.stub();
 
@@ -26,7 +25,8 @@ describe('** UNIT TESTING DYNAMODB ***', () => {
 
     before(() => {
         const validKey = { clientId: common.testValidClientId, floatId: common.testValidFloatId };
-        fetchStub.withArgs(config.get('tables.clientFloatVars'), validKey).returns({
+        const projection = ['bonusPoolShareOfAccrual', 'bonusPoolSystemWideId', 'clientShareOfAccrual', 'clientShareOfSystemWideId'];
+        fetchStub.withArgs(config.get('tables.clientFloatVars'), validKey, projection).returns({
             bonusPoolShareOfAccrual: common.testValueBonusPoolShare,
             bonusPoolSystemWideId: common.testValueBonusPoolTracker,
             clientShareOfAccrual: common.testValueClientShare,

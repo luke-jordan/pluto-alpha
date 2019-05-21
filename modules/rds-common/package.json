@@ -11,7 +11,7 @@
   "dependencies": {
     "config": "^3.1.0",
     "logger": "0.0.1",
-    "pg": "^7.10.0",
+    "pg": "^7.11.0",
     "pg-format": "^1.0.4",
     "pg-pool": "^2.0.6"
   },
@@ -19,7 +19,7 @@
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "mocha": "^6.1.4",
-    "nyc": "^14.0.0",
+    "nyc": "^14.1.1",
     "proxyquire": "^2.1.0",
     "random-words": "^1.1.0",
     "sinon": "^7.3.2",

@@ -47,11 +47,6 @@ Note: make sure to install ipython in your virtual env or you will get module im
 
 `sudo npm install -g serverless`
 
-3. Unless bug fixed by then - install our, patched version of serverless-localstack
-
-`git pull ...`
-`npm link ...`
-
 ## STEP 3: Testing frameworks
 
 1. For NodeJS: Mocha and Chai, globals

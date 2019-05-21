@@ -10,8 +10,12 @@ function docker_up {
 }
 
 function basic_setup {
-    cd ./templates
-    bash ./basicsetup.sh
+    bash ./setuprds.sh
+    bash ./setupdynamodb.sh
+}
+
+function deploy_serverless {
+    bash ./deploylambdas.sh
 }
 
 function activate_venv {

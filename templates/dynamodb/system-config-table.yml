@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Creates the tables that hold critical system-wide but rarely used variables, e.g., float shares, clients'
+Description: 'Creates the table that hold critical system-wide but rarely used variables, e.g., float shares, clients'
 Resources:
   systemVariableTable:
     Type: AWS::DynamoDB::Table

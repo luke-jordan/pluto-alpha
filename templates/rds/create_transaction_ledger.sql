@@ -19,10 +19,14 @@ create table if not exists transaction_data.core_transaction_ledger (
 );
 
 -- todo : indices
+-- todo : tighten up / narrow grants
 
 revoke all on transaction_data.core_transaction_ledger from public;
 
 grant usage on schema transaction_data to transaction_api_worker;
-grant select (creation_time, currency, amount, settlement_status, float_id, float_units_at_purchase, float_purchase_time, tags, flags) 
+grant select (creation_time, currency, amount, settlement_status, float_id, tags, flags) 
     on transaction_data.core_transaction_ledger to transaction_api_worker;
 grant insert on transaction_data.core_transaction_ledger to transaction_api_worker;
+
+grant usage on schema transaction_data to float_api_worker;
+grant select on transaction_data.core_transaction_ledger to float_api_worker;
