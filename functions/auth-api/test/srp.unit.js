@@ -1,0 +1,201 @@
+const logger = require('debug')('pluto:auth:test');
+
+const chai = require('chai');
+const expect = chai.expect;
+const sinon = require('sinon');
+const sinonChai = require('sinon-chai');
+chai.use(sinonChai);
+const uuid = require('uuid/v4');
+
+const proxyquire = require('proxyquire');
+
+let generateSaltStub = sinon.stub();
+let privateKeyStub = sinon.stub();
+let verifierStub = sinon.stub();
+let generateEphemeralStub = sinon.stub();
+let deriveSessionStub = sinon.stub();
+let verifySessionStub = sinon.stub();
+
+const passwordAlgorithm = proxyquire('../pwordalgo', {
+    'secure-remote-password/client': {
+        'generateSalt': generateSaltStub,
+        'derivePrivateKey': privateKeyStub,
+        'deriveVerifier': verifierStub,
+        'generateEphemeral': generateEphemeralStub,
+        'deriveSession': deriveSessionStub,
+        'verifySession': verifySessionStub
+    }
+});
+
+let loginHelperStub = sinon.stub(passwordAlgorithm, 'loginHelper');
+// logger('password ALgorithm structure:', passwordAlgorithm);
+
+const resetStubs = () => {
+    generateSaltStub.reset();
+    privateKeyStub.reset();
+    verifierStub.reset();
+    generateEphemeralStub.reset();
+    deriveSessionStub.reset();
+    verifySessionStub.reset();
+    loginHelperStub.reset();
+};
+
+const passedInSignUpDetails = {
+    systemWideUserId: uuid(),
+    password: 'a password policy compliant password'
+};
+
+const expectedArgsForSignup = {
+    systemWideUserId: passedInSignUpDetails.systemWideUserId,
+    password: passedInSignUpDetails.password
+};
+
+const passedInLoginDetails = {
+    systemWideUserId: uuid(),
+    password: 'a password policy compliant password'
+}
+const expectedLoginDetails = {
+    systemWideUserId: passedInLoginDetails.systemWideUserId,
+    password: passedInLoginDetails.password
+};
+
+
+describe('SecureRemotePassword', () => {
+
+    context("User sign up", () => {
+
+        before(() => {
+            // data which may need to be reset after each test
+            resetStubs();
+            generateSaltStub.returns('andpepper');
+            privateKeyStub.withArgs('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password).returns('some-private-key');
+            verifierStub.withArgs('some-private-key').returns('pushit');
+        });
+
+        it('should return username, salt and verifier', () => {
+            const expectedResult = { 
+                systemWideUserId: expectedArgsForSignup.systemWideUserId, 
+                salt: 'andpepper', 
+                verifier: 'pushit' 
+            };
+            
+            const result = passwordAlgorithm.generateSaltAndVerifier(passedInSignUpDetails.systemWideUserId, passedInSignUpDetails.password);
+            logger('result of signup: ', result);
+
+            expect(result).to.exist;
+            expect(result).to.deep.equal(expectedResult);
+            expect(generateSaltStub).to.be.calledOnceWithExactly();
+            expect(privateKeyStub).to.be.calledOnceWithExactly('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password);
+            expect(verifierStub).to.be.calledOnceWithExactly('some-private-key');
+        });
+    });
+
+
+    context("User Login", () => {
+
+        before(() => {
+            resetStubs();
+            generateEphemeralStub.returns({secret: 'mock clients secret ephemeral key', public: 'for the people'});
+            generateEphemeralStub.withArgs('mock persisted verifier').returns('a verifier-encoded ephemeral public key');
+            privateKeyStub
+                .withArgs('andpepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password)
+                .returns('some-private-key');
+            deriveSessionStub
+                .withArgs(
+                    'mock client ephemeral secret',
+                    'mock server ephemeral secret',
+                    'andpepper',
+                    expectedLoginDetails.systemWideUserId,
+                    'mock client private key'
+                ).returns({proof: 'mock client session proof'});
+            deriveSessionStub
+                .withArgs(
+                    'mock server ephemeral secret',
+                    'mock client public ephemeral',
+                    'andpepper',
+                    expectedLoginDetails.systemWideUserId,
+                    'mock persisted verifier',
+                    'mock client session proof'
+                ).returns({proof: 'mock server session proof'});
+            loginHelperStub.withArgs(
+                'saltAndServerPublicEphemeralLambdaUrl', {
+                    systemWideUserId: expectedLoginDetails.systemWideUserId,
+                    clientPublicEphemeral: 'mock client public ephemeral'
+                }).returns({salt: 'andpepper', serverEphemeralPublic: 'mock server public ephemeral'});
+            loginHelperStub.withArgs(
+                'serverSessionProofUrl', {
+                    systemWideUserId: expectedLoginDetails.systemWideUserId,
+                    clientSessionProof: 'mock client session proof',
+                    clientPublicEphemeral: 'mock client public ephemeral'
+                }).returns({serverSessionProof: 'mock server session proof'});           
+            }
+        );
+
+
+        it("should verify user credentials during login", () => {
+            const expectedLoginResult = {
+                systemWideUserId: expectedLoginDetails.systemWideUserId,
+                verified: true
+            };
+
+            const result = passwordAlgorithm.loginExistingUser(passedInLoginDetails.systemWideUserId, passedInLoginDetails.password);
+            logger('result of signup:', result)
+            logger('loginHelper calls', loginHelperStub.getCalls());
+
+            expect(result).to.exist;
+            expect(result).to.have.keys(['systemWideUserId', 'verified']);
+            expect(result).to.deep.equal(expectedLoginResult)
+            expect(generateEphemeralStub).to.have.been.calledOnceWithExactly();
+            expect(privateKeyStub).to.have.been.calledOnceWithExactly('andpepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password);
+            expect(deriveSessionStub).to.have.been.calledOnceWithExactly(
+                'mock client ephemeral secret',
+                'mock server ephemeral secret',
+                'andpepper',
+                expectedLoginDetails.systemWideUserId,
+                'mock client private key'
+            );
+        });
+
+
+        it('should get salt and server public ephemeral key', () => {
+            const expectedServerResult = {
+                salt: 'some rds stub returned salt',
+                serverPublicEphemeral: 'a verifier encoded ephemeral public key',
+            };
+            
+            const serverResult = passwordAlgorithm.getSaltAndServerPublicEphemeral(expectedLoginDetails.systemWideUserId, 'the clients public ephemeral key');
+            logger('result of salt and server publick ephemeral key extraction:', serverResult);
+
+            expect(serverResult).to.exist;
+            expect(serverResult).to.have.keys(['salt', 'serverPublicEphemeral']);
+            expect(serverResult).to.deep.equal(expectedServerResult);
+            expect(generateEphemeralStub).to.have.been.calledOnceWithExactly('persisted verifier');
+        });
+
+        it('should get server session proof', () => {
+            const expectedServerResponse = {
+                serverSessionProof: 'mock server session proof'
+            }
+
+            const serverResponse = passwordAlgorithm.getServerSessionProof(
+                expectedLoginDetails.systemWideUserId,
+                'mock client session proof',
+                'mock client public ephemeral'
+            );
+            logger('server session proof:', serverResponse);
+
+            expect(serverResponse).to.exist;
+            expect(serverResponse).to.have.keys(['serverSessionProof']);
+            expect(serverResponse).to.deep.equal(expectedServerResponse);
+            expect(deriveSessionStub).to.have.been.calledOnceWithExactly(
+                'mock server ephemeral secret',
+                'mock client public ephemeral',
+                'andpepper',
+                expectedLoginDetails.systemWideUserId,
+                'mock persisted verifier',
+                'mock client session proof'
+            );
+        });
+    });
+
+});

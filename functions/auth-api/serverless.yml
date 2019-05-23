@@ -1,0 +1,40 @@
+# Unnamed serverless API
+
+service: auth-api # NOTE: update this with your service name
+
+plugins:
+  - serverless-localstack
+
+custom:
+  localstack:
+    host: http://localhost
+    stages:
+      - dev
+      - local
+    debug: true
+  stages:
+    - local
+    - dev
+  thisStage: ${opt:stage, self:provider.stage}
+  thisProcess:
+    NODE_ENV:
+      prod: "production"
+      dev: "development"
+      local: "lamblocal"
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  region: eu-west-1
+  stage: dev
+
+functions:
+  create:
+    handler: handler.hello
+    # events:
+    #   - http:
+    #       path: save
+    #       method: post
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: u:*
