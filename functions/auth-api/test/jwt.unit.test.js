@@ -110,7 +110,6 @@ describe('JWT module', () => {
     });
 
     it('should return false if given invalid token', () => {
-        // this a productive but failed attempt to cover the infamous line 32
         verifyJwtStub.resetHistory();
         verifyJwtStub.withArgs('bad.web.token', mockPublicKey, sinon.match.any).throws('Invalid token');
         
@@ -118,8 +117,6 @@ describe('JWT module', () => {
 
         const result = jwt.verifyJsonWebToken('bad.web.token', mockVerifyOptions);
         logger('result of verification of a bad jwt token', result)
-        // logger('verfyJwt call count:', verifyJwtStub.callCount);
-        // logger('verifyJwt called with args:', verifyJwtStub.getCall(0).args)
 
         expect(result).to.be.false;
         expect(result).to.deep.equal(expectedFalseVerificationResult);

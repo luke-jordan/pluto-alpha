@@ -65,7 +65,6 @@ describe('SecureRemotePassword', () => {
     context("User sign up", () => {
 
         before(() => {
-            // data which may need to be reset after each test
             resetStubs();
             generateSaltStub.returns('andpepper');
             privateKeyStub.withArgs('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password).returns('some-private-key');
@@ -180,7 +179,6 @@ describe('SecureRemotePassword', () => {
 
             const result = passwordAlgorithm.loginExistingUser(passedInLoginDetails.systemWideUserId, passedInLoginDetails.password);
             logger('result of signup:', result)
-            // logger('loginHelper calls', loginHelperStub.getCalls());
 
             expect(result).to.exist;
             expect(result).to.have.keys(['systemWideUserId', 'verified']);
@@ -195,7 +193,6 @@ describe('SecureRemotePassword', () => {
                 'mock client private key'
             );
         });
-
 
         it('should get salt and server public ephemeral key', () => {
             const expectedServerResult = {
