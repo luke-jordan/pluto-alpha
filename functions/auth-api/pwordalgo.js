@@ -1,4 +1,5 @@
 const srp = require('secure-remote-password/client');
+const logger = require('debug')('pluto:auth:pwdalgo')
 
 
 /**
@@ -14,9 +15,9 @@ module.exports.generateSaltAndVerifier = (systemWideUserId, password) => {
         const privateKey = srp.derivePrivateKey(salt, systemWideUserId, password);
         const verifier = srp.deriveVerifier(privateKey);
 
-        return { systemWideUserId, salt, verifier }
+        return { systemWideUserId, salt, verifier };
     }
-    return new Error('Invalid input.')
+    return {error: 'Invalid input'};
 };
 
 
@@ -27,20 +28,22 @@ module.exports.loginExistingUser = (systemWideUserId, password) => {
         systemWideUserId: systemWideUserId,
         clientPublicEphemeral: clientEphemeral.public
     });
-    // if (!response) throw new Error('No response from server');
-    console.log(response);
+    // logger('first loginHelper args:', 'systemWideUserId:', systemWideUserId, ', clientEphemeralPublic', clientEphemeral.public);
+    logger('first server response:', response)
+    if (!response) return {systemWideUserId: systemWideUserId, verified: false, reason: 'No response from server'};
     salt = response.salt;
     serverPublicEphemeral = response.serverEphemeralPublic;
     const privateKey = srp.derivePrivateKey(salt, systemWideUserId, password);
     const clientSession = srp.deriveSession(clientEphemeral.secret, serverPublicEphemeral, salt, systemWideUserId, privateKey);
+    logger('args passed to clientSession generator:', clientEphemeral.secret, '|', serverPublicEphemeral, '|', salt, '|', systemWideUserId, '|',  privateKey);
     const serverResponse = exports.loginHelper('serverSessionProofLambdaUrl', {
         systemWideUserId: systemWideUserId,
         clientSessionProof: clientSession.proof,
         clientPublicEphemeral: clientEphemeral.public
     });
-    logger('server response structure:', serverResponse)
-    // if (!serverResponse) throw new Error('Server session proof not recieved')
+    logger('second server response:', serverResponse);
     try {  // testing this try/catch block proves a bit tricky
+        if (!serverResponse) throw new Error('Server session proof not recieved')
         srp.verifySession(clientEphemeral.public, clientSession, serverResponse.serverSessionProof);
         return {systemWideUserId: systemWideUserId, verified: true};
     }

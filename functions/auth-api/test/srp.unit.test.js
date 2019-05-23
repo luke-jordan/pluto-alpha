@@ -88,6 +88,19 @@ describe('SecureRemotePassword', () => {
             expect(privateKeyStub).to.be.calledOnceWithExactly('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password);
             expect(verifierStub).to.be.calledOnceWithExactly('some-private-key');
         });
+
+        it('should return error on invalid input arguments', () => {
+            const expectedResult = {error: 'Invalid input'};
+
+            const result = passwordAlgorithm.generateSaltAndVerifier(passedInSignUpDetails.systemWideUserId);
+            logger('result of invalid input to user registration:', result);
+
+            expect(result).to.exist;
+            expect(result).to.deep.equal(expectedResult);
+            expect(generateSaltStub).to.not.have.been.called;
+            expect(privateKeyStub).to.not.have.been.called;
+            expect(verifierStub).to.not.have.been.called;
+        })
     });
 
 
@@ -95,22 +108,33 @@ describe('SecureRemotePassword', () => {
 
         before(() => {
             resetStubs();
-            generateEphemeralStub.returns({secret: 'mock clients secret ephemeral key', public: 'for the people'});
             generateEphemeralStub.withArgs('mock persisted verifier').returns('a verifier-encoded ephemeral public key');
+            generateEphemeralStub.returns({secret: 'mock client secret ephemeral', public: 'mock client public ephemeral'});
             privateKeyStub
                 .withArgs('andpepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password)
-                .returns('some-private-key');
+                .returns('mock client private key');
+            privateKeyStub
+                .withArgs('andpepper', 'mock system-wide user id to unavailable server', expectedLoginDetails.password)
+                .returns('mock client private key');
             deriveSessionStub
                 .withArgs(
-                    'mock client ephemeral secret',
-                    'mock server ephemeral secret',
+                    'mock client secret ephemeral',
+                    'mock server public ephemeral',
                     'andpepper',
                     expectedLoginDetails.systemWideUserId,
                     'mock client private key'
                 ).returns({proof: 'mock client session proof'});
             deriveSessionStub
                 .withArgs(
-                    'mock server ephemeral secret',
+                    'mock client secret ephemeral',
+                    'mock server public ephemeral',
+                    'andpepper',
+                    'mock system-wide user id to unavailable server',
+                    'mock client private key'
+                ).returns({proof: 'mock client session proof'});
+            deriveSessionStub
+                .withArgs(
+                    'mock server secret ephemeral',
                     'mock client public ephemeral',
                     'andpepper',
                     expectedLoginDetails.systemWideUserId,
@@ -123,11 +147,27 @@ describe('SecureRemotePassword', () => {
                     clientPublicEphemeral: 'mock client public ephemeral'
                 }).returns({salt: 'andpepper', serverEphemeralPublic: 'mock server public ephemeral'});
             loginHelperStub.withArgs(
-                'serverSessionProofUrl', {
+                'saltAndServerPublicEphemeralLambdaUrl', {
+                    systemWideUserId: 'mock system-wide user id to unavailable server 1',
+                    clientPublicEphemeral: 'mock client public ephemeral'
+                }).returns();
+            loginHelperStub.withArgs(
+                'serverSessionProofLambdaUrl', {
                     systemWideUserId: expectedLoginDetails.systemWideUserId,
                     clientSessionProof: 'mock client session proof',
                     clientPublicEphemeral: 'mock client public ephemeral'
-                }).returns({serverSessionProof: 'mock server session proof'});           
+                }).returns({serverSessionProof: 'mock server session proof'});
+            loginHelperStub.withArgs(
+                'saltAndServerPublicEphemeralLambdaUrl', {
+                    systemWideUserId: 'mock system-wide user id to unavailable server',
+                    clientPublicEphemeral: 'mock client public ephemeral'
+                }).returns({salt: 'andpepper', serverEphemeralPublic: 'mock server public ephemeral'});
+            loginHelperStub.withArgs(
+                'serverSessionProofLambdaUrl', {
+                    systemWideUserId: 'mock system-wide user id to unavailable server',
+                    clientSessionProof: 'mock client session proof',
+                    clientPublicEphemeral: 'mock client public ephemeral'
+                }).returns();           
             }
         );
 
@@ -140,7 +180,7 @@ describe('SecureRemotePassword', () => {
 
             const result = passwordAlgorithm.loginExistingUser(passedInLoginDetails.systemWideUserId, passedInLoginDetails.password);
             logger('result of signup:', result)
-            logger('loginHelper calls', loginHelperStub.getCalls());
+            // logger('loginHelper calls', loginHelperStub.getCalls());
 
             expect(result).to.exist;
             expect(result).to.have.keys(['systemWideUserId', 'verified']);
@@ -175,13 +215,14 @@ describe('SecureRemotePassword', () => {
         it('should get server session proof', () => {
             const expectedServerResponse = {
                 serverSessionProof: 'mock server session proof'
-            }
+            };
 
             const serverResponse = passwordAlgorithm.getServerSessionProof(
                 expectedLoginDetails.systemWideUserId,
                 'mock client session proof',
                 'mock client public ephemeral'
             );
+
             logger('server session proof:', serverResponse);
 
             expect(serverResponse).to.exist;
@@ -196,6 +237,56 @@ describe('SecureRemotePassword', () => {
                 'mock client session proof'
             );
         });
-    });
 
+        it('should gracefully handle null response from unavailable verification server 1', () => {
+            const expectedServerResponse = {
+                systemWideUserId: 'mock system-wide user id to unavailable server 1',
+                verified: false, 
+                reason: 'No response from server'
+            };
+
+            const serverResponse = passwordAlgorithm.loginExistingUser(
+                'mock system-wide user id to unavailable server 1',
+                expectedLoginDetails.password
+            );
+            logger('result drom unavailble server 1:', serverResponse);
+
+            expect(serverResponse).to.exist;
+            expect(serverResponse).to.deep.equal(expectedServerResponse);
+            expect(loginHelperStub).to.have.been.calledWith(
+                'saltAndServerPublicEphemeralLambdaUrl', {
+                    systemWideUserId: 'mock system-wide user id to unavailable server 1',
+                    clientPublicEphemeral: 'mock client public ephemeral'
+            });
+        }); 
+
+        it('should gracefully handle null response from unavailable verification server 2', () => {
+            const expectedServerResponse = {
+                systemWideUserId: 'mock system-wide user id to unavailable server', 
+                verified: false, 
+                reason: 'Server session proof not recieved'
+            }
+
+            const serverResponse = passwordAlgorithm.loginExistingUser(
+                'mock system-wide user id to unavailable server',
+                expectedLoginDetails.password
+            );
+
+            logger('result from unavailable server 2:', serverResponse);
+
+            expect(serverResponse).to.exist;
+            expect(serverResponse).to.deep.equal(expectedServerResponse);
+            expect(loginHelperStub).to.have.been.calledWith(
+                'saltAndServerPublicEphemeralLambdaUrl', {
+                    systemWideUserId: 'mock system-wide user id to unavailable server',
+                    clientPublicEphemeral: 'mock client public ephemeral'
+            });
+            expect(loginHelperStub).to.have.been.calledWith(
+                'serverSessionProofLambdaUrl', {
+                    systemWideUserId: 'mock system-wide user id to unavailable server',
+                    clientSessionProof: 'mock client session proof',
+                    clientPublicEphemeral: 'mock client public ephemeral'
+            });
+        });
+    });
 });
