@@ -16,14 +16,16 @@
 
 
 ## General Sign up Flow (SRP)
-* User enters thier username and password into sign up form. The user is assigned a system wide user id and this together with the password is then passed to the Auth API's sign up lambda function. The event required by the sign up lambda is of the form:
+
+* A system wide user id, password, and requested user role are passed to the user insertion lambda. The insertion lambda expects an event of the form:
 ```
 {
     "systemWideUserId": "4579c88b-798f-42a8-a851-d80e38e19e3a",
     "password": "someP0licyC0mpliantPassw0rd"
+    "requestedUserRole": "default"
 }
 ```
-* The lambda then converts this to an object of the form
+* The insertion lambda includes a password encrpyption algorithm which has a method that accepts the system wide user id and password as parameters and returns a salt key and a verifier key. The transformed object would be of the form:
 ```
 {
     "systemWideUserId": "4579c88b-798f-42a8-a851-d80e38e19e3a",
@@ -31,26 +33,38 @@
     "verifier": "48352c7435da05bf2c5b...2"
 }
 ```
-* This new object is then sent to the server to be persisted.
-* The Auth API upon successfuly storing the data will then send back details of its operations and a JSON Web Token if it's operations were successful. On success the lambda will return an object of the form:
+* The insertion lambda then creates a persistable user object, consisting of the system wide user id, the salt key, the verifier key, and the objects creation time. An example user object created during this process is shown below.
 ```
 {
-    "message": "success",
-    "jwt": "eyJhbGciCiJIBzI1NiI...JG"
+    system_wide_user_id: "4579c88b-798f-42a8-a851-d80e38e19e3a",
+    salt: "da2b9a6e402200052...d",
+    verifier: "48352c7435da05bf2c5b...2",
+    server_ephemeral_secret: null,
+    creation_time: 1558704842900,
+    updated_time: null
+}
+```
+* The isertion lambda then assigns the user the roles and permissions associated with the requested role passed to it. It is worth noting here that only admin users can create users with protected roles and permissions (such as other admin users and support users).
+* The user object is then persisted into an AWS RDS database which returns an insertion id if successful.
+* If user insertion was successful, a JSON Web Token is generated for the user and sent back to the client as part of the final insertion lambda response. The response body of the insertion lambda on the advent of successful operations is of the form:
+```
+{
+    "jwt": "ajson.web.token",
+    "message": "Successfully inserted user <insertionId>"
 }
 ```
 
-* This conludes the current sign up operations relating to the Auth API
+* This conludes the current user insertion routine. It is worth noting one of the perks of this method is that the users actual password is never persisted.
 
 ## General Login Flow (SRP)
-* As during sign up, user enters username and password into login form. After login details are processed by an intermediary, the Auth API's login lambda recieves an event of the form
+* As during user insertion, the login lambda accepts an event of the form
 ```
 {
     "systemWideUserId": "4579c88b-798f-42a8-a851-d80e38e19e3a",
     "password": "someP0licyC0mpliantPassw0rd"
 }
 ```
-* You may note that this event is identical to that recieved during sign up.
+* You may note that this event is identical to that recieved during sign up. The only difference being the path the event is passed in to.
 * The login lambda will validate the users credentials without sending the password to the server (for details on this process please see Login Details (SRP)). If user credentials check out, the lambda will respond with an object of the form
 ```
 {
@@ -108,18 +122,28 @@ The above is stored when a user signs in. During login, the above object is upda
             "permissions": [
                 "ReadLogs",
                 "ReadPersistenceTables",
-                "CheckBalance"
+                "CheckBalance",
+                "UpdateConfig"
                 // add as needed
             ]
         },
     },
 }
 ```
+### Support User Role
+```
+{
+    systemWideUserId: systemWideUserId,
+    role: "Support User Role",
+    Permissions: []
+};
+```
+
 ### Password Policy
 The password policy which will be read and enforced on the frontend during sign up and login is as follows:
 ```
 {
-    "policyId": "default user",
+    "policy_id": "default user",
     "expiresOn": <unixEpochMilli>
     "minLength": 8,
     "requireAlphanumeric": true,
@@ -127,6 +151,23 @@ The password policy which will be read and enforced on the frontend during sign 
 	// add as needed
 }
 ```
+This is stored in a dynamodb table with the following 'schema'
+```
+{
+    "TableName": "auth_password_policy",
+    "KeySchema": [
+      { "AttributeName": "policy_id", "KeyType": "HASH" }
+    ],
+    "AttributeDefinitions": [
+      { "AttributeName": "policy_id", "AttributeType": "S" }
+    ],
+    "ProvisionedThroughput": {
+      "ReadCapacityUnits": 5,
+      "WriteCapacityUnits": 5
+    }
+}
+```
+
 
 ## Persistence
 ### Postgresql (RDS)
@@ -138,6 +179,12 @@ CREATE TABLE users (
   salt TEXT,
   verifier TEXT,
   server_ephemeral_secret TEXT
-  created_at TIMESTAMP
+  creation_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+  updated_time TIMESTAMP
 );
+```
+This table also includes the following index:
+```
+CREATE INDEX idx_creation_time
+ON users(creation_time)
 ```

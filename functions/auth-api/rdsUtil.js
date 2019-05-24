@@ -11,7 +11,7 @@ module.exports.createNewUser = (systemWideUserId, salt, verifier) => {
         salt: salt,
         verifier: verifier,
         serverEphemeralSecret: null,
-        createdAt: Date()
+        updatedTime: null
     });
 };
 

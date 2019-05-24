@@ -1,0 +1,6 @@
+{
+    "jwt": {
+        "expiresIn": "7d",
+        "algorithm": "RS256"
+    }
+}

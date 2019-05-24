@@ -16,13 +16,14 @@ module.exports.insertNewUser = async (event, context) => {
 	logger('Running in handler')
     const input = event['queryStringParameters'] || event;
 
-    console.log('Recieved ', input.systemWideUserId, input.password.length);
-    const encryption = passwordAlgorithm.generateSaltAndVerifier(input.systemWideUserId, input.password);
+    logger('Recieved ', input.systemWideUserId, input.password.length);
+	const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(input.systemWideUserId, input.password);
 	
-	const newUser = rdsUtil.createNewUser(input.systemWideUserId, encryption.salt, encryption.verifier);
+	const newUser = rdsUtil.createNewUser(input.systemWideUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
 	const userRolesAndPermissions = authUtil.assignUserRolesAndPermissions(input.systemWideUserId, input.userRole); // λfy
-	const signOptions = authUtil.getSignOptions(input.systemWideUserId);
 	const databaseInsertionResponse = rdsUtil.insertNewUser(newUser);
+	// if database insertion successful get jwt, else return databaseInsertionResponse message
+	const signOptions = authUtil.getSignOptions(input.systemWideUserId);
 
 	const response = {
 		jwt: jwt.generateJSONWebToken(userRolesAndPermissions, signOptions), // λfy 
@@ -53,4 +54,8 @@ module.exports.changePassword = async (event, context) => {
 
 module.exports.getOTP = async (event, context) => {
 	
+}
+
+module.exports.getPasswordPolicy = async (event, context) => {
+
 }

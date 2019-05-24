@@ -35,8 +35,8 @@ const resetStubs = () => {
 
 const mockPayload = {
     systemWideUserId: 'a system-wide user id',
-    Role: "Default User Role",
-    Permissions: [
+    role: "Default User Role",
+    permissions: [
         "EditProfile",
         "CreateWallet",
         "CheckBalance"

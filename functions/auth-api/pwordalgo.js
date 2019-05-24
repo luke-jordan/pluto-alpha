@@ -28,7 +28,6 @@ module.exports.loginExistingUser = (systemWideUserId, password) => {
         systemWideUserId: systemWideUserId,
         clientPublicEphemeral: clientEphemeral.public
     });
-    // logger('first loginHelper args:', 'systemWideUserId:', systemWideUserId, ', clientEphemeralPublic', clientEphemeral.public);
     logger('first server response:', response)
     if (!response) return {systemWideUserId: systemWideUserId, verified: false, reason: 'No response from server'};
     salt = response.salt;
@@ -42,7 +41,7 @@ module.exports.loginExistingUser = (systemWideUserId, password) => {
         clientPublicEphemeral: clientEphemeral.public
     });
     logger('second server response:', serverResponse);
-    try {  // testing this try/catch block proves a bit tricky
+    try {
         if (!serverResponse) throw new Error('Server session proof not recieved')
         srp.verifySession(clientEphemeral.public, clientSession, serverResponse.serverSessionProof);
         return {systemWideUserId: systemWideUserId, verified: true};

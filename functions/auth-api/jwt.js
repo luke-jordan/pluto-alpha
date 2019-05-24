@@ -1,4 +1,5 @@
 const logger = require('debug')('pluto:auth:jwt')
+const config = require('config');
 
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
@@ -11,8 +12,8 @@ module.exports.generateJsonWebToken = (payload, $Options) => {
         issuer: $Options.issuer,
         subject: $Options.subject,
         audience: $Options.audience,
-        expiresIn: "180d",
-        algorithm: "RS256"
+        expiresIn: config.get('jwt.expiresIn'),
+        algorithm: config.get('jwt.algorithm')
     };
     return jwt.sign(payload, privateKey, signOptions);
  };
@@ -25,8 +26,8 @@ module.exports.verifyJsonWebToken = (token, $Options) => {
         issuer: $Options.issuer,
         subject: $Options.subject,
         audience: $Options.audience,
-        expiresIn: "180d",
-        algorithm: ["RS256"]
+        expiresIn: config.get('jwt.expiresIn'),
+        algorithm: config.get('jwt.algorithm')
     };
 
     try {
@@ -41,5 +42,12 @@ module.exports.verifyJsonWebToken = (token, $Options) => {
 
 module.exports.decodeJsonWebToken = (token) => {
     return jwt.decode(token, {complete: true});
-    // returns null if token is invalid
 };   
+
+
+module.exports.refreshJsonWebToken = (token) => {
+    const decodedJwt = exports.decodeJsonWebToken(token);
+    // extract payload
+    // extract sign options
+    return exports.generateJsonWebToken(payload, signOPtions);
+}

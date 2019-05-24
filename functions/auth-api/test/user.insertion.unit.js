@@ -117,7 +117,7 @@ describe('User insertion happy path', () => {
             );
         });
 
-        it('should handle user login propertly', () => {
+        it('should handle user login properly', () => {
             // implement
         });
 
