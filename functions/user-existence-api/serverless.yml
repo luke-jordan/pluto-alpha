@@ -1,6 +1,6 @@
-# Welcome to Serverless!
+# Well this is pretty annoying
 
-service: transaction-api # NOTE: update this with your service name
+service: user-existence-api # NOTE: update this with your service name
 
 plugins:
   - serverless-localstack
@@ -9,12 +9,11 @@ custom:
   localstack:
     host: http://localhost
     stages:
-      - dev
       - local
     debug: true
-  stages:
+  stage:
     - local
-    - dev
+  mountCode: True
   thisStage: ${opt:stage, self:provider.stage}
   thisProcess:
     NODE_ENV:
@@ -26,16 +25,22 @@ provider:
   name: aws
   runtime: nodejs8.10
   region: eu-west-1
-  stage: dev
+  stage: local
+  deploymentBucket:
+    pluto.user.existence.lambdas
 
 functions:
-  save:
-    handler: saving.save
-    name: add-savings
+  create:
+    handler: account.create
+    name: create-account
     events:
       - http:
-          path: save
+          path: create
           method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
-      DEBUG: u:*
+      DEBUG: pluto:*
+
+package:
+  include:
+    - node_modules/rds-common/**

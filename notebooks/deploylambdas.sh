@@ -1,13 +1,13 @@
 #! /bin/bash
 
 echo "Deploying the float lambda"
-cd functions/float-api
+cd ../functions/float-api
 serverless deploy --stage local
 
 echo "Deploying the user account mgmt lambda"
-cd ../account-api
+cd ../user-existence-api
 serverless deploy --stage local
 
 echo "Deploying the save transaction lambda"
-cd ../save-transaction-api
+cd ../user-act-api
 serverless deploy --stage local

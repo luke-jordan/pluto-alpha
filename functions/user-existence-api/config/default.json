@@ -7,10 +7,8 @@
         }
     },
     "tables": {
-        "account": {
-            "dynamodb": "CoreAccountLedger",
-            "rds": "account_data.core_account_ledger"
-        }
+        "dynamodb": "CoreAccountLedger",
+        "accountData": "account_data.core_account_ledger"
     },
     "db": {
         "user": "account_api_worker",

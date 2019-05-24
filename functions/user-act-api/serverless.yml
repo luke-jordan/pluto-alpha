@@ -1,6 +1,6 @@
-# Unnamed serverless API
+# Welcome to Serverless!
 
-service: <<API_NAME>> # NOTE: update this with your service name
+service: user-activity-api
 
 plugins:
   - serverless-localstack
@@ -28,15 +28,16 @@ provider:
   region: eu-west-1
   stage: dev
   deploymentBucket:
-    change.this.after.creation
+    pluto.user.action.lambdas
 
 functions:
-  <<FUNCTION_NAME>>:
-    handler: handler.hello
-    # events:
-    #   - http:
-    #       path: save
-    #       method: post
+  save:
+    handler: saving.save
+    name: add-savings
+    events:
+      - http:
+          path: save
+          method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
-      DEBUG: u:*
+      DEBUG: pluto:*

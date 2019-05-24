@@ -27,14 +27,16 @@ provider:
   runtime: nodejs8.10
   region: eu-west-1
   stage: dev
+  deploymentBucket:
+    pluto.float.lambdas
 
 functions:
   accrue:
     handler: handler.accrue
-    # events:
-    #   - http:
-    #       path: save
-    #       method: post
+    events:
+      - http:
+          path: save
+          method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: u:*

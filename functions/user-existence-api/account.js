@@ -73,7 +73,7 @@ module.exports.createAccount = async (creationRequest = {
   );
   
   logger('Received from persistence: ', persistenceResult);
-  return { accountId: persistenceResult['account_id'], tags: persistenceResult['tags'], flags: persistenceResult['flags'] };
+  return persistenceResult;
 }
 
 module.exports.listAccounts = async () => {

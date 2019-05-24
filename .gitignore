@@ -17,4 +17,5 @@ __pycache__/
 # Any production config
 production.json
 
-
+# Notebook checkpoints
+.ipynb_checkpoints/

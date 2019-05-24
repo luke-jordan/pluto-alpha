@@ -28,7 +28,7 @@ class RdsConnection {
         const self = this;
 
         const defaultConfigs = {
-            db: 'plutotest', user: 'plutotest', password: 'verylongpassword', host: 'localhost', port: '5432' 
+            database: 'plutotest', user: 'plutotest', password: 'verylongpassword', host: 'localhost', port: '5432' 
         };
         
         // pattern is nicely explained here: https://github.com/lorenwest/node-config/wiki/Sub-Module-Configuration
@@ -38,7 +38,7 @@ class RdsConnection {
         self._pool = new Pool({
             host: config.get('RdsConnection.host'),
             port: config.get('RdsConnection.port'),
-            database: config.get('RdsConnection.db'),
+            database: config.get('RdsConnection.database'),
             user: config.get('RdsConnection.user'),
             password: config.get('RdsConnection.password')
         });

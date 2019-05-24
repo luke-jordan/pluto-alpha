@@ -7,7 +7,7 @@ create table if not exists transaction_data.core_transaction_ledger (
     account_id uuid not null references account_data.core_account_ledger (account_id),
     creation_time timestamp with time zone not null default current_timestamp,
     currency varchar(10),
-    units varchar(20),
+    unit varchar(20),
     amount integer not null,
     transaction_type varchar(50) not null,
     settlement_status varchar(50),
