@@ -33,15 +33,14 @@ robustness. That does however require somewhat extensive wrapping to handle larg
 
 The basic structure of calls to the two functions is to pass in: 
 
-1. The query structure ('template'), including the column clause as you wish it, and a placeholder `%L` (list) for where you want the list of 
+1.  The query structure ('template'), including the column clause as you wish it, and a placeholder `%L` (list) for where you want the list of 
 concatenated values to be inserted. For example, for a user table which auto-inserts user id and creation time given personal info,
 the query template might look as follows: ``insert into users (personal_name, family_name, email_address) values %L returning user_id, creation_time``
 
-2. An instruction for how to take an object and map it to the set of values representing a single row that the final query will need, the 
+2.  An instruction for how to take an object and map it to the set of values representing a single row that the final query will need, the 
 'column template'. The template consists of a column separated, ordered set of key names, surrounded by `${}` and in order. Continuing the example above, and for the object described below, the column template might look like: ``${firstName}, ${surName}, ${emailAddress}``
 
-3. An array of objects to translate into the rows of the insertion query. For example: ``[ { firstName: 'Luke', surName: 'Jordan', 'emailAddress': 'luke@plutosaving.com'}]``.
-
+3.  An array of objects to translate into the rows of the insertion query. For example: ``[ { firstName: 'Luke', surName: 'Jordan', 'emailAddress': 'luke@plutosaving.com'}]``.
 
 *Note*: As shown here, the key names in the column template must correspond to the **object** keys, not the column names. It is up to the calling function whether to make the labels the same, see note on flexibility above.
 
@@ -50,10 +49,10 @@ back if one fails).
 
 ### Errors
 
-* The methods will throw a `NoValuesError` if they are not passed an array of parameter values (see note above under 'simple queries').
-* The methods will throw a `QueryError` if an error is thrown either in the formatting of the query, by the Node Postgres library, or as a 
+*  The methods will throw a `NoValuesError` if they are not passed an array of parameter values (see note above under 'simple queries').
+*  The methods will throw a `QueryError` if an error is thrown either in the formatting of the query, by the Node Postgres library, or as a 
 query syntax error by Postgres itself.
-* The methods will throw a `CommitError` if something goes wrong during the transaction and does not fall under the above headings, e.g., 
+*  The methods will throw a `CommitError` if something goes wrong during the transaction and does not fall under the above headings, e.g., 
 if there is a unique value or key error.
 
 ## Dynamo-Common

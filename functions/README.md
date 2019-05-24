@@ -1,24 +1,26 @@
-# THE FUNCTIONS
+# SERVICE FUNCTIONS README
 
 This folder contains the Lambdas that relate to the general domain of user and float management. They are divided as follows:
 
-## Float API (float-api)
+## The individual functions
+
+### Float API (float-api)
 
 Contains lambdas for managing client floats. By far the most important parts are those handling interest / returns accrual and
 an apportionment among the float's different accounts.
 
-## User Existence API (user-ex-api)
+### User Existence API (user-ex-api)
 
 Handles the creation of accounts, from start to finish, as well as user profiles, .
 
-## User Activity API (user-act-api)
+### User Activity API (user-act-api)
 
 Handles ongoing user transactions. Handles saving, withdrawing, querying for the balance (= sum of Txs) and projected balance,
 obtaining the history (= records of Txs), and checking on open rewards.
 
-# CREATING AND DEPLOYING
+## CREATING AND DEPLOYING
 
-## Creation
+### Creation
 
 To create a new lambda, use the provided script create-node-function. The script takes as its first argument the name of the 
 overall API / collection of lambdas, and the second as the first lambda you wish to create, for example:
@@ -35,7 +37,7 @@ run one or both of:
 ``npm link rds-common``
 ``npm link dynamo-common``
 
-## Local deployment and updating
+### Local deployment and updating
 
 To deploy locally, first make sure that Localstack is running. Then execute:
 

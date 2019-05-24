@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('u:transaction:saving:rds');
+const logger = require('debug')('pluto:saving:rds');
 const config = require('config');
 const uuid = require('uuid/v4');
 
@@ -13,30 +13,42 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
     'settlementTime': Date.now(),
     'savedAmount': 500,
     'savedCurrency': 'ZAR',
+    'savedUnit': 'HUNDREDTH_CENT',
     'prizePoints': 100,
     'offerId': 'id-of-preceding-offer',
     'tags': ['TIME_BASED'],
     'flags': ['RESTRICTED']
 }) => {
 
+    // todo : validation
     // const bonusTransactionLedger = config.get('tables.bonus');
     
+    let responseEntity;
     try {
         const tableName = config.get('tables.transaction.rds');
         logger('Storing transaction in table: ', tableName);
 
         const transactionId = uuid();
+        const savedUnit = settlementDetails.savedUnit || 'HUNDREDTH_CENT';
+        const settlementStatus = !!settlementDetails.settlementTime ? 'SETTLED' : 'PENDING';
 
-        const queryString = `insert into ${tableName} (transaction_id, transaction_type, account_id, currency, amount, settlement_status) ` +
-            `values ($1, $2, $3, $4, $5, $6) returning transaction_id, tags, flags`;
-        const queryValues = [transactionId, 'CREDIT', settlementDetails['accountId'], settlementDetails['savedCurrency'], 
-            settlementDetails['savedAmount'], 'SETTLED'];
+        const queryString = `insert into ${tableName} (transaction_id, transaction_type, account_id, currency, unit, amount, settlement_status) ` +
+            `values %L returning transaction_id, tags, flags`;
+        const columnKeys = '${transactionId}, ${transactionType}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ${settlementStatus}';
+        const rowValues = { 
+            transactionId: transactionId, 
+            transactionType:  'CREDIT', 
+            accountId: settlementDetails['accountId'], 
+            savedCurrency: settlementDetails['savedCurrency'] || 'ZAR',
+            savedUnit: savedUnit,
+            savedAmount: settlementDetails.savedAmount,
+            settlementStatus: settlementStatus };
         
-        const insertionResult = await rdsConnection.insertRecords(queryString, queryValues);
-        logger('Result of insert : ', rows[0]);
+        const insertionResult = await rdsConnection.insertRecords(queryString, columnKeys, [rowValues]);
+        logger('Result of insert : ', insertionResult);
         responseEntity = insertionResult.rows[0];
 
-        const balanceCount = await exports.sumCurrentBalance(settlementDetails['accountId'], settlementDetails['savedCurrency'], client);
+        const balanceCount = await exports.sumCurrentBalance(settlementDetails['accountId'], settlementDetails['savedCurrency']);
         logger('New balance count: ', balanceCount);
 
         responseEntity['newBalance'] = balanceCount['sum'];
@@ -49,11 +61,12 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
 };
 
 module.exports.sumCurrentBalance = async (accountId, currency) => {
-    logger('Initiating or reusing client query to total balance on account');
-    
     const tableName = config.get('tables.transaction.rds');
     const queryString = `select sum(amount) from ${tableName} where account_id = $1 and currency = $2`;
-    const rows = await rdsConnection.selectQuery(queryString, [accountId, currency]);
+    const parameters = [accountId, currency];
+    logger('Running select query: ', queryString, ', with parameters: ', parameters);
+    const rows = await rdsConnection.selectQuery(queryString, parameters);
+    logger('Received result: ', rows);
     
     return rows[0];
 };
