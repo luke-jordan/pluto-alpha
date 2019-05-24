@@ -11,7 +11,7 @@ const proxyquire = require('proxyquire').noCallThru();
 
 var rdsStub = { };
 
-const handler = proxyquire('../handler', { './persistence/rds': rdsStub });
+const accountHandler = proxyquire('../account', { './persistence/rds': rdsStub });
 
 // Setting up the stubs
 const testUserId = uuid();
@@ -45,7 +45,7 @@ describe('transformEvent', () => {
         logger('Checking API gateway handled properly');
 
         const event = require('./api-event-valid.json');
-        const body = handler.transformEvent(event);
+        const body = accountHandler.transformEvent(event);
 
         expect(body).to.exist;
         expect(body).not.empty;
@@ -58,38 +58,38 @@ describe('transformEvent', () => {
         const dict = require('./api-event-valid.json');
         const eventBody = JSON.parse(dict['body']);
 
-        const transformed = handler.transformEvent(eventBody);
+        const transformed = accountHandler.transformEvent(eventBody);
         expect(transformed).to.exist;
         expect(transformed).not.empty;
         expect(transformed).to.eql(eventBody);
-    })
+    });
 });
 
 describe('validateEvent', () => {
     it('Valid event should be validated', async () => {
-        const validation = handler.validateRequest(testAccountOpeningRequest);
+        const validation = accountHandler.validateRequest(testAccountOpeningRequest);
         expect(validation).to.be.true;
     });
 
     it('Event without system wide ID should not be validated', async () => {
-        const validation = handler.validateRequest({ 'userFirstName': 'Luke', 'userFamilyName': 'Jordan'});
+        const validation = accountHandler.validateRequest({ 'userFirstName': 'Luke', 'userFamilyName': 'Jordan'});
         expect(validation).to.be.false;
     });
 
     it('Event without name should not be validated', async () => {
-        const validation = handler.validateRequest({ 'ownerUserId': uuid() });
+        const validation = accountHandler.validateRequest({ 'ownerUserId': uuid() });
         expect(validation).to.be.false;
     })
 
     it('Event with system wide ID that is not a UUID should not be validated', async () => {
-        const validation = handler.validateRequest({ 'ownerUserId': 'hello-something', 'userFirstName': 'Luke', 'userFamilyName': 'Jordan' });
+        const validation = accountHandler.validateRequest({ 'ownerUserId': 'hello-something', 'userFirstName': 'Luke', 'userFamilyName': 'Jordan' });
         expect(validation).to.be.false;
     })
 })
 
 describe('createAccountMethod', () => {
     it('Basic defaults work', async () => {
-        const response = await handler.createAccount(testAccountOpeningRequest);
+        const response = await accountHandler.createAccount(testAccountOpeningRequest);
         expect(response).to.exist;
         expect(response.accountId).to.be.a.uuid('v4');
         expect(response.tags).to.be.empty;
@@ -101,7 +101,7 @@ describe('handlerFunctionCreateAccount', () => {
     it('End to end, same owner and user', async () => {
         const event = require('./api-event-valid.json');
 
-        const response = await handler.create(event, null);
+        const response = await accountHandler.create(event, null);
         logger('Response from handler create: ', response);
 
         expect(response.statusCode).to.equal(200);

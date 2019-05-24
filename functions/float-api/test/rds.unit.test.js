@@ -23,7 +23,7 @@ class MockRdsConnection {
         this.insertRecords = insertStub;
         this.largeMultiTableInsert = multiTableStub;
     }
-}
+};
 
 const rds = proxyquire('../persistence/rds', {
     'rds-common': MockRdsConnection,

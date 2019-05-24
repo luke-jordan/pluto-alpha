@@ -10,12 +10,12 @@ services:
       - SERVICES=${SERVICES- }
       - DEFAULT_REGION=eu-west-1
       - LAMBDA_EXECUTOR=docker
-      - DEBUG=${DEBUG- }
+      - DEBUG=1
       - DATA_DIR=/tmp/localstack/data
       - PORT_WEB_UI=${PORT_WEB_UI- }
       - KINESIS_ERROR_PROBABILITY=${KINESIS_ERROR_PROBABILITY- }
       - DOCKER_HOST=unix:///var/run/docker.sock
-      - LAMBDA_DOCKER_NETWORK=unnamed_default
+      - LAMBDA_DOCKER_NETWORK=pluto_default
     volumes:
       - "${TMPDIR:-/tmp/localstack}:/tmp/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
