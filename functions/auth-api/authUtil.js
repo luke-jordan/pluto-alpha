@@ -50,7 +50,6 @@ const getPolicy =  async (policyName, systemWideUserId) => {
     };
     try {
         const dynamoDbResult = await docClient.get(params).promise();
-        console.log(Object.keys(dynamoDbResult.Item));
         dynamoDbResult.Item.systemWideUserId = systemWideUserId;
         logger('DynamoDB GetItem succeeded:', dynamoDbResult);
         return dynamoDbResult;

@@ -64,7 +64,7 @@ describe('User insertion happy path', () => {
     context('handler', () => {
 
         it('should handle new user properly', async () => {
-            const mockUserId = uuid();
+            const mockUserId = uuid(); // replace with common.expectedSomething.systemWideUserId
 
             saltVerifierStub.returns({ systemWideUserId: mockUserId, salt: 'andpepper', verifier: 'verified' });
             
@@ -230,7 +230,7 @@ describe('User insertion happy path', () => {
     context('rdsUtil', () => {
 
         it('should update user password as expected', () => {
-            
+
         })
     })
 });
