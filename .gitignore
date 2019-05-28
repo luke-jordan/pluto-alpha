@@ -19,3 +19,4 @@ production.json
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+.docker-compose.yml.swp

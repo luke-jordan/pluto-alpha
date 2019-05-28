@@ -67,7 +67,16 @@ describe('User insertion happy path', () => {
             const mockUserId = uuid();
 
             saltVerifierStub.returns({ systemWideUserId: mockUserId, salt: 'andpepper', verifier: 'verified' });
-            insertStub.resolves({databaseResponse: { insertion_id: 'an insertion id'}}); // here art lies our trouble
+            
+            insertStub
+                .withArgs(common.expectedInsertionQuery, common.expectedInsertionColumns, common.expectedInsertionList)
+                .resolves({
+                    databaseResponse: { 
+                        insertion_id: 'an insertion id',
+                        creation_time: 'document creation time'
+                    }
+                });
+            // insertStub.resolves({databaseResponse: { insertion_id: 'an insertion id'}}); // here art lies our trouble
             generateJwtStub.returns('some.jwt.token');
             
             const insertionResult = await handler.insertNewUser(event = { systemWideUserId: mockUserId, password: 'hellothere', userRole: 'default'});
@@ -217,4 +226,11 @@ describe('User insertion happy path', () => {
             expect(authUtilSignOptionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId);
         })
     });
+
+    context('rdsUtil', () => {
+
+        it('should update user password as expected', () => {
+            
+        })
+    })
 });

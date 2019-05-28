@@ -175,12 +175,12 @@ The data persisted during signup and used during login is stored in a postgresql
 ```
 CREATE TABLE users (
   insertion_id SERIAL
-  system_wide_user_id TEXT PRIMARY KEY,
+  system_wide_user_id UUID PRIMARY KEY,
   salt TEXT,
   verifier TEXT,
   server_ephemeral_secret TEXT
   creation_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
-  updated_time TIMESTAMP
+  update_time TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
 ```
 This table also includes the following index:

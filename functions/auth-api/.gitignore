@@ -11,3 +11,4 @@ public.key
 create-password-policy-table.json
 get-item.js
 password-policy.json
+templates/

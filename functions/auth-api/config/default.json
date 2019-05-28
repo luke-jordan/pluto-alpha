@@ -2,5 +2,12 @@
     "jwt": {
         "expiresIn": "7d",
         "algorithm": "RS256"
+    },
+    "db": {
+        "host": "localhost",
+        "port": "5430",
+        "database": "plutotest",
+        "user": "plutotest",
+        "password": "pwd_for_auth_api_worke"
     }
 }

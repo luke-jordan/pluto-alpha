@@ -25,16 +25,16 @@ custom:
 provider:
   name: aws
   runtime: nodejs8.10
-  region: eu-west-1
+  region: us-east-1
   stage: dev
 
 functions:
-  create:
-    handler: handler.hello
-    # events:
-    #   - http:
-    #       path: save
-    #       method: post
+  insertNewUser:
+    handler: handler.insertNewUser
+    events:
+      - http:
+          path: create-new-user
+          method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: u:*

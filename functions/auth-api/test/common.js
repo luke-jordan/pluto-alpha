@@ -1,7 +1,7 @@
 const uuid = require('uuid/v4')
 
 
-const expectedNewUser = {
+module.exports.expectedNewUser = {
     system_wide_user_id: uuid(),
     salt: '53ae324ef234i',
     verifier:'34eai33536io466o456',
@@ -9,20 +9,14 @@ const expectedNewUser = {
     created_at: Date()
 };
 
-const recievedNewUser = {
-    systemWideUserId: expectedNewUser.system_wide_user_id,
-    salt: expectedNewUser.salt,
-    verifier: expectedNewUser.verifier,
-    serverEphemeralSecret: expectedNewUser.server_ephemeral_secret,
-    createdAt: expectedNewUser.created_at
+module.exports.recievedNewUser = {
+    systemWideUserId: exports.expectedNewUser.system_wide_user_id,
+    salt: exports.expectedNewUser.salt,
+    verifier: exports.expectedNewUser.verifier,
+    serverEphemeralSecret: exports.expectedNewUser.server_ephemeral_secret,
+    createdAt: exports.expectedNewUser.created_at
 }
 
-module.exports.expectedInsertionQuery = `insert into userTable (system_wide_user_id, salt, verifier, server_ephemeral_secret, created_at) values %L`;
-module.exports.expectedInsertionColumns = '${system_wide_user_id}, ${salt}, ${verifier}, ${server_ephemeral_secret}, ${created_at}';
+module.exports.expectedInsertionQuery = `insert into userTable (system_wide_user_id, salt, verifier, server_ephemeral_secret, creation_time, updated_time) values %L returning insertion_id, creation_time`;
+module.exports.expectedInsertionColumns = '${systemWideUserId}, ${salt}, ${verifier}, ${serverEphemeralSecret}';
 module.exports.expectedInsertionList = [expectedNewUser];
-
-
-module.exports = {
-    expectedNewUser,
-    recievedNewUser
-}
