@@ -50,4 +50,22 @@ module.exports.refreshJsonWebToken = (token) => {
     // extract payload
     // extract sign options
     return exports.generateJsonWebToken(payload, signOPtions);
-}
+};
+
+
+const getPublicOrPrivateKey = (requestedKey, authentication = 'some authentication token') => {
+    const params = {
+        TableName: table,
+        Key: {
+            authKeyName: requestedKey
+        }
+    };
+    try {
+        const dynamoDbResult = await docClient.get(params).promise();
+        logger('DynamoDB GetItem succeeded:', dynamoDbResult);
+        return dynamoDbResult;
+    } catch (err) {
+        logger('DynamoDB GetItem failed with:', err.message);
+        throw err;
+    }
+};

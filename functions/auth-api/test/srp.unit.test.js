@@ -103,9 +103,9 @@ describe('SecureRemotePassword', () => {
     });
 
 
-    context("User Login", () => {
+    context.only('User Login', () => {
 
-        before(() => {
+        beforeEach(() => {
             resetStubs();
             generateEphemeralStub.withArgs('mock persisted verifier').returns('a verifier-encoded ephemeral public key');
             generateEphemeralStub.returns({secret: 'mock client secret ephemeral', public: 'mock client public ephemeral'});
@@ -186,8 +186,8 @@ describe('SecureRemotePassword', () => {
             expect(generateEphemeralStub).to.have.been.calledOnceWithExactly();
             expect(privateKeyStub).to.have.been.calledOnceWithExactly('andpepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password);
             expect(deriveSessionStub).to.have.been.calledOnceWithExactly(
-                'mock client ephemeral secret',
-                'mock server ephemeral secret',
+                'mock client secret ephemeral',
+                'mock server public ephemeral',
                 'andpepper',
                 expectedLoginDetails.systemWideUserId,
                 'mock client private key'

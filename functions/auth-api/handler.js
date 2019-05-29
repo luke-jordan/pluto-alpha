@@ -1,7 +1,7 @@
 'use strict';
 
 const config = require('config');
-const logger = require('debug');
+const logger = require('debug')('pluto:auth-handler:main');
 
 const passwordAlgorithm = require('./pwordalgo');
 const rdsUtil = require('./rdsUtil');
@@ -21,9 +21,11 @@ module.exports.insertNewUser = async (event, context) => {
 
     const newUser = rdsUtil.createNewUser(input.systemWideUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
     const userRolesAndPermissions = await authUtil.assignUserRolesAndPermissions(input.systemWideUserId, input.requestedRole); // λfy
-    const databaseInsertionResponse = /*await*/ rdsUtil.insertNewUser(newUser);
+    const databaseInsertionResponse = await rdsUtil.insertNewUser(newUser);
     // if database insertion successful get jwt, else return databaseInsertionResponse message
     const signOptions = authUtil.getSignOptions(input.systemWideUserId);
+
+    logger(userRolesAndPermissions);
 
     const response = {
         jwt: jwt.generateJsonWebToken(userRolesAndPermissions, signOptions), // λfy 

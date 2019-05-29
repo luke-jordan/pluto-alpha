@@ -4,6 +4,7 @@ const sinon = require('sinon');
 const chai = require('chai');
 const expect = chai.expect;
 const proxyquire = require('proxyquire');
+const config = require('config');
 
 let signJwtStub = sinon.stub();
 let verifyJwtStub = sinon.stub();
@@ -43,16 +44,13 @@ const mockPayload = {
     ]
 };
 
-const mockSignOptions = {
+// The jwt decryption process requires the verification options to match the sign options used
+// when the token was signed. We can therefore compile both into one object for testing, as
+// opposed to having two objects with the exact same content.
+const mockSignOrVerifyOptions = {
     issuer: 'Pluto Savings',
     subject: mockPayload.systemWideUserId,
     audience: 'https://plutosavings.com'
-};
-
-const mockVerifyOptions = {
-    issuer: 'Pluto Savings',
-    subject: mockPayload.systemWideUserId,
-    audience: 'https://plutosavings.com' 
 };
 
 const expectedVerificationResult = {
@@ -75,7 +73,7 @@ describe('JWT module', () => {
 
     before(() => {
         resetStubs();
-        signJwtStub.withArgs(mockPayload, mockPrivateKey, mockSignOptions).returns('json.web.token');
+        signJwtStub.withArgs(mockPayload, mockPrivateKey, mockSignOrVerifyOptions).returns('json.web.token');
         decodeJwtStub.withArgs('json.web.token')
             .returns({
                 header: { alg: 'RS256', typ: 'JWT' },
@@ -90,20 +88,20 @@ describe('JWT module', () => {
     it('should generate a jwt token', () => {
         const expectedGenerationResult = 'json.web.token';
 
-        const result = jwt.generateJsonWebToken(mockPayload, mockSignOptions);
+        const result = jwt.generateJsonWebToken(mockPayload, mockSignOrVerifyOptions);
         logger('jwt generation result:', result);
         
         expect(result).to.deep.equal(expectedGenerationResult);
-        expect(signJwtStub).to.have.been.calledOnceWithExactly(mockPayload, mockPrivateKey, mockSignOptions);
+        expect(signJwtStub).to.have.been.calledOnceWithExactly(mockPayload, mockPrivateKey, mockSignOrVerifyOptions);
     });
 
     it('should verify jwt token', () => {
-        const expectedJwtArgs = JSON.parse(JSON.stringify(mockVerifyOptions));
-        expectedJwtArgs.expiresIn = '180d';
+        const expectedJwtArgs = JSON.parse(JSON.stringify(mockSignOrVerifyOptions));
+        expectedJwtArgs.expiresIn ='7d'; // read from config?
         expectedJwtArgs.algorithm = [ 'RS256' ];
         verifyJwtStub.withArgs('json.web.token', mockPublicKey, expectedJwtArgs).returns(expectedVerificationResult);
         
-        const result = jwt.verifyJsonWebToken('json.web.token', mockVerifyOptions);
+        const result = jwt.verifyJsonWebToken('json.web.token', mockSignOrVerifyOptions);
 
         expect(result).to.deep.equal(expectedVerificationResult);
         expect(verifyJwtStub).to.have.been.calledOnceWithExactly('json.web.token', mockPublicKey, expectedJwtArgs);
@@ -115,7 +113,7 @@ describe('JWT module', () => {
         
         const expectedFalseVerificationResult = false;
 
-        const result = jwt.verifyJsonWebToken('bad.web.token', mockVerifyOptions);
+        const result = jwt.verifyJsonWebToken('bad.web.token', mockSignOrVerifyOptions);
         logger('result of verification of a bad jwt token', result)
 
         expect(result).to.be.false;

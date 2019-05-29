@@ -72,11 +72,9 @@ describe('User insertion happy path', () => {
                 .withArgs(common.expectedInsertionQuery, common.expectedInsertionColumns, common.expectedInsertionList)
                 .resolves({
                     databaseResponse: { 
-                        insertion_id: 'an insertion id',
-                        creation_time: 'document creation time'
+                        rows: [ { insertion_id: 'an insertion id', creation_time: 'document creation time' }]
                     }
                 });
-            // insertStub.resolves({databaseResponse: { insertion_id: 'an insertion id'}}); // here art lies our trouble
             generateJwtStub.returns('some.jwt.token');
             
             const insertionResult = await handler.insertNewUser(event = { systemWideUserId: mockUserId, password: 'hellothere', userRole: 'default'});
@@ -90,7 +88,7 @@ describe('User insertion happy path', () => {
             logger('parsedResult:', parsedResult);
             expect(parsedResult).to.have.property('message');
             expect(parsedResult).to.have.property('jwt');
-            expect(parsedResult.message).to.have.property('insertion_id');
+            expect(parsedResult.message).to.have.property('persistedTime');
             expect(parsedResult.jwt).to.not.be.null;
         });
 
@@ -227,10 +225,10 @@ describe('User insertion happy path', () => {
         })
     });
 
-    context('rdsUtil', () => {
+    // context('rdsUtil', () => {
 
-        it('should update user password as expected', () => {
+    //     it('should update user password as expected', () => {
 
-        })
-    })
+    //     })
+    // })
 });

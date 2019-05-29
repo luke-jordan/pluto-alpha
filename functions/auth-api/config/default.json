@@ -5,9 +5,12 @@
     },
     "db": {
         "host": "localhost",
-        "port": "5430",
+        "port": "5432",
         "database": "plutotest",
-        "user": "plutotest",
-        "password": "pwd_for_auth_api_worke"
+        "user": "auth_api_worker",
+        "password": "pwd_for_auth_api_worker"
+    },
+    "tables": {
+        "userTable": "user_data.user"
     }
 }
