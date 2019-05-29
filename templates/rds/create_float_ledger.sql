@@ -22,3 +22,8 @@ revoke all on transaction_data.core_transaction_ledger from public;
 grant usage on schema float_data to float_api_worker;
 grant select on float_data.float_transaction_ledger to float_api_worker;
 grant insert on float_data.float_transaction_ledger to float_api_worker;
+
+-- also need to give insert to account api worker because savings require corresponding entry, and must be in a single tx
+grant usage on schema float_data to save_tx_api_worker;
+grant select on float_data.float_transaction_ledger to save_tx_api_worker;
+grant insert on float_data.float_transaction_ledger to save_tx_api_worker;

@@ -28,7 +28,7 @@ const resetStubs = () => {
 
 const config = require('config');
 
-describe('Marshalls account insertion properly', () => {
+describe.only('Marshalls account insertion properly', () => {
 
     beforeEach(() => resetStubs());
 
@@ -36,15 +36,16 @@ describe('Marshalls account insertion properly', () => {
         const testAccountDetails = {
             'accountId': uuid(),
             'clientId': 'zar_savings_co',
+            'floatId': 'zar_cash_float',
             'userId': uuid(), 
             'userFirstName': 'Luke',
             'userFamilyName': 'Jordan'
         };
 
         const expectedQuery = `insert into ${config.get('tables.accountData')} `
-            + `(account_id, responsible_client_id, owner_user_id, opening_user_id, user_first_name, user_last_name) `
+            + `(account_id, responsible_client_id, default_float_id, owner_user_id, opening_user_id, user_first_name, user_last_name) `
             + `values %L returning account_id, creation_time`;
-        const expectedColumns = '${accountId}, ${clientId}, ${userId}, ${openingUserId}, ${userFirstName}, ${userFamilyName}';
+        const expectedColumns = '${accountId}, ${clientId}, ${floatId}, ${userId}, ${openingUserId}, ${userFirstName}, ${userFamilyName}';
         const expectedRow = JSON.parse(JSON.stringify(testAccountDetails));
         expectedRow.openingUserId = testAccountDetails.userId;
         const expectedObjects = sinon.match([expectedRow]);

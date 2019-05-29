@@ -41,6 +41,8 @@ module.exports.validateRequest = (creationRequest) => {
   if (!creationRequest['clientId']) {
     logger('Missing ID for intermediary client that this account belongs to');
     return false;
+  } else if (!creationRequest['floatId']) {
+    logger('Missing ID for default float for this account');
   } else if (!creationRequest['ownerUserId']) {
     logger('System wide ID for account owner missing, invalid request');
     return false;
@@ -57,6 +59,7 @@ module.exports.validateRequest = (creationRequest) => {
 
 module.exports.createAccount = async (creationRequest = {
   'clientId': 'zar_savings_co', 
+  'floatId': 'zar_cash_float',
   'ownerUserId': '2c957aca-47f9-4b4d-857f-a3205bfc6a78',
   'userFirstName': 'Luke',
   'userFamilyName': 'Jordan'}) => {
@@ -67,6 +70,7 @@ module.exports.createAccount = async (creationRequest = {
   const persistenceResult = await persistence.insertAccountRecord({ 
     'accountId': accountId, 
     'clientId': creationRequest['clientId'],
+    'floatId': creationRequest['floatId'],
     'ownerUserId': creationRequest['ownerUserId'], 
     'userFirstName': creationRequest['userFirstName'],
     'userFamilyName': creationRequest['userFamilyName']}

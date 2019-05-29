@@ -9,7 +9,7 @@ services:
     environment:
       - SERVICES=${SERVICES- }
       - DEFAULT_REGION=eu-west-1
-      - LAMBDA_EXECUTOR=docker
+      - LAMBDA_EXECUTOR=docker-reuse
       - DEBUG=1
       - DATA_DIR=/tmp/localstack/data
       - PORT_WEB_UI=${PORT_WEB_UI- }

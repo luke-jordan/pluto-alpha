@@ -93,7 +93,9 @@ class RdsConnection {
                             objectArray = [ { name: 'Test1', id: 'X'}, { name: 'Test2', id: 'Y'}]) {
         const nestedArray = this.compileInsertQueryString(columnTemplate, objectArray);
         // todo : throw an explanatory error here if there is a $1 inside it
+        logger('SINGLE: Nested array: ', nestedArray);
         const formattedQuery = format(queryTemplate, nestedArray);
+        logger('SINGLE: Formatted query: ', formattedQuery);
 
         // const safeSlice = Math.min(10, valuesString.length);
         // logger('About to run insertion, query string: %s, and values: %s', queryTemplate, valuesString.slice(0, safeSlice));
@@ -153,8 +155,12 @@ class RdsConnection {
     }
 
     async _executeQueryInBlock(client, query, columnTemplate, rows) {
-        const formattedQuery = format(query, this.compileInsertQueryString(columnTemplate, rows));
+        const insertionString = this.compileInsertQueryString(columnTemplate, rows);
+        logger('Insert string: ', insertionString);
+        const formattedQuery = format(query, insertionString);
+        logger('Formatted query: ', formattedQuery);
         const result = await client.query(formattedQuery);
+        logger('Result: ', result);
         return result['rows'] && result['rows'].length > 0 ? result['rows'] : [{ completed: true }];
     }
 
@@ -182,21 +188,49 @@ class RdsConnection {
 
     // todo : _lots_ of error testing
     compileInsertQueryString(columnTemplate, objectArray) {
-        const columnNames = this._extractParams(columnTemplate);
+        // logger('Object array: ', objectArray);
+        const paramAndConstantNames = this._extractKeysAndConstants(columnTemplate);
         // todo : also security test names for remote code execution
-        const nestedArray = objectArray.map((object) => columnNames.map((column => object[column])));
+        const nestedArray = objectArray.map((object) => paramAndConstantNames.map((paramOrConstant) => {
+            // logger('Extracting for: ', paramOrConstant, 'from: ', object);
+            if (paramOrConstant.type === 'PARAM') {
+                return object[paramOrConstant['value']];
+            } else {
+                return paramOrConstant['value']
+            }
+        }));
+        
+        // objectArray.map((object) => columnNames.map((column => object[column['value']])));
         logger(this._formatLogString(columnTemplate, objectArray, nestedArray));
         return nestedArray;
     }
 
     _extractParams(columnTemplate) {
-        const paramRxp = /{([^}]+)}/g;
+        const paramRxp = /\${([^}]+)}/g;
         const listParams = [];
         let param;
         while (param = paramRxp.exec(columnTemplate)) {
             listParams.push(param[1]);
         }
         return listParams;
+    }
+
+    _extractKeysAndConstants(columnTemplate) {
+        logger('Template: ', columnTemplate);
+        const splitItems = columnTemplate.split(',').map(col => col.trim());
+        logger('Split items: ', splitItems);
+        const paramRegex = /\${([^}]+)}/;
+        const constantRegex = /\*{([^}]+)}/;
+        const listKeysAndConstants = splitItems
+            .map(item => {
+                if (paramRegex.test(item)) {
+                    return ({ type: 'PARAM', value: paramRegex.exec(item)[1]})
+                } else if (constantRegex.test(item)) {
+                    return ({ type: 'CONSTANT', value: constantRegex.exec(item)[1]})
+                }
+            });
+        logger('Map: ', listKeysAndConstants);
+        return listKeysAndConstants;
     }
 
     _formatLogString(columnTemplate, objectArray, nestedArray) {

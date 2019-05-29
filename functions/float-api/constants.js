@@ -16,7 +16,7 @@ module.exports.floatUnitTransforms = {
 module.exports.floatTransTypes = {
     ACCRUAL: 'ACCRUAL',
     ALLOCATION: 'ALLOCATION',
-    DEPOSIT: 'DEPOSIT',
+    SAVING: 'SAVING',
     WITHDRAWAL: 'WITHDRAWAL',
     CAPITALIZATION: 'CAPITALIZATION'
 };

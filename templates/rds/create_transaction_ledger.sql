@@ -11,7 +11,8 @@ create table if not exists transaction_data.core_transaction_ledger (
     amount integer not null,
     transaction_type varchar(50) not null,
     settlement_status varchar(50),
-    float_id varchar(50),
+    float_id varchar(50) not null,
+    matching_float_tx_id varchar(50),
     tags text[] default '{}',
     flags text[] default '{}',
     primary key (transaction_id),
@@ -23,10 +24,11 @@ create table if not exists transaction_data.core_transaction_ledger (
 
 revoke all on transaction_data.core_transaction_ledger from public;
 
-grant usage on schema transaction_data to transaction_api_worker;
-grant select (creation_time, currency, amount, settlement_status, float_id, tags, flags) 
-    on transaction_data.core_transaction_ledger to transaction_api_worker;
-grant insert on transaction_data.core_transaction_ledger to transaction_api_worker;
+-- as above, tighten up grants here, worker probably doesn't need select, but getting tricky with 
+-- Postgres and interaction with insertion, etc.
+grant usage on schema transaction_data to save_tx_api_worker;
+grant select on transaction_data.core_transaction_ledger to save_tx_api_worker;
+grant insert on transaction_data.core_transaction_ledger to save_tx_api_worker;
 
 grant usage on schema transaction_data to float_api_worker;
 grant select on transaction_data.core_transaction_ledger to float_api_worker;

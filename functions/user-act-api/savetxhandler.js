@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:saving:main');
+const logger = require('debug')('pluto:save:main');
 
 const persistence = require('./persistence/rds');
 
@@ -14,7 +14,7 @@ module.exports.save = async (event) => {
   // todo : check validity
 
   const savingResult = await exports.storeSettledSaving(settlementInformation);
-  logger('Completed the save');
+  logger('Completed the save, result: ', savingResult);
 
   return {
     statusCode: 200,
@@ -38,7 +38,8 @@ module.exports.storeSettledSaving = async (settlementInformation = {
   
   logger('Initiating settlement record');
 
-  const resultOfSave = persistence.addSavingToTransactions(settlementInformation);
+  const resultOfSave = await persistence.addSavingToTransactions(settlementInformation);
+  logger('Result of save: ', resultOfSave);
 
   return resultOfSave;
   

@@ -1,12 +1,11 @@
 {
     "tables": {
-        "transaction": {
-            "rds": "transaction_data.core_transaction_ledger",
-            "bonus": "transaction_data.core_transaction_ledger"
-        }
+        "accountTransactions": "transaction_data.core_transaction_ledger",
+        "rewardTransactions": "transaction_data.core_transaction_ledger",
+        "floatTransactions": "float_data.float_transaction_ledger"
     },
     "db": {
-        "user": "transaction_api_worker",
+        "user": "save_tx_api_worker",
         "host": "localhost",
         "database": "pluto",
         "password": "pwd_for_transaction_api",

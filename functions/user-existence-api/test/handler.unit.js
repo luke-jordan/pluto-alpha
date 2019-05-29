@@ -19,12 +19,16 @@ const testAccountId = uuid();
 
 const testAccountOpeningRequest = {
     ownerUserId: testUserId,
+    clientId: 'pluto_savings_za',
+    defaultFloatId: 'zar_cash_float',
     userFirstName: 'Luke',
     userFamilyName: 'Jordan'
 }
 
 const wellFormedPersistenceReq = {
     'accountId': testAccountId, 
+    'clientId': 'pluto_savings_za',
+    'defaultFloatId': 'zar_cash_float',
     'ownerUserId': testUserId, 
     'userFirstName': 'Luke',
     'userFamilyName': 'Jordan'
