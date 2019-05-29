@@ -7,10 +7,17 @@ const expect = chai.expect;
 const common = require('./common');
 const proxyquire = require('proxyquire');
 const uuid = require('uuid/v4');
-const authUtil = require('../authUtil');
 const rdsUtil = require('../rdsUtil');
+const authUtil = require('../authUtil');
 
-let insertStub = sinon.stub();
+let insertStub  = sinon.stub();
+let saltVerifierStub = sinon.stub();
+let generateJwtStub = sinon.stub();
+let loginStub  = sinon.stub();
+let authUtilPermissionsSpy  = sinon.spy(authUtil, 'assignUserRolesAndPermissions');
+let authUtilSignOptionsSpy  = sinon.spy(authUtil, 'getSignOptions');
+let authUtilGetPolicySpy    = sinon.spy(authUtil, 'getPolicy');
+let rdsUtilCreateNewUserSpy = sinon.spy(rdsUtil, 'createNewUser');
 
 class MockRdsConnection {
     constructor(any) {
@@ -23,15 +30,8 @@ const rdsConnection = proxyquire('../rdsUtil', {
     '@noCallThru': true
 });
 
-let saltVerifierStub = sinon.stub();
-let generateJwtStub = sinon.stub();
-let loginStub = sinon.stub();
-let authUtilPermissionsSpy = sinon.spy(authUtil, 'assignUserRolesAndPermissions');
-let authUtilSignOptionsSpy = sinon.spy(authUtil, 'getSignOptions');
-let rdsUtilCreateNewUserSpy = sinon.spy(rdsUtil, 'createNewUser');
-
 const handler = proxyquire('../handler', {
-    './rdsUtil': rdsConnection,
+    './rdsUtil': rdsConnection, 
     './pwordalgo': {
         'generateSaltAndVerifier': saltVerifierStub,
         'loginExistingUser': loginStub
@@ -45,10 +45,13 @@ const handler = proxyquire('../handler', {
 const resetStubs = () => {
     insertStub.reset();
     saltVerifierStub.reset();
+    generateJwtStub.reset();
     loginStub.reset();
     authUtilPermissionsSpy.restore();
     authUtilSignOptionsSpy.restore();
+    authUtilGetPolicySpy.restore();
     rdsUtilCreateNewUserSpy.restore();
+    docClientGetStub.reset();
 };
 
 describe('User insertion happy path', () => {
@@ -130,13 +133,59 @@ describe('User insertion happy path', () => {
 
     });
 
-    context('authUtil', () => {
+    context.only('authUtil', () => {
 
-        it('should get default user roles and permissions as expected', () => {
+        beforeEach(() => {
+            resetStubs();
+            docClientGetStub.withArgs({
+                TableName: 'roles_and_permissions',
+                Key: {
+                    policy_id: 'defaultUserPolicy'
+                }
+            }).returns({
+                systemWideUserId: common.recievedNewUser.systemWideUserId,
+                role: "defaultUserPolicy",
+                permissions: [
+                    "EditProfile",
+                    "CreateWallet",
+                    "CheckBalance"
+                ]
+            });
+            docClientGetStub.withArgs({
+                TableName: 'roles_and_permissions',
+                Key: {
+                    policy_id: 'adminUserPolicy'
+                }
+            }).returns({
+                systemWideUserId: common.recievedNewUser.systemWideUserId,
+                role: "adminUserPolicy",
+                permisssions: [
+                    "ReadLogs",
+                    "ReadPersistenceTables",
+                    "CheckBalance",
+                    "CheckBalance"
+                ]
+            });
+            docClientGetStub.withArgs({
+                TableName: 'roles_and_permissions',
+                Key: {
+                    policy_id: 'supportUserPolicy'
+                }
+            }).returns({
+                systemWideUserId: common.recievedNewUser.systemWideUserId,
+                role: "supportUserPolicy",
+                permissions: [
+                    "ReadLogs"
+                ]
+            });
+        });
+
+
+        it('should get default user policy and permissions as expected', () => {
             const expectedRolesAndPermissions = {
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
-                role: "Default User Role",
-                Permissions: [
+                role: "defaultUserPolicy",
+                permissions: [
                     "EditProfile",
                     "CreateWallet",
                     "CheckBalance"
@@ -145,17 +194,19 @@ describe('User insertion happy path', () => {
 
             const result = authUtil.assignUserRolesAndPermissions(common.recievedNewUser.systemWideUserId, 'default');
             logger('Result of default user roles and permissions extraction:', result);
+            logger('docClient stub info:', docClientGetStub.getCalls());
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'default');
+            expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('defaultUserPolicy', common.recievedNewUser.systemWideUserId);
         });
 
-        it('should get default user roles and permissions if no role is specified', () => {
+        it('should get default user policy and permissions if no role is specified', () => {
             const expectedRolesAndPermissions = {
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
-                role: "Default User Role",
-                Permissions: [
+                role: "defaultUserPolicy",
+                permissions: [
                     "EditProfile",
                     "CreateWallet",
                     "CheckBalance"
@@ -168,44 +219,63 @@ describe('User insertion happy path', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId);
+            expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('defaultUserPolicy', common.recievedNewUser.systemWideUserId);
 
         })
 
-        it('should get admin roles and permissions as expected when requested by another admin user', () => {
+        it('should get admin policy and permissions as expected when requested by another admin user', () => {
             const expectedRolesAndPermissions = {
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
-                role: "Admin Role",
-                Permisssions: [
+                role: "adminUserPolicy",
+                permisssions: [
                     "ReadLogs",
                     "ReadPersistenceTables",
+                    "CheckBalance",
                     "CheckBalance"
                 ]
             };
 
             const result = authUtil.assignUserRolesAndPermissions(common.recievedNewUser.systemWideUserId, 'admin', 'some admin system wide id');
-            logger('result of admin user roles and permissions extraction:', result);
+            logger('result of admin user policy and permissions extraction:', result);
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'admin', 'some admin system wide id');
+            expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('adminUserPolicy', common.recievedNewUser.systemWideUserId);
         });
 
-        it('should get specialised user roles and permissions as expected when requested by an admin user', () => {
+        it('should get support user policy and permissions as expected when requested by an admin user', () => {
             const expectedRolesAndPermissions = {
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
-                role: "Specialised User Role",
-                Permissions: []
+                role: "supportUserPolicy",
+                permissions: [
+                    "ReadLogs"
+                ]
             };
 
-            const result = authUtil.assignUserRolesAndPermissions(common.recievedNewUser.systemWideUserId, 'specialised_user', 'some admin system wide id');
-            logger('result of specialised user roles and permissions extraction:', result);
+            const result = authUtil.assignUserRolesAndPermissions(common.recievedNewUser.systemWideUserId, 'support', 'some admin system wide id');
+            logger('result of specialised user policy and permissions extraction:', result);
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
-            expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'specialised_user', 'some admin system wide id')
+            expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'specialised_user', 'some admin system wide id');
+            expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('supportUserPolicy', common.recievedNewUser.systemWideUserId);
+        });
+
+        it('should return Undefined Policy when an unsupported policy is requested', () => {
+            const expectedResponse = {error: "Undefined Policy"};
+
+            const result = authUtil.assignUserRolesAndPermissions(common.recievedNewUser.systemWideUserId, 'god');
+            logger('result of extraction attempt on nonexistent policy:', result);
+
+            expect(result).to.exist;
+            expect(result).to.deep.equal(expectedResponse);
+            expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'god');
+            expect(authUtilGetPolicySpy).to.have.not.been.called;
+
         })
 
-        it('should throw and error when protected roles and permissions are requested by non-admin user', () => {
+        it('should throw and error when protected policy and permissions are requested by non-admin user', () => {
             // implement
         });
 

@@ -103,7 +103,7 @@ describe('SecureRemotePassword', () => {
     });
 
 
-    context.only('User Login', () => {
+    context('User Login', () => {
 
         beforeEach(() => {
             resetStubs();

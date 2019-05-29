@@ -11,6 +11,12 @@
         "password": "pwd_for_auth_api_worker"
     },
     "tables": {
-        "userTable": "user_data.user"
+        "userTable": "user_data.user",
+        "dynamoAuthPoliciesTable": "roles_and_permissions"
+    },
+    "s3": {
+        "Buckets": {
+            "jwtTestBucket": "test-jwt-encryption-keys"
+        }
     }
 }

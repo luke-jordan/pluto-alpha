@@ -3,8 +3,6 @@ const config = require('config');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-const decamelize = require('decamelize');
-
 module.exports.createNewUser = (systemWideUserId, salt, verifier) => {
     return {
         systemWideUserId: systemWideUserId,

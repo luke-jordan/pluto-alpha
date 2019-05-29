@@ -26,9 +26,12 @@ module.exports.insertNewUser = async (event, context) => {
     const signOptions = authUtil.getSignOptions(input.systemWideUserId);
 
     logger(userRolesAndPermissions);
+    logger(signOptions);
+    const jsonWebToken = await jwt.generateJsonWebToken(userRolesAndPermissions, signOptions)
+    logger('JWT:', jsonWebToken);
 
     const response = {
-        jwt: jwt.generateJsonWebToken(userRolesAndPermissions, signOptions), // λfy 
+        jwt: jsonWebToken, // λfy 
         message: databaseInsertionResponse.databaseResponse
     }
 

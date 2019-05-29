@@ -4,10 +4,17 @@ const config = require('config');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 
-var publicKey = fs.readFileSync('./public.key', 'utf8'); // read from s3/RDS/dynamo
-var privateKey = fs.readFileSync('./private.key', 'utf8'); // read from s3/RDS/dynamo
+const AWS = require('aws-sdk');
+AWS.config.update({
+    region: "us-east-1",
+    endpoint: "http://localhost:8000"
+});
 
-module.exports.generateJsonWebToken = (payload, $Options) => {
+const s3 = require('./s3Util');
+
+
+module.exports.generateJsonWebToken = async (payload, $Options) => {
+    logger('Running in jwt mod.');
     const signOptions = {
         issuer: $Options.issuer,
         subject: $Options.subject,
@@ -15,11 +22,13 @@ module.exports.generateJsonWebToken = (payload, $Options) => {
         expiresIn: config.get('jwt.expiresIn'),
         algorithm: config.get('jwt.algorithm')
     };
+    const privateKey = await s3.getPublicOrPrivateKey('jwt-private.key', 'someAuthorisationKey');
+    logger(privateKey);
     return jwt.sign(payload, privateKey, signOptions);
  };
 
 
-module.exports.verifyJsonWebToken = (token, $Options) => {
+module.exports.verifyJsonWebToken = async (token, $Options) => {
     logger('Public key? :', publicKey);
 
     const verifyOptions = {
@@ -31,6 +40,8 @@ module.exports.verifyJsonWebToken = (token, $Options) => {
     };
 
     try {
+        const publicKey = await s3.getPublicOrPrivateKey('jwt-public.key', 'someAuthorisationKey');
+        logger(publicKey);
         return jwt.verify(token, publicKey, verifyOptions);
     }
     catch (err) {
@@ -52,20 +63,3 @@ module.exports.refreshJsonWebToken = (token) => {
     return exports.generateJsonWebToken(payload, signOPtions);
 };
 
-
-const getPublicOrPrivateKey = (requestedKey, authentication = 'some authentication token') => {
-    const params = {
-        TableName: table,
-        Key: {
-            authKeyName: requestedKey
-        }
-    };
-    try {
-        const dynamoDbResult = await docClient.get(params).promise();
-        logger('DynamoDB GetItem succeeded:', dynamoDbResult);
-        return dynamoDbResult;
-    } catch (err) {
-        logger('DynamoDB GetItem failed with:', err.message);
-        throw err;
-    }
-};
