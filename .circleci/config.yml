@@ -70,8 +70,9 @@ jobs:
           name: handle cloud components
           command: |
              wget -O terraform.zip https://releases.hashicorp.com/terraform/0.12.0/terraform_0.12.0_linux_amd64.zip
-             unzip terraform.zip -d .
-             ./terraform init
+             unzip terraform.zip -d ~/terraform_extracted
+             export PATH="/home/$USER/terraform_extracted:$PATH"
+             terraform init
 
              if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging'] ; then
                 echo "On branch $CIRCLE_BRANCH, handling cloud components."
