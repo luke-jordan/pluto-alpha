@@ -1,9 +1,6 @@
 variable "aws_access_key" {}
-variable "aws_secret_key" {}
-variable "aws_region" {
-  description = "The AWS region to create things in."
-  default     = "us-east-1"
-}
+variable "aws_secret_access_key" {}
+variable "aws_region" {}
 
 variable "environment" {
   default = "dev"

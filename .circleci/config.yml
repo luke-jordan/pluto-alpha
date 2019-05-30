@@ -75,7 +75,8 @@ jobs:
              export PATH="$HOME/terraform_extracted:$PATH"
              cd ./terraform
              terraform init
-             terraform plan 
+             terraform plan -var 'aws_default_region=us-east-1' -var 'aws_access_key=$TERRAFORM_AWS_ACCESS_KEY' -var 'aws_secret_access_key=$TERRAFORM_AWS_SECRET_ACCESS_KEY' -var 'db_user=aaa' -var 'db_password=bbb' 
+
 
              if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging' ] ; then
                 echo "On branch $CIRCLE_BRANCH, handling cloud components."
