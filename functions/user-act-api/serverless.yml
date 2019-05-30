@@ -32,7 +32,7 @@ provider:
 
 functions:
   save:
-    handler: saving.save
+    handler: savetxhandler.save
     name: add-savings
     events:
       - http:
@@ -41,3 +41,7 @@ functions:
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: pluto:*
+
+package:
+  include:
+    - node_modules/rds-common/**

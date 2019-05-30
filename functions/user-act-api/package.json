@@ -4,7 +4,7 @@
   "description": "API for adding savings to a user account",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=u:* mocha"
+    "test": "DEBUG=pluto:save:* nyc mocha"
   },
   "author": "Luke Jordan",
   "license": "ISC",
@@ -17,6 +17,10 @@
     "chai": "^4.2.0",
     "chai-uuid": "^1.0.6",
     "mocha": "^6.1.4",
-    "serverless-localstack": "^0.4.15"
+    "nyc": "^14.1.1",
+    "proxyquire": "^2.1.0",
+    "serverless-localstack": "^0.4.15",
+    "sinon": "^7.3.2",
+    "sinon-chai": "^3.3.0"
   }
 }

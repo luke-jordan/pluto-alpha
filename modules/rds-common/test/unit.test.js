@@ -134,14 +134,14 @@ describe('Basic query pass through', () => {
 
 });
 
-describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
+describe.only('*** UNIT TEST BULK ROW INSERTION ***', () => {
 
     var rdsClient;
     before(() => {
         rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
     });
 
-    afterEach(() => {
+    beforeEach(() => {
         clearStubHistory();
     });
 
@@ -161,27 +161,34 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
         standardExpectations(expectedQuery, null, false, false, 'COMMIT');
     });
 
-    it('Sanitizes values properly to prevent injection', async () => {
-        const queryTemplate = 'INSERT INTO some_scema.some_table (column_1, column_2) VALUES $1';
+    it.only('Sanitizes values properly to prevent injection', async () => {
+        const queryTemplate = 'INSERT INTO some_scema.some_table (column_1, column_2) VALUES %L';
+        const columnTemplate = '${column_1}, ${column_2}';
         const maliciousValue = [ { column_1: 'Watch this', column_2: `'End'); DROP TABLE Users`}];
 
-        expect(rdsClient.insertRecords.bind(rdsClient, queryTemplate, maliciousValue)).to.throw(QueryError);
+        expect(rdsClient.insertRecords.bind(rdsClient, queryTemplate, columnTemplate, maliciousValue)).to.throw(QueryError);
         expect(connectStub).to.not.have.been.called;
         expect(queryStub).to.not.have.been.called;
     });
 
     it('Processes multi-insert queries properly', async () => {
-        const queryTemplate1 = 'INSERT INTO schema1.table1 (column_1, column_2) VALUES $1';
-        const queryValues1 = [ { column_1: 'Hello', column_2: 'X' }, { column_1: 'What', column_2: 'Y' } ];
-        const queryDef1 = { queryTemplate: queryTemplate1, queryValues: queryValues1 };
-        const expectedQuery1 = `INSERT INTO schema1.table1 (column_1, column_2) VALUES ('Hello', 'X'), ('What', 'Y')`;
+        const queryTemplate1 = 'INSERT INTO schema1.table1 (column_1, column_2) VALUES %L RETURNING insertion_id';
+        const queryColumns1 = '${column1}, ${column2}';
+        const queryValues1 = [ { column1: 'Hello', column2: 'X' }, { column1: 'What', column2: 'Y' } ];
+        const queryDef1 = { query: queryTemplate1, columnTemplate: queryColumns1, rows: queryValues1 };
+        const expectedQuery1 = `INSERT INTO schema1.table1 (column_1, column_2) VALUES ('Hello', 'X'), ('What', 'Y') RETURNING insertion_id`;
         
-        const queryTemplate2 = 'INSERT INTO schema2.table1 (column_1, column_2) VALUES $1';
-        const queryValues2 = [ { column_1: 'Other', column_2: 'Thing' }, { column_1: 'Hey', column_2: 'Over'} ];
-        const queryDef2 = { queryTemplate: queryTemplate2, queryValues: queryValues2 };
-        const expectedQuery2 = `INSERT INTO schema2.table1 (column_1, column_2) VALUES ('Other', 'Thing'), ('Hey', 'Over')`;
+        const queryTemplate2 = 'INSERT INTO schema2.table1 (column_1, column_2, column_3) VALUES %L RETURNING insertion_id';
+        const queryColumns2 = queryColumns1 + ', *{CONSTANT_HERE}';
+        const queryValues2 = [ { column1: 'Other', column2: 'Thing' }, { column1: 'Hey', column2: 'Over'} ];
+        const queryDef2 = { query: queryTemplate2, columnTemplate: queryColumns2, rows: queryValues2 };
+        const expectedQuery2 = `INSERT INTO schema2.table1 (column_1, column_2, column_3) VALUES ('Other', 'Thing', 'CONSTANT_HERE'), ('Hey', 'Over', 'CONSTANT_HERE') RETURNING insertion_id`;
+
+        queryStub.withArgs(expectedQuery1).resolves({ rows: [ { 'insertion_id': 1 }, { 'insertion_id': 2 }]});
+        queryStub.withArgs(expectedQuery2).resolves({ rows: [ { 'insertion_id': 401 }, { 'insertion_id': 402 }]});
 
         const insertResult = await rdsClient.largeMultiTableInsert([queryDef1, queryDef2]);
+        logger('Result of query: ', insertResult);
 
         expect(insertResult).to.exist;
 

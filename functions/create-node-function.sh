@@ -6,6 +6,8 @@ FUNCTION_NAME=$2
 sls create --template aws-nodejs --path $API_NAME
 
 cp ../templates/serverless/sls-template.yml $API_NAME/serverless.yml
+# bring in the npm default so we avoid package-lock, which wipes symlinks, for very little gain
+cp ../templates/serverless/.npmrc $API_NAME/.npmrc
 
 cd $API_NAME
 
