@@ -69,8 +69,8 @@ jobs:
       - run:
           name: handle cloud components
           command: |
-             wget https://releases.hashicorp.com/terraform/0.12.0/terraform_0.12.0_linux_amd64.zip
-             unzip terraform_0.6.8_linux_amd64.zip -d terraform
+             wget -O terraform.zip https://releases.hashicorp.com/terraform/0.12.0/terraform_0.12.0_linux_amd64.zip
+             unzip terraform.zip -d terraform
              terraform init
 
              if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging'] ; then
