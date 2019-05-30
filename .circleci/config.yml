@@ -27,11 +27,6 @@ jobs:
           - user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
           - user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
 
-      - run:
-          name: a
-          command: |
-            echo "Hi"
-
       - save_cache:
           key: float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
           paths:
@@ -67,14 +62,24 @@ jobs:
           name: build artifacts
           command: |
              echo $CIRCLE_SHA1 > last_commit.txt
-             zip -r deploy_$CIRCLE_SHA1.zip .
+             zip -r deploy_float_api_$CIRCLE_SHA1.zip ./functions/float-api
+             zip -r deploy_user_act_$CIRCLE_SHA1.zip ./functions/user-act-api
+             zip -r deploy_user_existence_api_$CIRCLE_SHA1.zip ./functions/user-existence-api
 
       - run:
-          name: deploy artifacts
+          name: handle cloud components
           command: |
 
-             if [ $CIRCLE_BRANCH == 'master' ] ; then
-                echo "On branch master, deploying artifacts."
+             if [ $CIRCLE_BRANCH == 'master' or $CIRCLE_BRANCH == 'staging'] ; then
+                echo "On branch $CIRCLE_BRANCH, handling cloud components."
+             fi
+
+      - run:
+          name: upload artifacts
+          command: |
+
+             if [ $CIRCLE_BRANCH == 'master' or $CIRCLE_BRANCH == 'staging'] ; then
+                echo "On branch $CIRCLE_BRANCH, uploading artifacts."
              fi
 
 
