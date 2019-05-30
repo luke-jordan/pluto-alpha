@@ -12,13 +12,14 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
   description = "RDS subnet group"
   subnet_ids  = ["${aws_subnet.private.*.id}"]
 
-  tags {
-    Environment = "${var.environment}"
-  }
-
   depends_on = [
     "aws_subnet.private"
   ]
+
+  tags {
+    AppName = "${var.app_name}"
+    Environment = "${var.environment}"
+  }
 }
 
 /* Security Group for resources that want to access the Database */
@@ -28,6 +29,7 @@ resource "aws_security_group" "db_access_sg" {
   description = "Allow access to RDS"
 
   tags {
+    AppName = "${var.app_name}"
     Environment = "${var.environment}"
   }
 }
@@ -38,7 +40,8 @@ resource "aws_security_group" "rds_sg" {
   vpc_id = "${aws_vpc.example.id}"
 
   tags {
-    Environment =  "${var.environment}"
+    AppName = "${var.app_name}"
+    Environment = "${var.environment}"
   }
 
   // allows traffic from the SG itself
@@ -81,6 +84,7 @@ resource "aws_db_instance" "rds" {
   skip_final_snapshot    = true
 
   tags {
+    AppName = "${var.app_name}"
     Environment = "${var.environment}"
   }
 }
