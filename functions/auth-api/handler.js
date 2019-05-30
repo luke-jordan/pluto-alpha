@@ -13,32 +13,43 @@ const jwt = require('./jwt');
 // the corresponing JSON Web Token. Finally, the result of these operations along with the JWT
 // is returned to the caller.
 module.exports.insertNewUser = async (event, context) => {
-    logger('Running in handler')
-    const input = event['queryStringParameters'] || event;
+    try {
+        logger('Running in handler');
+        const input = event['queryStringParameters'] || event;
 
-    logger('Recieved ', input.systemWideUserId, input.password.length);
-    const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(input.systemWideUserId, input.password);
+        logger('Recieved: systemWideUserId:', input.systemWideUserId, ', Password length:', input.password.length);
+        const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(input.systemWideUserId, input.password);
 
-    const newUser = rdsUtil.createNewUser(input.systemWideUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
-    const userRolesAndPermissions = await authUtil.assignUserRolesAndPermissions(input.systemWideUserId, input.requestedRole); // λfy
-    const databaseInsertionResponse = await rdsUtil.insertNewUser(newUser);
-    // if database insertion successful get jwt, else return databaseInsertionResponse message
-    const signOptions = authUtil.getSignOptions(input.systemWideUserId);
+        const newUser = rdsUtil.createNewUser(input.systemWideUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
+        const userRolesAndPermissions = await authUtil.assignUserRolesAndPermissions(input.systemWideUserId, input.requestedRole); // λfy
+        const databaseInsertionResponse = await rdsUtil.insertNewUser(newUser);
+        // if database insertion successful get jwt, else return databaseInsertionResponse message
+        const signOptions = authUtil.getSignOptions(input.systemWideUserId);
 
-    logger(userRolesAndPermissions);
-    logger(signOptions);
-    const jsonWebToken = await jwt.generateJsonWebToken(userRolesAndPermissions, signOptions)
-    logger('JWT:', jsonWebToken);
+        logger(userRolesAndPermissions);
+        logger(signOptions);
+        const jsonWebToken = await jwt.generateJsonWebToken(userRolesAndPermissions, signOptions)
+        logger('JWT:', jsonWebToken);
 
-    const response = {
-        jwt: jsonWebToken, // λfy 
-        message: databaseInsertionResponse.databaseResponse
+        const response = {
+            jwt: jsonWebToken, // λfy 
+            message: databaseInsertionResponse.databaseResponse
+        };
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify(response)
+        };
+
+    } catch (err) {
+        logger("FATAL_ERROR:", err);
+        const response = {message: err.message};
+        
+        return {
+            statusCode: 500,
+            body: JSON.stringify(response)
+        };
     }
-
-    return {
-        statusCode: 200,
-        body: JSON.stringify(response),
-    };
 };
 
 module.exports.loginUser = async (event, context) => {

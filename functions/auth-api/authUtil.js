@@ -5,13 +5,9 @@ const config = require('config');
 const logger = require('debug')('pluto:auth-util:main');
 const dynamo = require('./persistence/dynamodb/dynamodb');
 
-// const AWS = require('aws-sdk');
-// AWS.config.update({
-//    region: "us-east-1",
-//    endpoint: "http://localhost:8000"
-// });
-
-const docClient = new AWS.DynamoDB.DocumentClient();
+/**
+ * @param
+ */
 
 module.exports.assignUserRolesAndPermissions = (systemWideUserId, userRole, createdBy = 'newUser') => {
     if (!userRole) userRole = 'default';

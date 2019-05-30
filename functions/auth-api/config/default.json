@@ -1,4 +1,11 @@
 {
+    "aws": {
+        "region": "eu-west-1",
+        "apiVersion": "2012-08-10",
+        "endpoints": {
+            "dynamodb": "http://localhost:8000"
+        }
+    },
     "jwt": {
         "expiresIn": "7d",
         "algorithm": "RS256"

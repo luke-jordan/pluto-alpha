@@ -3,7 +3,7 @@
 const config = require('config');
 const logger = require('debug')('pluto:auth:dynamo');
 
-const dynamoCommon = require('dynamo-common');
+const dynamoCommon = require('../../../../modules/dynamo-common')
 
 module.exports.getPolicy =  async (policyName, systemWideUserId) => {
     const dynamoDbResult = await dynamoCommon.fetchSingleRow(config.get('tables.dynamoAuthPoliciesTable'), {policy_id: policyName});
