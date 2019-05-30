@@ -14,11 +14,7 @@ data "aws_availability_zones" "available" {}
 
 resource "aws_vpc" "example" {
   cidr_block = "172.17.0.0/16"
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
+  
 }
 
 # Create var.az_count private subnets, each in a different AZ
@@ -27,11 +23,6 @@ resource "aws_subnet" "private" {
   cidr_block        = "${cidrsubnet(aws_vpc.example.cidr_block, 8, count.index)}"
   availability_zone = "${data.aws_availability_zones.available.names[count.index]}"
   vpc_id            = "${aws_vpc.example.id}"
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
 
 # Create var.az_count public subnets, each in a different AZ
@@ -41,21 +32,11 @@ resource "aws_subnet" "public" {
   availability_zone       = "${data.aws_availability_zones.available.names[count.index]}"
   vpc_id                  = "${aws_vpc.example.id}"
   map_public_ip_on_launch = true
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
 
 # IGW for the public subnet
 resource "aws_internet_gateway" "gw" {
   vpc_id = "${aws_vpc.example.id}"
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
 
 # Route the public subnet traffic through the IGW
@@ -70,21 +51,12 @@ resource "aws_eip" "gw" {
   count      = "${var.az_count}"
   vpc        = true
   depends_on = ["aws_internet_gateway.gw"]
-
-  tags {
-    Environment = "${var.app_name}-${var.environment}"
-  }
 }
 
 resource "aws_nat_gateway" "gw" {
   count         = "${var.az_count}"
   subnet_id     = "${element(aws_subnet.public.*.id, count.index)}"
   allocation_id = "${element(aws_eip.gw.*.id, count.index)}"
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
 
 # Create a new route table for the private subnets
@@ -96,11 +68,6 @@ resource "aws_route_table" "private" {
   route {
     cidr_block = "0.0.0.0/0"
     nat_gateway_id = "${element(aws_nat_gateway.gw.*.id, count.index)}"
-  }
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
   }
 }
 
@@ -134,10 +101,6 @@ resource "aws_security_group" "lb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
 
 # Traffic to the Cluster should only come from the ALB
@@ -158,10 +121,5 @@ resource "aws_security_group" "ecs_tasks" {
     from_port   = 0
     to_port     = 0
     cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
   }
 }

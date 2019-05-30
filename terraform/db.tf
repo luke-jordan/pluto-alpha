@@ -10,16 +10,11 @@ variable "db_password" {}
 resource "aws_db_subnet_group" "rds_subnet_group" {
   name        = "${var.environment}-rds-subnet-group"
   description = "RDS subnet group"
-  subnet_ids  = ["${aws_subnet.private.*.id}"]
+  subnet_ids  = [for subnet in aws_subnet.private : subnet.id]
 
   depends_on = [
     "aws_subnet.private"
   ]
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
 
 /* Security Group for resources that want to access the Database */
@@ -27,22 +22,12 @@ resource "aws_security_group" "db_access_sg" {
   vpc_id      = "${aws_vpc.example.id}"
   name        = "${var.environment}-db-access-sg"
   description = "Allow access to RDS"
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
 
 resource "aws_security_group" "rds_sg" {
   name = "${var.environment}-rds-sg"
 
   vpc_id = "${aws_vpc.example.id}"
-
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 
   // allows traffic from the SG itself
   ingress {
@@ -83,8 +68,4 @@ resource "aws_db_instance" "rds" {
 
   skip_final_snapshot    = true
 
-  tags {
-    AppName = "${var.app_name}"
-    Environment = "${var.environment}"
-  }
 }
