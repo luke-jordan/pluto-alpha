@@ -6,15 +6,16 @@ const chai = require('chai');
 const expect = chai.expect;
 const common = require('./common');
 const proxyquire = require('proxyquire');
-const uuid = require('uuid/v4');
 const rdsUtil = require('../rdsUtil');
+const dynamodb = require('../persistence/dynamodb/dynamodb');
+const dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 
 
 let insertStub  = sinon.stub();
 let saltVerifierStub = sinon.stub();
 let generateJwtStub = sinon.stub();
 let loginStub  = sinon.stub();
-let getPolicyStub = sinon.stub()
+let getPolicyStub = dynamodbStub;
 // let authUtilGetPolicySpy    = sinon.spy(authUtil, 'getPolicy');
 let rdsUtilCreateNewUserSpy = sinon.spy(rdsUtil, 'createNewUser');
 
@@ -55,29 +56,55 @@ const resetStubs = () => {
     saltVerifierStub.reset();
     generateJwtStub.reset();
     loginStub.reset();
+    getPolicyStub.reset();
     authUtilPermissionsSpy.restore();
     authUtilSignOptionsSpy.restore();
-    // authUtilGetPolicySpy.restore();
     rdsUtilCreateNewUserSpy.restore();
     // docClientGetStub.reset();
 };
 
-describe('User insertion happy path', () => {
+describe.only('User insertion happy path', () => {
 
     beforeEach(() => {
         resetStubs();
+        getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
+            .resolves({
+                systemWideUserId: common.recievedNewUser.systemWideUserId,
+                role: "defaultUserPolicy",
+                permissions: [
+                    "EditProfile",
+                    "CreateWallet",
+                    "CheckBalance"
+                ]
+            });
+        getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
+            .resolves({
+                systemWideUserId: common.recievedNewUser.systemWideUserId,
+                role: "adminUserPolicy",
+                permisssions: [
+                    "ReadLogs",
+                    "ReadPersistenceTables",
+                    "CheckBalance",
+                    "CheckBalance"
+                ]
+            });
+        getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
+            .resolves({
+                systemWideUserId: common.recievedNewUser.systemWideUserId,
+                role: "supportUserPolicy",
+                permissions: [
+                    "ReadLogs"
+                ]
+            });
+    
     });
-
-    afterEach(() => {
-        sinon.restore()
-    })
 
     context('handler', () => {
 
         it.only('should handle new user properly', async () => {
-            const mockUserId = uuid(); // replace with common.expectedSomething.systemWideUserId
-
-            saltVerifierStub.returns({ systemWideUserId: mockUserId, salt: 'andpepper', verifier: 'verified' });
+            
+            // move all stub definitions to describes beforeEach() ?
+            saltVerifierStub.returns({ systemWideUserId: common.recievedNewUser.systemWideUserId, salt: 'andpepper', verifier: 'verified' });
             
             insertStub
                 .withArgs(common.expectedInsertionQuery, common.expectedInsertionColumns, common.expectedInsertionList)
@@ -88,10 +115,13 @@ describe('User insertion happy path', () => {
                 });
             generateJwtStub.returns('some.jwt.token');
             
-            const insertionResult = await handler.insertNewUser(event = { systemWideUserId: mockUserId, password: 'greetings', userRole: 'default'});
-            logger('Inserted new user');
+            const insertionResult = await handler.insertNewUser(event = { systemWideUserId: common.recievedNewUser.systemWideUserId, password: 'greetings', userRole: 'default'});
             logger('InsertionResult:', insertionResult);
+            logger('getPolicyStub recieved args:', getPolicyStub.getCall(0).args);
+            logger('getPolicyStub returned:', getPolicyStub.getCall(0).returnValue);
+
             expect(insertionResult).to.exist;
+            expect(getPolicyStub).to.have.been.calledOnce;
             expect(insertionResult).to.have.property('statusCode');
             expect(insertionResult).to.have.property('body');
             expect(insertionResult.statusCode).to.deep.equal(200);
@@ -145,47 +175,6 @@ describe('User insertion happy path', () => {
 
         beforeEach(() => {
             resetStubs();
-            /* docClientGetStub.withArgs({
-                TableName: 'roles_and_permissions',
-                Key: {
-                    policy_id: 'defaultUserPolicy'
-                }
-            }).returns({
-                systemWideUserId: common.recievedNewUser.systemWideUserId,
-                role: "defaultUserPolicy",
-                permissions: [
-                    "EditProfile",
-                    "CreateWallet",
-                    "CheckBalance"
-                ]
-            });
-            docClientGetStub.withArgs({
-                TableName: 'roles_and_permissions',
-                Key: {
-                    policy_id: 'adminUserPolicy'
-                }
-            }).returns({
-                systemWideUserId: common.recievedNewUser.systemWideUserId,
-                role: "adminUserPolicy",
-                permisssions: [
-                    "ReadLogs",
-                    "ReadPersistenceTables",
-                    "CheckBalance",
-                    "CheckBalance"
-                ]
-            });
-            docClientGetStub.withArgs({
-                TableName: 'roles_and_permissions',
-                Key: {
-                    policy_id: 'supportUserPolicy'
-                }
-            }).returns({
-                systemWideUserId: common.recievedNewUser.systemWideUserId,
-                role: "supportUserPolicy",
-                permissions: [
-                    "ReadLogs"
-                ]
-            });*/
         });
 
         // s3 stub needed on all policy tests
@@ -207,7 +196,7 @@ describe('User insertion happy path', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'default');
-            // expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('defaultUserPolicy', common.recievedNewUser.systemWideUserId);
+            expect(getPolicyStub).to.have.been.calledOnceWithExactly('defaultUserPolicy', common.recievedNewUser.systemWideUserId);
         });
 
         it('should get default user policy and permissions if no role is specified', () => {
@@ -227,8 +216,7 @@ describe('User insertion happy path', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId);
-            // expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('defaultUserPolicy', common.recievedNewUser.systemWideUserId);
-
+            expect(getPolicyStub).to.have.been.calledOnceWithExactly('defaultUserPolicy', common.recievedNewUser.systemWideUserId);
         })
 
         it('should get admin policy and permissions as expected when requested by another admin user', () => {
@@ -249,7 +237,7 @@ describe('User insertion happy path', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'admin', 'some admin system wide id');
-            // expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('adminUserPolicy', common.recievedNewUser.systemWideUserId);
+            expect(getPolicyStub).to.have.been.calledOnceWithExactly('adminUserPolicy', common.recievedNewUser.systemWideUserId);
         });
 
         it('should get support user policy and permissions as expected when requested by an admin user', () => {
@@ -267,7 +255,7 @@ describe('User insertion happy path', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedRolesAndPermissions);
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'specialised_user', 'some admin system wide id');
-            // expect(authUtilGetPolicySpy).to.have.been.calledOnceWithExactly('supportUserPolicy', common.recievedNewUser.systemWideUserId);
+            expect(getPolicyStub).to.have.been.calledOnceWithExactly('supportUserPolicy', common.recievedNewUser.systemWideUserId);
         });
 
         it('should return Undefined Policy when an unsupported policy is requested', () => {
@@ -275,14 +263,14 @@ describe('User insertion happy path', () => {
 
             const result = authUtil.assignUserRolesAndPermissions(common.recievedNewUser.systemWideUserId, 'god');
             logger('result of extraction attempt on nonexistent policy:', result);
-            // logger(authUtilPermissionsSpy.getCalls())
+            logger(authUtilPermissionsSpy.getCalls())
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedResponse);
             // result matches expectedResponse, however:
             //     authUtilPermissionsSpy is not getting called investigate and patch
-            // expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'god');
-            // expect(authUtilGetPolicySpy).to.have.not.been.called;
+            expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'god');
+            expect(getPolicyStub).to.have.not.been.called;
         })
 
         it('should throw and error when protected policy and permissions are requested by non-admin user', () => {

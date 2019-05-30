@@ -1,12 +1,13 @@
 // λfy
-// if (createdBy !== admin) throw new Error('Action not allowed');
 
 const config = require('config');
 const logger = require('debug')('pluto:auth-util:main');
 const dynamo = require('./persistence/dynamodb/dynamodb');
 
 /**
- * @param
+ * @param systemWideUserId the system wide user id passed into the auth lambda event
+ * @param userRole the requested role of new user to be created
+ * @param createdBy this is useful for accessing protected roles. Only admin users should be able create protected roles.
  */
 
 module.exports.assignUserRolesAndPermissions = (systemWideUserId, userRole, createdBy = 'newUser') => {
@@ -29,8 +30,8 @@ module.exports.assignUserRolesAndPermissions = (systemWideUserId, userRole, crea
 
 module.exports.getSignOptions = (systemWideUserId) => {
     return {
-        issuer: 'Pluto Savings',
+        issuer: 'Pluto Saving',
         subject: systemWideUserId,
-        audience: 'https://plutosavings.com'
+        audience: 'https://plutosaving.com'
     };
 };
