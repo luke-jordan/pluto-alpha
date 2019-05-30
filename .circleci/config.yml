@@ -16,7 +16,7 @@ jobs:
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: postgres
 
-    working_directory: ~/
+    working_directory: ~/app
 
     steps:
       - checkout
