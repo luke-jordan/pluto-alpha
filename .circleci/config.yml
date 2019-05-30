@@ -73,9 +73,11 @@ jobs:
              unzip terraform.zip -d ~/terraform_extracted
 
              export PATH="$HOME/terraform_extracted:$PATH"
+             cd ./terraform
              terraform init
+             terraform plan 
 
-             if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging'] ; then
+             if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging' ] ; then
                 echo "On branch $CIRCLE_BRANCH, handling cloud components."
              fi
 
@@ -83,7 +85,7 @@ jobs:
           name: upload artifacts
           command: |
 
-             if [ $CIRCLE_BRANCH == 'master' or $CIRCLE_BRANCH == 'staging'] ; then
+             if [ $CIRCLE_BRANCH == 'master' or $CIRCLE_BRANCH == 'staging' ] ; then
                 echo "On branch $CIRCLE_BRANCH, uploading artifacts."
              fi
 
