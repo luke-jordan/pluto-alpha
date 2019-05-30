@@ -77,7 +77,7 @@ describe.only('User insertion happy path', () => {
                     "CheckBalance"
                 ]
             });
-        getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
+        getPolicyStub.withArgs('adminUserPolicy', common.recievedNewUser.systemWideUserId)
             .resolves({
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
                 role: "adminUserPolicy",
@@ -88,7 +88,7 @@ describe.only('User insertion happy path', () => {
                     "CheckBalance"
                 ]
             });
-        getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
+        getPolicyStub.withArgs('supportUserPolicy', common.recievedNewUser.systemWideUserId)
             .resolves({
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
                 role: "supportUserPolicy",
@@ -267,8 +267,6 @@ describe.only('User insertion happy path', () => {
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedResponse);
-            // result matches expectedResponse, however:
-            //     authUtilPermissionsSpy is not getting called investigate and patch
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'god');
             expect(getPolicyStub).to.have.not.been.called;
         })
@@ -289,7 +287,6 @@ describe.only('User insertion happy path', () => {
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedSignOptions);
-            // spies dont seem to be getting called, investigate
             expect(authUtilSignOptionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId);
         })
     });

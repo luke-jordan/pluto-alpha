@@ -1,7 +1,6 @@
 const srp = require('secure-remote-password/client');
 const logger = require('debug')('pluto:auth:pwdalgo')
 
-
 /**
  * This is the primary module shared between all lambdas serving some function of the current
  * implementation of the secure remote password protocol.

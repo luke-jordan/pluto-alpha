@@ -28,7 +28,6 @@ const passwordAlgorithm = proxyquire('../pwordalgo', {
 });
 
 let loginHelperStub = sinon.stub(passwordAlgorithm, 'loginHelper');
-// logger('password ALgorithm structure:', passwordAlgorithm);
 
 const resetStubs = () => {
     generateSaltStub.reset();

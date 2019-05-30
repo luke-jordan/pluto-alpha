@@ -11,7 +11,7 @@ let verifyJwtStub = sinon.stub();
 let decodeJwtStub = sinon.stub();
 
 let readFileSyncStub = sinon.stub();
-const mockPrivateKey = '==erg4g35gt4ehrh=='; // test extraction from s3?
+const mockPrivateKey = '==erg4g35gt4ehrh=='; // todo: test extraction from s3
 const mockPublicKey  = '==ui34hr8iu3hr2i==';
 readFileSyncStub.withArgs('./public.key', 'utf8').returns(mockPublicKey);
 readFileSyncStub.withArgs('./private.key', 'utf8').returns(mockPrivateKey);
