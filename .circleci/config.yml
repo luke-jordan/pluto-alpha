@@ -23,10 +23,10 @@ jobs:
 
       - restore_cache:
           keys:
-          - _float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
-          - _user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
-          - _user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
-          - _terraform-bin-{{ checksum "./terraform/terraform_version" }}
+          - float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
+          - user-act-api_dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+          - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+          - terraform_bin-{{ checksum "./terraform/terraform_version" }}
 
       - run:
           name: install node modules
@@ -38,17 +38,17 @@ jobs:
             cd $HOME/app
 
       - save_cache:
-          key: _float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
+          key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
           paths:
             - ./functions/float-api/node_modules
 
       - save_cache:
-          key: _user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+          key: user-act-api_dependencies-{{ checksum "./functions/user-act-api/package.json" }}
           paths:
             - ./functions/user-act-api/node_modules
 
       - save_cache:
-          key: _user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+          key: user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
           paths:
             - ./functions/user-existence-api/node_modules
 
@@ -80,12 +80,12 @@ jobs:
           command: |
              export TF_VERSION=$(cat $HOME/app/terraform/terraform_version)
 
-             if [ ! -f /tmp/terraform ]; then
+             if [ ! -f /tmp/terraform/terraform ]; then
                 wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_$(echo "$TF_VERSION")_linux_amd64.zip
                 unzip /tmp/terraform.zip -d /tmp/terraform
              fi
 
-             export PATH="/tmp:$PATH"
+             export PATH="/tmp/terraform:$PATH"
              cd $HOME/app/terraform
              terraform init
              terraform plan -var "aws_default_region=us-east-1" -var "aws_access_key=$TERRAFORM_AWS_ACCESS_KEY" -var "aws_secret_access_key=$TERRAFORM_AWS_SECRET_ACCESS_KEY" -var "db_user=aaa" -var "db_password=bbb"
@@ -96,7 +96,7 @@ jobs:
              fi
 
       - save_cache:
-          key: _terraform-bin-{{ checksum "./terraform/terraform_version" }}
+          key: terraform_bin-{{ checksum "./terraform/terraform_version" }}
           paths:
             - /tmp/terraform
 
