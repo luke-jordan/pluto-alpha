@@ -19,7 +19,7 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
 
 /* Security Group for resources that want to access the Database */
 resource "aws_security_group" "db_access_sg" {
-  vpc_id      = "${aws_vpc.example.id}"
+  vpc_id      = "${aws_vpc.main.id}"
   name        = "${var.environment}-db-access-sg"
   description = "Allow access to RDS"
 }
@@ -27,7 +27,7 @@ resource "aws_security_group" "db_access_sg" {
 resource "aws_security_group" "rds_sg" {
   name = "${var.environment}-rds-sg"
 
-  vpc_id = "${aws_vpc.example.id}"
+  vpc_id = "${aws_vpc.main.id}"
 
   // allows traffic from the SG itself
   ingress {
