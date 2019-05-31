@@ -110,7 +110,7 @@ jobs:
           name: upload artifacts
           command: |
 
-             if [ $CIRCLE_BRANCH == 'master' or $CIRCLE_BRANCH == 'staging' ] ; then
+             if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging' ] ; then
                 echo "On branch $CIRCLE_BRANCH, uploading artifacts."
              fi
 
