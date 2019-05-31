@@ -94,7 +94,7 @@ jobs:
              export PATH="/tmp/terraform:$PATH"
              cd $HOME/app/terraform
              terraform init
-             terraform apply -auto-approve -var "aws_default_region=$AWS_DEFAULT_REGION" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaa" -var "db_password=bbb"
+             terraform apply -auto-approve -var "aws_default_region=$AWS_DEFAULT_REGION" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
 
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, deploying artifacts."
