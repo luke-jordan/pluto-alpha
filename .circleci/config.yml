@@ -23,37 +23,38 @@ jobs:
 
       - restore_cache:
           keys:
-          - float-api-dependencies-{{ checksum "$HOME/app/functions/float-api/package.json" }}
-          - user-act-api-dependencies-{{ checksum "$HOME/app/functions/user-act-api/package.json" }}
-          - user-existence-api-dependencies-{{ checksum "$HOME/app/functions/user-existence-api/package.json" }}
-          - terraform-bin-{{ checksum "$HOME/app/terraform/terraform_version" }}
+          - float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
+          - user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+          - user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+          - terraform-bin-{{ checksum "./terraform/terraform_version" }}
 
       - save_cache:
-          key: float-api-dependencies-{{ checksum "$HOME/app/functions/float-api/package.json" }}
+          key: float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
           paths:
-            - $HOME/app/functions/float-api/node_modules
+            - ./functions/float-api/node_modules
 
       - save_cache:
-          key: user-act-api-dependencies-{{ checksum "$HOME/app/functions/user-act-api/package.json" }}
+          key: user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
           paths:
-            - $HOME/app/functions/user-act-api/node_modules
+            - ./functions/user-act-api/node_modules
 
       - save_cache:
-          key: user-existence-api-dependencies-{{ checksum "$HOME/app/functions/user-existence-api/package.json" }}
+          key: user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
           paths:
-            - $HOME/app/functions/user-existence-api/node_modules
+            - ./functions/user-existence-api/node_modules
 
       - save_cache:
-          key: terraform-bin-{{ checksum "$HOME/app/terraform/terraform_version" }}
+          key: terraform-bin-{{ checksum "./terraform/terraform_version" }}
           paths:
-            - $HOME/app/terraform_extracted/terraform
+            - /tmp/terraform
 
       - run:
           name: install node modules
           command: |
-            cd $HOME/app/functions/float-api && npm install && cd -
-            cd $HOME/app/functions/user-act-api && npm install && cd -
-            cd $HOME/app/functions/user-existence-api && npm install && cd -
+            cd $HOME/app/functions/float-api && npm install
+            cd $HOME/app/functions/user-act-api && npm install
+            cd $HOME/app/functions/user-existence-api && npm install
+            cd $HOME/app
 
       - run:
           name: run linter
@@ -83,12 +84,12 @@ jobs:
           command: |
              tf_version=$(cat $HOME/app/terraform/terraform_version)
 
-             if [ ! -f $HOME/app/terraform_extracted/terraform ]; then
-                wget -O terraform.zip https://releases.hashicorp.com/terraform/$(tf_version)/terraform_$(tf_version)_linux_amd64.zip
-                unzip terraform.zip -d $HOME/app/terraform_extracted/terraform
+             if [ ! -f /tmp/terraform ]; then
+                wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$(tf_version)/terraform_$(tf_version)_linux_amd64.zip
+                unzip /tmp/terraform.zip -d /tmp/terraform
              fi
 
-             export PATH="$HOME/app/terraform_extracted/terraform:$PATH"
+             export PATH="/tmp:$PATH"
              cd $HOME/app/terraform
              terraform init
              terraform plan -var "aws_default_region=us-east-1" -var "aws_access_key=$TERRAFORM_AWS_ACCESS_KEY" -var "aws_secret_access_key=$TERRAFORM_AWS_SECRET_ACCESS_KEY" -var "db_user=aaa" -var "db_password=bbb"
