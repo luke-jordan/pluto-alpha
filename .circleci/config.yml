@@ -28,6 +28,15 @@ jobs:
           - user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
           - terraform-bin-{{ checksum "./terraform/terraform_version" }}
 
+      - run:
+          name: install node modules
+          command: |
+
+            cd $HOME/app/functions/float-api && npm install
+            cd $HOME/app/functions/user-act-api && npm install
+            cd $HOME/app/functions/user-existence-api && npm install
+            cd $HOME/app
+
       - save_cache:
           key: float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
           paths:
@@ -47,15 +56,6 @@ jobs:
           key: terraform-bin-{{ checksum "./terraform/terraform_version" }}
           paths:
             - /tmp/terraform
-
-      - run:
-          name: install node modules
-          command: |
-
-            cd $HOME/app/functions/float-api && npm install
-            cd $HOME/app/functions/user-act-api && npm install
-            cd $HOME/app/functions/user-existence-api && npm install
-            cd $HOME/app
 
       - run:
           name: run linter
@@ -83,10 +83,10 @@ jobs:
       - run:
           name: handle cloud components
           command: |
-             tf_version=$(cat $HOME/app/terraform/terraform_version)
+             export TF_VERSION=$(cat $HOME/app/terraform/terraform_version)
 
              if [ ! -f /tmp/terraform ]; then
-                wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$(tf_version)/terraform_$(tf_version)_linux_amd64.zip
+                wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_$TF_VERSION_linux_amd64.zip
                 unzip /tmp/terraform.zip -d /tmp/terraform
              fi
 
