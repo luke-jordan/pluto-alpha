@@ -23,10 +23,10 @@ jobs:
 
       - restore_cache:
           keys:
-          - float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
-          - user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
-          - user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
-          - terraform-bin-{{ checksum "./terraform/terraform_version" }}
+          - _float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
+          - _user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+          - _user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+          - _terraform-bin-{{ checksum "./terraform/terraform_version" }}
 
       - run:
           name: install node modules
@@ -38,22 +38,22 @@ jobs:
             cd $HOME/app
 
       - save_cache:
-          key: float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
+          key: _float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
           paths:
             - ./functions/float-api/node_modules
 
       - save_cache:
-          key: user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+          key: _user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
           paths:
             - ./functions/user-act-api/node_modules
 
       - save_cache:
-          key: user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+          key: _user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
           paths:
             - ./functions/user-existence-api/node_modules
 
       - save_cache:
-          key: terraform-bin-{{ checksum "./terraform/terraform_version" }}
+          key: _terraform-bin-{{ checksum "./terraform/terraform_version" }}
           paths:
             - /tmp/terraform
 
@@ -86,7 +86,7 @@ jobs:
              export TF_VERSION=$(cat $HOME/app/terraform/terraform_version)
 
              if [ ! -f /tmp/terraform ]; then
-                wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_$TF_VERSION_linux_amd64.zip
+                wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_$(echo "$TF_VERSION")_linux_amd64.zip
                 unzip /tmp/terraform.zip -d /tmp/terraform
              fi
 
