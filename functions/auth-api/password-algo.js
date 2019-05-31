@@ -1,3 +1,5 @@
+'use strict';
+
 const srp = require('secure-remote-password/client');
 const logger = require('debug')('pluto:auth:pwdalgo')
 

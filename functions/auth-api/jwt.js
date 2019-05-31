@@ -7,18 +7,18 @@ const jwt = require('jsonwebtoken');
 const AWS = require('aws-sdk');
 AWS.config.update({
     region: "us-east-1",
-    endpoint: "http://localhost:8000"
+    endpoint: "http://localhost:4572"
 });
 
-const s3 = require('./s3Util');
+const s3 = require('./s3-util');
 
 
-module.exports.generateJsonWebToken = async (payload, $Options) => {
+module.exports.generateJsonWebToken = async (payload, recievedSignOptions) => {
     logger('Running in jwt mod.');
     const signOptions = {
-        issuer: $Options.issuer,
-        subject: $Options.subject,
-        audience: $Options.audience,
+        issuer: recievedSignOptions.issuer,
+        subject: recievedSignOptions.subject,
+        audience: recievedSignOptions.audience,
         expiresIn: config.get('jwt.expiresIn'),
         algorithm: config.get('jwt.algorithm')
     };
@@ -28,13 +28,13 @@ module.exports.generateJsonWebToken = async (payload, $Options) => {
  };
 
 
-module.exports.verifyJsonWebToken = async (token, $Options) => {
+module.exports.verifyJsonWebToken = async (token, recievedVerifyOptions) => {
     logger('Public key? :', publicKey);
 
     const verifyOptions = {
-        issuer: $Options.issuer,
-        subject: $Options.subject,
-        audience: $Options.audience,
+        issuer: recievedVerifyOptions.issuer,
+        subject: recievedVerifyOptions.subject,
+        audience: recievedVerifyOptions.audience,
         expiresIn: config.get('jwt.expiresIn'),
         algorithm: config.get('jwt.algorithm')
     };

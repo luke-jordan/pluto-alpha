@@ -23,3 +23,5 @@ production.json
 
 # automated branch-master synchroniser
 gitup.sh
+jwt-private.key
+jwt-public.key

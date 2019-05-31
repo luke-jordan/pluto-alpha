@@ -1,3 +1,5 @@
+'use strict';
+
 const logger = require('debug')('pluto:auth:test');
 
 const chai = require('chai');
@@ -6,6 +8,7 @@ const sinon = require('sinon');
 const sinonChai = require('sinon-chai');
 chai.use(sinonChai);
 const uuid = require('uuid/v4');
+const common = require('./common');
 
 const proxyquire = require('proxyquire');
 
@@ -16,7 +19,7 @@ let generateEphemeralStub = sinon.stub();
 let deriveSessionStub = sinon.stub();
 let verifySessionStub = sinon.stub();
 
-const passwordAlgorithm = proxyquire('../pwordalgo', {
+const passwordAlgorithm = proxyquire('../password-algo', {
     'secure-remote-password/client': {
         'generateSalt': generateSaltStub,
         'derivePrivateKey': privateKeyStub,
@@ -115,57 +118,26 @@ describe('SecureRemotePassword', () => {
                 .withArgs('andpepper', 'mock system-wide user id to unavailable server', expectedLoginDetails.password)
                 .returns('mock client private key');
             deriveSessionStub
-                .withArgs(
-                    'mock client secret ephemeral',
-                    'mock server public ephemeral',
-                    'andpepper',
-                    expectedLoginDetails.systemWideUserId,
-                    'mock client private key'
-                ).returns({proof: 'mock client session proof'});
+                .withArgs(...common.getStubArgs('deriveClientSession', expectedLoginDetails.systemWideUserId))
+                .returns({proof: 'mock client session proof'});
             deriveSessionStub
-                .withArgs(
-                    'mock client secret ephemeral',
-                    'mock server public ephemeral',
-                    'andpepper',
-                    'mock system-wide user id to unavailable server',
-                    'mock client private key'
-                ).returns({proof: 'mock client session proof'});
+                .withArgs(...common.getStubArgs('deriveServerSession', expectedLoginDetails.systemWideUserId))
+                .returns({proof: 'mock server session proof'});
             deriveSessionStub
-                .withArgs(
-                    'mock server secret ephemeral',
-                    'mock client public ephemeral',
-                    'andpepper',
-                    expectedLoginDetails.systemWideUserId,
-                    'mock persisted verifier',
-                    'mock client session proof'
-                ).returns({proof: 'mock server session proof'});
-            loginHelperStub.withArgs(
-                'saltAndServerPublicEphemeralLambdaUrl', {
-                    systemWideUserId: expectedLoginDetails.systemWideUserId,
-                    clientPublicEphemeral: 'mock client public ephemeral'
-                }).returns({salt: 'andpepper', serverEphemeralPublic: 'mock server public ephemeral'});
-            loginHelperStub.withArgs(
-                'saltAndServerPublicEphemeralLambdaUrl', {
-                    systemWideUserId: 'mock system-wide user id to unavailable server 1',
-                    clientPublicEphemeral: 'mock client public ephemeral'
-                }).returns();
-            loginHelperStub.withArgs(
-                'serverSessionProofLambdaUrl', {
-                    systemWideUserId: expectedLoginDetails.systemWideUserId,
-                    clientSessionProof: 'mock client session proof',
-                    clientPublicEphemeral: 'mock client public ephemeral'
-                }).returns({serverSessionProof: 'mock server session proof'});
-            loginHelperStub.withArgs(
-                'saltAndServerPublicEphemeralLambdaUrl', {
-                    systemWideUserId: 'mock system-wide user id to unavailable server',
-                    clientPublicEphemeral: 'mock client public ephemeral'
-                }).returns({salt: 'andpepper', serverEphemeralPublic: 'mock server public ephemeral'});
-            loginHelperStub.withArgs(
-                'serverSessionProofLambdaUrl', {
-                    systemWideUserId: 'mock system-wide user id to unavailable server',
-                    clientSessionProof: 'mock client session proof',
-                    clientPublicEphemeral: 'mock client public ephemeral'
-                }).returns();           
+                .withArgs(...common.getStubArgs('deriveSessionOnNonResponsiveServer'))
+                .returns({proof: 'mock client session proof'});
+            loginHelperStub
+                .withArgs('serverSessionProofLambdaUrl', common.getStubArgs('serverSessionProofAvailable', expectedLoginDetails.systemWideUserId))
+                .returns({serverSessionProof: 'mock server session proof'});
+            loginHelperStub
+                .withArgs('serverSessionProofLambdaUrl', common.getStubArgs('serverSessionProofUnavailble'))
+                .returns();
+            loginHelperStub
+                .withArgs('saltAndServerPublicEphemeralLambdaUrl', common.getStubArgs('saltAndServerPublicEphemeralAvailable', expectedLoginDetails.systemWideUserId))
+                .returns({salt: 'andpepper', serverEphemeralPublic: 'mock server public ephemeral'});  
+            loginHelperStub
+                .withArgs('saltAndServerPublicEphemeralLambdaUrl', common.getStubArgs('saltAndServerPublicEphemeralUnavailable'))
+                .returns(); 
             }
         );
 

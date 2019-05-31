@@ -3,9 +3,9 @@
 const config = require('config');
 const logger = require('debug')('pluto:auth-handler:main');
 
-const passwordAlgorithm = require('./pwordalgo');
-const rdsUtil = require('./rdsUtil');
-const authUtil = require('./authUtil');
+const passwordAlgorithm = require('./password-algo');
+const rdsUtil = require('./rds-util');
+const authUtil = require('./auth-util');
 const jwt = require('./jwt');
 
 // This function generates persistable user credentials, persists them to RDS, sends the 

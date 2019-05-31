@@ -6,7 +6,7 @@ const chai = require('chai');
 const expect = chai.expect;
 const common = require('./common');
 const proxyquire = require('proxyquire');
-const rdsUtil = require('../rdsUtil');
+const rdsUtil = require('../rds-util');
 const dynamodb = require('../persistence/dynamodb/dynamodb');
 const dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 
@@ -25,7 +25,7 @@ class MockRdsConnection {
     }
 };
 
-const authUtil = proxyquire('../authUtil', {
+const authUtil = proxyquire('../auth-util', {
     './persistence/dynamodb/dynamodb': {
         getPolicy: getPolicyStub
     }
@@ -34,14 +34,14 @@ const authUtil = proxyquire('../authUtil', {
 let authUtilPermissionsSpy  = sinon.spy(authUtil, 'assignUserRolesAndPermissions');
 let authUtilSignOptionsSpy  = sinon.spy(authUtil, 'getSignOptions');
 
-const rdsConnection = proxyquire('../rdsUtil', {
+const rdsConnection = proxyquire('../rds-util', {
     'rds-common': MockRdsConnection,
     '@noCallThru': true
 });
 
 const handler = proxyquire('../handler', {
-    './rdsUtil': rdsConnection, 
-    './pwordalgo': {
+    './rds-util': rdsConnection, 
+    './password-algo': {
         'generateSaltAndVerifier': saltVerifierStub,
         'loginExistingUser': loginStub
     },
@@ -63,7 +63,7 @@ const resetStubs = () => {
     // docClientGetStub.reset();
 };
 
-describe.only('User insertion happy path', () => {
+describe('User insertion', () => {
 
     beforeEach(() => {
         resetStubs();
@@ -101,7 +101,7 @@ describe.only('User insertion happy path', () => {
 
     context('handler', () => {
 
-        it.only('should handle new user properly', async () => {
+        it('should handle new user properly', async () => {
             
             // move all stub definitions to describes beforeEach() ?
             saltVerifierStub.returns({ systemWideUserId: common.recievedNewUser.systemWideUserId, salt: 'andpepper', verifier: 'verified' });
@@ -267,6 +267,8 @@ describe.only('User insertion happy path', () => {
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedResponse);
+            // result matches expectedResponse, however:
+            //     authUtilPermissionsSpy is not getting called investigate and patch
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'god');
             expect(getPolicyStub).to.have.not.been.called;
         })
@@ -277,9 +279,9 @@ describe.only('User insertion happy path', () => {
 
         it('should get sign options for user', () => {
             const expectedSignOptions = {
-                issuer: 'Pluto Savings',
+                issuer: 'Pluto Saving',
                 subject: common.recievedNewUser.systemWideUserId,
-                audience: 'https://plutosavings.com'
+                audience: 'https://plutosaving.com'
             };
 
             const result = authUtil.getSignOptions(common.recievedNewUser.systemWideUserId);
@@ -287,6 +289,7 @@ describe.only('User insertion happy path', () => {
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedSignOptions);
+            // spies dont seem to be getting called, investigate
             expect(authUtilSignOptionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId);
         })
     });

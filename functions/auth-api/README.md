@@ -143,7 +143,7 @@ The above is stored when a user signs in. During login, the above object is upda
 The password policy which will be read and enforced on the frontend during sign up and login is as follows:
 ```
 {
-    "policy_id": "default user",
+    "password_policy_id": "default user",
     "expiresOn": <unixEpochMilli>
     "minLength": 8,
     "requireAlphanumeric": true,
@@ -153,19 +153,31 @@ The password policy which will be read and enforced on the frontend during sign 
 ```
 This is stored in a dynamodb table with the following 'schema'
 ```
-{
-    "TableName": "auth_password_policy",
-    "KeySchema": [
-      { "AttributeName": "policy_id", "KeyType": "HASH" }
-    ],
-    "AttributeDefinitions": [
-      { "AttributeName": "policy_id", "AttributeType": "S" }
-    ],
-    "ProvisionedThroughput": {
-      "ReadCapacityUnits": 5,
-      "WriteCapacityUnits": 5
-    }
-}
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Creates the table will hold the password policy enforced during signup'
+Resources:
+ PasswordPolicyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "password_policy_table"
+      AttributeDefinitions:
+      -
+        AttributeName: "password_policy_id"
+        AttributeType: "S"
+      -
+        AttributeName: "last_updated_timestamp"
+        AttributeType: "N"
+      KeySchema:
+      - AttributeName: "password_policy_id"
+        KeyType: HASH
+      - AttributeName: "last_updated_timestamp"
+        KeyType: "RANGE"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+
 ```
 
 
