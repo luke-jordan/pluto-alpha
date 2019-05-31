@@ -24,9 +24,15 @@ jobs:
       - restore_cache:
           keys:
           - float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
+      - restore_cache:
+          keys:
           - user-act-api_dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+      - restore_cache:
+          keys:
           - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
-          - terraform_bin-{{ checksum "./terraform/terraform_version" }}
+      - restore_cache:
+          keys:
+          - terraform_bin-{{ checksum "./terraform/terraform_version" }}        
 
       - run:
           name: install node modules
