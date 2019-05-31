@@ -97,8 +97,8 @@ jobs:
              terraform plan -var "aws_default_region=us-east-1" -var "aws_access_key=$TERRAFORM_AWS_ACCESS_KEY" -var "aws_secret_access_key=$TERRAFORM_AWS_SECRET_ACCESS_KEY" -var "db_user=aaa" -var "db_password=bbb"
 
 
-             if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging' ] ; then
-                echo "On branch $CIRCLE_BRANCH, handling cloud components."
+             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
+                echo "On branch $CIRCLE_BRANCH, deploying artifacts."
              fi
 
       - save_cache:
@@ -109,8 +109,7 @@ jobs:
       - run:
           name: upload artifacts
           command: |
-
-             if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging' ] ; then
+             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, uploading artifacts."
              fi
 
