@@ -6,7 +6,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/python:3.6.1
+      - image: circleci/node:chakracore-8.10.0
         environment:
 
       # Postgres image for testing
@@ -51,6 +51,7 @@ jobs:
       - run:
           name: install node modules
           command: |
+
             cd $HOME/app/functions/float-api && npm install
             cd $HOME/app/functions/user-act-api && npm install
             cd $HOME/app/functions/user-existence-api && npm install
