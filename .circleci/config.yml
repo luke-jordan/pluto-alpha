@@ -52,11 +52,6 @@ jobs:
           paths:
             - ./functions/user-existence-api/node_modules
 
-      - save_cache:
-          key: _terraform-bin-{{ checksum "./terraform/terraform_version" }}
-          paths:
-            - /tmp/terraform
-
       - run:
           name: run linter
           command: |
@@ -99,6 +94,11 @@ jobs:
              if [ $CIRCLE_BRANCH == 'master' || $CIRCLE_BRANCH == 'staging' ] ; then
                 echo "On branch $CIRCLE_BRANCH, handling cloud components."
              fi
+
+      - save_cache:
+          key: _terraform-bin-{{ checksum "./terraform/terraform_version" }}
+          paths:
+            - /tmp/terraform
 
       - run:
           name: upload artifacts
