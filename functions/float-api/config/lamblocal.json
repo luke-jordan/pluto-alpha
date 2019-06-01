@@ -1,0 +1,25 @@
+{
+    "aws": {
+        "region": "eu-west-1",
+        "apiVersion": "2012-08-10",
+        "endpoints": {
+            "dynamodb": "http://172.21.0.2:4569"
+        }
+    },
+    "tables": {
+        "clientFloatVars": "ClientFloatTable",
+        "floatTransactions": "float_data.float_transaction_ledger",
+        "accountTransactions": "account_data.core_account_ledger"
+    },
+    "variableKeys": {
+        "bonusPoolShare": "bonus_pool_accrual_share",
+        "companyShare": "company_accrual_share"
+    },
+    "db": {
+        "user": "float_api_worker",
+        "host": "rdslocal",
+        "database": "pluto",
+        "password": "pwd_for_float_api",
+        "port" :"5432"
+    }
+}

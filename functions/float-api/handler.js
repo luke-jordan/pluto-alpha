@@ -29,8 +29,11 @@ module.exports.accrue = async (event, context) => {
   const clientId = accrualParameters.clientId;
   const floatId = accrualParameters.floatId;
 
+  logger('Initiated execution, attempting to reach DynamoDB ...')
   const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
-  
+  // const floatConfig = { bonusPoolShare: 0.1, bonusPoolTracker: 'stuff', clientCoShare: 0.1, clientCoShareTracker: 'hello' };
+  logger('Fetched float config: ', floatConfig);
+
   const accrualAmount = accrualParameters.accrualAmount;
   const accrualCurrency = accrualParameters.currency || floatConfig.currency;
   const accrualUnit = accrualParameters.unit || floatConfig.unit;

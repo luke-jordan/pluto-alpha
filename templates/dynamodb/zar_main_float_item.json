@@ -3,7 +3,7 @@
         "S": "zar_client_co"
     },
     "float_id": {
-        "S": "zar_cash_primary"
+        "S": "zar_cash_float"
     },
     "bonus_pool_system_wide_id": {
         "S": "zar_cash_bonus_pool"
