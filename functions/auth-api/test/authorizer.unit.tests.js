@@ -75,16 +75,11 @@ describe('basicLambdaAuthorizer', () => {
         it('should create correct IAM policy', () => {
             const expectedResult = common.expectedAuthorizationResponseOnValidToken;
 
-            const result = authorizer.generatePolicy(
-                'a-system-wide-user-id',
-                'Allow',
-                'arn',
-                { 
-                    systemWideUserId: 'a-system-wide-user-id',
-                    role: 'Default User Role',
-                    permissions: [ 'EditProfile', 'CreateWallet', 'CheckBalance' ] 
-                }
-            );
+            const result = authorizer.generatePolicy('a-system-wide-user-id', 'Allow', 'arn', { 
+                systemWideUserId: 'a-system-wide-user-id',
+                role: 'Default User Role',
+                permissions: [ 'EditProfile', 'CreateWallet', 'CheckBalance' ] 
+            });
             logger('Got this back from policy generation:', result);
 
             expect(result).to.exist;
