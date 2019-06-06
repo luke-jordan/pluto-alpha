@@ -7,7 +7,7 @@ const jwt = require('jsonwebtoken');
 const AWS = require('aws-sdk');
 AWS.config.update({
     region: "us-east-1",
-    endpoint: "http://localhost:4572"
+    // endpoint: "http://localhost:4572"
 });
 
 const s3 = require('./s3-util');

@@ -15,6 +15,7 @@ const jwt = require('./jwt');
 module.exports.insertNewUser = async (event, context) => {
     try {
         logger('Running in handler');
+        logger('Recieved context:', context);
         const input = event['queryStringParameters'] || event;
 
         logger('Recieved: systemWideUserId:', input.systemWideUserId, ', Password length:', input.password.length);

@@ -45,11 +45,70 @@ module.exports.getStubArgs = (requestedStub, systemWideUserId = null) => {
                 systemWideUserId: 'mock system-wide user id to unavailable server 1',
                 clientPublicEphemeral: 'mock client public ephemeral'
             };
+        case 'validTokenToLambdaAuthorizer':
+            return { 
+                url: 'https://85d15dc6.ngrok.io/validate-token',
+                method: 'GET',
+                qs:
+                { token: 'a_valid.auth.token',
+                verifyOptions:
+                    { issuer: 'Pluto Saving',
+                    subject: 'a-system-wide-user-id',
+                    audience: 'https://plutosaving.com' } },
+                json: true 
+            };
+        case 'invalidTokenToLambdaAuthorizer':
+            return {
+                url: 'https://85d15dc6.ngrok.io/validate-token',
+                method: 'GET',
+                qs:
+                { token: 'an_invalid.auth.token',
+                verifyOptions:
+                    { issuer: 'Pluto Saving',
+                    subject: 'a-system-wide-user-id',
+                    audience: 'https://plutosaving.com' } },
+                json: true 
+            };
         default:
             throw new Error('No arguments exist for requested stub \'' + requestedStub + '\'');
     };
 };
 
+
+module.exports.expectedAuthorizationResponseOnValidToken = {
+    principalId: 'a-system-wide-user-id',
+    context: { 
+        systemWideUserId: 'a-system-wide-user-id',
+        role: 'Default User Role',
+        permissions: [ 'EditProfile', 'CreateWallet', 'CheckBalance' ] 
+    },
+    policyDocument: { 
+        Version: '2012-10-17', 
+        Statement: [{
+            Action: 'execute-api:Invoke',
+            Effect: 'Allow',
+            resource: 'arn'
+        }]
+    }
+};
+
+module.exports.expectedRequestPromiseResponseOnValidToken = { 
+    verified: true,
+    decoded:{ 
+        systemWideUserId: 'a-system-wide-user-id',
+        role: 'Default User Role',
+        permissions: [ 'EditProfile', 'CreateWallet', 'CheckBalance' ],
+        iat: 1559638875,
+        exp: 1560243675,
+        aud: 'https://plutosaving.com',
+        iss: 'Pluto Saving',
+        sub: 'a-system-wide-user-id' 
+    } 
+};
+
+module.exports.expectedRequestPromiseResponseOnInvalidToken = {
+    verified: false
+};
 
 module.exports.expectedInsertionQuery = `insert into ${config.get('tables.userTable')} (system_wide_user_id, salt, verifier, server_ephemeral_secret) values %L returning insertion_id, creation_time`;
 module.exports.expectedInsertionColumns = '${systemWideUserId}, ${salt}, ${verifier}, ${serverEphemeralSecret}';

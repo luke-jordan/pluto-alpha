@@ -4,7 +4,7 @@
   "description": "",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:auth:* nyc mocha"
+    "test": "DEBUG=pluto:*:* nyc mocha"
   },
   "author": "",
   "license": "ISC",

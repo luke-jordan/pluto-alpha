@@ -13,6 +13,8 @@
          * [Password Policy](#password-policy)
       * [Persistence](#persistence)
          * [Postgresql (RDS)](#postgresql-rds)
+      * [Authorization](#authorization)
+         * [Basic Lambda Authorizer](#basic-lambda-authorizer)
 
 
 ## General Sign up Flow (SRP)
@@ -200,3 +202,40 @@ This table also includes the following index:
 CREATE INDEX idx_creation_time
 ON users(creation_time)
 ```
+
+## Authorization
+### Basic Lmabda Authorizer
+Access to most of the endpoints provided by this API is facilitated by way of a basic AWS lambda authorizer. This is merely a lambda called by API Gateway with the users token to confirm that the user has permission to perform the action they are requesting.The authorization lambda expects an event of the form:
+```
+{
+    type: "TOKEN",
+    authorizationToken: "Bearer eyJhbGciOiJSUzI...',
+    methodArn: 'arn' // the name of the aws resource to be granted access to
+}
+```
+If the token is valid the authorization lambda will return a JSON to API Gateway of the form
+```
+{
+    principalId: '261ee5b1-88...',
+    context: { 
+        systemWideUserId: '21443071-e7d...',
+        role: <requestedRole>,
+        permissions: [ <associatedPermissions> ] 
+    },
+    policyDocument: { 
+        Version: '2012-10-17', 
+        Statement: [{
+            Action: 'execute-api:Invoke',
+            Effect: 'Allow',
+            resource: 'arn'
+        }]
+    }
+};
+```
+This will have the effect of directing API Gateway to grant the user access to the requested resources. It also provides the lambda services which constitute this API access to the users' role and permissions, making it easier to execute tasks as the token has already been decrypted.
+
+If the token is invalid the authorization lambda will return
+```
+"Unauthorized"
+```
+This output is as expected by API Gateway and will have the effect of directing API Gateway to reject the users request and return an error message to the caller.

@@ -48,13 +48,13 @@ const mockPayload = {
 // when the token was signed. We can therefore compile both into one object for testing, as
 // opposed to having two objects with the exact same content.
 const mockSignOrVerifyOptions = {
-    issuer: 'Pluto Savings',
+    issuer: 'Pluto Saving',
     subject: mockPayload.systemWideUserId,
-    audience: 'https://plutosavings.com'
+    audience: 'https://plutosaving.com'
 };
 
 const expectedVerificationResult = {
-    systemWideUserId: 'a system-wide user id',
+    systemWideUserId: 'a system-wide user id', // should be the same as signVerifyOptions ID
     role: "Default User Role",
     permissions: [
         "EditProfile",
@@ -63,9 +63,9 @@ const expectedVerificationResult = {
     ],
     iat: "time when the token was issued",
     exp: "time when token will expire",
-    aud: "https://plutosavings.com",
-    iss: "Pluto Savings",
-    sub: "a system-wide user id"
+    aud: "https://plutosaving.com",
+    iss: "Pluto Saving",
+    sub: mockPayload.systemWideUserId
 };
 
 
