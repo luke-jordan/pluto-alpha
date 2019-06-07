@@ -63,10 +63,9 @@ module.exports.validateToken = async (token, verifyOptions) => {
 module.exports.generatePolicy = (principalId, effect, resource, userRoleAndPermissions) => {
 	let authResponse = {
 		principalId: principalId,
-		context: userRoleAndPermissions
 	};
     if (effect && resource) {
-	authResponse.policyDocument = {
+		authResponse.policyDocument = {
 			Version: '2012-10-17',
 			Statement: [{
 				Action: 'execute-api:Invoke',
@@ -74,6 +73,7 @@ module.exports.generatePolicy = (principalId, effect, resource, userRoleAndPermi
 				resource: resource
 			}],
 		};
+		authResponse.context = userRoleAndPermissions;
 	};
     return authResponse;
 };
@@ -82,6 +82,7 @@ module.exports.generatePolicy = (principalId, effect, resource, userRoleAndPermi
 module.exports.generateAllow = (principalId, resource, userRoleAndPermissions) => {
     return exports.generatePolicy(principalId, 'Allow', resource, userRoleAndPermissions);
 };
+
 
 module.exports.getRolesAndPermissions = (decodedToken) => {
 	return {

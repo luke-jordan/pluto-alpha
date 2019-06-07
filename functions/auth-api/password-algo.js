@@ -1,7 +1,7 @@
 'use strict';
 
 const srp = require('secure-remote-password/client');
-const logger = require('debug')('pluto:auth:pwdalgo')
+const logger = require('debug')('pluto:auth:password-algo')
 
 /**
  * This is the primary module shared between all lambdas serving some function of the current

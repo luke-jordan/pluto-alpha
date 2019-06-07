@@ -15,6 +15,7 @@ const authorizer = proxyquire('../basicLambdaAuthorizer/handler', {
     '@noCallThru': true
 });
 
+
 const mockEventCallback = (err, generatedPolicy) => {
     if (err) {
         logger('about to return ERR', {message: err}); 
@@ -24,6 +25,7 @@ const mockEventCallback = (err, generatedPolicy) => {
     return generatedPolicy;
 };
 
+
 describe('basicLambdaAuthorizer', () => {
     
     beforeEach(() => {
@@ -32,9 +34,8 @@ describe('basicLambdaAuthorizer', () => {
             .resolves(common.expectedRequestPromiseResponseOnValidToken);
         requestStub
             .withArgs(common.getStubArgs('invalidTokenToLambdaAuthorizer'))
-            .resolves(common.expectedRequestPromiseResponseOnInvalidToken);
+            .rejects('this is a test rejection');
     });
-
 
     context('handler', () => {
 
@@ -85,6 +86,39 @@ describe('basicLambdaAuthorizer', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedResult);
         });
+
+        it('should not create policy in absence of resource argument', () => {
+            const expectedResult = {
+                principalId: 'a-system-wide-user-id'
+            };
+
+            const result = authorizer.generatePolicy('a-system-wide-user-id', 'Allow', null, {
+                systemWideUserId: 'a-system-wide-user-id',
+                role: 'Default User Role',
+                permissions: [ 'EditProfile', 'CreateWallet', 'CheckBalance' ]    
+            });
+            logger('got this back from policy generation with missing resource argument:', result);
+
+            expect(result).to.exist;
+            expect(result).to.deep.equal(expectedResult);
+        });
+
+        it('should not create policy in absence of effect argument', () => {
+            const expectedResult = {
+                principalId: 'a-system-wide-user-id'
+            };
+
+            const result = authorizer.generatePolicy('a-system-wide-user-id', null, 'arn', {
+                systemWideUserId: 'a-system-wide-user-id',
+                role: 'Default User Role',
+                permissions: [ 'EditProfile', 'CreateWallet', 'CheckBalance' ]    
+            });
+            logger('got this back from policy generation with missing effect argument:', result);
+
+            expect(result).to.exist;
+            expect(result).to.deep.equal(expectedResult);
+        });
+
 
         it('should extract user role and permissions from decoded token', () => {
             const expectedResult = { 
