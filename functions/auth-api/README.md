@@ -15,6 +15,9 @@
          * [Postgresql (RDS)](#postgresql-rds)
       * [Authorization](#authorization)
          * [Basic Lambda Authorizer](#basic-lambda-authorizer)
+      * [Password Reset/Update](#password-reset/change)
+         * [Password Reset Lambda](#password-reset-lambda)    
+         * [Password Update Lambda](#password-update-lambda)
 
 
 ## General Sign up Flow (SRP)
@@ -239,3 +242,10 @@ If the token is invalid the authorization lambda will return
 "Unauthorized"
 ```
 This output is as expected by API Gateway and will have the effect of directing API Gateway to reject the users request and return an error message to the caller.
+
+
+## Password Reset/Change
+
+### Password Reset Lmabda
+
+### Password Update Lambda

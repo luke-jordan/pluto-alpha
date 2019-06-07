@@ -1,4 +1,4 @@
-const logger = require('debug')('pluto:auth:test');
+const logger = require('debug')('pluto:auth-jwt-λ:test');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -16,7 +16,7 @@ const mockPublicKey  = '==ui34hr8iu3hr2i==';
 readFileSyncStub.withArgs('./public.key', 'utf8').returns(mockPublicKey);
 readFileSyncStub.withArgs('./private.key', 'utf8').returns(mockPrivateKey);
 
-const jwt = proxyquire('../jwt', {
+const jwt = proxyquire('../jwt-lambda/jwt', {
     'jsonwebtoken': {
         'sign'  : signJwtStub,
         'verify': verifyJwtStub,

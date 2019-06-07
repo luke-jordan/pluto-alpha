@@ -1,4 +1,4 @@
-const logger = require('debug')('pluto:auth:jwt')
+const logger = require('debug')('pluto:auth-jwt-λ:main')
 const config = require('config');
 
 const fs = require('fs');
@@ -10,7 +10,7 @@ AWS.config.update({
     // endpoint: "http://localhost:4572"
 });
 
-const s3 = require('./s3-util');
+const s3 = require('../utils/s3-util');
 
 
 module.exports.generateJsonWebToken = async (payload, recievedSignOptions) => {

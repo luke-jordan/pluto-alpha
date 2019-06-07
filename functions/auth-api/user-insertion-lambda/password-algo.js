@@ -1,7 +1,7 @@
 'use strict';
 
 const srp = require('secure-remote-password/client');
-const logger = require('debug')('pluto:auth:password-algo')
+const logger = require('debug')('pluto:auth-password-algo:main')
 
 /**
  * This is the primary module shared between all lambdas serving some function of the current
@@ -23,7 +23,7 @@ module.exports.generateSaltAndVerifier = (systemWideUserId, password) => {
 
 
 // all functions below handle user login
-module.exports.loginExistingUser = (systemWideUserId, password) => {
+module.exports.verifyPassword = (systemWideUserId, password) => {
     const clientEphemeral = srp.generateEphemeral()
     const response = exports.loginHelper('saltAndServerPublicEphemeralLambdaUrl', {
         systemWideUserId: systemWideUserId,

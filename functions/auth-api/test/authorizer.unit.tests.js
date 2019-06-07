@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:lambda-authorizer:test');
+const logger = require('debug')('pluto:auth-lambda-authorizer:test');
 
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -10,7 +10,7 @@ const expect = chai.expect;
 
 const requestStub = sinon.stub();
 
-const authorizer = proxyquire('../basicLambdaAuthorizer/handler', {
+const authorizer = proxyquire('../basic-lambda-authorizer/handler', {
     'request-promise': requestStub,
     '@noCallThru': true
 });

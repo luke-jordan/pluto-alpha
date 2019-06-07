@@ -1,3 +1,7 @@
+'use strict';
+
+const logger = require('debug')('pluto:auth-rds-utl:main')
+
 const config = require('config');
 
 const RdsConnection = require('rds-common');

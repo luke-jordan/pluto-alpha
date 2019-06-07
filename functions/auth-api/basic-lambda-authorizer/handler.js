@@ -3,7 +3,7 @@
 const logger = require('debug')('pluto:authoriser-lambda:main');
 const request = require('request-promise');
 
-// Think through whether signOptions should be sent over the lambda network
+// Think through whether verifyOptions should be sent over the lambda network
 module.exports.basicLambdaAuthorizer = async (event, context, callback) => {
 
 	logger('Recieved event:', event);

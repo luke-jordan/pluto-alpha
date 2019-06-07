@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:auth:test');
+const logger = require('debug')('pluto:auth-password-algo:test');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -19,7 +19,7 @@ let generateEphemeralStub = sinon.stub();
 let deriveSessionStub = sinon.stub();
 let verifySessionStub = sinon.stub();
 
-const passwordAlgorithm = proxyquire('../password-algo', {
+const passwordAlgorithm = proxyquire('../user-insertion-lambda/password-algo', {
     'secure-remote-password/client': {
         'generateSalt': generateSaltStub,
         'derivePrivateKey': privateKeyStub,

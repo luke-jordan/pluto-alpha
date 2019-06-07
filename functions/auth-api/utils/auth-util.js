@@ -2,7 +2,7 @@
 
 const config = require('config');
 const logger = require('debug')('pluto:auth-util:main');
-const dynamo = require('./persistence/dynamodb/dynamodb');
+const dynamo = require('../persistence/dynamodb/dynamodb');
 
 /**
  * @param systemWideUserId the system wide user id passed into the auth lambda event

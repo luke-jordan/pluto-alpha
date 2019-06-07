@@ -117,6 +117,43 @@ module.exports.expectedRequestPromiseResponseOnInvalidToken = {
     verified: false
 };
 
+
+module.exports.passwordUpdateResponseOnSuccess = (event) => {
+    return {
+        statusCode: 200,
+        body: JSON.stringify({
+        message: {
+            rows: [{
+                insertion_id: 'an insertion id',
+                creation_time: 'document creation time' 
+            }]
+        },
+        input: event,
+        }, null, 2),
+    };
+};
+
+module.exports.passwordUpdateResponseOnBadOldPassword = (event) => {
+    return {
+        statusCode: 500,
+        body: JSON.stringify({
+        message: "Invalid old password",
+        input: event,
+        }, null, 2),
+    };
+};
+
+module.exports.passwordUpdateResponseOnPersistenceFailure = (event) => {
+    return {
+        statusCode: 500,
+        body: JSON.stringify({
+        message: "An error occured during database update attempt.", // make more verbose
+        input: event,
+        }, null, 2),
+    };
+};
+
+
 module.exports.expectedInsertionQuery = `insert into ${config.get('tables.userTable')} (system_wide_user_id, salt, verifier, server_ephemeral_secret) values %L returning insertion_id, creation_time`;
 module.exports.expectedInsertionColumns = '${systemWideUserId}, ${salt}, ${verifier}, ${serverEphemeralSecret}';
 module.exports.expectedInsertionList = [exports.expectedNewUser];

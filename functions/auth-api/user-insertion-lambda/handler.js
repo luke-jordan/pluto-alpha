@@ -1,12 +1,12 @@
 'use strict';
 
 const config = require('config');
-const logger = require('debug')('pluto:auth-handler:main');
+const logger = require('debug')('pluto:auth-user-insertion-λ:main');
 
 const passwordAlgorithm = require('./password-algo');
-const rdsUtil = require('./rds-util');
-const authUtil = require('./auth-util');
-const jwt = require('./jwt');
+const rdsUtil = require('../utils/rds-util');
+const authUtil = require('../utils/auth-util');
+const jwt = require('../jwt-lambda/jwt');
 
 // This function generates persistable user credentials, persists them to RDS, sends the 
 // user to a JWT auth lamda where the user is assigned roles and permissions and the
@@ -56,7 +56,7 @@ module.exports.insertNewUser = async (event, context) => {
 module.exports.loginUser = async (event, context) => {
     // const input = event['queryStringParameters'] || event;
 
-    // const loginResult = passwordAlgorithm.loginExistingUser(input.systemWideUserId, input.password);
+    // const loginResult = passwordAlgorithm.verifyPassword(input.systemWideUserId, input.password);
     // if (loginResult.verified) {
     //     get user roles and permissions
     //     generate jwt

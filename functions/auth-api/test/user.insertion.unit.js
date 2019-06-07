@@ -1,12 +1,12 @@
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:auth:test');
+const logger = require('debug')('pluto:auth-user-insertion-λ:test');
 const sinon = require('sinon');
 const chai = require('chai');
 const expect = chai.expect;
 const common = require('./common');
 const proxyquire = require('proxyquire');
-const rdsUtil = require('../rds-util');
+const rdsUtil = require('../utils/rds-util');
 const dynamodb = require('../persistence/dynamodb/dynamodb');
 const dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 
@@ -25,8 +25,8 @@ class MockRdsConnection {
     }
 };
 
-const authUtil = proxyquire('../auth-util', {
-    './persistence/dynamodb/dynamodb': {
+const authUtil = proxyquire('../utils/auth-util', {
+    '../persistence/dynamodb/dynamodb': {
         getPolicy: getPolicyStub
     }
 });
@@ -34,18 +34,18 @@ const authUtil = proxyquire('../auth-util', {
 let authUtilPermissionsSpy  = sinon.spy(authUtil, 'assignUserRolesAndPermissions');
 let authUtilSignOptionsSpy  = sinon.spy(authUtil, 'getSignOptions');
 
-const rdsConnection = proxyquire('../rds-util', {
+const rdsConnection = proxyquire('../utils/rds-util', {
     'rds-common': MockRdsConnection,
     '@noCallThru': true
 });
 
-const handler = proxyquire('../handler', {
-    './rds-util': rdsConnection, 
+const handler = proxyquire('../user-insertion-lambda/handler', {
+    '../utils/rds-util': rdsConnection, 
     './password-algo': {
         'generateSaltAndVerifier': saltVerifierStub,
-        'loginExistingUser': loginStub
+        'verifyPassword': loginStub
     },
-    './jwt': {
+    '../jwt-lambda/jwt': {
         'generateJSONWebToken': generateJwtStub
     },
     '@noCallThru': true
@@ -63,7 +63,7 @@ const resetStubs = () => {
     // docClientGetStub.reset();
 };
 
-describe('User insertion', () => {
+describe.only('User insertion', () => {
 
     beforeEach(() => {
         resetStubs();
