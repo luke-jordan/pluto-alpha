@@ -63,7 +63,7 @@ const resetStubs = () => {
     // docClientGetStub.reset();
 };
 
-describe.only('User insertion', () => {
+describe('User insertion', () => {
 
     beforeEach(() => {
         resetStubs();

@@ -120,36 +120,27 @@ module.exports.expectedRequestPromiseResponseOnInvalidToken = {
 
 module.exports.passwordUpdateResponseOnSuccess = (event) => {
     return {
-        statusCode: 200,
-        body: JSON.stringify({
         message: {
             rows: [{
                 insertion_id: 'an insertion id',
-                creation_time: 'document creation time' 
+                updated_time: 'document update time' 
             }]
         },
         input: event,
-        }, null, 2),
     };
 };
 
 module.exports.passwordUpdateResponseOnBadOldPassword = (event) => {
     return {
-        statusCode: 500,
-        body: JSON.stringify({
         message: "Invalid old password",
-        input: event,
-        }, null, 2),
+        input: event
     };
 };
 
 module.exports.passwordUpdateResponseOnPersistenceFailure = (event) => {
     return {
-        statusCode: 500,
-        body: JSON.stringify({
         message: "An error occured during database update attempt.", // make more verbose
         input: event,
-        }, null, 2),
     };
 };
 

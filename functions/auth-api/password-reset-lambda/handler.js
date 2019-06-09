@@ -24,21 +24,25 @@ module.exports.updatePassword = async (event, context) => {
 		const newPassword = event.newPassword;
 		const origin = event.origin;
 		logger('event origin:', origin);
-		const systemWideUserId = event.systemWideUserId; // or load from context?
+		const systemWideUserId = event.origin.systemWideUserId; // or load from context?
 
 		const oldPasswordValid = passwordAlgorithm.verifyPassword(systemWideUserId, oldPassword);
+		logger('is old password valid:', oldPasswordValid);
 
 		if (oldPasswordValid) {
 			const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(systemWideUserId, newPassword);
+			logger('generated salt and verifier:', saltAndVerifier);
 			const salt = saltAndVerifier.salt;
 			const verifier = saltAndVerifier.verifier;
-			const databaseResponse = rdsUtil.updateUser(systemWideUserId, salt, verifier); // TODO: implement rdsUtil.updateUser;
+			const databaseResponse = rdsUtil.updateUserSaltAndVerifier(systemWideUserId, salt, verifier); // TODO: implement rdsUtil.updateUser;
+			logger('password update databaseResponse:', databaseResponse);
 			if (databaseResponse.statusCode == 0) {
+				logger('about to return successful call to caller.')
 				return {
 					statusCode: 200,
 					body: JSON.stringify({
-					message: databaseResponse.message,
-					input: event,
+						message: databaseResponse.message,
+						input: event,
 					}, null, 2),
 				};
 			}
@@ -48,8 +52,8 @@ module.exports.updatePassword = async (event, context) => {
 		return {
 			statusCode: 500,
 			body: JSON.stringify({
-			message: err.message,
-			input: event,
+				message: err.message,
+				input: event,
 			}, null, 2),
 		};
 	};

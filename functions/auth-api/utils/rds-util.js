@@ -30,8 +30,6 @@ module.exports.insertNewUser = async (newUser) => {
 };
 
 
-module.exports.updateUserPassword = (systemWideUserId, JsonWebToken, newPassword) => {
-    // This function assumes user identity has already beeen verified.
-    // The jwt passed in conatins the users permissions which will be checked before any
-    // operations are executed. 
-}
+module.exports.updateUserSaltAndVerifier = (systemWideUserId, salt, verifier) => {
+    // This function updates the user credentials table with a new salt and verifier
+};
