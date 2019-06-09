@@ -126,7 +126,7 @@ module.exports.passwordUpdateResponseOnSuccess = (event) => {
                 updated_time: 'document update time' 
             }]
         },
-        input: event,
+        input: event
     };
 };
 
@@ -140,7 +140,7 @@ module.exports.passwordUpdateResponseOnBadOldPassword = (event) => {
 module.exports.passwordUpdateResponseOnPersistenceFailure = (event) => {
     return {
         message: "An error occured during database update attempt.", // make more verbose
-        input: event,
+        input: event
     };
 };
 

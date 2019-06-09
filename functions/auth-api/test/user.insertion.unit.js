@@ -8,9 +8,9 @@ const common = require('./common');
 const proxyquire = require('proxyquire');
 const rdsUtil = require('../utils/rds-util');
 const dynamodb = require('../persistence/dynamodb/dynamodb');
-const dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 
 
+let dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 let insertStub  = sinon.stub();
 let saltVerifierStub = sinon.stub();
 let generateJwtStub = sinon.stub();

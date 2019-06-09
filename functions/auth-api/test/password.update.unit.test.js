@@ -37,18 +37,10 @@ describe('Password Change/Reset', () => {
             resetStubs();
             rdsUpdateUserStub
                 .withArgs('a-system-wide-user-id', 'new-pepper', 'new-generated-password-verifier')
-                .returns({
-                    statusCode: 0, // to be conventionalised
-                    message: {
-                        rows: [{ insertion_id: 'an insertion id', updated_time: 'document update time' }]
-                    }
-                });
+                .returns({statusCode: 0, message: {rows: [{ insertion_id: 'an insertion id', updated_time: 'document update time' }]}});
             rdsUpdateUserStub
                 .withArgs('second-system-wide-user-id', 'new-pepper', 'new-generated-password-verifier')
-                .returns({
-                    statusCode: 1,
-                    message: 'An error occured during database update attempt'
-                });
+                .returns({statusCode: 1, message: 'An error occured during database update attempt'});
             verifyPasswordStub
                 .withArgs('a-system-wide-user-id', 'valid-old-passw0rd')
                 .returns(true);

@@ -24,7 +24,7 @@ module.exports.updatePassword = async (event, context) => {
 		const newPassword = event.newPassword;
 		const origin = event.origin;
 		logger('event origin:', origin);
-		const systemWideUserId = event.origin.systemWideUserId; // or load from context?
+		const systemWideUserId = origin.systemWideUserId; // or load from context?
 
 		const oldPasswordValid = passwordAlgorithm.verifyPassword(systemWideUserId, oldPassword);
 		logger('is old password valid:', oldPasswordValid);
