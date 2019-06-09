@@ -6,7 +6,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/python:3.6.1
+      - image: circleci/node:chakracore-8.10.0
         environment:
 
       # Postgres image for testing
@@ -23,30 +23,40 @@ jobs:
 
       - restore_cache:
           keys:
-          - float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
-          - user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
-          - user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+          - float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
+      - restore_cache:
+          keys:
+          - user-act-api_dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+      - restore_cache:
+          keys:
+          - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+      - restore_cache:
+          keys:
+          - terraform_bin-{{ checksum "./terraform/terraform_version" }}        
 
       - run:
-          name: a
+          name: install node modules
           command: |
-            echo "Hi"
+
+            cd $HOME/app/functions/float-api && npm install
+            cd $HOME/app/functions/user-act-api && npm install
+            cd $HOME/app/functions/user-existence-api && npm install
+            cd $HOME/app
 
       - save_cache:
-          key: float-api-dependencies-{{ checksum "./functions/float-api/package.json" }}
+          key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
           paths:
             - ./functions/float-api/node_modules
 
       - save_cache:
-          key: user-act-api-dependencies-{{ checksum "./functions/user-act-api/package.json" }}
+          key: user-act-api_dependencies-{{ checksum "./functions/user-act-api/package.json" }}
           paths:
             - ./functions/user-act-api/node_modules
 
       - save_cache:
-          key: user-existence-api-dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
+          key: user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
           paths:
             - ./functions/user-existence-api/node_modules
-          
 
       - run:
           name: run linter
@@ -67,14 +77,40 @@ jobs:
           name: build artifacts
           command: |
              echo $CIRCLE_SHA1 > last_commit.txt
-             zip -r deploy_$CIRCLE_SHA1.zip .
+             zip -r deploy_float_api_$CIRCLE_SHA1.zip $HOME/app/functions/float-api
+             zip -r deploy_user_act_$CIRCLE_SHA1.zip $HOME/app/functions/user-act-api
+             zip -r deploy_user_existence_api_$CIRCLE_SHA1.zip $HOME/app/functions/user-existence-api
 
       - run:
-          name: deploy artifacts
+          name: handle cloud components
           command: |
+             export TF_VERSION=$(cat $HOME/app/terraform/terraform_version)
 
-             if [ $CIRCLE_BRANCH == 'master' ] ; then
-                echo "On branch master, deploying artifacts."
+             if [ ! -f /tmp/terraform/terraform ]; then
+                wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_$(echo "$TF_VERSION")_linux_amd64.zip
+                unzip /tmp/terraform.zip -d /tmp/terraform
+             fi
+
+             export PATH="/tmp/terraform:$PATH"
+             cd $HOME/app/terraform
+             terraform init
+             terraform workspace select $CIRCLE_BRANCH
+             terraform apply -auto-approve -var "env=$CIRCLE_BRANCH" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
+
+             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
+                echo "On branch $CIRCLE_BRANCH, deploying artifacts."
+             fi
+
+      - save_cache:
+          key: terraform_bin-{{ checksum "./terraform/terraform_version" }}
+          paths:
+            - /tmp/terraform
+
+      - run:
+          name: upload artifacts
+          command: |
+             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
+                echo "On branch $CIRCLE_BRANCH, uploading artifacts."
              fi
 
 
