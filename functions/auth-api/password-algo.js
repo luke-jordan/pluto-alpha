@@ -35,21 +35,14 @@ module.exports.verifyPassword = async (systemWideUserId, password) => {
         logger('args passed to clientSession generator:', clientEphemeral.secret, '|', serverPublicEphemeral, '|', salt, '|', systemWideUserId, '|',  privateKey);
         logger('generated client session:', clientSession);
         try {
-            // serverSessionProofJson returns undefined on 
             const serverSessionProofJson = await verifierHelper.getServerSessionProof(systemWideUserId, clientSession.proof, clientEphemeral.public);
             logger('second server response:', serverSessionProofJson);
             const serverSessionProof = JSON.parse(serverSessionProofJson);
             if (serverSessionProof.serverSessionProof == null) throw new Error(serverSessionProof.reason);
             logger('server session proof object keys:', Object.keys(serverSessionProof));
-            try {
-                // throws an error if password is invalid
-                srp.verifySession(clientEphemeral.public, clientSession, serverSessionProof.serverSessionProof);
-                return {systemWideUserId: systemWideUserId, verified: true};
-            }
-            catch (err) {
-                logger('password verification error:', err)
-                return {systemWideUserId: systemWideUserId, verified: false, reason: err.message};
-            };
+            // srp.verifySession throws error on invalid password
+            srp.verifySession(clientEphemeral.public, clientSession, serverSessionProof.serverSessionProof);
+            return {systemWideUserId: systemWideUserId, verified: true};
         } catch (err) {
             logger('password verification error', err);
             return {systemWideUserId: systemWideUserId, verified: false, reason: err.message};
