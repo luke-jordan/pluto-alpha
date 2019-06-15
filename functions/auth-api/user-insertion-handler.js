@@ -1,18 +1,19 @@
 'use strict';
 
 const config = require('config');
-const logger = require('debug')('pluto:auth-user-insertion-λ:main');
+const logger = require('debug')('pluto:auth:user-insertion-λ-main');
 
 const passwordAlgorithm = require('./password-algo');
-const rdsUtil = require('../utils/rds-util');
-const authUtil = require('../utils/auth-util');
-const jwt = require('../jwt-lambda/jwt');
+const rdsUtil = require('./utils/rds-util');
+const authUtil = require('./utils/auth-util');
+const jwt = require('./utils/jwt');
 
-// This function generates persistable user credentials, persists them to RDS, sends the 
-// user to a JWT auth lamda where the user is assigned roles and permissions and the
-// the corresponing JSON Web Token. Finally, the result of these operations along with the JWT
-// is returned to the caller.
-module.exports.insertNewUser = async (event, context) => {
+/** This function generates persistable user credentials, persists them to RDS, sends the 
+ *  user to a JWT auth lamda where the user is assigned roles and permissions and the
+ *  the corresponing JSON Web Token. Finally, the result of these operations along with the JWT
+ *  is returned to the caller. 
+ */
+module.exports.insertUserCredentials = async (event, context) => {
     try {
         logger('Running in handler');
         logger('Recieved context:', context);
@@ -51,27 +52,4 @@ module.exports.insertNewUser = async (event, context) => {
             body: JSON.stringify(response)
         };
     }
-};
-
-module.exports.loginUser = async (event, context) => {
-    // const input = event['queryStringParameters'] || event;
-
-    // const loginResult = passwordAlgorithm.verifyPassword(input.systemWideUserId, input.password);
-    // if (loginResult.verified) {
-    //     get user roles and permissions
-    //     generate jwt
-    // }
-    // transform final result as prescribed by docs
-};
-
-module.exports.changePassword = async (event, context) => {
-
-};
-
-module.exports.getOTP = async (event, context) => {
-
-};
-
-module.exports.getPasswordPolicy = async (event, context) => {
-
 };

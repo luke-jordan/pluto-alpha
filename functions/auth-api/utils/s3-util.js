@@ -1,5 +1,5 @@
 const config = require('config');
-const logger = require('debug')('pluto:s3-util:main');
+const logger = require('debug')('pluto:auth:s3-util-main');
 const aws = require('aws-sdk');
 const s3 = new aws.S3();
 

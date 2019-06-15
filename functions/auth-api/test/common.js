@@ -118,7 +118,7 @@ module.exports.expectedRequestPromiseResponseOnInvalidToken = {
 };
 
 
-module.exports.passwordUpdateResponseOnSuccess = (event) => {
+module.exports.passwordUpdateResponseOnSuccess = (event = null) => {
     return {
         message: {
             rows: [{
@@ -137,7 +137,7 @@ module.exports.passwordUpdateResponseOnBadOldPassword = (event) => {
     };
 };
 
-module.exports.passwordUpdateResponseOnPersistenceFailure = (event) => {
+module.exports.passwordUpdateResponseOnPersistenceFailure = (event = null) => {
     return {
         message: "An error occured during database update attempt.", // make more verbose
         input: event

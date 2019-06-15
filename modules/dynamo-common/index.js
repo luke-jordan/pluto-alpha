@@ -7,7 +7,7 @@ const camelcase = require('camelcase');
 const decamelize = require('decamelize');
 
 const AWS = require('aws-sdk');
-AWS.config.update({ region: config.get('aws.region')});
+AWS.config.update({region: config.get('aws.region')});
 
 const docC = new AWS.DynamoDB.DocumentClient();
 

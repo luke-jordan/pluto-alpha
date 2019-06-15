@@ -26,7 +26,7 @@ const resetStubs = () => {
     rdsUpdateUserStub.reset();
     verifyPasswordStub.reset();
     generateSaltAndVerifierStub.reset();
-}
+};
 
 
 describe('Password Change/Reset', () => {

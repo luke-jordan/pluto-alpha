@@ -5,31 +5,33 @@ const request = require('request-promise');
 
 // Think through whether verifyOptions should be sent over the lambda network
 module.exports.basicLambdaAuthorizer = async (event, context, callback) => {
+	try {
+		logger('Recieved event:', event);
+		// const verifyOptions = event.queryStringParameters.verifyOptions;
+		const verifyOptions = {
+			issuer: 'Pluto Saving',
+			subject: 'a-system-wide-user-id',
+			audience: 'https://plutosaving.com'
+		};
 
-	logger('Recieved event:', event);
+		const rawToken = event.authorizationToken;
+		const token = rawToken.substring('Bearer '.length);
+		logger('Spliced auth header:', token)
 
-	// const verifyOptions = event.queryStringParameters.verifyOptions;
-	const verifyOptions = {
-		issuer: 'Pluto Saving',
-		subject: 'a-system-wide-user-id',
-		audience: 'https://plutosaving.com'
-	};
-
-	const rawToken = event.authorizationToken;
-	const token = rawToken.substring('Bearer '.length);
-	logger('Spliced auth header:', token)
-
-	const tokenStatus = await exports.validateToken(token, verifyOptions);
-	logger('auth lambda recieved:', tokenStatus, 'from jwt validation');
-	
-	if (tokenStatus.verified) {
-		const userRoleAndPermissions = exports.getRolesAndPermissions(tokenStatus.decoded);
-		logger('user role and permissions:', userRoleAndPermissions);
-		const generatedPolicy = exports.generateAllow(userRoleAndPermissions.systemWideUserId, event.methodArn, userRoleAndPermissions);
-		logger('generated policy:', generatedPolicy);
-		callback(null, JSON.stringify(generatedPolicy));
-	} else {
-		callback('Unauthorized');
+		const tokenStatus = await exports.validateToken(token, verifyOptions);
+		logger('auth lambda recieved:', tokenStatus, 'from jwt validation');
+		
+		if (tokenStatus.verified) {
+			const userRoleAndPermissions = exports.getRolesAndPermissions(tokenStatus.decoded);
+			logger('user role and permissions:', userRoleAndPermissions);
+			const generatedPolicy = exports.generateAllow(userRoleAndPermissions.systemWideUserId, event.methodArn, userRoleAndPermissions);
+			logger('generated policy:', generatedPolicy);
+			callback(null, JSON.stringify(generatedPolicy));
+		} else {
+			callback('Unauthorized');
+		};
+	} catch (err) {
+		logger("FATAL_ERROR:", err);
 	};
 };
 
@@ -37,7 +39,7 @@ module.exports.basicLambdaAuthorizer = async (event, context, callback) => {
 module.exports.validateToken = async (token, verifyOptions) => {
 	logger('running in validateToken');
 	const verifyParams = {
-		url: 'https://85d15dc6.ngrok.io/validate-token',
+		url: 'https://85d15dc6.ngrok.io/validate-token', // replace with jwt lambda url and path
 		method: 'GET',
 		qs: {
 			token: token, 

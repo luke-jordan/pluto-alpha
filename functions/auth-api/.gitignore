@@ -4,11 +4,3 @@ jspm_packages
 
 # Serverless directories
 .serverless
-
-# test related files
-private.key
-public.key
-create-password-policy-table.json
-get-item.js
-password-policy.json
-templates/

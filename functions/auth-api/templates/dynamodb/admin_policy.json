@@ -1,0 +1,1 @@
+{"policy_id":{"S":"adminUserPolicy"},"permissions":{"L":[{"S":"ReadLogs"},{"S":"ReadPersistenceTables"},{"S":"CheckBalance"},{"S":"UpdateConfig"}]}}

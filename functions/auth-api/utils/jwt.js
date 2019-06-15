@@ -1,4 +1,4 @@
-const logger = require('debug')('pluto:auth-jwt-λ:main')
+const logger = require('debug')('pluto:auth:jwt-module-main')
 const config = require('config');
 
 const fs = require('fs');
@@ -14,7 +14,7 @@ const s3 = require('../utils/s3-util');
 
 
 module.exports.generateJsonWebToken = async (payload, recievedSignOptions) => {
-    logger('Running in jwt mod.');
+    logger('Running in jwt generation function');
     const signOptions = {
         issuer: recievedSignOptions.issuer,
         subject: recievedSignOptions.subject,
@@ -29,8 +29,7 @@ module.exports.generateJsonWebToken = async (payload, recievedSignOptions) => {
 
 
 module.exports.verifyJsonWebToken = async (token, recievedVerifyOptions) => {
-    logger('Public key? :', publicKey);
-
+    logger('running in jwt verification function');
     const verifyOptions = {
         issuer: recievedVerifyOptions.issuer,
         subject: recievedVerifyOptions.subject,
@@ -38,7 +37,6 @@ module.exports.verifyJsonWebToken = async (token, recievedVerifyOptions) => {
         expiresIn: config.get('jwt.expiresIn'),
         algorithm: config.get('jwt.algorithm')
     };
-
     try {
         const publicKey = await s3.getPublicOrPrivateKey('jwt-public.key', 'someAuthorisationKey');
         logger(publicKey);
