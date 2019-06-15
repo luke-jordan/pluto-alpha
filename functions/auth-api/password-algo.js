@@ -22,28 +22,36 @@ module.exports.verifyPassword = async (systemWideUserId, password) => {
         logger('recieved params:', systemWideUserId, password)
         const clientEphemeral = srp.generateEphemeral();
         logger('generated client ephemeral:', clientEphemeral);
-        let response = await verifierHelper.getSaltAndServerPublicEphemeral(systemWideUserId, clientEphemeral.public);
-        response = JSON.parse(response);
-        logger('first server response:', response)
-        if (!response) return {systemWideUserId: systemWideUserId, verified: false, reason: 'No response from server'};
-        const salt = response.salt;
-        const serverPublicEphemeral = response.serverPublicEphemeral;
+        let saltAndServerPublicEphemeralJson = await verifierHelper.getSaltAndServerPublicEphemeral(systemWideUserId, clientEphemeral.public);
+        const saltAndServerPublicEphemeral = JSON.parse(saltAndServerPublicEphemeralJson);
+        logger('got the following values for salt and server public ephemeral:', saltAndServerPublicEphemeral)
+        if (!saltAndServerPublicEphemeral) return {systemWideUserId: systemWideUserId, verified: false, reason: 'saltAndServerPublicEphemeral not recieved'};
+        const salt = saltAndServerPublicEphemeral.salt;
+        const serverPublicEphemeral = saltAndServerPublicEphemeral.serverPublicEphemeral;
         logger(salt, serverPublicEphemeral);
         const privateKey = srp.derivePrivateKey(salt, systemWideUserId, password);
         logger('derived private key:', privateKey);
         const clientSession = srp.deriveSession(clientEphemeral.secret, serverPublicEphemeral, salt, systemWideUserId, privateKey);
         logger('args passed to clientSession generator:', clientEphemeral.secret, '|', serverPublicEphemeral, '|', salt, '|', systemWideUserId, '|',  privateKey);
         logger('generated client session:', clientSession);
-        const serverResponseJson = await verifierHelper.getServerSessionProof(systemWideUserId, clientSession.proof, clientEphemeral.public);
-        logger('second server response:', serverResponseJson);
-        const serverResponse = JSON.parse(serverResponseJson);
-        logger('server session proof object keys:', Object.keys(serverResponse));
         try {
-            if (!serverResponse) throw new Error('Server session proof not recieved')
-            srp.verifySession(clientEphemeral.public, clientSession, serverResponse.serverSessionProof);
-            return {systemWideUserId: systemWideUserId, verified: true};
-        }
-        catch (err) {
+            // serverSessionProofJson returns undefined on 
+            const serverSessionProofJson = await verifierHelper.getServerSessionProof(systemWideUserId, clientSession.proof, clientEphemeral.public);
+            logger('second server response:', serverSessionProofJson);
+            const serverSessionProof = JSON.parse(serverSessionProofJson);
+            if (serverSessionProof.serverSessionProof == null) throw new Error(serverSessionProof.reason);
+            logger('server session proof object keys:', Object.keys(serverSessionProof));
+            try {
+                // throws an error if password is invalid
+                srp.verifySession(clientEphemeral.public, clientSession, serverSessionProof.serverSessionProof);
+                return {systemWideUserId: systemWideUserId, verified: true};
+            }
+            catch (err) {
+                logger('password verification error:', err)
+                return {systemWideUserId: systemWideUserId, verified: false, reason: err.message};
+            };
+        } catch (err) {
+            logger('password verification error', err);
             return {systemWideUserId: systemWideUserId, verified: false, reason: err.message};
         };
     } catch (err) {

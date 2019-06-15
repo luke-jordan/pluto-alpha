@@ -22,9 +22,9 @@ module.exports.insertUserCredentials = async (event, context) => {
         logger('Recieved: systemWideUserId:', input.systemWideUserId, ', Password length:', input.password.length);
         const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(input.systemWideUserId, input.password);
 
-        const newUser = rdsUtil.createNewUser(input.systemWideUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
+        const newUserCredentials = rdsUtil.createUserCredentials(input.systemWideUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
         const userRolesAndPermissions = await authUtil.assignUserRolesAndPermissions(input.systemWideUserId, input.requestedRole); // λfy
-        const databaseInsertionResponse = await rdsUtil.insertNewUser(newUser);
+        const databaseInsertionResponse = await rdsUtil.insertUserCredentials(newUserCredentials);
         // if database insertion successful get jwt, else return databaseInsertionResponse message
         const signOptions = authUtil.getSignOptions(input.systemWideUserId);
 

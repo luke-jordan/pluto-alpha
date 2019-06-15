@@ -47,6 +47,10 @@ module.exports.getServerSessionProof = async (systemWideUserId, clientSessionPro
             serverSessionProof: serverSession.proof    
         });
     } catch (err) {
-    logger('FATAL_ERROR:', err);
-}
+        logger('FATAL_ERROR:', err);
+        return JSON.stringify({
+            serverSessionProof: null,
+            reason: err.message
+        })
+    };
 };

@@ -7,7 +7,7 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 
-module.exports.createNewUser = (systemWideUserId, salt, verifier) => {
+module.exports.createUserCredentials = (systemWideUserId, salt, verifier) => {
     return {
         systemWideUserId: systemWideUserId,
         salt: salt,
@@ -18,7 +18,7 @@ module.exports.createNewUser = (systemWideUserId, salt, verifier) => {
 
 
 // consolidate below?
-module.exports.insertNewUser = async (newUser) => {
+module.exports.insertUserCredentials = async (newUser) => {
     try {
         const insertionQuery = `insert into ${config.get('tables.userTable')} (system_wide_user_id, salt, verifier, server_ephemeral_secret) values %L returning insertion_id, creation_time`;
         const insertionColumns = '${systemWideUserId}, ${salt}, ${verifier}, ${serverEphemeralSecret}';

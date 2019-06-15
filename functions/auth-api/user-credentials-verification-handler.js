@@ -10,17 +10,16 @@ module.exports.verifyUserCredentials = async (event) => {
 		const password = event.password;
 		const systemWideUserId = event.systemWideUserId;
 
-		const validPassword = await passwordAlgorithm.verifyPassword(systemWideUserId, password);
+		const passwordValidationResponse = await passwordAlgorithm.verifyPassword(systemWideUserId, password);
+		logger('response from password validation:', passwordValidationResponse);
 
-		if (validPassword) {
-			return {
-				statusCode: 200,
-				body: JSON.stringify({
-				  message: validPassword,
-				  input: event,
-				}, null, 2),
-			  };
-		} else throw new Error('Invalid password');
+		return {
+			statusCode: 200,
+			body: JSON.stringify({
+				message: passwordValidationResponse,
+				input: event,
+			}, null, 2),
+		};
 	} catch (err) {
 		logger('FATAL_ERROR', err);
 		return {
