@@ -95,7 +95,8 @@ jobs:
              cd $HOME/app/terraform
              terraform init
              terraform workspace select $CIRCLE_BRANCH
-             terraform plan -auto-approve -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
+             #-auto-approve for apply
+             terraform plan -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
 
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, deploying artifacts."
