@@ -1,5 +1,3 @@
-variable "env" {}
-
 variable "aws_access_key" {}
 variable "aws_secret_access_key" {}
 variable "aws_default_region" {
@@ -8,10 +6,6 @@ variable "aws_default_region" {
         "staging"  = "us-east-1"
         "master" = "eu-west-1"
     }
-}
-
-variable "environment" {
-  default = "dev"
 }
 
 variable "app_name" {

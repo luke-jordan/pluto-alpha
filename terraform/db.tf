@@ -8,7 +8,7 @@ variable "db_password" {}
 
 /* subnet used by rds */
 resource "aws_db_subnet_group" "rds_subnet_group" {
-  name        = "${var.environment}-rds-subnet-group"
+  name        = "${terraform.workspace}-rds-subnet-group"
   description = "RDS subnet group"
   subnet_ids  = [for subnet in aws_subnet.private : subnet.id]
 
@@ -20,12 +20,12 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
 /* Security Group for resources that want to access the Database */
 resource "aws_security_group" "db_access_sg" {
   vpc_id      = "${aws_vpc.main.id}"
-  name        = "${var.environment}-db-access-sg"
+  name        = "${terraform.workspace}-db-access-sg"
   description = "Allow access to RDS"
 }
 
 resource "aws_security_group" "rds_sg" {
-  name = "${var.environment}-rds-sg"
+  name = "${terraform.workspace}-rds-sg"
 
   vpc_id = "${aws_vpc.main.id}"
 
@@ -55,7 +55,7 @@ resource "aws_security_group" "rds_sg" {
 }
 
 resource "aws_db_instance" "rds" {
-  identifier             = "${var.environment}-database"
+  identifier             = "${terraform.workspace}-database"
   allocated_storage      = "${var.db_allocated_storage}"
   engine                 = "postgres"
   engine_version         = "9.6.6"
