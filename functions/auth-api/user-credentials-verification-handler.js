@@ -3,6 +3,11 @@
 const logger = require('debug')('pluto:auth:user-credentials-verification-λ-main');
 const passwordAlgorithm = require('./password-algo');
 
+/**
+ * A quick note on passwordAlgorithm.verifyPassword()
+ * This function returns an object 
+ */
+
 
 module.exports.verifyUserCredentials = async (event) => {
 	try {
@@ -16,8 +21,7 @@ module.exports.verifyUserCredentials = async (event) => {
 		return {
 			statusCode: 200,
 			body: JSON.stringify({
-				message: passwordValidationResponse,
-				input: event,
+				message: passwordValidationResponse
 			}, null, 2),
 		};
 	} catch (err) {
@@ -25,8 +29,7 @@ module.exports.verifyUserCredentials = async (event) => {
 		return {
 			statusCode: 500,
 			body: JSON.stringify({
-			  message: err.message,
-			  input: event,
+			  message: err.message
 			}, null, 2),
 		};
 	};

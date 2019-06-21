@@ -1,10 +1,10 @@
 'use strict';
 
 const logger = require('debug')('pluto:alpha:password-generator-lambda-main');
-const passwordAlgorithm = require('../user-insertion-lambda/password-algo');
+const passwordAlgorithm = require('./password-algo');
 const request = require('request-promise');
 const passwordGenerator = require('niceware');
-const rdsUtil = require('../utils/rds-util');
+const rdsUtil = require('./utils/rds-util');
 
 
 module.exports.generateEphemeralPassword = async (event) => {
@@ -14,9 +14,8 @@ module.exports.generateEphemeralPassword = async (event) => {
 		const generatedPassword = exports.generatePassword();
 		const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(systemWideUserId, generatedPassword);
 		logger('generated salt and verifier:', saltAndVerifier);
-		const databaseResponse = exports.persistSaltAndVerifier(event.targetUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
-		logger('password update databaseResponse:', databaseResponse);
 		const databaseResponse = await exports.persistSaltAndVerifier(event.targetUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
+		logger('password update databaseResponse:', databaseResponse);
 		if (!databaseResponse || databaseResponse.statusCode > 0) throw new err('error while persisting new password keys databaseResponse');
 
 		const passwordUpdateMessage = 'TIMESTAMP USERID reset their password.';
@@ -32,7 +31,6 @@ module.exports.generateEphemeralPassword = async (event) => {
 			statusCode: 200,
 			body: JSON.stringify({
 				message: response,
-				input: event,
 			}, null, 2),
 		};
 	} catch (err) {
@@ -40,8 +38,7 @@ module.exports.generateEphemeralPassword = async (event) => {
 		return {
 			statusCode: 500,
 			body: JSON.stringify({
-				message: err.message,
-				input: event,
+				message: err.message
 			}, null, 2),
 		};
 	}

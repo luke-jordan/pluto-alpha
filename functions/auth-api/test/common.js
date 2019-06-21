@@ -26,28 +26,6 @@ module.exports.getStubArgs = (requestedStub, systemWideUserId = null) => {
             return ['mock server secret ephemeral', 'mock client public ephemeral', 'andpepper', systemWideUserId, 'mock persisted verifier', 'mock client session proof'];
         case 'deriveSessionOnNonResponsiveServer':
             return ['mock client secret ephemeral', 'mock server public ephemeral', 'andpepper', 'mock system-wide user id to unavailable server', 'mock client private key'];
-        case 'serverSessionProofAvailable':
-            return {
-                systemWideUserId: systemWideUserId,
-                clientSessionProof: 'mock client session proof',
-                clientPublicEphemeral: 'mock client public ephemeral'
-            };
-        case 'serverSessionProofUnavailble':
-            return {
-                systemWideUserId: 'mock system-wide user id to unavailable server',
-                clientSessionProof: 'mock client session proof',
-                clientPublicEphemeral: 'mock client public ephemeral'
-            };
-        case 'saltAndServerPublicEphemeralAvailable':
-            return {
-                systemWideUserId: systemWideUserId,
-                clientPublicEphemeral: 'mock client public ephemeral'
-            };
-        case 'saltAndServerPublicEphemeralUnavailable':
-            return  {
-                systemWideUserId: 'mock system-wide user id to unavailable server 1',
-                clientPublicEphemeral: 'mock client public ephemeral'
-            };
         case 'validTokenToLambdaAuthorizer':
             return { 
                 url: 'https://85d15dc6.ngrok.io/validate-token',

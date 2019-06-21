@@ -23,9 +23,9 @@ module.exports.verifyPassword = async (systemWideUserId, password) => {
         const clientEphemeral = srp.generateEphemeral();
         logger('generated client ephemeral:', clientEphemeral);
         let saltAndServerPublicEphemeralJson = await verifierHelper.getSaltAndServerPublicEphemeral(systemWideUserId, clientEphemeral.public);
+        logger('got the following values for salt and server public ephemeral:', saltAndServerPublicEphemeralJson)
         const saltAndServerPublicEphemeral = JSON.parse(saltAndServerPublicEphemeralJson);
-        logger('got the following values for salt and server public ephemeral:', saltAndServerPublicEphemeral)
-        if (!saltAndServerPublicEphemeral) return {systemWideUserId: systemWideUserId, verified: false, reason: 'saltAndServerPublicEphemeral not recieved'};
+        if (saltAndServerPublicEphemeral.reason) throw new Error(saltAndServerPublicEphemeral.reason);
         const salt = saltAndServerPublicEphemeral.salt;
         const serverPublicEphemeral = saltAndServerPublicEphemeral.serverPublicEphemeral;
         logger(salt, serverPublicEphemeral);
@@ -42,12 +42,13 @@ module.exports.verifyPassword = async (systemWideUserId, password) => {
             logger('server session proof object keys:', Object.keys(serverSessionProof));
             // srp.verifySession throws error on invalid password
             srp.verifySession(clientEphemeral.public, clientSession, serverSessionProof.serverSessionProof);
-            return {systemWideUserId: systemWideUserId, verified: true};
+            return { systemWideUserId: systemWideUserId, verified: true };
         } catch (err) {
             logger('password verification error', err);
-            return {systemWideUserId: systemWideUserId, verified: false, reason: err.message};
+            return { systemWideUserId: systemWideUserId, verified: false, reason: err.message };
         };
     } catch (err) {
         logger('FATAL_ERROR:', err);
+        return { systemWideUserId: systemWideUserId, verified: false, reason: err.message }
     };
 };

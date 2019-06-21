@@ -1,6 +1,5 @@
 'use strict';
 
-const config = require('config');
 const logger = require('debug')('pluto:auth:user-insertion-λ-main');
 
 const passwordAlgorithm = require('./password-algo');
@@ -15,41 +14,34 @@ const jwt = require('./utils/jwt');
  */
 module.exports.insertUserCredentials = async (event, context) => {
     try {
-        logger('Running in handler');
         logger('Recieved context:', context);
         const input = event['queryStringParameters'] || event;
-
-        logger('Recieved: systemWideUserId:', input.systemWideUserId, ', Password length:', input.password.length);
+        if (!input.systemWideUserId || !input.password) throw new Error('invalid event passed to handler');
+        logger('recieved: event user id and password length', input.systemWideUserId, ', Password length:', input.password.length);
         const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(input.systemWideUserId, input.password);
-
         const newUserCredentials = rdsUtil.createUserCredentials(input.systemWideUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
         const userRolesAndPermissions = await authUtil.assignUserRolesAndPermissions(input.systemWideUserId, input.requestedRole); // λfy
         const databaseInsertionResponse = await rdsUtil.insertUserCredentials(newUserCredentials);
         // if database insertion successful get jwt, else return databaseInsertionResponse message
         const signOptions = authUtil.getSignOptions(input.systemWideUserId);
-
-        logger(userRolesAndPermissions);
-        logger(signOptions);
+        logger(signOptions, userRolesAndPermissions);
         const jsonWebToken = await jwt.generateJsonWebToken(userRolesAndPermissions, signOptions)
-        logger('JWT:', jsonWebToken);
-
-        const response = {
-            jwt: jsonWebToken, // λfy 
-            message: databaseInsertionResponse.databaseResponse
-        };
+        logger('got this back from jwt generation:', jsonWebToken);
 
         return {
             statusCode: 200,
-            body: JSON.stringify(response)
+            body: JSON.stringify({
+                jwt: jsonWebToken,
+                message: databaseInsertionResponse.databaseResponse
+            })
         };
-
     } catch (err) {
         logger("FATAL_ERROR:", err);
-        const response = {message: err.message};
-        
         return {
             statusCode: 500,
-            body: JSON.stringify(response)
+            body: JSON.stringify({
+                message: err.message
+            })
         };
-    }
+    };
 };

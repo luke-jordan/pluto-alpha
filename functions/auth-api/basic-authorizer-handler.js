@@ -32,6 +32,7 @@ module.exports.basicLambdaAuthorizer = async (event, context, callback) => {
 		};
 	} catch (err) {
 		logger("FATAL_ERROR:", err);
+		callback('Unauthorized');
 	};
 };
 

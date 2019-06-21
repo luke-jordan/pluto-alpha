@@ -19,7 +19,7 @@ let generateEphemeralStub = sinon.stub();
 let deriveSessionStub = sinon.stub();
 let verifySessionStub = sinon.stub();
 
-const passwordAlgorithm = proxyquire('../user-insertion-lambda/password-algo', {
+const passwordAlgorithm = proxyquire('../password-algo', {
     'secure-remote-password/client': {
         'generateSalt': generateSaltStub,
         'derivePrivateKey': privateKeyStub,
@@ -30,8 +30,6 @@ const passwordAlgorithm = proxyquire('../user-insertion-lambda/password-algo', {
     }
 });
 
-let loginHelperStub = sinon.stub(passwordAlgorithm, 'loginHelper');
-
 const resetStubs = () => {
     generateSaltStub.reset();
     privateKeyStub.reset();
@@ -39,7 +37,6 @@ const resetStubs = () => {
     generateEphemeralStub.reset();
     deriveSessionStub.reset();
     verifySessionStub.reset();
-    loginHelperStub.reset();
 };
 
 const passedInSignUpDetails = {
@@ -126,18 +123,6 @@ describe('SecureRemotePassword', () => {
             deriveSessionStub
                 .withArgs(...common.getStubArgs('deriveSessionOnNonResponsiveServer'))
                 .returns({proof: 'mock client session proof'});
-            loginHelperStub
-                .withArgs('serverSessionProofLambdaUrl', common.getStubArgs('serverSessionProofAvailable', expectedLoginDetails.systemWideUserId))
-                .returns({serverSessionProof: 'mock server session proof'});
-            loginHelperStub
-                .withArgs('serverSessionProofLambdaUrl', common.getStubArgs('serverSessionProofUnavailble'))
-                .returns();
-            loginHelperStub
-                .withArgs('saltAndServerPublicEphemeralLambdaUrl', common.getStubArgs('saltAndServerPublicEphemeralAvailable', expectedLoginDetails.systemWideUserId))
-                .returns({salt: 'andpepper', serverEphemeralPublic: 'mock server public ephemeral'});  
-            loginHelperStub
-                .withArgs('saltAndServerPublicEphemeralLambdaUrl', common.getStubArgs('saltAndServerPublicEphemeralUnavailable'))
-                .returns(); 
             }
         );
 

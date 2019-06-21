@@ -1,8 +1,8 @@
 'use strict';
 
-const logger = require('debug')('pluto:auth-password-update-λ:main')
-const passwordAlgorithm = require('../user-insertion-lambda/password-algo')
-const rdsUtil = require('../utils/rds-util');
+const logger = require('debug')('pluto:auth:password-update-λ-main')
+const passwordAlgorithm = require('./password-algo')
+const rdsUtil = require('./utils/rds-util');
 
 
 /**
@@ -22,39 +22,34 @@ module.exports.updatePassword = async (event, context) => {
 		
 		const oldPassword = event.oldPassword;
 		const newPassword = event.newPassword;
-		const origin = event.origin;
-		logger('event origin:', origin);
-		const systemWideUserId = origin.systemWideUserId; // or load from context?
+		const systemWideUserId = event.systemWideUserId;
 
-		const oldPasswordValid = passwordAlgorithm.verifyPassword(systemWideUserId, oldPassword);
-		logger('is old password valid:', oldPasswordValid);
+		const oldPasswordValidation = await passwordAlgorithm.verifyPassword(systemWideUserId, oldPassword);
+		logger('is old password valid:', oldPasswordValidation.verified);
 
-		if (oldPasswordValid) {
-			const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(systemWideUserId, newPassword);
+		if (oldPasswordValidation.verified) {
+			const saltAndVerifier = await passwordAlgorithm.generateSaltAndVerifier(systemWideUserId, newPassword);
 			logger('generated salt and verifier:', saltAndVerifier);
 			const salt = saltAndVerifier.salt;
 			const verifier = saltAndVerifier.verifier;
-			const databaseResponse = rdsUtil.updateUserSaltAndVerifier(systemWideUserId, salt, verifier); // TODO: implement rdsUtil.updateUser;
+			const databaseResponse = await rdsUtil.updateUserSaltAndVerifier(systemWideUserId, salt, verifier);
 			logger('password update databaseResponse:', databaseResponse);
 			if (databaseResponse.statusCode == 0) {
-				logger('about to return successful call to caller.')
 				return {
 					statusCode: 200,
 					body: JSON.stringify({
-						message: databaseResponse.message,
-						input: event,
+						message: databaseResponse.message
 					}, null, 2),
 				};
 			} 
-			else throw new Error('An error occured during database update attempt.');
-		} else throw new Error('Invalid old password');
+			else throw new Error(databaseResponse.message);
+		} else throw new Error(oldPasswordValidation.reason);
 	} catch (err) {
 		logger("FATAL_ERROR:", err);
 		return {
 			statusCode: 500,
 			body: JSON.stringify({
-				message: err.message,
-				input: event,
+				message: err.message
 			}, null, 2),
 		};
 	};

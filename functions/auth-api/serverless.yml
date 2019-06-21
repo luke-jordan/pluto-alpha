@@ -47,6 +47,15 @@ functions:
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: pluto:*
+  updatePassword:
+    handler: password-update-handler.updatePassword
+    events:
+      - http:
+          path: update-password
+          method: post
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: pluto:*
   verifyJsonWebToken:
     handler: jwt-handler.verifyJsonWebToken
     events:

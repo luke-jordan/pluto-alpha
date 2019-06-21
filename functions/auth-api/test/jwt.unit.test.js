@@ -1,4 +1,4 @@
-const logger = require('debug')('pluto:auth-jwt-λ:test');
+const logger = require('debug')('pluto:auth:jwt-λ-test');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -9,21 +9,20 @@ const config = require('config');
 let signJwtStub = sinon.stub();
 let verifyJwtStub = sinon.stub();
 let decodeJwtStub = sinon.stub();
+let getPublicOrPrivateKeyStub = sinon.stub();
 
 let readFileSyncStub = sinon.stub();
 const mockPrivateKey = '==erg4g35gt4ehrh=='; // todo: test extraction from s3
 const mockPublicKey  = '==ui34hr8iu3hr2i==';
-readFileSyncStub.withArgs('./public.key', 'utf8').returns(mockPublicKey);
-readFileSyncStub.withArgs('./private.key', 'utf8').returns(mockPrivateKey);
 
-const jwt = proxyquire('../jwt-lambda/jwt', {
+const jwt = proxyquire('../utils/jwt', {
     'jsonwebtoken': {
         'sign'  : signJwtStub,
         'verify': verifyJwtStub,
         'decode': decodeJwtStub
     },
-    'fs': {
-        'readFileSync': readFileSyncStub
+    './s3-util': {
+        'getPublicOrPrivateKey': getPublicOrPrivateKeyStub
     }
 });
 
@@ -31,7 +30,7 @@ const resetStubs = () => {
     signJwtStub.reset();
     verifyJwtStub.reset();
     decodeJwtStub.reset();
-    readFileSyncStub.reset();
+    getPublicOrPrivateKeyStub.reset();
 };
 
 const mockPayload = {
@@ -50,7 +49,9 @@ const mockPayload = {
 const mockSignOrVerifyOptions = {
     issuer: 'Pluto Saving',
     subject: mockPayload.systemWideUserId,
-    audience: 'https://plutosaving.com'
+    audience: 'https://plutosaving.com',
+    expiresIn: '7d',
+    algorithm: 'RS256'
 };
 
 const expectedVerificationResult = {
@@ -74,7 +75,15 @@ describe('JWT module', () => {
     before(() => {
         resetStubs();
         signJwtStub.withArgs(mockPayload, mockPrivateKey, mockSignOrVerifyOptions).returns('json.web.token');
-        decodeJwtStub.withArgs('json.web.token')
+        // signJwtStub.withArgs(mockPayload, badPrivateKey, mockSignOrVerifyOptions).throws('Invalid private key');
+        getPublicOrPrivateKeyStub
+            .withArgs('jwt-private.key')
+            .returns(mockPrivateKey);
+        getPublicOrPrivateKeyStub
+            .withArgs('jwt-public.key')
+            .returns(mockPublicKey);
+        decodeJwtStub
+            .withArgs('json.web.token')
             .returns({
                 header: { alg: 'RS256', typ: 'JWT' },
                 payload: expectedVerificationResult,
@@ -85,11 +94,12 @@ describe('JWT module', () => {
         }
     );
     
-    it('should generate a jwt token', () => {
+    it('should generate a jwt token', async () => {
         const expectedGenerationResult = 'json.web.token';
 
-        const result = jwt.generateJsonWebToken(mockPayload, mockSignOrVerifyOptions);
+        const result = await jwt.generateJsonWebToken(mockPayload, mockSignOrVerifyOptions);
         logger('jwt generation result:', result);
+        logger('signJwtStub call details:', signJwtStub.getCall(0).args);
         
         expect(result).to.deep.equal(expectedGenerationResult);
         expect(signJwtStub).to.have.been.calledOnceWithExactly(mockPayload, mockPrivateKey, mockSignOrVerifyOptions);
@@ -135,5 +145,19 @@ describe('JWT module', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedDecodedResult);
         expect(decodeJwtStub).to.have.been.calledOnceWithExactly('json.web.token');
-    })
+    });
+
+    it('should throw an error on malformed verification options', () => {
+        const badVerifyOptions = {};
+
+        const result = jwt.verifyJsonWebToken('json.web.token', badVerifyOptions);
+        logger('result from jwt verification with bad veriication options:', result)
+    });
+
+    it('should throw an error on malformed sign options', () => {
+        const badSignOptions = {};
+
+        const result = jwt.generateJsonWebToken(mockPayload, badSignOptions);
+        logger('result from from jwt generation request with bad sign options:', result);
+    });
 });

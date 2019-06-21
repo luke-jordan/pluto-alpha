@@ -9,21 +9,17 @@ const proxyquire = require('proxyquire');
 const rdsUtil = require('../utils/rds-util');
 const dynamodb = require('../persistence/dynamodb/dynamodb');
 
+// NB: These tests achieve full coverage on password-update-handler but need to be rewritten
+// with some tests being moved to seperate files
 
-let dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 let insertStub  = sinon.stub();
 let saltVerifierStub = sinon.stub();
 let generateJwtStub = sinon.stub();
 let loginStub  = sinon.stub();
+let dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 let getPolicyStub = dynamodbStub;
-// let authUtilGetPolicySpy    = sinon.spy(authUtil, 'getPolicy');
-let rdsUtilCreateNewUserSpy = sinon.spy(rdsUtil, 'createNewUser');
-
-class MockRdsConnection {
-    constructor(any) {
-        this.insertRecords = insertStub;
-    }
-};
+let rdsInsertUserCredentialsStub = sinon.stub();
+let rdsInsertUserCredentialsSpy = sinon.spy(rdsUtil, 'insertUserCredentials');
 
 const authUtil = proxyquire('../utils/auth-util', {
     '../persistence/dynamodb/dynamodb': {
@@ -34,19 +30,27 @@ const authUtil = proxyquire('../utils/auth-util', {
 let authUtilPermissionsSpy  = sinon.spy(authUtil, 'assignUserRolesAndPermissions');
 let authUtilSignOptionsSpy  = sinon.spy(authUtil, 'getSignOptions');
 
+class MockRdsConnection {
+    constructor(any) {
+        this.insertRecords = insertStub;
+    }
+};
+
 const rdsConnection = proxyquire('../utils/rds-util', {
-    'rds-common': MockRdsConnection,
+    'rds-common': MockRdsConnection,  
     '@noCallThru': true
 });
 
-const handler = proxyquire('../user-insertion-lambda/handler', {
-    '../utils/rds-util': rdsConnection, 
+const handler = proxyquire('../user-insertion-handler', {
+    './utils/rds-util': {
+        'insertUserCredentials': rdsInsertUserCredentialsStub
+    }, 
     './password-algo': {
         'generateSaltAndVerifier': saltVerifierStub,
         'verifyPassword': loginStub
     },
-    '../jwt-lambda/jwt': {
-        'generateJSONWebToken': generateJwtStub
+    './utils/jwt': {
+        'generateJsonWebToken': generateJwtStub
     },
     '@noCallThru': true
 });
@@ -59,7 +63,8 @@ const resetStubs = () => {
     getPolicyStub.reset();
     authUtilPermissionsSpy.restore();
     authUtilSignOptionsSpy.restore();
-    rdsUtilCreateNewUserSpy.restore();
+    rdsInsertUserCredentialsSpy.restore();
+    rdsInsertUserCredentialsStub.reset();
     // docClientGetStub.reset();
 };
 
@@ -67,6 +72,20 @@ describe('User insertion', () => {
 
     beforeEach(() => {
         resetStubs();
+        saltVerifierStub
+            .withArgs(common.recievedNewUser.systemWideUserId, 'greetings')
+            .returns({ systemWideUserId: common.recievedNewUser.systemWideUserId, salt: 'andpepper', verifier: 'verified' });
+        saltVerifierStub
+            .withArgs(null, 'greetings')
+            .throws('invalid input')
+        rdsInsertUserCredentialsStub // create variable scenarios
+            .withArgs() // userObject; create new tests for rdsUtil
+            .resolves({
+                databaseResponse: { 
+                    rows: [ { insertion_id: 'an insertion id', creation_time: 'document creation time' }]
+                }
+            });
+        generateJwtStub.returns('json.web.token');
         getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
             .resolves({
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
@@ -101,37 +120,56 @@ describe('User insertion', () => {
 
     context('handler', () => {
 
-        it('should handle new user properly', async () => {
-            
-            // move all stub definitions to describes beforeEach() ?
-            saltVerifierStub.returns({ systemWideUserId: common.recievedNewUser.systemWideUserId, salt: 'andpepper', verifier: 'verified' });
-            
-            insertStub
-                .withArgs(common.expectedInsertionQuery, common.expectedInsertionColumns, common.expectedInsertionList)
-                .resolves({
-                    databaseResponse: { 
+        it('should handle new user properly (happy path 1)', async () => {
+
+            const expectedResult = {
+                statusCode: 200,
+                body: JSON.stringify({
+                    jwt: 'json.web.token',
+                    message: { 
                         rows: [ { insertion_id: 'an insertion id', creation_time: 'document creation time' }]
                     }
-                });
-            generateJwtStub.returns('some.jwt.token');
+                })
+            }
             
-            const insertionResult = await handler.insertNewUser(event = { systemWideUserId: common.recievedNewUser.systemWideUserId, password: 'greetings', userRole: 'default'});
-            logger('InsertionResult:', insertionResult);
+            const handlerResponse = await handler.insertUserCredentials(event = { systemWideUserId: common.recievedNewUser.systemWideUserId, password: 'greetings', userRole: 'default'});
+
+            logger('handlerResponse:', handlerResponse);
+            logger('rdsInsertUserCredentialsStub called with args:', rdsInsertUserCredentialsStub.getCall(0).args)
             logger('getPolicyStub recieved args:', getPolicyStub.getCall(0).args);
             logger('getPolicyStub returned:', getPolicyStub.getCall(0).returnValue);
 
-            expect(insertionResult).to.exist;
+            expect(handlerResponse).to.exist;
+            expect(handlerResponse).to.deep.equal(expectedResult);
             expect(getPolicyStub).to.have.been.calledOnce;
-            expect(insertionResult).to.have.property('statusCode');
-            expect(insertionResult).to.have.property('body');
-            expect(insertionResult.statusCode).to.deep.equal(200);
-            const parsedResult = JSON.parse(insertionResult.body);
+            expect(handlerResponse).to.have.property('statusCode');
+            expect(handlerResponse).to.have.property('body');
+            expect(handlerResponse.statusCode).to.deep.equal(200);
+            const parsedResult = JSON.parse(handlerResponse.body);
             logger('parsedResult:', parsedResult);
             expect(parsedResult).to.have.property('message');
             expect(parsedResult).to.have.property('jwt');
-            expect(parsedResult.message).to.have.property('persistedTime');
             expect(parsedResult.jwt).to.not.be.null;
         });
+
+
+        it('should throw an error on malformed event', async () => {
+            expectedResult = {
+                statusCode: 500,
+                body: JSON.stringify({
+                    message: 'some error message'
+                })
+            };
+
+            const malformedEvent = {
+                // missing systemWideUserId
+                password: 'user-password'
+            };
+
+            const response = await handler.insertUserCredentials(malformedEvent);
+            logger('handler response on malformed event:', response);
+
+        })
 
         it('should persist a new user properly', () => {
             
@@ -143,7 +181,7 @@ describe('User insertion', () => {
                 'created_at': common.expectedNewUser.created_at
             };
 
-            const creationResult = rdsUtil.createNewUser(
+            const creationResult = rdsUtil.insertUserCredentials(
                 common.recievedNewUser.systemWideUserId,
                 common.recievedNewUser.salt,
                 common.recievedNewUser.verifier
@@ -158,7 +196,7 @@ describe('User insertion', () => {
                 'created_at'
             ]);
             expect(creationResult).to.deep.equal(expectedResult);
-            expect(rdsUtilCreateNewUserSpy).to.have.been.calledOnceWithExactly(
+            expect(rdsInsertUserCredentialsSpy).to.have.been.calledOnceWithExactly(
                 common.recievedNewUser.systemWideUserId,
                 common.recievedNewUser.salt,
                 common.recievedNewUser.verifier
@@ -166,7 +204,7 @@ describe('User insertion', () => {
         });
 
         it('should handle user login properly', () => {
-            // implement
+            // implement in diffrent test file
         });
 
     });

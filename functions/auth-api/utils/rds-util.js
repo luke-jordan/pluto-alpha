@@ -40,18 +40,22 @@ module.exports.insertUserCredentials = async (newUser) => {
 module.exports.updateUserSaltAndVerifier = async (systemWideUserId, salt, verifier) => {
     try {
         logger('running in updateUserSaltAndVerifier with args', systemWideUserId, salt, verifier);
-        const query = `update ${config.get('tables.userTable')} set salt = $1, verifier = $2 where system_wide_user_id = $3 returning insertion_id, updated_time`;
+        const query = `update ${config.get('tables.userTable')} set salt = $1, verifier = $2 where system_wide_user_id = $3 returning insertion_id, update_time`;
         const values = [salt, verifier, systemWideUserId];
 
         const response = await rdsConnection.updateRecord(query, values);
         logger('credentials update returned:', response);
 
         return {
-            databaseResponse: response
+            message: response,
+            statusCode: 0
         };
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        throw new Error(err.message);
+        return {
+            message: err.message,
+            statusCode: 1
+        };
     };
 };
 
@@ -79,12 +83,14 @@ module.exports.getUserCredentials = async (systemWideUserId) => {
         const query = `select * from  ${config.get('tables.userTable')} where system_wide_user_id = $1`;
         const value = [systemWideUserId];
 
+        // response returns [] on non-existent user
         const response = await rdsConnection.selectQuery(query, value);
         logger('got this back from credentials rds extraction query:', response);
+        if (response.length == 0) throw new Error('Credentials not found')
 
         return response
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        throw new Error(err.message);
+        return {error: err.message};
     };
 };

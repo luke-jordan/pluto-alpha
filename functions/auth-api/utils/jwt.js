@@ -1,20 +1,23 @@
+'use strict';
+
 const logger = require('debug')('pluto:auth:jwt-module-main')
 const config = require('config');
-
-const fs = require('fs');
 const jwt = require('jsonwebtoken');
-
 const AWS = require('aws-sdk');
+const s3 = require('./s3-util');
+
 AWS.config.update({
     region: "us-east-1",
     // endpoint: "http://localhost:4572"
 });
 
-const s3 = require('../utils/s3-util');
-
 
 module.exports.generateJsonWebToken = async (payload, recievedSignOptions) => {
-    logger('Running in jwt generation function');
+    try {
+    logger('Running in jwt generation function with args:', payload, recievedSignOptions);
+    if (!recievedSignOptions.issuer || 
+        !recievedSignOptions.subject || 
+        !recievedSignOptions.audience) throw new Error(`Invalid signOptions: ${recievedSignOptions}`);
     const signOptions = {
         issuer: recievedSignOptions.issuer,
         subject: recievedSignOptions.subject,
@@ -22,29 +25,35 @@ module.exports.generateJsonWebToken = async (payload, recievedSignOptions) => {
         expiresIn: config.get('jwt.expiresIn'),
         algorithm: config.get('jwt.algorithm')
     };
-    const privateKey = await s3.getPublicOrPrivateKey('jwt-private.key', 'someAuthorisationKey');
+    const privateKey = await s3.getPublicOrPrivateKey('jwt-private.key');
     logger(privateKey);
     return jwt.sign(payload, privateKey, signOptions);
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        throw new Error(err.message)
+    }
  };
 
 
 module.exports.verifyJsonWebToken = async (token, recievedVerifyOptions) => {
-    logger('running in jwt verification function');
-    const verifyOptions = {
-        issuer: recievedVerifyOptions.issuer,
-        subject: recievedVerifyOptions.subject,
-        audience: recievedVerifyOptions.audience,
-        expiresIn: config.get('jwt.expiresIn'),
-        algorithm: config.get('jwt.algorithm')
-    };
     try {
-        const publicKey = await s3.getPublicOrPrivateKey('jwt-public.key', 'someAuthorisationKey');
+        logger('running in jwt verification function');
+        if (!recievedVerifyOptions.issuer || 
+            !recievedVerifyOptions.subject || 
+            !recievedVerifyOptions.audience) throw new Error(`Invalid verifyOptions: ${recievedVerifyOptions}`);
+        const verifyOptions = {
+            issuer: recievedVerifyOptions.issuer,
+            subject: recievedVerifyOptions.subject,
+            audience: recievedVerifyOptions.audience,
+            expiresIn: config.get('jwt.expiresIn'),
+            algorithm: config.get('jwt.algorithm')
+        };
+        const publicKey = await s3.getPublicOrPrivateKey('jwt-public.key');
         logger(publicKey);
         return jwt.verify(token, publicKey, verifyOptions);
-    }
-    catch (err) {
-        logger('Error: ', err);
-        return false;
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        throw new Error(err.message);
     };
 };
 
@@ -54,10 +63,10 @@ module.exports.decodeJsonWebToken = (token) => {
 };   
 
 
-module.exports.refreshJsonWebToken = (token) => {
-    const decodedJwt = exports.decodeJsonWebToken(token);
-    // extract payload
-    // extract sign options
-    return exports.generateJsonWebToken(payload, signOPtions);
-};
+// module.exports.refreshJsonWebToken = (token) => {
+//     const decodedJwt = exports.decodeJsonWebToken(token);
+//     extract payload
+//     extract sign options
+//     return exports.generateJsonWebToken(payload, signOPtions);
+// };
 

@@ -10,7 +10,7 @@ const expect = chai.expect;
 
 const requestStub = sinon.stub();
 
-const authorizer = proxyquire('../basic-lambda-authorizer/handler', {
+const authorizer = proxyquire('../basic-authorizer-handler', {
     'request-promise': requestStub,
     '@noCallThru': true
 });

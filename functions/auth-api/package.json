@@ -16,6 +16,8 @@
     "jsonwebtoken": "^8.5.1",
     "niceware": "^1.0.7",
     "proxyquire": "^2.1.0",
+    "request": "^2.88.0",
+    "request-promise": "^4.2.4",
     "uuid": "^3.3.2"
   },
   "devDependencies": {

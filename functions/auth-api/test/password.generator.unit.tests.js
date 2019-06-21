@@ -12,17 +12,25 @@ const expect = chai.expect;
 const rdsUpdateUserStub = sinon.stub();
 const verifyPasswordStub = sinon.stub();
 const generateSaltAndVerifierStub = sinon.stub();
+const insertUserCredentialsStub = sinon.stub();
+const updateServerEphemeralSecretStub = sinon.stub();
+const getUserCredentialsStub = sinon.stub();
 const passwordGeneratorStub = sinon.stub();
 const requestStub = sinon.stub();
 // s3 related stub
 
-const handler = proxyquire('../password-reset-lambda/handler', {
+
+// TODO: add more rds related stubs
+const handler = proxyquire('../password-generation-handler', {
     'request-promise': requestStub,
     'niceware': passwordGeneratorStub,
-    '../utils/rds-util': {
-        updateUserSaltAndVerifier: rdsUpdateUserStub
+    './utils/rds-util': {
+        updateUserSaltAndVerifier: rdsUpdateUserStub,
+        insertUserCredentials: insertUserCredentialsStub,
+        updateServerEphemeralSecret: updateServerEphemeralSecretStub,
+        getUserCredentials: getUserCredentialsStub
     },
-    '../user-insertion-lambda/password-algo': {
+    './password-algo': {
         verifyPassword: verifyPasswordStub,
         generateSaltAndVerifier: generateSaltAndVerifierStub
     },
@@ -45,15 +53,17 @@ const mockEvent = {
 };
 
 
-// turn to class and spawn multiple instances
-const adminContactObject = {
-    systemWideUserId: uuid(),
-    rolesAndPermissions : {},
-    contactDetails: {
-        phone: 000000000000,
-        email: 'admin@plutosaving.com'
+class adminContactObject {
+    constructor() {
+        this.systemWideUserId = uuid();
+        this.rolesAndPermissions = {};
+        this.contactDetails = {
+            phone: '000000000',
+            email: 'admin@plutosaving.com'
+        }
     }
 };
+
 
 const adminOne = new adminContactObject();
 const adminTwo = new adminContactObject();
