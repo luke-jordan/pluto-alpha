@@ -156,7 +156,7 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
 
     const allocationQueryDef = {
         query: insertionQuery,
-        columns: insertionColumns,
+        columnTemplate: insertionColumns,
         rows: allocationRows
     };
 
@@ -183,7 +183,7 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
 
     const accountQueryDef = {
         query: accountQuery,
-        columns: accountColumns,
+        columnTemplate: accountColumns,
         rows: accountRows
     };
 
@@ -203,11 +203,11 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     const floatTable = config.get('tables.floatTransactions');
     
     const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
-    const sumQuery = `select account_id, sum(amount) from ${floatTable} group by account_id where float_id = $1 and ` + 
-        `currency = $2 and unit = $3 and allocated_to_type = $4`;
+    const sumQuery = `select allocated_to_id, sum(amount) from ${floatTable} where float_id = $1 and ` + 
+        `currency = $2 and unit = $3 and allocated_to_type = $4 group by allocated_to_id`;
 
     const unitResults = await rdsConnection.selectQuery(unitQuery, [floatId, currency, entityType]);
-    logger('Result of query: ', unitResults);
+    logger('Result of unit selection query: ', unitResults);
     // if unit results is empty, then just return an empty object
     if (!unitResults || unitResults.length === 0) {
         logger('No accounts found for float, should probably put something in DLQ');
@@ -221,12 +221,13 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     const selectResults = new Map();
     
     for (let i=0; i < usedUnits.length; i++) {
-        logger('Calculating for unit: ', usedUnits[i]);
+        logger('Calculating account balances for unit: ', usedUnits[i]);
         const accountTotalResult = await rdsConnection.selectQuery(sumQuery, [floatId, currency, usedUnits[i], entityType]);
-        const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['sum(amount)']}), {}); 
-        
+        logger('Account total result for this unit: ', accountTotalResult);
+        const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['allocated_to_id']]: row['sum']}), {}); 
+
         const transform = constants.floatUnitTransforms[usedUnits[i]];
-        logger('Initiating calculation loop');
+        logger('Initiating calculation loop, account object: ', accountObj);
         Object.keys(accountObj).forEach((accountId) => {
             const priorSum = selectResults.get(accountId) || 0;
             const accountSumInDefaultUnit = accountObj[accountId] * transform; // todo: skip if not present
@@ -235,7 +236,7 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
         logger('Completed unit calculation');
     }
 
-    logger('Completed calculations of account sums');
+    logger('Completed calculations of account sums, result: ', selectResults);
 
     if (logResult) {
         logger(selectResults);
@@ -270,7 +271,7 @@ module.exports.calculateFloatBalance = async function(floatId = 'zar_mmkt_co', c
         const sumParams = [floatId, currency, unit, constants.entityTypes.FLOAT_ITSELF, startDate, endDate];
         const sumResult = await rdsConnection.selectQuery(sumQuery, sumParams);
         logger(`Float sum results for unit ${unit}, as : ${JSON.stringify(sumResult)}`);
-        unitsWithSums[unit] = sumResult[0]['sum(amount)'];
+        unitsWithSums[unit] = sumResult[0]['sum'];
     }
     logger('Sums for units: ', unitsWithSums);
 

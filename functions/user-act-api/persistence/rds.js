@@ -45,19 +45,21 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         const settlementStatus = !!settlementDetails.settlementTime ? 'SETTLED' : 'PENDING';
 
         const accountQueryString = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, ` +
-            `float_id, matching_float_tx_id, settlement_status) values %L returning transaction_id, tags, flags`;
+            `float_id, matching_float_tx_id, settlement_status) values %L returning transaction_id, creation_time`;
         const accountColumnKeys = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
             '${floatId}, ${floatTransactionId}, ${settlementStatus}';
 
+        // note: we do this as two matching transactions, a save (which adds to the float itself) and then an allocation of that amount
         const floatQueryString = `insert into ${floatTxTable} (transaction_id, client_id, float_id, t_type, ` +
             `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
-        const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, *{SAVING}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
-            '*{END_USER_ACCOUNT}, ${accountId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
+        const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
+            '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
         
-        const rowValues = { 
+        
+        const rowValuesBase = { 
             accountTransactionId: accountTxId,
             floatTransactionId: floatTxId, 
-            accountId: settlementDetails['accountId'], 
+            accountId: settlementDetails.accountId, 
             savedCurrency: settlementDetails['savedCurrency'] || 'ZAR',
             savedUnit: savedUnit,
             savedAmount: settlementDetails.savedAmount,
@@ -65,8 +67,18 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
             settlementStatus: settlementStatus 
         };
 
-        const accountQueryDef = { query: accountQueryString, columnTemplate: accountColumnKeys, rows: [rowValues] };
-        const floatQueryDef = { query: floatQueryString, columnTemplate: floatColumnKeys, rows: [rowValues] };
+        const floatAdditionRow = JSON.parse(JSON.stringify(rowValuesBase));
+        floatAdditionRow.transactionType = 'SAVING';
+        floatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
+        floatAdditionRow.allocatedToId = settlementDetails.floatId;
+
+        const floatAllocationRow = JSON.parse(JSON.stringify(rowValuesBase));
+        floatAllocationRow.transactionType = 'ALLOCATION';
+        floatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
+        floatAllocationRow.allocatedToId = settlementDetails.accountId;
+
+        const accountQueryDef = { query: accountQueryString, columnTemplate: accountColumnKeys, rows: [rowValuesBase] };
+        const floatQueryDef = { query: floatQueryString, columnTemplate: floatColumnKeys, rows: [floatAdditionRow, floatAllocationRow] };
         
         logger('Inserting, with account query : ', accountQueryDef);
         logger('And with float def: ', floatQueryDef);
@@ -77,7 +89,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         const balanceCount = await exports.sumCurrentBalance(settlementDetails['accountId'], settlementDetails['savedCurrency']);
         logger('New balance count: ', balanceCount);
 
-        responseEntity['newBalance'] = balanceCount['sum'];
+        responseEntity['newBalance'] = parseInt(balanceCount['sum']);
     } catch (e) {
         logger('Error inserting save: ', e);
         throw e;

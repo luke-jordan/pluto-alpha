@@ -5,22 +5,28 @@ const logger = require('debug')('pluto:save:main');
 const persistence = require('./persistence/rds');
 
 module.exports.save = async (event) => {
-  logger('Initiating transaction record to save, environment: ', process.env.NODE_ENV);
+  try {
+    logger('Initiating transaction record to save, environment: ', process.env.NODE_ENV);
 
-  logger('Here is our event: ', event);
-  const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
-  logger('Have a saving request inbound: ', settlementInformation);
+    logger('Here is our event: ', event);
+    const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
+    logger('Have a saving request inbound: ', settlementInformation);
 
-  // todo : check validity
+    // todo : check validity
 
-  const savingResult = await exports.storeSettledSaving(settlementInformation);
-  logger('Completed the save, result: ', savingResult);
+    const savingResult = await exports.storeSettledSaving(settlementInformation);
+    logger('Completed the save, result: ', savingResult);
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify(savingResult)
-  };
-
+    return {
+      statusCode: 200,
+      body: JSON.stringify(savingResult)
+    };
+  } catch (e) {
+    logger('FATAL_ERROR: ', e);
+    return {
+      statusCode: 500
+    };
+  }
 };
 
 

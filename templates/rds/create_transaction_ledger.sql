@@ -21,7 +21,6 @@ create table if not exists transaction_data.core_transaction_ledger (
 
 -- todo : indices
 -- todo : tighten up / narrow grants
-
 revoke all on transaction_data.core_transaction_ledger from public;
 
 -- as above, tighten up grants here, worker probably doesn't need select, but getting tricky with 
@@ -30,5 +29,7 @@ grant usage on schema transaction_data to save_tx_api_worker;
 grant select on transaction_data.core_transaction_ledger to save_tx_api_worker;
 grant insert on transaction_data.core_transaction_ledger to save_tx_api_worker;
 
+-- So that the accrual worker can persist to account table
 grant usage on schema transaction_data to float_api_worker;
-grant select on transaction_data.core_transaction_ledger to float_api_worker;
+grant select (transaction_id, creation_time, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, tags) on transaction_data.core_transaction_ledger to float_api_worker;
+grant insert on transaction_data.core_transaction_ledger to float_api_worker;

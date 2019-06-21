@@ -25,76 +25,83 @@ BigNumber.prototype.valueOf = function () {
  * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
  */
 module.exports.accrue = async (event, context) => {
-  const accrualParameters = event['body'] || event;
-  const clientId = accrualParameters.clientId;
-  const floatId = accrualParameters.floatId;
-
-  logger('Initiated execution, attempting to reach DynamoDB ...')
-  const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
-  // const floatConfig = { bonusPoolShare: 0.1, bonusPoolTracker: 'stuff', clientCoShare: 0.1, clientCoShareTracker: 'hello' };
-  logger('Fetched float config: ', floatConfig);
-
-  const accrualAmount = accrualParameters.accrualAmount;
-  const accrualCurrency = accrualParameters.currency || floatConfig.currency;
-  const accrualUnit = accrualParameters.unit || floatConfig.unit;
-  
-  const allocationBase = {
-    currency: accrualCurrency,
-    unit: accrualUnit,
-    relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
-    relatedEntityId: accrualParameters.backingEntityIdentifier
-  };
-
-  const bonusAllocation = JSON.parse(JSON.stringify(allocationBase));
-  bonusAllocation.label = 'BONUS';
-  bonusAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.bonusPoolShare);
-  bonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
-  bonusAllocation.allocatedToId = floatConfig.bonusPoolTracker;
-
-  const clientAllocation = JSON.parse(JSON.stringify(allocationBase));
-  clientAllocation.label = 'CLIENT';
-  clientAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.clientCoShare);
-  clientAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
-  clientAllocation.allocatedToId = floatConfig.clientCoShareTracker;
-
-  logger('Company allocation: ', clientAllocation);
-
-  const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
-     unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
-  logger('New float balance: ', newFloatBalance);
+  try { 
+    const accrualParameters = event['body'] || event;
+    const clientId = accrualParameters.clientId;
+    const floatId = accrualParameters.floatId;
     
-  const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
-  logger('Allocation IDs: ', entityAllocationIds);
+    const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
+    logger('Fetched float config: ', floatConfig);
 
-  const entityAllocations = {
-    bonusShare: bonusAllocation.amount,
-    bonusTxId: entityAllocationIds.find((row) => Object.keys(row).includes('BONUS')).BONUS,
-    clientShare: clientAllocation.amount,
-    clientTxId: entityAllocationIds.find((row) => Object.keys(row).includes('CLIENT')).CLIENT,
-  };
+    const accrualAmount = accrualParameters.accrualAmount;
+    const accrualCurrency = accrualParameters.currency || floatConfig.currency;
+    const accrualUnit = accrualParameters.unit || floatConfig.unit;
+    
+    const allocationCommon = {
+      currency: accrualCurrency,
+      unit: accrualUnit,
+      relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
+      relatedEntityId: accrualParameters.backingEntityIdentifier,
+      transactionType: constants.floatTransTypes.ALLOCATION
+    };
 
-  const remainingAmount = accrualAmount - bonusAllocation.amount - clientAllocation.amount;
-  const userAllocEvent = { clientId, floatId, 
-    totalAmount: remainingAmount, 
-    currency: accrualCurrency, 
-    backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
-    backingEntityIdentifier: accrualParameters.backingEntityIdentifier 
-  };
-  
-  const userAllocations = await exports.allocate(userAllocEvent);
+    const bonusAllocation = JSON.parse(JSON.stringify(allocationCommon));
+    bonusAllocation.label = 'BONUS';
+    bonusAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.bonusPoolShare);
+    bonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
+    bonusAllocation.allocatedToId = floatConfig.bonusPoolTracker;
+    
+    const clientAllocation = JSON.parse(JSON.stringify(allocationCommon));
+    clientAllocation.label = 'CLIENT';
+    clientAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.clientCoShare);
+    clientAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
+    clientAllocation.allocatedToId = floatConfig.clientCoShareTracker;
 
-  const returnBody = {
-    newBalance: newFloatBalance.currentBalance,
-    entityAllocations: entityAllocations,
-    userAllocationTransactions: userAllocations
-  };
+    logger('Company allocation: ', clientAllocation);
 
-  logger('Returning: ', returnBody);
+    const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
+      transactionType: constants.floatTransTypes.ACCRUAL, unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
+    logger('New float balance: ', newFloatBalance);
+      
+    const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
+    logger('Allocation IDs: ', entityAllocationIds);
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify(returnBody),
-  };
+    const entityAllocations = {
+      bonusShare: bonusAllocation.amount,
+      bonusTxId: entityAllocationIds.find((row) => Object.keys(row).includes('BONUS')).BONUS,
+      clientShare: clientAllocation.amount,
+      clientTxId: entityAllocationIds.find((row) => Object.keys(row).includes('CLIENT')).CLIENT,
+    };
+
+    const remainingAmount = accrualAmount - bonusAllocation.amount - clientAllocation.amount;
+    const userAllocEvent = { clientId, floatId, 
+      totalAmount: remainingAmount, 
+      currency: accrualCurrency, 
+      backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier 
+    };
+    
+    const userAllocations = await exports.allocate(userAllocEvent);
+
+    const returnBody = {
+      newBalance: newFloatBalance.currentBalance,
+      entityAllocations: entityAllocations,
+      userAllocationTransactions: userAllocations
+    };
+
+    logger('Returning: ', returnBody);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(returnBody),
+    };
+  } catch (e) {
+    logger('FATAL_ERROR: ', e);
+    return {
+      statusCode: 500,
+      body: ''
+    };
+  }
 };
 
 // handled separately, divides up all the allocations, records them, and does a massive batch insert as a single TX
@@ -111,6 +118,7 @@ module.exports.allocate = async (event, context) => {
   const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
 
   const shareMap = await exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
+  logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult;
   if (shareMap.has(constants.EXCESSS_KEY)) {

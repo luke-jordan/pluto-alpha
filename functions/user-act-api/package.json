@@ -4,7 +4,7 @@
   "description": "API for adding savings to a user account",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:save:* nyc mocha"
+    "test": "DEBUG=pluto:save:test nyc mocha"
   },
   "author": "Luke Jordan",
   "license": "ISC",
