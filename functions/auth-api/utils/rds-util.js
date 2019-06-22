@@ -20,6 +20,7 @@ module.exports.createUserCredentials = (systemWideUserId, salt, verifier) => {
 // consolidate below?
 module.exports.insertUserCredentials = async (newUser) => {
     try {
+        logger('about to run credentials insertion query with user object:', newUser);
         const insertionQuery = `insert into ${config.get('tables.userTable')} (system_wide_user_id, salt, verifier, server_ephemeral_secret) values %L returning insertion_id, creation_time`;
         const insertionColumns = '${systemWideUserId}, ${salt}, ${verifier}, ${serverEphemeralSecret}';
         const insertionList = [newUser];
@@ -39,15 +40,16 @@ module.exports.insertUserCredentials = async (newUser) => {
 
 module.exports.updateUserSaltAndVerifier = async (systemWideUserId, salt, verifier) => {
     try {
+        if (!systemWideUserId || !salt || !verifier) throw new Error('Invalid arguments');
         logger('running in updateUserSaltAndVerifier with args', systemWideUserId, salt, verifier);
         const query = `update ${config.get('tables.userTable')} set salt = $1, verifier = $2 where system_wide_user_id = $3 returning insertion_id, update_time`;
         const values = [salt, verifier, systemWideUserId];
 
         const response = await rdsConnection.updateRecord(query, values);
-        logger('credentials update returned:', response);
+        logger('salt and verifier update returned:', response);
 
         return {
-            message: response,
+            message: response.rows,
             statusCode: 0
         };
     } catch (err) {
@@ -69,7 +71,7 @@ module.exports.updateServerEphemeralSecret = async (systemWideUserId, serverEphe
         const response = await rdsConnection.updateRecord(query, values);
         logger('credentials ephemeral update returned:', response);
 
-        return response
+        return response.rows
     } catch (err) {
         logger('FATAL_ERROR:', err);
         throw new Error(err.message);

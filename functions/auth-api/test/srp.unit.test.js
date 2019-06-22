@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:auth-password-algo:test');
+const logger = require('debug')('pluto:auth:password-algo-test');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -18,6 +18,8 @@ let verifierStub = sinon.stub();
 let generateEphemeralStub = sinon.stub();
 let deriveSessionStub = sinon.stub();
 let verifySessionStub = sinon.stub();
+let getSaltAndServerPublicEphemeralStub = sinon.stub();
+let getServerSessionProofStub = sinon.stub();
 
 const passwordAlgorithm = proxyquire('../password-algo', {
     'secure-remote-password/client': {
@@ -27,6 +29,10 @@ const passwordAlgorithm = proxyquire('../password-algo', {
         'generateEphemeral': generateEphemeralStub,
         'deriveSession': deriveSessionStub,
         'verifySession': verifySessionStub
+    },
+    './user-verification-helper': {
+        'getSaltAndServerPublicEphemeral': getSaltAndServerPublicEphemeralStub,
+        'getServerSessionProof': getServerSessionProofStub
     }
 });
 
@@ -123,18 +129,29 @@ describe('SecureRemotePassword', () => {
             deriveSessionStub
                 .withArgs(...common.getStubArgs('deriveSessionOnNonResponsiveServer'))
                 .returns({proof: 'mock client session proof'});
+            getServerSessionProofStub
+                .withArgs()
+                .resolves({serverSessionProof: 'serverSession.proof'});
+            getSaltAndServerPublicEphemeralStub
+                .withArgs()
+                .resolves({
+                    salt: 'and-pepper',
+                    serverPublicEphemeral: 'serverPublicEphemeralKey'
+                });
+            verifySessionStub
+                .returns({ systemWideUserId: passedInLoginDetails.systemWideUserId, verified: true });
             }
         );
 
 
-        it("should verify user credentials during login", () => {
+        it("should verify user credentials during login", async () => {
             const expectedLoginResult = {
                 systemWideUserId: expectedLoginDetails.systemWideUserId,
                 verified: true
             };
 
-            const result = passwordAlgorithm.loginExistingUser(passedInLoginDetails.systemWideUserId, passedInLoginDetails.password);
-            logger('result of signup:', result)
+            const result = await passwordAlgorithm.verifyPassword(passedInLoginDetails.systemWideUserId, passedInLoginDetails.password);
+            logger('result of login:', result);
 
             expect(result).to.exist;
             expect(result).to.have.keys(['systemWideUserId', 'verified']);
@@ -198,7 +215,7 @@ describe('SecureRemotePassword', () => {
                 reason: 'No response from server'
             };
 
-            const serverResponse = passwordAlgorithm.loginExistingUser(
+            const serverResponse = passwordAlgorithm.verifyPassword(
                 'mock system-wide user id to unavailable server 1',
                 expectedLoginDetails.password
             );
@@ -220,7 +237,7 @@ describe('SecureRemotePassword', () => {
                 reason: 'Server session proof not recieved'
             }
 
-            const serverResponse = passwordAlgorithm.loginExistingUser(
+            const serverResponse = passwordAlgorithm.verifyPassword(
                 'mock system-wide user id to unavailable server',
                 expectedLoginDetails.password
             );

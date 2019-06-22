@@ -131,7 +131,7 @@ def run(user_quota=user_quota):
         time.sleep(2)
         user = generate_new_user()
         print('attempting to register user: %s' % str(user))
-        insertion_response = sign_in_user(user)
+        insertion_response = sign_in_user(user, hack=True)
         print('credentials insertion request resulted in %s' % str(insertion_response))
         time.sleep(5)
     # print(Fore.GREEN + '\nnow attemting to login' + Fore.WHITE)
@@ -142,7 +142,7 @@ def run(user_quota=user_quota):
         print(separator)
         print(Fore.GREEN + 'Now logging in user %s of %s\n' % (i+1, len(user_pool)) + Fore.WHITE)
         time.sleep(2)
-        login_response = login_user(user_pool[i])
+        login_response = login_user(user_pool[i], hack=True)
         print('login request resulted in %s' % str(login_response))
         time.sleep(5)
     ## login non existent users TODO: simply omit sign in step in this sequence

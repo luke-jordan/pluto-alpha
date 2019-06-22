@@ -147,17 +147,31 @@ describe('JWT module', () => {
         expect(decodeJwtStub).to.have.been.calledOnceWithExactly('json.web.token');
     });
 
-    it('should throw an error on malformed verification options', () => {
+    it('should throw an error on malformed verification options', async () => {
+        const expectedResponse = {error: `Invalid verifyOptions: ${mockSignOrVerifyOptions}`}
+
         const badVerifyOptions = {};
 
-        const result = jwt.verifyJsonWebToken('json.web.token', badVerifyOptions);
+        const result = await jwt.verifyJsonWebToken('json.web.token', badVerifyOptions);
         logger('result from jwt verification with bad veriication options:', result)
+      
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResponse);
+        expect(getPublicOrPrivateKeyStub).to.have.not.been.called;
+        expect(verifyJwtStub).to.have.not.been.called;
     });
 
-    it('should throw an error on malformed sign options', () => {
+    it('should throw an error on malformed sign options', async () => {
+        const expectedResponse = {error: `Invalid signOptions: ${mockSignOrVerifyOptions}`}
+
         const badSignOptions = {};
 
-        const result = jwt.generateJsonWebToken(mockPayload, badSignOptions);
+        const result = await jwt.generateJsonWebToken(mockPayload, badSignOptions);
         logger('result from from jwt generation request with bad sign options:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResponse);
+        expect(getPublicOrPrivateKeyStub).to.have.not.been.called;
+        expect(signJwtStub).to.have.not.been.called;
     });
 });

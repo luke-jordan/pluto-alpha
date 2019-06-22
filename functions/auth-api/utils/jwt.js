@@ -30,7 +30,7 @@ module.exports.generateJsonWebToken = async (payload, recievedSignOptions) => {
     return jwt.sign(payload, privateKey, signOptions);
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        throw new Error(err.message)
+        return {error: err.message};
     }
  };
 
@@ -53,7 +53,7 @@ module.exports.verifyJsonWebToken = async (token, recievedVerifyOptions) => {
         return jwt.verify(token, publicKey, verifyOptions);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        throw new Error(err.message);
+        return {error: err.message}; // ensure all callers are aware of return object structure
     };
 };
 

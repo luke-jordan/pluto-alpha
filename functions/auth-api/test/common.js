@@ -108,12 +108,14 @@ module.exports.passwordUpdateResponseOnSuccess = (event = null) => {
     };
 };
 
+
 module.exports.passwordUpdateResponseOnBadOldPassword = (event) => {
     return {
         message: "Invalid old password",
         input: event
     };
 };
+
 
 module.exports.passwordUpdateResponseOnPersistenceFailure = (event = null) => {
     return {
@@ -122,6 +124,38 @@ module.exports.passwordUpdateResponseOnPersistenceFailure = (event = null) => {
     };
 };
 
+
+module.exports.getInsertRecordsArgs = (mockUserCredentials) => {
+    return [
+        `insert into ${config.get('tables.userTable')} (system_wide_user_id, salt, verifier, server_ephemeral_secret) values %L returning insertion_id, creation_time`,
+        '${systemWideUserId}, ${salt}, ${verifier}, ${serverEphemeralSecret}',
+        [mockUserCredentials]
+    ];
+};
+
+
+module.exports.getUpdateRecordWithSaltAndVerifierArgs = (mockUserCredentials) => {
+    return [
+        `update ${config.get('tables.userTable')} set salt = $1, verifier = $2 where system_wide_user_id = $3 returning insertion_id, update_time`,
+        [mockUserCredentials.salt, mockUserCredentials.verifier, mockUserCredentials.systemWideUserId]
+    ];
+};
+
+
+module.exports.getUpdateRecordWithServerEphemeralSecret = (mockUserCredentials) => {
+    return [
+        `update ${config.get('tables.userTable')} set server_ephemeral_secret = $1 where system_wide_user_id = $2 returning insertion_id, update_time`,
+        [mockUserCredentials.serverEphemeralSecret, mockUserCredentials.systemWideUserId]
+    ];
+};
+
+
+module.exports.getUserCredentialsSelectQueryArgs = (mockUserCredentials) => {
+    return [
+        `select * from  ${config.get('tables.userTable')} where system_wide_user_id = $1`,
+        [mockUserCredentials.systemWideUserId]
+    ];
+};
 
 module.exports.expectedInsertionQuery = `insert into ${config.get('tables.userTable')} (system_wide_user_id, salt, verifier, server_ephemeral_secret) values %L returning insertion_id, creation_time`;
 module.exports.expectedInsertionColumns = '${systemWideUserId}, ${salt}, ${verifier}, ${serverEphemeralSecret}';
