@@ -8,6 +8,10 @@ variable "aws_default_region" {
     }
 }
 
+
+variable "lambda-pluto-api-env" {
+  default = ""
+}
 variable "app_name" {
   default = "pluto-alpha"
 }
@@ -27,4 +31,3 @@ variable "db_instance_class" {
 variable "db_allocated_storage" {
   default = "10"
 }
-
