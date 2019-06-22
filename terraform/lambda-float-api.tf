@@ -1,3 +1,9 @@
+variable "lambda_function_name" {
+  default = "float-api"
+  type = "string"
+}
+
+
 resource "aws_api_gateway_rest_api" "float-api" {
   name        = "float-api"
 }
@@ -42,7 +48,7 @@ resource "aws_lambda_permission" "allow_lambda_invocation" {
 
 resource "aws_lambda_function" "float-api" {
 
-  function_name                  = "float-api"
+  function_name                  = "${var.lambda_function_name}"
   role                           = "${aws_iam_role.float-api-role.arn}"
   handler                        = "main.handler"
   memory_size                    = 256
@@ -117,6 +123,17 @@ resource "aws_iam_role_policy_attachment" "basic_execution_policy" {
 resource "aws_iam_role_policy_attachment" "aws_lambda_vpc" {
   role = "${aws_iam_role.float-api-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+module "float-api-alarm" {
+  source = "./modules/cloud_watch_alarm"
+  
+  metric_namespace = "lambda_errors"
+  alarm_name = "float-api-alarm"
+  log_group_name = "/aws/lambda/${var.lambda_function_name}"
+  pattern = "FATAL_ERROR"
+  alarm_action_arn = "${aws_sns_topic.fatal_errors_topic.arn}"
+  statistic = "Sum"
 }
 
 
