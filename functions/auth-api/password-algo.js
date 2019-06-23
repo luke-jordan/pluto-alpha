@@ -19,6 +19,7 @@ module.exports.generateSaltAndVerifier = (systemWideUserId, password) => {
 
 module.exports.verifyPassword = async (systemWideUserId, password) => {
     try {
+        if (!systemWideUserId || !password) throw new Error('Invalid arguments passed to verifyPassword()')
         logger('recieved params:', systemWideUserId, password)
         const clientEphemeral = srp.generateEphemeral();
         logger('generated client ephemeral:', clientEphemeral);

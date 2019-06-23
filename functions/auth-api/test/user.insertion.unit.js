@@ -6,7 +6,7 @@ const chai = require('chai');
 const expect = chai.expect;
 const common = require('./common');
 const proxyquire = require('proxyquire');
-const rdsUtil = require('../utils/rds-util');
+// const rdsUtil = require('../utils/rds-util');
 const dynamodb = require('../persistence/dynamodb/dynamodb');
 
 // NB: These tests achieve full coverage on password-update-handler but need to be rewritten
@@ -19,7 +19,6 @@ let loginStub  = sinon.stub();
 let dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 let getPolicyStub = dynamodbStub;
 let rdsInsertUserCredentialsStub = sinon.stub();
-let rdsInsertUserCredentialsSpy = sinon.spy(rdsUtil, 'insertUserCredentials');
 
 const authUtil = proxyquire('../utils/auth-util', {
     '../persistence/dynamodb/dynamodb': {
@@ -32,19 +31,17 @@ let authUtilSignOptionsSpy  = sinon.spy(authUtil, 'getSignOptions');
 
 class MockRdsConnection {
     constructor(any) {
-        this.insertRecords = insertStub;
+        this.insertRecords = rdsInsertUserCredentialsStub;
     }
 };
 
-const rdsConnection = proxyquire('../utils/rds-util', {
+const rdsUtil = proxyquire('../utils/rds-util', {
     'rds-common': MockRdsConnection,  
     '@noCallThru': true
 });
 
 const handler = proxyquire('../user-insertion-handler', {
-    './utils/rds-util': {
-        'insertUserCredentials': rdsInsertUserCredentialsStub
-    }, 
+    './utils/rds-util': rdsUtil, 
     './password-algo': {
         'generateSaltAndVerifier': saltVerifierStub,
         'verifyPassword': loginStub
@@ -55,6 +52,14 @@ const handler = proxyquire('../user-insertion-handler', {
     '@noCallThru': true
 });
 
+
+const mockUserCredentials = rdsUtil.createUserCredentials(
+    common.recievedNewUser.systemWideUserId,
+    common.recievedNewUser.salt,
+    common.recievedNewUser.verifie
+);
+
+
 const resetStubs = () => {
     insertStub.reset();
     saltVerifierStub.reset();
@@ -63,7 +68,6 @@ const resetStubs = () => {
     getPolicyStub.reset();
     authUtilPermissionsSpy.restore();
     authUtilSignOptionsSpy.restore();
-    rdsInsertUserCredentialsSpy.restore();
     rdsInsertUserCredentialsStub.reset();
     // docClientGetStub.reset();
 };
@@ -79,11 +83,13 @@ describe('User insertion', () => {
             .withArgs(null, 'greetings')
             .throws('invalid input')
         rdsInsertUserCredentialsStub // create variable scenarios
-            .withArgs() // userObject; create new tests for rdsUtil
+            .withArgs(...common.getInsertRecordsArgs(mockUserCredentials)) // userObject; create new tests for rdsUtil
             .resolves({
-                databaseResponse: { 
-                    rows: [ { insertion_id: 'an insertion id', creation_time: 'document creation time' }]
-                }
+                command: 'INSERT',
+                rowCount: 1,
+                oid: 0,
+                rows:
+                    [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ]
             });
         generateJwtStub.returns('json.web.token');
         getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
@@ -115,7 +121,7 @@ describe('User insertion', () => {
                     "ReadLogs"
                 ]
             });
-    
+
     });
 
     context('handler', () => {
@@ -171,36 +177,16 @@ describe('User insertion', () => {
 
         })
 
-        it('should persist a new user properly', () => {
+        it('should persist a new user properly', async () => {
             
-            const expectedResult = {
-                'system_wide_user_id': common.expectedNewUser.system_wide_user_id,
-                'salt': common.expectedNewUser.salt,
-                'verifier': common.expectedNewUser.verifier,
-                'server_ephemeral_secret': common.expectedNewUser.server_ephemeral_secret,
-                'created_at': common.expectedNewUser.created_at
-            };
+            const expectedResult = {databaseResponse: [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ]};
 
-            const creationResult = rdsUtil.insertUserCredentials(
-                common.recievedNewUser.systemWideUserId,
-                common.recievedNewUser.salt,
-                common.recievedNewUser.verifier
-            );
+            const creationResult = await rdsUtil.insertUserCredentials(mockUserCredentials);
+            logger('result of user credentials insertion:', creationResult);
 
             expect(creationResult).to.exist;
-            expect(creationResult).to.have.keys([
-                'sytem_wide_user_id',
-                'salt',
-                'verifier',
-                'server_ephemeral_secret',
-                'created_at'
-            ]);
             expect(creationResult).to.deep.equal(expectedResult);
-            expect(rdsInsertUserCredentialsSpy).to.have.been.calledOnceWithExactly(
-                common.recievedNewUser.systemWideUserId,
-                common.recievedNewUser.salt,
-                common.recievedNewUser.verifier
-            );
+            expect(rdsInsertUserCredentialsStub).to.have.been.calledOnceWithExactly(...common.getInsertRecordsArgs(mockUserCredentials));
         });
 
         it('should handle user login properly', () => {

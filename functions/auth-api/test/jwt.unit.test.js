@@ -11,7 +11,6 @@ let verifyJwtStub = sinon.stub();
 let decodeJwtStub = sinon.stub();
 let getPublicOrPrivateKeyStub = sinon.stub();
 
-let readFileSyncStub = sinon.stub();
 const mockPrivateKey = '==erg4g35gt4ehrh=='; // todo: test extraction from s3
 const mockPublicKey  = '==ui34hr8iu3hr2i==';
 
@@ -50,12 +49,12 @@ const mockSignOrVerifyOptions = {
     issuer: 'Pluto Saving',
     subject: mockPayload.systemWideUserId,
     audience: 'https://plutosaving.com',
-    expiresIn: '7d',
-    algorithm: 'RS256'
+    expiresIn: config.get('jwt.expiresIn'),
+    algorithm: config.get('jwt.algorithm')
 };
 
 const expectedVerificationResult = {
-    systemWideUserId: 'a system-wide user id', // should be the same as signVerifyOptions ID
+    systemWideUserId: 'a system-wide user id',
     role: "Default User Role",
     permissions: [
         "EditProfile",

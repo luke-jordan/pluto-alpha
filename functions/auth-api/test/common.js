@@ -21,11 +21,11 @@ module.exports.recievedNewUser = {
 module.exports.getStubArgs = (requestedStub, systemWideUserId = null) => {
     switch(requestedStub) {
         case 'deriveClientSession':
-            return ['mock client secret ephemeral', 'mock server public ephemeral', 'andpepper', systemWideUserId, 'mock client private key'];
+            return ['mock client secret ephemeral', 'mock server public ephemeral', 'and-pepper', systemWideUserId, 'mock client private key'];
         case 'deriveServerSession':
-            return ['mock server secret ephemeral', 'mock client public ephemeral', 'andpepper', systemWideUserId, 'mock persisted verifier', 'mock client session proof'];
+            return ['mock server secret ephemeral', 'mock client public ephemeral', 'and-pepper', systemWideUserId, 'mock persisted verifier', 'mock client session proof'];
         case 'deriveSessionOnNonResponsiveServer':
-            return ['mock client secret ephemeral', 'mock server public ephemeral', 'andpepper', 'mock system-wide user id to unavailable server', 'mock client private key'];
+            return ['mock client secret ephemeral', 'mock server public ephemeral', 'and-pepper', 'mock system-wide user id to unavailable server', 'mock client private key'];
         case 'validTokenToLambdaAuthorizer':
             return { 
                 url: 'https://85d15dc6.ngrok.io/validate-token',

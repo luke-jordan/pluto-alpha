@@ -13,8 +13,8 @@ const common = require('./common');
 const proxyquire = require('proxyquire');
 
 let generateSaltStub = sinon.stub();
-let privateKeyStub = sinon.stub();
-let verifierStub = sinon.stub();
+let derivePrivateKeyStub = sinon.stub();
+let deriveVerifierStub = sinon.stub();
 let generateEphemeralStub = sinon.stub();
 let deriveSessionStub = sinon.stub();
 let verifySessionStub = sinon.stub();
@@ -24,8 +24,8 @@ let getServerSessionProofStub = sinon.stub();
 const passwordAlgorithm = proxyquire('../password-algo', {
     'secure-remote-password/client': {
         'generateSalt': generateSaltStub,
-        'derivePrivateKey': privateKeyStub,
-        'deriveVerifier': verifierStub,
+        'derivePrivateKey': derivePrivateKeyStub,
+        'deriveVerifier': deriveVerifierStub,
         'generateEphemeral': generateEphemeralStub,
         'deriveSession': deriveSessionStub,
         'verifySession': verifySessionStub
@@ -38,8 +38,8 @@ const passwordAlgorithm = proxyquire('../password-algo', {
 
 const resetStubs = () => {
     generateSaltStub.reset();
-    privateKeyStub.reset();
-    verifierStub.reset();
+    derivePrivateKeyStub.reset();
+    deriveVerifierStub.reset();
     generateEphemeralStub.reset();
     deriveSessionStub.reset();
     verifySessionStub.reset();
@@ -67,13 +67,13 @@ const expectedLoginDetails = {
 
 describe('SecureRemotePassword', () => {
 
-    context("User sign up", () => {
+    context("User sign up (credentials insertion)", () => {
 
         before(() => {
             resetStubs();
             generateSaltStub.returns('andpepper');
-            privateKeyStub.withArgs('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password).returns('some-private-key');
-            verifierStub.withArgs('some-private-key').returns('pushit');
+            derivePrivateKeyStub.withArgs('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password).returns('some-private-key');
+            deriveVerifierStub.withArgs('some-private-key').returns('pushit');
         });
 
         it('should return username, salt and verifier', () => {
@@ -89,8 +89,8 @@ describe('SecureRemotePassword', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedResult);
             expect(generateSaltStub).to.be.calledOnceWithExactly();
-            expect(privateKeyStub).to.be.calledOnceWithExactly('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password);
-            expect(verifierStub).to.be.calledOnceWithExactly('some-private-key');
+            expect(derivePrivateKeyStub).to.be.calledOnceWithExactly('andpepper', expectedArgsForSignup.systemWideUserId, expectedArgsForSignup.password);
+            expect(deriveVerifierStub).to.be.calledOnceWithExactly('some-private-key');
         });
 
         it('should return error on invalid input arguments', () => {
@@ -102,22 +102,22 @@ describe('SecureRemotePassword', () => {
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedResult);
             expect(generateSaltStub).to.not.have.been.called;
-            expect(privateKeyStub).to.not.have.been.called;
-            expect(verifierStub).to.not.have.been.called;
+            expect(derivePrivateKeyStub).to.not.have.been.called;
+            expect(deriveVerifierStub).to.not.have.been.called;
         })
     });
 
 
-    context('User Login', () => {
+    context('User Login (credentials verification)', () => {
 
         beforeEach(() => {
             resetStubs();
             generateEphemeralStub.withArgs('mock persisted verifier').returns('a verifier-encoded ephemeral public key');
             generateEphemeralStub.returns({secret: 'mock client secret ephemeral', public: 'mock client public ephemeral'});
-            privateKeyStub
-                .withArgs('andpepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password)
+            derivePrivateKeyStub
+                .withArgs('and-pepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password)
                 .returns('mock client private key');
-            privateKeyStub
+            derivePrivateKeyStub
                 .withArgs('andpepper', 'mock system-wide user id to unavailable server', expectedLoginDetails.password)
                 .returns('mock client private key');
             deriveSessionStub
@@ -131,13 +131,13 @@ describe('SecureRemotePassword', () => {
                 .returns({proof: 'mock client session proof'});
             getServerSessionProofStub
                 .withArgs()
-                .resolves({serverSessionProof: 'serverSession.proof'});
+                .resolves(JSON.stringify({serverSessionProof: 'serverSession.proof'}));
             getSaltAndServerPublicEphemeralStub
                 .withArgs()
-                .resolves({
+                .resolves(JSON.stringify({
                     salt: 'and-pepper',
-                    serverPublicEphemeral: 'serverPublicEphemeralKey'
-                });
+                    serverPublicEphemeral: 'mock server public ephemeral'
+                }));
             verifySessionStub
                 .returns({ systemWideUserId: passedInLoginDetails.systemWideUserId, verified: true });
             }
@@ -152,19 +152,59 @@ describe('SecureRemotePassword', () => {
 
             const result = await passwordAlgorithm.verifyPassword(passedInLoginDetails.systemWideUserId, passedInLoginDetails.password);
             logger('result of login:', result);
+            logger('derivePrivateKey call details:', derivePrivateKeyStub.getCall(0).args)
 
             expect(result).to.exist;
             expect(result).to.have.keys(['systemWideUserId', 'verified']);
             expect(result).to.deep.equal(expectedLoginResult)
             expect(generateEphemeralStub).to.have.been.calledOnceWithExactly();
-            expect(privateKeyStub).to.have.been.calledOnceWithExactly('andpepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password);
+            expect(derivePrivateKeyStub).to.have.been.calledOnceWithExactly('and-pepper', expectedLoginDetails.systemWideUserId, expectedLoginDetails.password);
             expect(deriveSessionStub).to.have.been.calledOnceWithExactly(
                 'mock client secret ephemeral',
                 'mock server public ephemeral',
-                'andpepper',
+                'and-pepper',
                 expectedLoginDetails.systemWideUserId,
                 'mock client private key'
             );
+        });
+
+        it('password verifier should throw error on invalid arguments', async () => {
+            const expectedfirstResultand3 = {
+                systemWideUserId: null,
+                verified: false, 
+                reason: 'Invalid arguments passed to verifyPassword()' 
+            }
+
+            const expectedsecondResult = { 
+                systemWideUserId: expectedLoginDetails.systemWideUserId,
+                verified: false, 
+                reason: 'Invalid arguments passed to verifyPassword()' 
+            };
+
+            const firstResult = await passwordAlgorithm.verifyPassword(null, null);
+            const secondResult = await passwordAlgorithm.verifyPassword(passedInLoginDetails.systemWideUserId, null);
+            const thirdResult = await passwordAlgorithm.verifyPassword(null, passedInLoginDetails.password);
+            logger('result of password verifier call with null arguments:', firstResult);
+            logger('result of password verifier call with missing password:', secondResult);
+            logger('result of password verifier call with missing user id:', thirdResult);
+
+            expect(firstResult).to.deep.equal(expectedfirstResultand3);
+            expect(secondResult).to.deep.equal(expectedsecondResult);
+            expect(thirdResult).to.deep.equal(expectedfirstResultand3);
+            expect(generateEphemeralStub).to.have.not.been.called;
+            expect(getSaltAndServerPublicEphemeralStub).to.have.not.been.called;
+            expect(derivePrivateKeyStub).to.have.not.been.called;
+            expect(deriveSessionStub).to.have.not.been.called;
+            expect(getServerSessionProofStub).to.have.not.been.called;
+            expect(verifySessionStub).to.have.not.been.called;
+        });
+
+        it('should throw and error on salt and server public ephemeral extraction failure', async () => {
+            // TODO
+        });
+
+        it('should throw an error on server session proof extraction failure', async () => {
+            // TODO
         });
 
         it('should get salt and server public ephemeral key', () => {
