@@ -31,3 +31,6 @@ variable "db_instance_class" {
 variable "db_allocated_storage" {
   default = "10"
 }
+
+variable "deploy_code_commit_hash" {
+}

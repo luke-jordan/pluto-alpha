@@ -2,8 +2,6 @@ variable "lambda_function_name" {
   type = "string"
 }
 
-variable "in_port" {
-}
 variable "vpc_id" {
   type = "string"
 }
@@ -33,6 +31,9 @@ variable "handler" {
 variable "run_time" {
   type = "string"
 }
+variable "lambda_security_groups" {
+  type = "list"
+}
 
 resource "aws_api_gateway_rest_api" "api-gateway" {
   name        = "${var.lambda_function_name}-${terraform.workspace}-rest-api"
@@ -61,7 +62,7 @@ resource "aws_api_gateway_integration" "lambda" {
   uri                     = "${aws_lambda_function.the_lambda.invoke_arn}"
 }
 
-resource "aws_api_gateway_deployment" "api-deplpoment" {
+resource "aws_api_gateway_deployment" "api-deployment" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   stage_name  = "${terraform.workspace}-stage"
 }
@@ -70,7 +71,7 @@ resource "aws_lambda_permission" "allow_lambda_invocation" {
   action        = "lambda:InvokeFunction"
   function_name = "${var.lambda_function_name}"
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_deployment.api-deplpoment.execution_arn}/*/*"
+  source_arn    = "${aws_api_gateway_deployment.api-deployment.execution_arn}/*/*"
 }
 
 resource "aws_lambda_function" "the_lambda" {
@@ -92,31 +93,11 @@ resource "aws_lambda_function" "the_lambda" {
   }
   vpc_config {
     subnet_ids = [for subnet in var.vpc_subnets : subnet]
-    security_group_ids = [aws_security_group.lambda_sg.id]
+    security_group_ids = var.lambda_security_groups
   }
 
   s3_bucket = "${var.s3_bucket}"
   s3_key = "${var.s3_key}"
-}
-
-resource "aws_security_group" "lambda_sg" {
-  name = "${terraform.workspace}-${var.lambda_function_name}"
-
-  vpc_id = "${var.vpc_id}"
-
-  // allows traffic from the SG itself
-  ingress {
-      from_port = 0
-      to_port = 0
-      protocol = "-1"
-      self = true
-  }
-
-  ingress {
-      from_port = var.in_port
-      to_port   = var.in_port
-      protocol  = "tcp"
-  }
 }
 
 resource "aws_iam_role" "lambda-basic-role" {
