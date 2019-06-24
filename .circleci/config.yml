@@ -46,7 +46,7 @@ jobs:
       - run:
           name: install aws cli
           command: |
-            apt-get update && apt-get install -y awscli
+            sudo apt-get update && apt-get install -y awscli
 
       - save_cache:
           key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
