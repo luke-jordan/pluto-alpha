@@ -8,6 +8,10 @@ variable "lambda_env" {
   default = ""
 }
 
+variable default_region_tag {
+  type = "string"
+  default = "<<DEFAULT_REGION>>"
+}
 
 resource "aws_lambda_function" "float-api-lambda" {
 
@@ -25,7 +29,29 @@ resource "aws_lambda_function" "float-api-lambda" {
 
   environment {
     variables = {
-      config = "${var.lambda_env}"
+      NODE_CONFIG = "${
+        jsonencode({
+          "aws"= {
+              "region"= "${var.aws_default_region[terraform.workspace]}",
+              "apiVersion"= "2012-08-10",
+              "endpoints"= {
+                  "dynamodb"= "http=//localhost=4569"
+              }
+          },
+          "tables"= {
+              "clientFloatVars"= "ClientFloatTable",
+              "floatTransactions"= "float_data.float_transaction_ledger",
+              "accountTransactions"= "account_data.core_account_ledger"
+          },
+          "variableKeys"= {
+              "bonusPoolShare"= "bonus_pool_accrual_share",
+              "companyShare"= "company_accrual_share"
+          },
+          "db"= {
+              
+          }
+      })
+      }"
     }
   }
   vpc_config {
@@ -63,6 +89,11 @@ resource "aws_iam_role_policy_attachment" "basic_execution_policy" {
 resource "aws_iam_role_policy_attachment" "vpc_execution_policy" {
   role = "${aws_iam_role.float-api-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "ClientFloatTable_access_float_api" {
+  role = "${aws_iam_role.float-api-role.name}"
+  policy_arn = "${aws_iam_policy.dynamo_table_ClientFloatTable_access.arn}"
 }
 
 
