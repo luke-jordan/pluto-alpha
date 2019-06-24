@@ -12,6 +12,20 @@ resource "aws_security_group" "sg_5432_egress" {
 
 }
 
+resource "aws_security_group" "sg_433_egress" {
+  name = "${terraform.workspace}-${var.lambda_function_name}"
+
+  vpc_id = "${aws_vpc.main.id}"
+
+   egress {
+      from_port  = 433
+      to_port = 433
+      protocol = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+}
+
 resource "aws_security_group" "sg_db_5432_ingress" {
   name = "${terraform.workspace}-rds-sg"
 
