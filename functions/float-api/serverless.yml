@@ -33,6 +33,7 @@ provider:
 functions:
   accrue:
     handler: handler.accrue
+    name: float-accrue
     events:
       - http:
           path: save

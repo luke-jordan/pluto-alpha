@@ -13,6 +13,7 @@ __pycache__/
 
 # Coverage directories
 .nyc_output/
+coverage.lcov
 
 # Any production config
 production.json

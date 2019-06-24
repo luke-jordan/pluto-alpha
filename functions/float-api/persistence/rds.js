@@ -23,6 +23,17 @@ module.exports.debugConnection = async () => {
     return simpleQueryResult;
 };
 
+/**
+ * Adds or removes amounts from the float. Transaction types cannot be allocations. Request dict keys:
+ * @param {string} clientId ID for the client company holding the float
+ * @param {string} floatId ID of the float to which to add
+ * @param {string} transactionType What kind of transaction (e.g., accrual, capitalization, saving, withdrawal)
+ * @param {number} amount How much to add or subtract
+ * @param {string} currency The currency of the amount
+ * @param {string} unit The unit of the amount
+ * @param {string} backingEntityType If there is a related backing entity, e.g., an accrual event/transaction, what type is it
+ * @param {string} backingEntityIdentifer What is the identifier of the backing endity
+ */
 module.exports.addOrSubtractFloat = async (request = {
         clientId: 'some_saving_co', 
         floatId: 'cash_float',
@@ -30,12 +41,11 @@ module.exports.addOrSubtractFloat = async (request = {
         amount: 100 * 1e4,
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
+        backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
         backingEntityIdentifer: 'uid-on-wholesale'}) => {
     
-    // todo : validation on transaction types
+    // todo : validation on transaction types, units
 
-    // const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, currency, unit, amount, related_entity_type, related_entity_id) `
-    //         + `values %L returning transaction_id`;
     const query = insertionQuery;
     const columns = insertionColumns;
     
@@ -67,8 +77,6 @@ module.exports.addOrSubtractFloat = async (request = {
         transactionId: queryTxId
     };
 };
-
-// and add a float totals method
 
 /**
  * Simple allocation of the float, to either a bonus or company share (do not user this for user accruals)
@@ -245,7 +253,8 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
 };
 
 /**
- * Note: returns -- the amount, in the default unit; what that unit is; details on the earliest transaction that contributed
+ * Calculates a float balance, optionally only summing transactions within a certain timestamp range.
+ * Returns the amount, in the default unit; what that unit is; details on the earliest transaction that contributed
  * to this balance and is within the date range; the latest such transaction; and what the most common unit is among the float transactions
  * @param {string} floatId The ID of the float whose balance is sought
  * @param {string} currency The float currency sought

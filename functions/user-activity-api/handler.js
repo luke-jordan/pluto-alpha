@@ -1,7 +1,6 @@
 'use strict';
 
 const logger = require('debug')('pluto:save:main');
-
 const persistence = require('./persistence/rds');
 
 module.exports.save = async (event) => {
