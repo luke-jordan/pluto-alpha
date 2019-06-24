@@ -22,3 +22,9 @@ production.json
 
 # Notebook checkpoints
 .ipynb_checkpoints/
+.docker-compose.yml.swp
+
+# automated branch-master synchroniser
+gitup.sh
+jwt-private.key
+jwt-public.key

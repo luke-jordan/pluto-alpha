@@ -1,0 +1,29 @@
+{
+    "aws": {
+        "region": "eu-west-1",
+        "apiVersion": "2012-08-10",
+        "endpoints": {
+            "dynamodb": "http://localhost:8000"
+        }
+    },
+    "jwt": {
+        "expiresIn": "7d",
+        "algorithm": "RS256"
+    },
+    "db": {
+        "host": "localhost",
+        "port": "5432",
+        "database": "plutotest",
+        "user": "auth_api_worker",
+        "password": "pwd_for_auth_api_worker"
+    },
+    "tables": {
+        "userTable": "user_data.user",
+        "dynamoAuthPoliciesTable": "roles_and_permissions"
+    },
+    "s3": {
+        "Buckets": {
+            "jwtTestBucket": "test-jwt-encryption-keys"
+        }
+    }
+}
