@@ -43,6 +43,11 @@ jobs:
             cd $HOME/app/functions/user-existence-api && npm install
             cd $HOME/app
 
+      - run:
+          name: install aws cli
+          command: |
+            apt-get update && apt-get install -y awscli
+
       - save_cache:
           key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
           paths:
@@ -80,6 +85,10 @@ jobs:
              zip -r deploy_float_api_$CIRCLE_SHA1.zip $HOME/app/functions/float-api
              zip -r deploy_user_act_$CIRCLE_SHA1.zip $HOME/app/functions/user-act-api
              zip -r deploy_user_existence_api_$CIRCLE_SHA1.zip $HOME/app/functions/user-existence-api
+
+             aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float-api/$CIRCLE_SHA1.zip
+             aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user-act-api/$CIRCLE_SHA1.zip
+             aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user-existence-api/$CIRCLE_SHA1.zip
 
       - run:
           name: handle cloud components
