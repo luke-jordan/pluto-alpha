@@ -380,10 +380,10 @@ describe('Test account summation and float balances', () => {
 
         // using reduce and spread here, nicely explained in answer: https://stackoverflow.com/questions/42974735/create-object-from-array
         const wholeCentObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100) }), {});
-        const wholeCentRowResponse = accountIds.map((id) => ({ 'account_id': id, 'sum(amount)': wholeCentObject[id] }));
+        const wholeCentRowResponse = accountIds.map((id) => ({ 'account_id': id, 'sum': wholeCentObject[id] }));
         
         const hundredthsObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100 * 100) }), {});
-        const hundredthsRowResponse = accountIds.map((id) => ({ 'account_id': id, 'sum(amount)': hundredthsObject[id] }));
+        const hundredthsRowResponse = accountIds.map((id) => ({ 'account_id': id, 'sum': hundredthsObject[id] }));
 
         const expectedSumObject = new Map();
         accountIds.forEach((accountId) => {
@@ -463,8 +463,8 @@ describe('Test account summation and float balances', () => {
         
         // use any date matcher on last param, as 'now' has ticked on a few millis, and alternate prevents testing of defaults
         const sumParams = (unit) => [common.testValidFloatId, 'ZAR', unit, constants.entityTypes.FLOAT_ITSELF, startOfTime, sinon.match.date];
-        queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.HUNDREDTH_CENT))).resolves([{ 'sum(amount)': positiveRowSum }]);
-        queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.WHOLE_CENT))).resolves([ { 'sum(amount)': negativeRowSum }]);
+        queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.HUNDREDTH_CENT))).resolves([{ 'sum': positiveRowSum }]);
+        queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.WHOLE_CENT))).resolves([ { 'sum': negativeRowSum }]);
 
         const mostCommonUnitQuery = `select unit, count(*) from ${floatTable} group by unit`;
         queryStub.withArgs(mostCommonUnitQuery, []).resolves([

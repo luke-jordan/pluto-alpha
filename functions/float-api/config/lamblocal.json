@@ -3,7 +3,7 @@
         "region": "eu-west-1",
         "apiVersion": "2012-08-10",
         "endpoints": {
-            "dynamodb": "http://localhost:4569"
+            "dynamodb": "http://172.21.0.2:4569"
         }
     },
     "tables": {
@@ -16,6 +16,10 @@
         "companyShare": "company_accrual_share"
     },
     "db": {
-        
+        "user": "float_api_worker",
+        "host": "rdslocal",
+        "database": "pluto",
+        "password": "pwd_for_float_api",
+        "port" :"5432"
     }
 }

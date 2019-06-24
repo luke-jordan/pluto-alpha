@@ -25,81 +25,98 @@ BigNumber.prototype.valueOf = function () {
  * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
  */
 module.exports.accrue = async (event, context) => {
-  console.log('Starting accure function')
-
-  const accrualParameters = event['body'] || event;
-  const clientId = accrualParameters.clientId;
-  const floatId = accrualParameters.floatId;
-
-  const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
-  
-  const accrualAmount = accrualParameters.accrualAmount;
-  const accrualCurrency = accrualParameters.currency || floatConfig.currency;
-  const accrualUnit = accrualParameters.unit || floatConfig.unit;
-  
-  const allocationBase = {
-    currency: accrualCurrency,
-    unit: accrualUnit,
-    relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
-    relatedEntityId: accrualParameters.backingEntityIdentifier
-  };
-
-  const bonusAllocation = JSON.parse(JSON.stringify(allocationBase));
-  bonusAllocation.label = 'BONUS';
-  bonusAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.bonusPoolShare);
-  bonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
-  bonusAllocation.allocatedToId = floatConfig.bonusPoolTracker;
-
-  const clientAllocation = JSON.parse(JSON.stringify(allocationBase));
-  clientAllocation.label = 'CLIENT';
-  clientAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.clientCoShare);
-  clientAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
-  clientAllocation.allocatedToId = floatConfig.clientCoShareTracker;
-
-  logger('Company allocation: ', clientAllocation);
-
-  const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
-     unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
-  logger('New float balance: ', newFloatBalance);
+  try { 
+    const accrualParameters = event['body'] || event;
+    const clientId = accrualParameters.clientId;
+    const floatId = accrualParameters.floatId;
     
-  const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
-  logger('Allocation IDs: ', entityAllocationIds);
+    const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
+    logger('Fetched float config: ', floatConfig);
 
-  const entityAllocations = {
-    bonusShare: bonusAllocation.amount,
-    bonusTxId: entityAllocationIds.find((row) => Object.keys(row).includes('BONUS')).BONUS,
-    clientShare: clientAllocation.amount,
-    clientTxId: entityAllocationIds.find((row) => Object.keys(row).includes('CLIENT')).CLIENT,
-  };
+    const accrualAmount = accrualParameters.accrualAmount;
+    const accrualCurrency = accrualParameters.currency || floatConfig.currency;
+    const accrualUnit = accrualParameters.unit || floatConfig.unit;
+    
+    const allocationCommon = {
+      currency: accrualCurrency,
+      unit: accrualUnit,
+      relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
+      relatedEntityId: accrualParameters.backingEntityIdentifier,
+      transactionType: constants.floatTransTypes.ALLOCATION
+    };
 
-  const remainingAmount = accrualAmount - bonusAllocation.amount - clientAllocation.amount;
-  const userAllocEvent = { clientId, floatId, 
-    totalAmount: remainingAmount, 
-    currency: accrualCurrency, 
-    backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
-    backingEntityIdentifier: accrualParameters.backingEntityIdentifier 
-  };
-  
-  const userAllocations = await exports.allocate(userAllocEvent);
+    const bonusAllocation = JSON.parse(JSON.stringify(allocationCommon));
+    bonusAllocation.label = 'BONUS';
+    bonusAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.bonusPoolShare);
+    bonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
+    bonusAllocation.allocatedToId = floatConfig.bonusPoolTracker;
+    
+    const clientAllocation = JSON.parse(JSON.stringify(allocationCommon));
+    clientAllocation.label = 'CLIENT';
+    clientAllocation.amount = exports.calculateShare(accrualAmount, floatConfig.clientCoShare);
+    clientAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
+    clientAllocation.allocatedToId = floatConfig.clientCoShareTracker;
 
-  const returnBody = {
-    newBalance: newFloatBalance.currentBalance,
-    entityAllocations: entityAllocations,
-    userAllocationTransactions: userAllocations
-  };
+    logger('Company allocation: ', clientAllocation);
 
-  logger('Returning: ', returnBody);
+    const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
+      transactionType: constants.floatTransTypes.ACCRUAL, unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
+    logger('New float balance: ', newFloatBalance);
+      
+    const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
+    logger('Allocation IDs: ', entityAllocationIds);
 
-  return {
-    statusCode: 200,
-    body: JSON.stringify(returnBody),
-  };
+    const entityAllocations = {
+      bonusShare: bonusAllocation.amount,
+      bonusTxId: entityAllocationIds.find((row) => Object.keys(row).includes('BONUS')).BONUS,
+      clientShare: clientAllocation.amount,
+      clientTxId: entityAllocationIds.find((row) => Object.keys(row).includes('CLIENT')).CLIENT,
+    };
+
+    const remainingAmount = accrualAmount - bonusAllocation.amount - clientAllocation.amount;
+    const userAllocEvent = { clientId, floatId, 
+      totalAmount: remainingAmount, 
+      currency: accrualCurrency, 
+      backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier 
+    };
+    
+    const userAllocations = await exports.allocate(userAllocEvent);
+
+    const returnBody = {
+      newBalance: newFloatBalance.currentBalance,
+      entityAllocations: entityAllocations,
+      userAllocationTransactions: userAllocations
+    };
+
+    logger('Returning: ', returnBody);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(returnBody),
+    };
+  } catch (e) {
+    logger('FATAL_ERROR: ', e);
+    return {
+      statusCode: 500,
+      body: ''
+    };
+  }
 };
 
-// handled separately, divides up all the allocations, records them, and does a massive batch insert as a single TX
-// if one allocation does not succeed, all need to be redone, otherwise the calculations will go (way) off
-// note: this is generally the heart of things, and will require constant and continuous optimization, it will be 
-// triggered whenever another job detects unallocated amounts in the float, and gets passed: (i) the account totals, and (ii) amount to divide
+/**
+ * Divides up all the allocations, records them, and does a massive batch insert as a single TX
+ * If one allocation does not succeed, all need to be redone, otherwise the calculations will go (way) off
+ * Note: this is generally the heart of the engine, and will require constant and continuous optimization, it will be 
+ * triggered whenever another job detects unallocated amounts in the float.
+ * @param {string} clientId The client co that this allocation event relates to
+ * @param {string} floatId The float that is being allocated
+ * @param {string} currency The currency of the allocation
+ * @param {string} unit The units of the amount
+ * @param {number} totalAmount The total amount being allocated
+ * @param {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
+ * @param {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
+ */
 module.exports.allocate = async (event, context) => {
   
   const params = event.body || event;
@@ -110,6 +127,7 @@ module.exports.allocate = async (event, context) => {
   const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
 
   const shareMap = await exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
+  logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult;
   if (shareMap.has(constants.EXCESSS_KEY)) {
@@ -151,10 +169,14 @@ module.exports.allocate = async (event, context) => {
 
 // todo: add in capitalization at month end (think through how to do that)
 
-// this doesn't necessarily need to be public but (1) we might in a future refactor use it as its own lambda, 
-// and (2) it is easily important enough that we need to have it thoroughly covered on its own, even if it is small,
-// and that isn't a good enough reason to break the basic point that we shouldn't test private methods on its own and use rewire
-// NB: this assumes share in percent is in the strict sense of the word, i.e., 0 <= percent <= 1
+/**
+ * Utility method to reliably calculate a share, using BigNumber and a lot of tests to enforce robustness and avoid 
+ * possible floating point issues. It is exported as (1) it might graduate to its own lambda, and (2) although small
+ * it is the kind of thing that can crash spaceships into planets so it needs to be tested very very thoroughly on its own
+ * @param {number} totalPool What is the total pool that we are dividing
+ * @param {number} shareInPercent What is the share we are calculating. NOTE: Given in standard percent form, i.e., between 0 and 1
+ * @param {boolean} roundEvenUp Whether to round 0.5 to 1 or to 0
+ */
 module.exports.calculateShare = (totalPool = 1.23457e8, shareInPercent = 0.0165, roundEvenUp = true) => {
   logger(`Calculating an apportionment, total pool : ${totalPool}, and share: ${shareInPercent}`);
   // we do not want to introduce floating points, because that is bad, so first we check to make sure total pool is effectively an int
@@ -192,6 +214,10 @@ const checkBalancesIntegers = (accountBalances = new Map()) => {
   }
 };
 
+/**
+ * A utility method to sum up all the account balances
+ * @param {Map} accountBalances A map of account balances, with account ids as keys and balances as values
+ */
 const sumUpBalances = (accountBalances = new Map()) => {
   let amount = 0;
   for (const balance of accountBalances.values()) {
@@ -200,6 +226,16 @@ const sumUpBalances = (accountBalances = new Map()) => {
   return amount;
 }
 
+/**
+ * Core calculation method. Apportions an amount (i.e., the unallocated amount of a float) among an arbitrary length list of accounts
+ * in proportion to each of those account's balances. Note that the share of the total allocated to a specific account is not that account's
+ * balance divided by the total to be allocated, but that account's balance divided by the total balance of all the passed accounts.
+ * Returns a new map with (again) the account ids as keys, but the values being the amount apportioned to the account from the total
+ * @param {number} amountToDivide The total amount to split among the accounts
+ * @param {Map} accountTotals A map of all accounts, with their IDs as keys and current balances as values
+ * @param {boolean} appendExcess If true (default), then if there is an 'excess', i.e., a remainder due to rounding in the allocations,
+ * that amount (positive if there are cents left over or negative if the reverse) is appended to the result map with the key 'excess'
+ */
 module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = new Map(), appendExcess = true) => {
   // same reasoning as above for exposing this. note: account totals need to be all ints, else something is wrong upstream
   checkBalancesIntegers(accountTotals);

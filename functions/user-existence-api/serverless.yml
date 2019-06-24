@@ -31,8 +31,8 @@ provider:
 
 functions:
   create:
-    handler: account.create
-    name: create-account
+    handler: handler.create
+    name: account-create
     events:
       - http:
           path: create

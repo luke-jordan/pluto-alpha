@@ -91,7 +91,7 @@ describe('Fetch floats and find transactions', () => {
     
 });
 
-describe.only('Insert transaction alone and with float', () => {
+describe('Insert transaction alone and with float', () => {
 
     before(() => resetStubs());
 
@@ -102,13 +102,13 @@ describe.only('Insert transaction alone and with float', () => {
 
     const accountColumnKeys = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
         '${floatId}, ${floatTransactionId}, ${settlementStatus}';
-    const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, *{SAVING}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
-        '*{END_USER_ACCOUNT}, ${accountId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
+    const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
+        '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
 
     it('Insert a save with float id, performing matching sides', async () => {
-        const testAcTxId = sinon.any;
-        const testFlTxId = sinon.any;
-        const expectedRowItem = {
+        const testAcTxId = sinon.match.any;
+        const testFlTxId = sinon.match.any;
+        const expectedRowItem = ({
             accountTransactionId: testAcTxId,
             floatTransactionId: testFlTxId,
             accountId: testAccountId,
@@ -117,23 +117,45 @@ describe.only('Insert transaction alone and with float', () => {
             savedAmount: 105,
             floatId: testFloatId,
             settlementStatus: 'SETTLED'
-        };
-        const expectedAccountQueryDef = { query: insertAccountTxQuery, columnTemplate: accountColumnKeys, rows: [expectedRowItem]};
-        const expectedFloatQueryDef = { query: insertFloatTxQuery, columnTemplate: floatColumnKeys, rows: [expectedRowItem]};
+        });
+
+        const expectedFloatAdditionRow = JSON.parse(JSON.stringify(expectedRowItem));
+        expectedFloatAdditionRow.accountTransactionId = testAcTxId;
+        expectedFloatAdditionRow.floatTransactionId = testFlTxId;
+        expectedFloatAdditionRow.transactionType = 'SAVING';
+        expectedFloatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
+        expectedFloatAdditionRow.allocatedToId = testFloatId;
+
+        const expectedFloatAllocationRow = JSON.parse(JSON.stringify(expectedRowItem));
+        expectedFloatAllocationRow.accountTransactionId = testAcTxId;
+        expectedFloatAllocationRow.floatTransactionId = testFlTxId;
+        expectedFloatAllocationRow.transactionType = 'ALLOCATION';
+        expectedFloatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
+        expectedFloatAllocationRow.allocatedToId = testAccountId;
+
+        const expectedAccountQueryDef = { query: insertAccountTxQuery, columnTemplate: accountColumnKeys, rows: sinon.match([expectedRowItem])};
+        const expectedFloatQueryDef = { query: insertFloatTxQuery, columnTemplate: floatColumnKeys, rows: sinon.match([expectedFloatAdditionRow, expectedFloatAllocationRow])};
+        
         const expectedArgs = sinon.match([expectedAccountQueryDef, expectedFloatQueryDef]);
-        multiTableStub.withArgs(expectedArgs)
-            .resolves([{ 'transaction_id': testAcTxId, 'creation_time': new Date() }, { 'transaction_id': testFlTxId, 'creation_time': new Date()}]);
+        const expectedTxDetails = [{ 'transaction_id': testAcTxId, 'creation_time': new Date() }, { 'transaction_id': testFlTxId, 'creation_time': new Date()}]; 
+        
+        multiTableStub.withArgs(expectedArgs).resolves(expectedTxDetails);
+
+        const balanceQuery = `select sum(amount) from ${config.get('tables.accountTransactions')} where account_id = $1 and currency = $2`;
+        queryStub.withArgs(balanceQuery, [testAccountId, 'ZAR']).resolves([{ 'sum': '105' }]);
         
         const testSettledArgs = { accountId: testAccountId, savedCurrency: 'ZAR', savedUnit: 'HUNDREDTH_CENT', savedAmount: 105, 
             floatId: testFloatId, settlementTime: new Date() };
 
         const resultOfSaveInsertion = await rds.addSavingToTransactions(testSettledArgs);
-        logger('Result of insertion: ', resultOfSaveInsertion);
 
+        const calledArgs = multiTableStub.getCall(0).args[0][1];
+        
         expect(resultOfSaveInsertion).to.exist;
-        expect(resultOfSaveInsertion).to.deep.equal({});
+        expect(resultOfSaveInsertion).to.deep.equal({ newBalance: 105, transactionDetails: expectedTxDetails });
         expect(multiTableStub).to.have.been.calledOnceWithExactly(expectedArgs);
-        expectNoCalls(queryStub, insertStub);
+        expect(queryStub).to.have.been.calledOnceWithExactly(balanceQuery, [testAccountId, 'ZAR']);
+        // expectNoCalls(insertStub);
     });
 
     it('Throw an error if state is SETTLED but no float id', () => {
