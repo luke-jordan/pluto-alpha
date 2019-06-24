@@ -25,7 +25,7 @@ BigNumber.prototype.valueOf = function () {
  * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
  */
 module.exports.accrue = async (event, context) => {
-  logger('Starting accure function')
+  console.log('Starting accure function')
 
   const accrualParameters = event['body'] || event;
   const clientId = accrualParameters.clientId;

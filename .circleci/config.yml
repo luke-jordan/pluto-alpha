@@ -114,9 +114,9 @@ jobs:
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
 
-                cp -r modules/* $HOME/app/functions/float-api
-                cp -r modules/* $HOME/app/functions/user-act-api
-                cp -r modules/* $HOME/app/functions/user-existence-api
+                cp -r modules/* $HOME/app/functions/float-api/node_modules
+                cp -r modules/* $HOME/app/functions/user-act-api/node_modules
+                cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
 
                 cd $HOME/app/functions/float-api
                 echo $CIRCLE_SHA1 > last_commit.txt
