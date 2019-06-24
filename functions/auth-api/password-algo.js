@@ -20,7 +20,7 @@ module.exports.generateSaltAndVerifier = (systemWideUserId, password) => {
 module.exports.verifyPassword = async (systemWideUserId, password) => {
     try {
         if (!systemWideUserId || !password) throw new Error('Invalid arguments passed to verifyPassword()')
-        logger('recieved params:', systemWideUserId, password)
+        logger('recieved params:', systemWideUserId, password.length)
         const clientEphemeral = srp.generateEphemeral();
         logger('generated client ephemeral:', clientEphemeral);
         let saltAndServerPublicEphemeralJson = await verifierHelper.getSaltAndServerPublicEphemeral(systemWideUserId);
@@ -31,9 +31,9 @@ module.exports.verifyPassword = async (systemWideUserId, password) => {
         const serverPublicEphemeral = saltAndServerPublicEphemeral.serverPublicEphemeral;
         logger(salt, serverPublicEphemeral);
         const privateKey = srp.derivePrivateKey(salt, systemWideUserId, password);
-        logger('derived private key:', privateKey);
+        logger('derived private key:', privateKey.length);
         const clientSession = srp.deriveSession(clientEphemeral.secret, serverPublicEphemeral, salt, systemWideUserId, privateKey);
-        logger('args passed to clientSession generator:', clientEphemeral.secret, '|', serverPublicEphemeral, '|', salt, '|', systemWideUserId, '|',  privateKey);
+        logger('args passed to clientSession generator:', clientEphemeral.secret.length, '|', serverPublicEphemeral, '|', salt, '|', systemWideUserId, '|',  privateKey);
         logger('generated client session:', clientSession);
         try {
             const serverSessionProofJson = await verifierHelper.getServerSessionProof(systemWideUserId, clientSession.proof, clientEphemeral.public);

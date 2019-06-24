@@ -7,7 +7,8 @@ const rdsUtil = require('./utils/rds-util');
 
 /**
  * This λ function stands between client facing firmware and a persistence database. This function uses the basic-lambda-authorizer
- * to verify whether the caller has permissions to access this function.
+ * to verify whether the caller has permissions to access this function. In future thos function will also
+ * facilitate user notification via email (through another lambda function) on successful password change.
  * @param {string} event.oldPassword The users current password (the one to be replaced. The λ verifies this password (statelessly) and if valid replaces it with an encrypted
  * @param {string} event.newPassword The users new password. If oldPassword is correct, this password in encrypted and persisted.
  * @param {object} event.origin This provides information about the origin of the request. In most cases the objects will indicate administrator or direct user origin.
@@ -17,7 +18,6 @@ const rdsUtil = require('./utils/rds-util');
 
 module.exports.updatePassword = async (event, context) => {
 	try {
-		logger('recieved event:', event);
 		logger('recieved context', context);
 		
 		const oldPassword = event.oldPassword;

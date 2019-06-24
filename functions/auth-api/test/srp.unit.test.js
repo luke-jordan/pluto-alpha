@@ -1,7 +1,6 @@
 'use strict';
 
 const logger = require('debug')('pluto:auth:password-algo-test');
-
 const chai = require('chai');
 const expect = chai.expect;
 const sinon = require('sinon');
@@ -9,8 +8,10 @@ const sinonChai = require('sinon-chai');
 chai.use(sinonChai);
 const uuid = require('uuid/v4');
 const common = require('./common');
-
 const proxyquire = require('proxyquire');
+
+// NB: the use of descriptive strings as uuid's is meant to make the tests more clearly as 
+// some tests have only subtle differences.
 
 let generateSaltStub = sinon.stub();
 let derivePrivateKeyStub = sinon.stub();

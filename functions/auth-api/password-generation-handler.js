@@ -9,24 +9,19 @@ const rdsUtil = require('./utils/rds-util');
 
 module.exports.generateEphemeralPassword = async (event) => {
     try {
-		logger('recieved event:', event);
-
 		const generatedPassword = exports.generatePassword();
 		const saltAndVerifier = passwordAlgorithm.generateSaltAndVerifier(systemWideUserId, generatedPassword);
 		logger('generated salt and verifier:', saltAndVerifier);
 		const databaseResponse = await exports.persistSaltAndVerifier(event.targetUserId, saltAndVerifier.salt, saltAndVerifier.verifier);
 		logger('password update databaseResponse:', databaseResponse);
 		if (!databaseResponse || databaseResponse.statusCode > 0) throw new err('error while persisting new password keys databaseResponse');
-
 		const passwordUpdateMessage = 'TIMESTAMP USERID reset their password.';
 		const notificationCheckList = notifyAdministrators(passwordUpdateMessage);
 		logger('details of all admin notification operations:', notificationCheckList);
-
 		const response = {
 			password: generatedPassword,
 			notificationResult: notificationCheckList
-		};
-
+		}
 		return {
 			statusCode: 200,
 			body: JSON.stringify({
