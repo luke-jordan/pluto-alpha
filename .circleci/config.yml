@@ -49,7 +49,7 @@ jobs:
       - run:
           name: install aws cli
           command: |
-            if [ ! -f /tmp/terraform/terraform ]; then
+            if [ ! -f awscli-bundle.zip ]; then
                wget "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip"
             fi
             unzip awscli-bundle.zip
