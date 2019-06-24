@@ -1,5 +1,5 @@
 resource "aws_security_group" "sg_5432_egress" {
-  name = "${terraform.workspace}-${var.lambda_function_name}"
+  name = "${terraform.workspace}-5432-egress"
 
   vpc_id = "${aws_vpc.main.id}"
 
@@ -13,7 +13,7 @@ resource "aws_security_group" "sg_5432_egress" {
 }
 
 resource "aws_security_group" "sg_433_egress" {
-  name = "${terraform.workspace}-${var.lambda_function_name}"
+  name = "${terraform.workspace}-433-egress"
 
   vpc_id = "${aws_vpc.main.id}"
 
