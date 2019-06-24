@@ -160,7 +160,8 @@ jobs:
              cd $HOME/app/terraform
              terraform init
              terraform workspace select $CIRCLE_BRANCH
-             #-auto-approve for apply
+             
+             terraform plan -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
              terraform apply -auto-approve -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
 
       - save_cache:
