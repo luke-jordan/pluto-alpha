@@ -1,0 +1,3 @@
+# Fargate with Terraform
+
+Example .
