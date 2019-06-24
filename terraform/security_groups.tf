@@ -24,18 +24,12 @@ resource "aws_security_group" "sg_https_dns_egress" {
       cidr_blocks = ["0.0.0.0/0"]
     }
 
-    egress {
-      from_port  = 433
-      to_port = 433
-      protocol = "tcp"
-      cidr_blocks = ["::/0"]
-    }
-
    egress {
       from_port  = 53
       to_port = 53
       protocol = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
+      ipv6_cidr_blocks = ["::/0"]
     }
 
 }
