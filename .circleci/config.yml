@@ -32,7 +32,10 @@ jobs:
           - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
       - restore_cache:
           keys:
-          - terraform_bin-{{ checksum "./terraform/terraform_version" }}        
+          - terraform_bin-{{ checksum "./terraform/terraform_version" }}
+      - restore_cache:
+          keys:
+          - aws_zip
 
       - run:
           name: install node modules
@@ -46,7 +49,16 @@ jobs:
       - run:
           name: install aws cli
           command: |
-            sudo apt-get update && apt-get install -y awscli
+            if [ ! -f /tmp/terraform/terraform ]; then
+               wget "https://s3.amazonaws.com/aws-cli/awscli-bundle.zip"
+            fi
+            unzip awscli-bundle.zip
+            ./awscli-bundle/install -b ~/bin/aws
+
+      - save_cache:
+          key: aws_zip
+          paths:
+            - awscli-bundle.zip
 
       - save_cache:
           key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
@@ -86,9 +98,9 @@ jobs:
              zip -r deploy_user_act_$CIRCLE_SHA1.zip $HOME/app/functions/user-act-api
              zip -r deploy_user_existence_api_$CIRCLE_SHA1.zip $HOME/app/functions/user-existence-api
 
-             aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float-api/$CIRCLE_SHA1.zip
-             aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user-act-api/$CIRCLE_SHA1.zip
-             aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user-existence-api/$CIRCLE_SHA1.zip
+             /home/circleci/bin/aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float-api/$CIRCLE_SHA1.zip
+             /home/circleci/bin/aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user-act-api/$CIRCLE_SHA1.zip
+             /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user-existence-api/$CIRCLE_SHA1.zip
 
       - run:
           name: handle cloud components
