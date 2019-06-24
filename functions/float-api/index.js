@@ -1,5 +1,5 @@
 'use strict';
 
-const iml = require('handler')
+const impl = require('./handler')
 
-exports.accrue = iml.accrue
+exports.accrue = impl.accrue

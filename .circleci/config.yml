@@ -32,6 +32,12 @@ jobs:
           - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
       - restore_cache:
           keys:
+          - modules-dynamo-common-{{ checksum "./modules/dynamo-common/package.json" }}
+      - restore_cache:
+          keys:
+          - modules-rds-common-{{ checksum "./modules/rds-common/package.json" }}
+      - restore_cache:
+          keys:
           - terraform_bin-{{ checksum "./terraform/terraform_version" }}
       - restore_cache:
           keys:
@@ -44,6 +50,8 @@ jobs:
             cd $HOME/app/functions/float-api && npm install
             cd $HOME/app/functions/user-act-api && npm install
             cd $HOME/app/functions/user-existence-api && npm install
+            cd $HOME/app/modules/rds-common && npm install
+            cd $HOME/app/modules/dynamo-common && npm install
             cd $HOME/app
 
       - run:
@@ -75,6 +83,16 @@ jobs:
           paths:
             - ./functions/user-existence-api/node_modules
 
+      - save_cache:
+          key: modules-dynamo-common-{{ checksum "./modules/dynamo-common/package.json" }}
+          paths:
+            - ./modules/dynamo-common/node_modules
+
+      - save_cache:
+          key: modules-rds-common-{{ checksum "./modules/rds-common/package.json" }}
+          paths:
+            - ./modules/rds-common/node_modules
+
       - run:
           name: run linter
           command: |
@@ -95,6 +113,10 @@ jobs:
           command: |
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
+
+                cp -r modules/* $HOME/app/functions/float-api
+                cp -r modules/* $HOME/app/functions/user-act-api
+                cp -r modules/* $HOME/app/functions/user-existence-api
 
                 cd $HOME/app/functions/float-api
                 echo $CIRCLE_SHA1 > last_commit.txt
