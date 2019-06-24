@@ -12,7 +12,7 @@ resource "aws_security_group" "sg_5432_egress" {
 
 }
 
-resource "aws_security_group" "sg_433_egress" {
+resource "aws_security_group" "sg_https_dns_egress" {
   name = "${terraform.workspace}-433-egress"
 
   vpc_id = "${aws_vpc.main.id}"
@@ -20,6 +20,13 @@ resource "aws_security_group" "sg_433_egress" {
    egress {
       from_port  = 433
       to_port = 433
+      protocol = "tcp"
+      cidr_blocks = ["0.0.0.0/0"]
+    }
+
+   egress {
+      from_port  = 53
+      to_port = 53
       protocol = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
     }
