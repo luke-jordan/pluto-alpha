@@ -168,14 +168,14 @@ describe('SecureRemotePassword', () => {
             );
         });
 
-        it('password verifier should throw error on invalid arguments', async () => {
-            const expectedfirstResultand3 = {
+        it('password verifier should throw error on invalid arguments (edge cases)', async () => {
+            const expectedResult1and3 = {
                 systemWideUserId: null,
                 verified: false, 
                 reason: 'Invalid arguments passed to verifyPassword()' 
             }
 
-            const expectedsecondResult = { 
+            const expectedResult2 = { 
                 systemWideUserId: expectedLoginDetails.systemWideUserId,
                 verified: false, 
                 reason: 'Invalid arguments passed to verifyPassword()' 
@@ -188,115 +188,15 @@ describe('SecureRemotePassword', () => {
             logger('result of password verifier call with missing password:', secondResult);
             logger('result of password verifier call with missing user id:', thirdResult);
 
-            expect(firstResult).to.deep.equal(expectedfirstResultand3);
-            expect(secondResult).to.deep.equal(expectedsecondResult);
-            expect(thirdResult).to.deep.equal(expectedfirstResultand3);
+            expect(firstResult).to.deep.equal(expectedResult1and3);
+            expect(secondResult).to.deep.equal(expectedResult2);
+            expect(thirdResult).to.deep.equal(expectedResult1and3);
             expect(generateEphemeralStub).to.have.not.been.called;
             expect(getSaltAndServerPublicEphemeralStub).to.have.not.been.called;
             expect(derivePrivateKeyStub).to.have.not.been.called;
             expect(deriveSessionStub).to.have.not.been.called;
             expect(getServerSessionProofStub).to.have.not.been.called;
             expect(verifySessionStub).to.have.not.been.called;
-        });
-
-        it('should throw and error on salt and server public ephemeral extraction failure', async () => {
-            // TODO
-        });
-
-        it('should throw an error on server session proof extraction failure', async () => {
-            // TODO
-        });
-
-        it('should get salt and server public ephemeral key', () => {
-            const expectedServerResult = {
-                salt: 'some rds stub returned salt',
-                serverPublicEphemeral: 'a verifier encoded ephemeral public key',
-            };
-            
-            const serverResult = passwordAlgorithm.getSaltAndServerPublicEphemeral(expectedLoginDetails.systemWideUserId, 'the clients public ephemeral key');
-            logger('result of salt and server publick ephemeral key extraction:', serverResult);
-
-            expect(serverResult).to.exist;
-            expect(serverResult).to.have.keys(['salt', 'serverPublicEphemeral']);
-            expect(serverResult).to.deep.equal(expectedServerResult);
-            expect(generateEphemeralStub).to.have.been.calledOnceWithExactly('persisted verifier');
-        });
-
-        it('should get server session proof', () => {
-            const expectedServerResponse = {
-                serverSessionProof: 'mock server session proof'
-            };
-
-            const serverResponse = passwordAlgorithm.getServerSessionProof(
-                expectedLoginDetails.systemWideUserId,
-                'mock client session proof',
-                'mock client public ephemeral'
-            );
-
-            logger('server session proof:', serverResponse);
-
-            expect(serverResponse).to.exist;
-            expect(serverResponse).to.have.keys(['serverSessionProof']);
-            expect(serverResponse).to.deep.equal(expectedServerResponse);
-            expect(deriveSessionStub).to.have.been.calledOnceWithExactly(
-                'mock server ephemeral secret',
-                'mock client public ephemeral',
-                'andpepper',
-                expectedLoginDetails.systemWideUserId,
-                'mock persisted verifier',
-                'mock client session proof'
-            );
-        });
-
-        it('should gracefully handle null response from unavailable verification server 1', () => {
-            const expectedServerResponse = {
-                systemWideUserId: 'mock system-wide user id to unavailable server 1',
-                verified: false, 
-                reason: 'No response from server'
-            };
-
-            const serverResponse = passwordAlgorithm.verifyPassword(
-                'mock system-wide user id to unavailable server 1',
-                expectedLoginDetails.password
-            );
-            logger('result drom unavailble server 1:', serverResponse);
-
-            expect(serverResponse).to.exist;
-            expect(serverResponse).to.deep.equal(expectedServerResponse);
-            expect(loginHelperStub).to.have.been.calledWith(
-                'saltAndServerPublicEphemeralLambdaUrl', {
-                    systemWideUserId: 'mock system-wide user id to unavailable server 1',
-                    clientPublicEphemeral: 'mock client public ephemeral'
-            });
-        }); 
-
-        it('should gracefully handle null response from unavailable verification server 2', () => {
-            const expectedServerResponse = {
-                systemWideUserId: 'mock system-wide user id to unavailable server', 
-                verified: false, 
-                reason: 'Server session proof not recieved'
-            }
-
-            const serverResponse = passwordAlgorithm.verifyPassword(
-                'mock system-wide user id to unavailable server',
-                expectedLoginDetails.password
-            );
-
-            logger('result from unavailable server 2:', serverResponse);
-
-            expect(serverResponse).to.exist;
-            expect(serverResponse).to.deep.equal(expectedServerResponse);
-            expect(loginHelperStub).to.have.been.calledWith(
-                'saltAndServerPublicEphemeralLambdaUrl', {
-                    systemWideUserId: 'mock system-wide user id to unavailable server',
-                    clientPublicEphemeral: 'mock client public ephemeral'
-            });
-            expect(loginHelperStub).to.have.been.calledWith(
-                'serverSessionProofLambdaUrl', {
-                    systemWideUserId: 'mock system-wide user id to unavailable server',
-                    clientSessionProof: 'mock client session proof',
-                    clientPublicEphemeral: 'mock client public ephemeral'
-            });
         });
     });
 });

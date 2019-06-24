@@ -134,8 +134,6 @@ def run(user_quota=user_quota):
         insertion_response = sign_in_user(user, hack=True)
         print('credentials insertion request resulted in %s' % str(insertion_response))
         time.sleep(5)
-    # print(Fore.GREEN + '\nnow attemting to login' + Fore.WHITE)
-    ## login users created above
     print(separator)
     print(Fore.GREEN + 'user insertion process complete. %s/%s users made it through' % (len(user_pool), user_quota) + Fore.WHITE)
     for i in range(len(user_pool)):
@@ -145,9 +143,6 @@ def run(user_quota=user_quota):
         login_response = login_user(user_pool[i], hack=True)
         print('login request resulted in %s' % str(login_response))
         time.sleep(5)
-    ## login non existent users TODO: simply omit sign in step in this sequence
-    ## login in valid users with bad passwords TODO: intentionally corrupt passwords and see what happens
-    ## update user passwords
     print(separator)
     print(Fore.GREEN + 'user login batch process complete. %s/%s made it through.' % (successful_logins, user_quota) + Fore.WHITE)
     change_user_passwords()
@@ -159,7 +154,6 @@ def run(user_quota=user_quota):
         time.sleep(5)
     print(separator)
     print(Fore.GREEN + 'password update on %s users complete. Ready to login in with new credentials' % len(pending_update_user_pool) + Fore.WHITE)
-    ## login with new credentials
     for i in range(len(updated_user_pool)):
         print(separator)
         print(Fore.GREEN + 'Now logging in user %s of %s\n' % (i + 1, len(updated_user_pool)) + Fore.WHITE)

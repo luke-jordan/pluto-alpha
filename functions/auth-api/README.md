@@ -148,7 +148,7 @@ The above is stored when a user signs in. During login, the above object is upda
 The password policy which will be read and enforced on the frontend during sign up and login is as follows:
 ```
 {
-    "password_policy_id": "default user",
+    "role_password_applies_to": "systemWideUserId",
     "expiresOn": <unixEpochMilli>
     "minLength": 8,
     "requireAlphanumeric": true,
@@ -164,16 +164,16 @@ Resources:
  PasswordPolicyTable:
     Type: AWS::DynamoDB::Table
     Properties:
-      TableName: "password_policy_table"
+      TableName: "role_password_applies_to"
       AttributeDefinitions:
       -
-        AttributeName: "password_policy_id"
+        AttributeName: "role_password_applies_to"
         AttributeType: "S"
       -
         AttributeName: "last_updated_timestamp"
         AttributeType: "N"
       KeySchema:
-      - AttributeName: "password_policy_id"
+      - AttributeName: "role_password_applies_to"
         KeyType: HASH
       - AttributeName: "last_updated_timestamp"
         KeyType: "RANGE"

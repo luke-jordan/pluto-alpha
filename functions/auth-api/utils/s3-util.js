@@ -6,8 +6,8 @@ const s3 = new aws.S3();
 
 // As of Wed May 29 2019 11:52:09 GMT+0200 (South Africa Standard Time) this function fails when run on localstack. Runs as expected on actual aws s3 resources.
 module.exports.getPublicOrPrivateKey = async (requestedKey, authToken) => {
-    // consider how to implement authentication to orevent this function from being compromised.
-    // A potential solution may be s3's block public access option.
+    // consider how to implement authentication to prevent this function from being compromised.
+    // A potential solution may be s3's block public access option. Else lambda authoriser.
     logger('Running in s3Util. Recieved', requestedKey);
     const getParams = {
         Bucket: config.get('s3.Buckets.jwtTestBucket'),
@@ -22,17 +22,6 @@ module.exports.getPublicOrPrivateKey = async (requestedKey, authToken) => {
         return objectData;
     } catch (err) {
         console.log(err);
-        throw err;
+        throw new Error(err);
     }
 };
-
-
-const quickTest = async () => {
-    const x = await exports.getPublicOrPrivateKey('jwt-public.key');
-    const y = await exports.getPublicOrPrivateKey('jwt-private.key');
-
-    console.log('A', x);
-    console.log('B', y);
-};
-
-// quickTest();

@@ -1,10 +1,10 @@
 const logger = require('debug')('pluto:auth:jwt-λ-test');
-
+const config = require('config');
 const sinon = require('sinon');
+const uuid = require('uuid/v4');
 const chai = require('chai');
 const expect = chai.expect;
 const proxyquire = require('proxyquire');
-const config = require('config');
 
 let signJwtStub = sinon.stub();
 let verifyJwtStub = sinon.stub();
@@ -13,6 +13,8 @@ let getPublicOrPrivateKeyStub = sinon.stub();
 
 const mockPrivateKey = '==erg4g35gt4ehrh=='; // todo: test extraction from s3
 const mockPublicKey  = '==ui34hr8iu3hr2i==';
+
+const mockSystemWideUserId = uuid();
 
 const jwt = proxyquire('../utils/jwt', {
     'jsonwebtoken': {
@@ -33,7 +35,7 @@ const resetStubs = () => {
 };
 
 const mockPayload = {
-    systemWideUserId: 'a system-wide user id',
+    systemWideUserId: mockSystemWideUserId,
     role: "Default User Role",
     permissions: [
         "EditProfile",
@@ -54,7 +56,7 @@ const mockSignOrVerifyOptions = {
 };
 
 const expectedVerificationResult = {
-    systemWideUserId: 'a system-wide user id',
+    systemWideUserId: mockSystemWideUserId,
     role: "Default User Role",
     permissions: [
         "EditProfile",
@@ -74,7 +76,6 @@ describe('JWT module', () => {
     before(() => {
         resetStubs();
         signJwtStub.withArgs(mockPayload, mockPrivateKey, mockSignOrVerifyOptions).returns('json.web.token');
-        // signJwtStub.withArgs(mockPayload, badPrivateKey, mockSignOrVerifyOptions).throws('Invalid private key');
         getPublicOrPrivateKeyStub
             .withArgs('jwt-private.key')
             .returns(mockPrivateKey);
@@ -84,7 +85,10 @@ describe('JWT module', () => {
         decodeJwtStub
             .withArgs('json.web.token')
             .returns({
-                header: { alg: 'RS256', typ: 'JWT' },
+                header: { 
+                    alg: config.get('jwt.algorithm'), 
+                    typ: 'JWT' 
+                },
                 payload: expectedVerificationResult,
                 signature:
                     'LE34Q8dSxbT6iIeCC...' 
@@ -106,8 +110,8 @@ describe('JWT module', () => {
 
     it('should verify jwt token', () => {
         const expectedJwtArgs = JSON.parse(JSON.stringify(mockSignOrVerifyOptions));
-        expectedJwtArgs.expiresIn ='7d'; // read from config?
-        expectedJwtArgs.algorithm = [ 'RS256' ];
+        expectedJwtArgs.expiresIn = config.get('jwt.expiresIn');
+        expectedJwtArgs.algorithm = [ config.get('jwt.algorithm') ];
         verifyJwtStub.withArgs('json.web.token', mockPublicKey, expectedJwtArgs).returns(expectedVerificationResult);
         
         const result = jwt.verifyJsonWebToken('json.web.token', mockSignOrVerifyOptions);
@@ -132,7 +136,10 @@ describe('JWT module', () => {
 
     it('should decode jwt token', () => {
         const expectedDecodedResult = {
-            header: { alg: 'RS256', typ: 'JWT' },
+            header: { 
+                alg: config.get('jwt.algorithm'), 
+                typ: 'JWT' 
+            },
             payload: expectedVerificationResult,
             signature:
                 'LE34Q8dSxbT6iIeCC...' 

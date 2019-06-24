@@ -2,17 +2,17 @@
 
 const logger = require('debug')('pluto:authoriser-lambda:main');
 const request = require('request-promise');
+const config = require('config');
 
-// Think through whether verifyOptions should be sent over the lambda network
 module.exports.basicLambdaAuthorizer = async (event, context, callback) => {
 	try {
 		logger('Recieved event:', event);
-		// const verifyOptions = event.queryStringParameters.verifyOptions;
-		const verifyOptions = {
-			issuer: 'Pluto Saving',
-			subject: 'a-system-wide-user-id',
-			audience: 'https://plutosaving.com'
-		};
+		const verifyOptions = event.queryStringParameters.verifyOptions;
+		// const verifyOptions = {
+		// 	issuer: 'Pluto Saving',
+		// 	subject: 'a-system-wide-user-id',
+		// 	audience: 'https://plutosaving.com'
+		// };
 
 		const rawToken = event.authorizationToken;
 		const token = rawToken.substring('Bearer '.length);
@@ -40,7 +40,7 @@ module.exports.basicLambdaAuthorizer = async (event, context, callback) => {
 module.exports.validateToken = async (token, verifyOptions) => {
 	logger('running in validateToken');
 	const verifyParams = {
-		url: 'https://85d15dc6.ngrok.io/validate-token', // replace with jwt lambda url and path
+		url: config.get('jwtLambdaUrl'),
 		method: 'GET',
 		qs: {
 			token: token, 

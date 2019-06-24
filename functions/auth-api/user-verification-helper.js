@@ -5,7 +5,7 @@ const srp = require('secure-remote-password/server');
 const rdsUtil = require('./utils/rds-util');
 
 // λfy?
-module.exports.getSaltAndServerPublicEphemeral = async (systemWideUserId, clientPublicEphemeral) => {
+module.exports.getSaltAndServerPublicEphemeral = async (systemWideUserId) => {
     try {
         const userAccessCredentials = await rdsUtil.getUserCredentials(systemWideUserId);
         logger('got this back from user credentials extraction:', userAccessCredentials);
@@ -15,7 +15,8 @@ module.exports.getSaltAndServerPublicEphemeral = async (systemWideUserId, client
         const verifier = userAccessCredentials[0].verifier; 
         const serverEphemeral = srp.generateEphemeral(verifier);
         logger('generated server ephemeral', serverEphemeral);
-        const databaseResponse = await rdsUtil.updateServerEphemeralSecret(systemWideUserId, serverEphemeral.secret)
+        const databaseResponse = await rdsUtil.updateServerEphemeralSecret(systemWideUserId, serverEphemeral.secret);
+        // throw error if databaseResponse is not expected object
         logger('response from db:', databaseResponse);
         return JSON.stringify({
             salt: salt,
@@ -26,7 +27,7 @@ module.exports.getSaltAndServerPublicEphemeral = async (systemWideUserId, client
         return JSON.stringify({
             salt: null,
             serverPublicEphemeral: null,
-            reason: err.message 
+            reason: err.message
         });
     };
 };

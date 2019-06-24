@@ -23,7 +23,7 @@ module.exports.verifyPassword = async (systemWideUserId, password) => {
         logger('recieved params:', systemWideUserId, password)
         const clientEphemeral = srp.generateEphemeral();
         logger('generated client ephemeral:', clientEphemeral);
-        let saltAndServerPublicEphemeralJson = await verifierHelper.getSaltAndServerPublicEphemeral(systemWideUserId, clientEphemeral.public);
+        let saltAndServerPublicEphemeralJson = await verifierHelper.getSaltAndServerPublicEphemeral(systemWideUserId);
         logger('got the following values for salt and server public ephemeral:', saltAndServerPublicEphemeralJson)
         const saltAndServerPublicEphemeral = JSON.parse(saltAndServerPublicEphemeralJson);
         if (saltAndServerPublicEphemeral.reason) throw new Error(saltAndServerPublicEphemeral.reason);

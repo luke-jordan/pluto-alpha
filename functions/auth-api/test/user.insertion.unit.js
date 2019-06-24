@@ -1,15 +1,15 @@
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:auth-user-insertion-λ:test');
+const logger = require('debug')('pluto:auth:user-insertion-λ-test');
 const sinon = require('sinon');
+const config = require('config')
 const chai = require('chai');
 const expect = chai.expect;
 const common = require('./common');
 const proxyquire = require('proxyquire');
-// const rdsUtil = require('../utils/rds-util');
 const dynamodb = require('../persistence/dynamodb/dynamodb');
 
-// NB: These tests achieve full coverage on password-update-handler but need to be rewritten
+// NB: These tests achieve full coverage on password-update-handler and dynamodb-helper but need to be rewritten
 // with some tests being moved to seperate files
 
 let insertStub  = sinon.stub();
@@ -19,6 +19,7 @@ let loginStub  = sinon.stub();
 let dynamodbStub = sinon.stub(dynamodb, 'getPolicy');
 let getPolicyStub = dynamodbStub;
 let rdsInsertUserCredentialsStub = sinon.stub();
+let fetchSingleRowStub = sinon.stub();
 
 const authUtil = proxyquire('../utils/auth-util', {
     '../persistence/dynamodb/dynamodb': {
@@ -52,6 +53,12 @@ const handler = proxyquire('../user-insertion-handler', {
     '@noCallThru': true
 });
 
+const dynamodbHelper = proxyquire('../persistence/dynamodb/dynamodb', {
+    'dynamo-common': {
+        'fetchSingleRow': fetchSingleRowStub
+    }
+});
+
 
 const mockUserCredentials = rdsUtil.createUserCredentials(
     common.recievedNewUser.systemWideUserId,
@@ -69,12 +76,12 @@ const resetStubs = () => {
     authUtilPermissionsSpy.restore();
     authUtilSignOptionsSpy.restore();
     rdsInsertUserCredentialsStub.reset();
-    // docClientGetStub.reset();
+    fetchSingleRowStub.reset();
 };
 
 describe('User insertion', () => {
 
-    beforeEach(() => {
+    before(() => {
         resetStubs();
         saltVerifierStub
             .withArgs(common.recievedNewUser.systemWideUserId, 'greetings')
@@ -92,7 +99,8 @@ describe('User insertion', () => {
                     [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ]
             });
         generateJwtStub.returns('json.web.token');
-        getPolicyStub.withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
+        getPolicyStub
+            .withArgs('defaultUserPolicy', common.recievedNewUser.systemWideUserId)
             .resolves({
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
                 role: "defaultUserPolicy",
@@ -102,7 +110,8 @@ describe('User insertion', () => {
                     "CheckBalance"
                 ]
             });
-        getPolicyStub.withArgs('adminUserPolicy', common.recievedNewUser.systemWideUserId)
+        getPolicyStub
+            .withArgs('adminUserPolicy', common.recievedNewUser.systemWideUserId)
             .resolves({
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
                 role: "adminUserPolicy",
@@ -113,7 +122,8 @@ describe('User insertion', () => {
                     "CheckBalance"
                 ]
             });
-        getPolicyStub.withArgs('supportUserPolicy', common.recievedNewUser.systemWideUserId)
+        getPolicyStub
+            .withArgs('supportUserPolicy', common.recievedNewUser.systemWideUserId)
             .resolves({
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
                 role: "supportUserPolicy",
@@ -121,7 +131,9 @@ describe('User insertion', () => {
                     "ReadLogs"
                 ]
             });
-
+        fetchSingleRowStub
+            .withArgs(config.get('tables.dynamoAuthPoliciesTable'), {policy_id: 'default'})
+            .returns({databaseResponse: []});
     });
 
     context('handler', () => {
@@ -197,11 +209,6 @@ describe('User insertion', () => {
 
     context('authUtil', () => {
 
-        beforeEach(() => {
-            resetStubs();
-        });
-
-        // s3 stub needed on all policy tests
         it('should get default user policy and permissions as expected', () => {
             const expectedRolesAndPermissions = {
                 systemWideUserId: common.recievedNewUser.systemWideUserId,
@@ -291,8 +298,6 @@ describe('User insertion', () => {
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedResponse);
-            // result matches expectedResponse, however:
-            //     authUtilPermissionsSpy is not getting called investigate and patch
             expect(authUtilPermissionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId, 'god');
             expect(getPolicyStub).to.have.not.been.called;
         })
@@ -313,15 +318,22 @@ describe('User insertion', () => {
 
             expect(result).to.exist;
             expect(result).to.deep.equal(expectedSignOptions);
-            // spies dont seem to be getting called, investigate
+
             expect(authUtilSignOptionsSpy).to.have.been.calledOnceWithExactly(common.recievedNewUser.systemWideUserId);
         })
     });
 
-    // context('rdsUtil', () => {
+    context('dynamodb helper', () => {
 
-    //     it('should update user password as expected', () => {
+        it('should get user policy from dynamodb', async () => {
+            const expectedResult = {databaseResponse: [], systemWideUserId: common.recievedNewUser.systemWideUserId};
 
-    //     })
-    // })
+            const result = await dynamodbHelper.getPolicy('default', common.recievedNewUser.systemWideUserId);
+            logger('result of dynamodb user policy extraction:', result);
+
+            expect(result).to.exist;
+            expect(result).to.deep.equal(expectedResult);
+            expect(fetchSingleRowStub).to.have.been.calledOnceWithExactly(config.get('tables.dynamoAuthPoliciesTable'), {policy_id: 'default'})
+        })
+    })
 });
