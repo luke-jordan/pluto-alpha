@@ -18,8 +18,8 @@ resource "aws_security_group" "sg_https_dns_egress" {
   vpc_id = "${aws_vpc.main.id}"
 
    egress {
-      from_port  = 433
-      to_port = 433
+      from_port  = 443
+      to_port = 443
       protocol = "tcp"
       cidr_blocks = ["0.0.0.0/0"]
       ipv6_cidr_blocks = ["::/0"]
