@@ -127,7 +127,7 @@ jobs:
           name: handle cloud components
           command: |
              export TF_VERSION=$(cat $HOME/app/terraform/terraform_version)
-             cd $/HOME/app
+             cd $HOME/app
 
              if [ ! -f /tmp/terraform/terraform ]; then
                 wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_$(echo "$TF_VERSION")_linux_amd64.zip
