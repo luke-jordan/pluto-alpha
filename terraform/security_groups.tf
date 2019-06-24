@@ -13,7 +13,7 @@ resource "aws_security_group" "sg_5432_egress" {
 }
 
 resource "aws_security_group" "sg_https_dns_egress" {
-  name = "${terraform.workspace}-433-egress"
+  name = "${terraform.workspace}-sg_https_dns_egress"
 
   vpc_id = "${aws_vpc.main.id}"
 
