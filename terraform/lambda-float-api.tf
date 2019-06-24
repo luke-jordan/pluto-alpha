@@ -13,7 +13,7 @@ resource "aws_lambda_function" "float-api-lambda" {
 
   function_name                  = "${var.lambda_function_name}"
   role                           = "${aws_iam_role.float-api-role.arn}"
-  handler                        = "main.handler"
+  handler                        = "handler.accrue"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
