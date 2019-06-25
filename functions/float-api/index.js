@@ -2,6 +2,6 @@
 
 const impl = require('./handler')
 
-exports.accrue = async (event) => {
+exports.handler = async (event) => {
     return await impl.accrue(event, null);
 };

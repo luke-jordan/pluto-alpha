@@ -1,5 +1,5 @@
 resource "aws_api_gateway_rest_api" "api-gateway" {
-  name        = "${var.lambda_function_name}-${terraform.workspace}-rest-api"
+  name        = "${terraform.workspace}-rest-api"
 }
 
 resource "aws_api_gateway_deployment" "api-deployment" {
@@ -11,34 +11,64 @@ resource "aws_api_gateway_deployment" "api-deployment" {
 
 
 /////////////// FLOAT API LAMBDA //////////////////////////////////////////////////////////////////////////
-resource "aws_api_gateway_method" "proxy" {
+resource "aws_api_gateway_method" "float-api" {
   rest_api_id   = "${aws_api_gateway_rest_api.api-gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.proxy.id}"
-  http_method   = "ANY"
+  resource_id   = "${aws_api_gateway_resource.float-api.id}"
+  http_method   = "POST"
   authorization = "NONE"
 }
 
-resource "aws_api_gateway_resource" "proxy" {
+resource "aws_api_gateway_resource" "float-api" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
-  path_part   = "{proxy+}"
+  path_part   = "float-api"
 }
 
-resource "aws_lambda_permission" "allow_lambda_invocation" {
+resource "aws_lambda_permission" "float-api" {
   action        = "lambda:InvokeFunction"
-  function_name = "${var.lambda_function_name}"
+  function_name = "${aws_lambda_function.float-api.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_deployment.api-deployment.execution_arn}/*/*"
 }
 
 resource "aws_api_gateway_integration" "float-api" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
-  resource_id = "${aws_api_gateway_method.proxy.resource_id}"
-  http_method = "${aws_api_gateway_method.proxy.http_method}"
+  resource_id = "${aws_api_gateway_method.float-api.resource_id}"
+  http_method = "${aws_api_gateway_method.float-api.http_method}"
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.float-api-lambda.invoke_arn}"
+  uri                     = "${aws_lambda_function.float-api.invoke_arn}"
 }
 
-/////////////// OTHER LAMBDA //////////////////////////////////////////////////////////////////////////
+/////////////// USER ACT LAMBDA //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "user-act-api" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api-gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.user-act-api.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_resource" "user-act-api" {
+  rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
+  path_part   = "user-act-api"
+}
+
+resource "aws_lambda_permission" "user-act-api" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.user-act-api.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_deployment.api-deployment.execution_arn}/*/*"
+}
+
+resource "aws_api_gateway_integration" "user-act-api" {
+  rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
+  resource_id = "${aws_api_gateway_method.user-act-api.resource_id}"
+  http_method = "${aws_api_gateway_method.user-act-api.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.user-act-api.invoke_arn}"
+}

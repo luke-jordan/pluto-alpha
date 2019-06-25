@@ -1,12 +1,12 @@
-variable "float_api_lambda_function_name" {
-  default = "float-api"
+variable "user_act_api_lambda_function_name" {
+  default = "user-act-api"
   type = "string"
 }
 
-resource "aws_lambda_function" "float-api" {
+resource "aws_lambda_function" "user-act-api" {
 
-  function_name                  = "${var.float_api_lambda_function_name}"
-  role                           = "${aws_iam_role.float-api-role.arn}"
+  function_name                  = "${var.user_act_api_lambda_function_name}"
+  role                           = "${aws_iam_role.user-act-api-role.arn}"
   handler                        = "index.handler"
   memory_size                    = 256
   reserved_concurrent_executions = 20
@@ -15,7 +15,7 @@ resource "aws_lambda_function" "float-api" {
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
-  s3_key = "${var.float_api_lambda_function_name}/${var.deploy_code_commit_hash}.zip"
+  s3_key = "${var.user_act_api_lambda_function_name}/${var.deploy_code_commit_hash}.zip"
 
   environment {
     variables = {
@@ -50,8 +50,8 @@ resource "aws_lambda_function" "float-api" {
   }
 }
 
-resource "aws_iam_role" "float-api-role" {
-  name = "${var.float_api_lambda_function_name}-role"
+resource "aws_iam_role" "user-act-api-role" {
+  name = "${var.user_act_api_lambda_function_name}-role"
 
   assume_role_policy = <<EOF
 {
@@ -71,40 +71,35 @@ EOF
 }
 
 
-resource "aws_iam_role_policy_attachment" "float-api-basic_execution_policy" {
-  role = "${aws_iam_role.float-api-role.name}"
+resource "aws_iam_role_policy_attachment" "user_act_api_basic_execution_policy" {
+  role = "${aws_iam_role.user-act-api-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "float-api-vpc_execution_policy" {
-  role = "${aws_iam_role.float-api-role.name}"
+resource "aws_iam_role_policy_attachment" "user_act_api_vpc_execution_policy" {
+  role = "${aws_iam_role.user-act-api-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
-resource "aws_iam_role_policy_attachment" "float-api-ClientFloatTable_access" {
-  role = "${aws_iam_role.float-api-role.name}"
-  policy_arn = "${aws_iam_policy.dynamo_table_ClientFloatTable_access.arn}"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-module "float-api-alarm-fatal-errors" {
+module "user-act-api-alarm-fatal-errors" {
   source = "./modules/cloud_watch_alarm"
   
   metric_namespace = "lambda_errors"
-  alarm_name = "${var.float_api_lambda_function_name}-fatal-api-alarm"
-  log_group_name = "/aws/lambda/${var.float_api_lambda_function_name}"
+  alarm_name = "${var.user_act_api_lambda_function_name}-fatal-api-alarm"
+  log_group_name = "/aws/lambda/${var.user_act_api_lambda_function_name}"
   pattern = "FATAL_ERROR"
   alarm_action_arn = "${aws_sns_topic.fatal_errors_topic.arn}"
   statistic = "Sum"
 }
 
-module "float-api-alarm-security-errors" {
+module "user-act-api-alarm-security-errors" {
   source = "./modules/cloud_watch_alarm"
   
   metric_namespace = "lambda_errors"
-  alarm_name = "${var.float_api_lambda_function_name}-security-api-alarm"
-  log_group_name = "/aws/lambda/${var.float_api_lambda_function_name}"
+  alarm_name = "${var.user_act_api_lambda_function_name}-security-api-alarm"
+  log_group_name = "/aws/lambda/${var.user_act_api_lambda_function_name}"
   pattern = "SECURITY_ERROR"
   alarm_action_arn = "${aws_sns_topic.security_errors_topic.arn}"
   statistic = "Sum"
