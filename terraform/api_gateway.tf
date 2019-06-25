@@ -4,10 +4,11 @@ resource "aws_api_gateway_rest_api" "api-gateway" {
 
 resource "aws_api_gateway_deployment" "api-deployment" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
-  stage_name  = "${terraform.workspace}-stage"
+  stage_name  = "${terraform.workspace}"
 
   depends_on = [aws_api_gateway_integration.float-api]
 }
+
 
 
 /////////////// FLOAT API LAMBDA //////////////////////////////////////////////////////////////////////////
@@ -18,6 +19,7 @@ resource "aws_api_gateway_method" "float-api" {
   authorization = "NONE"
 }
 
+// example curl -X POST https://iaxlt9v3x1.execute-api.us-east-1.amazonaws.com/staging-stage/user-act-api
 resource "aws_api_gateway_resource" "float-api" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
@@ -50,6 +52,7 @@ resource "aws_api_gateway_method" "user-act-api" {
   authorization = "NONE"
 }
 
+// example curl -X POST https://iaxlt9v3x1.execute-api.us-east-1.amazonaws.com/staging-stage/user-act-api
 resource "aws_api_gateway_resource" "user-act-api" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"

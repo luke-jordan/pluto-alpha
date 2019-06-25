@@ -20,28 +20,29 @@ resource "aws_lambda_function" "float-api" {
   environment {
     variables = {
       NODE_CONFIG = "${
-        jsonencode({
-          "aws"= {
-              "region"= "${var.aws_default_region[terraform.workspace]}",
-              "apiVersion"= "2012-08-10",
-              "endpoints"= {
-                  "dynamodb"= "http=//localhost=4569"
-              }
-          },
-          "tables"= {
-              "clientFloatVars"= "ClientFloatTable",
-              "floatTransactions"= "float_data.float_transaction_ledger",
-              "accountTransactions"= "account_data.core_account_ledger"
-          },
-          "variableKeys"= {
-              "bonusPoolShare"= "bonus_pool_accrual_share",
-              "companyShare"= "company_accrual_share"
-          },
-          "db"= {
-              
-          }
-      })
-      }"
+        jsonencode(
+          {
+            "aws"= {
+                "region"= "${var.aws_default_region[terraform.workspace]}",
+                "apiVersion"= "2012-08-10",
+                "endpoints"= {
+                    "dynamodb"= "http=//localhost=4569"
+                }
+            },
+            "tables"= {
+                "clientFloatVars"= "ClientFloatTable",
+                "floatTransactions"= "float_data.float_transaction_ledger",
+                "accountTransactions"= "account_data.core_account_ledger"
+            },
+            "variableKeys"= {
+                "bonusPoolShare"= "bonus_pool_accrual_share",
+                "companyShare"= "company_accrual_share"
+            },
+            "db"= {
+                
+            }
+        }
+      )}"
     }
   }
 
