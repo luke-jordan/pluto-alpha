@@ -19,6 +19,7 @@ resource "aws_lambda_function" "float-api" {
 
   environment {
     variables = {
+      DEBUG = "*"
       NODE_CONFIG = "${
         jsonencode(
           {
