@@ -43,7 +43,7 @@ resource "aws_lambda_function" "user-activity-api" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.user-activity-api]
+  depends_on = [aws_cloudwatch_log_group.user-activity-api, aws_cloudwatch_log_group.user-activity-api]
 }
 
 resource "aws_iam_role" "user-activity-api-role" {
