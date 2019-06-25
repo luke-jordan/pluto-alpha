@@ -8,12 +8,38 @@ variable "aws_default_region" {
     }
 }
 
-
-variable "lambda-pluto-api-env" {
-  default = ""
+variable "dynamo_tables_read_capacity" {
+    default = {
+        "staging"  = {
+            "responsible_clients_table" = 1
+            "system_variable_table" = 1
+            "password_policy_table" = 1
+            "client-float-table" = 1
+        }
+        "master" = {
+            "responsible_clients_table" = 2
+            "system_variable_table" = 2
+            "password_policy_table" = 2
+            "client-float-table" = 2
+        }
+    }
 }
-variable "app_name" {
-  default = "pluto-alpha"
+
+variable "dynamo_tables_write_capacity" {
+    default = {
+        "staging"  = {
+            "responsible_clients_table" = 1
+            "system_variable_table" = 1
+            "password_policy_table" = 1
+            "client-float-table" = 1
+        }
+        "master" = {
+            "responsible_clients_table" = 2
+            "system_variable_table" = 2
+            "password_policy_table" = 2
+            "client-float-table" = 2
+        }
+    }
 }
 
 variable "az_count" {
