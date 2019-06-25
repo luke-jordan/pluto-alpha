@@ -162,7 +162,7 @@ jobs:
              terraform workspace select $CIRCLE_BRANCH
              
              terraform plan -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
-             terraform apply -auto-approve -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
+             #terraform apply -auto-approve -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=aaabbbccc" -var "db_password=aaabbbccc"
 
       - save_cache:
           key: terraform_bin-{{ checksum "./terraform/terraform_version" }}
