@@ -124,11 +124,11 @@ jobs:
 
                 cd $HOME/app/functions/user-act-api
                 echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_user_act_$CIRCLE_SHA1.zip $HOME/app/functions/user-act-api
+                zip -r $HOME/deploy_user_act_$CIRCLE_SHA1.zip .
 
                 cd $HOME/app/functions/user-existence-api
                 echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip $HOME/app/functions/user-existence-api
+                zip -r $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip .
 
              fi
       - run:
