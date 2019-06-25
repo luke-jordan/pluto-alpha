@@ -44,10 +44,13 @@ resource "aws_lambda_function" "float-api" {
       }"
     }
   }
+
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
+
+  depends_on = [aws_cloudwatch_log_group.float-api]
 }
 
 resource "aws_iam_role" "float-api-role" {

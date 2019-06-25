@@ -48,6 +48,8 @@ resource "aws_lambda_function" "user-act-api" {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
+
+  depends_on = [aws_cloudwatch_log_group.user-act-api]
 }
 
 resource "aws_iam_role" "user-act-api-role" {
