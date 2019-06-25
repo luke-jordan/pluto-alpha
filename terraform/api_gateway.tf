@@ -1,3 +1,6 @@
+// On each new function : add to aws_api_gateway_deployment's depends_on related component
+
+
 resource "aws_api_gateway_rest_api" "api-gateway" {
   name        = "${terraform.workspace}-rest-api"
 }
@@ -6,7 +9,7 @@ resource "aws_api_gateway_deployment" "api-deployment" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   stage_name  = "${terraform.workspace}"
 
-  depends_on = [aws_api_gateway_integration.float-api]
+  depends_on = [aws_api_gateway_integration.float-api, aws_api_gateway_integration.user-activity-api]
 }
 
 
