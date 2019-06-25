@@ -33,10 +33,11 @@ provider:
 functions:
   accrue:
     handler: handler.accrue
+    name: float-accrue
     events:
       - http:
           path: save
           method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
-      DEBUG: u:*
+      DEBUG: pluto:*

@@ -32,8 +32,8 @@ provider:
 
 functions:
   save:
-    handler: savetxhandler.save
-    name: add-savings
+    handler: handler.save
+    name: activity-save
     events:
       - http:
           path: save

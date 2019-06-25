@@ -7,7 +7,14 @@ const camelcase = require('camelcase');
 const decamelize = require('decamelize');
 
 const AWS = require('aws-sdk');
-AWS.config.update({region: config.get('aws.region')});
+
+const endpoint = process.env.NODE_ENV === 'lamblocal' && process.env.LOCALSTACK_HOSTNAME ? 
+    `http://${process.env.LOCALSTACK_HOSTNAME}:4569` : config.get('aws.endpoints.dynamodb');
+
+logger('Set endpoint for DynamoDB: ', endpoint);
+
+AWS.config.update({ region: config.get('aws.region'), endpoint: endpoint});
+// logger('Updated config to: ', config.get('aws.endpoints.dynamodb'));
 
 const docC = new AWS.DynamoDB.DocumentClient();
 
@@ -38,7 +45,7 @@ module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { ke
     logger('Passing parameters to docClient: ', params);
 
     try {
-        logger('Huh ? :', params['TableName']);
+        logger('Table name for DynamoDB ? :', params['TableName']);
         const ddbResult = await docC.get(params).promise();
         logger('Retrieved result: ', ddbResult);
         return camelCaseKeys(ddbResult.Item);

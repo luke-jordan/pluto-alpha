@@ -4,7 +4,8 @@
   "description": "Common module layer for interfacing with RDS",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=pluto:rds-common:* nyc mocha --exit"
+    "test": "DEBUG=pluto:rds-common:* nyc mocha --exit",
+    "report-coverage": "nyc report --reporter=text-lcov > coverage.lcov && codecov"
   },
   "author": "Luke Jordan",
   "license": "ISC",

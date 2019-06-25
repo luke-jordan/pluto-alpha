@@ -28,7 +28,7 @@ const resetStubs = () => {
 
 const config = require('config');
 
-describe.only('Marshalls account insertion properly', () => {
+describe('Marshalls account insertion properly', () => {
 
     beforeEach(() => resetStubs());
 

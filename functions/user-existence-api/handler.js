@@ -57,6 +57,14 @@ module.exports.validateRequest = (creationRequest) => {
   }
 }
 
+/**
+ * Creates an account within the core ledgers for a user. Returns the persistence result of the transaction.
+ * @param {string} clientId The id of the client company responsible for this user and account
+ * @param {string} floatId The id for the _default_ float that the user will save to (can be overriden on specific transactions)
+ * @param {string} ownerUserId The system wide ID of the user opening the account
+ * @param {string} userFirstName The first name of the user
+ * @param {string} userFamilyName The family name of the user
+ */
 module.exports.createAccount = async (creationRequest = {
   'clientId': 'zar_savings_co', 
   'floatId': 'zar_cash_float',
@@ -69,12 +77,12 @@ module.exports.createAccount = async (creationRequest = {
   
   const persistenceResult = await persistence.insertAccountRecord({ 
     'accountId': accountId, 
-    'clientId': creationRequest['clientId'],
-    'floatId': creationRequest['floatId'],
-    'ownerUserId': creationRequest['ownerUserId'], 
-    'userFirstName': creationRequest['userFirstName'],
-    'userFamilyName': creationRequest['userFamilyName']}
-  );
+    'clientId': creationRequest.clientId,
+    'floatId': creationRequest.floatId,
+    'ownerUserId': creationRequest.ownerUserId, 
+    'userFirstName': creationRequest.userFirstName,
+    'userFamilyName': creationRequest.userFamilyName
+  });
   
   logger('Received from persistence: ', persistenceResult);
   return persistenceResult;

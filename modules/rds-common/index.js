@@ -93,9 +93,9 @@ class RdsConnection {
                             objectArray = [ { name: 'Test1', id: 'X'}, { name: 'Test2', id: 'Y'}]) {
         const nestedArray = this.compileInsertQueryString(columnTemplate, objectArray);
         // todo : throw an explanatory error here if there is a $1 inside it
-        logger('SINGLE: Nested array: ', nestedArray);
+        // logger('SINGLE: Nested array: ', nestedArray);
         const formattedQuery = format(queryTemplate, nestedArray);
-        logger('SINGLE: Formatted query: ', formattedQuery);
+        // logger('SINGLE: Formatted query: ', formattedQuery);
 
         // const safeSlice = Math.min(10, valuesString.length);
         // logger('About to run insertion, query string: %s, and values: %s', queryTemplate, valuesString.slice(0, safeSlice));
@@ -216,9 +216,9 @@ class RdsConnection {
     }
 
     _extractKeysAndConstants(columnTemplate) {
-        logger('Template: ', columnTemplate);
+        // logger('Template: ', columnTemplate);
         const splitItems = columnTemplate.split(',').map(col => col.trim());
-        logger('Split items: ', splitItems);
+        // logger('Split items: ', splitItems);
         const paramRegex = /\${([^}]+)}/;
         const constantRegex = /\*{([^}]+)}/;
         const listKeysAndConstants = splitItems
@@ -229,7 +229,7 @@ class RdsConnection {
                     return ({ type: 'CONSTANT', value: constantRegex.exec(item)[1]})
                 }
             });
-        logger('Map: ', listKeysAndConstants);
+        // logger('Map: ', listKeysAndConstants);
         return listKeysAndConstants;
     }
 
