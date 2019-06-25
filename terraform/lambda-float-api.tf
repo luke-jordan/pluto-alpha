@@ -70,6 +70,13 @@ resource "aws_iam_role" "float-api-role" {
 EOF
 }
 
+resource "aws_cloudwatch_log_group" "float-api" {
+  name = "/aws/lambda/${var.float_api_lambda_function_name}"
+
+  tags = {
+    environment = "${terraform.workspace}"
+  }
+}
 
 resource "aws_iam_role_policy_attachment" "float-api-basic_execution_policy" {
   role = "${aws_iam_role.float-api-role.name}"

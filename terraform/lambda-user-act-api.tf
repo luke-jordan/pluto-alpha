@@ -70,6 +70,14 @@ resource "aws_iam_role" "user-act-api-role" {
 EOF
 }
 
+resource "aws_cloudwatch_log_group" "user-act-api" {
+  name = "/aws/lambda/${var.user_act_api_lambda_function_name}"
+
+  tags = {
+    environment = "${terraform.workspace}"
+  }
+}
+
 
 resource "aws_iam_role_policy_attachment" "user_act_api_basic_execution_policy" {
   role = "${aws_iam_role.user-act-api-role.name}"
