@@ -1,12 +1,12 @@
 variable "user_activity_api_lambda_function_name" {
-  default = "user-activity-api"
+  default = "user_activity_api"
   type = "string"
 }
 
-resource "aws_lambda_function" "user-activity-api" {
+resource "aws_lambda_function" "user_activity_api" {
 
   function_name                  = "${var.user_activity_api_lambda_function_name}"
-  role                           = "${aws_iam_role.user-activity-api-role.arn}"
+  role                           = "${aws_iam_role.user_activity_api_role.arn}"
   handler                        = "index.handler"
   memory_size                    = 256
   reserved_concurrent_executions = 20
@@ -44,11 +44,11 @@ resource "aws_lambda_function" "user-activity-api" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.user-activity-api]
+  depends_on = [aws_cloudwatch_log_group.user_activity_api]
 }
 
-resource "aws_iam_role" "user-activity-api-role" {
-  name = "${var.user_activity_api_lambda_function_name}-role"
+resource "aws_iam_role" "user_activity_api_role" {
+  name = "${var.user_activity_api_lambda_function_name}_role"
 
   assume_role_policy = <<EOF
 {
@@ -67,7 +67,7 @@ resource "aws_iam_role" "user-activity-api-role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "user-activity-api" {
+resource "aws_cloudwatch_log_group" "user_activity_api" {
   name = "/aws/lambda/${var.user_activity_api_lambda_function_name}"
 
   tags = {
@@ -77,35 +77,59 @@ resource "aws_cloudwatch_log_group" "user-activity-api" {
 
 
 resource "aws_iam_role_policy_attachment" "user_activity_api_basic_execution_policy" {
-  role = "${aws_iam_role.user-activity-api-role.name}"
+  role = "${aws_iam_role.user_activity_api_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "user_activity_api_vpc_execution_policy" {
-  role = "${aws_iam_role.user-activity-api-role.name}"
+  role = "${aws_iam_role.user_activity_api_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-module "user-activity-api-alarm-fatal-errors" {
-  source = "./modules/cloud_watch_alarm"
-  
-  metric_namespace = "lambda_errors"
-  alarm_name = "${var.user_activity_api_lambda_function_name}-fatal-api-alarm"
-  log_group_name = "/aws/lambda/${var.user_activity_api_lambda_function_name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_user_activity_api" {
+  log_group_name = "${aws_cloudwatch_log_group.user_activity_api.name}"
+  metric_transformation {
+    name = "${var.user_activity_api_lambda_function_name}_fatal_api_alarm"
+    namespace = "lambda_errors"
+    value = "1"
+  }
+  name = "${var.user_activity_api_lambda_function_name}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
-  alarm_action_arn = "${aws_sns_topic.fatal_errors_topic.arn}"
-  statistic = "Sum"
 }
 
-module "user-activity-api-alarm-security-errors" {
-  source = "./modules/cloud_watch_alarm"
-  
-  metric_namespace = "lambda_errors"
-  alarm_name = "${var.user_activity_api_lambda_function_name}-security-api-alarm"
-  log_group_name = "/aws/lambda/${var.user_activity_api_lambda_function_name}"
-  pattern = "SECURITY_ERROR"
-  alarm_action_arn = "${aws_sns_topic.security_errors_topic.arn}"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_user_activity_api" {
+  alarm_name = "${var.user_activity_api_lambda_function_name}_fatal_api_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods = 1
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_user_activity_api.name}"
+  namespace = "lambda_errors"
+  period = 60
+  threshold = 0
   statistic = "Sum"
+  alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
+}
+
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_user_activity_api" {
+  log_group_name = "${aws_cloudwatch_log_group.user_activity_api.name}"
+  metric_transformation {
+    name = "${var.user_activity_api_lambda_function_name}_security_api_alarm"
+    namespace = "lambda_errors"
+    value = "1"
+  }
+  name = "${var.user_activity_api_lambda_function_name}_security_api_alarm"
+  pattern = "SECURITY_ERROR"
+}
+
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_user_activity_api" {
+  alarm_name = "${var.user_activity_api_lambda_function_name}_security_api_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods = 1
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_user_activity_api.name}"
+  namespace = "lambda_errors"
+  period = 60
+  threshold = 0
+  statistic = "Sum"
+  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
 }

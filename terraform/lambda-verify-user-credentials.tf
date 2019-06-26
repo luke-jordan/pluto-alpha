@@ -1,12 +1,12 @@
-variable "verify_user_lambda_function_name" {
-  default = "verify-user"
+variable "verify_user_credentials_lambda_function_name" {
+  default = "verify_user_credentials"
   type = "string"
 }
 
-resource "aws_lambda_function" "verify-user" {
+resource "aws_lambda_function" "verify_user_credentials" {
 
-  function_name                  = "${var.verify_user_lambda_function_name}"
-  role                           = "${aws_iam_role.verify-user-role.arn}"
+  function_name                  = "${var.verify_user_credentials_lambda_function_name}"
+  role                           = "${aws_iam_role.verify_user_credentials_role.arn}"
   handler                        = "index.verifyUserCredentials"
   memory_size                    = 256
   reserved_concurrent_executions = 20
@@ -44,11 +44,11 @@ resource "aws_lambda_function" "verify-user" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.verify-user, aws_cloudwatch_log_group.verify-user]
+  depends_on = [aws_cloudwatch_log_group.verify_user_credentials]
 }
 
-resource "aws_iam_role" "verify-user-role" {
-  name = "${var.verify_user_lambda_function_name}-role"
+resource "aws_iam_role" "verify_user_credentials_role" {
+  name = "${var.verify_user_credentials_lambda_function_name}_role"
 
   assume_role_policy = <<EOF
 {
@@ -67,8 +67,8 @@ resource "aws_iam_role" "verify-user-role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "verify-user" {
-  name = "/aws/lambda/${var.verify_user_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "verify_user_credentials" {
+  name = "/aws/lambda/${var.verify_user_credentials_lambda_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
@@ -76,36 +76,60 @@ resource "aws_cloudwatch_log_group" "verify-user" {
 }
 
 
-resource "aws_iam_role_policy_attachment" "verify_user_basic_execution_policy" {
-  role = "${aws_iam_role.verify-user-role.name}"
+resource "aws_iam_role_policy_attachment" "verify_user_credentials_basic_execution_policy" {
+  role = "${aws_iam_role.verify_user_credentials_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "verify_user_vpc_execution_policy" {
-  role = "${aws_iam_role.verify-user-role.name}"
+resource "aws_iam_role_policy_attachment" "verify_user_credentials_vpc_execution_policy" {
+  role = "${aws_iam_role.verify_user_credentials_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-module "verify-user-alarm-fatal-errors" {
-  source = "./modules/cloud_watch_alarm"
-  
-  metric_namespace = "lambda_errors"
-  alarm_name = "${var.verify_user_lambda_function_name}-fatal-api-alarm"
-  log_group_name = "/aws/lambda/${var.verify_user_lambda_function_name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_verify_user_credentials" {
+  log_group_name = "${aws_cloudwatch_log_group.verify_user_credentials.name}"
+  metric_transformation {
+    name = "${var.verify_user_credentials_lambda_function_name}_fatal_api_alarm"
+    namespace = "lambda_errors"
+    value = "1"
+  }
+  name = "${var.verify_user_credentials_lambda_function_name}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
-  alarm_action_arn = "${aws_sns_topic.fatal_errors_topic.arn}"
-  statistic = "Sum"
 }
 
-module "verify-user-alarm-security-errors" {
-  source = "./modules/cloud_watch_alarm"
-  
-  metric_namespace = "lambda_errors"
-  alarm_name = "${var.verify_user_lambda_function_name}-security-api-alarm"
-  log_group_name = "/aws/lambda/${var.verify_user_lambda_function_name}"
-  pattern = "SECURITY_ERROR"
-  alarm_action_arn = "${aws_sns_topic.security_errors_topic.arn}"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_verify_user_credentials" {
+  alarm_name = "${var.verify_user_credentials_lambda_function_name}_fatal_api_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods = 1
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_verify_user_credentials.name}"
+  namespace = "lambda_errors"
+  period = 60
+  threshold = 0
   statistic = "Sum"
+  alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
+}
+
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_verify_user_credentials" {
+  log_group_name = "${aws_cloudwatch_log_group.verify_user_credentials.name}"
+  metric_transformation {
+    name = "${var.verify_user_credentials_lambda_function_name}_security_api_alarm"
+    namespace = "lambda_errors"
+    value = "1"
+  }
+  name = "${var.verify_user_credentials_lambda_function_name}_security_api_alarm"
+  pattern = "SECURITY_ERROR"
+}
+
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_verify_user_credentials" {
+  alarm_name = "${var.verify_user_credentials_lambda_function_name}_security_api_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods = 1
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_verify_user_credentials.name}"
+  namespace = "lambda_errors"
+  period = 60
+  threshold = 0
+  statistic = "Sum"
+  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
 }

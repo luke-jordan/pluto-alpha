@@ -7,6 +7,6 @@ output "workspace" {
 }
 
 output "api_gw_url" {
-  value = "${aws_api_gateway_deployment.api-deployment.invoke_url}"
+  value = "${aws_api_gateway_deployment.api_deployment.invoke_url}"
 }
 
