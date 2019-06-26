@@ -14,7 +14,8 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.insert_user_credentials,
   aws_api_gateway_integration.verify_user_credentials,
   aws_api_gateway_integration.update_password,
-  aws_api_gateway_integration.verify_jwt
+  aws_api_gateway_integration.verify_jwt,
+  aws_api_gateway_integration.sign_jwt
   ]
 
   variables = {
@@ -213,4 +214,38 @@ resource "aws_api_gateway_integration" "verify_jwt" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.verify_jwt.invoke_arn}"
+
+}
+
+/////////////// SIGN JWT LAMBDA //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "sign_jwt" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.sign_jwt.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_resource" "sign_jwt" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "sign-jwt"
+}
+
+resource "aws_lambda_permission" "sign_jwt" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.sign_jwt.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "sign_jwt" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.sign_jwt.resource_id}"
+  http_method = "${aws_api_gateway_method.sign_jwt.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.sign_jwt.invoke_arn}"
+
 }

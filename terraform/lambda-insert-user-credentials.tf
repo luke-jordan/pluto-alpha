@@ -23,17 +23,32 @@ resource "aws_lambda_function" "insert_user_credentials" {
       NODE_CONFIG = "${
         jsonencode(
           {
-              "tables": {
-                  "accountTransactions": "transaction_data.core_transaction_ledger",
-                  "rewardTransactions": "transaction_data.core_transaction_ledger",
-                  "floatTransactions": "float_data.float_transaction_ledger"
+              "aws": {
+                  "region": "${var.aws_default_region[terraform.workspace]}",
+                  "apiVersion": "2012-08-10",
+                  "endpoints": {
+                      "dynamodb": null
+                  }
+              },
+              "jwt": {
+                  "expiresIn": "7d",
+                  "algorithm": "RS256"
               },
               "db": {
-                  "user": "save_tx_api_worker",
                   "host": "localhost",
-                  "database": "pluto",
-                  "password": "pwd_for_transaction_api",
-                  "port" :"5430"
+                  "port": "5432",
+                  "database": "plutotest",
+                  "user": "auth_api_worker",
+                  "password": "pwd_for_auth_api_worker"
+              },
+              "tables": {
+                  "userTable": "user_data.user",
+                  "dynamoAuthPoliciesTable": "roles_and_permissions"
+              },
+              "s3": {
+                  "Buckets": {
+                      "jwtTestBucket": "test-jwt-encryption-keys"
+                  }
               }
           }
       )}"
