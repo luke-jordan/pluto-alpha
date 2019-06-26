@@ -36,7 +36,7 @@ resource "aws_lambda_permission" "float_api" {
   action        = "lambda:InvokeFunction"
   function_name = "${aws_lambda_function.float_api.function_name}"
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_deployment.api_deployment.execution_arn}/*/*"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
 resource "aws_api_gateway_integration" "float_api" {
@@ -100,7 +100,7 @@ resource "aws_lambda_permission" "insert_user_credentials" {
   action        = "lambda:InvokeFunction"
   function_name = "${aws_lambda_function.insert_user_credentials.function_name}"
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_deployment.api_deployment.execution_arn}/*/*"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
 resource "aws_api_gateway_integration" "insert_user_credentials" {
@@ -132,7 +132,7 @@ resource "aws_lambda_permission" "verify_user_credentials" {
   action        = "lambda:InvokeFunction"
   function_name = "${aws_lambda_function.verify_user_credentials.function_name}"
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_deployment.api_deployment.execution_arn}/*/*"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
 resource "aws_api_gateway_integration" "verify_user_credentials" {
