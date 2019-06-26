@@ -15,7 +15,7 @@ resource "aws_lambda_function" "insert_user_credentials" {
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
-  s3_key = "auth-api/${var.deploy_code_commit_hash}.zip"
+  s3_key = "auth_api/${var.deploy_code_commit_hash}.zip"
 
   environment {
     variables = {
