@@ -45,13 +45,13 @@ describe('Fetch floats and find transactions', () => {
     
     before(resetStubs);
 
-    it('Obtain a default float id', async () => {
+    it('Obtain a default float id and client id', async () => {
         const testAccountId = uuid();
-        const queryString = 'select default_float_id from account_data.core_account_ledger where account_id = $1';
-        queryStub.withArgs(queryString, [testAccountId]).resolves({ 'default_float_id': testFloatId });
+        const queryString = 'select default_float_id, responsible_client_id from account_data.core_account_ledger where account_id = $1';
+        queryStub.withArgs(queryString, [testAccountId]).resolves({ 'default_float_id': testFloatId, 'responsible_client_id': testClientId });
         const floatResult = await rds.findFloatForAccount(testAccountId);
         expect(floatResult).to.exist;
-        expect(floatResult).to.deep.equal({ floatId: testFloatId });
+        expect(floatResult).to.deep.equal({ clientId: testClientId, floatId: testFloatId });
         expect(queryStub).to.have.been.calledOnceWithExactly(queryString, sinon.match([testAccountId]));
         expectNoCalls([insertStub, multiTableStub]);
     });
@@ -174,6 +174,50 @@ describe('Insert transaction alone and with float', () => {
 
 describe('Sums balances', () => {
 
-    before(() => resetStubs());
+    const testUserId1 = uuid();
+
+    const testUserId2 = uuid();
+    const testAccoundIdsMulti = [ uuid(), uuid(), uuid() ];
+
+    const testBalance = Math.floor(100 * 100 * 100 * Math.random());
+
+    beforeEach(() => resetStubs());
+
+    it('Obtain the balance of an account at a point in time correctly', async () => {
+        const txTable = config.get('tables.accountTransactions');
+        const transTypes = '("SAVING", "ACCRUAL", "CAPITALIZATION", "WITHDRAWAL")';
+        const unitQuery = 'select distinct(unit) from $1 where account_id = $2 and currency = $3 and settlement_status = "SETTLED" and creation_time < $4';
+        const sumQuery = 'select sum(amount) from $1 where account_id = $2 and currency = $3 and unit = $4 and settlement_status = "SETTLED" and creation_time < $4 '
+            + 'and transaction_type in ' + transTypes;
+        
+        const testTime = new Date();
+        queryStub.withArgs(unitQuery, [txTable, testAccountId, 'USD', testTime]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.withArgs(sumQuery, [txTable, testAccoundId, 'USD', 'HUNDREDTH_CENT', testTime]).resolves([{ 'sum': testBalance }]);
+        
+        const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
+        expect(balanceResult).to.exist;
+        expect(balanceResult).to.equal(testBalance);
+    });
+
+    it('Find an account ID for a user ID, single and multiple', async () => {
+        // most recent account first
+        const findQuery = 'select account_id from account_data.core_account_ledger where owner_user_id = $1 order by creation_time desc';
+        queryStub.withArgs(findQuery, [testUserId1]).resolves([{ 'account_id': testAccountId }]);
+        const multiAccountList = testAccoundIdsMulti.map((accountId) => ({ 'account_id': accountId }));
+        queryStub.withArgs(findQuery, [testUserId2]).resolves(multiAccountList);
+
+        const resultOfAccountQuerySingle = await rds.findAccountsForUser(testUserId1);
+        expect(resultOfAccountQuerySingle).to.exist;
+        expect(resultOfAccountQuerySingle).to.equal(testAccountId);
+
+        const resultOfAccountQueryMultiple = await rds.findAccountsForUser(testUserId2);
+        expect(resultOfAccountQueryMultiple).to.exist;
+        expect(resultOfAccountQueryMultiple).to.deep.equal(testAccoundIdsMulti);
+
+        expect(queryStub.callCount).toBe(2);
+        expect(queryStub.getCall(0).calledWithExactly(findQuery, [testUserId1])).toBe(true);
+        expect(queryStub.getCall(1).calledWithExactly(findQuery, [testUserId2])).toBe(true);
+        expectNoCalls([insertStub, multiTableStub]);
+    });
 
 });

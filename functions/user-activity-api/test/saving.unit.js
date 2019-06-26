@@ -23,7 +23,7 @@ let findMatchingTxStub = sinon.stub();
 let findFloatStub = sinon.stub();
 let addSavingsRdsStub = sinon.stub();
 
-const handler = proxyquire('../savetxhandler', {
+const handler = proxyquire('../handler', {
     './persistence/rds': { 
         'findMatchingTransaction': findMatchingTxStub,
         'findFloatForAccount': findFloatStub, 

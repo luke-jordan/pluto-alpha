@@ -4,11 +4,13 @@
   "description": "API for adding savings to a user account",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:save:test nyc mocha"
+    "test": "DEBUG=pluto:*:test nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov"
   },
   "author": "Luke Jordan",
   "license": "ISC",
   "dependencies": {
+    "bignumber.js": "^9.0.0",
     "config": "^3.1.0",
     "debug": "^4.1.1",
     "uuid": "^3.3.2"

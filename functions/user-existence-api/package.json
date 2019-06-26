@@ -4,13 +4,16 @@
   "description": "API for creating an account in the ledger",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:account:test nyc mocha"
+    "test": "DEBUG=pluto:account:test nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",
   "devDependencies": {
     "chai": "^4.2.0",
     "chai-uuid": "^1.0.6",
+    "eslint": "^6.0.1",
     "mocha": "^6.1.4",
     "nock": "^10.0.6",
     "nyc": "^14.1.1",

@@ -6,7 +6,7 @@ const uuid = require('uuid/v4');
 const validator = require('validator');
 const persistence = require('./persistence/rds');
 
-module.exports.create = async (event, context) => {
+module.exports.create = async (event) => {
   const request = exports.transformEvent(event);
   logger('Transform inbound event completed, request: ', JSON.stringify(request));
 
@@ -17,7 +17,7 @@ module.exports.create = async (event, context) => {
     return {
       statusCode: 400
     };
-  };
+  }
 
   const persistenceResult = await exports.createAccount(request);
   logger('Persistence completed, returning success, result: ', persistenceResult);
@@ -89,7 +89,7 @@ module.exports.createAccount = async (creationRequest = {
 }
 
 module.exports.listAccounts = async () => {
-  const params = { TableName: 'CoreAccountLedger' };
+  // const params = { TableName: 'CoreAccountLedger' };
 
   // const result = await docClient.scan(params).promise();
   const result = { };

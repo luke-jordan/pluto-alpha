@@ -10,5 +10,11 @@
         "database": "pluto",
         "password": "pwd_for_transaction_api",
         "port" :"5430"
+    },
+    "aws": {
+        "endpoints": {
+            "dynamodb": "http://localhost:4569"
+        },
+        "region": "eu-west-1"
     }
 }

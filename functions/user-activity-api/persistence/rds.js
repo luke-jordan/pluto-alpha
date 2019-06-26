@@ -15,6 +15,10 @@ module.exports.findFloatForAccount = async (accountId = 'some-account-uid') => {
 
 };
 
+module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
+
+};
+
 /**
  * Core method. Records a user's saving event, with three inserts: one, in the accounts table, records the saving event on the user's account;
  * the second adds the amount of the save to the float; the third allocates a correspdonding amount of the float to the user. Note that the 
@@ -100,7 +104,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         logger('Result of insert : ', insertionResult);
         responseEntity['transactionDetails'] = insertionResult;
 
-        const balanceCount = await exports.sumCurrentBalance(settlementDetails['accountId'], settlementDetails['savedCurrency']);
+        const balanceCount = await exports.sumAccountBalance(settlementDetails['accountId'], settlementDetails['savedCurrency']);
         logger('New balance count: ', balanceCount);
 
         responseEntity['newBalance'] = parseInt(balanceCount['sum']);
@@ -112,7 +116,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
     return responseEntity;
 };
 
-module.exports.sumCurrentBalance = async (accountId, currency) => {
+module.exports.sumAccountBalance = async (accountId, currency, time = new Date()) => {
     const tableName = config.get('tables.accountTransactions');
     const queryString = `select sum(amount) from ${tableName} where account_id = $1 and currency = $2`;
     const parameters = [accountId, currency];
