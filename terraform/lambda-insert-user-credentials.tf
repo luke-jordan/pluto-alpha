@@ -1,13 +1,13 @@
-variable "auth_api_lambda_function_name" {
-  default = "auth-api"
+variable "user_insertion_handler_lambda_function_name" {
+  default = "user-insertion-handler"
   type = "string"
 }
 
-resource "aws_lambda_function" "auth-api" {
+resource "aws_lambda_function" "user-insertion-handler" {
 
-  function_name                  = "${var.auth_api_lambda_function_name}"
-  role                           = "${aws_iam_role.auth-api-role.arn}"
-  handler                        = "index.handler"
+  function_name                  = "${var.user_insertion_handler_lambda_function_name}"
+  role                           = "${aws_iam_role.user-insertion-handler-role.arn}"
+  handler                        = "user-insertion-handler.insertUserCredentials"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
@@ -15,7 +15,7 @@ resource "aws_lambda_function" "auth-api" {
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
-  s3_key = "${var.auth_api_lambda_function_name}/${var.deploy_code_commit_hash}.zip"
+  s3_key = "${var.user_insertion_handler_lambda_function_name}/${var.deploy_code_commit_hash}.zip"
 
   environment {
     variables = {
@@ -44,11 +44,11 @@ resource "aws_lambda_function" "auth-api" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.auth-api, aws_cloudwatch_log_group.auth-api]
+  depends_on = [aws_cloudwatch_log_group.user-insertion-handler, aws_cloudwatch_log_group.user-insertion-handler]
 }
 
-resource "aws_iam_role" "auth-api-role" {
-  name = "${var.auth_api_lambda_function_name}-role"
+resource "aws_iam_role" "user-insertion-handler-role" {
+  name = "${var.user_insertion_handler_lambda_function_name}-role"
 
   assume_role_policy = <<EOF
 {
@@ -67,8 +67,8 @@ resource "aws_iam_role" "auth-api-role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "auth-api" {
-  name = "/aws/lambda/${var.auth_api_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "user-insertion-handler" {
+  name = "/aws/lambda/${var.user_insertion_handler_lambda_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
@@ -76,35 +76,35 @@ resource "aws_cloudwatch_log_group" "auth-api" {
 }
 
 
-resource "aws_iam_role_policy_attachment" "auth_api_basic_execution_policy" {
-  role = "${aws_iam_role.auth-api-role.name}"
+resource "aws_iam_role_policy_attachment" "user_insertion_handler_basic_execution_policy" {
+  role = "${aws_iam_role.user-insertion-handler-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "auth_api_vpc_execution_policy" {
-  role = "${aws_iam_role.auth-api-role.name}"
+resource "aws_iam_role_policy_attachment" "user_insertion_handler_vpc_execution_policy" {
+  role = "${aws_iam_role.user-insertion-handler-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-module "auth-api-alarm-fatal-errors" {
+module "user-insertion-handler-alarm-fatal-errors" {
   source = "./modules/cloud_watch_alarm"
   
   metric_namespace = "lambda_errors"
-  alarm_name = "${var.auth_api_lambda_function_name}-fatal-api-alarm"
-  log_group_name = "/aws/lambda/${var.auth_api_lambda_function_name}"
+  alarm_name = "${var.user_insertion_handler_lambda_function_name}-fatal-api-alarm"
+  log_group_name = "/aws/lambda/${var.user_insertion_handler_lambda_function_name}"
   pattern = "FATAL_ERROR"
   alarm_action_arn = "${aws_sns_topic.fatal_errors_topic.arn}"
   statistic = "Sum"
 }
 
-module "auth-api-alarm-security-errors" {
+module "user-insertion-handler-alarm-security-errors" {
   source = "./modules/cloud_watch_alarm"
   
   metric_namespace = "lambda_errors"
-  alarm_name = "${var.auth_api_lambda_function_name}-security-api-alarm"
-  log_group_name = "/aws/lambda/${var.auth_api_lambda_function_name}"
+  alarm_name = "${var.user_insertion_handler_lambda_function_name}-security-api-alarm"
+  log_group_name = "/aws/lambda/${var.user_insertion_handler_lambda_function_name}"
   pattern = "SECURITY_ERROR"
   alarm_action_arn = "${aws_sns_topic.security_errors_topic.arn}"
   statistic = "Sum"
