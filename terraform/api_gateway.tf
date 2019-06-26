@@ -68,7 +68,7 @@ resource "aws_lambda_permission" "user_activity_api" {
   action        = "lambda:InvokeFunction"
   function_name = "${aws_lambda_function.user_activity_api.function_name}"
   principal     = "apigateway.amazonaws.com"
-  source_arn    = "${aws_api_gateway_deployment.api_deployment.execution_arn}/*/*"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
 resource "aws_api_gateway_integration" "user_activity_api" {
