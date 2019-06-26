@@ -12,8 +12,14 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.float_api,
   aws_api_gateway_integration.user_activity_api,
   aws_api_gateway_integration.insert_user_credentials,
-  aws_api_gateway_integration.verify_user_credentials
+  aws_api_gateway_integration.verify_user_credentials,
+  aws_api_gateway_integration.update_password,
+  aws_api_gateway_integration.verify_jwt
   ]
+
+  variables = {
+    commit_sha1 = "${var.deploy_code_commit_hash}"
+  }
 }
 
 
@@ -143,4 +149,68 @@ resource "aws_api_gateway_integration" "verify_user_credentials" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.verify_user_credentials.invoke_arn}"
+}
+
+/////////////// UPDATE USER PASSWORD LAMBDA //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "update_password" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.update_password.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_resource" "update_password" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "update-password"
+}
+
+resource "aws_lambda_permission" "update_password" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.update_password.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "update_password" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.update_password.resource_id}"
+  http_method = "${aws_api_gateway_method.update_password.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.update_password.invoke_arn}"
+}
+
+/////////////// VERIFY JWT LAMBDA //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "verify_jwt" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.verify_jwt.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_resource" "verify_jwt" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "verify-jwt"
+}
+
+resource "aws_lambda_permission" "verify_jwt" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.verify_jwt.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "verify_jwt" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.verify_jwt.resource_id}"
+  http_method = "${aws_api_gateway_method.verify_jwt.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.verify_jwt.invoke_arn}"
 }
