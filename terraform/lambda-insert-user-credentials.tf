@@ -7,7 +7,7 @@ resource "aws_lambda_function" "user-insertion-handler" {
 
   function_name                  = "${var.user_insertion_handler_lambda_function_name}"
   role                           = "${aws_iam_role.user-insertion-handler-role.arn}"
-  handler                        = "user-insertion-handler.insertUserCredentials"
+  handler                        = "index.insertUserCredentials"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"

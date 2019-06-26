@@ -92,7 +92,7 @@ resource "aws_api_gateway_method" "user-insertion-handler" {
 resource "aws_api_gateway_resource" "user-insertion-handler" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
-  path_part   = "user-insertion-handler"
+  path_part   = "create-new-user"
 }
 
 resource "aws_lambda_permission" "user-insertion-handler" {
