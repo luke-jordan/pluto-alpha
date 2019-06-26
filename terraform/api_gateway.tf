@@ -139,4 +139,3 @@ resource "aws_api_gateway_integration" "verify_user" {
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.verify_user.invoke_arn}"
 }
-}
