@@ -1,6 +1,5 @@
 // On each new function : add to aws_api_gateway_deployment's depends_on related component
 
-
 resource "aws_api_gateway_rest_api" "api-gateway" {
   name        = "${terraform.workspace}-rest-api"
 }
@@ -22,7 +21,6 @@ resource "aws_api_gateway_method" "float-api" {
   authorization = "NONE"
 }
 
-// example curl -X POST https://iaxlt9v3x1.execute-api.us-east-1.amazonaws.com/staging-stage/float-api
 resource "aws_api_gateway_resource" "float-api" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
@@ -55,7 +53,6 @@ resource "aws_api_gateway_method" "user-activity-api" {
   authorization = "NONE"
 }
 
-// example curl -X POST https://iaxlt9v3x1.execute-api.us-east-1.amazonaws.com/staging-stage/user-activity-api
 resource "aws_api_gateway_resource" "user-activity-api" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
@@ -79,35 +76,67 @@ resource "aws_api_gateway_integration" "user-activity-api" {
   uri                     = "${aws_lambda_function.user-activity-api.invoke_arn}"
 }
 
-/////////////// AUTH API LAMBDA //////////////////////////////////////////////////////////////////////////
+/////////////// INSERT USER CREDENTIALS LAMBDA //////////////////////////////////////////////////////////////////////////
 
-resource "aws_api_gateway_method" "user-insertion-handler" {
+resource "aws_api_gateway_method" "insert_user" {
   rest_api_id   = "${aws_api_gateway_rest_api.api-gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.user-insertion-handler.id}"
+  resource_id   = "${aws_api_gateway_resource.insert_user.id}"
   http_method   = "POST"
   authorization = "NONE"
 }
 
-// example curl -X POST https://iaxlt9v3x1.execute-api.us-east-1.amazonaws.com/staging-stage/user-insertion-handler
-resource "aws_api_gateway_resource" "user-insertion-handler" {
+resource "aws_api_gateway_resource" "insert_user" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
   path_part   = "create-new-user"
 }
 
-resource "aws_lambda_permission" "user-insertion-handler" {
+resource "aws_lambda_permission" "insert_user" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.user-insertion-handler.function_name}"
+  function_name = "${aws_lambda_function.insert_user.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_deployment.api-deployment.execution_arn}/*/*"
 }
 
-resource "aws_api_gateway_integration" "user-insertion-handler" {
+resource "aws_api_gateway_integration" "insert_user" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
-  resource_id = "${aws_api_gateway_method.user-insertion-handler.resource_id}"
-  http_method = "${aws_api_gateway_method.user-insertion-handler.http_method}"
+  resource_id = "${aws_api_gateway_method.insert_user.resource_id}"
+  http_method = "${aws_api_gateway_method.insert_user.http_method}"
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.user-insertion-handler.invoke_arn}"
+  uri                     = "${aws_lambda_function.insert_user.invoke_arn}"
+}
+
+/////////////// VERIFY USER CREDENTIALS LAMBDA //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "verify_user" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api-gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.verify_user.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_resource" "verify_user" {
+  rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api-gateway.root_resource_id}"
+  path_part   = "verify-user-credentials"
+}
+
+resource "aws_lambda_permission" "verify_user" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.verify_user.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "${aws_api_gateway_deployment.api-deployment.execution_arn}/*/*"
+}
+
+resource "aws_api_gateway_integration" "verify_user" {
+  rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
+  resource_id = "${aws_api_gateway_method.verify_user.resource_id}"
+  http_method = "${aws_api_gateway_method.verify_user.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.verify_user.invoke_arn}"
+}
 }

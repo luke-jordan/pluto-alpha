@@ -1,13 +1,13 @@
-variable "insert_user_lambda_function_name" {
-  default = "insert-user"
+variable "verify_user_lambda_function_name" {
+  default = "verify-user"
   type = "string"
 }
 
-resource "aws_lambda_function" "insert-user" {
+resource "aws_lambda_function" "verify-user" {
 
-  function_name                  = "${var.insert_user_lambda_function_name}"
-  role                           = "${aws_iam_role.insert-user-role.arn}"
-  handler                        = "index.insertUserCredentials"
+  function_name                  = "${var.verify_user_lambda_function_name}"
+  role                           = "${aws_iam_role.verify-user-role.arn}"
+  handler                        = "index.verifyUserCredentials"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
@@ -44,11 +44,11 @@ resource "aws_lambda_function" "insert-user" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.insert-user, aws_cloudwatch_log_group.insert-user]
+  depends_on = [aws_cloudwatch_log_group.verify-user, aws_cloudwatch_log_group.verify-user]
 }
 
-resource "aws_iam_role" "insert-user-role" {
-  name = "${var.insert_user_lambda_function_name}-role"
+resource "aws_iam_role" "verify-user-role" {
+  name = "${var.verify_user_lambda_function_name}-role"
 
   assume_role_policy = <<EOF
 {
@@ -67,8 +67,8 @@ resource "aws_iam_role" "insert-user-role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "insert-user" {
-  name = "/aws/lambda/${var.insert_user_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "verify-user" {
+  name = "/aws/lambda/${var.verify_user_lambda_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
@@ -76,35 +76,35 @@ resource "aws_cloudwatch_log_group" "insert-user" {
 }
 
 
-resource "aws_iam_role_policy_attachment" "insert_user_basic_execution_policy" {
-  role = "${aws_iam_role.insert-user-role.name}"
+resource "aws_iam_role_policy_attachment" "verify_user_basic_execution_policy" {
+  role = "${aws_iam_role.verify-user-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "insert_user_vpc_execution_policy" {
-  role = "${aws_iam_role.insert-user-role.name}"
+resource "aws_iam_role_policy_attachment" "verify_user_vpc_execution_policy" {
+  role = "${aws_iam_role.verify-user-role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-module "insert-user-alarm-fatal-errors" {
+module "verify-user-alarm-fatal-errors" {
   source = "./modules/cloud_watch_alarm"
   
   metric_namespace = "lambda_errors"
-  alarm_name = "${var.insert_user_lambda_function_name}-fatal-api-alarm"
-  log_group_name = "/aws/lambda/${var.insert_user_lambda_function_name}"
+  alarm_name = "${var.verify_user_lambda_function_name}-fatal-api-alarm"
+  log_group_name = "/aws/lambda/${var.verify_user_lambda_function_name}"
   pattern = "FATAL_ERROR"
   alarm_action_arn = "${aws_sns_topic.fatal_errors_topic.arn}"
   statistic = "Sum"
 }
 
-module "insert-user-alarm-security-errors" {
+module "verify-user-alarm-security-errors" {
   source = "./modules/cloud_watch_alarm"
   
   metric_namespace = "lambda_errors"
-  alarm_name = "${var.insert_user_lambda_function_name}-security-api-alarm"
-  log_group_name = "/aws/lambda/${var.insert_user_lambda_function_name}"
+  alarm_name = "${var.verify_user_lambda_function_name}-security-api-alarm"
+  log_group_name = "/aws/lambda/${var.verify_user_lambda_function_name}"
   pattern = "SECURITY_ERROR"
   alarm_action_arn = "${aws_sns_topic.security_errors_topic.arn}"
   statistic = "Sum"
