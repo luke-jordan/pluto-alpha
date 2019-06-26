@@ -11,6 +11,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   depends_on = [
   aws_api_gateway_integration.float_api,
   aws_api_gateway_integration.user_activity_api,
+  aws_api_gateway_integration.user_existence_api,
   aws_api_gateway_integration.insert_user_credentials,
   aws_api_gateway_integration.verify_user_credentials,
   aws_api_gateway_integration.update_password,
@@ -56,7 +57,7 @@ resource "aws_api_gateway_integration" "float_api" {
   uri                     = "${aws_lambda_function.float_api.invoke_arn}"
 }
 
-/////////////// USER ACT LAMBDA //////////////////////////////////////////////////////////////////////////
+/////////////// USER ACTIVITY API LAMBDA //////////////////////////////////////////////////////////////////////////
 
 resource "aws_api_gateway_method" "user_activity_api" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
@@ -86,6 +87,38 @@ resource "aws_api_gateway_integration" "user_activity_api" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.user_activity_api.invoke_arn}"
+}
+
+/////////////// USER EXISTENCE API LAMBDA //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "user_existence_api" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.user_existence_api.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_resource" "user_existence_api" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "user-existence-api"
+}
+
+resource "aws_lambda_permission" "user_existence_api" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.user_existence_api.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "user_existence_api" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.user_existence_api.resource_id}"
+  http_method = "${aws_api_gateway_method.user_existence_api.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.user_existence_api.invoke_arn}"
 }
 
 /////////////// INSERT USER CREDENTIALS LAMBDA //////////////////////////////////////////////////////////////////////////
