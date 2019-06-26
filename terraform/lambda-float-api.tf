@@ -27,7 +27,7 @@ resource "aws_lambda_function" "float-api" {
                 "region"= "${var.aws_default_region[terraform.workspace]}",
                 "apiVersion"= "2012-08-10",
                 "endpoints"= {
-                    "dynamodb"= "http=//localhost=4569"
+                    "dynamodb"= null
                 }
             },
             "tables"= {
