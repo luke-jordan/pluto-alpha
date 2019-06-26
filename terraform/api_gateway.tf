@@ -8,7 +8,12 @@ resource "aws_api_gateway_deployment" "api-deployment" {
   rest_api_id = "${aws_api_gateway_rest_api.api-gateway.id}"
   stage_name  = "${terraform.workspace}"
 
-  depends_on = [aws_api_gateway_integration.float-api, aws_api_gateway_integration.user-activity-api]
+  depends_on = [
+  aws_api_gateway_integration.float-api,
+  aws_api_gateway_integration.user-activity-api,
+  aws_api_gateway_integration.insert_user,
+  aws_api_gateway_integration.verify_user
+  ]
 }
 
 
@@ -93,7 +98,7 @@ resource "aws_api_gateway_resource" "insert_user" {
 
 resource "aws_lambda_permission" "insert_user" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.insert_user.function_name}"
+  function_name = "${aws_lambda_function.insert-user.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_deployment.api-deployment.execution_arn}/*/*"
 }
@@ -105,7 +110,7 @@ resource "aws_api_gateway_integration" "insert_user" {
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.insert_user.invoke_arn}"
+  uri                     = "${aws_lambda_function.insert-user.invoke_arn}"
 }
 
 /////////////// VERIFY USER CREDENTIALS LAMBDA //////////////////////////////////////////////////////////////////////////
@@ -125,7 +130,7 @@ resource "aws_api_gateway_resource" "verify_user" {
 
 resource "aws_lambda_permission" "verify_user" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.verify_user.function_name}"
+  function_name = "${aws_lambda_function.verify-user.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "${aws_api_gateway_deployment.api-deployment.execution_arn}/*/*"
 }
@@ -137,5 +142,5 @@ resource "aws_api_gateway_integration" "verify_user" {
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.verify_user.invoke_arn}"
+  uri                     = "${aws_lambda_function.verify-user.invoke_arn}"
 }

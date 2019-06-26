@@ -44,7 +44,7 @@ resource "aws_lambda_function" "insert-user" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.insert-user, aws_cloudwatch_log_group.insert-user]
+  depends_on = [aws_cloudwatch_log_group.insert-user]
 }
 
 resource "aws_iam_role" "insert-user-role" {
