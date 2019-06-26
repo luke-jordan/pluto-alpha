@@ -23,19 +23,30 @@ resource "aws_lambda_function" "user_existence_api" {
       NODE_CONFIG = "${
         jsonencode(
           {
-              "tables": {
-                  "accountTransactions": "transaction_data.core_transaction_ledger",
-                  "rewardTransactions": "transaction_data.core_transaction_ledger",
-                  "floatTransactions": "float_data.float_transaction_ledger"
-              },
-              "db": {
-                  "user": "save_tx_api_worker",
-                  "host": "localhost",
-                  "database": "pluto",
-                  "password": "pwd_for_transaction_api",
-                  "port" :"5430"
-              }
-          }
+            "aws": {
+                "region": "${var.aws_default_region[terraform.workspace]}",
+                "apiVersion": "2012-08-10",
+                "endpoints": {
+                    "dynamodb": null
+                }
+            },
+            "tables": {
+                "dynamodb": "CoreAccountLedger",
+                "accountData": "account_data.core_account_ledger"
+            },
+            "db": {
+                "user": "account_api_worker",
+                "host": "localhost",
+                "database": "pluto",
+                "password": "pwd_for_account_api",
+                "port" :"5430"
+            },
+            "test": {
+                "nock": {
+                    "dynamodb": "http://localhost:4569"
+                }
+            }
+        }
       )}"
     }
   }
