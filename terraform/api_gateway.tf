@@ -29,7 +29,7 @@ resource "aws_api_gateway_method" "float_api" {
 resource "aws_api_gateway_resource" "float_api" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "float_api"
+  path_part   = "float-api"
 }
 
 resource "aws_lambda_permission" "float_api" {
@@ -61,7 +61,7 @@ resource "aws_api_gateway_method" "user_activity_api" {
 resource "aws_api_gateway_resource" "user_activity_api" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "user_activity_api"
+  path_part   = "user-activity-api"
 }
 
 resource "aws_lambda_permission" "user_activity_api" {
