@@ -1,4 +1,4 @@
-'use strict'
+'use strict';
 
 process.env.NODE_ENV = 'test';
 
@@ -6,16 +6,16 @@ const logger = require('debug')('pluto:account:test');
 const uuid = require('uuid/v4');
 
 const chai = require('chai');
+const sinon = require('sinon');
 const expect = chai.expect;
 chai.use(require('chai-uuid'));
 
 const proxyquire = require('proxyquire').noCallThru();
 
 const rdsStub = { };
-
 const accountHandler = proxyquire('../handler', { './persistence/rds': rdsStub });
 
-// Setting up the stubs
+const testValidApiEvent = require('./api-event-valid.json');
 const testUserId = uuid();
 const testAccountId = uuid();
 
@@ -25,7 +25,7 @@ const testAccountOpeningRequest = {
     defaultFloatId: 'zar_cash_float',
     userFirstName: 'Luke',
     userFamilyName: 'Jordan'
-}
+};
 
 const wellFormedPersistenceReq = {
     'accountId': testAccountId, 
@@ -34,34 +34,32 @@ const wellFormedPersistenceReq = {
     'ownerUserId': testUserId, 
     'userFirstName': 'Luke',
     'userFamilyName': 'Jordan'
-}
+};
 
 const testAccountOpeningResult = {
-    account_id: testAccountId,
-    tags: [],
-    flags: []
-}
-
-rdsStub.insertAccountRecord = function(wellFormedPersistenceReq) { 
-    return testAccountOpeningResult; 
+    'account_id': testAccountId,
+    'tags': [],
+    'flags': []
 };
+
+rdsStub.insertAccountRecord = sinon.stub().withArgs(wellFormedPersistenceReq).
+    resolves(testAccountOpeningResult);
 
 describe('transformEvent', () => {
     it('Event comes in from API Gateway', async () => {
         logger('Checking API gateway handled properly');
 
-        const event = require('./api-event-valid.json');
-        const body = accountHandler.transformEvent(event);
+        const body = accountHandler.transformEvent(testValidApiEvent);
 
         expect(body).to.exist;
         expect(body).not.empty;
-        expect(body).to.eql(JSON.parse(event['body']));
+        expect(body).to.eql(testValidApiEvent['body']);
     });
 
     it('Event comes in from Lambda invoke', async () => {
         logger('Checking direct invoke handled properly');
 
-        const dict = require('./api-event-valid.json');
+        const dict = testValidApiEvent;
         const eventBody = JSON.parse(dict['body']);
 
         const transformed = accountHandler.transformEvent(eventBody);
@@ -78,20 +76,30 @@ describe('validateEvent', () => {
     });
 
     it('Event without system wide ID should not be validated', async () => {
-        const validation = accountHandler.validateRequest({ 'userFirstName': 'Luke', 'userFamilyName': 'Jordan'});
+        const validation = accountHandler.validateRequest({ 
+            'userFirstName': 'Luke', 
+            'userFamilyName': 
+            'Jordan'
+        });
         expect(validation).to.be.false;
     });
 
     it('Event without name should not be validated', async () => {
-        const validation = accountHandler.validateRequest({ 'ownerUserId': uuid() });
+        const validation = accountHandler.validateRequest({ 
+            'ownerUserId': uuid() 
+        });
         expect(validation).to.be.false;
-    })
+    });
 
     it('Event with system wide ID that is not a UUID should not be validated', async () => {
-        const validation = accountHandler.validateRequest({ 'ownerUserId': 'hello-something', 'userFirstName': 'Luke', 'userFamilyName': 'Jordan' });
+        const validation = accountHandler.validateRequest({ 
+            'ownerUserId': 'hello-something', 
+            'userFirstName': 'Luke', 
+            'userFamilyName': 'Jordan' 
+        });
         expect(validation).to.be.false;
-    })
-})
+    });
+});
 
 describe('createAccountMethod', () => {
     it('Basic defaults work', async () => {
@@ -105,9 +113,7 @@ describe('createAccountMethod', () => {
 
 describe('handlerFunctionCreateAccount', () => {
     it('End to end, same owner and user', async () => {
-        const event = require('./api-event-valid.json');
-
-        const response = await accountHandler.create(event, null);
+        const response = await accountHandler.create(testValidApiEvent, null);
         logger('Response from handler create: ', response);
 
         expect(response.statusCode).to.equal(200);
@@ -119,5 +125,5 @@ describe('handlerFunctionCreateAccount', () => {
         expect(bodyParsed.accountId).to.be.a.uuid('v4');
         expect(bodyParsed.tags).to.be.empty;
         expect(bodyParsed.flags).to.be.empty;
-    })
-})
+    });
+});

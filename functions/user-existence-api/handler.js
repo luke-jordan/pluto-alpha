@@ -55,7 +55,7 @@ module.exports.validateRequest = (creationRequest) => {
   } else {
     return true;
   }
-}
+};
 
 /**
  * Creates an account within the core ledgers for a user. Returns the persistence result of the transaction.
@@ -86,7 +86,7 @@ module.exports.createAccount = async (creationRequest = {
   
   logger('Received from persistence: ', persistenceResult);
   return persistenceResult;
-}
+};
 
 module.exports.listAccounts = async () => {
   // const params = { TableName: 'CoreAccountLedger' };
@@ -96,4 +96,4 @@ module.exports.listAccounts = async () => {
   logger('Result: ', result);
 
   return { 'statusCode': 200 };
-}
+};

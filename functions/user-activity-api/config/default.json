@@ -2,7 +2,8 @@
     "tables": {
         "accountTransactions": "transaction_data.core_transaction_ledger",
         "rewardTransactions": "transaction_data.core_transaction_ledger",
-        "floatTransactions": "float_data.float_transaction_ledger"
+        "floatTransactions": "float_data.float_transaction_ledger",
+        "clientFloatVars": "ClientFloatTable"
     },
     "db": {
         "user": "save_tx_api_worker",
