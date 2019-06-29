@@ -181,16 +181,17 @@ expectedFloatQueryDef
 
         const balanceQuery = `select sum(amount) from ${config.get('tables.accountTransactions')} where account_id = $1 and currency = $2`;
         queryStub.withArgs(balanceQuery, [
-testAccountId,
-'ZAR'
-]).resolves([{ 'sum': '105' }]);
+            testAccountId,
+            'ZAR'
+        ]).resolves([{ 'sum': '105' }]);
         
         const testSettledArgs = { accountId: testAccountId,
-savedCurrency: 'ZAR',
-savedUnit: 'HUNDREDTH_CENT',
-savedAmount: 105, 
+            savedCurrency: 'ZAR',
+            savedUnit: 'HUNDREDTH_CENT',
+            savedAmount: 105, 
             floatId: testFloatId,
-settlementTime: new Date() };
+            settlementTime: new Date() 
+        };
 
         const resultOfSaveInsertion = await rds.addSavingToTransactions(testSettledArgs);
 
@@ -226,11 +227,7 @@ describe('Sums balances', () => {
     const testUserId1 = uuid();
 
     const testUserId2 = uuid();
-    const testAccoundIdsMulti = [
-uuid(),
-uuid(),
-uuid()
-];
+    const testAccoundIdsMulti = [uuid(), uuid(),uuid()];
 
     const testBalance = Math.floor(100 * 100 * 100 * Math.random());
 
@@ -244,26 +241,15 @@ uuid()
             'and transaction_type in '}${transTypes}`;
         
         const testTime = new Date();
-        queryStub.withArgs(unitQuery, [
-txTable,
-testAccountId,
-'USD',
-testTime
-]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.withArgs(sumQuery, [
-txTable,
-testAccoundId,
-'USD',
-'HUNDREDTH_CENT',
-testTime
-]).resolves([{ 'sum': testBalance }]);
+        queryStub.withArgs(unitQuery, [txTable, testAccountId, 'USD', testTime]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.withArgs(sumQuery, [txTable, testAccoundId, 'USD', 'HUNDREDTH_CENT', testTime]).resolves([{ 'sum': testBalance }]);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
         expect(balanceResult).to.exist;
         expect(balanceResult).to.equal(testBalance);
     });
 
-    it('Find an account ID for a user ID, single and multiple', async () => {
+    it.only('Find an account ID for a user ID, single and multiple', async () => {
         // most recent account first
         const findQuery = 'select account_id from account_data.core_account_ledger where owner_user_id = $1 order by creation_time desc';
         queryStub.withArgs(findQuery, [testUserId1]).resolves([{ 'account_id': testAccountId }]);
@@ -281,10 +267,7 @@ testTime
         expect(queryStub.callCount).toBe(2);
         expect(queryStub.getCall(0).calledWithExactly(findQuery, [testUserId1])).toBe(true);
         expect(queryStub.getCall(1).calledWithExactly(findQuery, [testUserId2])).toBe(true);
-        expectNoCalls([
-insertStub,
-multiTableStub
-]);
+        expectNoCalls([insertStub, multiTableStub]);
     });
 
 });

@@ -15,11 +15,11 @@ unit: 'HUNDREDTH_CENT' }) => {
 };
 
 module.exports.findFloatForAccount = async (accountId = 'some-account-uid') => {
-
+    
 };
 
 module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
-
+    const findQuery = 'select account_id from account_data.core_account_ledger where owner_user_id = $1 order by creation_time desc';
 };
 
 /**
