@@ -3,5 +3,5 @@
 const impl = require('./handler')
 
 exports.handler = async (event) => {
-    return await impl.accrue(event, null);
+    return await impl.create(event, null);
 };

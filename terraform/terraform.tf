@@ -2,7 +2,7 @@
 provider "aws" {
   access_key = "${var.aws_access_key}"
   secret_key = "${var.aws_secret_access_key}"
-  region     = "${var.aws_default_region["${terraform.workspace}"]}"
+  region     = "${var.aws_default_region[terraform.workspace]}"
 }
 
 terraform {
