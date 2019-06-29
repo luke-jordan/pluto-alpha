@@ -23,6 +23,10 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   variables = {
     commit_sha1 = "${var.deploy_code_commit_hash}"
   }
+
+  lifecycle {
+    create_before_destroy = true
+  }
 }
 
 resource "aws_api_gateway_domain_name" "custom_doname_name" {
