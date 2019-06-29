@@ -2,6 +2,7 @@
 
 resource "aws_api_gateway_rest_api" "api_gateway" {
   name        = "${terraform.workspace}_rest_api"
+  
 }
 
 resource "aws_api_gateway_deployment" "api_deployment" {
@@ -24,6 +25,28 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   }
 }
 
+resource "aws_api_gateway_domain_name" "custom_doname_name" {
+  certificate_arn = "arn:aws:acm:us-east-1:455943420663:certificate/6fb77289-8ee8-420a-8f5b-6d62782e091e"
+  domain_name     = "${terraform.workspace}.jupiterapp.net"
+}
+
+resource "aws_route53_record" "route" {
+  name    = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+  type    = "A"
+  zone_id = "Z32F5PRK3A4ONK"
+
+  alias {
+    evaluate_target_health = true
+    name                   = "${aws_api_gateway_domain_name.custom_doname_name.cloudfront_domain_name}"
+    zone_id                = "${aws_api_gateway_domain_name.custom_doname_name.cloudfront_zone_id}"
+  }
+}
+
+resource "aws_api_gateway_base_path_mapping" "custom_resourse_mapping" {
+  api_id      = "${aws_api_gateway_rest_api.api_gateway.id}"
+  stage_name  = "${aws_api_gateway_deployment.api_deployment.stage_name}"
+  domain_name = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+}
 
 
 /////////////// FLOAT API LAMBDA //////////////////////////////////////////////////////////////////////////
