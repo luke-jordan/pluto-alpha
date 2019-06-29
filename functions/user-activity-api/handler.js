@@ -2,6 +2,7 @@
 
 const logger = require('debug')('pluto:save:main');
 const persistence = require('./persistence/rds');
+const dynamodb = require('./persistence/dynamodb');
 
 module.exports.save = async (event) => {
   try {
@@ -28,7 +29,6 @@ module.exports.save = async (event) => {
   }
 };
 
-
 module.exports.storeSettledSaving = async (settlementInformation = {
   'accountId': '0c3caa51-ce5f-467c-9470-3fc34f93b5cc',
   'initiationTime': Date.now(),
@@ -48,4 +48,14 @@ module.exports.storeSettledSaving = async (settlementInformation = {
 
   return resultOfSave;
   
-}
+};
+
+module.exports.balance = async (event, context) => {
+  if (context) {
+    logger('Context object: ', context); // todo : check user role etc
+  }
+
+  // todo : look up property
+  const params = event.queryParams || event;
+  const accountId = params.accountId;
+};

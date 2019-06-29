@@ -1,3 +1,5 @@
+'use strict';
+
 const logger = require('debug')('pluto:account:test');
 const uuid = require('uuid/v4');
 
@@ -9,13 +11,13 @@ chai.use(sinonChai);
 
 const proxyquire = require('proxyquire');
 
-var insertStub = sinon.stub();
+const insertStub = sinon.stub();
 
 class MockRdsConnection {
-    constructor(any) {
-        this.insertRecords = insertStub
+    constructor () {
+        this.insertRecords = insertStub;
     }
-};
+}
 
 const rds = proxyquire('../persistence/rds', {
     'rds-common': MockRdsConnection,
@@ -42,19 +44,26 @@ describe('Marshalls account insertion properly', () => {
             'userFamilyName': 'Jordan'
         };
 
-        const expectedQuery = `insert into ${config.get('tables.accountData')} `
-            + `(account_id, responsible_client_id, default_float_id, owner_user_id, opening_user_id, user_first_name, user_last_name) `
-            + `values %L returning account_id, creation_time`;
+        const expectedQuery = `insert into ${config.get('tables.accountData')} ` + 
+            `(account_id, responsible_client_id, default_float_id, owner_user_id, opening_user_id, user_first_name, user_last_name) ` + 
+            `values %L returning account_id, creation_time`;
         const expectedColumns = '${accountId}, ${clientId}, ${floatId}, ${userId}, ${openingUserId}, ${userFirstName}, ${userFamilyName}';
         const expectedRow = JSON.parse(JSON.stringify(testAccountDetails));
         expectedRow.openingUserId = testAccountDetails.userId;
         const expectedObjects = sinon.match([expectedRow]);
 
         const timeNow = new Date();
-        insertStub.withArgs(expectedQuery, expectedColumns, expectedObjects)
-            .resolves({ rows: [{'account_id': testAccountDetails.accountId, 'creation_time': timeNow }]});
+        insertStub.withArgs(expectedQuery, expectedColumns, expectedObjects).
+            resolves({ rows: [
+                {
+                    'account_id': testAccountDetails.accountId, 
+                    'creation_time': timeNow 
+                }
+            ]});
     
         const insertedAccount = await rds.insertAccountRecord(testAccountDetails);
+
+        logger('Completed account insertion');
 
         expect(insertedAccount).to.exist;
         expect(insertedAccount).to.have.property('accountId', testAccountDetails.accountId);

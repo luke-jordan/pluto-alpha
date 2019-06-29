@@ -1,4 +1,9 @@
-# GETTING STARTED: SETTING UP THE LOCAL ENVIRONMENT
+# POLICIES AND LOCAL DEVELOPMENT
+
+The master branch is protected and will not accept pull requests from any branch aside from staging. The staging 
+branch is protected against pushes but will accept pull requests from development branches. Every PR to staging requires code review 
+security and linting to all pass, as well as at least one code review. New branches should fork from the current staging branch. 
+Pull requests should aim for 400-500 lines of code at a time to facilitate reviews. Larger PRs will require more reviews before acceptance.
 
 For local development, you need to install:
 

@@ -7,12 +7,19 @@ const uuid = require('uuid/v4');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-module.exports.findMatchingTransaction = async (transactionDetails = { accountId: 'some-uuid', amount: 100, currency: 'ZAR', unit: 'HUNDREDTH_CENT' }) => {
+module.exports.findMatchingTransaction = async (transactionDetails = { accountId: 'some-uuid',
+amount: 100,
+currency: 'ZAR',
+unit: 'HUNDREDTH_CENT' }) => {
 
 };
 
 module.exports.findFloatForAccount = async (accountId = 'some-account-uid') => {
+    
+};
 
+module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
+    const findQuery = 'select account_id from account_data.core_account_ledger where owner_user_id = $1 order by creation_time desc';
 };
 
 /**
@@ -44,10 +51,12 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
     'flags': ['RESTRICTED']
 }) => {
 
-    // todo : validation
-    // const bonusTransactionLedger = config.get('tables.bonus');
+    /*
+     * todo : validation
+     * const bonusTransactionLedger = config.get('tables.bonus');
+     */
     
-    let responseEntity = { };
+    const responseEntity = { };
     try {
         const accountTxTable = config.get('tables.accountTransactions');
         const floatTxTable = config.get('tables.floatTransactions');
@@ -57,7 +66,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         const floatTxId = uuid();
 
         const savedUnit = settlementDetails.savedUnit || 'HUNDREDTH_CENT';
-        const settlementStatus = !!settlementDetails.settlementTime ? 'SETTLED' : 'PENDING';
+        const settlementStatus = settlementDetails.settlementTime ? 'SETTLED' : 'PENDING';
 
         const accountQueryString = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, ` +
             `float_id, matching_float_tx_id, settlement_status) values %L returning transaction_id, creation_time`;
@@ -91,16 +100,26 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         floatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
         floatAllocationRow.allocatedToId = settlementDetails.accountId;
 
-        const accountQueryDef = { query: accountQueryString, columnTemplate: accountColumnKeys, rows: [rowValuesBase] };
-        const floatQueryDef = { query: floatQueryString, columnTemplate: floatColumnKeys, rows: [floatAdditionRow, floatAllocationRow] };
+        const accountQueryDef = { query: accountQueryString,
+columnTemplate: accountColumnKeys,
+rows: [rowValuesBase] };
+        const floatQueryDef = { query: floatQueryString,
+columnTemplate: floatColumnKeys,
+rows: [
+floatAdditionRow,
+floatAllocationRow
+] };
         
         logger('Inserting, with account query : ', accountQueryDef);
         logger('And with float def: ', floatQueryDef);
-        const insertionResult = await rdsConnection.largeMultiTableInsert([accountQueryDef, floatQueryDef]);
+        const insertionResult = await rdsConnection.largeMultiTableInsert([
+accountQueryDef,
+floatQueryDef
+]);
         logger('Result of insert : ', insertionResult);
         responseEntity['transactionDetails'] = insertionResult;
 
-        const balanceCount = await exports.sumCurrentBalance(settlementDetails['accountId'], settlementDetails['savedCurrency']);
+        const balanceCount = await exports.sumAccountBalance(settlementDetails['accountId'], settlementDetails['savedCurrency']);
         logger('New balance count: ', balanceCount);
 
         responseEntity['newBalance'] = parseInt(balanceCount['sum']);
@@ -112,10 +131,13 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
     return responseEntity;
 };
 
-module.exports.sumCurrentBalance = async (accountId, currency) => {
+module.exports.sumAccountBalance = async (accountId, currency, time = new Date()) => {
     const tableName = config.get('tables.accountTransactions');
     const queryString = `select sum(amount) from ${tableName} where account_id = $1 and currency = $2`;
-    const parameters = [accountId, currency];
+    const parameters = [
+accountId,
+currency
+];
     logger('Running select query: ', queryString, ', with parameters: ', parameters);
     const rows = await rdsConnection.selectQuery(queryString, parameters);
     logger('Received result: ', rows);
