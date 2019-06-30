@@ -29,6 +29,78 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   }
 }
 
+/////////////////////// API GW LOGGING ///////////////////////////////////////////////////////////////
+resource "aws_api_gateway_account" "api_gateway" {
+  cloudwatch_role_arn = "${aws_iam_role.api_gateway_cloudwatch.arn}"
+
+  depends_on = [aws_iam_role.api_gateway_cloudwatch]
+}
+
+resource "aws_iam_role" "api_gateway_cloudwatch" {
+  name = "api_gateway_cloudwatch"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "",
+      "Effect": "Allow",
+      "Principal": {
+        "Service": "apigateway.amazonaws.com"
+      },
+      "Action": "sts:AssumeRole"
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy" "api_gateway_cloudwatch" {
+  name = "default"
+  role = "${aws_iam_role.api_gateway_cloudwatch.id}"
+
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "logs:CreateLogGroup",
+                "logs:CreateLogStream",
+                "logs:DescribeLogGroups",
+                "logs:DescribeLogStreams",
+                "logs:PutLogEvents",
+                "logs:GetLogEvents",
+                "logs:FilterLogEvents"
+            ],
+            "Resource": "*"
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_api_gateway_method_settings" "general_settings" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  stage_name  = "${aws_api_gateway_deployment.api_deployment.stage_name}"
+  method_path = "*/*"
+
+  settings {
+    # Enable CloudWatch logging and metrics
+    metrics_enabled        = true
+    data_trace_enabled     = true
+    logging_level          = "INFO"
+
+    # Limit the rate of calls to prevent abuse and unwanted charges
+    throttling_rate_limit  = 100
+    throttling_burst_limit = 50
+  }
+}
+
+/////////////////////// API GW DOMAIN ////////////////////////////////////////////////////////////////
+
 resource "aws_api_gateway_domain_name" "custom_doname_name" {
   certificate_arn = "arn:aws:acm:us-east-1:455943420663:certificate/6fb77289-8ee8-420a-8f5b-6d62782e091e"
   domain_name     = "${terraform.workspace}.jupiterapp.net"
