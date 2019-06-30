@@ -78,7 +78,7 @@ resource "aws_cloudwatch_log_group" "db_migration" {
 
 resource "aws_iam_role_policy_attachment" "migration_script_s3_access_policy" {
   role = "${aws_iam_role.db_migration_role.name}"
-  policy_arn = "${aws_iam_role.migration_script_s3_access.arn}"
+  policy_arn = "${aws_iam_policy.migration_script_s3_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "db_migration_basic_execution_policy" {
