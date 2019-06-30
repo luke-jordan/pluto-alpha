@@ -2,7 +2,6 @@
 
 const logger = require('debug')('pluto:persistence:rds');
 const config = require('config');
-const camelcase = require('camelcase');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
@@ -18,7 +17,7 @@ module.exports.insertAccountRecord = async (accountDetails = {
     const tableName = config.get('tables.accountData');
     logger('Using account table: ', tableName);
     
-    let responseEntity = {};
+    const responseEntity = {};
 
     try {
         const queryTemplate = `insert into ${tableName} (account_id, responsible_client_id, default_float_id, owner_user_id, opening_user_id, user_first_name, user_last_name) ` +

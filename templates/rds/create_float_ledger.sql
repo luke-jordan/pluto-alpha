@@ -17,7 +17,7 @@ create table if not exists float_data.float_transaction_ledger (
 
 -- todo: indices
 
-revoke all on transaction_data.core_transaction_ledger from public;
+revoke all on float_data.float_transaction_ledger from public;
 
 grant usage on schema float_data to float_api_worker;
 grant select on float_data.float_transaction_ledger to float_api_worker;
