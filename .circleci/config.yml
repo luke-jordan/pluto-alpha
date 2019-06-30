@@ -202,8 +202,8 @@ jobs:
                 migrator_region=us-east-1
              fi
 
-             /home/circleci/bin/aws lambda invoke --function-arn arn:aws:lambda:$migrator_region:455943420663:function:db_migration --payload '$(cat $HOME/app/functions/db-migration/create_roles_event.json)'
-             /home/circleci/bin/aws lambda invoke --function-arn arn:aws:lambda:$migrator_region:455943420663:function:db_migration --payload '{"type": "SETUP_TABLES"}' 
+             /home/circleci/bin/aws lambda invoke --function-name db_migration --function-arn arn:aws:lambda:$migrator_region:455943420663:function:db_migration --payload '$(cat $HOME/app/functions/db-migration/create_roles_event.json)'
+             /home/circleci/bin/aws lambda invoke --function-name db_migration --function-arn arn:aws:lambda:$migrator_region:455943420663:function:db_migration --payload '{"type": "SETUP_TABLES"}' 
 
       - save_cache:
           key: terraform_bin-{{ checksum "./terraform/terraform_version" }}
