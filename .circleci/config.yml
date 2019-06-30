@@ -23,7 +23,7 @@ jobs:
 
       - restore_cache:
           keys:
-          - db_migration_dependencies-{{ checksum "./functions/db_migration/package.json" }}
+          - db-migration_dependencies-{{ checksum "./functions/db-migration/package.json" }}
       - restore_cache:
           keys:
           - float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
@@ -53,7 +53,7 @@ jobs:
           name: install node modules
           command: |
 
-            cd $HOME/app/functions/db_migration && npm install
+            cd $HOME/app/functions/db-migration && npm install
             cd $HOME/app/functions/float-api && npm install
             cd $HOME/app/functions/auth-api && npm install
             cd $HOME/app/functions/user-activity-api && npm install
@@ -77,9 +77,9 @@ jobs:
             - awscli-bundle.zip
 
       - save_cache:
-          key: db_migration_dependencies-{{ checksum "./functions/db_migration/package.json" }}
+          key: db-migration_dependencies-{{ checksum "./functions/db-migration/package.json" }}
           paths:
-            - ./functions/db_migration/node_modules
+            - ./functions/db-migration/node_modules
 
       - save_cache:
           key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
@@ -132,13 +132,13 @@ jobs:
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
 
-                cp -r modules/* $HOME/app/functions/db_migration/node_modules
+                cp -r modules/* $HOME/app/functions/db-migration/node_modules
                 cp -r modules/* $HOME/app/functions/auth-api/node_modules
                 cp -r modules/* $HOME/app/functions/float-api/node_modules
                 cp -r modules/* $HOME/app/functions/user-activity-api/node_modules
                 cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
 
-                cd $HOME/app/functions/db_migration
+                cd $HOME/app/functions/db-migration
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -r $HOME/deploy_db_migrator_$CIRCLE_SHA1.zip .
 
