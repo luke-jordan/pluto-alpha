@@ -28,7 +28,7 @@ resource "aws_iam_policy" "migration_script_s3_access" {
     "Version": "2012-10-17",
     "Statement": [
         {
-            "Sid": "migration_script_s3_access",
+            "Sid": "MigrationScriptAccess",
             "Effect": "Allow",
             "Action": [
                 "s3:*"
