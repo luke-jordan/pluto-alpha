@@ -97,6 +97,7 @@ const createInitialTables = async () => {
 module.exports.migrate = async (event) => {
   const typeOfExecution = event.type;
   logger('Executing migration of type: ', typeOfExecution);
+  logger('event: ', event);
 
   let result;
   if (typeOfExecution === 'S3SCRIPT') {
