@@ -47,10 +47,6 @@ variable "az_count" {
   default     = "2"
 }
 
-variable "db_name" {
-  default = "main"
-}
-
 variable "db_instance_class" {
   default = "db.t2.micro"
 }
