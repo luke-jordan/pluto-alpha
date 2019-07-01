@@ -48,8 +48,13 @@ variable "az_count" {
 }
 
 variable "db_instance_class" {
-  default = "db.t2.micro"
+    type = "map"
+    default = {
+        "staging"  = "db.t2.micro"
+        "master" = "db.t2.micro"
+    }
 }
+
 variable "db_allocated_storage" {
   default = "10"
 }

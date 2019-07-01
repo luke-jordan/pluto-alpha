@@ -25,7 +25,7 @@ resource "aws_db_instance" "rds" {
   allocated_storage      = "${var.db_allocated_storage}"
   engine                 = "postgres"
   engine_version         = "9.6.6"
-  instance_class         = "${var.db_instance_class}"
+  instance_class         = "${var.db_instance_class[terraform.workspace]}"
   name                   = "${var.db_name}"
   username               = "${var.db_user}"
   password               = "${var.db_password}"
