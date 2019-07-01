@@ -130,6 +130,7 @@ jobs:
       - run:
           name: run tests
           command: |
+            cd functions
             ./test_all.sh
 
       - run:
