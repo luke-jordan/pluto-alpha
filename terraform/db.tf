@@ -25,6 +25,7 @@ resource "aws_db_instance" "rds" {
   allocated_storage      = "${var.db_allocated_storage}"
   engine                 = "${var.db_engine[terraform.workspace]}"
   engine_version         = "${var.db_engine_version[terraform.workspace]}"
+  allow_major_version_upgrade = true
   instance_class         = "${var.db_instance_class[terraform.workspace]}"
   name                   = "${var.db_name}"
   username               = "${var.db_user}"
