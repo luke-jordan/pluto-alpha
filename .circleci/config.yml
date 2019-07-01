@@ -130,9 +130,9 @@ jobs:
       - run:
           name: run tests
           command: |
-            npm install codecov
-            npm install
             cd functions
+            npm install
+            npm install codecov
             ./test_all.sh
 
       - run:
