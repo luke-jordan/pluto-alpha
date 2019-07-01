@@ -131,7 +131,6 @@ jobs:
           name: run tests
           command: |
             cd functions
-            npm install
             npm install codecov
             ./test_all.sh
 
