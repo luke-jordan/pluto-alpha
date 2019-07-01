@@ -7,6 +7,6 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "codecov": "*"
+    "codecov": "3.5.0"
   }
 }
