@@ -54,6 +54,21 @@ variable "db_instance_class" {
         "master" = "db.t2.micro"
     }
 }
+variable "db_engine" {
+    type = "map"
+    default = {
+        "staging"  = "postgres"
+        "master" = "aurora-postgresql"
+    }
+}
+
+variable "db_engine_version" {
+    type = "map"
+    default = {
+        "staging"  = "10.7"
+        "master" = "2.3.1"
+    }
+}
 
 variable "db_allocated_storage" {
   default = "10"
