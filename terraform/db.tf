@@ -63,5 +63,4 @@ resource "aws_rds_cluster_instance" "cluster_instances" {
   instance_class     = "db.t3.medium"
   engine             = "aurora-postgresql"
   engine_version     = "10.7"
-  aw
 }
