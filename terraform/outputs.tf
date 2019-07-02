@@ -10,3 +10,6 @@ output "api_gw_url" {
   value = "${aws_api_gateway_deployment.api_deployment.invoke_url}"
 }
 
+output "custom_url" {
+  value = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+}
