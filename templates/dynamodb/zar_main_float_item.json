@@ -17,13 +17,13 @@
     "client_share_of_accrual": {
         "N": "0.1"
     },
-    "accrualRateAnnualBps": {
+    "accrual_rate_annual_bps": {
         "N": "700"
     },
-    "prudentialFactor": {
+    "prudential_factor": {
         "N": "0.1"
     },
-    "defaultTimezone": {
+    "default_timezone": {
         "S": "Africa/Johannesburg"
     }
 }

@@ -33,7 +33,7 @@ module.exports.accrue = async (event, context) => {
     const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
     logger('Fetched float config: ', floatConfig);
 
-    const accrualAmount = accrualParameters.accrualAmount;
+    const accrualAmount = parseInt(accrualParameters.accrualAmount); // just in case it is formatted as string
     const accrualCurrency = accrualParameters.currency || floatConfig.currency;
     const accrualUnit = accrualParameters.unit || floatConfig.unit;
     
@@ -84,7 +84,7 @@ module.exports.accrue = async (event, context) => {
     const userAllocations = await exports.allocate(userAllocEvent);
 
     const returnBody = {
-      newBalance: newFloatBalance.currentBalance,
+      newBalance: newFloatBalance.updatedBalance,
       entityAllocations: entityAllocations,
       userAllocationTransactions: userAllocations
     };
@@ -182,6 +182,7 @@ module.exports.calculateShare = (totalPool = 1.23457e8, shareInPercent = 0.0165,
   // we do not want to introduce floating points, because that is bad, so first we check to make sure total pool is effectively an int
   // note: basic logic is that total pool should be expressed in hundredths of a cent, if it is not, this is an error
   // note: bignumber can handle non-integer of course, but that would allow greater laxity than we want in something this important
+  logger('Total pool: ', totalPool);
   if (!Number.isInteger(totalPool)) {
     throw new TypeError('Error! Passed a non-integer pool');
   } else if (typeof shareInPercent !== 'number') {

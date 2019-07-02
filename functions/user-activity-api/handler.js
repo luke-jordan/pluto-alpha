@@ -63,14 +63,18 @@ const fetchUserDefaultAccount = async (systemWideUserId) => {
 const accrueBalanceByDay = (currentBalanceAmount, floatProjectionVars) => {
   const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
   const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
-  const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShare).plus(floatProjectionVars.clientCoShare)
+  // logger('Accrual rate gross: ', annualAccrualRateNominalGross.toNumber());
+  const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual)
     .plus(floatProjectionVars.prudentialFactor);
+  // logger('Float deductions: ', floatDeductions.toNumber());
   const dailyAccrualRateNominalNet = annualAccrualRateNominalGross.dividedBy(365).times(new BigNumber(1).minus(floatDeductions));
+  // logger('Daily accrual net: ', dailyAccrualRateNominalNet.toNumber());
   const endOfDayBalanceAmount = new BigNumber(currentBalanceAmount).times(new BigNumber(1).plus(dailyAccrualRateNominalNet));
+  logger('Balance: ', endOfDayBalanceAmount.toNumber());
   return endOfDayBalanceAmount.decimalPlaces(0).toNumber();
 };
 
-const createBalanceDict = async (amount, unit, currency, timeMoment) => ({
+const createBalanceDict = (amount, unit, currency, timeMoment) => ({
   amount: amount,
   unit: unit,
   currency: currency,
@@ -121,9 +125,12 @@ module.exports.balance = async (event, context) => {
     currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
     const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
     const endOfIthDayDict = createBalanceDict(currentProjectedBalance, unit, currency, endOfThatDay);
-    logger('Adding end of day dict: ', endOfIthDayDict);
+    // logger('Adding end of day dict: ', endOfIthDayDict);
     balanceSubsequentDays.push(endOfIthDayDict);
   };
 
+  resultObject.balanceSubsequentDays = balanceSubsequentDays;
+
+  logger('Sending back result object: ', resultObject);
   return resultObject;
 };

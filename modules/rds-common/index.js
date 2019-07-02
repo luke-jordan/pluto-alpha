@@ -156,11 +156,11 @@ class RdsConnection {
 
     async _executeQueryInBlock(client, query, columnTemplate, rows) {
         const insertionString = this.compileInsertQueryString(columnTemplate, rows);
-        logger('Insert string: ', insertionString);
+        // logger('Insert string: ', insertionString);
         const formattedQuery = format(query, insertionString);
-        logger('Formatted query: ', formattedQuery);
+        // logger('Formatted query: ', formattedQuery);
         const result = await client.query(formattedQuery);
-        logger('Result: ', result);
+        // logger('Result: ', result);
         return result['rows'] && result['rows'].length > 0 ? result['rows'] : [{ completed: true }];
     }
 

@@ -10,7 +10,7 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.clientFloatVars'), {
         clientId,
         floatId
-    }, ['accrualRateAnnualBps', 'bonusPoolShare', 'clientCoShare', 'prudentialFactor', 'defaultTimezone']);
+    }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone']);
     logger('Result from Dynamo: ', rowFromDynamo);
     return rowFromDynamo;
 };

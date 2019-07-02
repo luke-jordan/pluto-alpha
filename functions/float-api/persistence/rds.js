@@ -148,6 +148,7 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
 }]) => {
     // will definitely need to make sure all the account Ids are valid (do as extra test)
 
+    logger(`Running allocation on clientId: ${clientId}, floatId: ${floatId}`);
     const allocationRows = allocationRequests.map((request) => ({
         'transaction_id': request.floatTxId || uuid(),
         'client_id':  clientId,
@@ -169,10 +170,11 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
     };
 
     const accountQuery = `insert into ${config.get('tables.accountTransactions')} `
-        + `(transaction_id, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, tags) values %L `
+        + `(transaction_id, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, client_id, tags) values %L `
         + `returning transaction_id, amount`;
 
-    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ${float_id}, ${tags}';
+    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ' + 
+        '${float_id}, ${client_id}, ${tags}';
 
     const accountRows = allocationRequests.map((request) => {
         const tags = request.relatedEntityId ? `ARRAY ['${request.relatedEntityType}::${request.relatedEntityId}']` : '{}';
@@ -185,6 +187,7 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
             'currency': request.currency,
             'unit': request.unit,
             'float_id': floatId,
+            'client_id': clientId,
             'tags': tags
         }
     });

@@ -9,6 +9,7 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 // NOTE: these are expressed in multiples of the DEFAULT unit, which is hundredth cent (basis point equivalent of currency)
+const DEFAULT_UNIT = 'HUNDREDTH_CENT';
 const floatUnitTransforms = {
     DEFAULT: 1,
     HUNDREDTH_CENT: 1,
@@ -47,6 +48,10 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     const sumQueryForUnit = `select sum(amount) from ${tableToQuery} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` + 
         `and creation_time < to_timestamp($4) and transaction_type in (${transTypesToInclude})`;
 
+    logger('Finding units prior to : ', time.format(), ' which is unix timestamp: ', time.unix());
+    const params = [accountId, currency, time.unix()];
+    logger('Seeking balance with params: ', params);
+
     const unitQueryResult = await rdsConnection.selectQuery(findUnitsQuery, [accountId, currency, time.unix()]);
     const usedUnits = unitQueryResult.map((row) => row.unit);
 
@@ -63,7 +68,7 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
         .reduce((a, b) => a + b, 0);
     logger('For account ID, RDS calculation yields result: ', totalBalanceInDefaultUnit);
 
-    return totalBalanceInDefaultUnit;
+    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT };
 };
 
 /**
@@ -166,10 +171,10 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         logger('Result of insert : ', insertionResult);
         responseEntity['transactionDetails'] = insertionResult;
 
-        const balanceCount = await exports.sumAccountBalance(settlementDetails['accountId'], settlementDetails['savedCurrency']);
+        const balanceCount = await exports.sumAccountBalance(settlementDetails['accountId'], settlementDetails['savedCurrency'], moment());
         logger('New balance count: ', balanceCount);
 
-        responseEntity['newBalance'] = parseInt(balanceCount);
+        responseEntity['newBalance'] = balanceCount;
     } catch (e) {
         logger('Error inserting save: ', e);
         throw e;
