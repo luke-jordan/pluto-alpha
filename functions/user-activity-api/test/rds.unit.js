@@ -48,17 +48,15 @@ describe('Fetch floats and find transactions', () => {
     it('Obtain a default float id and client id', async () => {
         const testAccountId = uuid();
         const queryString = 'select default_float_id, responsible_client_id from account_data.core_account_ledger where account_id = $1';
-        queryStub.withArgs(queryString, [testAccountId]).resolves({ 'default_float_id': testFloatId,
-'responsible_client_id': testClientId });
+        queryStub.withArgs(queryString, [testAccountId]).resolves({ 
+            'default_float_id': testFloatId,
+            'responsible_client_id': testClientId 
+        });
         const floatResult = await rds.findFloatForAccount(testAccountId);
         expect(floatResult).to.exist;
-        expect(floatResult).to.deep.equal({ clientId: testClientId,
-floatId: testFloatId });
+        expect(floatResult).to.deep.equal({ clientId: testClientId, floatId: testFloatId });
         expect(queryStub).to.have.been.calledOnceWithExactly(queryString, sinon.match([testAccountId]));
-        expectNoCalls([
-insertStub,
-multiTableStub
-]);
+        expectNoCalls([insertStub, multiTableStub]);
     });
 
     it('Find a prior matching transaction, by account ID and amount', async () => {
@@ -68,21 +66,12 @@ multiTableStub
         const cutOffTime = Date.now() - 30 * 24 * 60 * 60 * 1000; 
         const queryString = 'select transaction_id from account_data.core_account_ledger where account_id = $1 and amount = $2 and ' + 
             'currency = $3 and unit = $4 and creation_time > $5';
-        const queryParams = sinon.match([
-testAccountId,
-testAmount,
-'ZAR',
-'HUNDREDTH_CENT',
-cutOffTime
-]);
+        const queryParams = sinon.match([testAccountId, testAmount, 'ZAR', 'HUNDREDTH_CENT', cutOffTime]);
         
         const testMatchingTxId = uuid();
         queryStub.withArgs(queryString, queryParams).resolves([{ 'transaction_id': testMatchingTxId }]);
         
-        const findResult = await rds.findMatchingTransaction({ accountId: testAccountId,
-amount: testAmount,
-currency: 'ZAR',
-unit: 'HUNDREDTH_CENT'});
+        const findResult = await rds.findMatchingTransaction({ accountId: testAccountId, amount: testAmount, currency: 'ZAR', unit: 'HUNDREDTH_CENT'});
         expect(findResult).to.exist;
         expect(findResult).to.deep.equal({ transactionId: testMatchingTxId });
         expect(queryStub).to.have.been.calledOnceWithExactly(queryString, queryParams);
@@ -93,19 +82,15 @@ unit: 'HUNDREDTH_CENT'});
         const testAccountId = uuid();
         const queryString = 'select transaction_id from account_data.core_account_ledger where account_id = $1 and amount = $2 and ' +
             'currency = $3 and unit = $4 and creation_time > 5';
-        const queryParams = sinon.match([
-testAccountId,
-101,
-'ZAR',
-'HUNDREDTH_CENT',
-Date.now() - 24 * 60 * 60 * 1000
-]);
+        const queryParams = sinon.match([testAccountId, 101, 'ZAR', 'HUNDREDTH_CENT', Date.now() - 24 * 60 * 60 * 1000]);
         queryParams.withArgs(queryString, queryParams).resolves([{}]);
 
-        const findResult = await rds.findMatchingTransaction({ accountId: testAccountId,
-amount: 101,
-currency: 'ZAR',
-unit: 'HUNDREDTH_CENT' });
+        const findResult = await rds.findMatchingTransaction({ 
+            accountId: testAccountId,
+            amount: 101,
+            currency: 'ZAR',
+            unit: 'HUNDREDTH_CENT' 
+        });
         expect(findResult).to.exist;
         expect(findResult).to.deep.equal({});
         expect(queryString).to.have.been.calledOnceWithExactly(queryString, queryParams);
@@ -156,26 +141,25 @@ describe('Insert transaction alone and with float', () => {
         expectedFloatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
         expectedFloatAllocationRow.allocatedToId = testAccountId;
 
-        const expectedAccountQueryDef = { query: insertAccountTxQuery,
-columnTemplate: accountColumnKeys,
-rows: sinon.match([expectedRowItem])};
-        const expectedFloatQueryDef = { query: insertFloatTxQuery,
-columnTemplate: floatColumnKeys,
-rows: sinon.match([
-expectedFloatAdditionRow,
-expectedFloatAllocationRow
-])};
+        const expectedAccountQueryDef = { 
+            query: insertAccountTxQuery,
+            columnTemplate: accountColumnKeys,
+            rows: sinon.match([expectedRowItem])
+        };
+        const expectedFloatQueryDef = { 
+            query: insertFloatTxQuery,
+            columnTemplate: floatColumnKeys,
+            rows: sinon.match([expectedFloatAdditionRow, expectedFloatAllocationRow])
+        };
         
-        const expectedArgs = sinon.match([
-expectedAccountQueryDef,
-expectedFloatQueryDef
-]);
-        const expectedTxDetails = [
-{ 'transaction_id': testAcTxId,
-'creation_time': new Date() },
-{ 'transaction_id': testFlTxId,
-'creation_time': new Date()}
-]; 
+        const expectedArgs = sinon.match([expectedAccountQueryDef, expectedFloatQueryDef]);
+        const expectedTxDetails = [{ 
+            'transaction_id': testAcTxId,
+            'creation_time': new Date() 
+        }, { 
+            'transaction_id': testFlTxId,
+            'creation_time': new Date()
+        }]; 
         
         multiTableStub.withArgs(expectedArgs).resolves(expectedTxDetails);
 
@@ -195,30 +179,26 @@ expectedFloatQueryDef
 
         const resultOfSaveInsertion = await rds.addSavingToTransactions(testSettledArgs);
 
-        const calledArgs = multiTableStub.getCall(0).args[0][1];
+        // const calledArgs = multiTableStub.getCall(0).args[0][1];
         
         expect(resultOfSaveInsertion).to.exist;
-        expect(resultOfSaveInsertion).to.deep.equal({ newBalance: 105,
-transactionDetails: expectedTxDetails });
+        expect(resultOfSaveInsertion).to.deep.equal({ newBalance: 105, transactionDetails: expectedTxDetails });
         expect(multiTableStub).to.have.been.calledOnceWithExactly(expectedArgs);
-        expect(queryStub).to.have.been.calledOnceWithExactly(balanceQuery, [
-testAccountId,
-'ZAR'
-]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(balanceQuery, [testAccountId, 'ZAR']);
         // expectNoCalls(insertStub);
     });
 
-    it('Throw an error if state is SETTLED but no float id', () => {
+    // it('Throw an error if state is SETTLED but no float id', () => {
 
-    });
+    // });
 
-    it('Insert a pending state save, if no float id', () => {
+    // it('Insert a pending state save, if no float id', () => {
 
-    });
+    // });
 
-    it('Update transaction to settled on instruction', () => {
+    // it('Update transaction to settled on instruction', () => {
 
-    });
+    // });
 
 });
 
@@ -249,7 +229,7 @@ describe('Sums balances', () => {
         expect(balanceResult).to.equal(testBalance);
     });
 
-    it.only('Find an account ID for a user ID, single and multiple', async () => {
+    it('Find an account ID for a user ID, single and multiple', async () => {
         // most recent account first
         const findQuery = 'select account_id from account_data.core_account_ledger where owner_user_id = $1 order by creation_time desc';
         queryStub.withArgs(findQuery, [testUserId1]).resolves([{ 'account_id': testAccountId }]);

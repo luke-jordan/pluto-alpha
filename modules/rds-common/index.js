@@ -201,7 +201,7 @@ class RdsConnection {
         }));
         
         // objectArray.map((object) => columnNames.map((column => object[column['value']])));
-        logger(this._formatLogString(columnTemplate, objectArray, nestedArray));
+        // logger(this._formatLogString(columnTemplate, objectArray, nestedArray));
         return nestedArray;
     }
 

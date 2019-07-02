@@ -88,6 +88,14 @@ const resetStubs = () => {
 describe('Fetches user balance and makes projections', () => {
     
     const wellFormedResultBody = {
+        currentBalance: {
+            'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
+            'unit': 'HUNDREDTH_CENT',
+            'currency': 'USD',
+            'datetime': sinon.match.any,
+            'epochMilli': sinon.match.any,
+            'timezonze': testTimeZone
+        },
         balanceEndOfToday: {
             'amount': expectedBalanceToday,
             'currency': 'USD',
@@ -155,15 +163,13 @@ describe('Fetches user balance and makes projections', () => {
 
     it('Returns an error code when neither account ID or user ID is provided, or no currency', async () => {
         const expectedErrorMsg = 'No account or user ID provided';
-        const errorResult = await handler.balance({ currency: 'USD',
-atEpochMillis: testTimeNow.valueOf() });
+        const errorResult = await handler.balance({ currency: 'USD', atEpochMillis: testTimeNow.valueOf() });
         expect(errorResult).to.exist;
         expect(errorResult.statusCode).to.equal(400);
         expect(errorResult.body).to.equal(expectedErrorMsg);
 
         const expectedNoCurrencyMsg = 'No currency provided for this request';
-        const errorResultCurrency = await handler.balance({ accountId: testAccountId,
-atEpochMillis: testTimeNow.valueOf() });
+        const errorResultCurrency = await handler.balance({ accountId: testAccountId, atEpochMillis: testTimeNow.valueOf() });
         expect(errorResultCurrency).to.exist;
         expect(errorResultCurrency).to.have.property('statusCode', 500);
         expect(errorResultCurrency).to.have.property('body', expectedNoCurrencyMsg);

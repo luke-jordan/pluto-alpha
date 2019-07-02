@@ -2,7 +2,7 @@
     "db": {
         "user": "save_tx_api_worker",
         "host": "rdslocal",
-        "database": "pluto",
+        "database": "jupiter",
         "password": "pwd_for_transaction_api",
         "port" :"5432"
     }
