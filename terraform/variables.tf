@@ -51,14 +51,14 @@ variable "db_instance_class" {
     type = "map"
     default = {
         "staging"  = "db.t2.micro"
-        "master" = "db.t2.micro"
+        "master" = "db.t2.medium"
     }
 }
 variable "db_engine" {
     type = "map"
     default = {
         "staging"  = "postgres"
-        "master" = "aurora-postgresql"
+        "master" = "postgres"
     }
 }
 
@@ -66,12 +66,12 @@ variable "db_engine_version" {
     type = "map"
     default = {
         "staging"  = "10.7"
-        "master" = "2.3.1"
+        "master" = "10.7"
     }
 }
 
 variable "db_allocated_storage" {
-  default = "10"
+  default = "20"
 }
 
 variable "deploy_code_commit_hash" {
