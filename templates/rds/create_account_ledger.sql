@@ -13,7 +13,7 @@ create table if not exists account_data.core_account_ledger (
     default_float_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
     update_time timestamp with time zone not null default current_timestamp,
-    last_transaction_time timestamp with time zone not null default current_timestamp,
+    frozen boolean not null default false,
     tags text[] default '{}',
     flags text[] default '{}',
     primary key (account_id)
