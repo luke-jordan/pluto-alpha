@@ -1,4 +1,9 @@
-# GETTING STARTED: SETTING UP THE LOCAL ENVIRONMENT
+# POLICIES AND LOCAL DEVELOPMENT
+
+The master branch is protected and will not accept pull requests from any branch aside from staging. The staging 
+branch is protected against pushes but will accept pull requests from development branches. Every PR to staging requires code review 
+security and linting to all pass, as well as at least one code review. New branches should fork from the current staging branch. 
+Pull requests should aim for 400-500 lines of code at a time to facilitate reviews. Larger PRs will require more reviews before acceptance.
 
 For local development, you need to install:
 
@@ -81,3 +86,11 @@ execute the various SQL and CloudFormation templates to set up the persistence l
 The lambdas can then be deployed all at once by running the `deploylambdas` script, or by running `sls deploy --stage local` 
 in the lambda folder (for further variants, such as deploying just a single function if the folder contains multiple such 
 functions, see the serverless documentation).
+
+## TERRAFORM
+After applying terraform:
+`terraform workspace select staging`
+`terraform apply -var 'deploy_code_commit_hash=058c7f3729dd375e0983e09b276a2a3caa0df3dd' -var 'aws_access_key=****************' -var 'aws_secret_access_key=***********' -var 'db_user=aaabbbccc' -var 'db_password=aaabbbccc'`
+
+API requests can be sent to :
+`curl -vvv -X POST  https://[staging|master].jupiterapp.net/verify-jwt`

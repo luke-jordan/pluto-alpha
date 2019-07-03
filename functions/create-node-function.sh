@@ -8,6 +8,8 @@ sls create --template aws-nodejs --path $API_NAME
 cp ../templates/serverless/sls-template.yml $API_NAME/serverless.yml
 # bring in the npm default so we avoid package-lock, which wipes symlinks, for very little gain
 cp ../templates/serverless/.npmrc $API_NAME/.npmrc
+# copy in our linting defaults
+cp ../templates/serverless/.eslintrc.js $API_NAME/.eslintrc.js
 
 cd $API_NAME
 
@@ -19,8 +21,7 @@ npm init
 npm i --sav config debug uuid
 npm i --save-dev chai chai-uuid mocha nyc
 npm i --save-dev serverless-localstack
-
-# npm link serverless-localstack
+npm i --save-dev eslint eslint-plugin-chai-friendly
 
 mkdir test
 cd test

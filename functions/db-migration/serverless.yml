@@ -1,0 +1,48 @@
+# Unnamed serverless API
+
+service: db-migration
+
+# plugins:
+#   - serverless-localstack
+
+custom:
+  localstack:
+    host: http://localhost
+    stages:
+      - dev
+      - local
+    debug: true
+  stages:
+    - local
+    - dev
+  thisStage: ${opt:stage, self:provider.stage}
+  thisProcess:
+    NODE_ENV:
+      prod: "production"
+      dev: "development"
+      local: "lamblocal"
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  region: eu-west-1
+  stage: dev
+  deploymentBucket:
+    jupiter.migration.lambdas
+
+functions:
+  migrate:
+    handler: handler.migrate
+    # events:
+    #   - http:
+    #       path: save
+    #       method: post
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
+
+
+package:
+  include:
+    - node_modules/rds-common/**
+    - node_modules/dynamo-common/**

@@ -15,7 +15,7 @@ services:
       - PORT_WEB_UI=${PORT_WEB_UI- }
       - KINESIS_ERROR_PROBABILITY=${KINESIS_ERROR_PROBABILITY- }
       - DOCKER_HOST=unix:///var/run/docker.sock
-      - LAMBDA_DOCKER_NETWORK=pluto_default
+      - LAMBDA_DOCKER_NETWORK=jupiterops_default
     volumes:
       - "${TMPDIR:-/tmp/localstack}:/tmp/localstack"
       - "/var/run/docker.sock:/var/run/docker.sock"
@@ -23,7 +23,7 @@ services:
     image: postgres
     restart: always
     environment:
-      POSTGRES_DB: pluto
+      POSTGRES_DB: jupiter
       POSTGRES_USER: master
       POSTGRES_PASSWORD: alpineskiing
     ports:
