@@ -1,5 +1,5 @@
 resource "aws_iam_policy" "dynamo_table_ClientFloatTable_access" {
-  name        = "ClientFloatTable_access"
+  name        = "ClientFloatTable_access_${terraform.workspace}"
   path        = "/"
 
   policy = <<EOF
@@ -20,7 +20,7 @@ EOF
 }
 
 resource "aws_iam_policy" "migration_script_s3_access" {
-  name        = "migration_script_s3_access"
+  name        = "migration_script_s3_access_${terraform.workspace}"
   path        = "/"
 
   policy = <<EOF
