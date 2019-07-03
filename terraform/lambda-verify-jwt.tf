@@ -63,7 +63,7 @@ resource "aws_lambda_function" "verify_jwt" {
 }
 
 resource "aws_iam_role" "verify_jwt_role" {
-  name = "${var.verify_jwt_lambda_function_name}_role"
+  name = "${var.verify_jwt_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {

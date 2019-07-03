@@ -63,7 +63,7 @@ resource "aws_lambda_function" "insert_user_credentials" {
 }
 
 resource "aws_iam_role" "insert_user_credentials_role" {
-  name = "${var.insert_user_credentials_lambda_function_name}_role"
+  name = "${var.insert_user_credentials_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {

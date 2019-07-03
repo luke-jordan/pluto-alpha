@@ -56,7 +56,7 @@ resource "aws_lambda_function" "float_api" {
 }
 
 resource "aws_iam_role" "float_api_role" {
-  name = "${var.float_api_lambda_function_name}_role"
+  name = "${var.float_api_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {

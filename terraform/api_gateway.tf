@@ -37,7 +37,7 @@ resource "aws_api_gateway_account" "api_gateway" {
 }
 
 resource "aws_iam_role" "api_gateway_cloudwatch" {
-  name = "api_gateway_cloudwatch"
+  name = "api_gateway_cloudwatch_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {

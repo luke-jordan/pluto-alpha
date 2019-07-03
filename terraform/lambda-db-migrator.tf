@@ -47,7 +47,7 @@ resource "aws_lambda_function" "db_migration" {
 }
 
 resource "aws_iam_role" "db_migration_role" {
-  name = "${var.db_migration_lambda_function_name}_role"
+  name = "${var.db_migration_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
