@@ -181,7 +181,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         handler.allocate.restore();
     });
 
-    it('Check initial accrual', async () => {
+    it.only('Check initial accrual', async () => {
         const amountAccrued = Math.floor(Math.random() * 1e4 * 1e4);  // thousands of rand, in hundredths of a cent
         const testTxIds = Array(10).fill().map(_ => uuid());
 
@@ -197,6 +197,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
         delete expectedFloatAdjustment.accrualAmount;
         expectedFloatAdjustment.amount = amountAccrued;
+        expectedFloatAdjustment.transactionType = 'ACCRUAL';
         adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ currentBalance: 100 + amountAccrued });
 
         const expectedBonusAllocationAmount = Math.round(amountAccrued * common.testValueBonusPoolShare);
@@ -207,6 +208,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         delete expectedBonusAllocation.clientId;
         delete expectedBonusAllocation.floatId;
         delete expectedBonusAllocation.backingEntityIdentifier;
+        delete expectedBonusAllocation.transactionType;
         
         expectedBonusAllocation.label = 'BONUS';
         expectedBonusAllocation.amount = expectedBonusAllocationAmount;
@@ -221,7 +223,6 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expectedClientCoAllocation.allocatedToId = common.testValueClientCompanyTracker;
         expectedClientCoAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
 
-        logger('Client co allocation in test: ', expectedClientCoAllocation);
         const expectedCall = sinon.match([expectedBonusAllocation, expectedClientCoAllocation]);
         allocateFloatBalanceStub.withArgs(common.testValidClientId, common.testValidFloatId, expectedCall).resolves(
             [ { 'BONUS': uuid() }, { 'CLIENT': uuid() }]);
@@ -264,6 +265,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         const clientShare = responseEntity.entityAllocations.clientShare;
         expect(clientShare).to.be.lessThan(amountAccrued);
 
+        logger('New balance : ', responseEntity);
         expect(responseEntity.newBalance).to.be.at.least(amountAccrued);
         expect(responseEntity.entityAllocations.bonusShare).to.be.lessThan(amountAccrued - clientShare);
 

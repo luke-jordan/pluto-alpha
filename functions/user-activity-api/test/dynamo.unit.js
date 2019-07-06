@@ -9,6 +9,8 @@ const sinon = require('sinon');
 const chai = require('chai');
 const sinonChai = require('sinon-chai');
 chai.use(sinonChai);
+const chaiAsPromised = require('chai-as-promised');
+chai.use(chaiAsPromised);
 const expect = chai.expect;
 
 const proxyquire = require('proxyquire');
@@ -38,10 +40,11 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
         fetchStub.withArgs(config.get('tables.clientFloatVars'), { 
             clientId: testClientId,
             floatId: testFloatId
-        }, ['accrualRateBps', 'bonusPoolShare', 'clientCoShare', 'prudentialDiscount', 'timeZone']).resolves(expectedFloatParameters);
+        }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone']).
+        resolves(expectedFloatParameters);
     });
 
-    beforeEach(() => fetchStub.reset());
+    beforeEach(() => fetchStub.resetHistory());
 
     it('Fetches paramaters correctly when passed both IDs', async () => {
         const fetchedParams = await dynamo.fetchFloatVarsForBalanceCalc(testClientId, testFloatId);
@@ -49,12 +52,15 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
         expect(fetchedParams).to.deep.equal(expectedFloatParameters);
     });
 
-    it('Returns gracefully when cannot find variables for client/float pair', () => {
-        logger('**** TO TEST: Graceful exit on bad client float pair');
+    it('Throws an error when cannot find variables for client/float pair', async () => {
+        const badClientId = testClientId + '_mangled';
+        const expectedError = `Error! No config variables found for client-float pair: ${badClientId}-${testFloatId}`;
+        await expect(dynamo.fetchFloatVarsForBalanceCalc(badClientId, testFloatId)).to.be.rejectedWith(expectedError);
     });
 
-    it('Throws an error when missing one of the two needed IDs', () => {
-        logger('**** TO TEST: Graceful exist on insufficient params')
+    it('Throws an error when missing one of the two needed IDs', async () => {
+        const errorMsg = 'Error! One of client ID or float ID missing';
+        await expect(dynamo.fetchFloatVarsForBalanceCalc(testClientId)).to.be.rejectedWith(errorMsg);
     });
 
 });

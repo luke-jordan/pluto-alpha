@@ -41,8 +41,7 @@ module.exports.accrue = async (event, context) => {
       currency: accrualCurrency,
       unit: accrualUnit,
       relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
-      relatedEntityId: accrualParameters.backingEntityIdentifier,
-      transactionType: constants.floatTransTypes.ALLOCATION
+      relatedEntityId: accrualParameters.backingEntityIdentifier
     };
 
     const bonusAllocation = JSON.parse(JSON.stringify(allocationCommon));
@@ -84,7 +83,7 @@ module.exports.accrue = async (event, context) => {
     const userAllocations = await exports.allocate(userAllocEvent);
 
     const returnBody = {
-      newBalance: newFloatBalance.updatedBalance,
+      newBalance: newFloatBalance.currentBalance,
       entityAllocations: entityAllocations,
       userAllocationTransactions: userAllocations
     };

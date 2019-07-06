@@ -29,9 +29,6 @@ jobs:
           - user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
       - restore_cache:
           keys:
-          - auth-api_dependencies-{{ checksum "./functions/auth-api/package.json" }}
-      - restore_cache:
-          keys:
           - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
       - restore_cache:
           keys:
@@ -51,7 +48,6 @@ jobs:
           command: |
 
             cd $HOME/app/functions/float-api && npm install
-            cd $HOME/app/functions/auth-api && npm install
             cd $HOME/app/functions/user-activity-api && npm install
             cd $HOME/app/functions/user-existence-api && npm install
             cd $HOME/app/modules/rds-common && npm install
@@ -78,11 +74,6 @@ jobs:
             - ./functions/float-api/node_modules
 
       - save_cache:
-          key: auth-api_dependencies-{{ checksum "./functions/auth-api/package.json" }}
-          paths:
-            - ./functions/auth-api/node_modules
-
-      - save_cache:
           key: user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
           paths:
             - ./functions/user-activity-api/node_modules
@@ -105,12 +96,13 @@ jobs:
       - run:
           name: run linter
           command: |
-            echo "TODO: run linter"
+            cd $HOME/app/functions/user-activity-api && npm lint
 
       - run:
           name: run security check
           command: |
             echo 'TODO: run security check, SNYK, Sourceclear or similar...'
+            cd $HOME/app/functions/user-activity-api && npm audit
 
       - run:
           name: run tests
@@ -123,7 +115,6 @@ jobs:
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
 
-                cp -r modules/* $HOME/app/functions/auth-api/node_modules
                 cp -r modules/* $HOME/app/functions/float-api/node_modules
                 cp -r modules/* $HOME/app/functions/user-activity-api/node_modules
                 cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
@@ -131,10 +122,6 @@ jobs:
                 cd $HOME/app/functions/float-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -r $HOME/deploy_float_api_$CIRCLE_SHA1.zip .
-
-                cd $HOME/app/functions/auth-api
-                echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_auth_api_$CIRCLE_SHA1.zip .
 
                 cd $HOME/app/functions/user-activity-api
                 echo $CIRCLE_SHA1 > last_commit.txt
@@ -154,7 +141,6 @@ jobs:
 
                 cd $HOME
 
-                /home/circleci/bin/aws s3 cp deploy_auth_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/auth_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_activity_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_existence_api/$CIRCLE_SHA1.zip

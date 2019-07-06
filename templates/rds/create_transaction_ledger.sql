@@ -3,20 +3,23 @@ create schema if not exists transaction_data;
 -- For flags and tags, for the moment, see account ledger
 
 create table if not exists transaction_data.core_transaction_ledger (
-    transaction_id uuid not null,
+    transaction_id uuid not null primary key,
     account_id uuid not null references account_data.core_account_ledger (account_id),
     creation_time timestamp with time zone not null default current_timestamp,
     currency varchar(10),
     unit varchar(20),
     amount integer not null,
     transaction_type varchar(50) not null,
-    settlement_status varchar(50),
+    initiation_time timestamp with time zone,
+    settlement_status varchar(50) not null,
+    settlement_time timestamp with time zone,
     float_id varchar(255) not null,
     client_id varchar(255) not null,
-    matching_float_tx_id varchar(50),
+    float_adjust_tx_id varchar(50),
+    float_alloc_tx_id varchar(50),
+    payment_reference varchar(255),
     tags text[] default '{}',
     flags text[] default '{}',
-    primary key (transaction_id),
     check (amount >= 0)
 );
 
