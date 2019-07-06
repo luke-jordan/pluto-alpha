@@ -5,7 +5,8 @@
   "main": "handler.js",
   "scripts": {
     "test": "DEBUG=pluto:* nyc mocha",
-    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov"
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",
