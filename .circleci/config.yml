@@ -117,7 +117,7 @@ jobs:
           name: run security check
           command: |
             echo 'TODO: run security check, SNYK, Sourceclear or similar...'
-            cd $HOME/app/functions/user-activity-api && npm audit
+            # cd $HOME/app/functions/user-activity-api && npm audit
 
       - run:
           name: run tests
