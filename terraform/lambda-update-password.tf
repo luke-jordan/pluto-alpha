@@ -63,7 +63,7 @@ resource "aws_lambda_function" "update_password" {
 }
 
 resource "aws_iam_role" "update_password_role" {
-  name = "${var.update_password_lambda_function_name}_role"
+  name = "${var.update_password_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {

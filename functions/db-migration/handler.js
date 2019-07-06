@@ -25,8 +25,8 @@ const runS3script = async (bucket, key) => {
 
   const s3 = new AWS.S3();
   const params = {
-    Bucket: scriptBucket,
-    Key: scriptKey
+    Bucket: bucket,
+    Key: key
   };
 
   const retrievalResult = await s3.getObject(params).promise();

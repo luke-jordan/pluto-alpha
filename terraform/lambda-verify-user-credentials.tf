@@ -48,7 +48,7 @@ resource "aws_lambda_function" "verify_user_credentials" {
 }
 
 resource "aws_iam_role" "verify_user_credentials_role" {
-  name = "${var.verify_user_credentials_lambda_function_name}_role"
+  name = "${var.verify_user_credentials_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {

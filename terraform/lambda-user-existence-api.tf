@@ -59,7 +59,7 @@ resource "aws_lambda_function" "user_existence_api" {
 }
 
 resource "aws_iam_role" "user_existence_api_role" {
-  name = "${var.user_existence_api_lambda_function_name}_role"
+  name = "${var.user_existence_api_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -85,7 +85,6 @@ resource "aws_cloudwatch_log_group" "user_existence_api" {
     environment = "${terraform.workspace}"
   }
 }
-
 
 resource "aws_iam_role_policy_attachment" "user_existence_api_basic_execution_policy" {
   role = "${aws_iam_role.user_existence_api_role.name}"

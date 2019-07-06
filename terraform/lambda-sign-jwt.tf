@@ -63,7 +63,7 @@ resource "aws_lambda_function" "sign_jwt" {
 }
 
 resource "aws_iam_role" "sign_jwt_role" {
-  name = "${var.sign_jwt_lambda_function_name}_role"
+  name = "${var.sign_jwt_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {

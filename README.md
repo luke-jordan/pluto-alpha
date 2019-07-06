@@ -86,3 +86,11 @@ execute the various SQL and CloudFormation templates to set up the persistence l
 The lambdas can then be deployed all at once by running the `deploylambdas` script, or by running `sls deploy --stage local` 
 in the lambda folder (for further variants, such as deploying just a single function if the folder contains multiple such 
 functions, see the serverless documentation).
+
+## TERRAFORM
+After applying terraform:
+`terraform workspace select staging`
+`terraform apply -var 'deploy_code_commit_hash=058c7f3729dd375e0983e09b276a2a3caa0df3dd' -var 'aws_access_key=****************' -var 'aws_secret_access_key=***********' -var 'db_user=aaabbbccc' -var 'db_password=aaabbbccc'`
+
+API requests can be sent to :
+`curl -vvv -X POST  https://[staging|master].jupiterapp.net/verify-jwt`

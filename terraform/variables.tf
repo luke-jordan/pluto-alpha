@@ -47,15 +47,9 @@ variable "az_count" {
   default     = "2"
 }
 
-variable "db_name" {
-  default = "main"
-}
 
-variable "db_instance_class" {
-  default = "db.t2.micro"
-}
 variable "db_allocated_storage" {
-  default = "10"
+  default = "20"
 }
 
 variable "deploy_code_commit_hash" {

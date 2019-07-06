@@ -48,7 +48,7 @@ resource "aws_lambda_function" "user_activity_api" {
 }
 
 resource "aws_iam_role" "user_activity_api_role" {
-  name = "${var.user_activity_api_lambda_function_name}_role"
+  name = "${var.user_activity_api_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -73,6 +73,11 @@ resource "aws_cloudwatch_log_group" "user_activity_api" {
   tags = {
     environment = "${terraform.workspace}"
   }
+}
+
+resource "aws_iam_role_policy_attachment" "user_activity_ClientFloatTable_access" {
+  role = "${aws_iam_role.user_activity_api_role.name}"
+  policy_arn = "${aws_iam_policy.dynamo_table_ClientFloatTable_access.arn}"
 }
 
 
