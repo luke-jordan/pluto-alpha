@@ -59,7 +59,6 @@ jobs:
             cd $HOME/app
 
             cp -r modules/* $HOME/app/functions/db-migration/node_modules
-            cp -r modules/* $HOME/app/functions/auth-api/node_modules
             cp -r modules/* $HOME/app/functions/float-api/node_modules
             cp -r modules/* $HOME/app/functions/user-activity-api/node_modules
             cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
@@ -129,7 +128,6 @@ jobs:
             #cd user-existence-api; npm test; npm run-script generate-coverage
             #cd ../user-activity-api; npm test; npm run-script generate-coverage
             #cd ../float-api; npm test; npm run-script generate-coverage
-            #cd ../auth-api; npm test; npm run-script generate-coverage
             #cd ..
 
             echo "Uploading coverage reports"
