@@ -186,7 +186,7 @@ jobs:
              export PATH="/tmp/terraform:$PATH"
              cd $HOME/app/terraform
              
-             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
+             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'wip-ci-short' ]; then
               echo "On branch $CIRCLE_BRANCH, initiating Terraform"
               ./terraform_circleci.sh
              fi
