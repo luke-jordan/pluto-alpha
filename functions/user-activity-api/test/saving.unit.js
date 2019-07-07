@@ -29,7 +29,7 @@ const testTimeSettled = moment();
 const testNumberOfSaves = 5;
 const testBaseAmount = 1000000;
 const testAmounts = Array(testNumberOfSaves).fill().map(() => Math.floor(Math.random() * testBaseAmount));
-const sumOfTestAmounts = testAmounts.reduce((a, b) => a + b, 0);
+const sumOfTestAmounts = testAmounts.reduce((cum, value) => cum + value, 0);
 logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmounts);
 
 const findMatchingTxStub = sinon.stub();
@@ -80,7 +80,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     };
 
     const wellFormedMinimalPendingRequestToRds = JSON.parse(JSON.stringify(wellFormedMinimalSettledRequestToRds));
-    delete wellFormedMinimalPendingRequestToRds.settledTime;
+    Reflect.deleteProperty(wellFormedMinimalPendingRequestToRds, 'settledTime');
     wellFormedMinimalPendingRequestToRds.savedAmount = sinon.match.number;
     wellFormedMinimalPendingRequestToRds.settlementStatus = 'PENDING';
 
@@ -117,8 +117,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
 
     it('Saves, with payment at same time, but no float explicit', async () => {
         const saveEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        delete saveEvent.floatId;
-        delete saveEvent.clientId;
+        Reflect.deleteProperty(saveEvent, 'floatId');
+        Reflect.deleteProperty(saveEvent, 'clientId');
         
         const saveResult = await handler.save(saveEvent);
         
@@ -131,35 +131,39 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         expect(findMatchingTxStub).to.have.not.been.called;
     });
 
-    // todo : restore this in non-settled payment
-    // it('Stores pending, if no payment information, float provided but redundant', async () => {
-    //     const saveEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-    //     saveEvent.floatId = 'zar_cash_float';
+    /*     
+        
+    restore this when do non-settled payment
+    it('Stores pending, if no payment information, float provided but redundant', async () => {
+        const saveEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
+        saveEvent.floatId = 'zar_cash_float';
 
-    //     const expectedTxDetails = { accountTransactionId: uuid() };
-    //     addSavingsRdsStub.withArgs(settlementWithoutPayment, null).resolves({ rows: [expectedTxDetails] });
+        const expectedTxDetails = { accountTransactionId: uuid() };
+        addSavingsRdsStub.withArgs(settlementWithoutPayment, null).resolves({ rows: [expectedTxDetails] });
 
-    //     const saveResult = await handler.save(saveEvent);
+        const saveResult = await handler.save(saveEvent);
 
-    //     expect(saveResult).to.exist;
-    //     expect(saveResult.statusCode).to.equal(200);
-    //     expect(saveResult.body).to.exist;
-    //     const saveBody = JSON.parse(saveResult.body);
-    //     expect(saveBody).to.deep.equal({ 'state': 'PENDING', transactionsIds: expectedTxDetails });
-    //     expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(settlementWithPayment);
-    //     expect(findFloatStub).to.have.not.been.called;
-    //     expect(findMatchingTxStub).to.have.not.been.called;
-    // });
+        expect(saveResult).to.exist;
+        expect(saveResult.statusCode).to.equal(200);
+        expect(saveResult.body).to.exist;
+        const saveBody = JSON.parse(saveResult.body);
+        expect(saveBody).to.deep.equal({ 'state': 'PENDING', transactionsIds: expectedTxDetails });
+        expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(settlementWithPayment);
+        expect(findFloatStub).to.have.not.been.called;
+        expect(findMatchingTxStub).to.have.not.been.called;
+    });
+
+    */
 
     it('Throws an error when no account information, currency, unit or amount provided', async () => {
         const saveEventNoAccountId = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        delete saveEventNoAccountId.accountId;
+        Reflect.deleteProperty(saveEventNoAccountId, 'accountId');
         const saveEventNoAmount = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        delete saveEventNoAmount.savedAmount;
+        Reflect.deleteProperty(saveEventNoAmount, 'savedAmount');
         const saveEventNoCurrency = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        delete saveEventNoCurrency.savedCurrency;
+        Reflect.deleteProperty(saveEventNoCurrency, 'savedCurrency');
         const saveEventNoUnit = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        delete saveEventNoUnit.savedUnit;
+        Reflect.deleteProperty(saveEventNoUnit, 'savedUnit');
 
         const expectedNoAccountError = await handler.save(saveEventNoAccountId);
         testHelper.checkErrorResultForMsg(expectedNoAccountError, 'Error! No account ID provided for the save');
@@ -173,6 +177,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         testHelper.checkErrorResultForMsg(expectedNoUnitError, 'Error! No unit specified for the saving event');
     });
 
+    /* 
     it('Throws an error when provided a misaligned client Id and floatId', async () => {
 
     });
@@ -180,5 +185,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     it('Throw an error if state is PENDING but includes settlement time', () => {
 
     });
-
+     */
+    
 });

@@ -1,3 +1,5 @@
+'use strict';
+
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('pluto:save:test');
@@ -6,7 +8,6 @@ const moment = require('moment-timezone');
 
 const chai = require('chai');
 const expect = chai.expect;
-const testHelper = require('./test.helper');
 
 const proxyquire = require('proxyquire');
 const sinon = require('sinon');
@@ -19,7 +20,7 @@ const insertStub = sinon.stub();
 const multiTableStub = sinon.stub();
 
 class MockRdsConnection {
-    constructor (any) {
+    constructor () {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
         this.largeMultiTableInsert = multiTableStub;
@@ -49,7 +50,6 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
     beforeEach(resetStubs);
 
     it('Obtain a default float id and client id', async () => {
-        const testAccountId = uuid();
         const queryString = 'select default_float_id, responsible_client_id from account_data.core_account_ledger where account_id = $1';
         queryStub.withArgs(queryString, sinon.match([testAccountId])).resolves([{ 
             'default_float_id': testFloatId,
@@ -63,7 +63,6 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
     });
 
     it('Find a prior matching transaction, by account ID and amount', async () => {
-        const testAccountId = uuid();
         const testAmount = 100;
         // cut off time should be a configurable thing
         const cutOffTime = moment.tz('America/New_York').subtract(30, 'minutes'); 
@@ -89,7 +88,6 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
     });
 
     it('Fail to find a prior matching transaction', async () => {
-        const testAccountId = uuid();
         const queryString = 'select transaction_id from account_data.core_account_ledger where account_id = $1 and amount = $2 and ' + 
             'currency = $3 and unit = $4 and creation_time < to_timestamp($5) order by creation_time ascending';
         const cutOffTime = moment.tz('America/New_York').subtract(1, 'minutes'); 
@@ -109,9 +107,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
         expectNoCalls([insertStub, multiTableStub]);
     });
 
-    it('Call up a transaction via payment ref', async () => {
-
-    });
+    // it('Call up a transaction via payment ref', async () => { });
     
 });
 
@@ -237,21 +233,13 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectNoCalls([insertStub]);
     });
 
-    it('Throw an error if state is SETTLED but no float id', () => {
+    // it('Throw an error if state is SETTLED but no float id', () => { });
 
-    });
+    // it('Insert a pending state save, if no float id', () => { });
 
-    it('Insert a pending state save, if no float id', () => {
+    // it('Update transaction to settled on instruction', () => { });
 
-    });
-
-    it('Update transaction to settled on instruction', () => {
-
-    });
-
-    it('Throws errors if missing necessary arguments (times, etc)', () => {
-
-    });
+    // it('Throws errors if missing necessary arguments (times, etc)', () => {    });
 
 });
 
@@ -260,7 +248,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testUserId1 = uuid();
 
     const testUserId2 = uuid();
-    const testAccoundIdsMulti = [uuid(), uuid(),uuid()];
+    const testAccoundIdsMulti = [uuid(), uuid(), uuid()];
 
     const testBalance = Math.floor(100 * 100 * 100 * Math.random());
 

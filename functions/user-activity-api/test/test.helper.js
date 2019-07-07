@@ -1,4 +1,4 @@
-' use strict';
+'use strict';
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -8,16 +8,12 @@ const expect = chai.expect;
 
 const logger = require('debug')('pluto:user-activity:test');
 
-module.exports.momentMatcher = (testMoment) => sinon.match(value => {
-    return moment.isMoment(value) && testMoment.isSame(value);
-});
+module.exports.momentMatcher = (testMoment) => sinon.match((value) => moment.isMoment(value) && testMoment.isSame(value));
 
-module.exports.anyMoment = sinon.match(value => {
-    return moment.isMoment(value);
-});
+module.exports.anyMoment = sinon.match((value) => moment.isMoment(value));
 
 module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
-    Object.keys(expectedObj).forEach(key => {
+    Object.keys(expectedObj).forEach((key) => {
         const doesItMatch = sinon.match(expectedObj[key]).test(passedToArgs[key]);
         logger(`Key: ${key}, matches: ${doesItMatch}`);
         if (!doesItMatch) {

@@ -3,7 +3,6 @@
 process.env.NODE_ENV = 'test';
 
 const config = require('config');
-const logger = require('debug')('pluto:activity:test');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -53,7 +52,7 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
     });
 
     it('Throws an error when cannot find variables for client/float pair', async () => {
-        const badClientId = testClientId + '_mangled';
+        const badClientId = `${testClientId}_mangled`;
         const expectedError = `Error! No config variables found for client-float pair: ${badClientId}-${testFloatId}`;
         await expect(dynamo.fetchFloatVarsForBalanceCalc(badClientId, testFloatId)).to.be.rejectedWith(expectedError);
     });

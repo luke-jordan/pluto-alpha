@@ -33,11 +33,11 @@ module.exports.save = async (event) => {
     }
 
     settlementInformation.initiationTime = moment(settlementInformation.initiationTimeEpochMillis);
-    delete settlementInformation.initiationTimeEpochMillis;
+    Reflect.deleteProperty(settlementInformation, 'initiationTimeEpochMillis');
 
-    if (!!settlementInformation.settlementTimeEpochMillis) {
+    if (Reflect.has(settlementInformation, 'settlementTimeEpochMillis')) {
       settlementInformation.settlementTime = moment(settlementInformation.settlementTimeEpochMillis);
-      delete settlementInformation.settlementTimeEpochMillis;
+      Reflect.deleteProperty(settlementInformation, 'settlementTimeEpochMillis');
     }
     
     const savingResult = await exports.storeSettledSaving(settlementInformation);
@@ -80,15 +80,15 @@ const fetchUserDefaultAccount = async (systemWideUserId) => {
   logger('Fetching user accounts for user ID: ', systemWideUserId);
   const userAccounts = await persistence.findAccountsForUser(systemWideUserId);
   logger('Retrieved accounts: ', userAccounts);
-  return !!userAccounts ? userAccounts[0] : null;
+  return Array.isArray(userAccounts) && userAccounts.length > 0 ? userAccounts[0] : null;
 };
 
 const accrueBalanceByDay = (currentBalanceAmount, floatProjectionVars) => {
   const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
   const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
   // logger('Accrual rate gross: ', annualAccrualRateNominalGross.toNumber());
-  const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual)
-    .plus(floatProjectionVars.prudentialFactor);
+  const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
+    plus(floatProjectionVars.prudentialFactor);
   // logger('Float deductions: ', floatDeductions.toNumber());
   const dailyAccrualRateNominalNet = annualAccrualRateNominalGross.dividedBy(365).times(new BigNumber(1).minus(floatDeductions));
   // logger('Daily accrual net: ', dailyAccrualRateNominalNet.toNumber());
@@ -127,8 +127,9 @@ module.exports.balance = async (event, context) => {
     
     const accountId = params.accountId || await fetchUserDefaultAccount(params.userId);
     
-    let clientId;
-    let floatId;
+    let clientId = '';
+    let floatId = '';
+
     if (params.clientId && params.floatId) {
       clientId = params.clientId;
       floatId = params.floatId;              
@@ -174,13 +175,13 @@ module.exports.balance = async (event, context) => {
     
     let currentProjectedBalance = endOfTodayBalance;
     const balanceSubsequentDays = [];
-    for (let i = 1; i <= maxNumberDaysProjection; i++) {
+    for (let i = 1; i <= maxNumberDaysProjection; i += 1) {
       currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
       const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
       const endOfIthDayDict = createBalanceDict(currentProjectedBalance.decimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
       // logger('Adding end of day dict: ', endOfIthDayDict);
       balanceSubsequentDays.push(endOfIthDayDict);
-    };
+    }
 
     resultObject.balanceSubsequentDays = balanceSubsequentDays;
 
@@ -188,7 +189,7 @@ module.exports.balance = async (event, context) => {
     return {
       statusCode: 200,
       body: JSON.stringify(resultObject)
-    }
+    };
   } catch (e) {
     logger('FATAL_ERROR: ', e);
     return {

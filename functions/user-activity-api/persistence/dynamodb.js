@@ -20,7 +20,7 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     
     if (!rowFromDynamo) {
         throw new Error(`Error! No config variables found for client-float pair: ${clientId}-${floatId}`);
-    } else {
-        return rowFromDynamo;
-    }
+    } 
+    
+    return rowFromDynamo;
 };

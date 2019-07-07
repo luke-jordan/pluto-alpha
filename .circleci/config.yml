@@ -110,15 +110,15 @@ jobs:
       - run:
           name: run linter
           command: |
-            echo "Linting modules"
-            cd $HOME/app/modules/rds-common && npm run-script lint
-            cd ../dynamo-common && npm run-script lint
+            # echo "Linting modules"
+            # cd $HOME/app/modules/rds-common && npm run-script lint
+            # cd ../dynamo-common && npm run-script lint
 
             echo "Linting functions"
             cd $HOME/app/functions/user-activity-api && npm run-script lint
-            cd ../user-existence-api && npm run-script lint
-            cd ../float-api && npm run-script lint
-            cd ../db-migration && npm run-script lint
+            # cd ../user-existence-api && npm run-script lint
+            # cd ../float-api && npm run-script lint
+            # cd ../db-migration && npm run-script lint
 
       - run:
           name: run security check

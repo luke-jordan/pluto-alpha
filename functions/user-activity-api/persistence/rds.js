@@ -72,7 +72,7 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     const usedUnits = unitQueryResult.map((row) => row.unit);
 
     const unitsWithSums = { };
-    for (let i = 0; i < usedUnits.length; i++) {
+    for (let i = 0; i < usedUnits.length; i += 1) {
         const unit = usedUnits[i];
         const sumQueryResult = await rdsConnection.selectQuery(sumQueryForUnit, [accountId, currency, unit, time.unix()]);
         unitsWithSums[unit] = sumQueryResult[0]['sum'];
@@ -80,19 +80,19 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
 
     logger('For units : ', usedUnits, ' result of sums: ', unitsWithSums);
 
-    const totalBalanceInDefaultUnit = Object.keys(unitsWithSums).map(unit => unitsWithSums[unit] * floatUnitTransforms[unit])
-        .reduce((a, b) => a + b, 0);
+    const totalBalanceInDefaultUnit = Object.keys(unitsWithSums).map((unit) => unitsWithSums[unit] * floatUnitTransforms[unit]).
+        reduce((cum, value) => cum + value, 0);
     logger('For account ID, RDS calculation yields result: ', totalBalanceInDefaultUnit);
 
     return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT };
 };
 
 const extractTxDetails = (keyForTransactionId, row) => {
-    const obj = { }
+    const obj = { };
     obj[keyForTransactionId] = row['transaction_id'];
     obj['creationTimeEpochMillis'] = moment(row['creation_time']).valueOf();
     return obj;
-}
+};
 
 /**
  * Core method. Records a user's saving event, with three inserts: one, in the accounts table, records the saving event on the user's account;
@@ -163,7 +163,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
             clientId: settlementDetails.clientId,
             settlementStatus: settlementStatus,
             initiationTime: settlementDetails.initiationTime.format(),
-            settlementTime: settlementDetails.settlementTime.format(),
+            settlementTime: settlementDetails.settlementTime.format()
         };
 
         const accountRow = JSON.parse(JSON.stringify(rowValuesBase));

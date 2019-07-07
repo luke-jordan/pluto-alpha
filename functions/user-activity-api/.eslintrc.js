@@ -82,7 +82,7 @@ module.exports = {
         'id-length': [
             'error',
             {
-                'exceptions': ['e']
+                'exceptions': ['e', 'i', 'o']
             }
         ],
         'id-match': 'error',
@@ -110,13 +110,18 @@ module.exports = {
         'max-classes-per-file': 'error',
         'max-depth': 'error',
         'max-len': 'off',
-        'max-lines': 'error',
-        'max-lines-per-function': 'error',
+        'max-lines': 'warn',
+        'max-lines-per-function': 'warn',
         'max-nested-callbacks': 'error',
-        'max-params': 'error',
+        'max-params': [
+            'error',
+            {
+                'max': 4
+            }
+        ],
         'max-statements': 'off',
         'max-statements-per-line': 'error',
-        'multiline-comment-style': 'error',
+        'multiline-comment-style': 'off',
         'new-cap': 'error',
         'new-parens': 'error',
         'newline-after-var': 'off',
@@ -124,7 +129,7 @@ module.exports = {
         'newline-per-chained-call': 'off',
         'no-alert': 'error',
         'no-array-constructor': 'error',
-        'no-await-in-loop': 'error',
+        'no-await-in-loop': 'warn',
         'no-bitwise': 'error',
         'no-buffer-constructor': 'error',
         'no-caller': 'error',
@@ -162,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 400, 500]
+                'ignore': [0, 1, 100, 200, 400, 500, 365]
             }
         ],
         'no-mixed-operators': 'error',
@@ -221,7 +226,7 @@ module.exports = {
         'no-useless-return': 'error',
         'no-var': 'error',
         'no-void': 'error',
-        'no-warning-comments': 'error',
+        'no-warning-comments': 'warn',
         'no-whitespace-before-property': 'error',
         'nonblock-statement-body-position': 'error',
         'object-curly-newline': 'off',
