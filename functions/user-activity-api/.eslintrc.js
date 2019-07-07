@@ -18,7 +18,7 @@ module.exports = {
     ],
     'rules': {
         'accessor-pairs': 'error',
-        'array-bracket-newline': 'error',
+        'array-bracket-newline': 'off',
         'array-bracket-spacing': 'error',
         'array-callback-return': 'error',
         'array-element-newline': 'off',
@@ -226,7 +226,7 @@ module.exports = {
         'nonblock-statement-body-position': 'error',
         'object-curly-newline': 'off',
         'object-curly-spacing': 'off',
-        'object-property-newline': 'error',
+        'object-property-newline': 'off',
         'object-shorthand': 'off',
         'one-var': 'off',
         'one-var-declaration-per-line': 'error',
