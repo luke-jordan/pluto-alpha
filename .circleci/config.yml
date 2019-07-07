@@ -116,12 +116,10 @@ jobs:
       - run:
           name: run security check
           command: |
-            echo 'TODO: run security check, SNYK, Sourceclear or similar...'
             cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
-            if [ -f ./modules/rds-common ]
-              echo "Modules still intact"
-            else
-              echo "Modules missing! Need to adjust"
+            if [! -f ./node_modules/rds-common ]
+              echo "Modules are missing!"
+              ls ./node_modules
             fi
 
       - run:
