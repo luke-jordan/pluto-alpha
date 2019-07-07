@@ -117,10 +117,14 @@ jobs:
           name: run security check
           command: |
             cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
-            if [! -f ./node_modules/rds-common ]
-              echo "Modules are missing!"
-              ls ./node_modules
-            fi
+            # we do this to avoid the package lock inadvertantly overriding later and wiping modules
+            rm ./package-lock.json
+            cd ../app/functions/user-existence-api && npm i --package-lock-only && npm audit
+            rm ./package-lock.json
+            cd ../app/functions/float-api && npm i --package-lock-only && npm audit
+            rm ./package-lock.json
+            cd ../app/functions/db-migration && npm i --package-lock-only && npm audit
+            rm ./package-lock.json
 
       - run:
           name: run tests
