@@ -117,12 +117,17 @@ jobs:
           name: run security check
           command: |
             echo 'TODO: run security check, SNYK, Sourceclear or similar...'
-            # cd $HOME/app/functions/user-activity-api && npm audit
+            cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
+            if [ -f ./modules/rds-common ]
+              echo "Modules still intact"
+            else
+              echo "Modules missing! Need to adjust"
+            fi
 
       - run:
           name: run tests
           command: |
-            cd functions
+            cd $HOME/app/functions
             npm install codecov
             
             echo "Running tests and outputing coverage reports"
