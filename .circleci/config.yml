@@ -125,11 +125,11 @@ jobs:
             cd functions
             npm install codecov
             
-            #echo "Running tests and outputing coverage reports"
+            echo "Running tests and outputing coverage reports"
             #cd user-existence-api; npm test; npm run-script generate-coverage
-            #cd ../user-activity-api; npm test; npm run-script generate-coverage
+            cd /user-activity-api; npm test; npm run-script generate-coverage
             #cd ../float-api; npm test; npm run-script generate-coverage
-            #cd ..
+            cd ..
 
             echo "Uploading coverage reports"
             node_modules/codecov/bin/codecov
@@ -186,7 +186,7 @@ jobs:
              export PATH="/tmp/terraform:$PATH"
              cd $HOME/app/terraform
              
-             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'wip-ci-short' ]; then
+             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'wip-staging' ]; then
               echo "On branch $CIRCLE_BRANCH, initiating Terraform"
               ./terraform_circleci.sh
              fi
