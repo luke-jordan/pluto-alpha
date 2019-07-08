@@ -1,6 +1,8 @@
+'use strict';
+
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:float:test');
+// const logger = require('debug')('pluto:float:test');
 const config = require('config');
 
 const sinon = require('sinon');

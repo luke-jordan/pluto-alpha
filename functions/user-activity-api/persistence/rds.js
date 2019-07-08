@@ -60,8 +60,8 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     
     const findUnitsQuery = `select distinct(unit) from ${tableToQuery} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
         `and creation_time < to_timestamp($3)`;
-    const sumQueryForUnit = `select sum(amount) from ${tableToQuery} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` + 
-        `and creation_time < to_timestamp($4) and transaction_type in (${transTypesToInclude})`;
+    const sumQueryForUnit = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` + 
+        `and creation_time < to_timestamp($4) and transaction_type in (${transTypesToInclude}) group by unit`;
 
     logger('Finding units prior to : ', time.format(), ' which is unix timestamp: ', time.unix());
     const params = [accountId, currency, time.unix()];
@@ -71,12 +71,19 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     logger('Result of unit query: ', unitQueryResult);
     const usedUnits = unitQueryResult.map((row) => row.unit);
 
-    const unitsWithSums = { };
+    const unitQueries = [];
+    
     for (let i = 0; i < usedUnits.length; i += 1) {
         const unit = usedUnits[i];
-        const sumQueryResult = await rdsConnection.selectQuery(sumQueryForUnit, [accountId, currency, unit, time.unix()]);
-        unitsWithSums[unit] = sumQueryResult[0]['sum'];
+        const thisQuery = rdsConnection.selectQuery(sumQueryForUnit, [accountId, currency, unit, time.unix()]);
+        logger('Retrieved query: ', thisQuery);
+        unitQueries.push(thisQuery);
     }
+
+    const queryResults = await Promise.all(unitQueries);
+    logger('Query results: ', queryResults);
+    // const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['allocated_to_id']]: row['sum']}), {}); 
+    const unitsWithSums = queryResults.reduce((obj, queryResult) => ({ ...obj, [queryResult[0]['unit']]: queryResult[0]['sum']}), {});
 
     logger('For units : ', usedUnits, ' result of sums: ', unitsWithSums);
 

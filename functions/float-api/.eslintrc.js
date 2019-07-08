@@ -73,7 +73,7 @@ module.exports = {
         'func-name-matching': 'error',
         'func-names': 'error',
         'func-style': 'error',
-        'function-paren-newline': 'error',
+        'function-paren-newline': 'off',
         'generator-star-spacing': 'error',
         'global-require': 'error',
         'guard-for-in': 'error',
@@ -82,7 +82,7 @@ module.exports = {
         'id-length': [
             'error',
             {
-                'exceptions': ['e', 'i', 'o']
+                'exceptions': ['e', 'i', 'o', '_']
             }
         ],
         'id-match': 'error',
@@ -167,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 400, 500, 365]
+                'ignore': [0, 0.1, 1, 100, 200, 400, 500, 365]
             }
         ],
         'no-mixed-operators': 'error',

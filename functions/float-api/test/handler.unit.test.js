@@ -1,3 +1,5 @@
+'use strict';
+
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('pluto:float:test');
@@ -28,9 +30,9 @@ const rds = require('../persistence/rds');
 const dynamo = require('../persistence/dynamodb');
 const constants = require('../constants');
 
-describe('Single apportionment operations', () => {
+let handler = require('../handler');
 
-    const handler = require('../handler');
+describe('Single apportionment operations', () => {
 
     it('Calculate bonus share properly, with random values, plus bonus share', () => {
         // note: e13 = 1 * 10^13 = 1 billion rand (1e9) in hundredths of cents
@@ -41,12 +43,12 @@ describe('Single apportionment operations', () => {
 
         poolExamples.forEach((pool) => {
             shareExamples.forEach((share) => {
-                const expectedResult = BigNumber(pool).times(BigNumber(share)).integerValue(BigNumber.ROUND_HALF_UP).toNumber();
+                const expectedResult = new BigNumber(pool).times(new BigNumber(share)).integerValue(BigNumber.ROUND_HALF_UP).toNumber();
                 const obtainedResult = handler.calculateShare(pool, share);
                 expect(obtainedResult).to.exist;
                 expect(obtainedResult).to.be.a('number');
                 expect(obtainedResult).to.equal(expectedResult);
-            })
+            });
         });
     });
 
@@ -78,8 +80,6 @@ describe('Single apportionment operations', () => {
 
 describe('Multiple apportionment operations', () => {
 
-    const handler = require('../handler');
-
     it('Divide up the float with well-formed inputs', () => {
         const amountToAportion = Math.floor(Math.random() * 1e9); // somewhere in the region of R100
         
@@ -89,23 +89,23 @@ describe('Multiple apportionment operations', () => {
         const testAccountDict = new Map();
         // generate set of numbers representing accounts with ~R10k each
         const accountValues = numberList.map(() => Math.floor(Math.random() * 1e9));
-        numberList.forEach((n) => testAccountDict.set('test-account-' + n, accountValues[n]));
-        const sumOfAccounts = accountValues.reduce((a, b) => a + b, 0);
+        numberList.forEach((number) => testAccountDict.set(`test-account-${number}`, accountValues[number]));
+        const sumOfAccounts = accountValues.reduce((cum, value) => cum + value, 0);
 
         // logger(`Generated account shares: ${JSON.stringify(testAccountDict)}`);
         logger(`Sum of values (in ZAR): ${sumOfAccounts / 1e4}, vs amount to apportion: ${amountToAportion / 1e4}`);
         
         const accountShares = accountValues.map((value) => (value * 10) / (sumOfAccounts * 10)); // note: FP may result in _above_ 100% (!)
-        const sumOfPercent = accountShares.reduce((a, b) => a + b, 0);
+        const sumOfPercent = accountShares.reduce((cum, value) => cum + value, 0);
         logger(`Percentage splits amount accounts sums to: ${sumOfPercent}`);
         
         const dividedUpAmounts = accountShares.map((share) => Math.round(share * amountToAportion));
-        const sumCheck = dividedUpAmounts.reduce((a, b) => a + b, 0);
+        const sumCheck = dividedUpAmounts.reduce((cum, value) => cum + value, 0);
         const excess = amountToAportion - sumCheck; // this gets bigger as we have more accounts, though at rate of 2.85c in ~5 billion 
         logger(`Divided up amounts sum to: ${sumCheck}, vs original: ${amountToAportion}, excess: ${excess}`);
         
         const resultMap = new Map();
-        numberList.forEach((n) => resultMap.set('test-account-' + n, dividedUpAmounts[n]));
+        numberList.forEach((number) => resultMap.set(`test-account-${number}`, dividedUpAmounts[number]));
         if (excess !== 0) { 
             resultMap.set('excess', excess);
         }
@@ -121,8 +121,8 @@ describe('Multiple apportionment operations', () => {
         const sampleSizeToCheck = Math.ceil(numberOfAccounts / 1000);
         logger('Going to sample ', sampleSizeToCheck, ' accounts');
         const randomSampleIndices = Array(numberOfAccounts).fill().map(() => Math.round(Math.random() * numberOfAccounts));
-        randomSampleIndices.forEach((n) => {
-            expect(resultOfApportionment.get('test-account-' + n)).to.equal(resultMap.get('test-account-' + n))
+        randomSampleIndices.forEach((number) => {
+            expect(resultOfApportionment.get(`test-account-${number}`)).to.equal(resultMap.get(`test-account-${number}`));
         });
         
         if (excess !== 0) {
@@ -135,31 +135,27 @@ describe('Multiple apportionment operations', () => {
         const accountDict = { 'test-account-1': 234.5 };
 
         expect(handler.apportion.bind(handler, amountToAportion, accountDict)).to.throw(TypeError);
-    })
+    });
 
 });
 
 describe('Primary allocation of inbound accrual lambda', () => {
 
-    var handler;
-    var fetchFloatConfigVarsStub;
+    const fetchFloatConfigVarsStub = sinon.stub();
 
-    var adjustFloatBalanceStub;
-    var allocateFloatBalanceStub;
+    const adjustFloatBalanceStub = sinon.stub();
+    const allocateFloatBalanceStub = sinon.stub();
 
-    var allocationStub;
+    let allocationStub = sinon.stub();
 
     before(() => {
-        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFloat').withArgs(common.testValidClientId, common.testValidFloatId).resolves({
+        fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves({
             bonusPoolShare: common.testValueBonusPoolShare,
             bonusPoolTracker: common.testValueBonusPoolTracker,
             clientCoShare: common.testValueClientShare,
             clientCoShareTracker: common.testValueClientCompanyTracker
         });
         
-        adjustFloatBalanceStub = sinon.stub(rds, 'addOrSubtractFloat');
-        allocateFloatBalanceStub = sinon.stub(rds, 'allocateFloat');
-
         handler = proxyquire('../handler', createStubs({
             [dynamoPath]: { 
                 fetchConfigVarsForFloat: fetchFloatConfigVarsStub 
@@ -170,20 +166,21 @@ describe('Primary allocation of inbound accrual lambda', () => {
             }
         }));
 
-        //withArgs(common.testValidClientId, common.testValidFloatId).
+        // withArgs(common.testValidClientId, common.testValidFloatId).
         allocationStub = sinon.stub(handler, 'allocate');
     });
 
     after(() => {
-        dynamo.fetchConfigVarsForFloat.restore();
-        rds.addOrSubtractFloat.restore();
-        rds.allocateFloat.restore();
-        handler.allocate.restore();
+        fetchFloatConfigVarsStub.reset();
+        adjustFloatBalanceStub.reset();
+        allocateFloatBalanceStub.reset();
+        allocationStub.restore();
     });
 
-    it.only('Check initial accrual', async () => {
-        const amountAccrued = Math.floor(Math.random() * 1e4 * 1e4);  // thousands of rand, in hundredths of a cent
-        const testTxIds = Array(10).fill().map(_ => uuid());
+    it('Check initial accrual', async () => {
+        // thousands of rand, in hundredths of a cent
+        const amountAccrued = Math.floor(Math.random() * 1000 * 10000);  
+        const testTxIds = Array(10).fill().map(() => uuid());
 
         const accrualEvent = {
             clientId: common.testValidClientId,
@@ -195,7 +192,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         };
 
         const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
-        delete expectedFloatAdjustment.accrualAmount;
+        Reflect.deleteProperty(expectedFloatAdjustment, 'accrualAmount');
         expectedFloatAdjustment.amount = amountAccrued;
         expectedFloatAdjustment.transactionType = 'ACCRUAL';
         adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ currentBalance: 100 + amountAccrued });
@@ -205,10 +202,10 @@ describe('Primary allocation of inbound accrual lambda', () => {
         const expectedUserAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount;
 
         const expectedBonusAllocation = JSON.parse(JSON.stringify(expectedFloatAdjustment));
-        delete expectedBonusAllocation.clientId;
-        delete expectedBonusAllocation.floatId;
-        delete expectedBonusAllocation.backingEntityIdentifier;
-        delete expectedBonusAllocation.transactionType;
+        Reflect.deleteProperty(expectedBonusAllocation, 'clientId');
+        Reflect.deleteProperty(expectedBonusAllocation, 'floatId');
+        Reflect.deleteProperty(expectedBonusAllocation, 'backingEntityIdentifier');
+        Reflect.deleteProperty(expectedBonusAllocation, 'transactionType');
         
         expectedBonusAllocation.label = 'BONUS';
         expectedBonusAllocation.amount = expectedBonusAllocationAmount;
@@ -225,7 +222,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
 
         const expectedCall = sinon.match([expectedBonusAllocation, expectedClientCoAllocation]);
         allocateFloatBalanceStub.withArgs(common.testValidClientId, common.testValidFloatId, expectedCall).resolves(
-            [ { 'BONUS': uuid() }, { 'CLIENT': uuid() }]);
+            [{ 'BONUS': uuid() }, { 'CLIENT': uuid() }]);
 
         const userAllocEvent = {
             clientId: common.testValidClientId, floatId: common.testValidFloatId, 
@@ -277,21 +274,18 @@ describe('Primary allocation of inbound accrual lambda', () => {
 
 describe('Primary allocation of unallocated float lamdba', () => {
 
-    let handler;
-
-    let obtainAccountBalancesStub;
-    let allocateFloatStub;
-    let allocateToUsersStub;
-    let apportionStub;
-
-    let fetchFloatConfigVarsStub;
+    let obtainAccountBalancesStub = { };
+    let allocateFloatStub = { };
+    let allocateToUsersStub = { };
+    let apportionStub = { };
+    let fetchFloatConfigVarsStub = { };
 
     before(() => {
         obtainAccountBalancesStub = sinon.stub(rds, 'obtainAllAccountsWithPriorAllocations');
         allocateFloatStub = sinon.stub(rds, 'allocateFloat');
         allocateToUsersStub = sinon.stub(rds, 'allocateToUsers');
 
-        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFloat')
+        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFloat');
 
         handler = proxyquire('../handler', createStubs({
             [rdsPath]: { 
@@ -376,14 +370,14 @@ describe('Primary allocation of unallocated float lamdba', () => {
 
         const rdsMatcher = sinon.match(expectedUserAllocsToRds);
         
-        obtainAccountBalancesStub.withArgs(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false)
-            .resolves(existingBalances);
+        obtainAccountBalancesStub.withArgs(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false).
+            resolves(existingBalances);
 
-        allocateFloatStub.withArgs(common.testValidClientId, common.testValidFloatId, sinon.match([bonuxTxAlloc]))
-            .resolves({ 'BONUS': bonusTxId });
+        allocateFloatStub.withArgs(common.testValidClientId, common.testValidFloatId, sinon.match([bonuxTxAlloc])).
+            resolves({ 'BONUS': bonusTxId });
         
-        allocateToUsersStub.withArgs(common.testValidClientId, common.testValidFloatId, rdsMatcher)
-            .resolves(mockResultFromRds);
+        allocateToUsersStub.withArgs(common.testValidClientId, common.testValidFloatId, rdsMatcher).
+            resolves(mockResultFromRds);
         
         
         const expectedBody = JSON.stringify({ allocationRecords: mockResultFromRds, bonusAllocation: { 'BONUS': bonusTxId } });

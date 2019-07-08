@@ -1,7 +1,5 @@
 'use strict';
 
-const impl = require('./handler')
+const impl = require('./handler');
 
-exports.handler = async (event) => {
-    return await impl.accrue(event, null);
-};
+exports.handler = async (event) => impl.accrue(event, null);

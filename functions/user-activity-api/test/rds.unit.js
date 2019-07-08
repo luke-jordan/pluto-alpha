@@ -201,7 +201,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
         // note: this is test elsewhere and is quite complex so no point repeating here
         queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.any]).resolves([{ 'sum': testSaveAmount }]);
+        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.any]).resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
         
         const testSettledArgs = { 
             accountId: testAccountId,
@@ -251,6 +251,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testAccoundIdsMulti = [uuid(), uuid(), uuid()];
 
     const testBalance = Math.floor(100 * 100 * 100 * Math.random());
+    const testBalanceCents = Math.round(testBalance);
 
     beforeEach(() => resetStubs());
 
@@ -259,19 +260,25 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         const transTypes = `('USER_SAVING_EVENT','ACCRUAL','CAPITALIZATION','WITHDRAWAL')`;
         const unitQuery = `select distinct(unit) from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
             `and creation_time < to_timestamp($3)`;
-        const sumQuery = `select sum(amount) from ${txTable} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` +
-            `and creation_time < to_timestamp($4) and transaction_type in ${transTypes}`;
+        const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` +
+            `and creation_time < to_timestamp($4) and transaction_type in ${transTypes} group by unit`;
         
         const testTime = moment();
         const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
+        
         logger('Test time value of: ', testTime.valueOf());
-        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'HUNDREDTH_CENT', testTime.unix()]).resolves([{ 'sum': testBalance }]);
+        
+        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([{ 'unit': 'HUNDREDTH_CENT' }, { 'unit': 'WHOLE_CENT' }]);
+        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'HUNDREDTH_CENT', testTime.unix()]).
+            returns(Promise.resolve([{ 'sum': testBalance, 'unit': 'HUNDREDTH_CENT' }]));
+        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'WHOLE_CENT', testTime.unix()]).
+            returns(Promise.resolve([{ 'sum': testBalanceCents, 'unit': 'WHOLE_CENT' }]));
+        const expectedBalance = testBalance + (100 * testBalanceCents);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
-        
+
         expect(balanceResult).to.exist;
-        expect(balanceResult).to.deep.equal({ amount: testBalance, unit: 'HUNDREDTH_CENT' });
+        expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT' });
     });
 
     it('Find an account ID for a user ID, single and multiple', async () => {

@@ -116,9 +116,9 @@ jobs:
 
             echo "Linting functions"
             cd $HOME/app/functions/user-activity-api && npm run-script lint
-            # cd ../user-existence-api && npm run-script lint
-            # cd ../float-api && npm run-script lint
-            # cd ../db-migration && npm run-script lint
+            cd ../user-existence-api && npm run-script lint
+            cd ../float-api && npm run-script lint
+            cd ../db-migration && npm run-script lint
 
       - run:
           name: run security check
@@ -140,9 +140,9 @@ jobs:
             npm install codecov
             
             echo "Running tests and outputing coverage reports"
-            #cd user-existence-api; npm test; npm run-script generate-coverage
-            cd user-activity-api; npm test; npm run-script generate-coverage
-            #cd ../float-api; npm test; npm run-script generate-coverage
+            cd user-existence-api; npm test; npm run-script generate-coverage
+            cd ../user-activity-api; npm test; npm run-script generate-coverage
+            cd ../float-api; npm test; npm run-script generate-coverage
             cd ..
 
             echo "Uploading coverage reports"

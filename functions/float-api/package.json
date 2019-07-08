@@ -4,7 +4,7 @@
   "description": "The API for managing the primary cash float",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:float:test nyc mocha './test/*.unit.test.js'",
+    "test": "DEBUG=pluto:float:* nyc mocha './test/*.unit.test.js'",
     "test-all": "DEBUG=pluto:float:* nyc mocha",
     "generate-coverage": "nyc report",
     "lint": "eslint ."
@@ -15,6 +15,7 @@
     "bignumber.js": "^8.1.1",
     "config": "^3.1.0",
     "debug": "^4.1.1",
+    "moment": "^2.24.0",
     "uuid": "^3.3.2"
   },
   "devDependencies": {
