@@ -11,3 +11,7 @@ serverless deploy --stage local
 echo "Deploying the save transaction lambda"
 cd ../user-activity-api
 serverless deploy --stage local
+
+echo "Deploying the migration lambda"
+cd ../db-migration
+serverless deploy --stage local

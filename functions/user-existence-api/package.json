@@ -4,7 +4,7 @@
   "description": "API for creating an account in the ledger",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:account:test nyc mocha",
+    "test": "DEBUG=pluto:account:* nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
@@ -26,6 +26,7 @@
     "camelcase": "^5.3.1",
     "config": "^3.1.0",
     "debug": "^4.1.1",
+    "moment": "^2.24.0",
     "serverless-localstack": "^0.4.15",
     "uuid": "^3.3.2",
     "validator": "^10.11.0"

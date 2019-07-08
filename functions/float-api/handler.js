@@ -9,9 +9,9 @@ const constants = require('./constants');
 
 const BigNumber = require('bignumber.js');
 // make this guy safe for the world
-BigNumber.prototype.valueOf = function () {
+BigNumber.prototype.valueOf = () => {
   throw Error('valueOf called!');
-}
+};
 
 /**
  * The core function. Receives an instruction that interest (or other return) has been accrued, increases the balance recorded,
@@ -24,7 +24,7 @@ BigNumber.prototype.valueOf = function () {
  * @param {string} unit The units in which the amount is expressed. If not provided, defaults to float default.
  * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
  */
-module.exports.accrue = async (event, context) => {
+module.exports.accrue = async (event) => {
   try { 
     const accrualParameters = event['body'] || event;
     const clientId = accrualParameters.clientId;
@@ -33,7 +33,7 @@ module.exports.accrue = async (event, context) => {
     const floatConfig = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
     logger('Fetched float config: ', floatConfig);
 
-    const accrualAmount = accrualParameters.accrualAmount;
+    const accrualAmount = parseInt(accrualParameters.accrualAmount, 10); // just in case it is formatted as string
     const accrualCurrency = accrualParameters.currency || floatConfig.currency;
     const accrualUnit = accrualParameters.unit || floatConfig.unit;
     
@@ -41,8 +41,7 @@ module.exports.accrue = async (event, context) => {
       currency: accrualCurrency,
       unit: accrualUnit,
       relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
-      relatedEntityId: accrualParameters.backingEntityIdentifier,
-      transactionType: constants.floatTransTypes.ALLOCATION
+      relatedEntityId: accrualParameters.backingEntityIdentifier
     };
 
     const bonusAllocation = JSON.parse(JSON.stringify(allocationCommon));
@@ -70,7 +69,7 @@ module.exports.accrue = async (event, context) => {
       bonusShare: bonusAllocation.amount,
       bonusTxId: entityAllocationIds.find((row) => Object.keys(row).includes('BONUS')).BONUS,
       clientShare: clientAllocation.amount,
-      clientTxId: entityAllocationIds.find((row) => Object.keys(row).includes('CLIENT')).CLIENT,
+      clientTxId: entityAllocationIds.find((row) => Object.keys(row).includes('CLIENT')).CLIENT
     };
 
     const remainingAmount = accrualAmount - bonusAllocation.amount - clientAllocation.amount;
@@ -93,7 +92,7 @@ module.exports.accrue = async (event, context) => {
 
     return {
       statusCode: 200,
-      body: JSON.stringify(returnBody),
+      body: JSON.stringify(returnBody)
     };
   } catch (e) {
     logger('FATAL_ERROR: ', e);
@@ -117,11 +116,12 @@ module.exports.accrue = async (event, context) => {
  * @param {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
  * @param {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
  */
-module.exports.allocate = async (event, context) => {
+module.exports.allocate = async (event) => {
   
   const params = event.body || event;
-  const currentAllocatedBalanceMap = await rds.obtainAllAccountsWithPriorAllocations(params.floatId, params.currency, 
-    constants.entityTypes.END_USER_ACCOUNT, false);
+  const currentAllocatedBalanceMap = await rds.obtainAllAccountsWithPriorAllocations(
+    params.floatId, params.currency, constants.entityTypes.END_USER_ACCOUNT, false
+  );
 
   const amountToAllocate = params.totalAmount; // || fetch unallocated amount
   const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
@@ -129,7 +129,7 @@ module.exports.allocate = async (event, context) => {
   const shareMap = await exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
   logger('Allocated shares, map = ', shareMap);
 
-  let bonusAllocationResult;
+  let bonusAllocationResult = { };
   if (shareMap.has(constants.EXCESSS_KEY)) {
     const excessAmount = shareMap.get(constants.EXCESSS_KEY);
     // store the allocation, store in bonus allocation Tx id
@@ -163,7 +163,7 @@ module.exports.allocate = async (event, context) => {
     body: JSON.stringify({
       allocationRecords: resultOfAllocations,
       bonusAllocation: bonusAllocationResult || { }
-    }),
+    })
   };
 };
 
@@ -177,11 +177,12 @@ module.exports.allocate = async (event, context) => {
  * @param {number} shareInPercent What is the share we are calculating. NOTE: Given in standard percent form, i.e., between 0 and 1
  * @param {boolean} roundEvenUp Whether to round 0.5 to 1 or to 0
  */
-module.exports.calculateShare = (totalPool = 1.23457e8, shareInPercent = 0.0165, roundEvenUp = true) => {
+module.exports.calculateShare = (totalPool = 100, shareInPercent = 0.1, roundEvenUp = true) => {
   logger(`Calculating an apportionment, total pool : ${totalPool}, and share: ${shareInPercent}`);
   // we do not want to introduce floating points, because that is bad, so first we check to make sure total pool is effectively an int
   // note: basic logic is that total pool should be expressed in hundredths of a cent, if it is not, this is an error
   // note: bignumber can handle non-integer of course, but that would allow greater laxity than we want in something this important
+  logger('Total pool: ', totalPool);
   if (!Number.isInteger(totalPool)) {
     throw new TypeError('Error! Passed a non-integer pool');
   } else if (typeof shareInPercent !== 'number') {
@@ -200,11 +201,9 @@ module.exports.calculateShare = (totalPool = 1.23457e8, shareInPercent = 0.0165,
 
   logger(`Result of calculation: ${resultAsNumber}`);
   return resultAsNumber;
-}
-
-const calculatePercent = (total, account) => {
-  return BigNumber(account).dividedBy(total);
 };
+
+const calculatePercent = (total, account) => (new BigNumber(account)).dividedBy(total);
 
 const checkBalancesIntegers = (accountBalances = new Map()) => {
   for (const balance of accountBalances.values()) {
@@ -224,7 +223,7 @@ const sumUpBalances = (accountBalances = new Map()) => {
     amount += balance;
   }
   return amount;
-}
+};
 
 /**
  * Core calculation method. Apportions an amount (i.e., the unallocated amount of a float) among an arbitrary length list of accounts
@@ -236,22 +235,22 @@ const sumUpBalances = (accountBalances = new Map()) => {
  * @param {boolean} appendExcess If true (default), then if there is an 'excess', i.e., a remainder due to rounding in the allocations,
  * that amount (positive if there are cents left over or negative if the reverse) is appended to the result map with the key 'excess'
  */
-module.exports.apportion = (amountToDivide = 1.345e4, accountTotals = new Map(), appendExcess = true) => {
+module.exports.apportion = (amountToDivide = 100, accountTotals = new Map(), appendExcess = true) => {
   // same reasoning as above for exposing this. note: account totals need to be all ints, else something is wrong upstream
   checkBalancesIntegers(accountTotals);
 
   // unless our total float itself approaches R100bn, this will not break integer values
-  let shareMap = new Map(); 
+  const shareMap = new Map(); 
 
   const accountTotal = sumUpBalances(accountTotals);
-  const totalToShare = BigNumber(amountToDivide);
+  const totalToShare = new BigNumber(amountToDivide);
   
   // NOTE: the percentage is of the account relative to all other accounts, not relative to the float at present, hence calculate percent
   // is called with the total of the prior existing balances, and then multiples the amount to apportion
   for (const accountId of accountTotals.keys()) {
     // logger(`For account ${accountId}, balance is ${accountTotals.get(accountId)}`);
     shareMap.set(accountId, calculatePercent(accountTotal, accountTotals.get(accountId)).times(totalToShare).integerValue().toNumber());
-  };
+  }
 
   const apportionedAmount = sumUpBalances(shareMap);
   const excess = amountToDivide - apportionedAmount;

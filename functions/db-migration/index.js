@@ -1,8 +1,5 @@
 'use strict';
 
-const migrator = require('./handler')
+const migrator = require('./handler');
 
-
-exports.handler = async (event) => {
-    return await migrator.migrate(event);
-};
+exports.handler = (event) => migrator.migrate(event);

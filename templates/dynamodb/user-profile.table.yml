@@ -1,0 +1,27 @@
+# We will want to make this into auto-scaling, though this blog makes that seem more complex than we may need at present
+# Nonetheless, we will also need to create the IAM resources for this
+# https://aws.amazon.com/blogs/database/how-to-use-aws-cloudformation-to-configure-auto-scaling-for-amazon-dynamodb-tables-and-indexes/
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Creates the table that hold user profiles, including system wide id, contact info, and status'
+Resources:
+  ClientFloatTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "UserProfileTable"
+      AttributeDefinitions:
+      -
+        AttributeName: "user_id"
+        AttributeType: "S"
+      -
+        AttributeName: "float_id"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "client_id"
+        KeyType: HASH
+      - AttributeName: "float_id"
+        KeyType: "RANGE"
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true

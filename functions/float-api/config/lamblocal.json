@@ -18,7 +18,7 @@
     "db": {
         "user": "float_api_worker",
         "host": "rdslocal",
-        "database": "pluto",
+        "database": "jupiter",
         "password": "pwd_for_float_api",
         "port" :"5432"
     }

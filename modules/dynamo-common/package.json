@@ -4,12 +4,15 @@
   "description": "Common module layer for interfacing with DynamoDB",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=pluto:dynamo:* nyc mocha"
+    "test": "DEBUG=pluto:dynamo:* nyc mocha",
+    "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",
   "devDependencies": {
     "chai": "^4.2.0",
+    "eslint": "^6.0.1",
+    "eslint-plugin-chai-friendly": "^0.4.1",
     "mocha": "^6.1.4",
     "nyc": "^14.1.1",
     "proxyquire": "^2.1.0",

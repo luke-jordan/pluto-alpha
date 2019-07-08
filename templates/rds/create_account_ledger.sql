@@ -4,7 +4,7 @@ create schema if not exists account_data;
 -- Likely to convert tags and flags into integers in time, but premature optimization for now
 
 create table if not exists account_data.core_account_ledger (
-    account_id uuid not null,
+    account_id uuid not null primary key,
     owner_user_id uuid not null,
     opening_user_id uuid not null,
     user_first_name varchar (100) not null,
@@ -13,10 +13,9 @@ create table if not exists account_data.core_account_ledger (
     default_float_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
     update_time timestamp with time zone not null default current_timestamp,
-    last_transaction_time timestamp with time zone not null default current_timestamp,
+    frozen boolean not null default false,
     tags text[] default '{}',
-    flags text[] default '{}',
-    primary key (account_id)
+    flags text[] default '{}'
 );
 
 create index if not exists owner_id_idx on account_data.core_account_ledger (owner_user_id);

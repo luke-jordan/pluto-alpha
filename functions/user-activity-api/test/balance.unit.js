@@ -22,7 +22,8 @@ const testUserId = uuid();
 // note : in future at some time will need to handle user in different time zone to float
 const testTimeZone = 'America/New_York';
 const testTimeNow = moment.tz(testTimeZone);
-const testTimeEOD = testTimeNow.endOf('day');
+logger('Set test time now to : ', testTimeNow);
+const testTimeEOD = testTimeNow.clone().endOf('day');
 
 const testClientId = 'a_client_somewhere';
 const testFloatId = 'usd_cash_primary';
@@ -35,24 +36,28 @@ const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce project
 const divisorForAccrual = 365;
 const expectedNetAccrualRateBps = new BigNumber(testAccrualRateBps / divisorForAccrual).
     times(new BigNumber(1 - testBonusPoolShare - testClientCoShare - testPrudentialDiscountFactor));
+logger('Net daily rate: ', expectedNetAccrualRateBps.toNumber());
 
 // const testAccumulatedBalance = BigNumber(Math.floor(10000 * 100 * 100 * Math.random()));
 const toHundredthCent = 100 * 100;
 const testAmountUsd = 500;
-const testAccumulatedBalance = new BigNumber(testAmountUsd * toHundredthCent);
+const testAccumulatedBalance = new BigNumber(testAmountUsd).times(toHundredthCent);
 const expectedAmountAccruedToday = testAccumulatedBalance.times(expectedNetAccrualRateBps).dividedBy(toHundredthCent);
 
 const expectedBalanceToday = testAccumulatedBalance.plus(expectedAmountAccruedToday).decimalPlaces(0).toNumber();
 
 const expectedNumberOfDays = 5;
-const effectiveDailyRate = new BigNumber(expectedAmountAccruedToday).dividedBy(new BigNumber(testAccumulatedBalance));
+const effectiveDailyRate = expectedAmountAccruedToday.dividedBy(testAccumulatedBalance);
+logger('Effective daily rate: ', effectiveDailyRate.toNumber());
 const expectedBalanceSubsequentDays = Array.from(Array(expectedNumberOfDays).keys()).map((day) => {
     // note: lots of bignumber and fp weirdness to watch out for in here, hence splitting it and making very explicit
     const rebasedDay = day + 1;
     const multiplier = effectiveDailyRate.plus(1).pow(rebasedDay + 1);
     const endOfDay = testTimeEOD.clone().add(rebasedDay, 'days');
+    const balanceEndOfDay = testAccumulatedBalance.times(multiplier); 
+    logger('Test end of day: ', balanceEndOfDay.toNumber());
     return {
-        'amount': testAccumulatedBalance.times(multiplier).decimalPlaces(0).toNumber(),
+        'amount': balanceEndOfDay.decimalPlaces(0).toNumber(),
         'currency': 'USD',
         'unit': 'HUNDREDTH_CENT',
         'datetime': endOfDay.format(),
@@ -69,25 +74,40 @@ const floatPrincipalVarsStub = sinon.stub();
 const handler = proxyquire('../handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
-        'findFloatForAccount': accountClientFloatStub,
+        'findClientAndFloatForAccount': accountClientFloatStub,
         'findAccountsForUser': findAccountsForUserStub
     },
     './persistence/dynamodb': {
-        fetchSingleRow: floatPrincipalVarsStub
+        'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub
     },
     '@noCallThru': true
 });
 
-const resetStubs = () => {
-    accountBalanceQueryStub.reset();
-    accountClientFloatStub.reset();
-    findAccountsForUserStub.reset();
-    floatPrincipalVarsStub.reset();
+const resetStubs = (historyOnly = true) => {
+    if (historyOnly) {
+        accountBalanceQueryStub.resetHistory();
+        accountClientFloatStub.resetHistory();
+        findAccountsForUserStub.resetHistory();
+        floatPrincipalVarsStub.resetHistory();
+    } else {
+        accountBalanceQueryStub.reset();
+        accountClientFloatStub.reset();
+        findAccountsForUserStub.reset();
+        floatPrincipalVarsStub.reset();
+    }
 };
 
 describe('Fetches user balance and makes projections', () => {
     
     const wellFormedResultBody = {
+        currentBalance: {
+            'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
+            'unit': 'HUNDREDTH_CENT',
+            'currency': 'USD',
+            'datetime': testTimeNow.format(),
+            'epochMilli': testTimeNow.valueOf(),
+            'timezone': testTimeZone
+        },
         balanceEndOfToday: {
             'amount': expectedBalanceToday,
             'currency': 'USD',
@@ -99,15 +119,29 @@ describe('Fetches user balance and makes projections', () => {
         balanceSubsequentDays: expectedBalanceSubsequentDays
     };
 
-    before(() => {
-        logger('Test time now: ', testTimeNow.format(), ' and end of day: ', testTimeEOD.format());
-        logger('Expected balance at end of day: ', expectedBalanceToday);
-        logger('Effective daily rate: ', effectiveDailyRate.toNumber());
-        // logger('Balances subsequent days, first: ', expectedBalanceSubsequentDays[0]);
+    const checkResultIsWellFormed = (balanceAndProjections) => {
+        expect(balanceAndProjections).to.exist;
+        expect(balanceAndProjections.statusCode).to.equal(200);
+        expect(balanceAndProjections).to.have.property('body');
+        const resultBody = JSON.parse(balanceAndProjections.body);
+        expect(resultBody).to.deep.equal(wellFormedResultBody);
+    };
 
-        accountBalanceQueryStub.withArgs(testAccountId, 'USD', testTimeNow).resolves({ 
-            sum: expectedBalanceToday, 
-            currency: 'USD', 
+    const checkErrorResultForMsg = (errorResult, expectedErrorMsg) => {
+        expect(errorResult).to.exist;
+        expect(errorResult.statusCode).to.equal(400);
+        expect(errorResult.body).to.equal(expectedErrorMsg);
+    };
+
+    before(() => {
+        // logger('Test time now: ', testTimeNow.format(), ' and end of day: ', testTimeEOD.format());
+        // logger('Expected balance at end of day: ', expectedBalanceToday);
+        // logger('Effective daily rate: ', effectiveDailyRate.toNumber());
+        // logger('Balances subsequent days, first: ', expectedBalanceSubsequentDays[0]);
+        // resetStubs(false);
+        
+        accountBalanceQueryStub.withArgs(testAccountId, 'USD', sinon.match(testTimeNow)).resolves({ 
+            amount: testAccumulatedBalance.decimalPlaces(0).toNumber(), 
             unit: 'HUNDREDTH_CENT'
         });
         accountClientFloatStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
@@ -115,28 +149,27 @@ describe('Fetches user balance and makes projections', () => {
         
         floatPrincipalVarsStub.withArgs(testClientId, testFloatId).resolves({ 
             accrualRateAnnualBps: testAccrualRateBps, 
-            bonusPoolShare: testBonusPoolShare, 
-            clientCoShare: testClientCoShare,
+            bonusPoolShareOfAccrual: testBonusPoolShare, 
+            clientShareOfAccrual: testClientCoShare,
             prudentialFactor: testPrudentialDiscountFactor
         });
     });
 
-    beforeEach(() => resetStubs());
+    beforeEach(() => resetStubs(true));
+
+    after(() => resetStubs(false));
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
-
         const balanceAndProjections = await handler.balance({ 
-            accountId: testAccountId, 
+            accountId: testAccountId,
+            clientId: testClientId,
+            floatId: testFloatId, 
             currency: 'USD', 
             atEpochMillis: testTimeNow.valueOf(),
-            timeZone: testTimeZone
+            timezone: testTimeZone
         });
-        
-        expect(balanceAndProjections).to.exist;
-        expect(balanceAndProjections.statusCode).to.equal(200);
-        expect(balanceAndProjections).to.have.property('body');
-        const resultBody = JSON.parse(balanceAndProjections.body);
-        expect(resultBody).to.deep.equal(wellFormedResultBody);
+
+        checkResultIsWellFormed(balanceAndProjections);
     });
 
     it('Obtains balance and future projections correctly when given a system wide user ID, single and multiple accounts', async () => {
@@ -144,50 +177,61 @@ describe('Fetches user balance and makes projections', () => {
             userId: testUserId, 
             currency: 'USD', 
             atEpochMillis: testTimeNow.valueOf(),
-            timeZone: testTimeZone 
+            timezone: testTimeZone,
+            clientId: testClientId,
+            floatId: testFloatId 
         });
-        expect(balanceAndProjections).to.exist;
-        expect(balanceAndProjections.statusCode).to.equal(200);
-        expect(balanceAndProjections).to.have.property('body');
-        const resultBody = JSON.parse(balanceAndProjections.body);
-        expect(resultBody).to.deep.equal(wellFormedResultBody);
+
+        checkResultIsWellFormed(balanceAndProjections);
+    });
+
+    it('Obtains balance and future projections for default client and float when given an account Id or user Id', async () => {
+        const commonParams = {
+            currency: 'USD',
+            atEpochMillis: testTimeNow.valueOf(),
+            timezone: testTimeZone
+        };
+
+        const accountIdParams = JSON.parse(JSON.stringify(commonParams));
+        accountIdParams.accountId = testAccountId;
+        const userIdParams = JSON.parse(JSON.stringify(commonParams));
+        userIdParams.userId = testUserId;
+
+        const balanceAndProjectionsAccountId = await handler.balance(accountIdParams);
+        checkResultIsWellFormed(balanceAndProjectionsAccountId);
+
+        const balanceAndProjectionsUserId = await handler.balance(userIdParams);
+        checkResultIsWellFormed(balanceAndProjectionsUserId);
     });
 
     it('Returns an error code when neither account ID or user ID is provided, or no currency', async () => {
         const expectedErrorMsg = 'No account or user ID provided';
-        const errorResult = await handler.balance({ currency: 'USD',
-atEpochMillis: testTimeNow.valueOf() });
-        expect(errorResult).to.exist;
-        expect(errorResult.statusCode).to.equal(400);
-        expect(errorResult.body).to.equal(expectedErrorMsg);
+        const errorResult = await handler.balance({ currency: 'USD', atEpochMillis: testTimeNow.valueOf() });
+        checkErrorResultForMsg(errorResult, expectedErrorMsg);
 
         const expectedNoCurrencyMsg = 'No currency provided for this request';
-        const errorResultCurrency = await handler.balance({ accountId: testAccountId,
-atEpochMillis: testTimeNow.valueOf() });
-        expect(errorResultCurrency).to.exist;
-        expect(errorResultCurrency).to.have.property('statusCode', 500);
-        expect(errorResultCurrency).to.have.property('body', expectedNoCurrencyMsg);
+        const errorResultCurrency = await handler.balance({ accountId: testAccountId, atEpochMillis: testTimeNow.valueOf() });
+        checkErrorResultForMsg(errorResultCurrency, expectedNoCurrencyMsg);
     });
 
-    it('Returns an error code when missing time or timezone information', async () => {
+    it('Returns an error code when timezone information, but defaults to current time if no time given', async () => {
         const expectedErrorMsgTime = 'No time for balance calculation provided';
         const expectedErrorMsgZone = 'No timezone provided for user';
 
         const errorResult1 = await handler.balance({
             accountId: testAccountId,
+            timezone: testTimeZone,
             currency: 'USD'
         });
+        checkErrorResultForMsg(errorResult1, expectedErrorMsgTime);
 
         const errorResult2 = await handler.balance({
             accountId: testAccountId,
             currency: 'USD',
             atEpochMillis: testTimeNow.valueOf()
         });
+        checkErrorResultForMsg(errorResult2, expectedErrorMsgZone);
 
-        expect(errorResult1).to.have.property('statusCode', 500);
-        expect(errorResult1).to.have.property('body', expectedErrorMsgTime);
-        expect(errorResult2).to.have.property('statusCode', 500);
-        expect(errorResult2).to.have.property('body', expectedErrorMsgZone);
     });
 
 });

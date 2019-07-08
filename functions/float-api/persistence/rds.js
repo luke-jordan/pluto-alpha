@@ -10,9 +10,9 @@ const RdsConnection = require('rds-common');
 
 const rdsConnection = new RdsConnection(config.get('db'));
 
-const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` 
-        + `(transaction_id, client_id, float_id, t_type, currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) `
-        + `values %L returning transaction_id`;
+const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` +
+        `(transaction_id, client_id, float_id, t_type, currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) ` +
+        `values %L returning transaction_id`;
 
 const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type}, ${currency}, ${unit}, ${amount}, ' + 
         '${allocated_to_type}, ${allocated_to_id}, ${related_entity_type}, ${related_entity_id}';
@@ -38,7 +38,7 @@ module.exports.addOrSubtractFloat = async (request = {
         clientId: 'some_saving_co', 
         floatId: 'cash_float',
         transactionType: constants.floatTransTypes.ACCRUAL,
-        amount: 100 * 1e4,
+        amount: 100,
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
         backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
@@ -58,7 +58,7 @@ module.exports.addOrSubtractFloat = async (request = {
         'unit': request.unit,
         'amount': request.amount,
         'allocated_to_type': constants.entityTypes.FLOAT_ITSELF,
-        'allocated_to_id' : request.floatId,
+        'allocated_to_id': request.floatId,
         'related_entity_type': request.backingEntityType,
         'related_entity_id': request.backingEntityIdentifier
     };
@@ -90,9 +90,9 @@ module.exports.addOrSubtractFloat = async (request = {
  * @param {string} relatedEntityType Optional. Type of the backing or parent entity that spawned this allocation, e.g., the accrual or capitalization event
  * @param {string} relatedEntityId Optional. As above, here the ID (in the relevant namespace) for that entity type
  */
-module.exports.allocateFloat = async(clientId = 'someSavingCo', floatId = 'cashFloat', allocationRequests = [{
+module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cashFloat', allocationRequests = [{
     label: 'BONUS',
-    amount: 20 * 1e4,
+    amount: 100,
     currency: 'ZAR',
     unit: constants.floatUnits.DEFAULT,
     allocatedToType: constants.entityTypes.BONUS_POOL,
@@ -102,7 +102,7 @@ module.exports.allocateFloat = async(clientId = 'someSavingCo', floatId = 'cashF
     
     const mappedArray = allocationRequests.map((request) => ({
         'transaction_id': request.transactionId || uuid(),
-        'client_id':  clientId,
+        'client_id': clientId,
         'float_id': floatId,
         't_type': constants.floatTransTypes.ALLOCATION,
         'amount': request.amount,
@@ -119,9 +119,8 @@ module.exports.allocateFloat = async(clientId = 'someSavingCo', floatId = 'cashF
     // logger('INSERTION RESULT: ', resultOfInsertion);
 
     // finally, insert labels if they exist, so caller can map as they want
-    const labelledIds = allocationRequests.map((req, index) => {
-        return { [req.label || 'id']: resultOfInsertion.rows[index].transaction_id }
-    });
+    const labelledIds = allocationRequests.map((req, index) => ({ [req.label || 'id']: resultOfInsertion.rows[index].transaction_id }));
+    // logger('Returning labelledIds: ', labelledIds);
 
     return labelledIds;
 };
@@ -140,17 +139,18 @@ module.exports.allocateFloat = async(clientId = 'someSavingCo', floatId = 'cashF
  * @param {string} relatedEntityType A related entity type (e.g., if recording based on an external accrual tx)
  * @param {string} relatedEntityId The id of the related entity type (if present)
  */
-module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cashFloat', allocationRequests = [{
+module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'cashFloat', allocationRequests = [{
     accountId: 'uid-of-account',
-    amount: 10 * 1e4,
+    amount: 10000,
     currency: 'ZAR',
     unit: constants.floatUnits.DEFAULT
 }]) => {
     // will definitely need to make sure all the account Ids are valid (do as extra test)
 
+    logger(`Running allocation on clientId: ${clientId}, floatId: ${floatId}`);
     const allocationRows = allocationRequests.map((request) => ({
         'transaction_id': request.floatTxId || uuid(),
-        'client_id':  clientId,
+        'client_id': clientId,
         'float_id': floatId,
         't_type': constants.floatTransTypes.ALLOCATION,
         'amount': request.amount,
@@ -168,11 +168,12 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
         rows: allocationRows
     };
 
-    const accountQuery = `insert into ${config.get('tables.accountTransactions')} `
-        + `(transaction_id, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, tags) values %L `
-        + `returning transaction_id, amount`;
+    const accountQuery = `insert into ${config.get('tables.accountTransactions')} ` +
+        `(transaction_id, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, client_id, tags) values %L ` +
+        `returning transaction_id, amount`;
 
-    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ${float_id}, ${tags}';
+    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ' + 
+        '${float_id}, ${client_id}, ${tags}';
 
     const accountRows = allocationRequests.map((request) => {
         const tags = request.relatedEntityId ? `ARRAY ['${request.relatedEntityType}::${request.relatedEntityId}']` : '{}';
@@ -185,8 +186,9 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
             'currency': request.currency,
             'unit': request.unit,
             'float_id': floatId,
+            'client_id': clientId,
             'tags': tags
-        }
+        };
     });
 
     const accountQueryDef = {
@@ -196,6 +198,7 @@ module.exports.allocateToUsers = async(clientId = 'someSavingCo', floatId = 'cas
     };
 
     const resultOfDualInsertion = await rdsConnection.largeMultiTableInsert([allocationQueryDef, accountQueryDef]);
+    logger('Result of allocation records insertion: ', resultOfDualInsertion);
 
     return { result: 'SUCCESS', floatTxIds: resultOfDualInsertion[0], accountTxIds: resultOfDualInsertion[1] };
 };
@@ -211,8 +214,8 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     const floatTable = config.get('tables.floatTransactions');
     
     const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
-    const sumQuery = `select allocated_to_id, sum(amount) from ${floatTable} where float_id = $1 and ` + 
-        `currency = $2 and unit = $3 and allocated_to_type = $4 group by allocated_to_id`;
+    const sumQuery = `select allocated_to_id, unit, sum(amount) from ${floatTable} where float_id = $1 and ` + 
+        `currency = $2 and unit = $3 and allocated_to_type = $4 group by allocated_to_id, unit`;
 
     const unitResults = await rdsConnection.selectQuery(unitQuery, [floatId, currency, entityType]);
     logger('Result of unit selection query: ', unitResults);
@@ -222,27 +225,29 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
         return { }; 
     }
 
-    const usedUnits = unitResults.map((row) => row.unit );
+    const usedUnits = unitResults.map((row) => row.unit);
     logger('Units used in the float to date: ', usedUnits);
     
     // this could get _very_ big, so using Map for it instead of a simple variable
     const selectResults = new Map();
     
-    for (let i=0; i < usedUnits.length; i++) {
-        logger('Calculating account balances for unit: ', usedUnits[i]);
-        const accountTotalResult = await rdsConnection.selectQuery(sumQuery, [floatId, currency, usedUnits[i], entityType]);
-        logger('Account total result for this unit: ', accountTotalResult);
-        const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['allocated_to_id']]: row['sum']}), {}); 
+    const accountTotalQueries = usedUnits.map((unit) => {
+        logger('Calculating account balances for unit: ', unit);
+        return rdsConnection.selectQuery(sumQuery, [floatId, currency, unit, entityType]);
+    });
 
-        const transform = constants.floatUnitTransforms[usedUnits[i]];
-        logger('Initiating calculation loop, account object: ', accountObj);
+    const accountTotalResults = await Promise.all(accountTotalQueries);
+    accountTotalResults.filter((result) => result && result.length > 0).forEach((accountTotalResult) => {
+        const unit = accountTotalResult[0]['unit'];
+        const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['allocated_to_id']]: row['sum']}), {});
+        const unitTransformationMultiplier = constants.floatUnitTransforms[unit];
         Object.keys(accountObj).forEach((accountId) => {
             const priorSum = selectResults.get(accountId) || 0;
-            const accountSumInDefaultUnit = accountObj[accountId] * transform; // todo: skip if not present
+            const accountSumInDefaultUnit = accountObj[accountId] * unitTransformationMultiplier; // todo: skip if not present
             selectResults.set(accountId, priorSum + accountSumInDefaultUnit);
         });
         logger('Completed unit calculation');
-    }
+    });
 
     logger('Completed calculations of account sums, result: ', selectResults);
 
@@ -261,31 +266,34 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
  * @param {Date} startDate The date from which to start adding the balance. If not given, defaults to start of time
  * @param {Date} endDate As above, but end date
  */
-module.exports.calculateFloatBalance = async function(floatId = 'zar_mmkt_co', currency = 'ZAR', startDate = new Date(0), endDate = new Date()) {
+module.exports.calculateFloatBalance = async (floatId = 'zar_mmkt_co', currency = 'ZAR', startDate = new Date(0), endDate = new Date()) => {
     const floatTable = config.get('tables.floatTransactions');
-    const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 `
-        + `and allocated_to_type = $3`;
+    const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 ` +
+        `and allocated_to_type = $3`;
     const unitColumns = [floatId, currency, constants.entityTypes.FLOAT_ITSELF];
     const unitResult = await rdsConnection.selectQuery(unitQuery, unitColumns);
 
     const usedUnits = unitResult.map((row) => row.unit);
     logger('Units used in float transactions: ', usedUnits);
 
-    let unitsWithSums = { };
-    for (let i = 0; i < usedUnits.length; i++) {
-        const unit = usedUnits[i];
+    const unitQueries = usedUnits.map((unit) => {
         logger('Finding balance for unit: ', unit);
-        const sumQuery = `select sum(amount) from ${floatTable} where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 ` +
-            `and creation_time between $5 and $6`;
+        const sumQuery = `select unit, sum(amount) from ${floatTable} where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 ` +
+            `and creation_time between $5 and $6 group by unit`;
         const sumParams = [floatId, currency, unit, constants.entityTypes.FLOAT_ITSELF, startDate, endDate];
-        const sumResult = await rdsConnection.selectQuery(sumQuery, sumParams);
-        logger(`Float sum results for unit ${unit}, as : ${JSON.stringify(sumResult)}`);
-        unitsWithSums[unit] = sumResult[0]['sum'];
-    }
+        return rdsConnection.selectQuery(sumQuery, sumParams);
+    });
+
+    const unitResults = await Promise.all(unitQueries);
+    const unitsWithSums = { };
+    unitResults.forEach((result) => { 
+        unitsWithSums[result[0]['unit']] = result[0]['sum'];
+    });
+
     logger('Sums for units: ', unitsWithSums);
 
-    const totalBalanceInDefaultUnit = Object.keys(unitsWithSums).map(unit => unitsWithSums[unit] * constants.floatUnitTransforms[unit])
-        .reduce((a, b) => a + b, 0);
+    const totalBalanceInDefaultUnit = Object.keys(unitsWithSums).map((unit) => unitsWithSums[unit] * constants.floatUnitTransforms[unit]).
+        reduce((cum, value) => cum + value, 0);
 
     // now gather a few pieces of useful information
     const mostCommonUnitQuery = `select unit, count(*) from ${floatTable} group by unit`;
@@ -293,17 +301,19 @@ module.exports.calculateFloatBalance = async function(floatId = 'zar_mmkt_co', c
     logger('Unit counts for this float: ', unitCounts);
     const mostCommonUnit = unitCounts[0]['unit'];
     
-    const timeTxQueryStub = `select transaction_id, amount, currency, unit, related_entity_type, related_entity_id `
-            + `from ${floatTable} where float_id = $1 and currency = $2 and `;
-    const earliestTxRows = await rdsConnection.selectQuery(timeTxQueryStub + `creation_time > $3 order by creation_time asc limit 1`, [floatId, currency, startDate]);
-    const latestTxRows = await rdsConnection.selectQuery(timeTxQueryStub + `creation_time < $3 order by creation_time desc limit 1`, [floatId, currency, endDate]);    
+    const timeTxQueryStub = `select transaction_id, amount, currency, unit, related_entity_type, related_entity_id ` +
+            `from ${floatTable} where float_id = $1 and currency = $2 and`;
+    const earliestTxRows = await rdsConnection.selectQuery(`${timeTxQueryStub} creation_time > $3 order by creation_time asc limit 1`, [floatId, currency, startDate]);
+    const latestTxRows = await rdsConnection.selectQuery(`${timeTxQueryStub} creation_time < $3 order by creation_time desc limit 1`, [floatId, currency, endDate]);    
     
+    // logger('Earliest TX: ', earliestTxRows);
+    // logger('Latest TX: ', latestTxRows);
+
     return {
         balance: totalBalanceInDefaultUnit,
         unit: constants.floatUnits.DEFAULT,
         earliestTx: earliestTxRows[0],
         latestTx: latestTxRows[0],
         mostCommonUnit: mostCommonUnit
-    };
-    
-}
+    };  
+};
