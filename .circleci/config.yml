@@ -126,11 +126,11 @@ jobs:
             cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
             # we do this to avoid the package lock inadvertantly overriding later and wiping modules
             rm ./package-lock.json
-            cd ../functions/user-existence-api && npm i --package-lock-only && npm audit
+            cd ../user-existence-api && npm i --package-lock-only && npm audit
             rm ./package-lock.json
-            cd ../functions/float-api && npm i --package-lock-only && npm audit
+            cd ../float-api && npm i --package-lock-only && npm audit
             rm ./package-lock.json
-            cd ../functions/db-migration && npm i --package-lock-only && npm audit
+            cd ../db-migration && npm i --package-lock-only && npm audit
             rm ./package-lock.json
 
       - run:
