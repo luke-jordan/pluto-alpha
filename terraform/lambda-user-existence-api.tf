@@ -7,7 +7,7 @@ resource "aws_lambda_function" "user_existence_api" {
 
   function_name                  = "${var.user_existence_api_lambda_function_name}"
   role                           = "${aws_iam_role.user_existence_api_role.arn}"
-  handler                        = "index.handler"
+  handler                        = "handler.create"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"

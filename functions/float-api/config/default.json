@@ -16,6 +16,10 @@
         "companyShare": "company_accrual_share"
     },
     "db": {
-        
+        "user": "float_api_worker",
+        "host": "localhost",
+        "database": "jupiter",
+        "password": "pwd_for_float_api",
+        "port" :"5430"
     }
 }

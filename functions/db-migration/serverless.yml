@@ -2,19 +2,17 @@
 
 service: db-migration
 
-# plugins:
-#   - serverless-localstack
+plugins:
+  - serverless-localstack
 
 custom:
   localstack:
     host: http://localhost
     stages:
-      - dev
       - local
     debug: true
   stages:
     - local
-    - dev
   thisStage: ${opt:stage, self:provider.stage}
   thisProcess:
     NODE_ENV:
@@ -33,10 +31,6 @@ provider:
 functions:
   migrate:
     handler: handler.migrate
-    # events:
-    #   - http:
-    #       path: save
-    #       method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: jupiter:*

@@ -1,1 +1,0 @@
-{"policy_id":{"S":"defaultUserPolicy"},"permissions":{"L":[{"S":"EditProfile"},{"S":"CreateWallet"},{"S":"CheckBalance"}]}}

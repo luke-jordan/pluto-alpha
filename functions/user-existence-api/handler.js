@@ -6,29 +6,6 @@ const uuid = require('uuid/v4');
 const validator = require('validator');
 const persistence = require('./persistence/rds');
 
-module.exports.create = async (event) => {
-  const request = exports.transformEvent(event);
-  logger('Transform inbound event completed, request: ', JSON.stringify(request));
-
-  const requestValid = exports.validateRequest(request);
-  logger('Validity check completed, result: ', requestValid);
-
-  if (!requestValid) {
-    return {
-      statusCode: 400
-    };
-  }
-
-  const persistenceResult = await exports.createAccount(request);
-  logger('Persistence completed, returning success, result: ', persistenceResult);
-  
-  return {
-    statusCode: 200,
-    body: JSON.stringify(persistenceResult)
-  };
-};
-
-
 // point of this is to choose whether to use API calls or Lambda invocations
 module.exports.transformEvent = (event) => {
   const body = event['body'];
@@ -41,8 +18,9 @@ module.exports.validateRequest = (creationRequest) => {
   if (!creationRequest['clientId']) {
     logger('Missing ID for intermediary client that this account belongs to');
     return false;
-  } else if (!creationRequest['floatId']) {
+  } else if (!creationRequest['defaultFloatId']) {
     logger('Missing ID for default float for this account');
+    return false;
   } else if (!creationRequest['ownerUserId']) {
     logger('System wide ID for account owner missing, invalid request');
     return false;
@@ -52,9 +30,10 @@ module.exports.validateRequest = (creationRequest) => {
   } else if (!creationRequest['userFirstName'] || !creationRequest['userFamilyName']) {
     logger('Account creation request is missting user first name or family name');
     return false;
-  } else {
-    return true;
-  }
+  } 
+    
+  logger('Incoming event validated');
+  return true;
 };
 
 /**
@@ -78,7 +57,7 @@ module.exports.createAccount = async (creationRequest = {
   const persistenceResult = await persistence.insertAccountRecord({ 
     'accountId': accountId, 
     'clientId': creationRequest.clientId,
-    'floatId': creationRequest.floatId,
+    'defaultFloatId': creationRequest.defaultFloatId,
     'ownerUserId': creationRequest.ownerUserId, 
     'userFirstName': creationRequest.userFirstName,
     'userFamilyName': creationRequest.userFamilyName
@@ -88,12 +67,34 @@ module.exports.createAccount = async (creationRequest = {
   return persistenceResult;
 };
 
-module.exports.listAccounts = async () => {
-  // const params = { TableName: 'CoreAccountLedger' };
 
-  // const result = await docClient.scan(params).promise();
-  const result = { };
-  logger('Result: ', result);
+module.exports.create = async (event) => {
+  try {
+    const request = exports.transformEvent(event);
+    logger('Transform inbound event completed, request: ', JSON.stringify(request));
 
-  return { 'statusCode': 200 };
+    const requestValid = exports.validateRequest(request);
+    logger('Validity check completed, result: ', requestValid);
+
+    if (!requestValid) {
+      return {
+        statusCode: 400,
+        body: `Error! Invalid request. All valid requests require a responsible client id, float id, the owner's user id, and user's names`
+      };
+    }
+
+    const persistenceResult = await exports.createAccount(request);
+    logger('Persistence completed, returning success, result: ', persistenceResult);
+    
+    return {
+      statusCode: 200,
+      body: JSON.stringify(persistenceResult)
+    };
+  } catch (e) {
+    logger('FATAL_ERROR: ', e);
+    return {
+      statusCode: 500,
+      body: e.message
+    };
+  }
 };

@@ -1,6 +1,8 @@
+'use strict';
+
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:float:test');
+// const logger = require('debug')('pluto:float:test');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -39,11 +41,11 @@ describe('moneyMktFloatApportionment', () => {
 
     it('Happy path', async () => {
         const amountAccrued = 3412.2341e4;
+        const allocationRequest = { amount: amountAccrued }; 
 
         const response = await handler.allocate(allocationRequest, { });
         expect(response.statusCode).to.equal(200);
         expect(response.entity).to.exist;
+    });
 
-    })
-
-})
+});
