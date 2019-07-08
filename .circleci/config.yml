@@ -210,12 +210,5 @@ jobs:
           paths:
             - /tmp/terraform
 
-      - run:
-          name: upload artifacts
-          command: |
-             if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
-                echo "On branch $CIRCLE_BRANCH, uploading artifacts."
-             fi
-
 
 
