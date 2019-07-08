@@ -13,12 +13,12 @@ const { Pool } = require('pg');
 const pool = new Pool(config.get('db'));
 
 const extractCommands = (pgResult) => {
-  if (pgResult.length == 0) {
+  if (pgResult.length === 0) {
     return pgResult.command;
-  } else {
-    return pgResult.map((result) => result.command).join(', ');
-  }
-}
+  } 
+  
+  return pgResult.map((result) => result.command).join(', ');
+};
 
 const runS3script = async (bucket, key) => {
   logger(`Fetching script from bucket ${bucket} and key ${key}`);
@@ -53,7 +53,7 @@ const executeRoleCreation = async (client, role, password) => {
   } catch (e) {
     logger('Role creation failed: ', e.message);
   }
-}
+};
 
 const createDbRoles = async (credentialsDict) => {
   const rolesToCreate = Object.keys(credentialsDict);
@@ -61,7 +61,8 @@ const createDbRoles = async (credentialsDict) => {
   
   const client = await pool.connect();
   try {
-    for (let i = 0; i < rolesToCreate.length; i++) {
+    // note : we do this in the for loop so that failures eg on roles are contained
+    for (let i = 0; i < rolesToCreate.length; i += 1) {
       const role = rolesToCreate[i];
       await executeRoleCreation(client, role, credentialsDict[role]);
     }
@@ -79,7 +80,7 @@ const createInitialTables = async () => {
   logger('Result of script folder read: ', scripts);
   const client = await pool.connect();
   try {
-    for (let i = 0; i < scripts.length; i++) {
+    for (let i = 0; i < scripts.length; i += 1) {
       const scriptName = scripts[i];
       logger('Executing: ', scriptName);
       const scriptContents = await fs.readFileSync(`${scriptPath}/${scriptName}`).toString();
@@ -98,7 +99,7 @@ module.exports.migrate = async (event) => {
   const typeOfExecution = event.type;
   logger('Executing migration of type: ', typeOfExecution);
 
-  let result;
+  let result = { };
   if (typeOfExecution === 'S3SCRIPT') {
     const scriptBucket = event.bucket;
     const scriptKey = event.key;
@@ -115,8 +116,8 @@ module.exports.migrate = async (event) => {
     statusCode: 200,
     body: JSON.stringify({
       message: result,
-      input: event,
-    }, null, 2),
+      input: event
+    })
   };
 
   // Use this code if you don't use the http event with the LAMBDA-PROXY integration
