@@ -179,7 +179,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         accountRow.floatAllocTransactionId = floatAllocationTxId;
 
         const floatAdditionRow = JSON.parse(JSON.stringify(rowValuesBase));
-        floatAdditionRow.transactionType = 'SAVING';
+        floatAdditionRow.transactionType = 'USER_SAVING_EVENT';
         floatAdditionRow.floatTransactionId = floatAdditionTxId;
         floatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
         floatAdditionRow.allocatedToId = settlementDetails.floatId;

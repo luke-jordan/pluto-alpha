@@ -35,9 +35,8 @@ resource "aws_db_instance" "rds" {
   vpc_security_group_ids = ["${aws_security_group.sg_db_5432_ingress.id}"]
 
   skip_final_snapshot    = true
-
+  storage_encrypted      = true
 }
-
 
 resource "aws_rds_cluster" "pg_rds" {
   count = "${terraform.workspace != "staging" ? 1 : 0}"
@@ -54,6 +53,7 @@ resource "aws_rds_cluster" "pg_rds" {
   preferred_backup_window = "07:00-09:00"
   skip_final_snapshot     = true
   final_snapshot_identifier = "final"
+  storage_encrypted       = true
 }
 
 resource "aws_rds_cluster_instance" "cluster_instances" {

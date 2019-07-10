@@ -15,9 +15,11 @@ const pool = new Pool(config.get('db'));
 const extractCommands = (pgResult) => {
   if (pgResult.length === 0) {
     return pgResult.command;
-  } 
+  } else if (Array.isArray(pgResult)) {
+    return pgResult.map((result) => result.command).join(', ');
+  }
   
-  return pgResult.map((result) => result.command).join(', ');
+  return pgResult;
 };
 
 const runS3script = async (bucket, key) => {
@@ -76,10 +78,11 @@ const createDbRoles = async (credentialsDict) => {
 
 const createInitialTables = async () => {
   const scriptPath = './tables';
-  const scripts = fs.readdirSync(scriptPath);
+  const scripts = fs.readdirSync(scriptPath).sort();
   logger('Result of script folder read: ', scripts);
   const client = await pool.connect();
   try {
+    // we do this in a for loop as well as sequencing may matter
     for (let i = 0; i < scripts.length; i += 1) {
       const scriptName = scripts[i];
       logger('Executing: ', scriptName);
