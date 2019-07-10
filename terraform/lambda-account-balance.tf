@@ -15,7 +15,7 @@ resource "aws_lambda_function" "account_balance" {
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
-  s3_key = "${var.account_balance_function_name}/${var.deploy_code_commit_hash}.zip"
+  s3_key = "user_activity_api/${var.deploy_code_commit_hash}.zip"
 
   environment {
     variables = {
