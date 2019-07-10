@@ -1,5 +1,5 @@
 variable "user_existence_api_lambda_function_name" {
-  default = "user_existence_api"
+  default = "account_create"
   type = "string"
 }
 
@@ -36,15 +36,10 @@ resource "aws_lambda_function" "user_existence_api" {
             },
             "db": {
                 "user": "account_api_worker",
-                "host": "localhost",
-                "database": "pluto",
+                "host": "${aws_db_instance.rds.address}",
+                "database": "${var.db_name}",
                 "password": "pwd_for_account_api",
-                "port" :"5430"
-            },
-            "test": {
-                "nock": {
-                    "dynamodb": "http://localhost:4569"
-                }
+                "port" :"${aws_db_instance.rds.port}"
             }
         }
       )}"
