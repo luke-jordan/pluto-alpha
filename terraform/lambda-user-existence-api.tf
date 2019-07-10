@@ -36,10 +36,10 @@ resource "aws_lambda_function" "user_existence_api" {
             },
             "db": {
                 "user": "account_api_worker",
-                "host": "${aws_db_instance.rds.address}",
+                "host": "${aws_db_instance.rds[0].address}",
                 "database": "${var.db_name}",
                 "password": "pwd_for_account_api",
-                "port" :"${aws_db_instance.rds.port}"
+                "port" :"${aws_db_instance.rds[0].port}"
             }
         }
       )}"

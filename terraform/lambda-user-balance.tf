@@ -3,7 +3,7 @@ variable "account_balance_lambda_function_name" {
   type = "string"
 }
 
-resource "aws_lambda_function" "account_balance" {
+resource "aws_lambda_function" "account_balance_lambda" {
 
   function_name                  = "${var.account_balance_lambda_function_name}"
   role                           = "${aws_iam_role.account_balance_lambda_role.arn}"
@@ -109,7 +109,7 @@ resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_account_balance
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_user_existence_api" {
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_account_balance_lambda" {
   alarm_name = "${var.account_balance_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
@@ -132,7 +132,7 @@ resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_account_bala
   pattern = "SECURITY_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_user_existence_api" {
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_account_balance_lambda" {
   alarm_name = "${var.account_balance_lambda_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
