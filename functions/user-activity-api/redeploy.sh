@@ -3,5 +3,8 @@
 echo "Zipping up the code"
 sls package --stage local
 
-echo "Redeploying it"
-awslocal lambda update-function-code --function-name 'add-savings' --zip-file fileb://.serverless/user-activity-api.zip
+echo "Redeploying save"
+awslocal lambda update-function-code --function-name 'activity-save' --zip-file fileb://.serverless/user-activity-api.zip
+
+# echo "Redeploying balance"
+# awslocal lambda update-function-code --function-name 'activity-balance' --zip-file fileb://.serverless/user-activity-api.zip

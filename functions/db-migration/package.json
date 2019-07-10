@@ -4,7 +4,8 @@
   "description": "Lambda to execute a changescript on DB",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* mocha"
+    "test": "DEBUG=jupiter:* mocha",
+    "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",
@@ -22,6 +23,7 @@
     "eslint": "^6.0.1",
     "eslint-plugin-chai-friendly": "^0.4.1",
     "mocha": "^6.1.4",
-    "nyc": "^14.1.1"
+    "nyc": "^14.1.1",
+    "serverless-localstack": "^0.4.15"
   }
 }

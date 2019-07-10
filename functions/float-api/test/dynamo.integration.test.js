@@ -1,3 +1,5 @@
+'use strict';
+
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('pluto:float:test');
@@ -35,12 +37,13 @@ const createDynamoTable = (nextAction) => {
             ReadCapacityUnits: 5,
             WriteCapacityUnits: 5
         }
-    }
+    };
+
     docClient.createTable(params, (err, data) => {
-        if (!!err) {
+        if (err) {
             logger('Error! : ', err.message);
         } else {
-            logger('Created table!');
+            logger('Created table! Output: ', data);
         }
         logger('Calling next action');
         nextAction();
@@ -54,9 +57,9 @@ const insertBonusPoolShareOfAccrual = (nextAction) => {
     const params = {
         TableName: config.get('tables.clientFloatVars'),
         Item: {
-            'VariableKey': { S: bonusKey },
-            'LastUpdatedTimestamp': { N: '' + (new Date()).getTime() },
-            'Value': { S: '' + common.testValueBonusPoolShare }
+            'VariableKey': { 'S': bonusKey },
+            'LastUpdatedTimestamp': { 'N': String(new Date()).getTime() },
+            'Value': { 'S': String(common.testValueBonusPoolShare) }
         }
     };
 
@@ -64,7 +67,7 @@ const insertBonusPoolShareOfAccrual = (nextAction) => {
         if (err) { 
             logger('Error thrown inside put bonus share: ', err.message);
         } else {
-            logger('Done! Bonus pool share inserted');
+            logger('Done! Bonus pool share inserted, output: ', data);
         }
         nextAction();
     });
@@ -76,9 +79,9 @@ const insertCompanyShareOfAccrual = (nextAction) => {
     const params = {
         TableName: config.get('tables.clientFloatVars'),
         Item: {
-            'VariableKey': { S: companyKey },
-            'LastUpdatedTimestamp': { N: '' + (new Date()).getTime() },
-            'Value': { S: '' + common.testValueCompanyShare }
+            'VariableKey': { 'S': companyKey },
+            'LastUpdatedTimestamp': { 'N': String(new Date().getTime()) },
+            'Value': { 'S': String(common.testValueCompanyShare) }
         }
     };
 
@@ -86,7 +89,7 @@ const insertCompanyShareOfAccrual = (nextAction) => {
         if (err) {
             logger('Error thrown inside put company share: ', err.message);
         } else {
-            logger('Done! Company share of accrual added');
+            logger('Done! Company share of accrual added, output: ', data);
         }
         nextAction();
     });
@@ -97,9 +100,9 @@ const dropConfigVarTable = () => {
         TableName: config.get('tables.clientFloatVars')
     };
 
-    return docClient.describeTable(params).promise().then(_ => {
-        return docClient.deleteTable(params).promise().catch((err) => logger('Error thrown inside delete table: ', err.message));
-    }).catch((err) => logger('Table did not exist, not dropping it'));
+    return docClient.describeTable(params).promise().then(() => docClient.
+        deleteTable(params).promise().catch((err) => logger('Error thrown inside delete table: ', err.message))
+    ).catch(() => logger('Table did not exist, not dropping it'));
 };
 
 describe('obtainConfigVars', () => {
@@ -116,7 +119,7 @@ describe('obtainConfigVars', () => {
         it('obtainBonusPoolShare', async () => {
             const retrieveShare = floatDynamo.fetchSharesAndTrackersForFloat();
             expect(retrieveShare).to.have.property('bonusPoolShare', common.testValueBonusPoolShare);
-            expect(retrieveShare).to.have.property('bonusPoolSystemWideId', common.testValueBonusPoolShare)
+            expect(retrieveShare).to.have.property('bonusPoolSystemWideId', common.testValueBonusPoolShare);
         });
     
         it('obtainCompanyShare', async () => {

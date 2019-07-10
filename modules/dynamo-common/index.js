@@ -30,7 +30,7 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o
  * @param {array[string]} soughtAttributes Optional. A list of column names
  */
 module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { keyName: VALUE }, soughtAttributes = []) => {
-    
+
     const caseConvertedKey = decamelizeKeys(keyValue);
     logger('Transformed key: ', caseConvertedKey);
     const params = {
@@ -54,3 +54,8 @@ module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { ke
         throw e;
     }
 }
+
+// module.exports.debugAllTable = async (tableName) => {
+//     const results = await docC.scan({ TableName: tableName }).promise();
+//     logger('Results of scan: ', results);
+// }

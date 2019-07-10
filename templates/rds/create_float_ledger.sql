@@ -1,7 +1,7 @@
 create schema if not exists float_data;
 
 create table if not exists float_data.float_transaction_ledger (
-    transaction_id uuid not null,
+    transaction_id uuid not null primary key,
     creation_time timestamp with time zone not null default current_timestamp,
     client_id varchar(255) not null, 
     float_id varchar(255) not null,

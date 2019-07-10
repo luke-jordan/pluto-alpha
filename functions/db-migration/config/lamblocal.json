@@ -1,0 +1,7 @@
+{
+    "db": {
+        "host": "rdslocal",
+        "database": "jupiter",
+        "port": "5432"
+    }
+}

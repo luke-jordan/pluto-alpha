@@ -41,7 +41,14 @@ functions:
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: pluto:*
+  balance:
+    handler: handler.balance
+    name: activity-balance
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: pluto:*
 
 package:
   include:
     - node_modules/rds-common/**
+    - node_modules/dynamo-common/**

@@ -6,7 +6,7 @@ version: 2
 jobs:
   build:
     docker:
-      - image: circleci/node:chakracore-8.10.0
+      - image: circleci/node:10
         environment:
 
       # Postgres image for testing
@@ -32,9 +32,6 @@ jobs:
           - user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
       - restore_cache:
           keys:
-          - auth-api_dependencies-{{ checksum "./functions/auth-api/package.json" }}
-      - restore_cache:
-          keys:
           - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
       - restore_cache:
           keys:
@@ -55,7 +52,6 @@ jobs:
 
             cd $HOME/app/functions/db-migration && npm install
             cd $HOME/app/functions/float-api && npm install
-            cd $HOME/app/functions/auth-api && npm install
             cd $HOME/app/functions/user-activity-api && npm install
             cd $HOME/app/functions/user-existence-api && npm install
             cd $HOME/app/modules/rds-common && npm install
@@ -63,7 +59,6 @@ jobs:
             cd $HOME/app
 
             cp -r modules/* $HOME/app/functions/db-migration/node_modules
-            cp -r modules/* $HOME/app/functions/auth-api/node_modules
             cp -r modules/* $HOME/app/functions/float-api/node_modules
             cp -r modules/* $HOME/app/functions/user-activity-api/node_modules
             cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
@@ -93,11 +88,6 @@ jobs:
             - ./functions/float-api/node_modules
 
       - save_cache:
-          key: auth-api_dependencies-{{ checksum "./functions/auth-api/package.json" }}
-          paths:
-            - ./functions/auth-api/node_modules
-
-      - save_cache:
           key: user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
           paths:
             - ./functions/user-activity-api/node_modules
@@ -120,25 +110,40 @@ jobs:
       - run:
           name: run linter
           command: |
-            echo "TODO: run linter"
+            # echo "Linting modules"
+            # cd $HOME/app/modules/rds-common && npm run-script lint
+            # cd ../dynamo-common && npm run-script lint
+
+            echo "Linting functions"
+            cd $HOME/app/functions/user-activity-api && npm run-script lint
+            cd ../user-existence-api && npm run-script lint
+            cd ../float-api && npm run-script lint
+            cd ../db-migration && npm run-script lint
 
       - run:
           name: run security check
           command: |
-            echo 'TODO: run security check, SNYK, Sourceclear or similar...'
+            cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
+            # we do this to avoid the package lock inadvertantly overriding later and wiping modules
+            rm ./package-lock.json
+            cd ../user-existence-api && npm i --package-lock-only && npm audit
+            rm ./package-lock.json
+            cd ../float-api && npm i --package-lock-only && npm audit
+            rm ./package-lock.json
+            cd ../db-migration && npm i --package-lock-only && npm audit
+            rm ./package-lock.json
 
       - run:
           name: run tests
           command: |
-            cd functions
+            cd $HOME/app/functions
             npm install codecov
             
-            #echo "Running tests and outputing coverage reports"
-            #cd user-existence-api; npm test; npm run-script generate-coverage
-            #cd ../user-activity-api; npm test; npm run-script generate-coverage
-            #cd ../float-api; npm test; npm run-script generate-coverage
-            #cd ../auth-api; npm test; npm run-script generate-coverage
-            #cd ..
+            echo "Running tests and outputing coverage reports"
+            cd user-existence-api; npm test; npm run-script generate-coverage
+            cd ../user-activity-api; npm test; npm run-script generate-coverage
+            cd ../float-api; npm test; npm run-script generate-coverage
+            cd ..
 
             echo "Uploading coverage reports"
             node_modules/codecov/bin/codecov
@@ -149,27 +154,21 @@ jobs:
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
 
-
-
                 cd $HOME/app/functions/db-migration
                 echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_db_migration_$CIRCLE_SHA1.zip .
+                zip -rq $HOME/deploy_db_migration_$CIRCLE_SHA1.zip .
 
                 cd $HOME/app/functions/float-api
                 echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_float_api_$CIRCLE_SHA1.zip .
-
-                cd $HOME/app/functions/auth-api
-                echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_auth_api_$CIRCLE_SHA1.zip .
+                zip -rq $HOME/deploy_float_api_$CIRCLE_SHA1.zip .
 
                 cd $HOME/app/functions/user-activity-api
                 echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_user_act_$CIRCLE_SHA1.zip .
+                zip -rq $HOME/deploy_user_act_$CIRCLE_SHA1.zip .
 
                 cd $HOME/app/functions/user-existence-api
                 echo $CIRCLE_SHA1 > last_commit.txt
-                zip -r $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip .
+                zip -rq $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip .
 
              fi
       - run:
@@ -182,7 +181,6 @@ jobs:
                 cd $HOME
 
                 /home/circleci/bin/aws s3 cp deploy_db_migration_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/db_migration/$CIRCLE_SHA1.zip
-                /home/circleci/bin/aws s3 cp deploy_auth_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/auth_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_activity_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_existence_api/$CIRCLE_SHA1.zip
@@ -207,7 +205,7 @@ jobs:
                 terraform workspace select $CIRCLE_BRANCH
                 
                 terraform plan -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=$RDS_USERNAME" -var "db_password=$RDS_PASSWORD"
-                terraform apply -auto-approve -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=$RDS_USERNAME" -var "db_password=$RDS_PASSWORD"
+                #terraform apply -auto-approve -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=$RDS_USERNAME" -var "db_password=$RDS_PASSWORD"
                 
                 if [ $CIRCLE_BRANCH == 'master' ]; then
                     migrator_region=eu-west-1
@@ -218,8 +216,8 @@ jobs:
                 fi
 
 
-                /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload file://$HOME/app/functions/db-migration/create_roles_event.json  --log-type Tail -
-                /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload '{"type": "SETUP_TABLES"}' --log-type Tail -
+                #/home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload file://$HOME/app/functions/db-migration/create_roles_event.json  --log-type Tail -
+                #/home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload '{"type": "SETUP_TABLES"}' --log-type Tail -
              fi
 
       - save_cache:
