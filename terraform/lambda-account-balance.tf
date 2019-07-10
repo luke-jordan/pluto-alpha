@@ -1,4 +1,4 @@
-variable "account_balance_function_name" {
+variable "account_balance_lambda_function_name" {
   default = "account_balance"
   type = "string"
 }
