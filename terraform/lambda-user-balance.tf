@@ -59,7 +59,7 @@ resource "aws_lambda_function" "account_balance_lambda" {
 }
 
 resource "aws_iam_role" "account_balance_lambda_role" {
-  name = "${var.user_existence_api_lambda_function_name}_role_${terraform.workspace}"
+  name = "${var.account_balance_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -79,7 +79,7 @@ EOF
 }
 
 resource "aws_cloudwatch_log_group" "account_balance_lambda" {
-  name = "/aws/lambda/${var.user_existence_api_lambda_function_name}"
+  name = "/aws/lambda/${var.account_balance_lambda_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
