@@ -30,3 +30,6 @@ production.json
 gitup.sh
 jwt-private.key
 jwt-public.key
+
+# git attributes so not everyone needs to run the notebook cleaning
+.gitattributes
