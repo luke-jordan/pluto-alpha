@@ -31,14 +31,14 @@ const fetchStubs = [fetchUserBySystemIdStub, fetchUserByIdStub, fetchUserByPhone
 const dynamoStubs = {
     'insertUserProfile': insertUserProfileStub,
     'updateUserProfile': updateUserProfileStub,
-    'fetchUserBySystemId': fetchUserBySystemIdStub,
-    'fetchUserById': fetchUserByIdStub,
+    'fetchUserProfile': fetchUserBySystemIdStub,
+    'fetchUserByNationalId': fetchUserByIdStub,
     'fetchUserByPhone': fetchUserByPhoneStub,
     'fetchUserByEmail': fetchUserByEmailStub
 };
 
-const handler = proxyquire('../profile.handler', {
-    './persistence/dynamo': dynamoStubs
+const handler = proxyquire('../profile-handler', {
+    './persistence/dynamodb': dynamoStubs
 });
 
 const testSystemId = uuid();

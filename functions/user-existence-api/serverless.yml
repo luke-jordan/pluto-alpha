@@ -2,8 +2,8 @@
 
 service: user-existence-api # NOTE: update this with your service name
 
-plugins:
-  - serverless-localstack
+# plugins:
+#   - serverless-localstack
 
 custom:
   localstack:
@@ -30,9 +30,9 @@ provider:
     pluto.user.existence.lambdas
 
 functions:
-  create:
-    handler: handler.create
-    name: account-create
+  account_create:
+    handler: account.handler.create
+    name: account_create
     events:
       - http:
           path: create
@@ -40,7 +40,13 @@ functions:
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: pluto:*
+  profile_create:
+    handler: profile-handler.insertNewUser
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
 
 package:
   include:
     - node_modules/rds-common/**
+    - node_modules/dynamo-common/**

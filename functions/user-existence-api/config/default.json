@@ -7,8 +7,13 @@
         }
     },
     "tables": {
-        "dynamodb": "CoreAccountLedger",
-        "accountData": "account_data.core_account_ledger"
+        "accountData": "account_data.core_account_ledger",
+        "dynamo": {
+            "profileTable": "UserProfileTable",
+            "nationalIdTable": "UserNationalIdTable",
+            "phoneTable": "UserPhoneTable",
+            "emailTable": "UserEmailTable"
+        }
     },
     "db": {
         "user": "account_api_worker",

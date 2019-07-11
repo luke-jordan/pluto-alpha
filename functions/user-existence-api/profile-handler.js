@@ -5,7 +5,7 @@ const logger = require('debug')('jupiter:profile:handler');
 const uuid = require('uuid/v4');
 const validator = require('validator');
 
-const dynamo = require('./persistence/dynamo');
+const dynamo = require('./persistence/dynamodb');
 
 /**
  * 
@@ -24,7 +24,10 @@ const dynamo = require('./persistence/dynamo');
  * @param {array} tags Optional. A set of tags to associate with the user 
  */
 module.exports.insertNewUser = async (event, context) => {
-    
+    // todo : validate client & float IDs
+    const resultOfInsertion = await dynamo.insertUserProfile(event);
+    logger('Well, did that work: ', resultOfInsertion);
+    return { statusCode: 200, body: JSON.stringify(resultOfInsertion) };
 }
 
 /**
