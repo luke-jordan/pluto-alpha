@@ -64,7 +64,7 @@ describe('*** UNIT TEST USER PROFILE *** FINDING USERS ***', () => {
         clientId: testClientId,
         nationalId: testNationalId,
         primaryPhone: testPhone,
-        primaryEmail: testeEmail,
+        primaryEmail: testEmail,
         systemState: 'USER_HAS_SAVED',
         kycState: 'VERIFIED_AS_PERSON',
         kycRiskRating: 0,
@@ -108,7 +108,7 @@ describe('*** UNIT TEST USER PROFILE *** FINDING USERS ***', () => {
         expect(retrievedUser).to.deep.equal({ systemWideId: testSystemId, phoneNumber: testPhone });
     });
 
-    it('Successfully find a user by their system wide user ID', () => {
+    it('Successfully find a user by their system wide user ID', async () => {
         const userResult = await handler.fetchUserBySystemId({ }, testUserContext);
         const retrievedUser = testHelper.standardOkayChecks(userResult);
         expect(retrievedUser).to.deep.equal(testReturnedUser);
@@ -142,9 +142,24 @@ describe('*** UNIT TEST USER PROFILE *** INSERTING USERS ***', () => {
         kycStatus: 'CONTACT_VERIFIED'
     };
 
+    const testPersistedTime = moment.now().valueOf();
+
+    const dynamoResponse = {
+        persistedTimeMillis: testPersistedTime
+    };
+
+    const expectedResponse = {
+        insertionResult: 'INSERTED',
+        persistedTimeMillis: testPersistedTime,
+        systemWideId: testSystemId
+    };
+
+    // https://stackoverflow.com/questions/3825990/http-response-code-for-post-when-resource-already-exists
+    const httpStatusCodeForUserExists = 409;
+
     before(() => {
         testHelper.resetStubs(Object.values(dynamoStubs));
-        insertUserProfileStub.withArgs(wellFormedRequest).returns(wellFormedRequest); // or, what else does Dynamo put in? Also a timestamp?
+        insertUserProfileStub.withArgs(wellFormedRequest).returns(dynamoResponse); // or, what else does Dynamo put in? Also a timestamp?
     });
     
     beforeEach(() => {
@@ -156,16 +171,22 @@ describe('*** UNIT TEST USER PROFILE *** INSERTING USERS ***', () => {
         testHelper.expectNoCalls(updateUserProfileStub);
     });
 
-    it('Insert a new user profile, happy path, ID and phone number', () => {
+    it('Insert a new user profile, happy path, ID and phone number', async () => {
         fetchUserByIdStub.withArgs(testClientId, testNationalId).resolves({ });
         fetchUserByPhoneStub.withArgs(testPhone).resolves({ });
         const resultOfInsert = await handler.insertNewUser(wellFormedRequest);
         const insertBody = testHelper.standardOkayChecks(resultOfInsert);
-        // ... okay, then the rest.
+        expect(insertBody).to.deep.equal(expectedResponse);
     });
 
-    it('Fail if any part of user data is not unique', () => {
-
+    it('Fail if any part of user data is not unique', async () => {
+        fetchUserByIdStub.withArgs(testClientId, testNationalId).resolves(testSystemId);
+        const resultOfInsert = await handler.insertNewUser(wellFormedRequest);
+        expect(resultOfInsert).to.exist;
+        expect(resultOfInsert).to.have.property('statusCode', httpStatusCodeForUserExists);
+        expect(resultOfInsert).to.have.property('body');
+        expect(resultOfInsert.body).to.deep.equal({ 'message': 'Error! User with that national ID already exists', 'field': 'NATIONAL_ID' });
+        // and so on, with others to test
     });
 
 });
@@ -173,11 +194,29 @@ describe('*** UNIT TEST USER PROFILE *** INSERTING USERS ***', () => {
 
 describe('*** UNIT TEST USER PROFILE *** UPDATING USERS ***', () => {
 
-    it('Update a user status', () => {
+    it('Update a user status', async () => {
+        // todo: add in a time stamp
+        updateUserProfileStub.withArgs(testSystemId, { systemState: 'USER_HAS_WITHDRAWN' }).resolves({ message: 'UPDATED'});
+        const resultOfUserUpdate = await handler.updateUserStatus({ systemWideId: testSystemId, systemState: 'USER_HAS_WITHDRAWN' }, testUserContext);
+        const resultBody = testHelper.standardOkayChecks(resultOfUserUpdate);
+        // what it should return
+
+        updateUserProfileStub.withArgs(testSystemId, { systemState: 'SUSPENDED_FOR_KYC' }).resolves({ message: 'UPDATED '});
+        const resultOfAdminUpdate = await handler.updateUserStatus({ systemWideId: testSystemId, systemState: 'SUSPENDED_FOR_KYC' }, testAdminContext);
+        const adminResultBody = testHelper.standardOkayChecks(resultOfAdminUpdate);
+        // further tests
+    });
+
+    // note: we will definitely need to put this in a queue to prevent someone eventually altering it themselves
+    it('Update a user KYC status', () => {
+        
+    });
+
+    it('Throw security error if user is in suspended / KYC frozen state and non-system admin tries to update', async() => {
 
     });
 
-    it('Update a user KYC status', () => {
+    it('Throw validation errors if incorrect status', async () => {
 
     });
 

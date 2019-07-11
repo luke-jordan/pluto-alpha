@@ -13,9 +13,12 @@ const expect = chai.expect;
 // const docC = new AWS.DynamoDB.DocumentClient({apiVersion: config.get('aws.apiVersion')});
 
 const docClientGetStub = sinon.stub();
+const docClientPutStub = sinon.stub();
+
 class MockDocClient {
-    constructor(config) {
+    constructor() {
         this.get = docClientGetStub;
+        this.put = docClientPutStub;
     }
 }
 
@@ -99,6 +102,32 @@ describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
 
 
 
+});
+
+describe('*** UNIT TEST SIMPLE ROW INSERTION ***', () => {
+
+    const userTable = 'UserProfileTable';
+
+    const wellFormedParams = {
+        TableName: testTableName,
+        Key: {
+            'client_id': testClientId,
+            'float_id': testFloatId
+        }
+    };
+    
+    const expectedResult = {
+        Item: { }
+    };
+
+    docClientPutStub.withArgs(sinon.match(wellFormedParams)).returns({ promise: () => { return expectedResult }});
+    
+    it('Happy path, simple row insertion, completion', async () => {
+        const insertRow = await dynamo.putRow(userTable, { });
+        expect(insertRow).to.exist;
+        // then add the rest
+    });
+    
 });
 
 describe('*** UNIT TEST SIMPLE ROW UPDATING ***', () => {

@@ -8,8 +8,9 @@ const decamelize = require('decamelize');
 
 const AWS = require('aws-sdk');
 
-const endpoint = process.env.NODE_ENV === 'lamblocal' && process.env.LOCALSTACK_HOSTNAME ? 
-    `http://${process.env.LOCALSTACK_HOSTNAME}:4569` : config.get('aws.endpoints.dynamodb');
+const processInDocker = process.env.NODE_ENV === 'lamblocal' && process.env.LOCALSTACK_HOSTNAME;
+const endpoint = processInDocker ? `http://${process.env.LOCALSTACK_HOSTNAME}:4569` : 
+    config.has('aws.endpoints.dynamodb') ? config.get('aws.endpoints.dynamodb') : null;
 
 logger('Set endpoint for DynamoDB: ', endpoint);
 
@@ -53,7 +54,17 @@ module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { ke
         logger('Error from AWS: ', e.message);
         throw e;
     }
-}
+};
+
+module.exports.putRow = async (tableName = 'ConfigVars', item) => {
+
+    const caseConvertedKey = decamelizeKeys(item);
+
+    const params = {
+        TableName: tableName
+    };
+
+};
 
 // module.exports.debugAllTable = async (tableName) => {
 //     const results = await docC.scan({ TableName: tableName }).promise();
