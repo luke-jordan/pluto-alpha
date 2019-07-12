@@ -58,17 +58,19 @@ module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { ke
     }
 };
 
-const extractConditionalExpression = (keyColumns) => {
-    if (!Array.isArray(keyColumns)) {
+const extractConditionalExpression = (rawKeyColumns) => {
+    if (!Array.isArray(rawKeyColumns)) {
         throw new Error('Error! Key columns must be passed as an array');
-    } else if (keyColumns.length === 0) {
+    } else if (rawKeyColumns.length === 0) {
         throw new Error('Error! No key column names provided');
-    } else if (keyColumns.length > 2) {
-        throw new Error('Error! Too many key column names provided, DynamoDB tables can have at most two')
-    } else if (keyColumns.some(keyColumn => typeof keyColumn !== 'string')) {
+    } else if (rawKeyColumns.length > 2) {
+        throw new Error('Error! Too many key column names provided, DynamoDB tables can have at most two');
+    } else if (rawKeyColumns.some(keyColumn => typeof keyColumn !== 'string')) {
         throw new Error('Error! One of the provided key column names is not a string');
     }
 
+    const keyColumns = rawKeyColumns.map((columnName) => decamelize(columnName, '_'));
+    
     const hashChar = '#';
     const columnKeyNames = keyColumns.map(keyColumnName => hashChar + keyColumnName.charAt(0));
     const singleKey = keyColumns.length === 1;
@@ -106,12 +108,9 @@ const assembleErrorDict = (error) => {
 };
 
 module.exports.insertNewRow = async (tableName = 'ConfigVars', keyColumns = ['clientId'], item = { }) => {
-    const caseConvertedKeyColumns = keyColumns.map((columnName) => decamelize(columnName, '_'));
-    const caseConvertedItem = decamelizeKeys(item);
-
-    const params = extractConditionalExpression(caseConvertedKeyColumns);
+    const params = extractConditionalExpression(keyColumns);
     params.TableName = tableName;
-    params.Item = caseConvertedItem;
+    params.Item = decamelizeKeys(item);
 
     let resultDict = { };
 
@@ -123,6 +122,50 @@ module.exports.insertNewRow = async (tableName = 'ConfigVars', keyColumns = ['cl
     } catch (err) {
         logger('Error! From AWS: ', err);
         resultDict = assembleErrorDict(err);   
+    }
+
+    return resultDict;
+};
+
+/**
+ * Update a single row in a table. Needs to work with the horror show of the DynamoDB SDK for this, so has to leave more to caller than usual
+ * See docs here: https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/GettingStarted.NodeJs.03.html (Step 3.3). An example of params:
+ * {
+ *   tableName: 'ConfigVars', 
+ *   itemKey: { keyName: keyValue }, 
+ *   updateExpression: 'set property = :val', 
+ *   substitutionDict: { ':val': someValue}, 
+ *   returnOnlyUpdated = true
+ * }
+ * @param {string} tableName The name of the table where the item sits
+ * @param {string} itemKey A dict, as for item fetch, with key and value (as with others, run through decamelize)
+ * @param {string} updateExpression The update expression -- **note** this will not be run through decamelize so must be written with names as in table
+ * @param {object} substitutionDict What to use in ExpressionAttributeValues (world's worst SDK, what can you do). Keys usually of form :s and so on, so not altered
+ * @param {boolean} returnOnlyUpdated Whether to return only the updated values or all the values of the item
+ */
+module.exports.updateRow = async (updateParams) => {
+    logger('Updating a row ...');
+    
+    const caseConvertedKey = decamelizeKeys(updateParams.itemKey);
+    const returnValues = updateParams.returnOnlyUpdated ? 'UPDATED_NEW' : 'ALL_NEW';
+
+    const awsParams = {
+        TableName: updateParams.tableName,
+        Key: caseConvertedKey,
+        UpdateExpression: updateParams.updateExpression,
+        ExpressionAttributeValues: updateParams.substitutionDict,
+        ReturnValues: returnValues
+    };
+
+    let resultDict = { };
+    try {
+        logger('Updating item with params: ', awsParams);
+        const updateResult = await docC.update(awsParams).promise();
+        logger('Result from update: ', updateResult);
+        resultDict = { result: 'SUCCESS', returnedAttributes: updateResult.Attributes }
+    } catch (err) {
+        logger('Something went wrong updating! : ', err);
+        resultDict = assembleErrorDict(err);
     }
 
     return resultDict;

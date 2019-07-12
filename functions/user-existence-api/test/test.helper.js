@@ -42,3 +42,10 @@ module.exports.standardOkayChecks = (result) => {
     expect(result).to.have.property('body');
     return JSON.parse(result.body);
 };
+
+module.exports.expectedErrorChecks = (result, expectedStatusCode) => {
+    expect(result).to.exist;
+    expect(result).to.have.property('statusCode', expectedStatusCode);
+    expect(result).to.have.property('body');
+    return JSON.parse(result.body);
+};

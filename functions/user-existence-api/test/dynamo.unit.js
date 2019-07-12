@@ -69,7 +69,7 @@ const wellFormedNewItemToDdb = {
     updatedTimeEpochMillis: testTimeCreated.valueOf()
 };
 
-describe.only('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
+describe('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
 
     const insertionSuccessResult = {
         result: 'SUCCESS'
@@ -85,11 +85,11 @@ describe.only('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
         
         fetchRowStub.withArgs(nationalIdTable, { clientId: testClientId, nationalId: testNationalId }).resolves({ });
         insertRowStub.withArgs(nationalIdTable, ['clientId', 'nationalId'], { clientId: testClientId, nationalId: testNationalId, systemWideUserId: testSystemId }).
-            resolves(insertionSuccessResult)
+            resolves(insertionSuccessResult);
         fetchRowStub.withArgs(phoneTable, { phoneNumber: testPhone }).resolves({ });
         insertRowStub.withArgs(phoneTable, ['phoneNumber'], { phoneNumber: testPhone, systemWideUserId: testSystemId }).resolves(insertionSuccessResult);
 
-        insertRowStub.withArgs(profileTable, [ 'systemWideUserId' ], wellFormedNewItemToDdb).resolves(insertionSuccessResult);
+        insertRowStub.withArgs(profileTable, ['systemWideUserId'], wellFormedNewItemToDdb).resolves(insertionSuccessResult);
 
         const insertionResult = await dynamo.insertUserProfile(testUserPassed);
         expect(insertionResult).to.exist;
@@ -120,8 +120,23 @@ describe.only('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
         expect(userProfileRetrieved).to.deep.equal(wellFormedNewItemToDdb);
     });
 
-    it('Returns gracefully when nothing is found', () => {
+    it('Returns gracefully when nothing is found', async () => {
+        fetchRowStub.withArgs(profileTable, { systemWideUserId: testSystemId }).resolves({ });
+        const userProfileRetrieved = await dynamo.fetchUserProfile(testSystemId);
+        logger('Result of retrieval: ', userProfileRetrieved);
+        expect(userProfileRetrieved).to.be.null;
 
+        fetchRowStub.withArgs(nationalIdTable, { clientId: testClientId, nationalId: testNationalId }).resolves({ });
+        const retrievedNational = await dynamo.fetchUserByNationalId(testClientId, testNationalId);
+        expect(retrievedNational).to.be.null;
+
+        fetchRowStub.withArgs(phoneTable, { phoneNumber: testPhone }).resolves({ });
+        const retrievedPhone = await dynamo.fetchUserByPhone(testPhone);
+        expect(retrievedPhone).to.be.null;
+
+        fetchRowStub.withArgs(emailTable, { emailAddress: testEmail }).resolves({ });
+        const retrievedEmail = await dynamo.fetchUserByEmail(testEmail);
+        expect(retrievedEmail).to.be.null;
     });
 
     it('Updates a user row correctly', () => {

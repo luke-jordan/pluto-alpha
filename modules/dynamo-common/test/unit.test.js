@@ -5,18 +5,23 @@ const logger = require('debug')('jupiter:dynamo:test');
 const chai = require('chai');
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
-const expect = chai.expect;
 chai.use(require('sinon-chai'));
+const chaiAsPromised = require('chai-as-promised');
+chai.use(chaiAsPromised);
+
+const expect = chai.expect;
 
 const uuid = require('uuid/v4');
 
 const docClientGetStub = sinon.stub();
 const docClientPutStub = sinon.stub();
+const docClientUpdateStub = sinon.stub();
 
 class MockDocClient {
     constructor() {
         this.get = docClientGetStub;
         this.put = docClientPutStub;
+        this.update = docClientUpdateStub;
     }
 }
 
@@ -27,6 +32,8 @@ const dynamo = proxyquire('../index', {
 
 const resetStubs = () => {
     docClientGetStub.reset();
+    docClientPutStub.reset();
+    docClientUpdateStub.reset();
 };
 
 const testTableName = 'ClientCoFloatTableTest';
@@ -43,18 +50,18 @@ const testValues = {
 
 describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
 
+    const genericParams = {
+        TableName: testTableName,
+        Key: {
+            'client_id': testClientId,
+            'float_id': testFloatId
+        }
+    };
+
     afterEach(() => resetStubs());
 
     it('Fetch a unique record', async () => {
         logger('Initiating simplest unit test');
-
-        const expectedParams = {
-            TableName: testTableName,
-            Key: {
-                'client_id': testClientId,
-                'float_id': testFloatId
-            }
-        };
 
         const expectedResult = {
             Item: {
@@ -66,8 +73,8 @@ describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
             }
         };
 
-        logger('Expected params: ', expectedParams);
-        docClientGetStub.withArgs(sinon.match(expectedParams)).returns({ promise: () => { return expectedResult}});
+        logger('Expected params: ', genericParams);
+        docClientGetStub.withArgs(sinon.match(genericParams)).returns({ promise: () => { return expectedResult}});
 
         const fetchVars = await dynamo.fetchSingleRow(testTableName, { clientId: testClientId, floatId: testFloatId });
         expect(fetchVars).to.exist;
@@ -75,14 +82,8 @@ describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
     });
 
     it('Fetch a record with a projection expression', async () => {
-        const expectedParams = {
-            TableName: testTableName,
-            Key: {
-                'client_id': testClientId,
-                'float_id': testFloatId
-            },
-            ProjectionExpression: 'bonus_pool_share, bonus_pool_tracker'
-        };
+        const expectedParams = JSON.parse(JSON.stringify(genericParams));
+        expectedParams.ProjectionExpression = 'bonus_pool_share, bonus_pool_tracker';
 
         const expectedResult = {
             Item: {
@@ -100,7 +101,22 @@ describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
         expect(docClientPutStub).to.not.has.been.called;
     });
 
+    it('Handles empty response', async () => {
+        const emptyParams = JSON.parse(JSON.stringify(genericParams));
+        emptyParams['Key']['client_id'] = 'wrong_client';
+        docClientGetStub.withArgs(sinon.match(emptyParams)).returns({ promise: () => ({ })});
+        const noResponse = await dynamo.fetchSingleRow(testTableName, { clientId: 'wrong_client', floatId: testFloatId });
+        expect(noResponse).to.deep.equal({ });
+    });
 
+    it('Throws error if get fails', async () => {
+        const badTableParams = JSON.parse(JSON.stringify(genericParams));
+        badTableParams['TableName'] = 'WrongTable';
+        const expectedError = { 'message': 'Requested resource not found', 'code': 'ResourceNotFoundException' };
+        docClientGetStub.withArgs(sinon.match(badTableParams)).returns({ promise: () => { throw expectedError }});
+        await expect(dynamo.fetchSingleRow('WrongTable', { clientId: testClientId, floatId: testFloatId })).to.be.
+            rejectedWith(expectedError);
+    });
 
 });
 
@@ -199,14 +215,67 @@ describe('*** UNIT TEST SIMPLE ROW INSERTION ***', () => {
         expect(docClientPutStub).to.have.been.calledOnceWithExactly(sinon.match(oneKeyWellFormedParams));
         expect(docClientGetStub).to.not.have.been.called;
     });
+
+    it('Throws errors if incorrect keys', async () => {
+        const errorNotArray = new Error('Error! Key columns must be passed as an array');
+        const errorNoKeys = new Error('Error! No key column names provided');
+        const errorTooManyKeys = new Error('Error! Too many key column names provided, DynamoDB tables can have at most two');
+        const errorNotString = new Error('Error! One of the provided key column names is not a string');
+
+        // do this because rejectedWith is extremely unreliable
+        await expect(dynamo.insertNewRow(userTable, 'systemWideUserId', testUserItem)).to.be.rejected.and.to.eventually.have.property('message', errorNotArray.message);
+        await expect(dynamo.insertNewRow(userTable, [], testUserItem)).to.be.rejected.and.to.eventually.have.property('message', errorNoKeys.message);
+        await expect(dynamo.insertNewRow(userTable, ['system', 'wide', 'id'], testUserItem)).to.be.rejected.and.to.eventually.have.property('message', errorTooManyKeys.message);
+        await expect(dynamo.insertNewRow(userTable, ['systemWideUserId', 1234], testUserItem)).to.be.rejected.and.to.eventually.have.property('message', errorNotString.message);
+    });
     
 });
 
 describe('*** UNIT TEST SIMPLE ROW UPDATING ***', () => {
 
+    const testTable = 'UserProfileTable';
+    const testUserId = uuid();
+
+    const oneKeyWellFormedParams = {
+        TableName: testTable,
+        Key: {
+            'system_wide_user_id': testUserId
+        },
+        UpdateExpression: 'set status = :st',
+        ExpressionAttributeValues: {
+            ':st': 'ACCOUNT_OPENED'
+        },
+        ReturnValues: 'UPDATED_NEW'
+    };
+
+    const testParams = {
+        tableName: testTable,
+        itemKey: { systemWideUserId: testUserId },
+        updateExpression: 'set status = :st',
+        substitutionDict: { ':st': 'ACCOUNT_OPENED' },
+        returnOnlyUpdated: true
+    };
+
+    it('Happy path, update a user profile status', async () => {
+        const ddbExpectedResult = { 'Attributes': { 'status': 'ACCOUNT_OPENED' }};
+        docClientUpdateStub.withArgs(sinon.match(oneKeyWellFormedParams)).returns({ promise: () => ddbExpectedResult });
+        const updateResult = await dynamo.updateRow(testParams);
+        expect(updateResult).to.exist;
+        expect(updateResult).to.have.property('result', 'SUCCESS');
+        expect(updateResult).to.have.property('returnedAttributes');
+        expect(updateResult.returnedAttributes).to.deep.equal({ status: 'ACCOUNT_OPENED' });
+        expect(docClientUpdateStub).to.have.been.calledOnceWithExactly(oneKeyWellFormedParams);
+    });
+
+    it('Throws error if error in update expression or item not found', async () => {
+        const ddbError = { 'message': 'The document path provided in the update expression is invalid for update', code: 'ValidationException' };
+        docClientUpdateStub.withArgs(sinon.match(oneKeyWellFormedParams)).returns({ promise: () => { throw ddbError; }});
+        const updateResult = await dynamo.updateRow(testParams);
+        expect(updateResult).to.exist;
+        expect(updateResult).to.have.property('result', 'ERROR');
+        expect(updateResult).to.have.property('details');
+        const errorBody = JSON.parse(updateResult.details);
+        expect(errorBody).to.deep.equal(ddbError);
+    });
+
 });
-
-describe('*** UNIT TEST ROW QUERIES AND SCANS ***', () => {
-
-});
-

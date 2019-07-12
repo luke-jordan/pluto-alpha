@@ -7,12 +7,17 @@ const uuid = require('uuid/v4');
 
 const dynamoCommon = require('dynamo-common');
 
-const nullIfEmptyElseSystemId = (itemFromDynamo) => Object.keys(itemFromDynamo).length === 0 ? null : { systemWideUserId: itemFromDynamo.systemWideUserId };
+const nullIfEmptyElseSystemId = (itemFromDynamo) => {
+    if (!itemFromDynamo || Object.keys(itemFromDynamo).length === 0) {
+        return null;
+    } 
+    return { systemWideUserId: itemFromDynamo.systemWideUserId };
+};
 
 // note: eventually use transactions to do rollback, most likely (but check the SDK, may be painful)
 module.exports.insertUserProfile = async (userProfile) => {
     const doesIdExist = await exports.fetchUserByNationalId(userProfile.clientId, userProfile.nationalId);
-    logger('User profile creation, is national ID taken? : ', doesIdExist != null);
+    logger('User profile creation, is national ID taken? : ', doesIdExist !== null);
     if (doesIdExist !== null) {
         return { result: 'ERROR', message: 'NATIONAL_ID_TAKEN' };
     }
@@ -73,13 +78,13 @@ module.exports.insertUserProfile = async (userProfile) => {
     // todo : record creation time in the other tables too
     const creationTime = moment();
     rowForTable.creationTimeEpochMillis = creationTime.valueOf();
-    rowForTable.updatedTimeEpochMillis = creationTime.valueOf()
+    rowForTable.updatedTimeEpochMillis = creationTime.valueOf();
 
     const resultOfInsertion = await dynamoCommon.insertNewRow(config.get('tables.dynamo.profileTable'), ['systemWideUserId'], rowForTable);
     logger('Result of inserting profile, from DynamoDB: ', resultOfInsertion);
     if (!resultOfInsertion || resultOfInsertion.result !== 'SUCCESS') {
-        return { result: 'ERROR', message: 'FAILED_AT_LAST_HURDLE' }
-    };
+        return { result: 'ERROR', message: 'FAILED_AT_LAST_HURDLE' };
+    }
     
     return {
         result: 'SUCCESS',
@@ -92,7 +97,7 @@ module.exports.fetchUserProfile = async (systemWideUserId) => {
     logger('Seeking user with system ID: ', systemWideUserId);
     const itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.dynamo.profileTable'), { systemWideUserId });
     logger('Back from Dynamo: ', itemFromDynamo);
-    return Object.keys(itemFromDynamo).length === 0 ? null : itemFromDynamo;
+    return !itemFromDynamo || Object.keys(itemFromDynamo).length === 0 ? null : itemFromDynamo;
 };
 
 module.exports.fetchUserByNationalId = async (clientId, nationalId) => {
