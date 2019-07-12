@@ -18,7 +18,7 @@ const docClientPutStub = sinon.stub();
 const docClientUpdateStub = sinon.stub();
 
 class MockDocClient {
-    constructor() {
+    constructor () {
         this.get = docClientGetStub;
         this.put = docClientPutStub;
         this.update = docClientUpdateStub;
@@ -41,9 +41,9 @@ const testClientId = 'zar_client_co';
 const testFloatId = 'zar_mmkt_primary';
 
 const testValues = {
-    bonusPoolShare: (1 / 7),
+    bonusPoolShare: 1 / 7,
     bonusPoolTracker: 'zar_mmkt_bonus_pool',
-    companyShare: (0.2 / 7),
+    companyShare: 0.2 / 7,
     companyShareTracker: 'pluto_za_share',
     defaultCurrency: 'ZAR'
 };
@@ -74,7 +74,7 @@ describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
         };
 
         logger('Expected params: ', genericParams);
-        docClientGetStub.withArgs(sinon.match(genericParams)).returns({ promise: () => { return expectedResult}});
+        docClientGetStub.withArgs(sinon.match(genericParams)).returns({ promise: () => expectedResult });
 
         const fetchVars = await dynamo.fetchSingleRow(testTableName, { clientId: testClientId, floatId: testFloatId });
         expect(fetchVars).to.exist;
@@ -92,7 +92,7 @@ describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
             }
         };
 
-        docClientGetStub.withArgs(sinon.match(expectedParams)).returns({ promise: () => { return expectedResult }});
+        docClientGetStub.withArgs(sinon.match(expectedParams)).returns({ promise: () => expectedResult });
         const fetchSomeVars = await dynamo.fetchSingleRow(testTableName, { clientId: testClientId, floatId: testFloatId }, 
             ['bonusPoolShare', 'bonusPoolTracker']);
         expect(fetchSomeVars).to.exist;
@@ -113,7 +113,9 @@ describe('*** UNIT TEST SIMPLE ROW RETRIEVAL***', () => {
         const badTableParams = JSON.parse(JSON.stringify(genericParams));
         badTableParams['TableName'] = 'WrongTable';
         const expectedError = { 'message': 'Requested resource not found', 'code': 'ResourceNotFoundException' };
-        docClientGetStub.withArgs(sinon.match(badTableParams)).returns({ promise: () => { throw expectedError }});
+        docClientGetStub.withArgs(sinon.match(badTableParams)).returns({ promise: () => { 
+            throw expectedError; 
+        }});
         await expect(dynamo.fetchSingleRow('WrongTable', { clientId: testClientId, floatId: testFloatId })).to.be.
             rejectedWith(expectedError);
     });
@@ -198,7 +200,9 @@ describe('*** UNIT TEST SIMPLE ROW INSERTION ***', () => {
 
     it('Error path, trying to insert a row that exists, two keys', async () => {
         const errorResult = { 'message': 'The conditional request failed', 'code': 'ConditionalCheckFailedException' };
-        docClientPutStub.withArgs(sinon.match(twoKeysWellFormedParams)).returns({ promise: () => { throw errorResult }});
+        docClientPutStub.withArgs(sinon.match(twoKeysWellFormedParams)).returns({ promise: () => { 
+            throw errorResult;
+        }});
         const insertRow = await dynamo.insertNewRow(floatTable, ['clientId', 'floatId'], testConfigItem);
         expect(insertRow).to.have.property('result', 'ERROR');
         expect(insertRow).to.have.property('message', 'KEY_EXISTS');
@@ -208,7 +212,9 @@ describe('*** UNIT TEST SIMPLE ROW INSERTION ***', () => {
 
     it('Error path, trying to insert a row that exists, one key', async () => {
         const errorResult = { 'message': 'The conditional request failed', 'code': 'ConditionalCheckFailedException' };
-        docClientPutStub.withArgs(sinon.match(oneKeyWellFormedParams)).returns({ promise: () => { throw errorResult }});
+        docClientPutStub.withArgs(sinon.match(oneKeyWellFormedParams)).returns({ promise: () => { 
+            throw errorResult;
+        }});
         const insertRow = await dynamo.insertNewRow(userTable, ['systemWideUserId'], testUserItem);
         expect(insertRow).to.have.property('result', 'ERROR');
         expect(insertRow).to.have.property('message', 'KEY_EXISTS');
@@ -257,19 +263,21 @@ describe('*** UNIT TEST SIMPLE ROW UPDATING ***', () => {
     };
 
     it('Happy path, update a user profile status', async () => {
-        const ddbExpectedResult = { 'Attributes': { 'status': 'ACCOUNT_OPENED' }};
+        const ddbExpectedResult = { 'Attributes': { 'user_status': 'ACCOUNT_OPENED' }};
         docClientUpdateStub.withArgs(sinon.match(oneKeyWellFormedParams)).returns({ promise: () => ddbExpectedResult });
         const updateResult = await dynamo.updateRow(testParams);
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('result', 'SUCCESS');
         expect(updateResult).to.have.property('returnedAttributes');
-        expect(updateResult.returnedAttributes).to.deep.equal({ status: 'ACCOUNT_OPENED' });
+        expect(updateResult.returnedAttributes).to.deep.equal({ userStatus: 'ACCOUNT_OPENED' });
         expect(docClientUpdateStub).to.have.been.calledOnceWithExactly(oneKeyWellFormedParams);
     });
 
     it('Throws error if error in update expression or item not found', async () => {
         const ddbError = { 'message': 'The document path provided in the update expression is invalid for update', code: 'ValidationException' };
-        docClientUpdateStub.withArgs(sinon.match(oneKeyWellFormedParams)).returns({ promise: () => { throw ddbError; }});
+        docClientUpdateStub.withArgs(sinon.match(oneKeyWellFormedParams)).returns({ promise: () => { 
+            throw ddbError;
+        }});
         const updateResult = await dynamo.updateRow(testParams);
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('result', 'ERROR');

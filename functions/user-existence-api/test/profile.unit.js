@@ -14,10 +14,15 @@ chai.use(require('chai-uuid'));
 
 const testHelper = require('./test.helper');
 
+// https://stackoverflow.com/questions/3825990/http-response-code-for-post-when-resource-already-exists
+const httpStatusCodeForUserExists = 409;
+
 const proxyquire = require('proxyquire').noCallThru();
 
 const insertUserProfileStub = sinon.stub();
 const updateUserProfileStub = sinon.stub();
+const updateUserStatusStub = sinon.stub();
+const updateUserLoginStub = sinon.stub();
 
 // tables: UserProfileTable, NationalIdUserTable, EmailUserTable, PhoneUserTable
 const fetchUserBySystemIdStub = sinon.stub();
@@ -28,7 +33,9 @@ const fetchUserByEmailStub = sinon.stub();
 const fetchStubs = [fetchUserBySystemIdStub, fetchUserByIdStub, fetchUserByPhoneStub, fetchUserByEmailStub];
 const dynamoStubs = {
     'insertUserProfile': insertUserProfileStub,
+    'updateUserStatus': updateUserStatusStub,
     'updateUserProfile': updateUserProfileStub,
+    'updateUserLastLogin': updateUserLoginStub,
     'fetchUserProfile': fetchUserBySystemIdStub,
     'fetchUserByNationalId': fetchUserByIdStub,
     'fetchUserByPhone': fetchUserByPhoneStub,
@@ -53,6 +60,11 @@ const testUserContext = {
 const testAdminContext = {
     systemWideId: uuid(),
     userRole: 'SYSTEM_ADMIN'
+};
+
+const testSystemWorkerContext = {
+    systemWideId: 'system-worker-X',
+    userRole: 'SYSTEM_WORKER'
 };
 
 describe('*** UNIT TEST USER PROFILE *** FINDING USERS ***', () => {
@@ -116,12 +128,24 @@ describe('*** UNIT TEST USER PROFILE *** FINDING USERS ***', () => {
         expect(retreivedByAdmin).to.deep.equal(testReturnedUser);
     });
 
-    it('Gracefully handle user not found', () => {
-        
+    it('Gracefully handle user not found', async () => {
+        fetchUserBySystemIdStub.withArgs('non-existent-stub').resolves(null);
+        const resultOfBlankCheck = await handler.fetchUserBySystemId({ systemWideId: 'non-existen-stub' }, testAdminContext);
+        expect(resultOfBlankCheck).to.deep.equal({ statusCode: 404 });
+
+        fetchUserByEmailStub.withArgs('surprise@nowhere.com').resolves(null);
+        const resultOfEmpty = await handler.fetchUserByPersonalDetail({ emailAddress: 'surprise@nowhere.com' });
+        expect(resultOfEmpty).to.deep.equal({ statusCode: 404 });
     });
 
-    it('Throw error if no context, if not user calling, or if not system admin', () => {
+    it('Throw error if no context, if not user calling, or if not system admin', async () => {
+        const fishyRequest = await handler.fetchUserBySystemId({ systemWideId: 'some-other-person' }, testUserContext);
+        const otherFishyRequest = await handler.fetchUserBySystemId({ systemWideId: 'third-person' });
+        const thirdFishyRequest = await handler.fetchUserBySystemId({ systemWideId: 'fourth-person'}, { });
 
+        expect(fishyRequest).to.deep.equal({ statusCode: 403 });
+        expect(otherFishyRequest).to.deep.equal({ statusCode: 403 });
+        expect(thirdFishyRequest).to.deep.equal({ statusCode: 403 });
     });
 
 });
@@ -152,9 +176,6 @@ describe('*** UNIT TEST USER PROFILE *** INSERTING USERS ***', () => {
         systemWideUserId: testSystemId,
         persistedTimeMillis: testPersistedTime
     };
-
-    // https://stackoverflow.com/questions/3825990/http-response-code-for-post-when-resource-already-exists
-    const httpStatusCodeForUserExists = 409;
 
     before(() => {
         testHelper.resetStubs(Object.values(dynamoStubs));
@@ -193,54 +214,102 @@ describe('*** UNIT TEST USER PROFILE *** INSERTING USERS ***', () => {
 
 describe('*** UNIT TEST USER PROFILE *** UPDATING USERS ***', () => {
 
-    // it('Update a user status', async () => {
-    //     // todo: add in a time stamp
-    //     updateUserProfileStub.withArgs(testSystemId, { systemState: 'USER_HAS_WITHDRAWN' }).resolves({ message: 'UPDATED'});
-    //     const resultOfUserUpdate = await handler.updateUserStatus({ systemWideId: testSystemId, systemState: 'USER_HAS_WITHDRAWN' }, testUserContext);
-    //     const resultBody = testHelper.standardOkayChecks(resultOfUserUpdate);
-    //     // what it should return
-
-    //     updateUserProfileStub.withArgs(testSystemId, { systemState: 'SUSPENDED_FOR_KYC' }).resolves({ message: 'UPDATED '});
-    //     const resultOfAdminUpdate = await handler.updateUserStatus({ systemWideId: testSystemId, systemState: 'SUSPENDED_FOR_KYC' }, testAdminContext);
-    //     const adminResultBody = testHelper.standardOkayChecks(resultOfAdminUpdate);
-    //     // further tests
-    // });
+    beforeEach(() => testHelper.resetStubs(Object.values(dynamoStubs)));
 
     // note: we will definitely need to put this in a queue to prevent someone eventually altering it themselves
-    it('Update a user KYC status', () => {
-        
+    it('Update a user KYC status', async () => {
+        const updateEvent = {
+            systemWideUserId: testUserContext.systemWideId, 
+            updatedKycStatus: { changeTo: 'ACCOUNT_VERIFIED', reasonToLog: 'Check on ID number is positive' }
+        };
+
+        const expectedDynamoInstruction = {
+            kycStatus: 'ACCOUNT_VERIFIED'
+        };
+
+        const updateTime = moment().valueOf();
+        updateUserStatusStub.withArgs(testUserContext.systemWideId, expectedDynamoInstruction).
+            resolves({ result: 'SUCCESS', updatedTimeEpochMillis: updateTime });
+        const resultOfUpdate = await handler.updateUserStatus(updateEvent, testSystemWorkerContext);
+        logger('Result of update: ', resultOfUpdate);
+        const bodyOfResult = await testHelper.standardOkayChecks(resultOfUpdate);
+        expect(bodyOfResult).to.deep.equal({ updatedTimeMillis: updateTime });
     });
 
     it('Throw security error if user is in suspended / KYC frozen state and non-system admin tries to update', async () => {
+        const updateEvent = {
+            systemWideUserId: 'sneaky-user-trying-dodgy-stuff',
+            updatedKycStatus: { changeTo: 'ACCOUNT_VERIFIED', reasonToLog: 'Attempted endrun' }
+        };
+        const endRunContext = JSON.parse(JSON.stringify(testUserContext));
+        endRunContext.systemWideUserId = 'sneaky-user-trying-dodgy-stuff';
 
+        const bodyOfResult = await handler.updateUserStatus(updateEvent, endRunContext);
+        expect(bodyOfResult).to.deep.equal({ statusCode: 403 });
     });
 
-    it('Throw validation errors if incorrect status', async () => {
+    // it('Throw validation errors if incorrect status', async () => {
 
+    // });
+
+    it('Update user system and secured status', async () => {
+        const updateEvent = {
+            systemWideUserId: testSystemId,
+            updatedUserStatus: { changeTo: 'ACCOUNT_OPENED', reasonToLog: 'Completed first onboarding' },
+            updatedSecurityStatus: { changeTo: 'PASSWORD_SET', reasonToLog: 'Completed first onboarding' }
+        };
+
+        const expectedInstruction = {
+            userStatus: 'ACCOUNT_OPENED',
+            securityStatus: 'PASSWORD_SET'
+        };
+
+        const updateTime = moment().valueOf();
+        updateUserStatusStub.withArgs(testSystemId, expectedInstruction).resolves({ result: 'SUCCESS', updatedTimeEpochMillis: updateTime });
+
+        const resultOfUpdate = await handler.updateUserStatus(updateEvent, testUserContext);
+        const bodyOfResult = testHelper.standardOkayChecks(resultOfUpdate);
+        expect(bodyOfResult).to.deep.equal({ updatedTimeMillis: updateTime });
     });
 
-    it('Update user secured status', () => {
+    it('Update user last full login', async () => {
+        const loginTime = moment().valueOf();
+        const updateEvent = { loggedInTimeEpochMillis: loginTime };
+        updateUserLoginStub.withArgs(testSystemId, loginTime).resolves({ result: 'SUCCESS', lastLoginTimeMillis: loginTime });
 
+        const resultOfUpdate = await handler.updateUserLastLogin(updateEvent, testUserContext);
+        const bodyOfResult = testHelper.standardOkayChecks(resultOfUpdate);
+        expect(bodyOfResult).to.deep.equal({ lastLoginTimeMillis: loginTime });
+
+        const forbiddenUpdate = await handler.updateUserLastLogin({ systemWideUserId: testSystemId, loggedInTimeEpochMillis: loginTime });
+        expect(forbiddenUpdate).to.deep.equal({ statusCode: 403 });
     });
 
-    it('Update user role', () => {
+    // todo : also tags, backup phones and backup email once have space to figure out array ops in condition expression
+    // todo : validation tests, several
+    it('Update user phone and/or email', async () => {
+        const forbiddenUpdate = await handler.updateUserDetails({ systemWideUserId: testSystemId, primaryEmail: 'malicious@somewhere.com' });
+        expect(forbiddenUpdate).to.deep.equal({ statusCode: 403 });
 
-    });
+        const updateTime = moment().valueOf();
 
-    it('Update user last full login', () => {
+        updateUserProfileStub.withArgs(testSystemId, { primaryEmail: 'newemail@newplace.com' }).
+            resolves({ result: 'SUCCESS', updatedTimeMillis: updateTime });
 
-    });
+        const updateUserEmailEvent = { primaryEmail: 'newemail@newplace.com' };
+        const emailUpdateResult = await handler.updateUserDetails(updateUserEmailEvent, testUserContext);
+        const bodyOfResult = testHelper.standardOkayChecks(emailUpdateResult);
+        expect(bodyOfResult).to.deep.equal({ updatedTimeMillis: updateTime });
+        
+        updateUserProfileStub.withArgs(testSystemId, { primaryEmail: 'someonehasthis@somewhere.com' }).
+            resolves({ result: 'ERROR', message: 'EMAIL_TAKEN' });
 
-    it('Update user tags', () => {
-
-    });
-
-    it('Update user primary phone', () => {
-
-    });
-
-    it('Update user email', () => {
-
+        const conflictingUserEmailUpdateEvent = { primaryEmail: 'someonehasthis@somewhere.com' };
+        const conflictResult = await handler.updateUserDetails(conflictingUserEmailUpdateEvent, testUserContext);
+        expect(conflictResult).to.have.property('statusCode', httpStatusCodeForUserExists);
+        expect(conflictResult).to.have.property('body');
+        const errorBody = JSON.parse(conflictResult.body);
+        expect(errorBody).to.deep.equal({ message: 'A user with that email address already exists', errorType: 'EMAIL_TAKEN', errorField: 'EMAIL_ADDRESS' });
     });
 
 });

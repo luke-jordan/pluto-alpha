@@ -8,9 +8,11 @@ const decamelize = require('decamelize');
 
 const AWS = require('aws-sdk');
 
-const processInDocker = process.env.NODE_ENV === 'lamblocal' && process.env.LOCALSTACK_HOSTNAME;
-const endpoint = processInDocker ? `http://${process.env.LOCALSTACK_HOSTNAME}:4569` : 
-    config.has('aws.endpoints.dynamodb') ? config.get('aws.endpoints.dynamodb') : null;
+const localStackHostname = process.env.LOCALSTACK_HOSTNAME;
+const processInDocker = config.env === 'lamblocal' && localStackHostname;
+const dynamoEndPoint = config.has('aws.endpoints.dynamodb') ? config.get('aws.endpoints.dynamodb') : null;
+
+const endpoint = processInDocker ? `http://${localStackHostname}:4569` : dynamoEndPoint;
 
 logger('Set endpoint for DynamoDB: ', endpoint);
 
@@ -19,11 +21,11 @@ AWS.config.update({ region: config.get('aws.region'), endpoint: endpoint});
 
 const docC = new AWS.DynamoDB.DocumentClient();
 
-//const wholeCentObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100) }), {});
+// const wholeCentObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100) }), {});
 
 const nonEmptyReturnItem = (ddbResult) => ddbResult && typeof ddbResult === 'object' && ddbResult.Item && Object.keys(ddbResult.Item) !== 0;
-const decamelizeKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [decamelize(key, '_')]: object[key] }), {});
-const camelCaseKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [camelcase(key)]: object[key] }), {});
+const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
+const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [camelcase(key)]: object[key] }), {});
 
 /**
  * Returns the item as an object. NB: This method enforces our convention of camel case in code and dashed in code 
@@ -31,7 +33,7 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o
  * @param {any} keyValue A map, in standard DynamoDB docClient form, of key column names and values
  * @param {array[string]} soughtAttributes Optional. A list of column names
  */
-module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { keyName: VALUE }, soughtAttributes = []) => {
+module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { keyName: 'VALUE' }, soughtAttributes = []) => {
 
     const caseConvertedKey = decamelizeKeys(keyValue);
     logger('Transformed key: ', caseConvertedKey);
@@ -65,14 +67,14 @@ const extractConditionalExpression = (rawKeyColumns) => {
         throw new Error('Error! No key column names provided');
     } else if (rawKeyColumns.length > 2) {
         throw new Error('Error! Too many key column names provided, DynamoDB tables can have at most two');
-    } else if (rawKeyColumns.some(keyColumn => typeof keyColumn !== 'string')) {
+    } else if (rawKeyColumns.some((keyColumn) => typeof keyColumn !== 'string')) {
         throw new Error('Error! One of the provided key column names is not a string');
     }
 
     const keyColumns = rawKeyColumns.map((columnName) => decamelize(columnName, '_'));
     
     const hashChar = '#';
-    const columnKeyNames = keyColumns.map(keyColumnName => hashChar + keyColumnName.charAt(0));
+    const columnKeyNames = keyColumns.map((keyColumnName) => hashChar + keyColumnName.charAt(0));
     const singleKey = keyColumns.length === 1;
 
     const exprAttrNameDict = singleKey ? { [columnKeyNames[0]]: keyColumns[0] } : {
@@ -80,8 +82,8 @@ const extractConditionalExpression = (rawKeyColumns) => {
         [columnKeyNames[1]]: keyColumns[1]
     };
 
-    const conditionalExpression = singleKey ? `attribute_not_exists(${columnKeyNames[0]})` :
-        `attribute_not_exists(${columnKeyNames[0]}) and attribute_not_exists(${columnKeyNames[1]})`;
+    const conditionalExpression = singleKey ? `attribute_not_exists(${columnKeyNames[0]})` 
+        : `attribute_not_exists(${columnKeyNames[0]}) and attribute_not_exists(${columnKeyNames[1]})`;
     
     return {
         ExpressionAttributeNames: exprAttrNameDict,
@@ -93,7 +95,7 @@ const assembleErrorDict = (error) => {
     const ITEM_EXISTS_CODE = 'ConditionalCheckFailedException';
     const ERROR_STRING_SPACING = 2;
     
-    let result = 'ERROR';
+    const result = 'ERROR';
     let message = '';
     let details = '';
 
@@ -162,7 +164,8 @@ module.exports.updateRow = async (updateParams) => {
         logger('Updating item with params: ', awsParams);
         const updateResult = await docC.update(awsParams).promise();
         logger('Result from update: ', updateResult);
-        resultDict = { result: 'SUCCESS', returnedAttributes: updateResult.Attributes }
+        const returnedAttributes = updateResult && updateResult['Attributes'] ? camelCaseKeys(updateResult.Attributes) : { };
+        resultDict = { result: 'SUCCESS', returnedAttributes };
     } catch (err) {
         logger('Something went wrong updating! : ', err);
         resultDict = assembleErrorDict(err);

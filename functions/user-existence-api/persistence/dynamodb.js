@@ -93,6 +93,89 @@ module.exports.insertUserProfile = async (userProfile) => {
     };
 };
 
+
+/**
+ * todo: validation, lots
+ * Updates a user's status field
+ * Status field (in dict): 'SYSTEM_STATUS', 'KYC_STATUS', 'SECURED_STATUS'
+ */
+module.exports.updateUserStatus = async (systemWideUserId, statusDict) => {
+    logger('Triggering an update of user');
+    
+    const expressionClauses = [];
+    const expressionMap = { };
+
+    if (statusDict.userStatus) {
+        expressionClauses.push('user_status = :ust');
+        expressionMap[':ust'] = statusDict.userStatus;
+    }
+
+    if (statusDict.kycStatus) {
+        expressionClauses.push('kyc_status = :kst');
+        expressionMap[':kst'] = statusDict.kycStatus;
+    }
+
+    if (statusDict.securedStatus) {
+        expressionClauses.push('secured_status = :sst');
+        expressionMap[':sst'] = statusDict.securedStatus;
+    }
+
+    if (expressionClauses.length === 0) {
+        throw new Error('No valid updates passed to update method');
+    }
+
+    expressionClauses.push('updated_time_epoch_millis = :utime');
+    expressionMap[':utime'] = moment().valueOf();
+
+    const assembledClause = `set ${expressionClauses.join(', ')}`;
+    const updateParams = {
+        tableName: config.get('tables.dynamo.profileTable'),
+        itemKey: { systemWideUserId },
+        updateExpression: assembledClause,
+        substitutionDict: expressionMap,
+        returnOnlyUpdated: true
+    };
+
+    try {
+        logger('Passing to Dynamo: ', updateParams);
+        const resultOfUpdate = await dynamoCommon.updateRow(updateParams);
+        // logger('Received from Dynamo: ', resultOfUpdate);
+        return { result: 'SUCCESS', updatedTimeEpochMillis: resultOfUpdate.returnedAttributes.updatedTimeEpochMillis };
+    } catch (err) {
+        logger('Error updating row in Dynamo: ', err);
+        logger('Was passed status update dict: ', statusDict);
+        logger('Assembled expression: ', assembledClause);
+        throw err;
+    }
+};
+
+module.exports.updateUserLastLogin = async (systemWideUserId, lastLoginTimeMillis) => {
+    if (!Number.isInteger(lastLoginTimeMillis)) {
+        throw new TypeError('Error! Last login time must be in millis');
+    }
+
+    const updateParams = {
+        tableName: config.get('tables.dynamo.profileTable'),
+        itemKey: { systemWideUserId },
+        updateExpression: 'set last_login_time_millis = :llt',
+        substitutionDict: { ':llt': lastLoginTimeMillis },
+        returnOnlyUpdated: true
+    };
+
+    try {
+        const resultOfUpdate = await dynamoCommon.updateRow(updateParams);
+        return { result: 'SUCCESS', lastLoginTimeMillis: resultOfUpdate.returnedAttributes.lastLoginTimeMillis };
+    } catch (err) {
+        logger('Error updating last login time, error details: ', err);
+        throw err;
+    }
+};
+
+module.exports.updateUserProfile = async (systemWideUserId, updateParams) => {
+    logger('Not built yet, but would update: ', systemWideUserId, ' according to instruction: ', updateParams);
+    throw new Error('Not built yet');
+};
+
 module.exports.fetchUserProfile = async (systemWideUserId) => {
     logger('Seeking user with system ID: ', systemWideUserId);
     const itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.dynamo.profileTable'), { systemWideUserId });

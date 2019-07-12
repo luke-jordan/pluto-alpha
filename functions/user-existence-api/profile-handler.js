@@ -7,11 +7,21 @@ const logger = require('debug')('jupiter:profile:handler');
 const dynamo = require('./persistence/dynamodb');
 
 // https://stackoverflow.com/questions/11746894/what-is-the-proper-rest-response-code-for-a-valid-request-but-an-empty-data
-const USER_NOT_FOUND_CODE = 404;
 const USER_CONFLICT_CODE = 409;
 const UNKNOWN_INTERNAL_ERROR_CODE = 500;
 
+const USER_NOT_FOUND_CODE = 404;
 const NOT_FOUND_RESPONSE = { statusCode: USER_NOT_FOUND_CODE };
+
+const FORBIDDEN_CODE = 403;
+const NO_PERMISSION_RESPONSE = { statusCode: FORBIDDEN_CODE };
+
+const INVALID_REQUEST_CODE = 400;
+
+const SYSTEM_ADMIN_ROLE = 'SYSTEM_ADMIN';
+const SYSTEM_WORKER_ROLE = 'SYSTEM_WORKER';
+
+const isSystemAdminOrWorker = (context) => context.userRole === SYSTEM_ADMIN_ROLE || context.userRole === SYSTEM_WORKER_ROLE;
 
 const assembleErrorBody = (message, type, field) => JSON.stringify({
     message: message,
@@ -25,6 +35,8 @@ const handleInsertionError = (dynamoErrorMessage) => {
             return { statusCode: USER_CONFLICT_CODE, body: assembleErrorBody('A user with that national ID already exists', 'NATIONAL_ID_TAKEN', 'NATIONAL_ID') };
         case 'ERROR_INSERTING_NATIONAL_ID':
             return { statusCode: USER_CONFLICT_CODE, body: assembleErrorBody('Conflict (possible race condition) on national ID', 'NATIONAL_ID_CONFLICT', 'NATIONAL_ID') };
+        case 'EMAIL_TAKEN':
+            return { statusCode: USER_CONFLICT_CODE, body: assembleErrorBody('A user with that email address already exists', 'EMAIL_TAKEN', 'EMAIL_ADDRESS')};
         default:
             return { statusCode: UNKNOWN_INTERNAL_ERROR_CODE, body: assembleErrorBody('Unknown server error, examine logs', 'UNKNOWN', 'UNKNOWN') };
     }
@@ -52,17 +64,15 @@ module.exports.insertNewUser = async (event) => {
     try {
         const resultOfInsertion = await dynamo.insertUserProfile(event);
         logger('Well, did that work: ', resultOfInsertion);
-        if (!resultOfInsertion || !resultOfInsertion.result) {
-            throw new Error('Internal error in DynamoDB row insertion');
-        } else if (resultOfInsertion.result !== 'SUCCESS') {
-            return handleInsertionError(resultOfInsertion.message);
-        } else {
+        if (resultOfInsertion.result === 'SUCCESS') {
             const resultBody = {
                 systemWideUserId: resultOfInsertion.systemWideUserId,
                 persistedTimeMillis: resultOfInsertion.creationTimeEpochMillis
             };
             return { statusCode: 200, body: JSON.stringify(resultBody) };
         }
+        // otherwise something went wrong
+        return handleInsertionError(resultOfInsertion.message);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500, body: JSON.stringify(err) };
@@ -75,7 +85,17 @@ module.exports.insertNewUser = async (event) => {
  */
 module.exports.fetchUserBySystemId = async (event, context) => {
     // logger('Fetch user called, with context: ', context);
+    if (!context) {
+        return NO_PERMISSION_RESPONSE;
+    }
+
     const params = event.body || event;
+
+    const needAdminRole = !context.systemWideId || (params.systemWideId && context.systemWideId !== params.systemWideId);
+    if (needAdminRole && !isSystemAdminOrWorker(context)) {
+        return NO_PERMISSION_RESPONSE;
+    }
+    
     const systemWideId = params.systemWideId || context.systemWideId;
     const fetchedProfile = await dynamo.fetchUserProfile(systemWideId);
     if (fetchedProfile) {
@@ -84,7 +104,7 @@ module.exports.fetchUserBySystemId = async (event, context) => {
             body: JSON.stringify(fetchedProfile)
         };
     } 
-    
+
     return NOT_FOUND_RESPONSE;
 };
 
@@ -125,32 +145,54 @@ module.exports.fetchUserByPersonalDetail = async (event) => {
 };
 
 /**
- * Updates the user's system status (see the README in this folder for the potential status types)
- * @param {string} systemWideId The user's system wide ID
- * @param {string} newUserStatus The status to which to update the user
- * @param {string} reasonToLog Why the status is being updated
+ * Updates the user's system status (see the README in this folder for the potential status types). Pass the updates in the form
+ * newUserStatus: { changeTo: 'ACCOUNT_OPENED', reasonToLog: 'Completed onboarding' }
+ * @param {string} systemWideUserId The user's system wide ID (note: context drops 'user' because ID pool can have non-user entities)
+ * @param {string} updatedUserStatus The status to which to update the user
+ * @param {string} updatedKycStatus The status to which to update the user
+ * @param {string} updatedSecurityStatus Whether the user has a password set or not (and in time, if MFA, etc., is turned on)  
  */
-module.exports.updateUserStatus = async (event) => {
+module.exports.updateUserStatus = async (event, context) => {
+    // todo : add in the logging (need a table)
+    // todo : KYC update also can't be called by the user themselves
+    const params = event.body || event;
+    const needAdminRole = !context.systemWideId || context.systemWideId !== params.systemWideUserId || Boolean(params.updatedKycStatus);
+    logger('Updating status, requires admin role? : ', needAdminRole);
+
+    if (needAdminRole && !isSystemAdminOrWorker(context)) {
+        logger('Need admin role since context Id: ', context.systemWideId, ' and params user id: ', params.systemWideUserId);
+        return NO_PERMISSION_RESPONSE;
+    }
     
-};
+    const updateInstruction = { };
+    if (params.updatedUserStatus) {
+        updateInstruction.userStatus = params.updatedUserStatus.changeTo;
+    }
 
-/**
- * Updates the user's KYC (know your customer - regulatory) status. See README for potential states.
- * @param {string} systemWideId The user's ID
- * @param {string} newKycStatus The status to which to update the user
- * @param {string} reasonToLog A log to record for the cause of the change
- */
-module.exports.updateUserKycStatus = async (event, context) => {
+    if (params.updatedKycStatus) {
+        updateInstruction.kycStatus = params.updatedKycStatus.changeTo;
+    }
 
-};
+    if (params.updatedSecurityStatus) {
+        updateInstruction.securityStatus = params.updatedSecurityStatus.changeTo;
+    }
+    
+    if (Object.keys(updateInstruction) === 0) {
+        return { statusCode: INVALID_REQUEST_CODE, body: 'Must update at least one field to be valid call' };
+    }
 
-/**
- * Updates whether or not the user has secured their account by setting a password
- * @param {string} systemWideId The user's ID
- * @param {string} userSecurityStatus Whether the user has a password set or not (and in time, if MFA, etc., is turned on) 
- */
-module.exports.updateWhetherUserIsSecured = async (event, context) => {
-
+    try {
+        const userIdChanging = params.systemWideUserId || context.systemWideUserId;
+        const dynamoUpdate = await dynamo.updateUserStatus(userIdChanging, updateInstruction);
+        logger('Result from Dynamo call: ', dynamoUpdate);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ updatedTimeMillis: dynamoUpdate.updatedTimeEpochMillis })
+        };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: UNKNOWN_INTERNAL_ERROR_CODE, body: err.message };
+    }
 };
 
 /**
@@ -159,7 +201,20 @@ module.exports.updateWhetherUserIsSecured = async (event, context) => {
  * @param {number} lastFullLoginTimeEpochMills The new timestamp
  */
 module.exports.updateUserLastLogin = async (event, context) => {
+    if (!context || !context.systemWideId) {
+        return NO_PERMISSION_RESPONSE;
+    }
 
+    try {
+        const resultOfUpdate = await dynamo.updateUserLastLogin(context.systemWideId, event.loggedInTimeEpochMillis);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({ lastLoginTimeMillis: resultOfUpdate.lastLoginTimeMillis })
+        };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: UNKNOWN_INTERNAL_ERROR_CODE, body: err.message };
+    }
 };
 
 /**
@@ -171,6 +226,38 @@ module.exports.updateUserLastLogin = async (event, context) => {
  * @param {array} backupPhones Any secondary phones the user adds
  * @param {array} backupEmails Any backup emails for the user 
  */
-module.exports.updateUserDetails = (event, context) => {
+module.exports.updateUserDetails = async (event, context) => {
+    if (!context || !context.systemWideId) {
+        return NO_PERMISSION_RESPONSE;
+    }
 
+    // todo : validation
+    const params = event.body || event;
+    const updateInstruction = { };
+    
+    if (params.primaryPhone) {
+        updateInstruction.primaryPhone = params.primaryPhone;
+    }
+
+    if (params.primaryEmail) {
+        updateInstruction.primaryEmail = params.primaryEmail;
+    }
+
+    // todo: add others once time to revert and work out updating lists
+    try {
+        logger('Sending instruction: ', updateInstruction);
+        const resultOfUpdate = await dynamo.updateUserProfile(context.systemWideId, updateInstruction);
+        logger('Result of updte: ', resultOfUpdate);
+        if (resultOfUpdate.result === 'SUCCESS') {
+            return {
+                statusCode: 200,
+                body: JSON.stringify({ updatedTimeMillis: resultOfUpdate.updatedTimeMillis })
+            };
+        }
+
+        return handleInsertionError(resultOfUpdate.message);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: UNKNOWN_INTERNAL_ERROR_CODE, body: err.message };
+    }
 };
