@@ -70,7 +70,7 @@ const testSystemWorkerContext = {
 describe('*** UNIT TEST USER PROFILE *** FINDING USERS ***', () => {
 
     const testReturnedUser = {
-        systemId: testSystemId,
+        systemWideUserId: testSystemId,
         clientId: testClientId,
         nationalId: testNationalId,
         primaryPhone: testPhone,

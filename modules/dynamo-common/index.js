@@ -8,8 +8,9 @@ const decamelize = require('decamelize');
 
 const AWS = require('aws-sdk');
 
+logger(`Initiating DynamoDB handler, localstack hostname = ${process.env.LOCALSTACK_HOSTNAME}, and environment = ${process.env.NODE_ENV}`);
 const localStackHostname = process.env.LOCALSTACK_HOSTNAME;
-const processInDocker = config.env === 'lamblocal' && localStackHostname;
+const processInDocker = process.env.NODE_ENV === 'lamblocal' && localStackHostname;
 const dynamoEndPoint = config.has('aws.endpoints.dynamodb') ? config.get('aws.endpoints.dynamodb') : null;
 
 const endpoint = processInDocker ? `http://${localStackHostname}:4569` : dynamoEndPoint;

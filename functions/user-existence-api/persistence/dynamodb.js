@@ -11,7 +11,7 @@ const nullIfEmptyElseSystemId = (itemFromDynamo) => {
     if (!itemFromDynamo || Object.keys(itemFromDynamo).length === 0) {
         return null;
     } 
-    return { systemWideUserId: itemFromDynamo.systemWideUserId };
+    return itemFromDynamo.systemWideUserId;
 };
 
 // note: eventually use transactions to do rollback, most likely (but check the SDK, may be painful)
@@ -36,11 +36,15 @@ module.exports.insertUserProfile = async (userProfile) => {
         systemWideUserId: systemWideUserId,
         clientId: userProfile.clientId,
         floatId: userProfile.defaultFloatId,
+        defaultCurrency: userProfile.defaultCurrency,
+        defaultTimezone: userProfile.defaultTimezone,
         personalName: userProfile.personalName,
         familyName: userProfile.familyName,
         nationalId: userProfile.nationalId,
         userStatus: userProfile.userStatus,
-        kycStatus: userProfile.kycStatus
+        kycStatus: userProfile.kycStatus,
+        userRole: userProfile.userRole || 'ORDINARY_MEMBER',
+        securedStatus: userProfile.passwordSet ? 'PASSWORD_SET' : 'NO_PASSWORD'
     };
 
     // todo: what do we do if the national ID goes fine but the phone number is taken and there is no email [ answer : we should reverse it all ]

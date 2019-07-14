@@ -40,7 +40,6 @@ const handleInsertionError = (dynamoErrorMessage) => {
         default:
             return { statusCode: UNKNOWN_INTERNAL_ERROR_CODE, body: assembleErrorBody('Unknown server error, examine logs', 'UNKNOWN', 'UNKNOWN') };
     }
-
 };
 
 /**
@@ -62,6 +61,7 @@ const handleInsertionError = (dynamoErrorMessage) => {
 module.exports.insertNewUser = async (event) => {
     // todo : validate client & float IDs
     try {
+        logger('Received event for profile creaition: ', event);
         const resultOfInsertion = await dynamo.insertUserProfile(event);
         logger('Well, did that work: ', resultOfInsertion);
         if (resultOfInsertion.result === 'SUCCESS') {
@@ -84,17 +84,19 @@ module.exports.insertNewUser = async (event) => {
  * @param {string} systemWideId The primary user ID
  */
 module.exports.fetchUserBySystemId = async (event, context) => {
-    // logger('Fetch user called, with context: ', context);
-    if (!context) {
-        return NO_PERMISSION_RESPONSE;
-    }
+    logger('Fetch user called, with context: ', context);
+    // todo : restore this once have figured out with AWS tech support
+    // if (!context) {
+    //     return NO_PERMISSION_RESPONSE;
+    // }
 
     const params = event.body || event;
+    logger('Fetch user, params: ', params);
 
-    const needAdminRole = !context.systemWideId || (params.systemWideId && context.systemWideId !== params.systemWideId);
-    if (needAdminRole && !isSystemAdminOrWorker(context)) {
-        return NO_PERMISSION_RESPONSE;
-    }
+    // const needAdminRole = !context.systemWideId || (params.systemWideId && context.systemWideId !== params.systemWideId);
+    // if (needAdminRole && !isSystemAdminOrWorker(context)) {
+    //     return NO_PERMISSION_RESPONSE;
+    // }
     
     const systemWideId = params.systemWideId || context.systemWideId;
     const fetchedProfile = await dynamo.fetchUserProfile(systemWideId);
