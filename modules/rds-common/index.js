@@ -1,7 +1,7 @@
 'use strict';
 process.env.SUPPRESS_NO_CONFIG_WARNING = 'y';
 
-const logger = require('debug')('pluto:rds-common:main');
+const logger = require('debug')('jupiter:rds-common:main');
 const config = require('config');
 
 const { Pool } = require('pg');
@@ -42,6 +42,7 @@ class RdsConnection {
             user: config.get('RdsConnection.user'),
             password: config.get('RdsConnection.password')
         });
+        logger('Connected with user: ', config.get('RdsConnection.user'));
         // logger('Set up connection, ready to initiate connections');
     }
 
@@ -108,8 +109,9 @@ class RdsConnection {
             results = await client.query(formattedQuery);
             await client.query('COMMIT');
         } catch (e) {
-            logger('Error running insertion: ', e);
-            throw new CommitError(queryTemplate);
+            logger(`RDS error, query: ${queryTemplate}, columnTemplate: ${columnTemplate}, object: ${JSON.stringify(objectArray)}`);
+            logger('Error stack: ', e);
+            throw e;
         } finally {
             await client.release();
         }

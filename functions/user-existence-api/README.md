@@ -18,6 +18,7 @@ risk rating (0 being lowest risk)
 * A flag for whether the user has set a password ("SECURED", as a more general term)
 * The user's role (system admin, customer support, ordinary)
 * The timestamp for the last time the user logged in (note: full login, not just had an app session, for which see analytics)
+* The timestamp for the last time the user profile (i.e., this record) changed
 * Any tags relevant to the user (including whether the account has been gifted)
 
 ### States

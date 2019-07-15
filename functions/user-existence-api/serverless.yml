@@ -30,9 +30,9 @@ provider:
     pluto.user.existence.lambdas
 
 functions:
-  create:
-    handler: handler.create
-    name: account-create
+  account_create:
+    handler: account-handler.create
+    name: account_create
     events:
       - http:
           path: create
@@ -40,7 +40,27 @@ functions:
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: pluto:*
+  profile_create:
+    handler: profile-handler.insertNewUser
+    name: profile_create
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
+  profile_fetch:
+    handler: profile-handler.fetchUserBySystemId
+    name: profile_fetch
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
+  profile_find_by_details:
+    handler: profile-handler.fetchUserByPersonalDetail
+    name: profile_find_by_details
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
 
 package:
+  excludeDevDependencies: false
   include:
     - node_modules/rds-common/**
+    - node_modules/dynamo-common/**

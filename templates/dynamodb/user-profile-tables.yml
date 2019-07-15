@@ -1,0 +1,75 @@
+# We will want to make this into auto-scaling, though this blog makes that seem more complex than we may need at present
+# Nonetheless, we will also need to create the IAM resources for this
+# https://aws.amazon.com/blogs/database/how-to-use-aws-cloudformation-to-configure-auto-scaling-for-amazon-dynamodb-tables-and-indexes/
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Creates the tables that hold user profiles, including system wide id, contact info, and status'
+Resources:
+  UserProfileTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "UserProfileTable"
+      AttributeDefinitions:
+      -
+        AttributeName: "system_wide_user_id"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "system_wide_user_id"
+        KeyType: HASH
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  UserNationalIdTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: "UserNationalIdTable"
+      AttributeDefinitions:
+      -
+        AttributeName: "client_id"
+        AttributeType: "S"
+      -
+        AttributeName: "national_id"
+        AttributeType: "S"
+      KeySchema:
+      - AttributeName: "client_id"
+        KeyType: HASH
+      - AttributeName: "national_id"
+        KeyType: RANGE
+      ProvisionedThroughput:
+        ReadCapacityUnits: 2
+        WriteCapacityUnits: 2
+      PointInTimeRecoverySpecification:
+        PointInTimeRecoveryEnabled: true
+  UserPhoneTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: "UserPhoneTable"
+        AttributeDefinitions:
+        -
+          AttributeName: "phone_number"
+          AttributeType: "S"
+        KeySchema:
+        - AttributeName: "phone_number"
+          KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true
+  UserEmailTable:
+      Type: AWS::DynamoDB::Table
+      Properties:
+        TableName: "UserEmailTable"
+        AttributeDefinitions:
+        -
+          AttributeName: "email_address"
+          AttributeType: "S"
+        KeySchema:
+        - AttributeName: "email_address"
+          KeyType: HASH
+        ProvisionedThroughput:
+          ReadCapacityUnits: 2
+          WriteCapacityUnits: 2
+        PointInTimeRecoverySpecification:
+          PointInTimeRecoveryEnabled: true

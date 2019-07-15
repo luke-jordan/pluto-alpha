@@ -9,6 +9,7 @@ const BigNumber = require('bignumber.js');
 const persistence = require('./persistence/rds');
 const dynamodb = require('./persistence/dynamodb');
 
+const ACCOUNT_NOT_FOUND_CODE = 404;
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
 
 module.exports.save = async (event) => {
@@ -126,6 +127,9 @@ module.exports.balance = async (event, context) => {
     }
     
     const accountId = params.accountId || await fetchUserDefaultAccount(params.userId);
+    if (!accountId) {
+      return { statusCode: ACCOUNT_NOT_FOUND_CODE, body: 'User does not have an account open yet' };
+    }
     
     let clientId = '';
     let floatId = '';

@@ -163,7 +163,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         const expectedFloatAdditionRow = JSON.parse(JSON.stringify(expectedRowItem));
         expectedFloatAdditionRow.accountTransactionId = testAcTxId;
         expectedFloatAdditionRow.floatTransactionId = testFlTxAddId;
-        expectedFloatAdditionRow.transactionType = 'SAVING';
+        expectedFloatAdditionRow.transactionType = 'USER_SAVING_EVENT';
         expectedFloatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
         expectedFloatAdditionRow.allocatedToId = testFloatId;
 

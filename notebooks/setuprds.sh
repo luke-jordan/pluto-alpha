@@ -6,10 +6,13 @@ export PGPASSWORD=alpineskiing
 export PGUSER=master
 export PGHOST=localhost
 export PGPORT=5430
-export PGDATABASE=pluto
+export PGDATABASE=jupiter
 
 echo "Setting up users"
 psql -f ../templates/rds/create_db_roles.sql
+
+echo "Creating enum types"
+psql -f ../templates/rds/create_enums.sql
 
 echo "Setting up account ledger in RDS local"
 psql -f ../templates/rds/create_account_ledger.sql

@@ -2,7 +2,7 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:balance:test');
+const logger = require('debug')('jupiter:balance:test');
 const BigNumber = require('bignumber.js');
 const moment = require('moment-timezone');
 
