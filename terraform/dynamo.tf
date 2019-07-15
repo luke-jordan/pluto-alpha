@@ -26,26 +26,84 @@ resource "aws_dynamodb_table" "client-float-table" {
   }
 }
 
-resource "aws_dynamodb_table" "password_policy_table" {
-  name           = "PasswordPolicyTable"
-  billing_mode   = "PROVISIONED"
-  read_capacity  = "${lookup(var.dynamo_tables_read_capacity[terraform.workspace], "password_policy_table")}"
-  write_capacity = "${lookup(var.dynamo_tables_write_capacity[terraform.workspace], "password_policy_table")}"
-  hash_key       = "AuthPasswordPolicy"
-  range_key      = "LastUpdatedTimestamp"
+resource "aws_dynamodb_table" "user_profile_table" {
+  name           = "UserProfileTable"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "system_wide_user_id"
+  
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  attribute {
+    name = "system_wide_user_id"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "environment"
+    Environment = "${terraform.workspace}"
+  }
+}
+
+resource "aws_dynamodb_table" "user_national_id_table" {
+  name          = "UserNationalIdTable"
+  billing_mode  = "PAY_PER_REQUEST"
+  hash_key      = "country_code"
+  range_key     = "national_id"
 
   point_in_time_recovery {
     enabled = true
   }
 
   attribute {
-    name = "AuthPasswordPolicy"
+    name = "country_code"
     type = "S"
   }
 
   attribute {
-    name = "LastUpdatedTimestamp"
-    type = "N"
+    name = "national_id"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "environment"
+    Environment = "${terraform.workspace}"
+  }
+}
+
+resource "aws_dynamodb_table" "user_phone_table" {
+  name           = "UserPhoneTable"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "phone_number"
+  
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  attribute {
+    name = "phone_number"
+    type = "S"
+  }
+
+  tags = {
+    Name        = "environment"
+    Environment = "${terraform.workspace}"
+  }
+}
+
+resource "aws_dynamodb_table" "user_email_table" {
+  name           = "UserEmailTable"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "email_address"
+  
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  attribute {
+    name = "email_address"
+    type = "S"
   }
 
   tags = {

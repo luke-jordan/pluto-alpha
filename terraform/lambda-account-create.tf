@@ -7,7 +7,7 @@ resource "aws_lambda_function" "account_create" {
 
   function_name                  = "${var.account_create_lambda_function_name}"
   role                           = "${aws_iam_role.account_create_role.arn}"
-  handler                        = "handler.create"
+  handler                        = "account-handler.create"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
