@@ -71,7 +71,7 @@ EOF
 }
 
 resource "aws_iam_policy" "dynamo_table_UserProfileTableRead_access" {
-  name        = "UserProfileTable_access_${terraform.workspace}"
+  name        = "UserProfileTableRead_access_${terraform.workspace}"
   path        = "/"
 
   policy = <<EOF
@@ -93,7 +93,7 @@ EOF
 }
 
 resource "aws_iam_policy" "dynamo_table_UserDetailsTablesRead_access" {
-  name        = "UserDetailsQueryTables_access_${terraform.workspace}"
+  name        = "UserDetailsTablesQuery_access_${terraform.workspace}"
   path        = "/"
 
   policy = <<EOF
