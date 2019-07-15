@@ -128,8 +128,8 @@ module.exports.balance = async (event, context) => {
     
     const accountId = params.accountId || await fetchUserDefaultAccount(params.userId);
     if (!accountId) {
-      return { statusCode: ACCOUNT_NOT_FOUND_CODE, body: 'User does not have an account open yet' }
-    };
+      return { statusCode: ACCOUNT_NOT_FOUND_CODE, body: 'User does not have an account open yet' };
+    }
     
     let clientId = '';
     let floatId = '';

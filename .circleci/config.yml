@@ -110,8 +110,8 @@ jobs:
       - run:
           name: run linter
           command: |
-            # echo "Linting modules"
-            # cd $HOME/app/modules/rds-common && npm run-script lint
+            echo "Linting modules"
+            cd $HOME/app/modules/dynamo-common && npm run-script lint
             # cd ../dynamo-common && npm run-script lint
 
             echo "Linting functions"
@@ -119,6 +119,7 @@ jobs:
             cd ../user-existence-api && npm run-script lint
             cd ../float-api && npm run-script lint
             cd ../db-migration && npm run-script lint
+            
 
       - run:
           name: run security check
@@ -136,14 +137,16 @@ jobs:
       - run:
           name: run tests
           command: |
-            cd $HOME/app/functions
+            cd $HOME/app
             npm install codecov
             
-            echo "Running tests and outputing coverage reports"
-            cd user-existence-api; npm test; npm run-script generate-coverage
+            echo "Running function tests and outputing coverage reports"
+            cd $HOME/app/functions/user-existence-api; npm test; npm run-script generate-coverage
             cd ../user-activity-api; npm test; npm run-script generate-coverage
             cd ../float-api; npm test; npm run-script generate-coverage
-            cd ..
+            
+            echo "Runing module tests and outputting coverage reports"
+            cd $HOME/app/modules/dynamo-common && npm run-script lint
 
             echo "Uploading coverage reports"
             node_modules/codecov/bin/codecov

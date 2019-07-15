@@ -249,7 +249,7 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
         logger('Completed unit calculation');
     });
 
-    logger('Completed calculations of account sums, result: ', selectResults);
+    // logger('Completed calculations of account sums, result: ', selectResults);
 
     if (logResult) {
         logger(selectResults);

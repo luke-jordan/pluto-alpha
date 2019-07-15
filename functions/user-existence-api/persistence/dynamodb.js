@@ -84,6 +84,7 @@ module.exports.insertUserProfile = async (userProfile) => {
     rowForTable.creationTimeEpochMillis = creationTime.valueOf();
     rowForTable.updatedTimeEpochMillis = creationTime.valueOf();
 
+    logger('Sending row to table: ', rowForTable);
     const resultOfInsertion = await dynamoCommon.insertNewRow(config.get('tables.dynamo.profileTable'), ['systemWideUserId'], rowForTable);
     logger('Result of inserting profile, from DynamoDB: ', resultOfInsertion);
     if (!resultOfInsertion || resultOfInsertion.result !== 'SUCCESS') {

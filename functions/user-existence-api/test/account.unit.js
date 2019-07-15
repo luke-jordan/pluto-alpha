@@ -15,7 +15,7 @@ chai.use(require('chai-uuid'));
 const proxyquire = require('proxyquire').noCallThru();
 
 const insertRecordStub = sinon.stub();
-const accountHandler = proxyquire('../account.handler', { 
+const accountHandler = proxyquire('../account-handler', { 
     './persistence/rds': {
         'insertAccountRecord': insertRecordStub
     }

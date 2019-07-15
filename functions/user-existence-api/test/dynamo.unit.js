@@ -49,12 +49,15 @@ const testTimeCreated = moment();
 const testUserPassed = {
     clientId: testClientId,
     defaultFloatId: 'primary_mmkt_fund',
+    defaultCurrency: 'USD',
+    defaultTimezone: 'America/New_York',
     personalName: 'Luke',
     familyName: 'Jordan',
     primaryPhone: testPhone,
     nationalId: testNationalId,
     userStatus: 'CREATED',
-    kycStatus: 'CONTACT_VERIFIED'
+    kycStatus: 'CONTACT_VERIFIED',
+    passwordSet: false
 };
 
 const wellFormedNewItemToDdb = {
@@ -62,12 +65,15 @@ const wellFormedNewItemToDdb = {
     creationTimeEpochMillis: testTimeCreated.valueOf(),
     clientId: testClientId,
     floatId: testUserPassed.defaultFloatId,
+    defaultCurrency: 'USD',
+    defaultTimezone: 'America/New_York',
     personalName: testUserPassed.personalName,
     familyName: testUserPassed.familyName,
     phoneNumber: testPhone,
     nationalId: testNationalId,
     userStatus: testUserPassed.userStatus,
     kycStatus: testUserPassed.kycStatus,
+    securedStatus: 'NO_PASSWORD',
     updatedTimeEpochMillis: testTimeCreated.valueOf()
 };
 
@@ -91,9 +97,11 @@ describe('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
         fetchRowStub.withArgs(phoneTable, { phoneNumber: testPhone }).resolves({ });
         insertRowStub.withArgs(phoneTable, ['phoneNumber'], { phoneNumber: testPhone, systemWideUserId: testSystemId }).resolves(insertionSuccessResult);
 
-        insertRowStub.withArgs(profileTable, ['systemWideUserId'], wellFormedNewItemToDdb).resolves(insertionSuccessResult);
+        logger('Expecting profile table: ', profileTable);
+        insertRowStub.withArgs(profileTable, ['systemWideUserId'], sinon.match(wellFormedNewItemToDdb)).resolves(insertionSuccessResult);
 
         const insertionResult = await dynamo.insertUserProfile(testUserPassed);
+
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal({ result: 'SUCCESS', systemWideUserId: testSystemId, creationTimeEpochMillis: testTimeCreated.valueOf() });
     });
@@ -111,9 +119,9 @@ describe('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
         const fetchByPhone = await dynamo.fetchUserByPhone(testPhone);
         const fetchByEmail = await dynamo.fetchUserByEmail(testEmail);
 
-        expect(fetchById).to.deep.equal({ systemWideUserId: testSystemId });
-        expect(fetchByPhone).to.deep.equal({ systemWideUserId: testSystemId });
-        expect(fetchByEmail).to.deep.equal({ systemWideUserId: testSystemId });
+        expect(fetchById).to.equal(testSystemId);
+        expect(fetchByPhone).to.equal(testSystemId);
+        expect(fetchByEmail).to.equal(testSystemId);
     });
 
     it('Checks for user with system ID', async () => {
