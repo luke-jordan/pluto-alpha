@@ -146,9 +146,10 @@ jobs:
             cd ../float-api; npm test; npm run-script generate-coverage
             
             echo "Runing module tests and outputting coverage reports"
-            cd $HOME/app/modules/dynamo-common && npm run-script lint
+            cd $HOME/app/modules/dynamo-common; npm test; npm run-script generate-coverage
 
             echo "Uploading coverage reports"
+            cd $HOME/app
             node_modules/codecov/bin/codecov
 
       - run:
