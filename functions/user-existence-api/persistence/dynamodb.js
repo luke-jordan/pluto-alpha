@@ -25,8 +25,8 @@ module.exports.insertUserProfile = async (userProfile) => {
     // now we can create a system wide user id
     const systemWideUserId = uuid();
 
-    const nationalIdRow = { clientId: userProfile.clientId, nationalId: userProfile.nationalId, systemWideUserId };
-    const insertNationalId = await dynamoCommon.insertNewRow(config.get('tables.dynamo.nationalIdTable'), ['clientId', 'nationalId'], nationalIdRow);
+    const nationalIdRow = { countryCode: userProfile.countryCode, nationalId: userProfile.nationalId, systemWideUserId };
+    const insertNationalId = await dynamoCommon.insertNewRow(config.get('tables.dynamo.nationalIdTable'), ['countryCode', 'nationalId'], nationalIdRow);
     logger('Result of inserting national ID: ', insertNationalId);
     if (!insertNationalId || insertNationalId.result !== 'SUCCESS') {
         return { result: 'ERROR', message: 'ERROR_INSERTING_NATIONAL_ID' };
@@ -40,6 +40,7 @@ module.exports.insertUserProfile = async (userProfile) => {
         defaultTimezone: userProfile.defaultTimezone,
         personalName: userProfile.personalName,
         familyName: userProfile.familyName,
+        countryCode: userProfile.countryCode,
         nationalId: userProfile.nationalId,
         userStatus: userProfile.userStatus,
         kycStatus: userProfile.kycStatus,
@@ -188,9 +189,9 @@ module.exports.fetchUserProfile = async (systemWideUserId) => {
     return !itemFromDynamo || Object.keys(itemFromDynamo).length === 0 ? null : itemFromDynamo;
 };
 
-module.exports.fetchUserByNationalId = async (clientId, nationalId) => {
+module.exports.fetchUserByNationalId = async (countryCode, nationalId) => {
     logger('Seeking a user with national ID: ', nationalId);
-    const itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.dynamo.nationalIdTable'), { clientId, nationalId });
+    const itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.dynamo.nationalIdTable'), { countryCode, nationalId });
     return nullIfEmptyElseSystemId(itemFromDynamo);
 };
 

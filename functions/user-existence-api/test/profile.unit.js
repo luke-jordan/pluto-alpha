@@ -47,6 +47,7 @@ const handler = proxyquire('../profile-handler', {
 });
 
 const testSystemId = uuid();
+const testCountryCode = 'ZAF';
 const testClientId = 'some_country_client';
 const testNationalId = 'some-social-security-number';
 const testEmail = 'luke@jupitersave.com';
@@ -72,6 +73,7 @@ describe('*** UNIT TEST USER PROFILE *** FINDING USERS ***', () => {
     const testReturnedUser = {
         systemWideUserId: testSystemId,
         clientId: testClientId,
+        countryCode: testCountryCode,
         nationalId: testNationalId,
         primaryPhone: testPhone,
         primaryEmail: testEmail,
@@ -96,9 +98,9 @@ describe('*** UNIT TEST USER PROFILE *** FINDING USERS ***', () => {
         testHelper.expectNoCalls(insertUserProfileStub, updateUserProfileStub);
     });
 
-    it('Successfully find a user by client co and national ID number', async () => {
-        fetchUserByIdStub.withArgs(testClientId, testNationalId).resolves(testSystemId);
-        const fetchUserProjection = await handler.fetchUserByPersonalDetail({ clientId: testClientId, nationalId: testNationalId });
+    it('Successfully find a user by national country and national ID number', async () => {
+        fetchUserByIdStub.withArgs(testCountryCode, testNationalId).resolves(testSystemId);
+        const fetchUserProjection = await handler.fetchUserByPersonalDetail({ countryCode: testCountryCode, nationalId: testNationalId });
         const retrievedUser = testHelper.standardOkayChecks(fetchUserProjection);
         expect(retrievedUser).to.deep.equal({ systemWideUserId: testSystemId });
     });
@@ -160,6 +162,7 @@ describe('*** UNIT TEST USER PROFILE *** INSERTING USERS ***', () => {
         personalName: 'Luke',
         familyName: 'Jordan',
         primaryPhone: testPhone,
+        countryCode: testCountryCode,
         nationalId: testNationalId,
         userStatus: 'CREATED',
         kycStatus: 'CONTACT_VERIFIED'

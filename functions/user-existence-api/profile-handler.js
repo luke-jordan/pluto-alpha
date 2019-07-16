@@ -121,10 +121,10 @@ module.exports.fetchUserBySystemId = async (event, context) => {
  */
 module.exports.fetchUserByPersonalDetail = async (event) => {
     const params = event.body || event;
-    const isNationalIdPresent = params.clientId && params.nationalId;
+    const isNationalIdPresent = params.countryCode && params.nationalId;
     let foundUserId = null;
     if (isNationalIdPresent) {
-        foundUserId = await dynamo.fetchUserByNationalId(params.clientId, params.nationalId);
+        foundUserId = await dynamo.fetchUserByNationalId(params.countryCode, params.nationalId);
     }
 
     if (!foundUserId && params.phoneNumber) {

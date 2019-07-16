@@ -7,7 +7,7 @@ resource "aws_lambda_function" "profile_create" {
 
   function_name                  = "${var.profile_create_lambda_function_name}"
   role                           = "${aws_iam_role.profile_create_role.arn}"
-  handler                        = "profile-handler.create"
+  handler                        = "profile-handler.insertNewUser"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"

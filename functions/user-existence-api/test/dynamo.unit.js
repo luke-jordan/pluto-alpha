@@ -41,6 +41,7 @@ const emailTable = config.get('tables.dynamo.emailTable');
 
 const testSystemId = uuid();
 const testClientId = 'some_country_client';
+const testCountryCode = 'USA';
 const testPhone = '16061110000';
 const testEmail = 'lukesjordan@gmail.com';
 const testNationalId = 'some-long-alpha-numeric';
@@ -54,6 +55,7 @@ const testUserPassed = {
     personalName: 'Luke',
     familyName: 'Jordan',
     primaryPhone: testPhone,
+    countryCode: testCountryCode,
     nationalId: testNationalId,
     userStatus: 'CREATED',
     kycStatus: 'CONTACT_VERIFIED',
@@ -70,6 +72,7 @@ const wellFormedNewItemToDdb = {
     personalName: testUserPassed.personalName,
     familyName: testUserPassed.familyName,
     phoneNumber: testPhone,
+    countryCode: testCountryCode,
     nationalId: testNationalId,
     userStatus: testUserPassed.userStatus,
     kycStatus: testUserPassed.kycStatus,
@@ -91,9 +94,9 @@ describe('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
         uuidStub.returns(testSystemId);
         momentStub.returns({ valueOf: () => testTimeCreated.valueOf() });
         
-        fetchRowStub.withArgs(nationalIdTable, { clientId: testClientId, nationalId: testNationalId }).resolves({ });
-        insertRowStub.withArgs(nationalIdTable, ['clientId', 'nationalId'], { clientId: testClientId, nationalId: testNationalId, systemWideUserId: testSystemId }).
-            resolves(insertionSuccessResult);
+        fetchRowStub.withArgs(nationalIdTable, { countryCode: testCountryCode, nationalId: testNationalId }).resolves({ });
+        insertRowStub.withArgs(nationalIdTable, ['countryCode', 'nationalId'], { countryCode: testCountryCode, nationalId: testNationalId, 
+            systemWideUserId: testSystemId }).resolves(insertionSuccessResult);
         fetchRowStub.withArgs(phoneTable, { phoneNumber: testPhone }).resolves({ });
         insertRowStub.withArgs(phoneTable, ['phoneNumber'], { phoneNumber: testPhone, systemWideUserId: testSystemId }).resolves(insertionSuccessResult);
 
@@ -107,15 +110,15 @@ describe('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
     });
 
     it('Checks for user with existing details', async () => {
-        fetchRowStub.withArgs(nationalIdTable, { clientId: testClientId, nationalId: testNationalId }).resolves({ 
-            clientId: testClientId,
+        fetchRowStub.withArgs(nationalIdTable, { countryCode: testCountryCode, nationalId: testNationalId }).resolves({ 
+            countryCode: testCountryCode,
             nationalId: testNationalId,
             systemWideUserId: testSystemId
         });
         fetchRowStub.withArgs(phoneTable, { phoneNumber: testPhone }).resolves({ phoneNumber: testPhone, systemWideUserId: testSystemId });
         fetchRowStub.withArgs(emailTable, { emailAddress: testEmail }).resolves({ emailAddress: testEmail, systemWideUserId: testSystemId });
         
-        const fetchById = await dynamo.fetchUserByNationalId(testClientId, testNationalId);
+        const fetchById = await dynamo.fetchUserByNationalId(testCountryCode, testNationalId);
         const fetchByPhone = await dynamo.fetchUserByPhone(testPhone);
         const fetchByEmail = await dynamo.fetchUserByEmail(testEmail);
 
@@ -136,7 +139,7 @@ describe('*** UNIT TESTING PROFILE-DYNAMO HP ***', () => {
         logger('Result of retrieval: ', userProfileRetrieved);
         expect(userProfileRetrieved).to.be.null;
 
-        fetchRowStub.withArgs(nationalIdTable, { clientId: testClientId, nationalId: testNationalId }).resolves({ });
+        fetchRowStub.withArgs(nationalIdTable, { countryCode: testCountryCode, nationalId: testNationalId }).resolves({ });
         const retrievedNational = await dynamo.fetchUserByNationalId(testClientId, testNationalId);
         expect(retrievedNational).to.be.null;
 
