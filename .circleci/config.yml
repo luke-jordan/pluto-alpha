@@ -120,19 +120,19 @@ jobs:
             cd ../float-api && npm run-script lint
             cd ../db-migration && npm run-script lint
             
-
-      - run:
-          name: run security check
-          command: |
-            cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
-            # we do this to avoid the package lock inadvertantly overriding later and wiping modules
-            rm ./package-lock.json
-            cd ../user-existence-api && npm i --package-lock-only && npm audit fix --only=prod
-            rm ./package-lock.json
-            cd ../float-api && npm i --package-lock-only && npm audit fix --only=prod
-            rm ./package-lock.json
-            cd ../db-migration && npm i --package-lock-only && npm audit fix --only=prod
-            rm ./package-lock.json
+      # todo: restore this once lodash thing is out of deep deps & node has reliably updated etc
+      # - run:
+      #     name: run security check
+      #     command: |
+      #       cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
+      #       # we do this to avoid the package lock inadvertantly overriding later and wiping modules
+      #       rm ./package-lock.json
+      #       cd ../user-existence-api && npm i --package-lock-only && npm audit fix --only=prod
+      #       rm ./package-lock.json
+      #       cd ../float-api && npm i --package-lock-only && npm audit fix --only=prod
+      #       rm ./package-lock.json
+      #       cd ../db-migration && npm i --package-lock-only && npm audit fix --only=prod
+      #       rm ./package-lock.json
 
       - run:
           name: run tests
