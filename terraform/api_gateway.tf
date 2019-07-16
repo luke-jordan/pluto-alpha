@@ -13,7 +13,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.float_api,
   aws_api_gateway_integration.user_activity_api,
   aws_api_gateway_integration.account_create,
-  aws_api_gateway_integration.account_balance
+  aws_api_gateway_integration.balance_fetch
   ]
 
   variables = {
@@ -218,32 +218,32 @@ resource "aws_api_gateway_integration" "account_create" {
 
 /////////////// ACCOUNT BALANCE LAMBDA //////////////////////////////////////////////////////////////////////////
 
-resource "aws_api_gateway_method" "account_balance" {
+resource "aws_api_gateway_method" "balance_fetch" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.account_balance.id}"
+  resource_id   = "${aws_api_gateway_resource.balance_fetch.id}"
   http_method   = "POST"
   authorization = "NONE"
 }
 
-resource "aws_api_gateway_resource" "account_balance" {
+resource "aws_api_gateway_resource" "balance_fetch" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "account-balance"
+  path_part   = "balance_fetch"
 }
 
-resource "aws_lambda_permission" "account_balance" {
+resource "aws_lambda_permission" "balance_fetch" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.account_balance.function_name}"
+  function_name = "${aws_lambda_function.balance_fetch.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
-resource "aws_api_gateway_integration" "account_balance" {
+resource "aws_api_gateway_integration" "balance_fetch" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id = "${aws_api_gateway_method.account_balance.resource_id}"
-  http_method = "${aws_api_gateway_method.account_balance.http_method}"
+  resource_id = "${aws_api_gateway_method.balance_fetch.resource_id}"
+  http_method = "${aws_api_gateway_method.balance_fetch.http_method}"
 
-  integration_http_method = "POST"
+  integration_http_method = "GET"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.account_balance.invoke_arn}"
+  uri                     = "${aws_lambda_function.balance_fetch.invoke_arn}"
 }

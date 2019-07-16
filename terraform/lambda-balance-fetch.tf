@@ -1,12 +1,12 @@
-variable "account_balance_function_name" {
-  default = "account_balance"
+variable "balance_fetch_function_name" {
+  default = "balance_fetch"
   type = "string"
 }
 
-resource "aws_lambda_function" "account_balance" {
+resource "aws_lambda_function" "balance_fetch" {
 
-  function_name                  = "${var.account_balance_function_name}"
-  role                           = "${aws_iam_role.account_balance_role.arn}"
+  function_name                  = "${var.balance_fetch_function_name}"
+  role                           = "${aws_iam_role.balance_fetch_role.arn}"
   handler                        = "handler.balance"
   memory_size                    = 256
   reserved_concurrent_executions = 20
@@ -36,15 +36,10 @@ resource "aws_lambda_function" "account_balance" {
             },
             "db": {
                 "user": "account_api_worker",
-                "host": "localhost",
-                "database": "pluto",
+                "host": "${aws_db_instance.rds[0].address}",
+                "database": "${var.db_name}",
                 "password": "pwd_for_account_api",
-                "port" :"5430"
-            },
-            "test": {
-                "nock": {
-                    "dynamodb": "http://localhost:4569"
-                }
+                "port" :"${aws_db_instance.rds[0].port}"
             }
         }
       )}"
@@ -55,11 +50,11 @@ resource "aws_lambda_function" "account_balance" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.account_balance]
+  depends_on = [aws_cloudwatch_log_group.balance_fetch]
 }
 
-resource "aws_iam_role" "account_balance_role" {
-  name = "${var.account_balance_function_name}_role_${terraform.workspace}"
+resource "aws_iam_role" "balance_fetch_role" {
+  name = "${var.balance_fetch_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -78,42 +73,42 @@ resource "aws_iam_role" "account_balance_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "account_balance" {
-  name = "/aws/lambda/${var.account_balance_function_name}"
+resource "aws_cloudwatch_log_group" "balance_fetch" {
+  name = "/aws/lambda/${var.balance_fetch_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
   }
 }
 
-resource "aws_iam_role_policy_attachment" "account_balance_basic_execution_policy" {
-  role = "${aws_iam_role.account_balance_role.name}"
+resource "aws_iam_role_policy_attachment" "balance_fetch_basic_execution_policy" {
+  role = "${aws_iam_role.balance_fetch_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "account_balance_vpc_execution_policy" {
-  role = "${aws_iam_role.account_balance_role.name}"
+resource "aws_iam_role_policy_attachment" "balance_fetch_vpc_execution_policy" {
+  role = "${aws_iam_role.balance_fetch_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_account_balance" {
-  log_group_name = "${aws_cloudwatch_log_group.account_balance.name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_balance_fetch" {
+  log_group_name = "${aws_cloudwatch_log_group.balance_fetch.name}"
   metric_transformation {
-    name = "${var.account_balance_function_name}_fatal_api_alarm"
+    name = "${var.balance_fetch_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.account_balance_function_name}_fatal_api_alarm"
+  name = "${var.balance_fetch_function_name}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_account_balance" {
-  alarm_name = "${var.account_balance_function_name}_fatal_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_balance_fetch" {
+  alarm_name = "${var.balance_fetch_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_account_balance.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_balance_fetch.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
@@ -121,22 +116,22 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_account_balance" {
   alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
 }
 
-resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_account_balance" {
-  log_group_name = "${aws_cloudwatch_log_group.account_balance.name}"
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_balance_fetch" {
+  log_group_name = "${aws_cloudwatch_log_group.balance_fetch.name}"
   metric_transformation {
-    name = "${var.account_balance_function_name}_security_api_alarm"
+    name = "${var.balance_fetch_function_name}_security_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.account_balance_function_name}_security_api_alarm"
+  name = "${var.balance_fetch_function_name}_security_api_alarm"
   pattern = "SECURITY_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_account_balance" {
-  alarm_name = "${var.account_balance_function_name}_security_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_balance_fetch" {
+  alarm_name = "${var.balance_fetch_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_account_balance.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_balance_fetch.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0

@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:save:main');
+const logger = require('debug')('jupiter:save:main');
 const config = require('config');
 
 const moment = require('moment-timezone');
@@ -109,13 +109,14 @@ const createBalanceDict = (amount, unit, currency, timeMoment) => ({
 
 module.exports.balance = async (event, context) => {
   try {
+    logger('Event: ', event);
     if (context) {
       logger('Context object: ', context); // todo : check user role etc
     }
 
     // todo : look up property
     const params = event.queryParams || event;
-    
+
     if (!params.accountId && !params.userId) {
       return invalidRequestResponse('No account or user ID provided');
     } else if (!params.currency) {
@@ -127,6 +128,8 @@ module.exports.balance = async (event, context) => {
     }
     
     const accountId = params.accountId || await fetchUserDefaultAccount(params.userId);
+    logger('Finding balance for user with accountId: ', accountId);
+
     if (!accountId) {
       return { statusCode: ACCOUNT_NOT_FOUND_CODE, body: 'User does not have an account open yet' };
     }
