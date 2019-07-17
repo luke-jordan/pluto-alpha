@@ -120,12 +120,12 @@ describe('Fetches user balance and makes projections', () => {
         balanceSubsequentDays: expectedBalanceSubsequentDays
     };
 
-    const checkResultIsWellFormed = (balanceAndProjections) => {
+    const checkResultIsWellFormed = (balanceAndProjections, expectedBody = wellFormedResultBody) => {
         expect(balanceAndProjections).to.exist;
         expect(balanceAndProjections.statusCode).to.equal(200);
         expect(balanceAndProjections).to.have.property('body');
         const resultBody = JSON.parse(balanceAndProjections.body);
-        expect(resultBody).to.deep.equal(wellFormedResultBody);
+        expect(resultBody).to.deep.equal(expectedBody);
     };
 
     const checkErrorResultForMsg = (errorResult, expectedErrorMsg) => {
@@ -159,6 +159,11 @@ describe('Fetches user balance and makes projections', () => {
     beforeEach(() => resetStubs(true));
 
     after(() => resetStubs(false));
+
+    // it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
+    //     // const 
+    // });
+
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
         const balanceAndProjections = await handler.balance({ 
@@ -203,6 +208,22 @@ describe('Fetches user balance and makes projections', () => {
 
         const balanceAndProjectionsUserId = await handler.balance(userIdParams);
         checkResultIsWellFormed(balanceAndProjectionsUserId);
+    });
+
+    it('Obtains balance but leaves out future projections if days to project is is 0', async () => {
+        const zeroDaysParams = {
+            userId: testUserId,
+            currency: 'USD',
+            atEpochMillis: testTimeNow.valueOf(),
+            timezone: testTimeZone,
+            daysToProject: 0
+        };
+
+        const resultWithoutDays = JSON.parse(JSON.stringify(wellFormedResultBody));
+        Reflect.deleteProperty(resultWithoutDays, 'balanceSubsequentDays');
+        const balanceWithoutProjections = await handler.balance(zeroDaysParams);
+        logger('Result: ', balanceWithoutProjections);
+        checkResultIsWellFormed(balanceWithoutProjections, resultWithoutDays);
     });
 
     it('Returns an error code when neither account ID or user ID is provided, or no currency', async () => {

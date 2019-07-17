@@ -179,19 +179,22 @@ module.exports.balance = async (event, context) => {
     resultObject.balanceEndOfToday = createBalanceDict(endOfTodayBalance.decimalPlaces(0).toNumber(), unit, currency, endOfDayMoment);
 
     // we allow the client to define how many days to project, but put a cap to prevent a malfunctioning client from blowing things up
-    const maxNumberDaysProjection = Math.min(params.daysToProject || config.get('projection.defaultDays'), config.get('projection.maxDays'));
-    
-    let currentProjectedBalance = endOfTodayBalance;
-    const balanceSubsequentDays = [];
-    for (let i = 1; i <= maxNumberDaysProjection; i += 1) {
-      currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
-      const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
-      const endOfIthDayDict = createBalanceDict(currentProjectedBalance.decimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
-      // logger('Adding end of day dict: ', endOfIthDayDict);
-      balanceSubsequentDays.push(endOfIthDayDict);
-    }
+    const passedDays = Number.isSafeInteger(params.daysToProject) ? params.daysToProject : config.get('projection.defaultDays');
+    const daysToProject = Math.min(passedDays, config.get('projection.maxDays'));
 
-    resultObject.balanceSubsequentDays = balanceSubsequentDays;
+    if (daysToProject > 0) {
+      let currentProjectedBalance = endOfTodayBalance;
+      const balanceSubsequentDays = [];
+      for (let i = 1; i <= daysToProject; i += 1) {
+        currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
+        const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
+        const endOfIthDayDict = createBalanceDict(currentProjectedBalance.decimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
+        // logger('Adding end of day dict: ', endOfIthDayDict);
+        balanceSubsequentDays.push(endOfIthDayDict);
+      }
+
+      resultObject.balanceSubsequentDays = balanceSubsequentDays;
+    }
 
     // logger('Sending back result object: ', resultObject);
     return {
@@ -206,3 +209,16 @@ module.exports.balance = async (event, context) => {
     };
   }
 };
+
+// this is a convenience method exposed to allow for simple JWT based get balance based on defaults
+// module.exports.balanceWrapper = async (event, context) => {
+//   try {
+
+//   } catch (e) {
+//     logger('FATAL_ERROR: ', e);
+//     return {
+//       statusCode: 500,
+//       body: JSON.stringify(e)
+//     }
+//   }
+// }
