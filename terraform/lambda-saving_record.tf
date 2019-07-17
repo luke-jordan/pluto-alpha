@@ -15,7 +15,7 @@ resource "aws_lambda_function" "saving_record" {
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
-  s3_key = "user-activity-api/${var.deploy_code_commit_hash}.zip"
+  s3_key = "user_activity_api/${var.deploy_code_commit_hash}.zip"
 
   environment {
     variables = {
