@@ -1,4 +1,4 @@
-resource "aws_iam_policy" "dynamo_table_ClientFloatTable_access" {
+resource "aws_iam_policy" "dynamo_table_client_float_table_access" {
   name        = "ClientFloatTable_access_${terraform.workspace}"
   path        = "/"
 

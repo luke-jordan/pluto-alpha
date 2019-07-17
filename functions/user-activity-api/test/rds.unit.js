@@ -182,10 +182,10 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         };
         
         const expectedArgs = sinon.match([expectedAccountQueryDef, expectedFloatQueryDef]);
-        const txDetailsFromRds = [
-            { rows: [{ 'transaction_id': uuid(), 'creation_time': moment().format() }] },
-            { rows: [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }]}
-        ];
+        const txDetailsFromRds = [[ 
+            { 'transaction_id': uuid(), 'creation_time': moment().format() }],
+            [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }
+        ]];
         const expectedTxDetails = [{ 
             'accountTransactionId': testAcTxId,
             'creationTimeEpochMillis': sinon.match.number

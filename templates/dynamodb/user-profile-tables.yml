@@ -26,13 +26,13 @@ Resources:
       TableName: "UserNationalIdTable"
       AttributeDefinitions:
       -
-        AttributeName: "client_id"
+        AttributeName: "country_code"
         AttributeType: "S"
       -
         AttributeName: "national_id"
         AttributeType: "S"
       KeySchema:
-      - AttributeName: "client_id"
+      - AttributeName: "country_code"
         KeyType: HASH
       - AttributeName: "national_id"
         KeyType: RANGE

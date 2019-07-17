@@ -210,9 +210,9 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
         
         logger('Result of insert : ', insertionResult);
         const transactionDetails = [
-            extractTxDetails('accountTransactionId', insertionResult[0]['rows'][0]),
-            extractTxDetails('floatAdditionTransactionId', insertionResult[1]['rows'][0]),
-            extractTxDetails('floatAllocationTransactionId', insertionResult[1]['rows'][0])
+            extractTxDetails('accountTransactionId', insertionResult[0][0]),
+            extractTxDetails('floatAdditionTransactionId', insertionResult[1][0]),
+            extractTxDetails('floatAllocationTransactionId', insertionResult[1][0])
         ];
 
         responseEntity['transactionDetails'] = transactionDetails;

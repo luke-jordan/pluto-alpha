@@ -100,6 +100,7 @@ const resetStubs = (historyOnly = true) => {
 describe('Fetches user balance and makes projections', () => {
     
     const wellFormedResultBody = {
+        accountId: [testAccountId],
         currentBalance: {
             'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
             'unit': 'HUNDREDTH_CENT',

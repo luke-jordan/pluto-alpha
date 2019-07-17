@@ -35,10 +35,8 @@ resource "aws_lambda_function" "balance_fetch" {
                 "accountData": "account_data.core_account_ledger"
             },
             "db": {
-                "user": "account_api_worker",
                 "host": "${aws_db_instance.rds[0].address}",
                 "database": "${var.db_name}",
-                "password": "pwd_for_account_api",
                 "port" :"${aws_db_instance.rds[0].port}"
             }
         }
@@ -89,6 +87,11 @@ resource "aws_iam_role_policy_attachment" "balance_fetch_basic_execution_policy"
 resource "aws_iam_role_policy_attachment" "balance_fetch_vpc_execution_policy" {
   role = "${aws_iam_role.balance_fetch_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "balance_fetch_client_float_table_access" {
+  role = "${aws_iam_role.balance_fetch_role.name}"
+  policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

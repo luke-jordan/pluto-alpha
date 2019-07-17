@@ -162,7 +162,8 @@ module.exports.balance = async (event, context) => {
     const timeForBalance = params.atEpochMillis ? providedTime.tz(timezone) : moment.tz(timezone);
     logger('Time for balance unix: ', timeForBalance.unix());
 
-    const resultObject = {};
+    // in future we might send multiple back, if user has multiple
+    const resultObject = { accountId: [accountId] }; 
 
     // logger('Retrieving balance at time: ', timeForBalance.unix());
     const currentBalance = await persistence.sumAccountBalance(accountId, currency, timeForBalance);
