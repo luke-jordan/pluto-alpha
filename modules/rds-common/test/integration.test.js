@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:rds-common:int-test');
+const logger = require('debug')('jupiter:rds-common:int-test');
 const config = require('config');
 
 const chai = require('chai');
@@ -68,7 +68,7 @@ const endPools = (rdsClient, done) => {
     });
 }
 
-describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
+describe.only('*** INTEGRATION TEST HAPPY PATHS ***', function () {
 
     // this.timeout(5000);
 
@@ -276,6 +276,17 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
         const selectRow = await rdsClient.selectQuery('select amount from update_ledger where id = $1', [transId]);
         expect(selectRow).to.exist;
         expect(parseInt(selectRow[0]['amount'])).to.equal(2431);
+    });
+
+    it.only('Run a deletion, and check results', async () => {
+        const account = await createBunchOfAccounts(1);
+        const accountId = account.rows[0]['id'];
+
+        const deletionResult = await rdsClient.deleteRow('account', ['id'], [accountId]);
+        // logger('Deletion result: ', deletionResult);
+        expect(deletionResult).to.exist;
+        expect(deletionResult).to.have.property('command', 'DELETE');
+        expect(deletionResult).to.have.property('rowCount', 1);
     });
 
 });
