@@ -107,6 +107,42 @@ const createBalanceDict = (amount, unit, currency, timeMoment) => ({
   timezone: timeMoment.tz()
 });
 
+const assembleBalanceForUser = async (accountId, currency, timeForBalance, floatProjectionVars, daysToProject) => {
+    // in future we might send multiple back, if user has multiple
+    const resultObject = { accountId: [accountId] }; 
+
+    // logger('Retrieving balance at time: ', timeForBalance.unix());
+    const currentBalance = await persistence.sumAccountBalance(accountId, currency, timeForBalance);
+    logger('Current balance calculated as: ', currentBalance);
+    
+    const unit = currentBalance.unit;    
+    resultObject.currentBalance = createBalanceDict(currentBalance.amount, unit, currency, timeForBalance);
+    
+    const endOfDayMoment = timeForBalance.clone().endOf('day');
+    const endOfTodayBalance = accrueBalanceByDay(currentBalance.amount, floatProjectionVars);
+    logger('Balance at end of today: ', endOfTodayBalance);
+    
+    resultObject.balanceEndOfToday = createBalanceDict(endOfTodayBalance.decimalPlaces(0).toNumber(), unit, currency, endOfDayMoment);
+
+    logger('Doing a loop');
+    if (daysToProject > 0) {
+      let currentProjectedBalance = endOfTodayBalance;
+      const balanceSubsequentDays = [];
+      for (let i = 1; i <= daysToProject; i += 1) {
+        currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
+        const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
+        const endOfIthDayDict = createBalanceDict(currentProjectedBalance.decimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
+        // logger('Adding end of day dict: ', endOfIthDayDict);
+        balanceSubsequentDays.push(endOfIthDayDict);
+      }
+
+      resultObject.balanceSubsequentDays = balanceSubsequentDays;
+    }
+    logger('Finished loop');
+
+    return resultObject;
+};
+
 module.exports.balance = async (event, context) => {
   try {
     logger('Event: ', event);
@@ -162,40 +198,12 @@ module.exports.balance = async (event, context) => {
     const timeForBalance = params.atEpochMillis ? providedTime.tz(timezone) : moment.tz(timezone);
     logger('Time for balance unix: ', timeForBalance.unix());
 
-    // in future we might send multiple back, if user has multiple
-    const resultObject = { accountId: [accountId] }; 
-
-    // logger('Retrieving balance at time: ', timeForBalance.unix());
-    const currentBalance = await persistence.sumAccountBalance(accountId, currency, timeForBalance);
-    logger('Current balance calculated as: ', currentBalance);
-    
-    const unit = currentBalance.unit;    
-    resultObject.currentBalance = createBalanceDict(currentBalance.amount, unit, currency, timeForBalance);
-    logger('What the  : ', resultObject.currentBalance);
-    
-    const endOfDayMoment = timeForBalance.clone().endOf('day');
-    const endOfTodayBalance = accrueBalanceByDay(currentBalance.amount, floatProjectionVars);
-    logger('Balance at end of today: ', endOfTodayBalance);
-    resultObject.balanceEndOfToday = createBalanceDict(endOfTodayBalance.decimalPlaces(0).toNumber(), unit, currency, endOfDayMoment);
-
     // we allow the client to define how many days to project, but put a cap to prevent a malfunctioning client from blowing things up
     const passedDays = Number.isSafeInteger(params.daysToProject) ? params.daysToProject : config.get('projection.defaultDays');
     const daysToProject = Math.min(passedDays, config.get('projection.maxDays'));
 
-    if (daysToProject > 0) {
-      let currentProjectedBalance = endOfTodayBalance;
-      const balanceSubsequentDays = [];
-      for (let i = 1; i <= daysToProject; i += 1) {
-        currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
-        const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
-        const endOfIthDayDict = createBalanceDict(currentProjectedBalance.decimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
-        // logger('Adding end of day dict: ', endOfIthDayDict);
-        balanceSubsequentDays.push(endOfIthDayDict);
-      }
-
-      resultObject.balanceSubsequentDays = balanceSubsequentDays;
-    }
-
+    const resultObject = await assembleBalanceForUser(accountId, currency, timeForBalance, floatProjectionVars, daysToProject);
+    
     // logger('Sending back result object: ', resultObject);
     return {
       statusCode: 200,
@@ -211,14 +219,39 @@ module.exports.balance = async (event, context) => {
 };
 
 // this is a convenience method exposed to allow for simple JWT based get balance based on defaults
-// module.exports.balanceWrapper = async (event, context) => {
-//   try {
+module.exports.balanceWrapper = async (event, context) => {
+  try {
+    logger('Balance wrapper received event: ', event);
+    logger('Here is the context: ', context);
 
-//   } catch (e) {
-//     logger('FATAL_ERROR: ', e);
-//     return {
-//       statusCode: 500,
-//       body: JSON.stringify(e)
-//     }
-//   }
-// }
+    if (!context || !context.systemWideUserId) {
+      return { statusCode: '400', message: 'User ID not found in context' };
+    }
+
+    const systemWideUserId = context.systemWideUserId;
+    const accountId = await fetchUserDefaultAccount(systemWideUserId);
+    const floatAndClient = await persistence.findClientAndFloatForAccount(accountId);
+    logger('Received float and client: ', floatAndClient);
+    const floatParams = await dynamodb.fetchFloatVarsForBalanceCalc(floatAndClient.clientId, floatAndClient.floatId);
+    logger('Received float params: ', floatParams);
+
+    const timezone = floatParams.defaultTimezone;
+    const timeForBalance = moment.tz(timezone);
+    logger('Timezone: ', timezone, ' and moment: ', timeForBalance.tz());
+
+    const resultObject = await assembleBalanceForUser(accountId, floatParams.currency, timeForBalance, floatParams, config.get('projection.defaultDays'));
+    logger('Result object: ', resultObject);
+
+    return {
+      statusCode: 200,
+      body: JSON.stringify(resultObject)
+    };
+
+  } catch (e) {
+    logger('FATAL_ERROR: ', e);
+    return {
+      statusCode: 500,
+      body: JSON.stringify(e)
+    };
+  }
+};

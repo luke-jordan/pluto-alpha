@@ -25,5 +25,8 @@
     },
     "default_timezone": {
         "S": "Africa/Johannesburg"
+    },
+    "currency": {
+        "S": "ZAR"
     }
 }
