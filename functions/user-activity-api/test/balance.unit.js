@@ -16,6 +16,8 @@ chai.use(require('sinon-chai'));
 const uuid = require('uuid/v4');
 chai.use(require('chai-uuid'));
 
+const testHelper = require('./test.helper');
+
 const testAccountId = uuid();
 const testUserId = uuid();
 
@@ -134,6 +136,14 @@ describe('Fetches user balance and makes projections', () => {
         expect(errorResult.body).to.equal(expectedErrorMsg);
     };
 
+    const stripCurrBalanceDateTime = (expectedBody) => {
+        const strippedBalance = expectedBody.currentBalance;
+        Reflect.deleteProperty(strippedBalance, 'datetime');
+        Reflect.deleteProperty(strippedBalance, 'epochMilli');
+        expectedBody.currentBalance = strippedBalance;
+        return expectedBody;
+    };
+
     before(() => {
         // logger('Test time now: ', testTimeNow.format(), ' and end of day: ', testTimeEOD.format());
         // logger('Expected balance at end of day: ', expectedBalanceToday);
@@ -141,7 +151,7 @@ describe('Fetches user balance and makes projections', () => {
         // logger('Balances subsequent days, first: ', expectedBalanceSubsequentDays[0]);
         // resetStubs(false);
         
-        accountBalanceQueryStub.withArgs(testAccountId, 'USD', sinon.match(testTimeNow)).resolves({ 
+        accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment).resolves({ 
             amount: testAccumulatedBalance.decimalPlaces(0).toNumber(), 
             unit: 'HUNDREDTH_CENT'
         });
@@ -152,7 +162,9 @@ describe('Fetches user balance and makes projections', () => {
             accrualRateAnnualBps: testAccrualRateBps, 
             bonusPoolShareOfAccrual: testBonusPoolShare, 
             clientShareOfAccrual: testClientCoShare,
-            prudentialFactor: testPrudentialDiscountFactor
+            prudentialFactor: testPrudentialDiscountFactor,
+            defaultTimezone: 'America/New_York',
+            currency: 'USD'
         });
     });
 
@@ -160,9 +172,28 @@ describe('Fetches user balance and makes projections', () => {
 
     after(() => resetStubs(false));
 
-    // it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
-    //     // const 
-    // });
+    it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
+        const authContext = {
+            systemWideUserId: testUserId
+        };
+        // accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment);
+        const balanceAndProjections = await handler.balanceWrapper(null, authContext);
+        
+        // logger('Received: ', balanceAndProjections);
+        const expectedBody = stripCurrBalanceDateTime(JSON.parse(JSON.stringify(wellFormedResultBody)));
+        
+        // usual sinon annoying stubornness on matching means passing to helper isn't working, so unspooling
+        expect(balanceAndProjections).to.exist.and.have.property('statusCode', 200);
+        const bodyReturned = JSON.parse(balanceAndProjections.body);
+        expect(bodyReturned).to.exist;
+        expect(bodyReturned.currentBalance.datetime).to.be.a.string;
+        expect(bodyReturned.currentBalance.epochMilli).to.be.a('number');
+        // and this is the point at which I truly loathe Sinon and matchers, which can be utterly stupid; what follows 
+        // becomes necessary to get around matching equality
+        const strippedReturned = stripCurrBalanceDateTime(bodyReturned);
+        expect(strippedReturned).to.deep.equal(expectedBody);
+    
+    });
 
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
@@ -174,7 +205,7 @@ describe('Fetches user balance and makes projections', () => {
             atEpochMillis: testTimeNow.valueOf(),
             timezone: testTimeZone
         });
-
+        logger('Result: ', balanceAndProjections);
         checkResultIsWellFormed(balanceAndProjections);
     });
 

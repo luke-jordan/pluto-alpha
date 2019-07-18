@@ -116,7 +116,7 @@ module.exports = {
         'max-params': [
             'error',
             {
-                'max': 4
+                'max': 5
             }
         ],
         'max-statements': 'off',
