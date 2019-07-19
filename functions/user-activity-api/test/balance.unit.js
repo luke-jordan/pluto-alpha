@@ -5,6 +5,7 @@ process.env.NODE_ENV = 'test';
 const logger = require('debug')('jupiter:balance:test');
 const BigNumber = require('bignumber.js');
 const moment = require('moment-timezone');
+const fs = require('fs');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -19,7 +20,7 @@ chai.use(require('chai-uuid'));
 const testHelper = require('./test.helper');
 
 const testAccountId = uuid();
-const testUserId = uuid();
+const testUserId = '27b00e1c-4f32-4631-a67b-88aaf5a01d0c';
 
 // note : in future at some time will need to handle user in different time zone to float
 const testTimeZone = 'America/New_York';
@@ -173,11 +174,9 @@ describe('Fetches user balance and makes projections', () => {
     after(() => resetStubs(false));
 
     it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
-        const authContext = {
-            systemWideUserId: testUserId
-        };
+        const authEvent = JSON.parse(fs.readFileSync('./test/auth-event-balance.json'));
         // accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment);
-        const balanceAndProjections = await handler.balanceWrapper(null, authContext);
+        const balanceAndProjections = await handler.balanceWrapper(authEvent);
         
         // logger('Received: ', balanceAndProjections);
         const expectedBody = stripCurrBalanceDateTime(JSON.parse(JSON.stringify(wellFormedResultBody)));
