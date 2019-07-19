@@ -146,6 +146,47 @@ class RdsConnection {
         return results;
     }
 
+    /**
+     * Deletes a row from a table. Must be scarcely used. Must have conditions on it.
+     * todo: run a select query first and throw an error if more than one record returned
+     * @param {string} tableName The name of the table from which to delete
+     * @param {array[string]} conditionColumns An array of the column names to place in the 'where' column. Cannot be empty.
+     * @param {array[string]} conditionValues The array of corresponding values for the condition columns 
+     */
+    async deleteRow(tableName, conditionColumns, conditionValues) {
+        if (!conditionColumns || conditionColumns.length === 0 || !conditionValues || conditionValues.length === 0) {
+            throw new Error('')
+        }
+        
+        const queryBase = `DELETE FROM ${tableName} WHERE `;
+        const subClauses = conditionColumns.map((column, index) => `(${column} = \$${index + 1})`);
+        const formedQuery = queryBase.concat(subClauses.join(' AND ')); 
+
+        logger('Formed delete query: ', formedQuery);
+
+        let results = null;
+        const client = await this._pool.connect();
+        
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            results = await client.query(formedQuery, conditionValues);
+            if (results.rowCount > 1) {
+                throw new Error('Error! Trying to delete multiple rows');
+            }
+            await client.query('COMMIT');
+        } catch (e) {
+            logger('Error committing delete! : ', e);
+            await client.query('ROLLBACK');
+            throw new CommitError();
+        } finally {
+            await client.release();
+        }
+
+        logger('Finished, delete result: ', results);
+        return results;
+    }
+
     async _executeMultipleInserts(client, inserts) {
         // note : we assume ordering matters, so these should be sequential, so we use a for loop instead of Promise.all
         let results = [];

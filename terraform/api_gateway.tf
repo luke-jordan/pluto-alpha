@@ -25,6 +25,59 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   }
 }
 
+/////////////////////// API GW AUTHORIZER ///////////////////////////////////////////////////////////////
+
+variable jwt_authorizer_arn {
+  default = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
+  type = "string"
+}
+
+resource "aws_api_gateway_authorizer" "jwt_authorizer" {
+  name = "api_gateway_jwt_authorizer_${terraform.workspace}"
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  type = "TOKEN"
+  authorizer_uri = "arn:aws:apigateway:${var.aws_default_region[terraform.workspace]}:lambda:path/2015-03-31/functions/${var.jwt_authorizer_arn}/invocations"
+}
+
+resource "aws_iam_role" "auth_invocation_role" {
+  name = "api_gateway_auth_invocation"
+  path = "/"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "apigateway.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy" "invocation_policy" {
+  name = "default"
+  role = "${aws_iam_role.auth_invocation_role.id}"
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "lambda:InvokeFunction",
+      "Effect": "Allow",
+      "Resource": "${var.jwt_authorizer_arn}"
+    }
+  ]
+}
+EOF
+}
+
 /////////////////////// API GW LOGGING ///////////////////////////////////////////////////////////////
 resource "aws_api_gateway_account" "api_gateway" {
   cloudwatch_role_arn = "${aws_iam_role.api_gateway_cloudwatch.arn}"
@@ -222,7 +275,8 @@ resource "aws_api_gateway_method" "balance_fetch_wrapper" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
   resource_id   = "${aws_api_gateway_resource.balance_fetch_wrapper.id}"
   http_method   = "GET"
-  authorization = "NONE"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
 }
 
 resource "aws_api_gateway_resource" "balance_fetch_wrapper" {
@@ -243,7 +297,7 @@ resource "aws_api_gateway_integration" "balance_fetch_wrapper" {
   resource_id = "${aws_api_gateway_method.balance_fetch_wrapper.resource_id}"
   http_method = "${aws_api_gateway_method.balance_fetch_wrapper.http_method}"
 
-  integration_http_method = "GET"
+  integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.balance_fetch_wrapper.invoke_arn}"
 }

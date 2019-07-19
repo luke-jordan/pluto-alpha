@@ -132,9 +132,24 @@ describe('Basic query pass through', () => {
         standardExpectations(updateQuery, updateValues, false, false, 'COMMIT');
     });
 
+    it('Processes a deletion query properly', async () => {
+        const tableName = 'schema1.table1';
+        const conditionColumns = ['column_1', 'column_2'];
+        const conditionValues = ['value1', 'value2'];
+
+        const expectedDeleteQuery = 'DELETE FROM schema1.table1 WHERE (column_1 = $1) AND (column_2 = $2)';
+        const expectedDeleteValues = conditionValues;
+        queryStub.withArgs(expectedDeleteQuery, expectedDeleteValues).resolves({ command: 'DELETE' });
+
+        const deleteResult = await rdsClient.deleteRow(tableName, conditionColumns, conditionValues);
+        
+        expect(deleteResult).to.exist;
+        standardExpectations(expectedDeleteQuery, expectedDeleteValues, false, false, 'COMMIT');
+    });
+
 });
 
-describe.only('*** UNIT TEST BULK ROW INSERTION ***', () => {
+describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
 
     var rdsClient;
     before(() => {
@@ -161,7 +176,7 @@ describe.only('*** UNIT TEST BULK ROW INSERTION ***', () => {
         standardExpectations(expectedQuery, null, false, false, 'COMMIT');
     });
 
-    it.only('Sanitizes values properly to prevent injection', async () => {
+    it('Sanitizes values properly to prevent injection', async () => {
         const queryTemplate = 'INSERT INTO some_scema.some_table (column_1, column_2) VALUES %L';
         const columnTemplate = '${column_1}, ${column_2}';
         const maliciousValue = [ { column_1: 'Watch this', column_2: `'End'); DROP TABLE Users`}];
@@ -200,6 +215,7 @@ describe.only('*** UNIT TEST BULK ROW INSERTION ***', () => {
         expect(queryStub).to.have.been.calledWithExactly('COMMIT');
         expect(releaseStub).to.have.been.calledOnce;
     });
+
 });
 
 describe('*** UNIT TEST BASIC POOL MGMT ***', () => {

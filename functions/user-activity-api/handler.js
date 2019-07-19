@@ -219,16 +219,17 @@ module.exports.balance = async (event, context) => {
 };
 
 // this is a convenience method exposed to allow for simple JWT based get balance based on defaults
-module.exports.balanceWrapper = async (event, context) => {
+module.exports.balanceWrapper = async (event) => {
   try {
     logger('Balance wrapper received event: ', event);
-    logger('Here is the context: ', context);
+    // logger('Here is the context: ', context);
 
-    if (!context || !context.systemWideUserId) {
+    const authParams = event.requestContext.authorizer;
+    if (!authParams || !authParams.systemWideUserId) {
       return { statusCode: '400', message: 'User ID not found in context' };
     }
 
-    const systemWideUserId = context.systemWideUserId;
+    const systemWideUserId = authParams.systemWideUserId;
     const accountId = await fetchUserDefaultAccount(systemWideUserId);
     const floatAndClient = await persistence.findClientAndFloatForAccount(accountId);
     logger('Received float and client: ', floatAndClient);
