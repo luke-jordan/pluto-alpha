@@ -6,7 +6,7 @@
   "scripts": {
     "test": "DEBUG=jupiter:dynamo:* nyc mocha",
     "lint": "eslint .",
-    "generate-coverage": "nyc report"
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov"
   },
   "author": "Luke Jordan",
   "license": "ISC",

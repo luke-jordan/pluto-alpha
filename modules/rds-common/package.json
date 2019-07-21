@@ -6,7 +6,7 @@
   "scripts": {
     "test": "DEBUG=jupiter:rds-common:* nyc mocha './test/unit.test.js'",
     "test-all": "DEBUG=jupiter:rds-common:* nyc mocha --exit",
-    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov && codecov",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
   "author": "Luke Jordan",

@@ -6,7 +6,7 @@
   "scripts": {
     "test": "DEBUG=pluto:float:* nyc mocha './test/*.unit.test.js'",
     "test-all": "DEBUG=pluto:float:* nyc mocha",
-    "generate-coverage": "nyc report",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
   "author": "Luke Jordan",
