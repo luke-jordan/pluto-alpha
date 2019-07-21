@@ -112,7 +112,7 @@ jobs:
           command: |
             echo "Linting modules"
             cd $HOME/app/modules/dynamo-common && npm run-script lint
-            # cd ../dynamo-common && npm run-script lint
+            cd ../rds-common && npm run-script lint
 
             echo "Linting functions"
             cd $HOME/app/functions/user-activity-api && npm run-script lint
@@ -147,6 +147,7 @@ jobs:
             
             echo "Runing module tests and outputting coverage reports"
             cd $HOME/app/modules/dynamo-common; npm test; npm run-script generate-coverage
+            cd ../rds-common; npm test; npm run-script generate-coverage
 
             echo "Uploading coverage reports"
             cd $HOME/app
