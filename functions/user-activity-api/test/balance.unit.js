@@ -193,11 +193,10 @@ describe('Fetches user balance and makes projections', () => {
         expect(strippedReturned).to.deep.equal(expectedBody);
     });
 
-    it.only('Wrapper returns appropriate error if no authorizer', async () => {
+    it('Wrapper returns appropriate error if no authorizer', async () => {
         const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' } });
         expect(balanceError1).to.exist;
-        
-        const balanceError2 = await handler.balanceWrapper(); 
+        // const balanceError2 = await handler.balanceWrapper(); 
     });
 
     // it('Wrapper swallows error & logs it correctly', async () => {
