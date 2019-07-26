@@ -10,35 +10,17 @@ jobs:
         environment:
 
       # Postgres image for testing
-      - image: circleci/postgres:9.6.5-alpine-ram
-        environment:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: postgres
-          POSTGRES_PASSWORD: postgres
+      # - image: circleci/postgres:9.6.5-alpine-ram
+      #   environment:
+      #     POSTGRES_USER: postgres
+      #     POSTGRES_DB: postgres
+      #     POSTGRES_PASSWORD: postgres
 
     working_directory: ~/app
 
     steps:
       - checkout
 
-      - restore_cache:
-          keys:
-          - db-migration_dependencies-{{ checksum "./functions/db-migration/package.json" }}
-      - restore_cache:
-          keys:
-          - float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
-      - restore_cache:
-          keys:
-          - user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
-      - restore_cache:
-          keys:
-          - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
-      - restore_cache:
-          keys:
-          - modules-dynamo-common-{{ checksum "./modules/dynamo-common/package.json" }}
-      - restore_cache:
-          keys:
-          - modules-rds-common-{{ checksum "./modules/rds-common/package.json" }}
       - restore_cache:
           keys:
           - terraform_bin-{{ checksum "./terraform/terraform_version" }}
@@ -76,36 +58,6 @@ jobs:
           key: aws_zip
           paths:
             - awscli-bundle.zip
-
-      - save_cache:
-          key: db-migration_dependencies-{{ checksum "./functions/db-migration/package.json" }}
-          paths:
-            - ./functions/db-migration/node_modules
-
-      - save_cache:
-          key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
-          paths:
-            - ./functions/float-api/node_modules
-
-      - save_cache:
-          key: user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
-          paths:
-            - ./functions/user-activity-api/node_modules
-
-      - save_cache:
-          key: user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
-          paths:
-            - ./functions/user-existence-api/node_modules
-
-      - save_cache:
-          key: modules-dynamo-common-{{ checksum "./modules/dynamo-common/package.json" }}
-          paths:
-            - ./modules/dynamo-common/node_modules
-
-      - save_cache:
-          key: modules-rds-common-{{ checksum "./modules/rds-common/package.json" }}
-          paths:
-            - ./modules/rds-common/node_modules
 
       - run:
           name: run linter
