@@ -150,8 +150,9 @@ class RdsConnection {
      * @param {array} insertDefinitions 
      */
     async largeMultiTableInsert (inserts = [{ query: 'INSERT QUERIES', columnTemplate: '', rows: [{ }] }]) {
-
         let results = null;
+
+        inserts.forEach((insert) => RdsConnection._validateInsertParams(insert.query, insert.columnTemplate, insert.rows));
 
         // we will almost certainly want to upgrade this to do batches of 10k pretty soon
         const client = await this._pool.connect();

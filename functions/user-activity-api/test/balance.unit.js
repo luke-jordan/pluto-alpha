@@ -191,9 +191,17 @@ describe('Fetches user balance and makes projections', () => {
         // becomes necessary to get around matching equality
         const strippedReturned = stripCurrBalanceDateTime(bodyReturned);
         expect(strippedReturned).to.deep.equal(expectedBody);
-    
     });
 
+    it('Wrapper returns appropriate error if no authorizer', async () => {
+        const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' } });
+        expect(balanceError1).to.exist;
+        // const balanceError2 = await handler.balanceWrapper(); 
+    });
+
+    // it('Wrapper swallows error & logs it correctly', async () => {
+
+    // });
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
         const balanceAndProjections = await handler.balance({ 
@@ -283,7 +291,6 @@ describe('Fetches user balance and makes projections', () => {
             atEpochMillis: testTimeNow.valueOf()
         });
         checkErrorResultForMsg(errorResult2, expectedErrorMsgZone);
-
     });
 
 });

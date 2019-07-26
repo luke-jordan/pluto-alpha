@@ -1,7 +1,7 @@
 {
   "name": "db-migration",
   "version": "0.0.1",
-  "description": "Lambda to execute a changescript on DB",
+  "description": "Lambda to execute a changescript on DB within auth",
   "main": "handler.js",
   "scripts": {
     "test": "DEBUG=jupiter:* mocha",
@@ -20,7 +20,7 @@
   "devDependencies": {
     "chai": "^4.2.0",
     "chai-uuid": "^1.0.6",
-    "eslint": "^6.0.1",
+    "eslint": "^6.1.0",
     "eslint-plugin-chai-friendly": "^0.4.1",
     "mocha": "^6.1.4",
     "nyc": "^14.1.1",
