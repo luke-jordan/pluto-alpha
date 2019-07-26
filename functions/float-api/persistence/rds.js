@@ -3,7 +3,7 @@
 const config = require('config');
 
 const constants = require('../constants');
-const logger = require('debug')('pluto:float:rds');
+const logger = require('debug')('jupiter:float:rds');
 const uuid = require('uuid/v4');
 
 const RdsConnection = require('rds-common');
@@ -222,7 +222,7 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     // if unit results is empty, then just return an empty object
     if (!unitResults || unitResults.length === 0) {
         logger('No accounts found for float, should probably put something in DLQ');
-        return { }; 
+        return new Map(); 
     }
 
     const usedUnits = unitResults.map((row) => row.unit);

@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:float:handler');
+const logger = require('debug')('jupiter:float:handler');
 
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
@@ -98,7 +98,7 @@ module.exports.accrue = async (event) => {
     logger('FATAL_ERROR: ', e);
     return {
       statusCode: 500,
-      body: ''
+      body: JSON.stringify(e.message)
     };
   }
 };

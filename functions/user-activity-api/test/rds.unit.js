@@ -233,6 +233,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectNoCalls([insertStub]);
     });
 
+    // todo: restore
     // it('Throw an error if state is SETTLED but no float id', () => { });
 
     // it('Insert a pending state save, if no float id', () => { });

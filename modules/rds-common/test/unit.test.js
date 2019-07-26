@@ -2,7 +2,7 @@
 
 const { QueryError, CommitError, NoValuesError } = require('../errors');
 
-const logger = require('debug')('pluto:rds-common:unit-test');
+const logger = require('debug')('jupiter:rds-common:unit-test');
 const config = require('config');
 
 const chai = require('chai');
@@ -121,7 +121,7 @@ describe('Basic query pass through', () => {
     it('Runs an update query properly', async () => {
         const updateQuery = 'UPDATE table SET column_1 = $1 WHERE id = $2';
         const updateValues = [1500, 1];
-        const result = { command: 'UPDATE' }; // todo : return successful
+        const result = { command: 'UPDATE' };
         queryStub.withArgs(updateQuery, updateValues).resolves(result);
 
         const updateResult = await rdsClient.updateRecord(updateQuery, updateValues);
@@ -161,17 +161,19 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
     });
 
     it('Assembles row insertion properly', async () => {
-        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES %L';
+        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES %L returning insertion_id';
         const columnTemplate = '${column1}, ${column2}';
         const queryValues = [{ column1: 'Hello', column2: 'World' }, { column1: 'Something', column2: 'Else' }];
 
         const expectedValue = '(\'Hello\', \'World\'), (\'Something\', \'Else\')';
-        const expectedQuery = `INSERT INTO some_schema.some_table (column_1, column_2) VALUES ${expectedValue}`;
+        const expectedQuery = `INSERT INTO some_schema.some_table (column_1, column_2) VALUES ${expectedValue} returning insertion_id`;
 
-        queryStub.withArgs(expectedQuery).returns('Hallelujah');
+        const expectedResult = { rows: [{'insertion_id': 1 }, { 'insertion_id': 2 }]};
+        queryStub.withArgs(expectedQuery).returns(expectedResult);
 
         const insertResult = await rdsClient.insertRecords(queryTemplate, columnTemplate, queryValues);
-        expect(insertResult).to.exist; // todo : also check for the return of indices
+        expect(insertResult).to.exist;
+        expect(insertResult).to.deep.equal(expectedResult);
         
         standardExpectations(expectedQuery, null, false, false, 'COMMIT');
     });
@@ -275,7 +277,7 @@ describe('Error handling, including connection release, non-parameterized querie
 
     it('Connection release is called if selection query fails', async () => {
         const badSelectionQuery = 'SELECT bad syntax who knows what this person is doing';
-        queryStub.withArgs(badSelectionQuery, []).throws('Bad query'); // todo : adjust to actual
+        queryStub.withArgs(badSelectionQuery, []).throws('Commit error');
         
         // note: deeper checks on error class etc., are failing on JS equality badness, so doing this as equivalent
         const expectedMsg = `Query with template ${badSelectionQuery} and values ${JSON.stringify([])} caused an error.`;
@@ -318,6 +320,59 @@ describe('Error handling, including connection release, non-parameterized querie
         standardExpectations(formattedQuery, null, false, false, 'ROLLBACK');
     });
 
+    it('Multitable insert calls rollback and release if commit fails on any', async () => {
+        const queryTemplate1 = 'INSERT INTO schema1.table1 (column_1, column_2) VALUES %L RETURNING insertion_id';
+        const queryColumns1 = '${column1}, ${column2}';
+        const queryValues1 = [{ column1: 'Hello', column2: 'X' }, { column1: 'What', column2: 'Y' }];
+        const goodInsert = { query: queryTemplate1, columnTemplate: queryColumns1, rows: queryValues1 };
+        const expectedQuery1 = `INSERT INTO schema1.table1 (column_1, column_2) VALUES ('Hello', 'X'), ('What', 'Y') RETURNING insertion_id`;
+        
+        const badInsert = {
+            query: 'INSERT STUFF BADLY IN FALSE WAYS %L',
+            columnTemplate: '${column1}',
+            rows: [{ column1: 123 }]
+        };
+        const formattedQueryBad = `INSERT STUFF BADLY IN FALSE WAYS ('123')`;
+
+        queryStub.withArgs(expectedQuery1).resolves({ rows: [{ 'insertion_id': 1 }, { 'insertion_id': 2 }]});
+        queryStub.withArgs(formattedQueryBad).rejects('PSQL ERROR! Bad insertion');
+
+        await expect(rdsClient.largeMultiTableInsert([goodInsert, badInsert])).to.be.rejected.
+            and.to.eventually.be.a('CommitError');
+
+        // note: can't use standard expectations because we need two calls to query, one for each insert
+        expect(connectStub).to.have.been.calledOnce;
+        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
+        // logger('Query calls: ', queryStub.getCalls().map((call, index) => `${index}: ${JSON.stringify(call.args[0])}`));
+        expect(queryStub).to.have.been.calledWithExactly(expectedQuery1);
+        expect(queryStub).to.have.been.calledWithExactly(formattedQueryBad);
+        expectTxWrapping('ROLLBACK');
+        expect(queryStub).to.have.been.callCount(5);
+        expect(releaseStub).to.have.been.calledOnce; 
+    });
+
+    it('Delete calls rollback and release if commit fails', async () => {
+        const badDeleteQuery = 'DELETE FROM BADTABLE WHERE (column_1 = $1)';
+
+        queryStub.withArgs(badDeleteQuery, ['causeFKviolation']).throws('Delete error');
+        
+        await expect(rdsClient.deleteRow('BADTABLE', ['column_1'], ['causeFKviolation'])).to.be.rejected.
+            and.to.eventually.be.a('CommitError');
+
+        standardExpectations(badDeleteQuery, ['causeFKviolation'], false, false, 'ROLLBACK');
+    });
+
+    it('Delete fails and calls rowback if attempts multiple at once', async () => {
+        const badDeleteQuery = 'DELETE FROM BADTABLE WHERE (general_column = $1)';
+
+        queryStub.withArgs(badDeleteQuery, ['trueForMany']).resolves({ command: 'DELETE', rowCount: 100 });
+
+        await expect(rdsClient.deleteRow('BADTABLE', ['general_column'], ['trueForMany'])).to.be.rejected.
+            and.to.eventually.be.a('CommitError');
+
+        standardExpectations(badDeleteQuery, ['trueForMany'], false, false, 'ROLLBACK');
+    });
+
     it('Failure to provide parameters on any method throws an error', async () => {
         await expect(rdsClient.selectQuery('SELECT 1')).to.be.rejected.and.to.eventually.be.a('NoValuesError');
         await expect(rdsClient.updateRecord('UPDATE SOMETHING')).to.be.rejected.and.to.eventually.be.a('NoValuesError');
@@ -325,8 +380,17 @@ describe('Error handling, including connection release, non-parameterized querie
         await expect(rdsClient.insertRecords('INSERT SOMETHING')).to.be.rejected.and.to.eventually.be.a('NoValuesError');
         await expect(rdsClient.insertRecords('INSERT SOMETHING', [])).to.be.rejected.and.to.eventually.be.a('NoValuesError');
 
+        await expect(rdsClient.largeMultiTableInsert([{ query: 'INSERT SOMETHING WITHOUT VALUES' }])).to.be.rejected.and.to.eventually.be.a('NoValuesError');
+        
+        const withBadSecondArg = [{ query: 'INSERT THIS IS FINE %L', columnTemplate: '${column1}', rows: [{ column1: 'somevalue'}]}, 
+            { query: 'INSERT THIS ONE NOT SO MUCH %L', columnTemplate: '${columnX}' }];
+        const badQueryVariant = JSON.parse(JSON.stringify(withBadSecondArg));
+        badQueryVariant[1].query = 'INSERT SOMETHING NO VALUE PLACEHOLDER';
+        badQueryVariant[1].rows = [{ columnX: 'somethingorother' }];
+        await expect(rdsClient.largeMultiTableInsert(withBadSecondArg)).to.be.rejected.and.to.eventually.be.a('NoValuesError');
+        await expect(rdsClient.largeMultiTableInsert(badQueryVariant)).to.be.rejected.and.to.eventually.be.a('QueryError'); // because it has no %L
+
         expect(connectStub).to.not.have.been.called; // should not get there, in other words, in any of them
-        // todo : also write for multi table
     });
 
 });
