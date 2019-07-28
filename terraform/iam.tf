@@ -52,6 +52,7 @@ resource "aws_iam_policy" "lambda_invoke_warmup_access" {
             "Sid": "WarmupLambdaInvokeAccess",
             "Effect": "Allow",
             "Action": [
+                "lambda:InvokeFunction",
                 "lambda:InvokeAsync"
             ],
             "Resource": [

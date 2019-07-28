@@ -4,7 +4,7 @@ const logger = require('debug')('jupiter:lambda:warmup');
 const config = require('config');
 
 const AWS = require('aws-sdk');
-const endpoint = config.has('aws.endpoints.lambda') ? config.get('aws.endpoints.lamdba') : null;
+const endpoint = config.has('aws.endpoints.lambda') ? config.get('aws.endpoints.lambda') : null;
 const lambda = new AWS.Lambda({ region: config.get('aws.region'), endpoint });
 
 const invokeFunctionPromise = (functionName) => lambda.invoke({
