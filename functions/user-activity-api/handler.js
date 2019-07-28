@@ -14,6 +14,11 @@ const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: mes
 
 module.exports.save = async (event) => {
   try {
+    if (!event) {
+      logger('No event! Must be warmup lambda');
+      return { statusCode: 400, body: 'Empty invocation' };
+    }
+    
     const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
     logger('Have a saving request inbound: ', settlementInformation);
 
@@ -156,6 +161,11 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
 
 module.exports.balance = async (event) => {
   try {
+    if (!event) {
+      logger('No event! Must be warmup lambda');
+      return { statusCode: 400, body: 'Empty invocation' };
+    }
+
     // todo : look up property
     const params = event.queryParams || event;
 
@@ -227,8 +237,10 @@ module.exports.balance = async (event) => {
 // this is a convenience method exposed to allow for simple JWT based get balance based on defaults
 module.exports.balanceWrapper = async (event) => {
   try {
-    // logger('Balance wrapper received event: ', event);
-    // logger('Here is the context: ', context);
+    if (!event) {
+      logger('No event! Must be warmup lambda');
+      return { statusCode: 400, body: 'Empty invocation' };
+    }
 
     const authParams = event.requestContext.authorizer;
     if (!authParams || !authParams.systemWideUserId) {
