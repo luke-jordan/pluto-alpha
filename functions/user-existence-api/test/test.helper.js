@@ -6,7 +6,7 @@ const moment = require('moment');
 
 const expect = chai.expect;
 
-const logger = require('debug')('pluto:account:test');
+const logger = require('debug')('jupiter:existence:test');
 
 module.exports.momentMatcher = (testMoment) => sinon.match((value) => moment.isMoment(value) && testMoment.isSame(value));
 
@@ -26,4 +26,26 @@ module.exports.checkErrorResultForMsg = (errorResult, expectedErrorMsg) => {
     expect(errorResult).to.exist;
     expect(errorResult).to.have.property('statusCode', 400);
     expect(errorResult.body).to.equal(expectedErrorMsg);
+};
+
+module.exports.resetStubs = (stubs) => {
+    stubs.forEach((stub) => stub.reset());
+};
+
+module.exports.expectNoCalls = (...stubs) => {
+    stubs.forEach((stub) => expect(stub).to.not.have.been.called);
+};
+
+module.exports.standardOkayChecks = (result) => {
+    expect(result).to.exist;
+    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('body');
+    return JSON.parse(result.body);
+};
+
+module.exports.expectedErrorChecks = (result, expectedStatusCode) => {
+    expect(result).to.exist;
+    expect(result).to.have.property('statusCode', expectedStatusCode);
+    expect(result).to.have.property('body');
+    return JSON.parse(result.body);
 };

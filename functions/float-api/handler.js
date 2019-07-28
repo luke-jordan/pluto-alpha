@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:float:handler');
+const logger = require('debug')('jupiter:float:handler');
 
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
@@ -98,7 +98,7 @@ module.exports.accrue = async (event) => {
     logger('FATAL_ERROR: ', e);
     return {
       statusCode: 500,
-      body: ''
+      body: JSON.stringify(e.message)
     };
   }
 };
@@ -127,7 +127,7 @@ module.exports.allocate = async (event) => {
   const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
 
   const shareMap = await exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
-  logger('Allocated shares, map = ', shareMap);
+  // logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult = { };
   if (shareMap.has(constants.EXCESSS_KEY)) {
@@ -156,7 +156,7 @@ module.exports.allocate = async (event) => {
   }
 
   const resultOfAllocations = await rds.allocateToUsers(params.clientId, params.floatId, allocRequests);
-  logger('Result of allocations: ', resultOfAllocations);
+  // logger('Result of allocations: ', resultOfAllocations);
   
   return {
     statusCode: 200,

@@ -2,7 +2,7 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:float:test');
+const logger = require('debug')('jupiter:float:test');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -428,6 +428,15 @@ describe('Test account summation and float balances', () => {
         expect(insertStub).to.not.have.been.called;
         expect(multiTableStub).to.not.have.been.called;
     }).timeout('3000');
+
+    it('Should handle case where no accounts found for float', async () => {
+        const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
+        queryStub.withArgs(unitQuery, ['bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT]).returns([]);
+        const queryResult = await rds.obtainAllAccountsWithPriorAllocations('bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT);
+        logger('Result: ', queryResult);
+        expect(queryResult).to.exist;
+        expect(queryResult).to.deep.equal(new Map());
+    });
 
     it('Should accurately retrieve current float balances', async () => {
         // const numberOfAccounts = 1;

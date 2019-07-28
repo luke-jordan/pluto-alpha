@@ -2,7 +2,7 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:float:test');
+const logger = require('debug')('jupiter:float:test');
 
 const _ = require('lodash');
 const uuid = require('uuid/v4');
@@ -130,9 +130,10 @@ describe('Multiple apportionment operations', () => {
         }
     }).timeout('4000'); // so we don't get spurious fails if the sample is taking a little time
 
-    it('Check that error is thrown if passed non-integer account balances', () => {
+    it('Check that error is thrown if passed non-integer account balances', async () => {
         const amountToAportion = Math.floor(Math.random() * 1e6);
-        const accountDict = { 'test-account-1': 234.5 };
+        const accountDict = new Map();
+        accountDict.set('test-account-1', 234.5);
 
         expect(handler.apportion.bind(handler, amountToAportion, accountDict)).to.throw(TypeError);
     });
@@ -175,6 +176,20 @@ describe('Primary allocation of inbound accrual lambda', () => {
         adjustFloatBalanceStub.reset();
         allocateFloatBalanceStub.reset();
         allocationStub.restore();
+    });
+
+    beforeEach(() => {
+        fetchFloatConfigVarsStub.resetHistory();
+        adjustFloatBalanceStub.resetHistory();
+        allocateFloatBalanceStub.resetHistory();
+        allocationStub.resetHistory();
+    });
+
+    it('Handles errors correctly (ie still exits)', async () => {
+        fetchFloatConfigVarsStub.withArgs('some_client', 'some_float').throws(new Error('That went wrong!'));
+        const expectedErrorReturn = await handler.accrue({ clientId: 'some_client', floatId: 'some_float'});
+        expect(expectedErrorReturn).to.exist;
+        expect(expectedErrorReturn).to.have.property('statusCode', 500);
     });
 
     it('Check initial accrual', async () => {

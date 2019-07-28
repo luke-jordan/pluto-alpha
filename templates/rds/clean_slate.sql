@@ -9,3 +9,5 @@ drop role if exists account_api_worker;
 drop role if exists save_tx_api_worker;
 drop role if exists float_api_worker;
 drop role if exists auth_api_worker;
+
+drop type base_unit;

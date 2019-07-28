@@ -163,7 +163,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         const expectedFloatAdditionRow = JSON.parse(JSON.stringify(expectedRowItem));
         expectedFloatAdditionRow.accountTransactionId = testAcTxId;
         expectedFloatAdditionRow.floatTransactionId = testFlTxAddId;
-        expectedFloatAdditionRow.transactionType = 'SAVING';
+        expectedFloatAdditionRow.transactionType = 'USER_SAVING_EVENT';
         expectedFloatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
         expectedFloatAdditionRow.allocatedToId = testFloatId;
 
@@ -182,10 +182,10 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         };
         
         const expectedArgs = sinon.match([expectedAccountQueryDef, expectedFloatQueryDef]);
-        const txDetailsFromRds = [
-            { rows: [{ 'transaction_id': uuid(), 'creation_time': moment().format() }] },
-            { rows: [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }]}
-        ];
+        const txDetailsFromRds = [[ 
+            { 'transaction_id': uuid(), 'creation_time': moment().format() }],
+            [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }
+        ]];
         const expectedTxDetails = [{ 
             'accountTransactionId': testAcTxId,
             'creationTimeEpochMillis': sinon.match.number
@@ -233,6 +233,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectNoCalls([insertStub]);
     });
 
+    // todo: restore
     // it('Throw an error if state is SETTLED but no float id', () => { });
 
     // it('Insert a pending state save, if no float id', () => { });

@@ -2,9 +2,10 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:balance:test');
+const logger = require('debug')('jupiter:balance:test');
 const BigNumber = require('bignumber.js');
 const moment = require('moment-timezone');
+const fs = require('fs');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -16,8 +17,10 @@ chai.use(require('sinon-chai'));
 const uuid = require('uuid/v4');
 chai.use(require('chai-uuid'));
 
+const testHelper = require('./test.helper');
+
 const testAccountId = uuid();
-const testUserId = uuid();
+const testUserId = '27b00e1c-4f32-4631-a67b-88aaf5a01d0c';
 
 // note : in future at some time will need to handle user in different time zone to float
 const testTimeZone = 'America/New_York';
@@ -100,6 +103,7 @@ const resetStubs = (historyOnly = true) => {
 describe('Fetches user balance and makes projections', () => {
     
     const wellFormedResultBody = {
+        accountId: [testAccountId],
         currentBalance: {
             'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
             'unit': 'HUNDREDTH_CENT',
@@ -119,18 +123,26 @@ describe('Fetches user balance and makes projections', () => {
         balanceSubsequentDays: expectedBalanceSubsequentDays
     };
 
-    const checkResultIsWellFormed = (balanceAndProjections) => {
+    const checkResultIsWellFormed = (balanceAndProjections, expectedBody = wellFormedResultBody) => {
         expect(balanceAndProjections).to.exist;
         expect(balanceAndProjections.statusCode).to.equal(200);
         expect(balanceAndProjections).to.have.property('body');
         const resultBody = JSON.parse(balanceAndProjections.body);
-        expect(resultBody).to.deep.equal(wellFormedResultBody);
+        expect(resultBody).to.deep.equal(expectedBody);
     };
 
     const checkErrorResultForMsg = (errorResult, expectedErrorMsg) => {
         expect(errorResult).to.exist;
         expect(errorResult.statusCode).to.equal(400);
         expect(errorResult.body).to.equal(expectedErrorMsg);
+    };
+
+    const stripCurrBalanceDateTime = (expectedBody) => {
+        const strippedBalance = expectedBody.currentBalance;
+        Reflect.deleteProperty(strippedBalance, 'datetime');
+        Reflect.deleteProperty(strippedBalance, 'epochMilli');
+        expectedBody.currentBalance = strippedBalance;
+        return expectedBody;
     };
 
     before(() => {
@@ -140,7 +152,7 @@ describe('Fetches user balance and makes projections', () => {
         // logger('Balances subsequent days, first: ', expectedBalanceSubsequentDays[0]);
         // resetStubs(false);
         
-        accountBalanceQueryStub.withArgs(testAccountId, 'USD', sinon.match(testTimeNow)).resolves({ 
+        accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment).resolves({ 
             amount: testAccumulatedBalance.decimalPlaces(0).toNumber(), 
             unit: 'HUNDREDTH_CENT'
         });
@@ -151,13 +163,45 @@ describe('Fetches user balance and makes projections', () => {
             accrualRateAnnualBps: testAccrualRateBps, 
             bonusPoolShareOfAccrual: testBonusPoolShare, 
             clientShareOfAccrual: testClientCoShare,
-            prudentialFactor: testPrudentialDiscountFactor
+            prudentialFactor: testPrudentialDiscountFactor,
+            defaultTimezone: 'America/New_York',
+            currency: 'USD'
         });
     });
 
     beforeEach(() => resetStubs(true));
 
     after(() => resetStubs(false));
+
+    it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
+        const authEvent = JSON.parse(fs.readFileSync('./test/auth-event-balance.json'));
+        // accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment);
+        const balanceAndProjections = await handler.balanceWrapper(authEvent);
+        
+        // logger('Received: ', balanceAndProjections);
+        const expectedBody = stripCurrBalanceDateTime(JSON.parse(JSON.stringify(wellFormedResultBody)));
+        
+        // usual sinon annoying stubornness on matching means passing to helper isn't working, so unspooling
+        expect(balanceAndProjections).to.exist.and.have.property('statusCode', 200);
+        const bodyReturned = JSON.parse(balanceAndProjections.body);
+        expect(bodyReturned).to.exist;
+        expect(bodyReturned.currentBalance.datetime).to.be.a.string;
+        expect(bodyReturned.currentBalance.epochMilli).to.be.a('number');
+        // and this is the point at which I truly loathe Sinon and matchers, which can be utterly stupid; what follows 
+        // becomes necessary to get around matching equality
+        const strippedReturned = stripCurrBalanceDateTime(bodyReturned);
+        expect(strippedReturned).to.deep.equal(expectedBody);
+    });
+
+    it('Wrapper returns appropriate error if no authorizer', async () => {
+        const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' } });
+        expect(balanceError1).to.exist;
+        // const balanceError2 = await handler.balanceWrapper(); 
+    });
+
+    // it('Wrapper swallows error & logs it correctly', async () => {
+
+    // });
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
         const balanceAndProjections = await handler.balance({ 
@@ -168,7 +212,7 @@ describe('Fetches user balance and makes projections', () => {
             atEpochMillis: testTimeNow.valueOf(),
             timezone: testTimeZone
         });
-
+        logger('Result: ', balanceAndProjections);
         checkResultIsWellFormed(balanceAndProjections);
     });
 
@@ -204,6 +248,22 @@ describe('Fetches user balance and makes projections', () => {
         checkResultIsWellFormed(balanceAndProjectionsUserId);
     });
 
+    it('Obtains balance but leaves out future projections if days to project is is 0', async () => {
+        const zeroDaysParams = {
+            userId: testUserId,
+            currency: 'USD',
+            atEpochMillis: testTimeNow.valueOf(),
+            timezone: testTimeZone,
+            daysToProject: 0
+        };
+
+        const resultWithoutDays = JSON.parse(JSON.stringify(wellFormedResultBody));
+        Reflect.deleteProperty(resultWithoutDays, 'balanceSubsequentDays');
+        const balanceWithoutProjections = await handler.balance(zeroDaysParams);
+        logger('Result: ', balanceWithoutProjections);
+        checkResultIsWellFormed(balanceWithoutProjections, resultWithoutDays);
+    });
+
     it('Returns an error code when neither account ID or user ID is provided, or no currency', async () => {
         const expectedErrorMsg = 'No account or user ID provided';
         const errorResult = await handler.balance({ currency: 'USD', atEpochMillis: testTimeNow.valueOf() });
@@ -231,7 +291,6 @@ describe('Fetches user balance and makes projections', () => {
             atEpochMillis: testTimeNow.valueOf()
         });
         checkErrorResultForMsg(errorResult2, expectedErrorMsgZone);
-
     });
 
 });

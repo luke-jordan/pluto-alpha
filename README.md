@@ -42,7 +42,7 @@ do not have Python yet, install it as below. It is also suggested that you insta
 
 `sudo npm install -g serverless`
 
-### Python (optional at present)
+### Python (for integration testing notebooks etc)
 
 1.  Downloand and install Anaconda
 2.  Create a new virtual env, using Python 3.6:
@@ -55,6 +55,9 @@ do not have Python yet, install it as below. It is also suggested that you insta
 
 Note: prior to the above you may need to install libpq-dev locally
 Note: make sure to install ipython in your virtual env or you will get module import errors all the time
+
+**NOTE**: If you are running the integration testing notebooks, make sure to add in a pre-commit filter that strips them
+of output. See here: https://github.com/toobaz/ipynb_output_filter
 
 ## STEP 3: Install testing frameworks and dependencies
 

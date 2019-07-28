@@ -6,10 +6,10 @@ create table if not exists transaction_data.core_transaction_ledger (
     transaction_id uuid not null primary key,
     account_id uuid not null references account_data.core_account_ledger (account_id),
     creation_time timestamp with time zone not null default current_timestamp,
-    currency varchar(10),
-    unit varchar(20),
-    amount integer not null,
-    transaction_type varchar(50) not null,
+    currency varchar(10) not null,
+    unit base_unit not null,
+    amount integer not null check (amount >= 0),
+    transaction_type varchar(50) not null check (transaction_type in ('ACCRUAL', 'ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION')),
     initiation_time timestamp with time zone,
     settlement_status varchar(50) not null,
     settlement_time timestamp with time zone,
@@ -19,8 +19,7 @@ create table if not exists transaction_data.core_transaction_ledger (
     float_alloc_tx_id varchar(50),
     payment_reference varchar(255),
     tags text[] default '{}',
-    flags text[] default '{}',
-    check (amount >= 0)
+    flags text[] default '{}'
 );
 
 -- todo : indices

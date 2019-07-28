@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:rds-common:int-test');
+const logger = require('debug')('jupiter:rds-common:int-test');
 const config = require('config');
 
 const chai = require('chai');
@@ -26,7 +26,7 @@ const createFreshDb = async (done) => {
     await client.query('DROP SCHEMA public CASCADE');
     await client.query('CREATE SCHEMA public');
     await client.query('GRANT ALL ON SCHEMA public TO postgres');
-    client.query('GRANT ALL ON SCHEMA public TO public', (err, res) => {
+    client.query('GRANT ALL ON SCHEMA public TO public', (err) => {
         if (err) {
             logger('Error creating clean copy of DB!');
         } else {
@@ -34,15 +34,18 @@ const createFreshDb = async (done) => {
             done();
         }
     });
-}
+};
 
 const createLedgerTable = async (ledgerName, client) => {
-    if (!client) {
-        client = await pool.connect();
+    let connToUse = { };
+    if (client) {
+        connToUse = client;
+    } else {
+        connToUse = await pool.connect();
     }
     // todo maybe have an option to drop and recreate if exists
-    await client.query(`create table if not exists ${ledgerName} (id serial not null primary key, creation_time timestamp not null default current_timestamp, account_id integer references account(id), amount bigint)`); 
-}
+    await connToUse.query(`create table if not exists ${ledgerName} (id serial not null primary key, creation_time timestamp not null default current_timestamp, account_id integer references account(id), amount bigint)`); 
+};
 
 const setupTables = async (done) => {
     const client = await pool.connect();
@@ -56,7 +59,7 @@ const setupTables = async (done) => {
     // logger('Query result: ', singleAccount);
     await client.release();
     done();
-}
+};
 
 const endPools = (rdsClient, done) => {
     rdsClient.endPool().then(() => {
@@ -66,13 +69,13 @@ const endPools = (rdsClient, done) => {
             done();
         });
     });
-}
+};
 
-describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
+describe.only('*** INTEGRATION TEST HAPPY PATHS ***', () => {
 
     // this.timeout(5000);
 
-    var rdsClient;
+    let rdsClient = { };
 
     before((done) => {
         rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
@@ -92,31 +95,31 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
         if (numAccounts < 5) {
             logger('Value list: ', values);
         }
-        return await rdsClient.insertRecords(query, '${name}', values);
+        return rdsClient.insertRecords(query, '${name}', values);
     };
 
     const generateRecordsToInsert = async (numRecordsPerAccount, referenceAmount, accounts) => {
-        let accountIds;
-        if (!accounts) {
+        let accountIds = [];
+        if (Array.isArray(accounts) && accounts.length > 0) {
+            accountIds = accounts;
+        } else {
             const idQueryFetch = await rdsClient.selectQuery('SELECT id FROM account', []);
             accountIds = idQueryFetch.map((row) => row['id']);
-        } else  {
-            accountIds = accounts;
         }
         // logger('accounts: ', accountIds);
 
         const transValues = Array.from({ length: numRecordsPerAccount}, 
-            () => accountIds.map(id => ({ account_id: id, amount: Math.floor(Math.random() * referenceAmount)})));
+            () => accountIds.map((id) => ({ 'account_id': id, amount: Math.floor(Math.random() * referenceAmount)})));
         // logger('Trans values: ', transValues);
-        const flattened = [].concat.apply([], transValues);
-        // logger('Flattened: ', flattened);
+        const flattened = [].concat(...transValues);
+        logger('Flattened: ', flattened);
         return flattened;
     };
 
     const sumForAccount = (transactionBatches, accountId) => {
-        const extractedAccountAmounts = transactionBatches
-            .filter((trans) => trans['account_id'] === accountId).map((trans) => trans['amount']);
-        const sumOfAmounts = extractedAccountAmounts.reduce((a, b) => a + b, 0);
+        const extractedAccountAmounts = transactionBatches.
+            filter((trans) => trans['account_id'] === accountId).map((trans) => trans['amount']);
+        const sumOfAmounts = extractedAccountAmounts.reduce((cum, value) => cum + value, 0);
         return sumOfAmounts;
     };
 
@@ -204,7 +207,7 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
         expect(transIds).to.be.an('array');
         expect(transIds.length).to.equal(bigBatchTransactions.length);
 
-        const sumOfAmounts = bigBatchTransactions.map((trans) => trans['amount']).reduce((a, b) => a + b, 0);
+        const sumOfAmounts = bigBatchTransactions.map((trans) => trans['amount']).reduce((cum, value) => cum + value, 0);
         
         const sumResult = await rdsClient.selectQuery('select sum(amount), count(*) from ledger_3', []);
         expect(parseInt(sumResult[0]['sum'], 10)).to.equal(sumOfAmounts);
@@ -236,10 +239,11 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
             rows: bigBatchTransactions
         };
 
+        // todo: convert these to accountID
         const insertDefinition3 = {
             query: 'insert into multi_ledger_master (account_id, amount) values %L',
             columnTemplate: '${account_id}, ${amount}',
-            rows: [{account_id: 1, amount: 1}]
+            rows: [{'account_id': 1, 'amount': 1}]
         };
 
         const insertResult = await rdsClient.largeMultiTableInsert([insertDefinition1, insertDefinition2, insertDefinition3]);
@@ -257,7 +261,7 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
         
         expect(parseInt(countInsertions1[0]['count'], 10)).to.equal(numberTrans);
         expect(parseInt(countInsertions2[0]['count'], 10)).to.equal(numberTrans);
-        expect(countInsertions3).to.deep.equal([{ account_id: 1, amount: '1'}]);
+        expect(countInsertions3).to.deep.equal([{ 'account_id': 1, 'amount': '1'}]);
     });
 
     it('Run an update, single, and check results', async () => {
@@ -269,13 +273,24 @@ describe('*** INTEGRATION TEST HAPPY PATHS ***', function () {
             '${account_id}, ${amount}', [{ 'account_id': accountId, 'amount': 1432 }]);
         const transId = transIdResult.rows[0]['id'];
         
-        const updateLedgerResult = await rdsClient.updateRecord('update update_ledger set amount = $1 where id = $2', [ 2431, transId ]);
+        const updateLedgerResult = await rdsClient.updateRecord('update update_ledger set amount = $1 where id = $2', [2431, transId]);
         
         expect(updateLedgerResult).to.exist;
         
         const selectRow = await rdsClient.selectQuery('select amount from update_ledger where id = $1', [transId]);
         expect(selectRow).to.exist;
-        expect(parseInt(selectRow[0]['amount'])).to.equal(2431);
+        expect(parseInt(selectRow[0]['amount'], 10)).to.equal(2431);
+    });
+
+    it('Run a deletion, and check results', async () => {
+        const account = await createBunchOfAccounts(1);
+        const accountId = account.rows[0]['id'];
+
+        const deletionResult = await rdsClient.deleteRow('account', ['id'], [accountId]);
+        // logger('Deletion result: ', deletionResult);
+        expect(deletionResult).to.exist;
+        expect(deletionResult).to.have.property('command', 'DELETE');
+        expect(deletionResult).to.have.property('rowCount', 1);
     });
 
 });

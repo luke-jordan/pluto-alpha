@@ -93,9 +93,9 @@ resource "aws_iam_role_policy_attachment" "float_api_vpc_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "float_api_ClientFloatTable_access" {
+resource "aws_iam_role_policy_attachment" "float_api_client_float_table_access" {
   role = "${aws_iam_role.float_api_role.name}"
-  policy_arn = "${aws_iam_policy.dynamo_table_ClientFloatTable_access.arn}"
+  policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

@@ -31,22 +31,22 @@ provider:
     pluto.user.action.lambdas
 
 functions:
-  save:
-    handler: handler.save
-    name: activity-save
-    events:
-      - http:
-          path: save
-          method: post
-    environment:
-      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
-      DEBUG: pluto:*
+  # save:
+  #   handler: handler.save
+  #   name: activity-save
+  #   events:
+  #     - http:
+  #         path: save
+  #         method: post
+  #   environment:
+  #     NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+  #     DEBUG: jupiter:*
   balance:
     handler: handler.balance
-    name: activity-balance
+    name: balance_fetch
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
-      DEBUG: pluto:*
+      DEBUG: jupiter:*
 
 package:
   include:

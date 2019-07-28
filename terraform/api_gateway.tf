@@ -11,8 +11,9 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
   depends_on = [
   aws_api_gateway_integration.float_api,
-  aws_api_gateway_integration.user_activity_api,
-  aws_api_gateway_integration.user_existence_api
+  aws_api_gateway_integration.saving_record,
+  aws_api_gateway_integration.account_create,
+  aws_api_gateway_integration.balance_fetch_wrapper
   ]
 
   variables = {
@@ -22,6 +23,59 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   lifecycle {
     create_before_destroy = true
   }
+}
+
+/////////////////////// API GW AUTHORIZER ///////////////////////////////////////////////////////////////
+
+variable jwt_authorizer_arn {
+  default = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
+  type = "string"
+}
+
+resource "aws_api_gateway_authorizer" "jwt_authorizer" {
+  name = "api_gateway_jwt_authorizer_${terraform.workspace}"
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  type = "TOKEN"
+  authorizer_uri = "arn:aws:apigateway:${var.aws_default_region[terraform.workspace]}:lambda:path/2015-03-31/functions/${var.jwt_authorizer_arn}/invocations"
+}
+
+resource "aws_iam_role" "auth_invocation_role" {
+  name = "api_gateway_auth_invocation"
+  path = "/"
+
+  assume_role_policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "sts:AssumeRole",
+      "Principal": {
+        "Service": "apigateway.amazonaws.com"
+      },
+      "Effect": "Allow",
+      "Sid": ""
+    }
+  ]
+}
+EOF
+}
+
+resource "aws_iam_role_policy" "invocation_policy" {
+  name = "default"
+  role = "${aws_iam_role.auth_invocation_role.id}"
+
+  policy = <<EOF
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Action": "lambda:InvokeFunction",
+      "Effect": "Allow",
+      "Resource": "${var.jwt_authorizer_arn}"
+    }
+  ]
+}
+EOF
 }
 
 /////////////////////// API GW LOGGING ///////////////////////////////////////////////////////////////
@@ -151,66 +205,99 @@ resource "aws_api_gateway_integration" "float_api" {
   uri                     = "${aws_lambda_function.float_api.invoke_arn}"
 }
 
-/////////////// USER ACTIVITY API LAMBDA //////////////////////////////////////////////////////////////////////////
+/////////////// SAVE API LAMBDA //////////////////////////////////////////////////////////////////////////
 
-resource "aws_api_gateway_method" "user_activity_api" {
+resource "aws_api_gateway_method" "saving_record" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.user_activity_api.id}"
+  resource_id   = "${aws_api_gateway_resource.saving_record.id}"
   http_method   = "POST"
   authorization = "NONE"
 }
 
-resource "aws_api_gateway_resource" "user_activity_api" {
+resource "aws_api_gateway_resource" "saving_record" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "user-activity-api"
+  path_part   = "saving_record"
 }
 
-resource "aws_lambda_permission" "user_activity_api" {
+resource "aws_lambda_permission" "saving_record" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.user_activity_api.function_name}"
+  function_name = "${aws_lambda_function.saving_record.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
-resource "aws_api_gateway_integration" "user_activity_api" {
+resource "aws_api_gateway_integration" "saving_record" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id = "${aws_api_gateway_method.user_activity_api.resource_id}"
-  http_method = "${aws_api_gateway_method.user_activity_api.http_method}"
+  resource_id = "${aws_api_gateway_method.saving_record.resource_id}"
+  http_method = "${aws_api_gateway_method.saving_record.http_method}"
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.user_activity_api.invoke_arn}"
+  uri                     = "${aws_lambda_function.saving_record.invoke_arn}"
 }
 
-/////////////// USER EXISTENCE API LAMBDA //////////////////////////////////////////////////////////////////////////
+/////////////// ACCOUNT CREATE API LAMBDA //////////////////////////////////////////////////////////////////////////
 
-resource "aws_api_gateway_method" "user_existence_api" {
+resource "aws_api_gateway_method" "account_create" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.user_existence_api.id}"
+  resource_id   = "${aws_api_gateway_resource.account_create.id}"
   http_method   = "POST"
   authorization = "NONE"
 }
 
-resource "aws_api_gateway_resource" "user_existence_api" {
+resource "aws_api_gateway_resource" "account_create" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "user-existence-api"
+  path_part   = "account-create"
 }
 
-resource "aws_lambda_permission" "user_existence_api" {
+resource "aws_lambda_permission" "account_create" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.user_existence_api.function_name}"
+  function_name = "${aws_lambda_function.account_create.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
-resource "aws_api_gateway_integration" "user_existence_api" {
+resource "aws_api_gateway_integration" "account_create" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id = "${aws_api_gateway_method.user_existence_api.resource_id}"
-  http_method = "${aws_api_gateway_method.user_existence_api.http_method}"
+  resource_id = "${aws_api_gateway_method.account_create.resource_id}"
+  http_method = "${aws_api_gateway_method.account_create.http_method}"
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.user_existence_api.invoke_arn}"
+  uri                     = "${aws_lambda_function.account_create.invoke_arn}"
+}
+
+/////////////// ACCOUNT BALANCE LAMBDA (WRAPPER ONLY, SIMPLE GET) -- MAIN LAMBDA ONLY FOR INVOKE /////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "balance_fetch_wrapper" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.balance_fetch_wrapper.id}"
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_api_gateway_resource" "balance_fetch_wrapper" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "balance"
+}
+
+resource "aws_lambda_permission" "balance_fetch_wrapper" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.balance_fetch_wrapper.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "balance_fetch_wrapper" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.balance_fetch_wrapper.resource_id}"
+  http_method = "${aws_api_gateway_method.balance_fetch_wrapper.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.balance_fetch_wrapper.invoke_arn}"
 }

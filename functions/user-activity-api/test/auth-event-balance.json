@@ -1,0 +1,118 @@
+{
+  "resource": "/balance",
+  "path": "/balance",
+  "httpMethod": "GET",
+  "headers": {
+    "Accept": "*/*",
+    "Authorization": "Bearer eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJzeXN0ZW1XaWRlVXNlcklkIjoiMjdiMDBlMWMtNGYzMi00NjMxLWE2N2ItODhhYWY1YTAxZDBjIiwicm9sZSI6Ik9SRElOQVJZX1VTRVIiLCJwZXJtaXNzaW9ucyI6WyJFZGl0UHJvZmlsZSIsIkNyZWF0ZVdhbGxldCIsIkNoZWNrQmFsYW5jZSJdLCJpYXQiOjE1NjM0NzYzNzcsImV4cCI6MTU2NDA4MTE3NywiYXVkIjoiaHR0cHM6Ly9zdGFnaW5nLmp1cGl0ZXJhcHAubmV0IiwiaXNzIjoiSnVwaXRlciBTYXZpbmdzIiwic3ViIjoiSnVwaXRlciBVc2VyIn0.BdTZ3k22cct-qxVgd-2uZDSFt5EwSz3Zbw9-tSeAR-_PhSZMANHRAyM9PLsUuYONTHcfKlltf5BtbMcrLirWMp4SEzIvrl1d1pq0tHGy1jdTqgwGS1_sYcyBEpcCgeTg17HpKYxoVXjICekKIu9uygx8DMvlS2JhlyABkG4uBo5wymndyk_bKod87R--RomBdUNv9TL7yHYzCfht9Nh4QWxQEvQMcu43WImwkDkulfabV_zOiaa_mxnk4K_YzZMJnvnlZuXRmZ8V22u2z6wERENFNZAySr2yyflMrFBwSbPOuj-6OjNjGEnET7A1hcR--ftorMsRapqrxYwdGJipzKVbHNiF6TiW-N89SPSxSKY5KokCtVQc-J98VI0WKAqy8p_ivHe4ZI4R-9OfXkPqzPaDXlAs9U_-qc84byFoWnemVH45ZwgmwOk1laGx-KS9A8-5mbW9JRxtZp-0sYuDor_kICH2jKbZXPT7xxdAD5Wkq7u51jAJAzsSJaUmjytvmBw2LuS76LJB9TsD0a-JGtM217c1FLvSGiaDEFIHAq5nRXXivfWnGP9fzs9xJlbvKww2_ppE24h5j8KlSHKgMbnYVEnXLFKAqd3ZsR3h2Uw4CIjGBSFUmHaTM5n5osLGXFI0z1Hn9qyQIeTBO9sRAEwFFsZGTDOuUoR-vXX0AB8",
+    "CloudFront-Forwarded-Proto": "https",
+    "CloudFront-Is-Desktop-Viewer": "true",
+    "CloudFront-Is-Mobile-Viewer": "false",
+    "CloudFront-Is-SmartTV-Viewer": "false",
+    "CloudFront-Is-Tablet-Viewer": "false",
+    "CloudFront-Viewer-Country": "ZA",
+    "Host": "5qg7smp6w6.execute-api.us-east-1.amazonaws.com",
+    "User-Agent": "curl/7.60.0",
+    "Via": "1.1 429364ce824325f1d833bd309144888e.cloudfront.net (CloudFront)",
+    "X-Amz-Cf-Id": "Gi4F5mF8NKS5fnzKcLSpaRcKHDW2D2yILEXXJAyDU6-gJUTlrj2zow==",
+    "X-Amzn-Trace-Id": "Root=1-5d321693-83988d0a4796cad038f2fc91",
+    "X-Forwarded-For": "197.185.107.240, 52.46.40.85",
+    "X-Forwarded-Port": "443",
+    "X-Forwarded-Proto": "https"
+  },
+  "multiValueHeaders": {
+    "Accept": [
+      "*/*"
+    ],
+    "Authorization": [
+      "Bearer somethingorother"
+    ],
+    "CloudFront-Forwarded-Proto": [
+      "https"
+    ],
+    "CloudFront-Is-Desktop-Viewer": [
+      "true"
+    ],
+    "CloudFront-Is-Mobile-Viewer": [
+      "false"
+    ],
+    "CloudFront-Is-SmartTV-Viewer": [
+      "false"
+    ],
+    "CloudFront-Is-Tablet-Viewer": [
+      "false"
+    ],
+    "CloudFront-Viewer-Country": [
+      "ZA"
+    ],
+    "Host": [
+      "5qg7smp6w6.execute-api.us-east-1.amazonaws.com"
+    ],
+    "User-Agent": [
+      "curl/7.60.0"
+    ],
+    "Via": [
+      "1.1 429364ce824325f1d833bd309144888e.cloudfront.net (CloudFront)"
+    ],
+    "X-Amz-Cf-Id": [
+      "Gi4F5mF8NKS5fnzKcLSpaRcKHDW2D2yILEXXJAyDU6-gJUTlrj2zow=="
+    ],
+    "X-Amzn-Trace-Id": [
+      "Root=1-5d321693-83988d0a4796cad038f2fc91"
+    ],
+    "X-Forwarded-For": [
+      "197.185.107.240, 52.46.40.85"
+    ],
+    "X-Forwarded-Port": [
+      "443"
+    ],
+    "X-Forwarded-Proto": [
+      "https"
+    ]
+  },
+  "queryStringParameters": null,
+  "multiValueQueryStringParameters": null,
+  "pathParameters": null,
+  "stageVariables": {
+    "commit_sha1": "daa1879c458977a6c4316ec3dbcfb102ba83749a"
+  },
+  "requestContext": {
+    "resourceId": "zam5r2",
+    "authorizer": {
+      "role": "ORDINARY_USER",
+      "permissions": "EditProfile,CreateWallet,CheckBalance",
+      "principalId": "user",
+      "integrationLatency": 14255,
+      "systemWideUserId": "27b00e1c-4f32-4631-a67b-88aaf5a01d0c"
+    },
+    "resourcePath": "/balance",
+    "httpMethod": "GET",
+    "extendedRequestId": "dFh3BHa8IAMFjgQ=",
+    "requestTime": "19/Jul/2019:19:14:27 +0000",
+    "path": "/staging/balance",
+    "accountId": "455943420663",
+    "protocol": "HTTP/1.1",
+    "stage": "staging",
+    "domainPrefix": "5qg7smp6w6",
+    "requestTimeEpoch": 1563563667331,
+    "requestId": "6d412d82-aa59-11e9-a22b-33ca05533726",
+    "identity": {
+      "cognitoIdentityPoolId": null,
+      "accountId": null,
+      "cognitoIdentityId": null,
+      "caller": null,
+      "sourceIp": "197.185.107.240",
+      "principalOrgId": null,
+      "accessKey": null,
+      "cognitoAuthenticationType": null,
+      "cognitoAuthenticationProvider": null,
+      "userArn": null,
+      "userAgent": "curl/7.60.0",
+      "user": null
+    },
+    "domainName": "5qg7smp6w6.execute-api.us-east-1.amazonaws.com",
+    "apiId": "5qg7smp6w6"
+  },
+  "body": null,
+  "isBase64Encoded": false
+}

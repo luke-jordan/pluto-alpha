@@ -4,9 +4,9 @@
   "description": "The API for managing the primary cash float",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=pluto:float:* nyc mocha './test/*.unit.test.js'",
-    "test-all": "DEBUG=pluto:float:* nyc mocha",
-    "generate-coverage": "nyc report",
+    "test": "DEBUG=jupiter:float:* nyc mocha './test/*.unit.test.js'",
+    "test-all": "DEBUG=jupiter:float:* nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
   "author": "Luke Jordan",
@@ -20,10 +20,11 @@
   },
   "devDependencies": {
     "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
     "chai-uuid": "^1.0.6",
     "eslint": "^6.0.1",
     "eslint-plugin-chai-friendly": "^0.4.1",
-    "lodash": "^4.17.11",
+    "lodash": "^4.17.13",
     "mocha": "^6.1.4",
     "nyc": "^14.1.1",
     "proxyquire": "^2.1.0",

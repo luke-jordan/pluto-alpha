@@ -10,35 +10,17 @@ jobs:
         environment:
 
       # Postgres image for testing
-      - image: circleci/postgres:9.6.5-alpine-ram
-        environment:
-          POSTGRES_USER: postgres
-          POSTGRES_DB: postgres
-          POSTGRES_PASSWORD: postgres
+      # - image: circleci/postgres:9.6.5-alpine-ram
+      #   environment:
+      #     POSTGRES_USER: postgres
+      #     POSTGRES_DB: postgres
+      #     POSTGRES_PASSWORD: postgres
 
     working_directory: ~/app
 
     steps:
       - checkout
 
-      - restore_cache:
-          keys:
-          - db-migration_dependencies-{{ checksum "./functions/db-migration/package.json" }}
-      - restore_cache:
-          keys:
-          - float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
-      - restore_cache:
-          keys:
-          - user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
-      - restore_cache:
-          keys:
-          - user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
-      - restore_cache:
-          keys:
-          - modules-dynamo-common-{{ checksum "./modules/dynamo-common/package.json" }}
-      - restore_cache:
-          keys:
-          - modules-rds-common-{{ checksum "./modules/rds-common/package.json" }}
       - restore_cache:
           keys:
           - terraform_bin-{{ checksum "./terraform/terraform_version" }}
@@ -77,75 +59,50 @@ jobs:
           paths:
             - awscli-bundle.zip
 
-      - save_cache:
-          key: db-migration_dependencies-{{ checksum "./functions/db-migration/package.json" }}
-          paths:
-            - ./functions/db-migration/node_modules
-
-      - save_cache:
-          key: float-api_dependencies-{{ checksum "./functions/float-api/package.json" }}
-          paths:
-            - ./functions/float-api/node_modules
-
-      - save_cache:
-          key: user-activity-api_dependencies-{{ checksum "./functions/user-activity-api/package.json" }}
-          paths:
-            - ./functions/user-activity-api/node_modules
-
-      - save_cache:
-          key: user-existence-api_dependencies-{{ checksum "./functions/user-existence-api/package.json" }}
-          paths:
-            - ./functions/user-existence-api/node_modules
-
-      - save_cache:
-          key: modules-dynamo-common-{{ checksum "./modules/dynamo-common/package.json" }}
-          paths:
-            - ./modules/dynamo-common/node_modules
-
-      - save_cache:
-          key: modules-rds-common-{{ checksum "./modules/rds-common/package.json" }}
-          paths:
-            - ./modules/rds-common/node_modules
-
       - run:
           name: run linter
           command: |
-            # echo "Linting modules"
-            # cd $HOME/app/modules/rds-common && npm run-script lint
-            # cd ../dynamo-common && npm run-script lint
+            echo "Linting modules"
+            cd $HOME/app/modules/dynamo-common && npm run-script lint
+            cd ../rds-common && npm run-script lint
 
             echo "Linting functions"
             cd $HOME/app/functions/user-activity-api && npm run-script lint
             cd ../user-existence-api && npm run-script lint
             cd ../float-api && npm run-script lint
             cd ../db-migration && npm run-script lint
-
-      - run:
-          name: run security check
-          command: |
-            cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
-            # we do this to avoid the package lock inadvertantly overriding later and wiping modules
-            rm ./package-lock.json
-            cd ../user-existence-api && npm i --package-lock-only && npm audit
-            rm ./package-lock.json
-            cd ../float-api && npm i --package-lock-only && npm audit
-            rm ./package-lock.json
-            cd ../db-migration && npm i --package-lock-only && npm audit
-            rm ./package-lock.json
+            
+      # todo: restore this once lodash thing is out of deep deps & node has reliably updated etc
+      # - run:
+      #     name: run security check
+      #     command: |
+      #       cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
+      #       # we do this to avoid the package lock inadvertantly overriding later and wiping modules
+      #       rm ./package-lock.json
+      #       cd ../user-existence-api && npm i --package-lock-only && npm audit fix --only=prod
+      #       rm ./package-lock.json
+      #       cd ../float-api && npm i --package-lock-only && npm audit fix --only=prod
+      #       rm ./package-lock.json
+      #       cd ../db-migration && npm i --package-lock-only && npm audit fix --only=prod
+      #       rm ./package-lock.json
 
       - run:
           name: run tests
           command: |
-            cd $HOME/app/functions
+            cd $HOME/app
             npm install codecov
             
-            echo "Running tests and outputing coverage reports"
-            cd user-existence-api; npm test; npm run-script generate-coverage
+            echo "Running function tests and outputing coverage reports"
+            cd $HOME/app/functions/user-existence-api; npm test; npm run-script generate-coverage
             cd ../user-activity-api; npm test; npm run-script generate-coverage
             cd ../float-api; npm test; npm run-script generate-coverage
-            cd ..
+            
+            echo "Runing module tests and outputting coverage reports"
+            cd $HOME/app/modules/dynamo-common; npm test; npm run-script generate-coverage
+            cd ../rds-common; npm test; npm run-script generate-coverage
 
             echo "Uploading coverage reports"
+            cd $HOME/app
             node_modules/codecov/bin/codecov
 
       - run:
@@ -205,7 +162,7 @@ jobs:
                 terraform workspace select $CIRCLE_BRANCH
                 
                 terraform plan -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=$RDS_USERNAME" -var "db_password=$RDS_PASSWORD"
-                #terraform apply -auto-approve -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=$RDS_USERNAME" -var "db_password=$RDS_PASSWORD"
+                terraform apply -auto-approve -var "deploy_code_commit_hash=$CIRCLE_SHA1" -var "aws_access_key=$AWS_ACCESS_KEY_ID" -var "aws_secret_access_key=$AWS_SECRET_ACCESS_KEY" -var "db_user=$RDS_USERNAME" -var "db_password=$RDS_PASSWORD"
                 
                 if [ $CIRCLE_BRANCH == 'master' ]; then
                     migrator_region=eu-west-1
@@ -216,8 +173,8 @@ jobs:
                 fi
 
 
-                #/home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload file://$HOME/app/functions/db-migration/create_roles_event.json  --log-type Tail -
-                #/home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload '{"type": "SETUP_TABLES"}' --log-type Tail -
+                /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload file://$HOME/app/functions/db-migration/create_roles_event.json  --log-type Tail -
+                /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload '{"type": "SETUP_TABLES"}' --log-type Tail -
              fi
 
       - save_cache:
