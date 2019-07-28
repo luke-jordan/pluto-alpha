@@ -8,6 +8,16 @@ variable "aws_default_region" {
     }
 }
 
+variable "aws_account" {
+    default=  "455943420663"
+    type = "string"
+}
+
+variable jwt_authorizer_arn {
+  default = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
+  type = "string"
+}
+
 variable "dynamo_tables_read_capacity" {
     default = {
         "staging"  = {
@@ -46,7 +56,6 @@ variable "az_count" {
   description = "Number of AZs to cover in a given AWS region"
   default     = "2"
 }
-
 
 variable "db_allocated_storage" {
   default = "20"

@@ -27,11 +27,6 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
 /////////////////////// API GW AUTHORIZER ///////////////////////////////////////////////////////////////
 
-variable jwt_authorizer_arn {
-  default = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
-  type = "string"
-}
-
 resource "aws_api_gateway_authorizer" "jwt_authorizer" {
   name = "api_gateway_jwt_authorizer_${terraform.workspace}"
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"

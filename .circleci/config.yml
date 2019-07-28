@@ -33,6 +33,7 @@ jobs:
           command: |
 
             cd $HOME/app/functions/db-migration && npm install
+            cd $HOME/app/functions/warmup && npm install
             cd $HOME/app/functions/float-api && npm install
             cd $HOME/app/functions/user-activity-api && npm install
             cd $HOME/app/functions/user-existence-api && npm install
@@ -40,6 +41,7 @@ jobs:
             cd $HOME/app/modules/dynamo-common && npm install
             cd $HOME/app
 
+            # Warmup lambda does not need these
             cp -r modules/* $HOME/app/functions/db-migration/node_modules
             cp -r modules/* $HOME/app/functions/float-api/node_modules
             cp -r modules/* $HOME/app/functions/user-activity-api/node_modules
@@ -66,6 +68,7 @@ jobs:
             cd $HOME/app/modules/dynamo-common && npm run-script lint
             cd ../rds-common && npm run-script lint
 
+            # We skip warmup because it is so trivial
             echo "Linting functions"
             cd $HOME/app/functions/user-activity-api && npm run-script lint
             cd ../user-existence-api && npm run-script lint
@@ -127,6 +130,10 @@ jobs:
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip .
 
+                cd $HOME/app/functions/warmup
+                echo $CIRCLE_SHA1 > last_commit.text
+                zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip
+
              fi
       - run:
           name: deploy artifacts
@@ -141,6 +148,8 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_activity_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_existence_api/$CIRCLE_SHA1.zip
+
+                /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip
              fi
 
       - run:
