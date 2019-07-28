@@ -24,4 +24,4 @@ module.exports.handler = async (context) => {
     return response;
 };
 
-exports.handler();
+// exports.handler();
