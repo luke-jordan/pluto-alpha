@@ -3,6 +3,8 @@
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('jupiter:balance:test');
+const config = require('config');
+
 const BigNumber = require('bignumber.js');
 const moment = require('moment-timezone');
 const fs = require('fs');
@@ -26,6 +28,7 @@ const testUserId = '27b00e1c-4f32-4631-a67b-88aaf5a01d0c';
 const testTimeZone = 'America/New_York';
 const testTimeNow = moment.tz(testTimeZone);
 logger('Set test time now to : ', testTimeNow);
+const testTimeBOD = testTimeNow.clone().startOf('day');
 const testTimeEOD = testTimeNow.clone().endOf('day');
 
 const testClientId = 'a_client_somewhere';
@@ -49,9 +52,18 @@ const expectedAmountAccruedToday = testAccumulatedBalance.times(expectedNetAccru
 
 const expectedBalanceToday = testAccumulatedBalance.plus(expectedAmountAccruedToday).decimalPlaces(0).toNumber();
 
-const expectedNumberOfDays = 5;
+const expectedNumberOfDays = config.get('projection.defaultDays');
 const effectiveDailyRate = expectedAmountAccruedToday.dividedBy(testAccumulatedBalance);
 logger('Effective daily rate: ', effectiveDailyRate.toNumber());
+
+const secondsInDay = 24 * 60 * 60;
+const linearAmountPerSecond = expectedAmountAccruedToday.dividedBy(secondsInDay);
+logger('Effective linear amount per second: ', linearAmountPerSecond.toString());
+const secondsSinceBOD = testTimeNow.unix() - testTimeBOD.unix();
+logger('Seconds since start of day: ', secondsSinceBOD);
+const immediateBalance = testAccumulatedBalance.plus(linearAmountPerSecond.times(secondsSinceBOD));
+logger('Current time expected balance: ', immediateBalance.toNumber());
+
 const expectedBalanceSubsequentDays = Array.from(Array(expectedNumberOfDays).keys()).map((day) => {
     // note: lots of bignumber and fp weirdness to watch out for in here, hence splitting it and making very explicit
     const rebasedDay = day + 1;
@@ -105,11 +117,19 @@ describe('Fetches user balance and makes projections', () => {
     const wellFormedResultBody = {
         accountId: [testAccountId],
         currentBalance: {
-            'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
+            'amount': immediateBalance.decimalPlaces(0).toNumber(),
             'unit': 'HUNDREDTH_CENT',
             'currency': 'USD',
             'datetime': testTimeNow.format(),
             'epochMilli': testTimeNow.valueOf(),
+            'timezone': testTimeZone
+        },
+        balanceStartDayOrLastSettled: {
+            'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
+            'unit': 'HUNDREDTH_CENT',
+            'currency': 'USD',
+            'datetime': testTimeBOD.format(),
+            'epochMilli': testTimeBOD.valueOf(),
             'timezone': testTimeZone
         },
         balanceEndOfToday: {
@@ -122,6 +142,8 @@ describe('Fetches user balance and makes projections', () => {
         },
         balanceSubsequentDays: expectedBalanceSubsequentDays
     };
+
+    logger('Expected body: ', wellFormedResultBody);
 
     const checkResultIsWellFormed = (balanceAndProjections, expectedBody = wellFormedResultBody) => {
         expect(balanceAndProjections).to.exist;
@@ -154,7 +176,8 @@ describe('Fetches user balance and makes projections', () => {
         
         accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment).resolves({ 
             amount: testAccumulatedBalance.decimalPlaces(0).toNumber(), 
-            unit: 'HUNDREDTH_CENT'
+            unit: 'HUNDREDTH_CENT',
+            lastTxTime: testTimeBOD
         });
         accountClientFloatStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
         findAccountsForUserStub.withArgs(testUserId).resolves([testAccountId]);

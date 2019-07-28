@@ -112,17 +112,28 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
     const resultObject = { accountId: [accountId] }; 
 
     // logger('Retrieving balance at time: ', timeForBalance.unix());
-    const currentBalance = await persistence.sumAccountBalance(accountId, currency, timeForBalance);
-    logger('Current balance calculated as: ', currentBalance);
+    const startingBalance = await persistence.sumAccountBalance(accountId, currency, timeForBalance);
+    logger('Starting balance calculated as: ', startingBalance);
     
-    const unit = currentBalance.unit;    
-    resultObject.currentBalance = createBalanceDict(currentBalance.amount, unit, currency, timeForBalance);
+    const unit = startingBalance.unit;
     
+    const lastSettledTime = startingBalance.lastTxTime;
+    const startOfTodayTime = timeForBalance.clone().startOf('day');
+    const startTime = startOfTodayTime.isBefore(lastSettledTime) ? lastSettledTime : startOfTodayTime;
+    logger('Start time in calculations: ', startTime);
+    resultObject.balanceStartDayOrLastSettled = createBalanceDict(startingBalance.amount, unit, currency, startTime);
+
     const endOfDayMoment = timeForBalance.clone().endOf('day');
-    const endOfTodayBalance = accrueBalanceByDay(currentBalance.amount, floatProjectionVars);
-    logger('Balance at end of today: ', endOfTodayBalance);
+    const endOfTodayBalance = accrueBalanceByDay(startingBalance.amount, floatProjectionVars);
+    logger('Balance at end of today: ', endOfTodayBalance.decimalPlaces(0).toNumber());
     
     resultObject.balanceEndOfToday = createBalanceDict(endOfTodayBalance.decimalPlaces(0).toNumber(), unit, currency, endOfDayMoment);
+
+    const secondsDifference = timeForBalance.unix() - startTime.unix();
+    const accruedAmountPerSecond = endOfTodayBalance.minus(startingBalance.amount).dividedBy(endOfDayMoment.unix() - startTime.unix());
+    const currentBalanceAmount = new BigNumber(startingBalance.amount).plus(accruedAmountPerSecond.times(secondsDifference));
+
+    resultObject.currentBalance = createBalanceDict(currentBalanceAmount.decimalPlaces(0).toNumber(), unit, currency, timeForBalance);
 
     logger('Doing a loop');
     if (daysToProject > 0) {
@@ -143,13 +154,8 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
     return resultObject;
 };
 
-module.exports.balance = async (event, context) => {
+module.exports.balance = async (event) => {
   try {
-    logger('Event: ', event);
-    if (context) {
-      logger('Context object: ', context); // todo : check user role etc
-    }
-
     // todo : look up property
     const params = event.queryParams || event;
 
@@ -221,7 +227,7 @@ module.exports.balance = async (event, context) => {
 // this is a convenience method exposed to allow for simple JWT based get balance based on defaults
 module.exports.balanceWrapper = async (event) => {
   try {
-    logger('Balance wrapper received event: ', event);
+    // logger('Balance wrapper received event: ', event);
     // logger('Here is the context: ', context);
 
     const authParams = event.requestContext.authorizer;

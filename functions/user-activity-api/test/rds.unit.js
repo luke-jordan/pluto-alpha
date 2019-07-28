@@ -229,7 +229,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(resultOfSaveInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
 
         expect(multiTableStub).to.have.been.calledOnceWithExactly(expectedArgs);
-        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledThrice; // because also fetches timestamp
         expectNoCalls([insertStub]);
     });
 
@@ -263,8 +263,11 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
             `and creation_time < to_timestamp($3)`;
         const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` +
             `and creation_time < to_timestamp($4) and transaction_type in ${transTypes} group by unit`;
+        const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
+            `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
         
         const testTime = moment();
+        const testLastTxTime = moment().subtract(5, 'hours');
         const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
         
         logger('Test time value of: ', testTime.valueOf());
@@ -274,12 +277,20 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
             returns(Promise.resolve([{ 'sum': testBalance, 'unit': 'HUNDREDTH_CENT' }]));
         queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'WHOLE_CENT', testTime.unix()]).
             returns(Promise.resolve([{ 'sum': testBalanceCents, 'unit': 'WHOLE_CENT' }]));
+        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).
+            returns(Promise.resolve([{ 'creation_time': testLastTxTime._d }]));
         const expectedBalance = testBalance + (100 * testBalanceCents);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
 
         expect(balanceResult).to.exist;
-        expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT' });
+        expect(balanceResult).to.have.property('amount', expectedBalance);
+        expect(balanceResult).to.have.property('unit', 'HUNDREDTH_CENT');
+        expect(balanceResult).to.have.property('lastTxTime');
+        // result of sinon hatred
+        const balanceLastTxTime = balanceResult.lastTxTime;
+        expect(testLastTxTime.isSame(balanceLastTxTime)).to.be.true;
+        // expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', lastTxTime: testHelper.momentMatchertestLastTxTime });
     });
 
     it('Find an account ID for a user ID, single and multiple', async () => {

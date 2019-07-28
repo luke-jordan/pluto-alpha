@@ -20,7 +20,7 @@
         "region": "eu-west-1"
     },
     "projection": {
-        "defaultDays": "5",
-        "maxDays": "5"
+        "defaultDays": 3,
+        "maxDays": 5
     }
 }

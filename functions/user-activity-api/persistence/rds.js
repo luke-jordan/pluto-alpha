@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:save:rds');
+const logger = require('debug')('jupiter:save:rds');
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment-timezone');
@@ -91,7 +91,15 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
         reduce((cum, value) => cum + value, 0);
     logger('For account ID, RDS calculation yields result: ', totalBalanceInDefaultUnit);
 
-    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT };
+    // note: try combine with earlier, and/or optimize when these get big
+    const findMomentOfLastSettlementQuery = `select creation_time from ${tableToQuery} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
+        `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
+    const lastTxTimeResult = await rdsConnection.selectQuery(findMomentOfLastSettlementQuery, [accountId, currency, time.unix()]);
+    logger('Retrieved last settled time: ', lastTxTimeResult);
+    const lastSettledTx = lastTxTimeResult[0]['creation_time'];
+    logger('Last settled TX: ', lastSettledTx);
+
+    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, lastTxTime: moment(lastSettledTx) };
 };
 
 const extractTxDetails = (keyForTransactionId, row) => {
@@ -220,7 +228,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
     const balanceCount = await exports.sumAccountBalance(settlementDetails['accountId'], settlementDetails['savedCurrency'], moment());
     logger('New balance count: ', balanceCount);
 
-    responseEntity['newBalance'] = balanceCount;
+    responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit };
     
     return responseEntity;
 };
