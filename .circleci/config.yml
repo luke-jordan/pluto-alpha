@@ -132,7 +132,7 @@ jobs:
 
                 cd $HOME/app/functions/warmup
                 echo $CIRCLE_SHA1 > last_commit.text
-                zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip
+                zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip .
 
              fi
       - run:
