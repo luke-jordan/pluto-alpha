@@ -54,9 +54,9 @@ resource "aws_iam_policy" "lambda_invoke_warmup_access" {
             "Action": [
                 "lambda:InvokeAsync"
             ],
-            "Resources": [
+            "Resource": [
                 "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch",
+                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch_wrapper",
                 "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:saving_record"
             ]
         }

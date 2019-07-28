@@ -4,6 +4,6 @@
         "apiVersion": "2012-08-10"
     },
     "lambdas": [
-        "balance_fetch", "balance_fetch_wrapper", "saving_record", "authorizer"
+        "balance_fetch", "balance_fetch_wrapper", "saving_record"
     ]
 }
