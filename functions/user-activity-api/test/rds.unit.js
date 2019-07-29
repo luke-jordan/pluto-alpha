@@ -2,9 +2,10 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:save:test');
+const logger = require('debug')('jupiter:activity-rds:test');
 const config = require('config');
 const moment = require('moment-timezone');
+const testHelper = require('./test.helper');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -18,6 +19,7 @@ const uuid = require('uuid/v4');
 const queryStub = sinon.stub();
 const insertStub = sinon.stub();
 const multiTableStub = sinon.stub();
+const uuidStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
@@ -29,6 +31,7 @@ class MockRdsConnection {
 
 const rds = proxyquire('../persistence/rds', {
     'rds-common': MockRdsConnection,
+    'uuid/v4': uuidStub,
     '@noCallThru': true
 });
 
@@ -36,6 +39,8 @@ const resetStubs = () => {
     queryStub.reset();
     insertStub.reset();
     multiTableStub.reset();
+    uuidStub.reset();
+    uuidStub.callsFake(uuid); // not actually a fake but call through is tricky, so this is simpler
 };
 
 const expectNoCalls = (stubList) => stubList.forEach((stub) => expect(stub).to.not.have.been.called);
@@ -113,21 +118,75 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
 
 describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and with float', () => {
 
-    before(() => resetStubs());
+    beforeEach(() => resetStubs());
 
     const testSaveAmount = 1050000;
 
-    const insertAccountTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
+    const insertAccNotSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
+        `amount, settlement_status, initiation_time) values %L returning transaction_id, creation_time`;
+    const insertAccSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
         `amount, float_id, client_id, settlement_status, initiation_time, settlement_time, payment_reference, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
     const insertFloatTxQuery = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, ` +
         `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
 
-    const accountColumnKeys = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
+    const accountColKeysNotSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
+        '${settlementStatus}, ${initiationTime}'; 
+    const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
         '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
         '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
 
-    it('Insert a settled save with float id, payment ref, etc., performing matching sides', async () => {
+    it.only('Insert a pending state save, if status is initiated', async () => { 
+        const testAcTxId = uuid();
+        const testInitiationTime = moment().subtract(5, 'minutes');
+
+        logger('Test TX ID for account: ', testAcTxId);
+        uuidStub.onFirstCall().returns(testAcTxId);
+        
+        const expectedRowItem = {
+            accountTransactionId: testAcTxId,
+            accountId: testAccountId,
+            savedCurrency: 'ZAR',
+            savedUnit: 'HUNDREDTH_CENT',
+            savedAmount: testSaveAmount,
+            settlementStatus: 'INITIATED',
+            initiationTime: testInitiationTime.format()
+        };
+        
+        const expectedAccountQueryDef = {
+            query: insertAccNotSettledTxQuery,
+            columnTemplate: accountColKeysNotSettled,
+            rows: [expectedRowItem]
+        };
+
+        const expectedTxDetails = [{ 
+            'accountTransactionId': testAcTxId,
+            'creationTimeEpochMillis': sinon.match.number
+        }];
+
+        multiTableStub.withArgs(sinon.match([expectedAccountQueryDef])).resolves([[{ 'transaction_id': testAcTxId, 'creation_time': moment().format() }]]);
+
+        const testNotSettledArgs = { 
+            accountId: testAccountId,
+            savedCurrency: 'ZAR',
+            savedUnit: 'HUNDREDTH_CENT',
+            savedAmount: testSaveAmount, 
+            initiationTime: testInitiationTime,
+            settlementStatus: 'INITIATED'
+        };
+
+        const resultOfInsertion = await rds.addSavingToTransactions(testNotSettledArgs);
+        
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('transactionDetails');
+        expect(resultOfInsertion.transactionDetails).to.be.an('array').that.has.length(1);
+        expect(sinon.match(expectedTxDetails[0]).test(resultOfInsertion.transactionDetails[0])).to.be.true;
+
+        // unsettled means no balance call
+        expectNoCalls([queryStub, insertStub]);
+    });
+
+    it.only('Insert a settled save with float id, payment ref, etc., performing matching sides', async () => {
         const testAcTxId = sinon.match.string;
         const testFlTxAddId = sinon.match.string;
         const testFlTxAllocId = sinon.match.string;
@@ -155,8 +214,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectedAccountRow.floatAllocTransactionId = testFlTxAllocId;
         
         const expectedAccountQueryDef = { 
-            query: insertAccountTxQuery,
-            columnTemplate: accountColumnKeys,
+            query: insertAccSettledTxQuery,
+            columnTemplate: accountColKeysSettled,
             rows: sinon.match([expectedAccountRow])
         };
 
@@ -182,10 +241,10 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         };
         
         const expectedArgs = sinon.match([expectedAccountQueryDef, expectedFloatQueryDef]);
-        const txDetailsFromRds = [[ 
-            { 'transaction_id': uuid(), 'creation_time': moment().format() }],
-            [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }
-        ]];
+        const txDetailsFromRds = [
+            [{ 'transaction_id': uuid(), 'creation_time': moment().format() }],
+            [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }]
+        ];
         const expectedTxDetails = [{ 
             'accountTransactionId': testAcTxId,
             'creationTimeEpochMillis': sinon.match.number
@@ -235,10 +294,6 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
     // todo: restore
     // it('Throw an error if state is SETTLED but no float id', () => { });
-
-    // it('Insert a pending state save, if no float id', () => { });
-
-    // it('Update transaction to settled on instruction', () => { });
 
     // it('Throws errors if missing necessary arguments (times, etc)', () => {    });
 

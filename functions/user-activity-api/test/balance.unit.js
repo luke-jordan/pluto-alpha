@@ -86,7 +86,7 @@ const accountClientFloatStub = sinon.stub();
 const findAccountsForUserStub = sinon.stub();
 const floatPrincipalVarsStub = sinon.stub();
 
-const handler = proxyquire('../handler', {
+const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
         'findClientAndFloatForAccount': accountClientFloatStub,

@@ -36,7 +36,7 @@ const findMatchingTxStub = sinon.stub();
 const findFloatStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
 
-const handler = proxyquire('../handler', {
+const handler = proxyquire('../saving-handler', {
     './persistence/rds': { 
         'findMatchingTransaction': findMatchingTxStub,
         'findClientAndFloatForAccount': findFloatStub, 
@@ -65,6 +65,10 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         clientId: testClientId,
         paymentRef: testPaymentRef
     });
+
+    // const testSavePendingBase = (amount = testAmounts[0]) => ({
+
+    // });
 
     const wellFormedMinimalSettledRequestToRds = {
         accountId: testAccountId,

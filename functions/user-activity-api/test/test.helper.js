@@ -6,7 +6,7 @@ const moment = require('moment');
 
 const expect = chai.expect;
 
-const logger = require('debug')('pluto:user-activity:test');
+const logger = require('debug')('jupiter:user-activity:test');
 
 module.exports.momentMatcher = (testMoment) => sinon.match((value) => moment.isMoment(value) && testMoment.isSame(value));
 
