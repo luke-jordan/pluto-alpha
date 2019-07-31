@@ -2,13 +2,15 @@
 
 const logger = require('debug')('jupiter:save:main');
 const moment = require('moment-timezone');
+const status = require('statuses');
+
 const persistence = require('./persistence/rds');
 
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
 
 module.exports.save = async (event) => {
     try {
-      if (!event) {
+      if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
         logger('No event! Must be warmup lambda');
         return { statusCode: 400, body: 'Empty invocation' };
       }
@@ -24,6 +26,8 @@ module.exports.save = async (event) => {
         return invalidRequestResponse('Error! No currency specified for the saving event');
       } else if (!settlementInformation.savedUnit) {
         return invalidRequestResponse('Error! No unit specified for the saving event');
+      } else if (!settlementInformation.settlementStatus) {
+        return invalidRequestResponse('Error! No settlement status passed');
       }
   
       if (!settlementInformation.floatId && !settlementInformation.clientId) {
@@ -40,7 +44,8 @@ module.exports.save = async (event) => {
         Reflect.deleteProperty(settlementInformation, 'settlementTimeEpochMillis');
       }
       
-      const savingResult = await exports.storeSettledSaving(settlementInformation);
+      const savingResult = await persistence.addSavingToTransactions(settlementInformation);
+
       logger('Completed the save, result: ', savingResult);
   
       return {
@@ -50,29 +55,40 @@ module.exports.save = async (event) => {
     } catch (e) {
       logger('FATAL_ERROR: ', e);
       return {
-        statusCode: 500
+        statusCode: 500,
+        body: JSON.stringify(e.message)
       };
     }
-  };
+};
   
-  module.exports.storeSettledSaving = async (settlementInformation = {
-    'accountId': '0c3caa51-ce5f-467c-9470-3fc34f93b5cc',
-    'initiationTime': Date.now(),
-    'settlementTime': Date.now(),
-    'savedAmount': 50000, // five rand (figures always in hundredths of a cent)
-    'savedCurrency': 'ZAR',
-    'prizePoints': 100,
-    'offerId': 'id-of-preceding-offer',
-    'tags': ['TIME_BASED'],
-    'flags': ['RESTRICTED']
-  }) => {
+/* Wrapper method, calls the above, after verifying the user owns the account, event params are:
+ * @param {string} accountId The account where the save is happening
+ * @param {number} savedAmount The amount to be saved
+ * @param {string} savedCurrency The account where the save is happening
+ * @param {string} savedUnit The unit for the save, preferably default (HUNDREDTH_CENT), but will transform
+ * @param {string} floatId optional: the user's float (will revert to default if not provided)
+ * @param {string} clientId optional: the user's responsible client (will use default as with float)
+ * @return {object} transactionDetails and paymentRedirectDetails for the initiated payment
+ */
+module.exports.initatePendingSave = async (event) => {
+  try {
+    const authParams = event.requestContext.authorizer;
+    if (!authParams || !authParams.systemWideUserId) {
+      return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
+    }
+
+    const saveInformation = JSON.parse(event.body);
+    saveInformation.settlementStatus = 'INITIATED';
     
-    logger('Initiating settlement record, passed parameters: ', settlementInformation);
-  
-    const resultOfSave = await persistence.addSavingToTransactions(settlementInformation);
-    logger('Result of save: ', resultOfSave);
-  
-    return resultOfSave;
-    
-  };
-  
+    if (!saveInformation.initiationTimeEpochMillis) {
+      saveInformation.initiationTimeEpochMillis = moment().valueOf();
+      logger('Initiation time: ', saveInformation.initiationTimeEpochMillis);
+    }
+
+    return exports.save(saveInformation);
+
+  } catch (e) {
+    logger('FATAL_ERROR: ', e);
+    return { statusCode: status(500), body: JSON.stringify(e.message) };
+  }
+};

@@ -36,10 +36,7 @@ const rds = proxyquire('../persistence/rds', {
 });
 
 const resetStubs = () => {
-    queryStub.reset();
-    insertStub.reset();
-    multiTableStub.reset();
-    uuidStub.reset();
+    testHelper.resetStubs(queryStub, insertStub, multiTableStub, uuidStub);
     uuidStub.callsFake(uuid); // not actually a fake but call through is tricky, so this is simpler
 };
 
@@ -123,20 +120,20 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
     const testSaveAmount = 1050000;
 
     const insertAccNotSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
-        `amount, settlement_status, initiation_time) values %L returning transaction_id, creation_time`;
+        `amount, float_id, client_id, settlement_status, initiation_time) values %L returning transaction_id, creation_time`;
     const insertAccSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
         `amount, float_id, client_id, settlement_status, initiation_time, settlement_time, payment_reference, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
     const insertFloatTxQuery = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, ` +
         `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
 
     const accountColKeysNotSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
-        '${settlementStatus}, ${initiationTime}'; 
+        '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}'; 
     const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
         '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
         '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
 
-    it.only('Insert a pending state save, if status is initiated', async () => { 
+    it('Insert a pending state save, if status is initiated', async () => { 
         const testAcTxId = uuid();
         const testInitiationTime = moment().subtract(5, 'minutes');
 
@@ -150,7 +147,9 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             savedUnit: 'HUNDREDTH_CENT',
             savedAmount: testSaveAmount,
             settlementStatus: 'INITIATED',
-            initiationTime: testInitiationTime.format()
+            initiationTime: testInitiationTime.format(),
+            floatId: testFloatId,
+            clientId: testClientId
         };
         
         const expectedAccountQueryDef = {
@@ -172,7 +171,9 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             savedUnit: 'HUNDREDTH_CENT',
             savedAmount: testSaveAmount, 
             initiationTime: testInitiationTime,
-            settlementStatus: 'INITIATED'
+            settlementStatus: 'INITIATED',
+            floatId: testFloatId,
+            clientId: testClientId
         };
 
         const resultOfInsertion = await rds.addSavingToTransactions(testNotSettledArgs);
@@ -186,7 +187,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectNoCalls([queryStub, insertStub]);
     });
 
-    it.only('Insert a settled save with float id, payment ref, etc., performing matching sides', async () => {
+    it('Insert a settled save with float id, payment ref, etc., performing matching sides', async () => {
         const testAcTxId = sinon.match.string;
         const testFlTxAddId = sinon.match.string;
         const testFlTxAllocId = sinon.match.string;

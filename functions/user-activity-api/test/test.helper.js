@@ -27,3 +27,14 @@ module.exports.checkErrorResultForMsg = (errorResult, expectedErrorMsg) => {
     expect(errorResult).to.have.property('statusCode', 400);
     expect(errorResult.body).to.equal(expectedErrorMsg);
 };
+
+module.exports.resetStubs = (...stubs) => {
+    stubs.forEach((stub) => stub.reset());
+};
+
+module.exports.standardOkayChecks = (result) => {
+    expect(result).to.exist;
+    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('body');
+    return JSON.parse(result.body);
+};

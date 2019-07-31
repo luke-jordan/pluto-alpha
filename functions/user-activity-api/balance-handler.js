@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:balance:main');
 const config = require('config');
+const status = require('statuses');
 
 const moment = require('moment-timezone');
 const BigNumber = require('bignumber.js');
@@ -91,7 +92,7 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
 
 module.exports.balance = async (event) => {
   try {
-    if (!event) {
+    if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
       logger('No event! Must be warmup lambda');
       return { statusCode: 400, body: 'Empty invocation' };
     }
@@ -159,7 +160,7 @@ module.exports.balance = async (event) => {
     logger('FATAL_ERROR: ', e);
     return {
       statusCode: 500,
-      body: JSON.stringify(e)
+      body: JSON.stringify(e.message)
     };
   }
 };
@@ -167,14 +168,14 @@ module.exports.balance = async (event) => {
 // this is a convenience method exposed to allow for simple JWT based get balance based on defaults
 module.exports.balanceWrapper = async (event) => {
   try {
-    if (!event) {
+    if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
       logger('No event! Must be warmup lambda');
       return { statusCode: 400, body: 'Empty invocation' };
     }
 
     const authParams = event.requestContext.authorizer;
     if (!authParams || !authParams.systemWideUserId) {
-      return { statusCode: '400', message: 'User ID not found in context' };
+      return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
 
     const systemWideUserId = authParams.systemWideUserId;
@@ -200,7 +201,7 @@ module.exports.balanceWrapper = async (event) => {
     logger('FATAL_ERROR: ', e);
     return {
       statusCode: 500,
-      body: JSON.stringify(e)
+      body: JSON.stringify(e.message)
     };
   }
 };

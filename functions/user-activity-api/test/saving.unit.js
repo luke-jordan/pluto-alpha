@@ -2,7 +2,7 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:save:test');
+const logger = require('debug')('jupiter:save:test');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -18,9 +18,16 @@ const moment = require('moment');
 const testHelper = require('./test.helper');
 
 const testAccountId = uuid();
+const testUserId = uuid();
 const testClientId = 'some_savings_co';
 const testFloatId = 'usd_primary_float';
 const testPaymentRef = 'some_ref_at_bank';
+
+const testAuthContext = {
+    authorizer: {
+        systemWideUserId: testUserId
+    }
+};
 
 const testSettlementTimeSeconds = 10;
 const testTimeInitiated = moment().subtract(testSettlementTimeSeconds, 'seconds');
@@ -35,20 +42,24 @@ logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmount
 const findMatchingTxStub = sinon.stub();
 const findFloatStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
+const momentStub = sinon.stub();
 
 const handler = proxyquire('../saving-handler', {
     './persistence/rds': { 
         'findMatchingTransaction': findMatchingTxStub,
         'findClientAndFloatForAccount': findFloatStub, 
-        'addSavingToTransactions': addSavingsRdsStub
+        'addSavingToTransactions': addSavingsRdsStub,
+        '@noCallThru': true
     },
-    '@noCallThru': true
+    'moment-timezone': momentStub
 });
 
 const resetStubHistory = () => {
     findMatchingTxStub.resetHistory();
     findFloatStub.resetHistory();
     addSavingsRdsStub.resetHistory();
+    momentStub.reset();
+    momentStub.callsFake(moment); // as with uuid in RDS, too much time being sunk into test framework's design flaws, so a work around here
 };
 
 describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward, sync or async', () => {
@@ -66,9 +77,14 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         paymentRef: testPaymentRef
     });
 
-    // const testSavePendingBase = (amount = testAmounts[0]) => ({
-
-    // });
+    const testSavePendingBase = (amount = testAmounts[0]) => ({
+        accountId: testAccountId,
+        initiationTimeEpochMillis: testTimeInitiated.valueOf(),
+        settlementStatus: 'INITIATED',
+        savedAmount: amount,
+        savedCurrency: 'USD',
+        savedUnit: 'HUNDREDTH_CENT'
+    });
 
     const wellFormedMinimalSettledRequestToRds = {
         accountId: testAccountId,
@@ -83,11 +99,17 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         paymentRef: testPaymentRef
     };
 
-    const wellFormedMinimalPendingRequestToRds = JSON.parse(JSON.stringify(wellFormedMinimalSettledRequestToRds));
-    Reflect.deleteProperty(wellFormedMinimalPendingRequestToRds, 'settledTime');
-    wellFormedMinimalPendingRequestToRds.savedAmount = sinon.match.number;
-    wellFormedMinimalPendingRequestToRds.settlementStatus = 'PENDING';
-
+    const wellFormedMinimalPendingRequestToRds = {
+        accountId: testAccountId,
+        initiationTime: testHelper.momentMatcher(testTimeInitiated),
+        settlementStatus: 'INITIATED',
+        savedAmount: sinon.match.number,
+        savedCurrency: 'USD',
+        savedUnit: 'HUNDREDTH_CENT',
+        clientId: testClientId,
+        floatId: testFloatId
+    }
+    
     const responseToTxSettled = {
         transactionDetails: [{ accountTransactionId: uuid(), creationTime: moment().format() }, 
             { floatAdditionTransactionId: uuid(), creationTime: moment().format() },
@@ -96,7 +118,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     };
 
     const responseToTxPending = {
-        transactionDetails: [{ accountTransactionId: uuid(), creationTime: moment().format() }]
+        transactionDetails: [{ accountTransactionId: uuid(), persistedTimeEpochMillis: moment().format() }]
     };
 
     before(() => {
@@ -106,6 +128,47 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     });
 
     beforeEach(() => resetStubHistory());
+
+    it('Fails gracefully, all routes', async () => {
+        const expectedError = await handler.initatePendingSave({ });
+        expect(expectedError).to.exist;
+        expect(expectedError).to.have.property('statusCode', 500);
+
+        const badEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
+        badEvent.settlementStatus = 'SOMETHINGOROTHER';
+        addSavingsRdsStub.withArgs(badEvent).rejects(new Error('Error! Bad status'));
+        const expectedError2 = await handler.save(badEvent);
+        expect(expectedError2).to.exist;
+        expect(expectedError2).to.have.property('statusCode', 500);
+        expect(expectedError2).to.have.property('body', JSON.stringify('Error! Bad status')); // in case something puts a dict in error msg
+    });
+
+    it('Warmup handled gracefully', async () => {
+        const expectedWarmupResponse = await handler.save({});
+        expect(expectedWarmupResponse).to.exist;
+        expect(expectedWarmupResponse).to.have.property('statusCode', 400);
+        expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
+    });
+
+    it('Most common route, initiated payment, works as wrapper, happy path', async () => {
+        const saveEventToWrapper = testSavePendingBase();
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        momentStub.returns(testTimeInitiated);
+        logger('Seeking: ', testTimeInitiated.valueOf());
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initatePendingSave(apiGwMock);
+        logger('Received: ', resultOfWrapperCall);
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        expect(saveBody).to.deep.equal(responseToTxPending);
+    });
+
+    it('Wrapper fails if no auth context', async () => {
+        const noAuthEvent = { body: JSON.stringify(testSavePendingBase()), requestContext: { }};
+        const resultOfCallWithNoContext = await handler.initatePendingSave(noAuthEvent);
+        expect(resultOfCallWithNoContext).to.exist;
+        expect(resultOfCallWithNoContext).to.have.property('statusCode', 403);
+    });
 
     it('Saves, with payment at same time, and client and float explicit', async () => {
         const saveEventWellFormed = JSON.parse(JSON.stringify(testSaveSettlementBase()));
@@ -134,16 +197,11 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalSettledRequestToRds);
         expect(findMatchingTxStub).to.have.not.been.called;
     });
-
-    /*     
         
-    restore this when do non-settled payment
-    it('Stores pending, if no payment information, float provided but redundant', async () => {
-        const saveEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        saveEvent.floatId = 'zar_cash_float';
-
-        const expectedTxDetails = { accountTransactionId: uuid() };
-        addSavingsRdsStub.withArgs(settlementWithoutPayment, null).resolves({ rows: [expectedTxDetails] });
+    it('Stores pending, if no payment information', async () => {
+        const saveEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
+        
+        logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
 
         const saveResult = await handler.save(saveEvent);
 
@@ -151,13 +209,30 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         expect(saveResult.statusCode).to.equal(200);
         expect(saveResult.body).to.exist;
         const saveBody = JSON.parse(saveResult.body);
-        expect(saveBody).to.deep.equal({ 'state': 'PENDING', transactionsIds: expectedTxDetails });
-        expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(settlementWithPayment);
-        expect(findFloatStub).to.have.not.been.called;
+        expect(saveBody).to.deep.equal(responseToTxPending);
+        expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
+        expect(findFloatStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMatchingTxStub).to.have.not.been.called;
     });
 
-    */
+    it('Stores pending, if given client and float too', async () => {
+        const saveEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
+        saveEvent.floatId = testFloatId;
+        saveEvent.clientId = testClientId;
+
+        logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
+
+        const saveResult = await handler.save(saveEvent);
+
+        expect(saveResult).to.exist;
+        expect(saveResult.statusCode).to.equal(200);
+        expect(saveResult.body).to.exist;
+        const saveBody = JSON.parse(saveResult.body);
+        expect(saveBody).to.deep.equal(responseToTxPending);
+        expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
+        expect(findFloatStub).to.not.have.been.called;
+        expect(findMatchingTxStub).to.have.not.been.called;
+    });
 
     it('Throws an error when no account information, currency, unit or amount provided', async () => {
         const saveEventNoAccountId = JSON.parse(JSON.stringify(testSaveSettlementBase()));
@@ -168,6 +243,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         Reflect.deleteProperty(saveEventNoCurrency, 'savedCurrency');
         const saveEventNoUnit = JSON.parse(JSON.stringify(testSaveSettlementBase()));
         Reflect.deleteProperty(saveEventNoUnit, 'savedUnit');
+        const saveEventNoStatus = JSON.parse(JSON.stringify(testSaveSettlementBase()));
+        Reflect.deleteProperty(saveEventNoStatus, 'settlementStatus');
 
         const expectedNoAccountError = await handler.save(saveEventNoAccountId);
         testHelper.checkErrorResultForMsg(expectedNoAccountError, 'Error! No account ID provided for the save');
@@ -175,10 +252,12 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         const expectedNoAmountError = await handler.save(saveEventNoAmount);
         const expectedNoCurrencyError = await handler.save(saveEventNoCurrency);
         const expectedNoUnitError = await handler.save(saveEventNoUnit);
+        const expectedNoStatusError = await handler.save(saveEventNoStatus);
 
         testHelper.checkErrorResultForMsg(expectedNoAmountError, 'Error! No amount provided for the save');
         testHelper.checkErrorResultForMsg(expectedNoCurrencyError, 'Error! No currency specified for the saving event');
         testHelper.checkErrorResultForMsg(expectedNoUnitError, 'Error! No unit specified for the saving event');
+        testHelper.checkErrorResultForMsg(expectedNoStatusError, 'Error! No settlement status passed');
     });
 
     /* 

@@ -116,27 +116,28 @@ const assembleAccountTxInsertion = (accountTxId, settlementDetails, floatTxIds) 
         savedUnit: settlementDetails.savedUnit,
         savedAmount: settlementDetails.savedAmount,
         settlementStatus: settlementDetails.settlementStatus,
-        initiationTime: settlementDetails.initiationTime.format()
+        initiationTime: settlementDetails.initiationTime.format(),
+        floatId: settlementDetails.floatId,
+        clientId: settlementDetails.clientId
     };
 
     let accountQuery = '';
     let accountColumnKeys = '';
 
     if (isSaveSettled) {
-        accountRow.clientId = settlementDetails.clientId;
-        accountRow.floatId = settlementDetails.floatId;
         accountRow.paymentRef = settlementDetails.paymentRef;
+        accountRow.settlementTime = settlementDetails.settlementTime.format();
         accountRow.floatAddTransactionId = floatTxIds.floatAdditionTxId;
         accountRow.floatAllocTransactionId = floatTxIds.floatAllocationTxId;
-        accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id ` +
+        accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id, ` +
             `settlement_status, initiation_time, settlement_time, payment_reference, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
         accountColumnKeys = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
             '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     } else {
-        accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, ` +
+        accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id, ` +
             `settlement_status, initiation_time) values %L returning transaction_id, creation_time`;
         accountColumnKeys = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
-            '${settlementStatus}, ${initiationTime}';
+            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}';
     }
 
     return {
@@ -161,6 +162,7 @@ const assembleFloatTxInsertions = (accountTxId, settlementDetails, floatTxIds) =
         savedCurrency: settlementDetails.savedCurrency,
         savedUnit: settlementDetails.savedUnit,
         savedAmount: settlementDetails.savedAmount,
+        settlementStatus: settlementDetails.settlementStatus,
         floatId: settlementDetails.floatId,
         clientId: settlementDetails.clientId,
         initiationTime: settlementDetails.initiationTime.format(),
@@ -255,7 +257,7 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
     
     logger('Result of insert : ', insertionResult);
     const transactionDetails = [
-        extractTxDetails('accountTransactionId', insertionResult[0][0]),
+        extractTxDetails('accountTransactionId', insertionResult[0][0])
     ];
 
     if (isSaveSettled) {
