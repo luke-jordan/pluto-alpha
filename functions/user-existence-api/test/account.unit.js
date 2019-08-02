@@ -2,7 +2,7 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:account:test');
+const logger = require('debug')('jupiter:account:test');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
@@ -28,24 +28,22 @@ const testAccountId = uuid();
 const testAccountOpeningRequest = {
     ownerUserId: testUserId,
     clientId: 'some_country_client',
-    defaultFloatId: 'usd_primary_mmkt',
-    userFirstName: 'Luke',
-    userFamilyName: 'Jordan'
+    defaultFloatId: 'usd_primary_mmkt'
 };
 
 const wellFormedPersistenceReq = {
     accountId: sinon.match.string, 
     clientId: 'some_country_client',
     defaultFloatId: 'usd_primary_mmkt',
-    ownerUserId: testUserId, 
-    userFirstName: 'Luke',
-    userFamilyName: 'Jordan'
+    ownerUserId: testUserId
 };
 
-const testPersistedTime = moment().format();
+const testPersistedTime = moment();
+const expectedMillis = testPersistedTime.startOf('second').valueOf();
+
 const testAccountOpeningResult = {
     'accountId': testAccountId,
-    'persistedTime': testPersistedTime
+    'persistedTime': testPersistedTime.format()
 };
 
 describe('transformEvent', () => {
@@ -80,7 +78,7 @@ describe('validateEvent', () => {
     });
 
     it('Event without client Id or float Id should not be validated', async () => {
-        const validationNoClient = accountHandler.validateRequest({ userFirstName: 'Luke', userFamilyName: 'Jordan', 'ownerUserId': uuid()});
+        const validationNoClient = accountHandler.validateRequest({ 'ownerUserId': uuid()});
         expect(validationNoClient).to.be.false;
         const noFloatEvent = JSON.parse(JSON.stringify(testAccountOpeningRequest));
         Reflect.deleteProperty(noFloatEvent, 'defaultFloatId');
@@ -91,22 +89,9 @@ describe('validateEvent', () => {
     it('Event without system wide ID should not be validated', async () => {
         const validation = accountHandler.validateRequest({ 
             clientId: 'some_country_client',
-            defaultFloatId: 'usd_mmkt_primary',
-            userFirstName: 'Luke', 
-            userFamilyName: 'Jordan'
+            defaultFloatId: 'usd_mmkt_primary'
         });
         expect(validation).to.be.false;
-    });
-
-    it('Event without name should not be validated', async () => {
-        const testEvent = JSON.parse(JSON.stringify(testAccountOpeningRequest));
-        Reflect.deleteProperty(testEvent, 'userFirstName');
-        const validation = accountHandler.validateRequest(testEvent);
-        expect(validation).to.be.false;
-        testEvent.userFirstName = 'Luke';
-        Reflect.deleteProperty(testEvent, 'userFamilyName');
-        const validation2 = accountHandler.validateRequest(testEvent);
-        expect(validation2).to.be.false;
     });
 
     it('Event with system wide ID that is not a UUID should not be validated', async () => {
@@ -128,7 +113,7 @@ describe('createAccountMethod', () => {
         const response = await accountHandler.createAccount(testAccountOpeningRequest);
         expect(response).to.exist;
         expect(response.accountId).to.be.a.uuid('v4');
-        expect(response.persistedTime).to.equal(testPersistedTime);
+        expect(response.persistedTimeMillis).to.equal(expectedMillis);
     });
 });
 
@@ -148,13 +133,13 @@ describe('handlerFunctionCreateAccount', () => {
         const bodyParsed = JSON.parse(response.body);
 
         expect(bodyParsed.accountId).to.be.a.uuid('v4');
-        expect(bodyParsed.persistedTime).to.equal(testPersistedTime);
+        expect(bodyParsed.persistedTimeMillis).to.equal(expectedMillis);
     });
 
     it('Handles errors in accordance with standards', async () => {
         const response = await accountHandler.create({ userFirstName: 'Luke' });
         expect(response.statusCode).to.equal(400);
-        expect(response.body).to.equal(`Error! Invalid request. All valid requests require a responsible client id, float id, the owner's user id, and user's names`);
+        expect(response.body).to.equal(`Error! Invalid request. All valid requests require a responsible client id, float id, and the owner's user id`);
     });
 
     it('Handles error from DB correctly', async () => {

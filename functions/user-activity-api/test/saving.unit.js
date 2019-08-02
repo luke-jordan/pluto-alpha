@@ -108,7 +108,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         savedUnit: 'HUNDREDTH_CENT',
         clientId: testClientId,
         floatId: testFloatId
-    }
+    };
     
     const responseToTxSettled = {
         transactionDetails: [{ accountTransactionId: uuid(), creationTime: moment().format() }, 
