@@ -17,6 +17,7 @@
     "debug": "^4.1.1",
     "moment": "^2.24.0",
     "moment-timezone": "^0.5.25",
+    "statuses": "^1.5.0",
     "uuid": "^3.3.2"
   },
   "devDependencies": {

@@ -23,6 +23,7 @@ const testHelper = require('./test.helper');
 
 const testAccountId = uuid();
 const testUserId = '27b00e1c-4f32-4631-a67b-88aaf5a01d0c';
+const errorCausingUser = 'look-this-is-no-good';
 
 // note : in future at some time will need to handle user in different time zone to float
 const testTimeZone = 'America/New_York';
@@ -86,7 +87,7 @@ const accountClientFloatStub = sinon.stub();
 const findAccountsForUserStub = sinon.stub();
 const floatPrincipalVarsStub = sinon.stub();
 
-const handler = proxyquire('../handler', {
+const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
         'findClientAndFloatForAccount': accountClientFloatStub,
@@ -113,6 +114,15 @@ const resetStubs = (historyOnly = true) => {
 };
 
 describe('Fetches user balance and makes projections', () => {
+
+    const createUserIdEvent = (userId) => ({ 
+        userId, 
+        currency: 'USD', 
+        atEpochMillis: testTimeNow.valueOf(),
+        timezone: testTimeZone,
+        clientId: testClientId,
+        floatId: testFloatId 
+    });
     
     const wellFormedResultBody = {
         accountId: [testAccountId],
@@ -168,12 +178,6 @@ describe('Fetches user balance and makes projections', () => {
     };
 
     before(() => {
-        // logger('Test time now: ', testTimeNow.format(), ' and end of day: ', testTimeEOD.format());
-        // logger('Expected balance at end of day: ', expectedBalanceToday);
-        // logger('Effective daily rate: ', effectiveDailyRate.toNumber());
-        // logger('Balances subsequent days, first: ', expectedBalanceSubsequentDays[0]);
-        // resetStubs(false);
-        
         accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment).resolves({ 
             amount: testAccumulatedBalance.decimalPlaces(0).toNumber(), 
             unit: 'HUNDREDTH_CENT',
@@ -181,6 +185,8 @@ describe('Fetches user balance and makes projections', () => {
         });
         accountClientFloatStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
         findAccountsForUserStub.withArgs(testUserId).resolves([testAccountId]);
+        findAccountsForUserStub.withArgs('user-has-no-account').resolves([]);
+        findAccountsForUserStub.withArgs(errorCausingUser).rejects(new Error('Something went wrong with DynamoDB (for example)'));
         
         floatPrincipalVarsStub.withArgs(testClientId, testFloatId).resolves({ 
             accrualRateAnnualBps: testAccrualRateBps, 
@@ -217,14 +223,30 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Wrapper returns appropriate error if no authorizer', async () => {
-        const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' } });
-        expect(balanceError1).to.exist;
+        const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' }, requestContext: {} });
+        logger('This error: ', balanceError1);
+        expect(balanceError1).to.have.property('statusCode', 403);
         // const balanceError2 = await handler.balanceWrapper(); 
     });
 
-    // it('Wrapper swallows error & logs it correctly', async () => {
+    it('Warmup handled gracefully', async () => {
+        const expectedWarmupResponse = await handler.balanceWrapper({});
+        expect(expectedWarmupResponse).to.exist;
+        expect(expectedWarmupResponse).to.have.property('statusCode', 400);
+        expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
 
-    // });
+        const expectedWarmupFull = await handler.balance({});
+        expect(expectedWarmupFull).to.exist;
+        expect(expectedWarmupFull).to.have.property('statusCode', 400);
+        expect(expectedWarmupFull).to.have.property('body', 'Empty invocation');
+    });
+
+    it('Wrapper swallows error & logs it correctly', async () => {
+        const expectedErrorWrapper = await handler.balanceWrapper({ requestContext: { authorizer: { systemWideUserId: errorCausingUser }}});
+        expect(expectedErrorWrapper).to.exist;
+        expect(expectedErrorWrapper).to.have.property('statusCode', 500);
+        expect(expectedErrorWrapper).to.have.property('body', JSON.stringify('Something went wrong with DynamoDB (for example)'));
+    });
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
         const balanceAndProjections = await handler.balance({ 
@@ -240,16 +262,22 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Obtains balance and future projections correctly when given a system wide user ID, single and multiple accounts', async () => {
-        const balanceAndProjections = await handler.balance({ 
-            userId: testUserId, 
-            currency: 'USD', 
-            atEpochMillis: testTimeNow.valueOf(),
-            timezone: testTimeZone,
-            clientId: testClientId,
-            floatId: testFloatId 
-        });
-
+        const balanceAndProjections = await handler.balance(createUserIdEvent(testUserId));
         checkResultIsWellFormed(balanceAndProjections);
+    });
+
+    it('Handles no account ID properly', async () => {
+        const errorResult = await handler.balance(createUserIdEvent('user-has-no-account'));
+        expect(errorResult).to.exist;
+        expect(errorResult).to.have.property('statusCode', 404);
+        expect(errorResult).to.have.property('body', 'User does not have an account open yet');
+    });
+
+    it('Full lambda wraps errors properly', async () => {
+        const expectedError = await handler.balance(createUserIdEvent(errorCausingUser));
+        expect(expectedError).to.exist;
+        expect(expectedError).to.have.property('statusCode', 500);
+        expect(expectedError).to.have.property('body', JSON.stringify('Something went wrong with DynamoDB (for example)'));
     });
 
     it('Obtains balance and future projections for default client and float when given an account Id or user Id', async () => {

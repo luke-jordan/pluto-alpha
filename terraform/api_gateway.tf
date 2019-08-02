@@ -11,7 +11,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
   depends_on = [
   aws_api_gateway_integration.float_api,
-  aws_api_gateway_integration.saving_record,
+  aws_api_gateway_integration.save_initiate,
   aws_api_gateway_integration.account_create,
   aws_api_gateway_integration.balance_fetch_wrapper,
   aws_api_gateway_integration.ops_warmup
@@ -201,36 +201,42 @@ resource "aws_api_gateway_integration" "float_api" {
   uri                     = "${aws_lambda_function.float_api.invoke_arn}"
 }
 
-/////////////// SAVE API LAMBDA //////////////////////////////////////////////////////////////////////////
+/////////////// SAVE API LAMBDA (INITIATE & SETTLE) //////////////////////////////////////////////////////////////////////////
 
-resource "aws_api_gateway_method" "saving_record" {
+resource "aws_api_gateway_resource" "save_path_root" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "save"
+}
+
+resource "aws_api_gateway_resource" "save_initiate" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.save_path_root.id}"
+  path_part   = "initiate"
+}
+
+resource "aws_api_gateway_method" "save_initiate" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.saving_record.id}"
+  resource_id   = "${aws_api_gateway_resource.save_initiate.id}"
   http_method   = "POST"
   authorization = "NONE"
 }
 
-resource "aws_api_gateway_resource" "saving_record" {
-  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "saving_record"
-}
-
-resource "aws_lambda_permission" "saving_record" {
+resource "aws_lambda_permission" "save_initiate" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.saving_record.function_name}"
+  function_name = "${aws_lambda_function.save_initiate.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
-resource "aws_api_gateway_integration" "saving_record" {
+resource "aws_api_gateway_integration" "save_initiate" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id = "${aws_api_gateway_method.saving_record.resource_id}"
-  http_method = "${aws_api_gateway_method.saving_record.http_method}"
+  resource_id = "${aws_api_gateway_method.save_initiate.resource_id}"
+  http_method = "${aws_api_gateway_method.save_initiate.http_method}"
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.saving_record.invoke_arn}"
+  uri                     = "${aws_lambda_function.save_initiate.invoke_arn}"
 }
 
 /////////////// ACCOUNT CREATE API LAMBDA //////////////////////////////////////////////////////////////////////////

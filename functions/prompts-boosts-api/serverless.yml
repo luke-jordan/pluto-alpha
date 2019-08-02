@@ -1,0 +1,48 @@
+# Unnamed serverless API
+
+service: prompts-boosts-api # NOTE: update this with your service name
+
+plugins:
+  - serverless-localstack
+
+custom:
+  localstack:
+    host: http://localhost
+    stages:
+      - dev
+      - local
+    debug: true
+  stages:
+    - local
+    - dev
+  thisStage: ${opt:stage, self:provider.stage}
+  thisProcess:
+    NODE_ENV:
+      prod: "production"
+      dev: "development"
+      local: "lamblocal"
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  region: eu-west-1
+  stage: dev
+  deploymentBucket:
+    change.this.after.creation
+
+functions:
+  message_select:
+    handler: handler.hello
+    # events:
+    #   - http:
+    #       path: save
+    #       method: post
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: u:*
+
+
+package:
+  include:
+    - node_modules/rds-common/**
+    - node_modules/dynamo-common/**
