@@ -1,5 +1,14 @@
 {
+    "aws": {
+        "region": "us-east-1"
+    },
     "tables": {
         "clientFloatVars": "ClientFloatTableTest"
+    },
+    "secrets": {
+        "enabled": true,
+        "names": {
+            "float_api_worker": "staging/ops/psql/float"
+        }
     }
 }

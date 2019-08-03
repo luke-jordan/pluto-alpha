@@ -13,6 +13,16 @@ BigNumber.prototype.valueOf = () => {
   throw Error('valueOf called!');
 };
 
+/** Temporary convenience to check some things in connection etc */
+module.exports.balanceCheck = async (event) => {
+  logger('Initiating balance check');
+  const resultOfCheck = await rds.calculateFloatBalance(event.floatId, event.currency);
+  return {
+    statusCode: 200,
+    body: JSON.stringify(resultOfCheck)
+  }
+}
+
 /**
  * The core function. Receives an instruction that interest (or other return) has been accrued, increases the balance recorded,
  * and then allocates the amounts to the client's bonus and company shares, and thereafter allocates to all accounts with 

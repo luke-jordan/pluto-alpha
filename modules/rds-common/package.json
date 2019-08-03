@@ -12,6 +12,7 @@
   "author": "Luke Jordan",
   "license": "ISC",
   "dependencies": {
+    "aws-sdk": "^2.503.0",
     "config": "^3.1.0",
     "logger": "0.0.1",
     "pg": "^7.11.0",
