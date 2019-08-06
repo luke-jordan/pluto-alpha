@@ -6,13 +6,20 @@ const status = require('statuses');
 
 const persistence = require('./persistence/rds');
 
+const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
+const warmupResponse = { statusCode: 400, body: 'Empty invocation' };
+
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
+
+const handleError = (err) => { 
+  logger('FATAL_ERROR: ', err);
+  return { statusCode: 500, body: JSON.stringify(err.message) };
+};
 
 module.exports.save = async (event) => {
     try {
-      if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
-        logger('No event! Must be warmup lambda');
-        return { statusCode: 400, body: 'Empty invocation' };
+      if (warmupCheck(event)) {
+        return warmupResponse;
       }
       
       const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
@@ -52,13 +59,38 @@ module.exports.save = async (event) => {
         statusCode: 200,
         body: JSON.stringify(savingResult)
       };
-    } catch (e) {
-      logger('FATAL_ERROR: ', e);
-      return {
-        statusCode: 500,
-        body: JSON.stringify(e.message)
-      };
+    } catch (err) {
+      return handleError(err);
     }
+};
+
+module.exports.settle = async (event) => {
+  try {
+    if (warmupCheck(event)) {
+      return warmupResponse;
+    }
+
+    const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
+    logger('Settling payment, event: ', settlementInformation);
+
+    if (!settlementInformation.transactionId) {
+      return invalidRequestResponse('Error! No transaction ID provided');
+    } else if (!settlementInformation.paymentRef || !settlementInformation.paymentProvider) {
+      return invalidRequestResponse('Error! No payment reference or provider');
+    }
+
+    if (Reflect.has(settlementInformation, 'settlementTimeEpochMillis')) {
+      settlementInformation.settlementTime = moment(settlementInformation.settlementTimeEpochMillis);
+      Reflect.deleteProperty(settlementInformation, 'settlementTimeEpochMillis');
+    } else {
+      settlementInformation.settlementTime = moment();
+    }
+
+
+
+  } catch (err) {
+    return handleError(err);
+  }
 };
   
 /* Wrapper method, calls the above, after verifying the user owns the account, event params are:
@@ -92,3 +124,9 @@ module.exports.initatePendingSave = async (event) => {
     return { statusCode: status(500), body: JSON.stringify(e.message) };
   }
 };
+
+/* Method to change a pending save to complete. Wrapper. Will be used by payment method eventually.
+ */
+module.exports.updateIncompleteSave = async (event) => {
+
+}

@@ -223,6 +223,48 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
 
 });
 
+describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
+
+    let rdsClient = { };
+    before(() => rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')}));
+    beforeEach(() => clearStubHistory());
+
+    it.only('Combined update and insert assembles as necessary', async () => {
+        const testTime = new Date();
+
+        const updateQueryKeyObject = { someId: 101, someTime: testTime };
+        const updateQueryValueObject = { someStatus: 'SETTLED', someText: 'something_else', someBoolean: false };
+        const updateDef = { table: 'schema1.tableX', key: updateQueryKeyObject, values: updateQueryValueObject, returnClause: 'updated_time' };
+
+        const expectedUpdateQuery = 'UPDATE TABLE schema1.tableX SET some_status = $3, some_text = $4, some_boolean = $5 WHERE some_id = $1 and some_time = $2 RETURNING updated_time';
+        const updateValues = [101, testTime, 'SETTLED', 'something_else', false];
+
+        const insertQueryTemplate = 'INSERT INTO schema2.table1 (column_1, column_2) VALUES %L RETURNING insertion_id';
+        const insertQueryColumns = '${column1}, ${column2}';
+        const insertQueryValues = [{ column1: 'Hello', column2: 'X' }, { column1: 'What', column2: 'Y' }];
+        const insertDef = { query: insertQueryTemplate, columnTemplate: insertQueryColumns, rows: insertQueryValues };
+        
+        const expectedInsertQuery = `INSERT INTO schema2.table1 (column_1, column_2) VALUES ('Hello', 'X'), ('What', 'Y') RETURNING insertion_id`;
+        
+        queryStub.withArgs(expectedUpdateQuery, sinon.match(updateValues)).resolves({ rows: [{ 'updated_time': new Date() }]});
+        queryStub.withArgs(expectedInsertQuery).resolves({ rows: [{ 'insertion_id': 1 }, { 'insertion_id': 2 }]});
+
+        const updateInsertResult = await rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef]);
+        logger('Result of queries: ', updateInsertResult);
+
+        expect(updateInsertResult).to.exist;
+
+        expect(connectStub).to.have.been.calledOnce;
+        expect(queryStub).to.have.been.calledWithExactly('BEGIN');
+        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
+        expect(queryStub).to.have.been.calledWithExactly(expectedUpdateQuery, sinon.match(updateValues));
+        expect(queryStub).to.have.been.calledWithExactly(expectedInsertQuery);
+        expect(queryStub).to.have.been.calledWithExactly('COMMIT');
+        expect(releaseStub).to.have.been.calledOnce;
+    })
+
+});
+
 describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
     
     let rdsClient = { };

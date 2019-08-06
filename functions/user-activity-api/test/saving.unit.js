@@ -42,6 +42,8 @@ logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmount
 const findMatchingTxStub = sinon.stub();
 const findFloatStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
+const updateSaveRdsStub = sinon.stub();
+
 const momentStub = sinon.stub();
 
 const handler = proxyquire('../saving-handler', {
@@ -49,6 +51,7 @@ const handler = proxyquire('../saving-handler', {
         'findMatchingTransaction': findMatchingTxStub,
         'findClientAndFloatForAccount': findFloatStub, 
         'addSavingToTransactions': addSavingsRdsStub,
+        'updateSaveTxToSettled': updateSaveRdsStub,
         '@noCallThru': true
     },
     'moment-timezone': momentStub
@@ -270,4 +273,41 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     });
      */
     
+});
+
+describe.only('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
+
+    const testPendingTxId = uuid();
+    const testSettlementTime = moment();
+    const testPaymentDetails = { provider: 'STRIPE', reference: 'xyz123' };
+
+    const responseToTxUpdated = {
+        transactionDetails: [
+            { accountTransactionId: testPendingTxId, updatedTime: moment().format() }, 
+            { floatAdditionTransactionId: uuid(), creationTime: moment().format() },
+            { floatAllocationTransactionId: uuid(), creationTime: moment().format() }
+        ],
+        newBalance: { amount: sumOfTestAmounts, unit: 'HUNDREDTH_CENT' }
+    };
+
+    beforeEach(() => testHelper.resetStubs(updateSaveRdsStub));
+
+    it('Happy path, completes an update properly, no settlement time', async () => {
+        updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
+        expect(updateTxResult).to.exist;
+        expect(updateTxResult).to.deep.equal(responseToTxUpdated);
+    });
+
+    it('Handles validation errors properly', async () => {
+        const expectNoTxError = await handler.settle({ paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
+        testHelper.checkErrorResultForMsg(expectNoTxError, 'Error! No transaction ID provided');
+        const expectNoPaymentRefError = await handler.settle({ transactionId: testPendingTxId, paymentProvider: 'STRIPE' });
+        testHelper.checkErrorResultForMsg(expectNoPaymentRefError, 'Error! No payment reference or provider');
+        const expectNoPaymentProviderErr = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123' });
+        testHelper.checkErrorResultForMsg(expectNoPaymentProviderErr, 'Error! No payment reference or provider');
+    });
+
 });

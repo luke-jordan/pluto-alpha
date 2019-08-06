@@ -275,3 +275,15 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
     
     return responseEntity;
 };
+
+/**
+ * Records that a saving event settled (via any payment intermediary). Payment details includes provider and reference.
+ * @param {string} transactionId The ID of the transaction in the accounts ledger
+ * @param {string} paymentProvider The intermediary used for the payment (for tracing, etc.)
+ * @param {string} paymentReference The reference for the payment provided by the payment intermediary
+ * @param {moment} settlementTime When the payment settled
+ */
+module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, settlementTime) => {
+    const responseEntity = uuid();
+    
+};

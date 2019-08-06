@@ -125,13 +125,16 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         `amount, float_id, client_id, settlement_status, initiation_time, settlement_time, payment_reference, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
     const insertFloatTxQuery = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, ` +
         `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
-
+    
     const accountColKeysNotSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
         '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}'; 
     const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
         '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
         '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
+
+    const updateAccTxQuery = `update ${config.get('tables.accountTransactions')} set settlement_status = $2, settlement_time = $3, payment_reference = $4, payment_provider = $5 ` +
+        `where transaction_id = $1`;
 
     it('Insert a pending state save, if status is initiated', async () => { 
         const testAcTxId = uuid();
@@ -291,6 +294,27 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(multiTableStub).to.have.been.calledOnceWithExactly(expectedArgs);
         expect(queryStub).to.have.been.calledThrice; // because also fetches timestamp
         expectNoCalls([insertStub]);
+    });
+
+    it.only('Updates a pending save to settled and ties up all parts of float, etc.', async () => {
+        const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: testPaymentRef };
+        const testSettlementTime = moment();
+
+        const expectedUpdateParams = [testAccountId, 'SETTLED', testSettlementTime.format(), testPaymentRef, 'STRIPE'];
+        
+
+        const resultOfSaveUpdate = await rds.updateSaveTxToSettled(testAccountId, testPaymentDetails, testSettlementTime);
+
+        expect(resultOfSaveUpdate).to.exist;
+        expect(resultOfSaveUpdate).to.have.property('transactionDetails');
+        expect(resultOfSaveUpdate.transactionDetails).to.be.an('array').that.has.length(3);
+
+        expect(sinon.match(expectedTxDetails[0]).test(resultOfSaveInsertion.transactionDetails[0])).to.be.true;
+        expect(sinon.match(expectedTxDetails[1]).test(resultOfSaveInsertion.transactionDetails[1])).to.be.true;
+        expect(sinon.match(expectedTxDetails[2]).test(resultOfSaveInsertion.transactionDetails[2])).to.be.true;
+
+        expect(resultOfSaveInsertion).to.have.property('newBalance');
+        expect(resultOfSaveInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
     });
 
     // todo: restore
