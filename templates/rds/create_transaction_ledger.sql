@@ -18,11 +18,17 @@ create table if not exists transaction_data.core_transaction_ledger (
     float_adjust_tx_id varchar(50),
     float_alloc_tx_id varchar(50),
     payment_reference varchar(255),
+    payment_provider varchar(255),
+    updated_time timestamp with time zone not null default current_timestamp,
     tags text[] default '{}',
     flags text[] default '{}'
 );
 
+create trigger update_transaction_modtime before update on transaction_data.core_transaction_ledger 
+    for each row execute procedure trigger_set_updated_timestamp();
+
 -- todo : indices
+
 -- todo : tighten up / narrow grants
 revoke all on transaction_data.core_transaction_ledger from public;
 

@@ -22,5 +22,10 @@
     "projection": {
         "defaultDays": 3,
         "maxDays": 5
+    },
+    "payment": {
+        "default": {
+            "name": "STRIPE"
+        }
     }
 }

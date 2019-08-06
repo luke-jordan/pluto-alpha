@@ -126,13 +126,14 @@ const assembleAccountTxInsertion = (accountTxId, settlementDetails, floatTxIds) 
 
     if (isSaveSettled) {
         accountRow.paymentRef = settlementDetails.paymentRef;
+        accountRow.paymentProvider = settlementDetails.paymentProvider;
         accountRow.settlementTime = settlementDetails.settlementTime.format();
         accountRow.floatAddTransactionId = floatTxIds.floatAdditionTxId;
         accountRow.floatAllocTransactionId = floatTxIds.floatAllocationTxId;
         accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id, ` +
-            `settlement_status, initiation_time, settlement_time, payment_reference, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
+            `settlement_status, initiation_time, settlement_time, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
         accountColumnKeys = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
-            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
+            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     } else {
         accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id, ` +
             `settlement_status, initiation_time) values %L returning transaction_id, creation_time`;
@@ -147,7 +148,7 @@ const assembleAccountTxInsertion = (accountTxId, settlementDetails, floatTxIds) 
     };
 };
 
-const assembleFloatTxInsertions = (accountTxId, settlementDetails, floatTxIds) => {
+const assembleFloatTxInsertions = (accountTxId, savingEventDetails, floatTxIds) => {
     const floatTxTable = config.get('tables.floatTransactions');
 
     // note: we do this as two matching transactions, a save (which adds to the float itself) and then an allocation of that amount
@@ -158,28 +159,25 @@ const assembleFloatTxInsertions = (accountTxId, settlementDetails, floatTxIds) =
     
     const rowValuesBase = { 
         accountTransactionId: accountTxId,
-        accountId: settlementDetails.accountId, 
-        savedCurrency: settlementDetails.savedCurrency,
-        savedUnit: settlementDetails.savedUnit,
-        savedAmount: settlementDetails.savedAmount,
-        settlementStatus: settlementDetails.settlementStatus,
-        floatId: settlementDetails.floatId,
-        clientId: settlementDetails.clientId,
-        initiationTime: settlementDetails.initiationTime.format(),
-        settlementTime: settlementDetails.settlementTime.format()
+        accountId: savingEventDetails.accountId, 
+        savedCurrency: savingEventDetails.savedCurrency,
+        savedUnit: savingEventDetails.savedUnit,
+        savedAmount: savingEventDetails.savedAmount,
+        floatId: savingEventDetails.floatId,
+        clientId: savingEventDetails.clientId
     };
 
     const floatAdditionRow = JSON.parse(JSON.stringify(rowValuesBase));
     floatAdditionRow.transactionType = 'USER_SAVING_EVENT';
     floatAdditionRow.floatTransactionId = floatTxIds.floatAdditionTxId;
     floatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
-    floatAdditionRow.allocatedToId = settlementDetails.floatId;
+    floatAdditionRow.allocatedToId = savingEventDetails.floatId;
 
     const floatAllocationRow = JSON.parse(JSON.stringify(rowValuesBase));
     floatAllocationRow.transactionType = 'ALLOCATION';
     floatAllocationRow.floatTransactionId = floatTxIds.floatAllocationTxId;
     floatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
-    floatAllocationRow.allocatedToId = settlementDetails.accountId;
+    floatAllocationRow.allocatedToId = savingEventDetails.accountId;
 
     return { 
         query: floatQueryString,
@@ -212,6 +210,8 @@ const extractTxDetails = (keyForTransactionId, row) => {
  * @param {string} settlementStatus The status of the saving event (initiated or settled)
  * @param {string} floatId The float to which this amount of saving is allocated
  * @param {string} offerId (Optional) Include if the saving event is clearly linked to a specific inducement/reward
+ * @param {string} paymentRef If settled: the reference at the payment provider for the transaction
+ * @param {string} paymentProvider If settled: who the payment provider was
  * @param {list(string)} tags (Optional) Any tags to include in the event
  * @param {list(string)} flags (Optional) Any flags to add to the event (e.g., if the saving is restricted in withdrawals)
  */
@@ -277,13 +277,58 @@ module.exports.addSavingToTransactions = async (settlementDetails = {
 };
 
 /**
- * Records that a saving event settled (via any payment intermediary). Payment details includes provider and reference.
+ * Second core method. Records that a saving event settled (via any payment intermediary). Payment details includes provider and reference.
  * @param {string} transactionId The ID of the transaction in the accounts ledger
  * @param {string} paymentProvider The intermediary used for the payment (for tracing, etc.)
  * @param {string} paymentReference The reference for the payment provided by the payment intermediary
  * @param {moment} settlementTime When the payment settled
  */
 module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, settlementTime) => {
-    const responseEntity = uuid();
-    
+    const responseEntity = { };
+
+    const accountTxTable = config.get('tables.accountTransactions');
+    const floatAdditionTxId = uuid();
+    const floatAllocationTxId = uuid();
+
+    const pendingTxResult = await rdsConnection.selectQuery(`select * from ${accountTxTable} where transaction_id = $1`, [transactionId]);
+    logger('Retrieved pending save: ', pendingTxResult);
+
+    const saveDetails = camelizeKeys(pendingTxResult[0]);
+    saveDetails.savedAmount = saveDetails.amount;
+    saveDetails.savedCurrency = saveDetails.currency;
+    saveDetails.savedUnit = saveDetails.unit;
+    logger('Resulting save details: ', saveDetails);
+
+    const updateQueryDef = {
+        table: accountTxTable,
+        key: { transactionId },
+        value: {
+            settlementStatus: 'SETTLED',
+            settlementTime: settlementTime.format(),
+            floatAddTransactionId: floatAdditionTxId,
+            floatAllocTransactionId: floatAllocationTxId,
+            paymentReference: paymentDetails.paymentRef,
+            paymentProvider: paymentDetails.paymentProvider
+        },
+        returnClause: 'transaction_id, updated_time'
+    };
+    const floatQueryDef = assembleFloatTxInsertions(transactionId, saveDetails, { floatAdditionTxId, floatAllocationTxId });
+    logger('Assembled float query def: ', floatQueryDef);
+
+    const updateAndInsertResult = await rdsConnection.multiTableUpdateAndInsert([updateQueryDef], [floatQueryDef]);
+    logger('Result of update and insert: ', updateAndInsertResult);
+
+    const transactionDetails = [];
+    transactionDetails.push({ 
+        accountTransactionId: updateAndInsertResult[0][0]['transaction_id'], 
+        updatedTimeEpochMillis: moment(updateAndInsertResult[0][0]['updated_time']).valueOf()
+    });
+    transactionDetails.push(extractTxDetails('floatAdditionTransactionId', updateAndInsertResult[1][0]));
+    transactionDetails.push(extractTxDetails('floatAllocationTransactionId', updateAndInsertResult[1][0]));
+    responseEntity['transactionDetails'] = transactionDetails;
+
+    const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['savedCurrency'], moment());
+    responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit };
+
+    return responseEntity;
 };

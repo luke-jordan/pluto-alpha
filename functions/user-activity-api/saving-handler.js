@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:save:main');
+const config = require('config');
 const moment = require('moment-timezone');
 const status = require('statuses');
 
@@ -66,27 +67,32 @@ module.exports.save = async (event) => {
 
 module.exports.settle = async (event) => {
   try {
-    if (warmupCheck(event)) {
-      return warmupResponse;
-    }
 
-    const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
-    logger('Settling payment, event: ', settlementInformation);
+    const settleInfo = event['body'] ? JSON.parse(event['body']) : event;
+    logger('Settling payment, event: ', settleInfo);
 
-    if (!settlementInformation.transactionId) {
+    if (!settleInfo.transactionId) {
       return invalidRequestResponse('Error! No transaction ID provided');
-    } else if (!settlementInformation.paymentRef || !settlementInformation.paymentProvider) {
+    } else if (!settleInfo.paymentRef || !settleInfo.paymentProvider) {
       return invalidRequestResponse('Error! No payment reference or provider');
     }
 
-    if (Reflect.has(settlementInformation, 'settlementTimeEpochMillis')) {
-      settlementInformation.settlementTime = moment(settlementInformation.settlementTimeEpochMillis);
-      Reflect.deleteProperty(settlementInformation, 'settlementTimeEpochMillis');
+    if (Reflect.has(settleInfo, 'settlementTimeEpochMillis')) {
+      settleInfo.settlementTime = moment(settleInfo.settlementTimeEpochMillis);
+      Reflect.deleteProperty(settleInfo, 'settlementTimeEpochMillis');
     } else {
-      settlementInformation.settlementTime = moment();
+      settleInfo.settlementTime = moment();
     }
+    
+    const paymentDetails = { 
+      paymentProvider: settleInfo.paymentProvider,
+      paymentRef: settleInfo.paymentRef
+    };
 
+    const resultOfUpdate = await persistence.updateSaveTxToSettled(settleInfo.transactionId, paymentDetails, settleInfo.settlementTime);
+    logger('Completed the update: ', resultOfUpdate);
 
+    return { statusCode: 200, body: JSON.stringify(resultOfUpdate) };
 
   } catch (err) {
     return handleError(err);
@@ -125,8 +131,31 @@ module.exports.initatePendingSave = async (event) => {
   }
 };
 
-/* Method to change a pending save to complete. Wrapper. Will be used by payment method eventually.
+/* Method to change a pending save to complete. Wrapper. Once integration is done, will query payment provider first.
  */
-module.exports.updateIncompleteSave = async (event) => {
+module.exports.settleInitiatedSave = async (event) => {
+  try {
 
+    if (warmupCheck(event)) {
+      return warmupResponse;
+    }
+
+    const authParams = event.requestContext.authorizer;
+    if (!authParams || !authParams.systemWideUserId) {
+      return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
+    }
+
+    // todo : check transaction ID, accountId and user Id match
+    // todo : get default payment provider from client
+    const settleInfo = JSON.parse(event.body);
+    if (!settleInfo.paymentProvider) {
+      settleInfo.paymentProvider = config.get('payment.default.name');
+    }
+
+    logger('Settling, with info: ', settleInfo);
+    return exports.settle(settleInfo);
+  } catch (err) {
+    logger('FATAL_ERROR: ', err);
+    return handleError(err);
+  }
 }
