@@ -226,10 +226,12 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
 describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
 
     let rdsClient = { };
-    before(() => rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')}));
+    before(() => { 
+        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
+    });
     beforeEach(() => clearStubHistory());
 
-    it.only('Combined update and insert assembles as necessary', async () => {
+    it('Combined update and insert assembles as necessary', async () => {
         const testTime = new Date();
 
         const updateQueryKeyObject = { someId: 101, someTime: testTime };
@@ -261,7 +263,7 @@ describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
         expect(queryStub).to.have.been.calledWithExactly(expectedInsertQuery);
         expect(queryStub).to.have.been.calledWithExactly('COMMIT');
         expect(releaseStub).to.have.been.calledOnce;
-    })
+    });
 
 });
 

@@ -158,4 +158,4 @@ module.exports.settleInitiatedSave = async (event) => {
     logger('FATAL_ERROR: ', err);
     return handleError(err);
   }
-}
+};

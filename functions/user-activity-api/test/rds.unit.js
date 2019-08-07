@@ -167,7 +167,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             columnTemplate: floatColumnKeys,
             rows: floatRows
         };
-    }
+    };
 
     it('Insert a pending state save, if status is initiated', async () => { 
         const testAcTxId = uuid();

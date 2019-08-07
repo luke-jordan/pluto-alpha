@@ -305,12 +305,12 @@ class RdsConnection {
 
     static compileUpdateQueryAndArray (updateQueryDef) {
         const keyObject = updateQueryDef.skipDecamelize ? updateQueryDef.key : decamelizeKeys(updateQueryDef.key, '_');
-        const keyPart = Object.keys(keyObject).map((column, index) => `${column} = \$${index + 1}`).join(' and ');
+        const keyPart = Object.keys(keyObject).map((column, index) => `${column} = $${index + 1}`).join(' and ');
         logger('Key part: ', keyPart);
         
         const baseIndex = Object.values(keyObject).length + 1;
         const valueObject = updateQueryDef.skipDecamelize ? updateQueryDef.values : decamelizeKeys(updateQueryDef.values, '_');
-        const setPart = Object.keys(valueObject).map((column, index) => `${column} = \$${baseIndex + index}`).join(', ');
+        const setPart = Object.keys(valueObject).map((column, index) => `${column} = $${baseIndex + index}`).join(', ');
         logger('And setting: ', setPart);
         
         const returnPart = updateQueryDef.returnClause ? `RETURNING ${updateQueryDef.returnClause}` : '';
