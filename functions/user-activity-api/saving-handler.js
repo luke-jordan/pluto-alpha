@@ -172,4 +172,4 @@ module.exports.checkPendingPayment = async (transactionId) => {
   return { statusCode: 200, body: JSON.stringify({
     result: 'PAYMENT_COMPLETE'
   })};
-}
+};
