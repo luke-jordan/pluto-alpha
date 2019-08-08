@@ -90,6 +90,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         savedUnit: 'HUNDREDTH_CENT'
     });
 
+    const wrapTestEvent = (eventBody) => ({ body: JSON.stringify(eventBody), requestContext: testAuthContext });
+
     const wellFormedMinimalSettledRequestToRds = {
         accountId: testAccountId,
         initiationTime: testHelper.momentMatcher(testTimeInitiated),
@@ -134,22 +136,29 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
 
     beforeEach(() => resetStubHistory());
 
-    it('Fails gracefully, all routes', async () => {
-        const expectedError = await handler.initatePendingSave({ });
-        expect(expectedError).to.exist;
-        expect(expectedError).to.have.property('statusCode', 500);
+    it('Fails gracefully, RDS failure', async () => {
+        const badEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
+        badEvent.accountId = 'hello-blah-wrong';
+        badEvent.clientId = testClientId;
+        badEvent.floatId = testFloatId;
 
-        const badEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        badEvent.settlementStatus = 'SOMETHINGOROTHER';
-        addSavingsRdsStub.withArgs(badEvent).rejects(new Error('Error! Bad status'));
-        const expectedError2 = await handler.save(badEvent);
+        const badRdsRequest = JSON.parse(JSON.stringify(wellFormedMinimalPendingRequestToRds));
+        badRdsRequest.accountId = 'hello-blah-wrong';
+        badRdsRequest.savedAmount = badEvent.savedAmount;
+        badRdsRequest.initiationTime = testHelper.momentMatcher(testTimeInitiated);
+        
+        addSavingsRdsStub.withArgs(badRdsRequest).rejects(new Error('Error! Bad account ID'));
+        
+        const expectedError2 = await handler.initatePendingSave({ body: JSON.stringify(badEvent), requestContext: testAuthContext });
+        // testHelper.logNestedMatches(badRdsRequest, addSavingsRdsStub.getCall(0).args[0]);
+        
         expect(expectedError2).to.exist;
         expect(expectedError2).to.have.property('statusCode', 500);
-        expect(expectedError2).to.have.property('body', JSON.stringify('Error! Bad status')); // in case something puts a dict in error msg
+        expect(expectedError2).to.have.property('body', JSON.stringify('Error! Bad account ID')); // in case something puts a dict in error msg
     });
 
     it('Warmup handled gracefully', async () => {
-        const expectedWarmupResponse = await handler.save({});
+        const expectedWarmupResponse = await handler.initatePendingSave({});
         expect(expectedWarmupResponse).to.exist;
         expect(expectedWarmupResponse).to.have.property('statusCode', 400);
         expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
@@ -178,7 +187,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     it('Saves, with payment at same time, and client and float explicit', async () => {
         const saveEventWellFormed = JSON.parse(JSON.stringify(testSaveSettlementBase()));
         
-        const saveResult = await handler.save(saveEventWellFormed);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEventWellFormed));
         
         expect(saveResult).to.exist;
         expect(saveResult).to.have.property('statusCode', 200);
@@ -192,7 +201,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         Reflect.deleteProperty(saveEvent, 'floatId');
         Reflect.deleteProperty(saveEvent, 'clientId');
         
-        const saveResult = await handler.save(saveEvent);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEvent));
         
         expect(saveResult).to.have.property('statusCode', 200);
         expect(saveResult.body).to.exist;
@@ -208,7 +217,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
 
-        const saveResult = await handler.save(saveEvent);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEvent));
 
         expect(saveResult).to.exist;
         expect(saveResult.statusCode).to.equal(200);
@@ -227,7 +236,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
 
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
 
-        const saveResult = await handler.save(saveEvent);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEvent));
 
         expect(saveResult).to.exist;
         expect(saveResult.statusCode).to.equal(200);
@@ -248,21 +257,17 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         Reflect.deleteProperty(saveEventNoCurrency, 'savedCurrency');
         const saveEventNoUnit = JSON.parse(JSON.stringify(testSaveSettlementBase()));
         Reflect.deleteProperty(saveEventNoUnit, 'savedUnit');
-        const saveEventNoStatus = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        Reflect.deleteProperty(saveEventNoStatus, 'settlementStatus');
 
-        const expectedNoAccountError = await handler.save(saveEventNoAccountId);
+        const expectedNoAccountError = await handler.initatePendingSave(wrapTestEvent(saveEventNoAccountId));
         testHelper.checkErrorResultForMsg(expectedNoAccountError, 'Error! No account ID provided for the save');
 
-        const expectedNoAmountError = await handler.save(saveEventNoAmount);
-        const expectedNoCurrencyError = await handler.save(saveEventNoCurrency);
-        const expectedNoUnitError = await handler.save(saveEventNoUnit);
-        const expectedNoStatusError = await handler.save(saveEventNoStatus);
+        const expectedNoAmountError = await handler.initatePendingSave(wrapTestEvent(saveEventNoAmount));
+        const expectedNoCurrencyError = await handler.initatePendingSave(wrapTestEvent(saveEventNoCurrency));
+        const expectedNoUnitError = await handler.initatePendingSave(wrapTestEvent(saveEventNoUnit));
 
         testHelper.checkErrorResultForMsg(expectedNoAmountError, 'Error! No amount provided for the save');
         testHelper.checkErrorResultForMsg(expectedNoCurrencyError, 'Error! No currency specified for the saving event');
         testHelper.checkErrorResultForMsg(expectedNoUnitError, 'Error! No unit specified for the saving event');
-        testHelper.checkErrorResultForMsg(expectedNoStatusError, 'Error! No settlement status passed');
     });
 
     /* 

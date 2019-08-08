@@ -1,0 +1,8 @@
+{
+    "body": "{\"accountId\":\"a9a87bce-2681-406a-9bb7-3d20cf385e86\",\"savedAmount\":50000,\"savedCurrency\":\"ZAR\",\"savedUnit\":\"HUNDREDTH_CENT\"}",
+    "requestContext": {
+        "authorizer": {
+            "systemWideUserId": "hereitis"
+        }
+    }
+}

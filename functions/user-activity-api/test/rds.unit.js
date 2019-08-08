@@ -134,7 +134,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
     const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
         '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
-        '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
+        '${allocatedToType}, ${allocatedToId}, ${transactionType}, ${accountTransactionId}';
 
     const createFloatQueryDef = (txIds) => {
         const expectedRowItem = {
@@ -327,8 +327,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         const expectedUpdateValue = {
             settlementStatus: 'SETTLED',
             settlementTime: testSettlementTime.format(),
-            floatAddTransactionId: testFlTxAddId,
-            floatAllocTransactionId: testFlTxAllocId,
+            floatAdjustTxId: testFlTxAddId,
+            floatAllocTxId: testFlTxAllocId,
             paymentReference: testPaymentRef,
             paymentProvider: 'STRIPE'
         };
@@ -368,11 +368,12 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             'creationTimeEpochMillis': sinon.match.number
         }];
 
-        logger('Expected float query def: ', expectedFloatQueryDef);
+        // logger('Expected float query def: ', expectedFloatQueryDef);
 
         const resultOfSaveUpdate = await rds.updateSaveTxToSettled(testAcTxId, testPaymentDetails, testSettlementTime);
 
         // testHelper.logNestedMatches(expectedUpdateDef, multiOpStub.getCall(0).args[0][0]);
+        // testHelper.logNestedMatches(expectedFloatQueryDef, multiOpStub.getCall(0).args[1][0]);
 
         expect(resultOfSaveUpdate).to.exist;
         expect(resultOfSaveUpdate).to.have.property('transactionDetails');

@@ -7,7 +7,7 @@ resource "aws_lambda_function" "saving_record" {
 
   function_name                  = "${var.saving_record_lambda_function_name}"
   role                           = "${aws_iam_role.saving_record_role.arn}"
-  handler                        = "saving-handler.save"
+  handler                        = "saving-handler.settleInitiatedSave"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"

@@ -17,52 +17,30 @@ const handleError = (err) => {
   return { statusCode: 500, body: JSON.stringify(err.message) };
 };
 
-module.exports.save = async (event) => {
-    try {
-      if (warmupCheck(event)) {
-        return warmupResponse;
-      }
-      
-      const settlementInformation = event['body'] ? JSON.parse(event['body']) : event;
-      logger('Have a saving request inbound: ', settlementInformation);
-  
-      if (!settlementInformation.accountId) {
-        return invalidRequestResponse('Error! No account ID provided for the save');
-      } else if (!settlementInformation.savedAmount) {
-        return invalidRequestResponse('Error! No amount provided for the save');
-      } else if (!settlementInformation.savedCurrency) {
-        return invalidRequestResponse('Error! No currency specified for the saving event');
-      } else if (!settlementInformation.savedUnit) {
-        return invalidRequestResponse('Error! No unit specified for the saving event');
-      } else if (!settlementInformation.settlementStatus) {
-        return invalidRequestResponse('Error! No settlement status passed');
-      }
-  
-      if (!settlementInformation.floatId && !settlementInformation.clientId) {
-        const floatAndClient = await persistence.findClientAndFloatForAccount(settlementInformation.accountId);
-        settlementInformation.floatId = settlementInformation.floatId || floatAndClient.floatId;
-        settlementInformation.clientId = settlementInformation.clientId || floatAndClient.clientId;
-      }
-  
-      settlementInformation.initiationTime = moment(settlementInformation.initiationTimeEpochMillis);
-      Reflect.deleteProperty(settlementInformation, 'initiationTimeEpochMillis');
-  
-      if (Reflect.has(settlementInformation, 'settlementTimeEpochMillis')) {
-        settlementInformation.settlementTime = moment(settlementInformation.settlementTimeEpochMillis);
-        Reflect.deleteProperty(settlementInformation, 'settlementTimeEpochMillis');
-      }
-      
-      const savingResult = await persistence.addSavingToTransactions(settlementInformation);
+const save = async (eventBody) => {
+    const saveInformation = eventBody;
+    logger('Have a saving request inbound: ', saveInformation);
 
-      logger('Completed the save, result: ', savingResult);
-  
-      return {
-        statusCode: 200,
-        body: JSON.stringify(savingResult)
-      };
-    } catch (err) {
-      return handleError(err);
+    if (!eventBody.floatId && !eventBody.clientId) {
+      const floatAndClient = await persistence.findClientAndFloatForAccount(saveInformation.accountId);
+      saveInformation.floatId = eventBody.floatId || floatAndClient.floatId;
+      saveInformation.clientId = eventBody.clientId || floatAndClient.clientId;
     }
+
+    saveInformation.initiationTime = moment(saveInformation.initiationTimeEpochMillis);
+    Reflect.deleteProperty(saveInformation, 'initiationTimeEpochMillis');
+
+    if (Reflect.has(saveInformation, 'settlementTimeEpochMillis')) {
+      saveInformation.settlementTime = moment(saveInformation.settlementTimeEpochMillis);
+      Reflect.deleteProperty(saveInformation, 'settlementTimeEpochMillis');
+    }
+    
+    logger('Sending to persistence: ', saveInformation);
+    const savingResult = await persistence.addSavingToTransactions(saveInformation);
+
+    logger('Completed the save, result: ', savingResult);
+
+    return savingResult;
 };
 
 module.exports.settle = async (event) => {
@@ -110,20 +88,45 @@ module.exports.settle = async (event) => {
  */
 module.exports.initatePendingSave = async (event) => {
   try {
-    const authParams = event.requestContext.authorizer;
+    if (warmupCheck(event)) {
+      return warmupResponse;
+    }
+
+    const authParams = event.requestContext ? event.requestContext.authorizer : null;
     if (!authParams || !authParams.systemWideUserId) {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
 
     const saveInformation = JSON.parse(event.body);
-    saveInformation.settlementStatus = 'INITIATED';
+    if (!saveInformation.accountId) {
+      return invalidRequestResponse('Error! No account ID provided for the save');
+    } else if (!saveInformation.savedAmount) {
+      return invalidRequestResponse('Error! No amount provided for the save');
+    } else if (!saveInformation.savedCurrency) {
+      return invalidRequestResponse('Error! No currency specified for the saving event');
+    } else if (!saveInformation.savedUnit) {
+      return invalidRequestResponse('Error! No unit specified for the saving event');
+    }
     
+    // todo : make this check more robust 
+    if (saveInformation.settlementTimeEpochMillis) { 
+      saveInformation.settlementStatus = 'SETTLED';
+    } else {
+      saveInformation.settlementStatus = 'INITIATED';
+    }
+
     if (!saveInformation.initiationTimeEpochMillis) {
       saveInformation.initiationTimeEpochMillis = moment().valueOf();
       logger('Initiation time: ', saveInformation.initiationTimeEpochMillis);
     }
 
-    return exports.save(saveInformation);
+    const initiationResult = await save(saveInformation);
+    
+    initiationResult.paymentRedirectDetails = {
+      urlToCompletePayment: 'https://pay.here/1234'
+    };
+
+    return { statusCode: 200, body: JSON.stringify(initiationResult) };
 
   } catch (e) {
     logger('FATAL_ERROR: ', e);

@@ -155,7 +155,7 @@ const assembleFloatTxInsertions = (accountTxId, savingEventDetails, floatTxIds) 
     const floatQueryString = `insert into ${floatTxTable} (transaction_id, client_id, float_id, t_type, ` +
         `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
-        '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
+        '${allocatedToType}, ${allocatedToId}, ${transactionType}, ${accountTransactionId}';
     
     const rowValuesBase = { 
         accountTransactionId: accountTxId,
@@ -305,8 +305,8 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
         value: {
             settlementStatus: 'SETTLED',
             settlementTime: settlementTime.format(),
-            floatAddTransactionId: floatAdditionTxId,
-            floatAllocTransactionId: floatAllocationTxId,
+            floatAdjustTxId: floatAdditionTxId,
+            floatAllocTxId: floatAllocationTxId,
             paymentReference: paymentDetails.paymentRef,
             paymentProvider: paymentDetails.paymentProvider
         },

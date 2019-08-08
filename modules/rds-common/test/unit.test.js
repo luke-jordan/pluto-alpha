@@ -236,9 +236,9 @@ describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
 
         const updateQueryKeyObject = { someId: 101, someTime: testTime };
         const updateQueryValueObject = { someStatus: 'SETTLED', someText: 'something_else', someBoolean: false };
-        const updateDef = { table: 'schema1.tableX', key: updateQueryKeyObject, values: updateQueryValueObject, returnClause: 'updated_time' };
+        const updateDef = { table: 'schema1.tableX', key: updateQueryKeyObject, value: updateQueryValueObject, returnClause: 'updated_time' };
 
-        const expectedUpdateQuery = 'UPDATE TABLE schema1.tableX SET some_status = $3, some_text = $4, some_boolean = $5 WHERE some_id = $1 and some_time = $2 RETURNING updated_time';
+        const expectedUpdateQuery = 'UPDATE schema1.tableX SET some_status = $3, some_text = $4, some_boolean = $5 WHERE some_id = $1 and some_time = $2 RETURNING updated_time';
         const updateValues = [101, testTime, 'SETTLED', 'something_else', false];
 
         const insertQueryTemplate = 'INSERT INTO schema2.table1 (column_1, column_2) VALUES %L RETURNING insertion_id';
@@ -248,7 +248,7 @@ describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
         
         const expectedInsertQuery = `INSERT INTO schema2.table1 (column_1, column_2) VALUES ('Hello', 'X'), ('What', 'Y') RETURNING insertion_id`;
         
-        queryStub.withArgs(expectedUpdateQuery, sinon.match(updateValues)).resolves({ rows: [{ 'updated_time': new Date() }]});
+        queryStub.withArgs(expectedUpdateQuery, sinon.match(updateValues)).resolves({ command: 'UPDATE', rows: [{ 'updated_time': new Date() }]});
         queryStub.withArgs(expectedInsertQuery).resolves({ rows: [{ 'insertion_id': 1 }, { 'insertion_id': 2 }]});
 
         const updateInsertResult = await rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef]);

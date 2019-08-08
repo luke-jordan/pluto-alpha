@@ -37,6 +37,7 @@ revoke all on transaction_data.core_transaction_ledger from public;
 grant usage on schema transaction_data to save_tx_api_worker;
 grant select on transaction_data.core_transaction_ledger to save_tx_api_worker;
 grant insert on transaction_data.core_transaction_ledger to save_tx_api_worker;
+grant update on transaction_data.core_transaction_ledger to save_tx_api_worker;
 
 -- So that the accrual worker can persist to account table
 grant usage on schema transaction_data to float_api_worker;

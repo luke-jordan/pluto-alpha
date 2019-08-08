@@ -213,12 +213,14 @@ class RdsConnection {
         try {
             await client.query('BEGIN');
             await client.query('SET TRANSACTION READ WRITE');
+            logger('Update query defs: ', updateQueryDefs);
             const queries = updateQueryDefs.map((queryDef) => RdsConnection.compileUpdateQueryAndArray(queryDef)).
                 map((queryAndArray) => client.query(queryAndArray.query, queryAndArray.values));
             for (const insert of insertQueryDefs) {
                 queries.push(RdsConnection._executeQueryInBlock(client, insert['query'], insert['columnTemplate'], insert['rows']));
             }
             results = await Promise.all(queries);
+            results = results.map((result) => RdsConnection._extractRowsIfExist(result));
             await client.query('COMMIT');
         } catch (e) {
             logger('Error running batch of insertions: ', e);
@@ -289,6 +291,16 @@ class RdsConnection {
         return result['rows'] && result['rows'].length > 0 ? result['rows'] : [{ completed: true }];
     }
 
+    static _extractRowsIfExist (queryResult) {
+        if (Array.isArray(queryResult)) {
+            return queryResult; // already processed, in other words
+        }
+        if (typeof queryResult === 'object' && Reflect.has(queryResult, 'rows')) {
+            return queryResult.rows;
+        }
+        return [];
+    }
+
     // todo : _lots_ of error testing
     static compileInsertQueryString (columnTemplate, objectArray) {
         const paramAndConstantNames = RdsConnection._extractKeysAndConstants(columnTemplate);
@@ -303,19 +315,20 @@ class RdsConnection {
         return nestedArray;
     }
 
+    // todo : validation before getting here
     static compileUpdateQueryAndArray (updateQueryDef) {
         const keyObject = updateQueryDef.skipDecamelize ? updateQueryDef.key : decamelizeKeys(updateQueryDef.key, '_');
         const keyPart = Object.keys(keyObject).map((column, index) => `${column} = $${index + 1}`).join(' and ');
         logger('Key part: ', keyPart);
         
         const baseIndex = Object.values(keyObject).length + 1;
-        const valueObject = updateQueryDef.skipDecamelize ? updateQueryDef.values : decamelizeKeys(updateQueryDef.values, '_');
+        const valueObject = updateQueryDef.skipDecamelize ? updateQueryDef.value : decamelizeKeys(updateQueryDef.value, '_');
         const setPart = Object.keys(valueObject).map((column, index) => `${column} = $${baseIndex + index}`).join(', ');
         logger('And setting: ', setPart);
         
         const returnPart = updateQueryDef.returnClause ? `RETURNING ${updateQueryDef.returnClause}` : '';
 
-        const assembledQuery = `UPDATE TABLE ${updateQueryDef.table} SET ${setPart} WHERE ${keyPart} ${returnPart}`.trim(); // avoids ugly no-ws
+        const assembledQuery = `UPDATE ${updateQueryDef.table} SET ${setPart} WHERE ${keyPart} ${returnPart}`.trim(); // avoids ugly no-ws
         const assembledArray = Object.values(keyObject).concat(Object.values(valueObject));
         return { query: assembledQuery, values: assembledArray };
     }
