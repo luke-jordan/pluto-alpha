@@ -28,7 +28,7 @@ const errorCausingUser = 'look-this-is-no-good';
 // note : in future at some time will need to handle user in different time zone to float
 const testTimeZone = 'America/New_York';
 const testTimeNow = moment.tz(testTimeZone);
-logger('Set test time now to : ', testTimeNow);
+// logger('Set test time now to : ', testTimeNow);
 const testTimeBOD = testTimeNow.clone().startOf('day');
 const testTimeEOD = testTimeNow.clone().endOf('day');
 
@@ -43,7 +43,7 @@ const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce project
 const divisorForAccrual = 365;
 const expectedNetAccrualRateBps = new BigNumber(testAccrualRateBps / divisorForAccrual).
     times(new BigNumber(1 - testBonusPoolShare - testClientCoShare - testPrudentialDiscountFactor));
-logger('Net daily rate: ', expectedNetAccrualRateBps.toNumber());
+// logger('Net daily rate: ', expectedNetAccrualRateBps.toNumber());
 
 // const testAccumulatedBalance = BigNumber(Math.floor(10000 * 100 * 100 * Math.random()));
 const toHundredthCent = 100 * 100;
@@ -55,15 +55,15 @@ const expectedBalanceToday = testAccumulatedBalance.plus(expectedAmountAccruedTo
 
 const expectedNumberOfDays = config.get('projection.defaultDays');
 const effectiveDailyRate = expectedAmountAccruedToday.dividedBy(testAccumulatedBalance);
-logger('Effective daily rate: ', effectiveDailyRate.toNumber());
+// logger('Effective daily rate: ', effectiveDailyRate.toNumber());
 
 const secondsInDay = 24 * 60 * 60;
 const linearAmountPerSecond = expectedAmountAccruedToday.dividedBy(secondsInDay);
-logger('Effective linear amount per second: ', linearAmountPerSecond.toString());
+// logger('Effective linear amount per second: ', linearAmountPerSecond.toString());
 const secondsSinceBOD = testTimeNow.unix() - testTimeBOD.unix();
-logger('Seconds since start of day: ', secondsSinceBOD);
+// logger('Seconds since start of day: ', secondsSinceBOD);
 const immediateBalance = testAccumulatedBalance.plus(linearAmountPerSecond.times(secondsSinceBOD));
-logger('Current time expected balance: ', immediateBalance.toNumber());
+// logger('Current time expected balance: ', immediateBalance.toNumber());
 
 const expectedBalanceSubsequentDays = Array.from(Array(expectedNumberOfDays).keys()).map((day) => {
     // note: lots of bignumber and fp weirdness to watch out for in here, hence splitting it and making very explicit
@@ -71,7 +71,7 @@ const expectedBalanceSubsequentDays = Array.from(Array(expectedNumberOfDays).key
     const multiplier = effectiveDailyRate.plus(1).pow(rebasedDay + 1);
     const endOfDay = testTimeEOD.clone().add(rebasedDay, 'days');
     const balanceEndOfDay = testAccumulatedBalance.times(multiplier); 
-    logger('Test end of day: ', balanceEndOfDay.toNumber());
+    // logger('Test end of day: ', balanceEndOfDay.toNumber());
     return {
         'amount': balanceEndOfDay.decimalPlaces(0).toNumber(),
         'currency': 'USD',
@@ -153,7 +153,7 @@ describe('Fetches user balance and makes projections', () => {
         balanceSubsequentDays: expectedBalanceSubsequentDays
     };
 
-    logger('Expected body: ', wellFormedResultBody);
+    // logger('Expected body: ', wellFormedResultBody);
 
     const checkResultIsWellFormed = (balanceAndProjections, expectedBody = wellFormedResultBody) => {
         expect(balanceAndProjections).to.exist;

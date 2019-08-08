@@ -42,6 +42,8 @@ logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmount
 const findMatchingTxStub = sinon.stub();
 const findFloatStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
+const updateSaveRdsStub = sinon.stub();
+
 const momentStub = sinon.stub();
 
 const handler = proxyquire('../saving-handler', {
@@ -49,6 +51,7 @@ const handler = proxyquire('../saving-handler', {
         'findMatchingTransaction': findMatchingTxStub,
         'findClientAndFloatForAccount': findFloatStub, 
         'addSavingToTransactions': addSavingsRdsStub,
+        'updateSaveTxToSettled': updateSaveRdsStub,
         '@noCallThru': true
     },
     'moment-timezone': momentStub
@@ -74,7 +77,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         savedUnit: 'HUNDREDTH_CENT',
         floatId: testFloatId,
         clientId: testClientId,
-        paymentRef: testPaymentRef
+        paymentRef: testPaymentRef,
+        paymentProvider: 'STRIPE'
     });
 
     const testSavePendingBase = (amount = testAmounts[0]) => ({
@@ -86,6 +90,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         savedUnit: 'HUNDREDTH_CENT'
     });
 
+    const wrapTestEvent = (eventBody) => ({ body: JSON.stringify(eventBody), requestContext: testAuthContext });
+
     const wellFormedMinimalSettledRequestToRds = {
         accountId: testAccountId,
         initiationTime: testHelper.momentMatcher(testTimeInitiated),
@@ -96,7 +102,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         savedUnit: 'HUNDREDTH_CENT',
         floatId: testFloatId,
         clientId: testClientId,
-        paymentRef: testPaymentRef
+        paymentRef: testPaymentRef,
+        paymentProvider: 'STRIPE'
     };
 
     const wellFormedMinimalPendingRequestToRds = {
@@ -129,22 +136,29 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
 
     beforeEach(() => resetStubHistory());
 
-    it('Fails gracefully, all routes', async () => {
-        const expectedError = await handler.initatePendingSave({ });
-        expect(expectedError).to.exist;
-        expect(expectedError).to.have.property('statusCode', 500);
+    it('Fails gracefully, RDS failure', async () => {
+        const badEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
+        badEvent.accountId = 'hello-blah-wrong';
+        badEvent.clientId = testClientId;
+        badEvent.floatId = testFloatId;
 
-        const badEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        badEvent.settlementStatus = 'SOMETHINGOROTHER';
-        addSavingsRdsStub.withArgs(badEvent).rejects(new Error('Error! Bad status'));
-        const expectedError2 = await handler.save(badEvent);
+        const badRdsRequest = JSON.parse(JSON.stringify(wellFormedMinimalPendingRequestToRds));
+        badRdsRequest.accountId = 'hello-blah-wrong';
+        badRdsRequest.savedAmount = badEvent.savedAmount;
+        badRdsRequest.initiationTime = testHelper.momentMatcher(testTimeInitiated);
+        
+        addSavingsRdsStub.withArgs(badRdsRequest).rejects(new Error('Error! Bad account ID'));
+        
+        const expectedError2 = await handler.initatePendingSave({ body: JSON.stringify(badEvent), requestContext: testAuthContext });
+        // testHelper.logNestedMatches(badRdsRequest, addSavingsRdsStub.getCall(0).args[0]);
+        
         expect(expectedError2).to.exist;
         expect(expectedError2).to.have.property('statusCode', 500);
-        expect(expectedError2).to.have.property('body', JSON.stringify('Error! Bad status')); // in case something puts a dict in error msg
+        expect(expectedError2).to.have.property('body', JSON.stringify('Error! Bad account ID')); // in case something puts a dict in error msg
     });
 
     it('Warmup handled gracefully', async () => {
-        const expectedWarmupResponse = await handler.save({});
+        const expectedWarmupResponse = await handler.initatePendingSave({});
         expect(expectedWarmupResponse).to.exist;
         expect(expectedWarmupResponse).to.have.property('statusCode', 400);
         expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
@@ -173,7 +187,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     it('Saves, with payment at same time, and client and float explicit', async () => {
         const saveEventWellFormed = JSON.parse(JSON.stringify(testSaveSettlementBase()));
         
-        const saveResult = await handler.save(saveEventWellFormed);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEventWellFormed));
         
         expect(saveResult).to.exist;
         expect(saveResult).to.have.property('statusCode', 200);
@@ -187,7 +201,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         Reflect.deleteProperty(saveEvent, 'floatId');
         Reflect.deleteProperty(saveEvent, 'clientId');
         
-        const saveResult = await handler.save(saveEvent);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEvent));
         
         expect(saveResult).to.have.property('statusCode', 200);
         expect(saveResult.body).to.exist;
@@ -203,7 +217,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
 
-        const saveResult = await handler.save(saveEvent);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEvent));
 
         expect(saveResult).to.exist;
         expect(saveResult.statusCode).to.equal(200);
@@ -222,7 +236,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
 
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
 
-        const saveResult = await handler.save(saveEvent);
+        const saveResult = await handler.initatePendingSave(wrapTestEvent(saveEvent));
 
         expect(saveResult).to.exist;
         expect(saveResult.statusCode).to.equal(200);
@@ -243,21 +257,17 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         Reflect.deleteProperty(saveEventNoCurrency, 'savedCurrency');
         const saveEventNoUnit = JSON.parse(JSON.stringify(testSaveSettlementBase()));
         Reflect.deleteProperty(saveEventNoUnit, 'savedUnit');
-        const saveEventNoStatus = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        Reflect.deleteProperty(saveEventNoStatus, 'settlementStatus');
 
-        const expectedNoAccountError = await handler.save(saveEventNoAccountId);
+        const expectedNoAccountError = await handler.initatePendingSave(wrapTestEvent(saveEventNoAccountId));
         testHelper.checkErrorResultForMsg(expectedNoAccountError, 'Error! No account ID provided for the save');
 
-        const expectedNoAmountError = await handler.save(saveEventNoAmount);
-        const expectedNoCurrencyError = await handler.save(saveEventNoCurrency);
-        const expectedNoUnitError = await handler.save(saveEventNoUnit);
-        const expectedNoStatusError = await handler.save(saveEventNoStatus);
+        const expectedNoAmountError = await handler.initatePendingSave(wrapTestEvent(saveEventNoAmount));
+        const expectedNoCurrencyError = await handler.initatePendingSave(wrapTestEvent(saveEventNoCurrency));
+        const expectedNoUnitError = await handler.initatePendingSave(wrapTestEvent(saveEventNoUnit));
 
         testHelper.checkErrorResultForMsg(expectedNoAmountError, 'Error! No amount provided for the save');
         testHelper.checkErrorResultForMsg(expectedNoCurrencyError, 'Error! No currency specified for the saving event');
         testHelper.checkErrorResultForMsg(expectedNoUnitError, 'Error! No unit specified for the saving event');
-        testHelper.checkErrorResultForMsg(expectedNoStatusError, 'Error! No settlement status passed');
     });
 
     /* 
@@ -270,4 +280,103 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     });
      */
     
+});
+
+describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
+
+    const testPendingTxId = uuid();
+    const testSettlementTime = moment();
+    const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: 'xyz123' };
+
+    const responseToTxUpdated = {
+        transactionDetails: [
+            { accountTransactionId: testPendingTxId, updatedTime: moment().format() }, 
+            { floatAdditionTransactionId: uuid(), creationTime: moment().format() },
+            { floatAllocationTransactionId: uuid(), creationTime: moment().format() }
+        ],
+        newBalance: { amount: sumOfTestAmounts, unit: 'HUNDREDTH_CENT' }
+    };
+
+    beforeEach(() => testHelper.resetStubs(updateSaveRdsStub));
+
+    it('Happy path, completes an update properly, no settlement time', async () => {
+        updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
+        expect(updateTxResult).to.exist;
+        expect(updateTxResult).to.have.property('statusCode', 200);
+        expect(updateTxResult).to.have.property('body');
+        const resultOfUpdate = JSON.parse(updateTxResult.body);
+        expect(resultOfUpdate).to.deep.equal(responseToTxUpdated);
+    });
+
+    it('Handles validation errors properly', async () => {
+        const expectNoTxError = await handler.settle({ paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
+        testHelper.checkErrorResultForMsg(expectNoTxError, 'Error! No transaction ID provided');
+        const expectNoPaymentRefError = await handler.settle({ transactionId: testPendingTxId, paymentProvider: 'STRIPE' });
+        testHelper.checkErrorResultForMsg(expectNoPaymentRefError, 'Error! No payment reference or provider');
+        const expectNoPaymentProviderErr = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123' });
+        testHelper.checkErrorResultForMsg(expectNoPaymentProviderErr, 'Error! No payment reference or provider');
+    });
+
+    it('Wrapper inserts payment provider properly', async () => {
+        updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const testBody = { 
+            transactionId: testPendingTxId,
+            settlementTimeEpochMillis: testSettlementTime.valueOf(), 
+            paymentRef: 'xyz123' 
+        };
+
+        const testRequest = {
+            requestContext: { authorizer: { systemWideUserId: uuid() }},
+            body: JSON.stringify(testBody)
+        };
+
+        const updateTxResult = await handler.settleInitiatedSave(testRequest);
+        expect(updateTxResult).to.exist;
+        expect(updateTxResult).to.have.property('statusCode', 200);
+        expect(updateTxResult).to.have.property('body');
+        const resultOfUpdate = JSON.parse(updateTxResult.body);
+        expect(resultOfUpdate).to.deep.equal(responseToTxUpdated);
+    });
+
+    it('Wrapper handles warmup gracefully', async () => {
+        const expectedWarmupResponse = await handler.settleInitiatedSave({});
+        expect(expectedWarmupResponse).to.exist;
+        expect(expectedWarmupResponse).to.have.property('statusCode', 400);
+        expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
+    });
+
+    it('Swallows context error gracefully', async () => {
+        const updateErrorResult = await handler.settleInitiatedSave({ transactionId: testPendingTxId, paymentRef: 'xyz123' });
+        logger('Looks like: ', updateErrorResult);
+        expect(updateErrorResult).to.exist;
+        expect(updateErrorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify(`Cannot read property 'authorizer' of undefined`) });
+    });
+
+    it('Swallows RDS error gracefully', async () => {
+        updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).rejects(new Error('Commit error!'));
+        momentStub.returns(testSettlementTime);
+        
+        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
+        expect(updateTxResult).to.exist;
+        expect(updateTxResult).to.have.property('statusCode', 500);
+        expect(updateTxResult).to.have.property('body');
+        const resultOfUpdate = JSON.parse(updateTxResult.body);
+        expect(resultOfUpdate).to.deep.equal('Commit error!');
+    });
+
+    it('Rejects unauthorized requests properly', async () => {
+        const unauthorizedResponse = await handler.settleInitiatedSave({ 
+            body: JSON.stringify({ transactionId: testPendingTxId }), 
+            requestContext: { }
+        });
+
+        expect(unauthorizedResponse).to.exist;
+        expect(unauthorizedResponse).to.deep.equal({ statusCode: 403, message: 'User ID not found in context' });
+    });
+
 });

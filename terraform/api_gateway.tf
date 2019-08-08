@@ -206,7 +206,7 @@ resource "aws_api_gateway_integration" "float_api" {
 resource "aws_api_gateway_resource" "save_path_root" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "save"
+  path_part   = "addcash"
 }
 
 resource "aws_api_gateway_resource" "save_initiate" {
@@ -219,7 +219,8 @@ resource "aws_api_gateway_method" "save_initiate" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
   resource_id   = "${aws_api_gateway_resource.save_initiate.id}"
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
 }
 
 resource "aws_lambda_permission" "save_initiate" {

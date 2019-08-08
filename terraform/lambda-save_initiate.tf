@@ -7,7 +7,7 @@ resource "aws_lambda_function" "save_initiate" {
 
   function_name                  = "${var.save_initiate_lambda_function_name}"
   role                           = "${aws_iam_role.save_initiate_role.arn}"
-  handler                        = "saving-handler.save"
+  handler                        = "saving-handler.initiatePendingSave"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
