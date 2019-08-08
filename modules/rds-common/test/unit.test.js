@@ -294,9 +294,9 @@ describe('Error handling, including connection release, non-parameterized querie
         rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
     });
 
-    afterEach(() => {
+    beforeEach(() => {
         connectStub.resetHistory();
-        queryStub.resetHistory();
+        queryStub.reset();
         releaseStub.resetHistory();
     });
 
@@ -342,12 +342,20 @@ describe('Error handling, including connection release, non-parameterized querie
 
     it('Insert calls throw error if badly templated', async () => {
         const badQuery = 'INSERT WITHOUT VALUE';
+        const fineQuery = 'INSERT STUFF BADLY BUT HAS %L'
         const badColumns = '_something_';
+        const fineColumns = '${someKey}';
         const badValues = [];
 
-        await expect(rdsClient.insertRecords(badQuery, badColumns, badValues)).to.be.rejected.
-            and.to.eventually.be.a('QueryError');
+        await expect(rdsClient.insertRecords(badQuery, badColumns, badValues)).to.be.rejected.and.to.eventually.be.a('QueryError');
+        await expect(rdsClient.insertRecords(fineQuery, badColumns, badValues)).to.be.rejected.and.to.eventually.be.a('QueryError');
+        await expect(rdsClient.insertRecords(fineQuery, fineColumns, badValues)).to.be.rejected.and.to.eventually.be.a('QueryError');
         expect(connectStub).to.not.have.been.called;
+    });
+
+    it('Multitable update and insert throws error if no update', async () => {
+        const fineInsertDef = { query: 'insert into schema (column) values %L', columnTemplate: '${column}', rows: [ {column: 'hello world'}]};
+        await expect(rdsClient.multiTableUpdateAndInsert([], [fineInsertDef])).to.be.rejected.and.to.eventually.be.a('NoValuesError');
     });
 
     it('Insert calls rollback and release if commit fails', async () => {
@@ -395,6 +403,37 @@ describe('Error handling, including connection release, non-parameterized querie
         expect(releaseStub).to.have.been.calledOnce; 
     });
 
+    it('Multitable update and insert calls rollback and release if commit fails on any', async () => {
+        const testTime = new Date();
+        const updateQueryKeyObject = { someId: 101, someTime: testTime };
+        const updateQueryValueObject = { someStatus: 'SETTLED', someText: 'something_else', someBoolean: false };
+        const updateDef = { table: 'schema1.tableX', key: updateQueryKeyObject, value: updateQueryValueObject, returnClause: 'updated_time' };
+
+        const expectedUpdateQuery = 'UPDATE schema1.tableX SET some_status = $3, some_text = $4, some_boolean = $5 WHERE some_id = $1 and some_time = $2 RETURNING updated_time';
+        const updateValues = [101, testTime, 'SETTLED', 'something_else', false];
+
+        const insertQueryTemplate = 'INSERT INTO TABLE schema2.table1 (column_1, column_2) VALUES %L RETURNING insertion_id SOMETHING';
+        const insertQueryColumns = '${column1}, ${column2}';
+        const insertQueryValues = [{ column1: 'Hello', column2: 'X' }, { column1: 'What', column2: 'Y' }];
+        const insertDef = { query: insertQueryTemplate, columnTemplate: insertQueryColumns, rows: insertQueryValues };
+        
+        const expectedInsertQuery = `INSERT INTO TABLE schema2.table1 (column_1, column_2) VALUES ('Hello', 'X'), ('What', 'Y') RETURNING insertion_id SOMETHING`;
+        
+        queryStub.withArgs(expectedUpdateQuery, sinon.match(updateValues)).resolves({ command: 'UPDATE', rows: [{ 'updated_time': new Date() }]});
+        queryStub.withArgs(expectedInsertQuery).rejects('PSQL ERROR! Bad insertion');
+
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef])).to.be.rejected;
+        // note: as above, can't use standard expectations because we need two calls to query, one for update, one for insert
+        expect(connectStub).to.have.been.calledOnce;
+        expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
+        // logger('Query calls: ', queryStub.getCalls().map((call, index) => `${index}: ${JSON.stringify(call.args[0])}`));
+        expect(queryStub).to.have.been.calledWithExactly(expectedUpdateQuery, updateValues);
+        expect(queryStub).to.have.been.calledWithExactly(expectedInsertQuery);
+        expectTxWrapping('ROLLBACK');
+        expect(queryStub).to.have.been.callCount(5);
+        expect(releaseStub).to.have.been.calledOnce; 
+    });
+
     it('Delete calls rollback and release if commit fails', async () => {
         const badDeleteQuery = 'DELETE FROM BADTABLE WHERE (column_1 = $1)';
 
@@ -435,6 +474,12 @@ describe('Error handling, including connection release, non-parameterized querie
         await expect(rdsClient.largeMultiTableInsert(badQueryVariant)).to.be.rejected.and.to.eventually.be.a('QueryError'); // because it has no %L
 
         expect(connectStub).to.not.have.been.called; // should not get there, in other words, in any of them
+    });
+
+    it('Failure to provide delete condition columns or values throws error, or if wildcard, or rows > 0', async () => {
+        await expect(rdsClient.deleteRow('someTable', [], [])).to.be.rejected.and.to.eventually.be.a('NoValuesError');
+        // await expect(rdsClient.deleteRow('someTable', ['someId'], ['*'])).to.be.rejected.and.to.eventually.be.a('QueryError');
+
     });
 
 });

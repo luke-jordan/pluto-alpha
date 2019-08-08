@@ -219,7 +219,8 @@ resource "aws_api_gateway_method" "save_initiate" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
   resource_id   = "${aws_api_gateway_resource.save_initiate.id}"
   http_method   = "POST"
-  authorization = "NONE"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
 }
 
 resource "aws_lambda_permission" "save_initiate" {
