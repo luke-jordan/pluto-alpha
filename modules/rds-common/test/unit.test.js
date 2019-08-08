@@ -342,7 +342,7 @@ describe('Error handling, including connection release, non-parameterized querie
 
     it('Insert calls throw error if badly templated', async () => {
         const badQuery = 'INSERT WITHOUT VALUE';
-        const fineQuery = 'INSERT STUFF BADLY BUT HAS %L'
+        const fineQuery = 'INSERT STUFF BADLY BUT HAS %L';
         const badColumns = '_something_';
         const fineColumns = '${someKey}';
         const badValues = [];
@@ -354,7 +354,7 @@ describe('Error handling, including connection release, non-parameterized querie
     });
 
     it('Multitable update and insert throws error if no update', async () => {
-        const fineInsertDef = { query: 'insert into schema (column) values %L', columnTemplate: '${column}', rows: [ {column: 'hello world'}]};
+        const fineInsertDef = { query: 'insert into schema (column) values %L', columnTemplate: '${column}', rows: [{column: 'hello world'}]};
         await expect(rdsClient.multiTableUpdateAndInsert([], [fineInsertDef])).to.be.rejected.and.to.eventually.be.a('NoValuesError');
     });
 
