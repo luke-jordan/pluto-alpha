@@ -201,7 +201,7 @@ resource "aws_api_gateway_integration" "float_api" {
   uri                     = "${aws_lambda_function.float_api.invoke_arn}"
 }
 
-/////////////// SAVE API LAMBDA (INITIATE & SETTLE) //////////////////////////////////////////////////////////////////////////
+/////////////// SAVE API LAMBDA (INITIATE & CHECK) //////////////////////////////////////////////////////////////////////////
 
 resource "aws_api_gateway_resource" "save_path_root" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
@@ -239,6 +239,38 @@ resource "aws_api_gateway_integration" "save_initiate" {
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.save_initiate.invoke_arn}"
 }
+
+resource "aws_api_gateway_resource" "save_payment_check" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.save_path_root.id}"
+  path_part   = "check"
+}
+
+resource "aws_api_gateway_method" "save_payment_check" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.save_payment_check.id}"
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "save_payment_check" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.save_payment_check.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "save_payment_check" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.save_payment_check.resource_id}"
+  http_method = "${aws_api_gateway_method.save_payment_check.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.save_payment_check.invoke_arn}"
+}
+
 
 /////////////// ACCOUNT CREATE API LAMBDA //////////////////////////////////////////////////////////////////////////
 

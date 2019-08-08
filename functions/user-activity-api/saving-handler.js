@@ -162,3 +162,14 @@ module.exports.settleInitiatedSave = async (event) => {
     return handleError(err);
   }
 };
+
+/**
+ * Checks on the backend whether this payment is done
+ * @param {string} transactionId The transaction ID of the pending payment
+ */
+module.exports.checkPendingPayment = async (transactionId) => {
+  logger('Checking for payment with transaction ID: ', transactionId);
+  return { statusCode: 200, body: JSON.stringify({
+    result: 'PAYMENT_COMPLETE'
+  })};
+}
