@@ -54,7 +54,7 @@ class RdsConnection {
         }
     }
 
-    _obtainSecretPword(rdsUserName) {
+    _obtainSecretPword (rdsUserName) {
         const self = this;
         
         const secretName = config.get(`secrets.names.${rdsUserName}`);
@@ -72,14 +72,14 @@ class RdsConnection {
                 const secret = JSON.parse(fetchedSecretData.SecretString);
                 self._initializePool(secret.password);
             } else {
-                let buff = new Buffer(fetchedSecretData.SecretBinary, 'base64');
-                decodedBinarySecret = buff.toString('ascii');
+                const buff = Buffer.from(fetchedSecretData.SecretBinary, 'base64');
+                const decodedBinarySecret = buff.toString('ascii');
                 self._initializePool(decodedBinarySecret);
             }
         });
     }
 
-    _initializePool(pwordOverride) {
+    _initializePool (pwordOverride) {
         const self = this;
         const pwordToUse = pwordOverride ? pwordOverride : config.get('RdsConnection.password'); 
         
@@ -94,7 +94,7 @@ class RdsConnection {
         logger('Set up pool, ready to initiate connections');
     }
 
-    async _getConnection() {
+    async _getConnection () {
         const self = this;
         while (!self._pool) {
             logger('No pool yet, waiting ...');
