@@ -349,25 +349,8 @@ class RdsConnection {
         if (Array.isArray(queryResult)) {
             return queryResult; // already processed, in other words
         }
-<<<<<<< HEAD
-        
-        let results = null;
-        const client = await this._getConnection();
-        try {
-            await client.query('BEGIN');
-            await client.query('SET TRANSACTION READ WRITE');
-            results = await client.query(query, values);
-            await client.query('COMMIT');
-        } catch (e) {
-            logger('Error running update: ', e);
-            await client.query('ROLLBACK');
-            throw new CommitError(query, values);
-        } finally {
-            await client.release();
-=======
         if (typeof queryResult === 'object' && Reflect.has(queryResult, 'rows')) {
             return queryResult.rows;
->>>>>>> staging
         }
         return [];
     }
