@@ -86,7 +86,7 @@ module.exports.settle = async (event) => {
  * @param {string} clientId optional: the user's responsible client (will use default as with float)
  * @return {object} transactionDetails and paymentRedirectDetails for the initiated payment
  */
-module.exports.initatePendingSave = async (event) => {
+module.exports.initiatePendingSave = async (event) => {
   try {
     if (warmupCheck(event)) {
       return warmupResponse;
@@ -173,14 +173,21 @@ module.exports.checkPendingPayment = async (event) => {
     const transactionId = params.transactionId;
     logger('Transaction ID: ', transactionId);
 
-    let result = '';
+    let resultBody = { };
     if (params.failureType) {
-      result = params.failureType === 'PENDING' ? 'PAYMENT_PENDING' : 'PAYMENT_FAILED';
+      if (params.failureType == 'FAILED') {
+        resultBody = { 
+          result: 'PAYMENT_FAILED', 
+          messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank' 
+        };
+      } else {
+        resultBody = { result: 'PAYMENT_PENDING' };
+      }
     } else {
-      result = 'PAYMENT_SUCCEEDED';
+      resultBody = { result: 'PAYMENT_SUCCEEDED' };
     }
 
-    return { statusCode: 200, body: JSON.stringify({ result })};
+    return { statusCode: 200, body: JSON.stringify(resultBody)};
   } catch (err) {
     return handleError(err);
   }
