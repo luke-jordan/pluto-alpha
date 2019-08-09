@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:user-notifications:create-msg-instructions');
 const config = require('config');
+const moment = require('moment')
 const RdsConnection = require('rds-common');
 
 const rdsConnection = new RdsConnection(config.get('db'))
@@ -61,8 +62,8 @@ const createPersistableObject = (instruction) => ({
     recurrenceInstruction: instruction.recurrenceInstruction? instruction.recurrenceInstruction: null,
     responseAction: instruction.responseAction? instruction.responseAction: null,
     responseContext: instruction.responseContext? instruction.responseContext: null,
-    startTime: instruction.startTime? instruction.startTime: null,
-    endTime: instruction.endTime? instruction.endTime: null,
+    startTime: instruction.startTime? instruction.startTime: moment()._d,
+    endTime: instruction.endTime? instruction.endTime: moment().add(500, 'years')._d, // notifications that will outlive us all :/
     priority: instruction.priority? instruction.priority: 0
 });
 
