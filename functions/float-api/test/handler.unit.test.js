@@ -198,7 +198,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expect(expectedErrorReturn).to.have.property('statusCode', 500);
     });
 
-    it.only('Gets float balance properly', async () => {
+    it('Gets float balance properly', async () => {
         const balanceFetch = await handler.balanceCheck({ floatId: common.testValidFloatId, currency: 'ZAR' });
         logger('Result: ', balanceFetch);
         expect(balanceFetch).to.exist;

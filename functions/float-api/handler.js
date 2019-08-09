@@ -20,8 +20,8 @@ module.exports.balanceCheck = async (event) => {
   return {
     statusCode: 200,
     body: JSON.stringify(resultOfCheck)
-  }
-}
+  };
+};
 
 /**
  * The core function. Receives an instruction that interest (or other return) has been accrued, increases the balance recorded,
