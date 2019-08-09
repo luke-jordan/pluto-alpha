@@ -1,4 +1,7 @@
 {
+    "aws": {
+        "region": "us-east-1"
+    },
     "tables": {
         "clientFloatVars": "ClientFloatTableTest"
     }

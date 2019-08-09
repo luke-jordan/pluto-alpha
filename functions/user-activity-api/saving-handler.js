@@ -175,7 +175,7 @@ module.exports.checkPendingPayment = async (event) => {
 
     let resultBody = { };
     if (params.failureType) {
-      if (params.failureType == 'FAILED') {
+      if (params.failureType === 'FAILED') {
         resultBody = { 
           result: 'PAYMENT_FAILED', 
           messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank' 

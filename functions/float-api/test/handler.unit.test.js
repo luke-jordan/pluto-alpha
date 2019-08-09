@@ -146,6 +146,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
 
     const adjustFloatBalanceStub = sinon.stub();
     const allocateFloatBalanceStub = sinon.stub();
+    const calculateFloatBalanceStub = sinon.stub();
 
     let allocationStub = sinon.stub();
 
@@ -156,6 +157,8 @@ describe('Primary allocation of inbound accrual lambda', () => {
             clientCoShare: common.testValueClientShare,
             clientCoShareTracker: common.testValueClientCompanyTracker
         });
+
+        calculateFloatBalanceStub.withArgs(common.testValidFloatId, 'ZAR').resolves({ balance: 1000 });
         
         handler = proxyquire('../handler', createStubs({
             [dynamoPath]: { 
@@ -163,7 +166,8 @@ describe('Primary allocation of inbound accrual lambda', () => {
             },
             [rdsPath]: { 
                 addOrSubtractFloat: adjustFloatBalanceStub,
-                allocateFloat: allocateFloatBalanceStub
+                allocateFloat: allocateFloatBalanceStub,
+                calculateFloatBalance: calculateFloatBalanceStub
             }
         }));
 
@@ -175,6 +179,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         fetchFloatConfigVarsStub.reset();
         adjustFloatBalanceStub.reset();
         allocateFloatBalanceStub.reset();
+        calculateFloatBalanceStub.reset();
         allocationStub.restore();
     });
 
@@ -182,6 +187,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         fetchFloatConfigVarsStub.resetHistory();
         adjustFloatBalanceStub.resetHistory();
         allocateFloatBalanceStub.resetHistory();
+        calculateFloatBalanceStub.resetHistory();
         allocationStub.resetHistory();
     });
 
@@ -190,6 +196,13 @@ describe('Primary allocation of inbound accrual lambda', () => {
         const expectedErrorReturn = await handler.accrue({ clientId: 'some_client', floatId: 'some_float'});
         expect(expectedErrorReturn).to.exist;
         expect(expectedErrorReturn).to.have.property('statusCode', 500);
+    });
+
+    it('Gets float balance properly', async () => {
+        const balanceFetch = await handler.balanceCheck({ floatId: common.testValidFloatId, currency: 'ZAR' });
+        logger('Result: ', balanceFetch);
+        expect(balanceFetch).to.exist;
+        expect(balanceFetch).to.deep.equal({ statusCode: 200, body: JSON.stringify({ balance: 1000 })});
     });
 
     it('Check initial accrual', async () => {

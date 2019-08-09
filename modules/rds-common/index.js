@@ -6,8 +6,13 @@ const logger = require('debug')('jupiter:rds-common:main');
 const config = require('config');
 const decamelizeKeys = require('decamelize-keys');
 
+const sleep = require('util').promisify(setTimeout);
+const secretsWaitInterval = 100;
+
 const { Pool } = require('pg');
 const format = require('pg-format');
+
+const AWS = require('aws-sdk');
 
 const { QueryError, CommitError, NoValuesError } = require('./errors');
 
@@ -23,13 +28,13 @@ class RdsConnection {
      * Creates a client to the relevant RDS host and initiates work on it
      * @param {string} db The relevant DB for this client (host is either specified below or global instance is used)
      * @param {string} user The user, the remainder of the client assumes this has the correct permissions
-     * @param {string} password Password for the given user
+     * @param {string} password Password for the given user. If secret mgmt is enabled this will be ignored. 
      * @param {string} host Optional. A specified host, otherwise global default for environment is used.
      * @param {number} port Optiona. As above.
      */
     constructor (dbConfigs) {
         const self = this;
-
+        
         const defaultConfigs = {
             database: 'plutotest', user: 'plutotest', password: 'verylongpassword', host: 'localhost', port: '5432' 
         };
@@ -38,15 +43,64 @@ class RdsConnection {
         config.util.extendDeep(defaultConfigs, dbConfigs);
         config.util.setModuleDefaults('RdsConnection', defaultConfigs);
 
+        const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
+        logger('Connecting with user: ', config.get('RdsConnection.user'), ' secret mgmt enabled: ', secretsMgmtEnabled);
+        
+        if (secretsMgmtEnabled) {
+            logger('Secrets management enabled, fetching');
+            self._obtainSecretPword(config.get('RdsConnection.user'));    
+        } else {
+            self._initializePool();
+        }
+    }
+
+    _obtainSecretPword (rdsUserName) {
+        const self = this;
+        
+        const secretName = config.get(`secrets.names.${rdsUserName}`);
+        logger('Fetching secret with name: ', secretName);
+        const secretsClient = new AWS.SecretsManager({ region: config.get('aws.region') });        
+        secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
+            if (err) {
+                logger('Error retrieving auth secret for RDS: ', err);
+                throw err;
+            }
+            // Decrypts secret using the associated KMS CMK.
+            // Depending on whether the secret is a string or binary, one of these fields will be populated.
+            logger('No error, got the secret, moving onward: ', fetchedSecretData);
+            if ('SecretString' in fetchedSecretData) {
+                const secret = JSON.parse(fetchedSecretData.SecretString);
+                self._initializePool(secret.password);
+            } else {
+                const buff = Buffer.from(fetchedSecretData.SecretBinary, 'base64');
+                const decodedBinarySecret = buff.toString('ascii');
+                self._initializePool(decodedBinarySecret);
+            }
+        });
+    }
+
+    _initializePool (pwordOverride) {
+        const self = this;
+        const pwordToUse = pwordOverride ? pwordOverride : config.get('RdsConnection.password'); 
+        
         self._pool = new Pool({
             host: config.get('RdsConnection.host'),
             port: config.get('RdsConnection.port'),
             database: config.get('RdsConnection.database'),
             user: config.get('RdsConnection.user'),
-            password: config.get('RdsConnection.password')
+            password: pwordToUse
         });
-        logger('Connected with user: ', config.get('RdsConnection.user'));
-        // logger('Set up connection, ready to initiate connections');
+        
+        logger('Set up pool, ready to initiate connections');
+    }
+
+    async _getConnection () {
+        const self = this;
+        while (!self._pool) {
+            logger('No pool yet, waiting ...');
+            await sleep(secretsWaitInterval);
+        }
+        return self._pool.connect();
     }
 
     async testPool () {
@@ -69,7 +123,7 @@ class RdsConnection {
         }
 
         let results = null; // since lambda execution means if we return etc., finally may not finish if the return statement is prior to finally
-        const client = await this._pool.connect();
+        const client = await this._getConnection();
         try {
             await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
             const queryResult = await client.query(query, values);
@@ -126,7 +180,7 @@ class RdsConnection {
         // const safeSlice = Math.min(10, valuesString.length);
         // logger('About to run insertion, query string: %s, and values: %s', queryTemplate, valuesString.slice(0, safeSlice));
         let results = null;
-        const client = await this._pool.connect();
+        const client = await this._getConnection();
 
         try {
             await client.query('BEGIN');
@@ -156,7 +210,7 @@ class RdsConnection {
         queryDefs.forEach((insert) => RdsConnection._validateInsertParams(insert.query, insert.columnTemplate, insert.rows));
 
         // we will almost certainly want to upgrade this to do batches of 10k pretty soon
-        const client = await this._pool.connect();
+        const client = await this._getConnection();
         
         try {
             await client.query('BEGIN');
@@ -252,7 +306,7 @@ class RdsConnection {
         logger('Formed delete query: ', formedQuery);
 
         let results = null;
-        const client = await this._pool.connect();
+        const client = await this._getConnection();
         
         try {
             await client.query('BEGIN');

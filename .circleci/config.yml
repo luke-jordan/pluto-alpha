@@ -114,6 +114,10 @@ jobs:
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
 
+                echo "Removing AWS SDK as lambda runtimes have built-in and causes massive bloat"
+                cd $HOME/app
+                sudo find . -name "aws-sdk" -exec rm -r {} +
+
                 cd $HOME/app/functions/db-migration
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_db_migration_$CIRCLE_SHA1.zip .

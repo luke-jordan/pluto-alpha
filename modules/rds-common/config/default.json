@@ -1,4 +1,7 @@
 {
+    "aws": {
+        "region": "us-east-1"
+    },
     "db": {
         "host": "localhost",
         "port": "5432",
