@@ -158,7 +158,6 @@ module.exports.settleInitiatedSave = async (event) => {
     logger('Settling, with info: ', settleInfo);
     return exports.settle(settleInfo);
   } catch (err) {
-    logger('FATAL_ERROR: ', err);
     return handleError(err);
   }
 };
@@ -167,9 +166,22 @@ module.exports.settleInitiatedSave = async (event) => {
  * Checks on the backend whether this payment is done
  * @param {string} transactionId The transaction ID of the pending payment
  */
-module.exports.checkPendingPayment = async (transactionId) => {
-  logger('Checking for payment with transaction ID: ', transactionId);
-  return { statusCode: 200, body: JSON.stringify({
-    result: 'PAYMENT_COMPLETE'
-  })};
+module.exports.checkPendingPayment = async (event) => {
+  try {
+    logger('Checking for payment with inbound event: ', event);
+    const params = event.queryStringParameters ? event : event.queryStringParameters;
+    const transactionId = params.transactionId;
+    logger('Transaction ID: ', transactionId);
+
+    let result = '';
+    if (params.failureType) {
+      result = params.failureType === 'PENDING' ? 'PAYMENT_PENDING' : 'PAYMENT_FAILED';
+    } else {
+      result = 'PAYMENT_SUCCEEDED';
+    }
+
+    return { statusCode: 200, body: JSON.stringify({ result })};
+  } catch (err) {
+    return handleError(err);
+  }
 };

@@ -12,6 +12,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   depends_on = [
   aws_api_gateway_integration.float_api,
   aws_api_gateway_integration.save_initiate,
+  aws_api_gateway_integration.save_payment_check,
   aws_api_gateway_integration.account_create,
   aws_api_gateway_integration.balance_fetch_wrapper,
   aws_api_gateway_integration.ops_warmup
@@ -249,7 +250,7 @@ resource "aws_api_gateway_resource" "save_payment_check" {
 resource "aws_api_gateway_method" "save_payment_check" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
   resource_id   = "${aws_api_gateway_resource.save_payment_check.id}"
-  http_method   = "POST"
+  http_method   = "GET"
   authorization = "CUSTOM"
   authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
 }
