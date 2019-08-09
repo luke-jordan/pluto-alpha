@@ -1,0 +1,12 @@
+{
+    "tables": {
+        "messageInstructionTable": "message_instruction"
+    },
+    "db": {
+        "host": "localhost",
+        "port": "5430",
+        "database": "jupiter",
+        "user": "user_notifications_worker",
+        "password": "pwd_for_user_notifications_worker"
+    }
+}
