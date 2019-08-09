@@ -4,6 +4,7 @@ process.env.SUPPRESS_NO_CONFIG_WARNING = 'y';
 
 const logger = require('debug')('jupiter:rds-common:main');
 const config = require('config');
+const decamelizeKeys = require('decamelize-keys');
 
 const sleep = require('util').promisify(setTimeout);
 const secretsWaitInterval = 100;
@@ -203,10 +204,10 @@ class RdsConnection {
      * Note: returns array of arrays, concatenated results if 'returning' clause present, or [{ completed: true }] if none
      * @param {array} insertDefinitions 
      */
-    async largeMultiTableInsert (inserts = [{ query: 'INSERT QUERIES', columnTemplate: '', rows: [{ }] }]) {
+    async largeMultiTableInsert (queryDefs = [{ query: 'INSERT QUERIES', columnTemplate: '', rows: [{ }] }]) {
         let results = null;
 
-        inserts.forEach((insert) => RdsConnection._validateInsertParams(insert.query, insert.columnTemplate, insert.rows));
+        queryDefs.forEach((insert) => RdsConnection._validateInsertParams(insert.query, insert.columnTemplate, insert.rows));
 
         // we will almost certainly want to upgrade this to do batches of 10k pretty soon
         const client = await this._getConnection();
@@ -214,7 +215,66 @@ class RdsConnection {
         try {
             await client.query('BEGIN');
             await client.query('SET TRANSACTION READ WRITE');
-            results = await RdsConnection._executeMultipleInserts(client, inserts);
+            results = await RdsConnection._executeMultipleInserts(client, queryDefs);
+            await client.query('COMMIT');
+        } catch (e) {
+            logger('Error running batch of insertions: ', e);
+            await client.query('ROLLBACK');
+            throw new CommitError();
+        } finally {
+            await client.release();
+        }
+
+        return results;
+    }
+
+    // todo : update to look like handling of update query defs below
+    async updateRecord (query = 'UPDATE TABLE SET VALUE = $1 WHERE ID = $2 RETURNING ID', values) {
+        if (!Array.isArray(values) || values.length === 0) {
+            throw new NoValuesError(query);
+        }
+        
+        let results = null;
+        const client = await this._pool.connect();
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            results = await client.query(query, values);
+            await client.query('COMMIT');
+        } catch (e) {
+            logger('Error running update: ', e);
+            await client.query('ROLLBACK');
+            throw new CommitError(query, values);
+        } finally {
+            await client.release();
+        }
+
+        return results;
+    }
+
+    async multiTableUpdateAndInsert (updateQueryDefs, insertQueryDefs) {
+        // updates with no inserts permitted, but reverse not, as have dedicated method for it
+        if (!Array.isArray(updateQueryDefs) || updateQueryDefs.length === 0) {
+            throw new NoValuesError('No update queries provided, use large multi table insert instead');
+        }
+
+        // todo : same for updates
+        insertQueryDefs.forEach((insert) => RdsConnection._validateInsertParams(insert.query, insert.columnTemplate, insert.rows));
+
+        const client = await this._pool.connect();
+        
+        let results = null;
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            logger('Update query defs: ', updateQueryDefs);
+            const queries = updateQueryDefs.map((queryDef) => RdsConnection.compileUpdateQueryAndArray(queryDef)).
+                map((queryAndArray) => client.query(queryAndArray.query, queryAndArray.values));
+            for (const insert of insertQueryDefs) {
+                queries.push(RdsConnection._executeQueryInBlock(client, insert['query'], insert['columnTemplate'], insert['rows']));
+            }
+            results = await Promise.all(queries);
+            results = results.map((result) => RdsConnection._extractRowsIfExist(result));
             await client.query('COMMIT');
         } catch (e) {
             logger('Error running batch of insertions: ', e);
@@ -285,10 +345,11 @@ class RdsConnection {
         return result['rows'] && result['rows'].length > 0 ? result['rows'] : [{ completed: true }];
     }
 
-    async updateRecord (query = 'UPDATE TABLE SET VALUE = $1 WHERE ID = $2 RETURNING ID', values) {
-        if (!Array.isArray(values) || values.length === 0) {
-            throw new NoValuesError(query);
+    static _extractRowsIfExist (queryResult) {
+        if (Array.isArray(queryResult)) {
+            return queryResult; // already processed, in other words
         }
+<<<<<<< HEAD
         
         let results = null;
         const client = await this._getConnection();
@@ -303,9 +364,12 @@ class RdsConnection {
             throw new CommitError(query, values);
         } finally {
             await client.release();
+=======
+        if (typeof queryResult === 'object' && Reflect.has(queryResult, 'rows')) {
+            return queryResult.rows;
+>>>>>>> staging
         }
-
-        return results;
+        return [];
     }
 
     // todo : _lots_ of error testing
@@ -320,6 +384,24 @@ class RdsConnection {
         }));
         
         return nestedArray;
+    }
+
+    // todo : validation before getting here
+    static compileUpdateQueryAndArray (updateQueryDef) {
+        const keyObject = updateQueryDef.skipDecamelize ? updateQueryDef.key : decamelizeKeys(updateQueryDef.key, '_');
+        const keyPart = Object.keys(keyObject).map((column, index) => `${column} = $${index + 1}`).join(' and ');
+        logger('Key part: ', keyPart);
+        
+        const baseIndex = Object.values(keyObject).length + 1;
+        const valueObject = updateQueryDef.skipDecamelize ? updateQueryDef.value : decamelizeKeys(updateQueryDef.value, '_');
+        const setPart = Object.keys(valueObject).map((column, index) => `${column} = $${baseIndex + index}`).join(', ');
+        logger('And setting: ', setPart);
+        
+        const returnPart = updateQueryDef.returnClause ? `RETURNING ${updateQueryDef.returnClause}` : '';
+
+        const assembledQuery = `UPDATE ${updateQueryDef.table} SET ${setPart} WHERE ${keyPart} ${returnPart}`.trim(); // avoids ugly no-ws
+        const assembledArray = Object.values(keyObject).concat(Object.values(valueObject));
+        return { query: assembledQuery, values: assembledArray };
     }
 
     static _extractKeysAndConstants (columnTemplate) {

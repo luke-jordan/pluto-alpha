@@ -7,7 +7,7 @@ resource "aws_lambda_function" "balance_fetch" {
 
   function_name                  = "${var.balance_fetch_function_name}"
   role                           = "${aws_iam_role.balance_fetch_role.arn}"
-  handler                        = "handler.balance"
+  handler                        = "balance-handler.balance"
   memory_size                    = 512
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"

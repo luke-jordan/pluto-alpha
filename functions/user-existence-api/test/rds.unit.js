@@ -41,15 +41,13 @@ describe('Marshalls account insertion properly', () => {
             accountId: uuid(),
             clientId: 'zar_savings_co',
             defaultFloatId: 'zar_cash_float',
-            ownerUserId: uuid(), 
-            userFirstName: 'Luke',
-            userFamilyName: 'Jordan'
+            ownerUserId: uuid()
         };
 
         const expectedQuery = `insert into ${config.get('tables.accountData')} ` + 
-            `(account_id, responsible_client_id, default_float_id, owner_user_id, opening_user_id, user_first_name, user_last_name) ` + 
+            `(account_id, responsible_client_id, default_float_id, owner_user_id, opening_user_id) ` + 
             `values %L returning account_id, creation_time`;
-        const expectedColumns = '${accountId}, ${clientId}, ${defaultFloatId}, ${ownerUserId}, ${openingUserId}, ${userFirstName}, ${userFamilyName}';
+        const expectedColumns = '${accountId}, ${clientId}, ${defaultFloatId}, ${ownerUserId}, ${openingUserId}';
         const expectedRow = JSON.parse(JSON.stringify(testAccountDetails));
         expectedRow.openingUserId = testAccountDetails.ownerUserId;
         
