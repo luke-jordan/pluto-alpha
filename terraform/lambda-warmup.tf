@@ -9,7 +9,6 @@ resource "aws_lambda_function" "ops_warmup" {
   role                           = "${aws_iam_role.ops_warmup_role.arn}"
   handler                        = "index.handler"
   memory_size                    = 256
-  reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}

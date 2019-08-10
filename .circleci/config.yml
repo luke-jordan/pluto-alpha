@@ -68,7 +68,7 @@ jobs:
             cd $HOME/app/modules/dynamo-common && npm run-script lint
             cd ../rds-common && npm run-script lint
 
-            # We skip warmup because it is so trivial
+            # We skip warmup for the moment
             echo "Linting functions"
             cd $HOME/app/functions/user-activity-api && npm run-script lint
             cd ../user-existence-api && npm run-script lint

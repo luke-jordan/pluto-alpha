@@ -26,6 +26,14 @@
     "payment": {
         "default": {
             "name": "STRIPE"
+        },
+        "credentials": {
+            "ozow": {
+                "request_link": "https://pay.ozow.com",
+                "site_code": "TSTSTE0001",
+                "private_key": "215114531AFF7134A94C88CEEA48E",
+                "api_key": "EB5758F2C3B4DF3FF4F2669D5FF5B"
+            }
         }
     }
 }

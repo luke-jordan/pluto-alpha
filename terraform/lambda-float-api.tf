@@ -44,6 +44,11 @@ resource "aws_lambda_function" "float_api" {
                 "names": {
                     "float_api_worker": "${terraform.workspace}/ops/psql/float"
                 }
+            },
+            "db": {
+                "host": "${aws_db_instance.rds[0].address}",
+                "database": "${var.db_name}",
+                "port" :"${aws_db_instance.rds[0].port}"
             }
         }
       )}"
