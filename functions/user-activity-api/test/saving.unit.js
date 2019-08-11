@@ -299,6 +299,21 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
 
     beforeEach(() => testHelper.resetStubs(updateSaveRdsStub));
 
+    it('Check for payment settles if payment has been successful', async () => {
+        const expectedResult = JSON.parse(JSON.stringify(responseToTxUpdated));
+        expectedResult.result = 'PAYMENT_SUCCEEDED';
+
+        const dummyPaymentDetails = { paymentRef: sinon.match.string, paymentProvider: 'OZOW' };
+        updateSaveRdsStub.withArgs(testPendingTxId, dummyPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const paymentCheckSuccessResult = await handler.checkPendingPayment({ queryStringParameters: { transactionId: testPendingTxId }});
+        expect(paymentCheckSuccessResult).to.have.property('statusCode', 200);
+        expect(paymentCheckSuccessResult).to.have.property('body');
+        const resultOfCheck = JSON.parse(paymentCheckSuccessResult.body);
+        expect(resultOfCheck).to.deep.equal(expectedResult);
+    });
+
     it('Happy path, completes an update properly, no settlement time', async () => {
         updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
         momentStub.returns(testSettlementTime);

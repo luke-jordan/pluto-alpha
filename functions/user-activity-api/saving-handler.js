@@ -164,17 +164,26 @@ module.exports.settleInitiatedSave = async (event) => {
 
 /**
  * Checks on the backend whether this payment is done
+ * todo: validation that the TX belongs to the user
  * @param {string} transactionId The transaction ID of the pending payment
  */
 module.exports.checkPendingPayment = async (event) => {
   try {
     logger('Checking for payment with inbound event: ', event);
-    const params = event.queryStringParameters ? event : event.queryStringParameters;
+    const params = event.queryStringParameters || event;
+    logger('Extracted params: ', params);
     const transactionId = params.transactionId;
     logger('Transaction ID: ', transactionId);
 
     let resultBody = { };
-    if (params.failureType) {
+    const paymentSuccessful = !params.failureType; // for now
+    if (paymentSuccessful) {
+      const dummyPaymentRef = 'some-payment-reference-' + (new Date().getTime());
+      const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
+      logger('Result of save: ', resultOfSave);
+      resultBody = JSON.parse(resultOfSave.body);
+      resultBody.result = 'PAYMENT_SUCCEEDED';
+    } else {
       if (params.failureType === 'FAILED') {
         resultBody = { 
           result: 'PAYMENT_FAILED', 
@@ -183,8 +192,6 @@ module.exports.checkPendingPayment = async (event) => {
       } else {
         resultBody = { result: 'PAYMENT_PENDING' };
       }
-    } else {
-      resultBody = { result: 'PAYMENT_SUCCEEDED' };
     }
 
     return { statusCode: 200, body: JSON.stringify(resultBody)};
