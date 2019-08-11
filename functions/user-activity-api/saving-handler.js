@@ -178,12 +178,13 @@ module.exports.checkPendingPayment = async (event) => {
     let resultBody = { };
     const paymentSuccessful = !params.failureType; // for now
     if (paymentSuccessful) {
-      const dummyPaymentRef = 'some-payment-reference-' + (new Date().getTime());
+      const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
       const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
       logger('Result of save: ', resultOfSave);
       resultBody = JSON.parse(resultOfSave.body);
       resultBody.result = 'PAYMENT_SUCCEEDED';
     } else {
+      logger('Payment failed, consider how and return which way');
       if (params.failureType === 'FAILED') {
         resultBody = { 
           result: 'PAYMENT_FAILED', 
