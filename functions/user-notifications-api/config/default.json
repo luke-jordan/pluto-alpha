@@ -8,5 +8,8 @@
         "database": "jupiter",
         "user": "user_notifications_worker",
         "password": "pwd_for_user_notifications_worker"
+    },
+    "templates": {
+        "default": "Hello! Jupiter is now live. To celebrate, we are asking everyone to say something foul. Thank you."
     }
 }
