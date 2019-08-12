@@ -48,9 +48,9 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
     });
 
     const wellFormedSnsPublish = (userId, eventType, options) => ({
-        TopicArn: config.get('publishing.userEvents.topicArn'),
+        Message: stringify(wellFormedEvent(userId, eventType, options)),
         Subject: eventType,
-        Message: stringify(wellFormedEvent(userId, eventType, options))
+        TopicArn: config.get('publishing.userEvents.topicArn')
     });
 
     const dummySnsResult = {

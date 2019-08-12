@@ -65,3 +65,24 @@ resource "aws_iam_policy" "lambda_invoke_warmup_access" {
 }
 EOF
 }
+
+resource "aws_iam_policy" "ops_sns_user_event_publish" {
+  name    = "OpsSNSUserLogEvent_access_${terraform.workspace}"
+  path    = "/"
+
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SNSAccess",
+            "Effect": "Allow",
+            "Action": [
+                "SNS:Publish*"
+            ],
+            "Resource": "${var.user_event_topic_arn[terraform.workspace]}"
+        }
+    ]
+}
+EOF
+}

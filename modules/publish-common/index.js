@@ -22,9 +22,9 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         };
 
         const messageForQueue = {
-            TopicArn: config.get('publishing.userEvents.topicArn'),
+            Message: stringify(eventToPublish),
             Subject: eventType,
-            Message: stringify(eventToPublish)
+            TopicArn: config.get('publishing.userEvents.topicArn')
         };
 
         logger('Sending to queue: ', messageForQueue);
