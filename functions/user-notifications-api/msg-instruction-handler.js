@@ -84,7 +84,7 @@ module.exports.getMessageInstruction = async (event) => {
 const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
 
 // to be moved to persistence/ directory
-const createInsertionColumns = (object, outputType = 'columns') => {
+const createInsertionArray = (object, outputType = 'columns') => {
     if (outputType === 'query') {
         return Object.keys(decamelizeKeys(object));
     }
@@ -100,10 +100,8 @@ const createInsertionColumns = (object, outputType = 'columns') => {
 
 // to be moved to persistence/ directory
 const insertMessageInstruction = async (persistableObject) => {
-    const insertionQueryArray = createInsertionColumns(persistableObject, 'query');
-    const insertionColumnsArray = createInsertionColumns(persistableObject, 'columns');
-    logger('created query array:', insertionQueryArray);
-    logger('created columns array:', insertionColumnsArray.join(', '));
+    const insertionQueryArray = createInsertionArray(persistableObject, 'query');
+    const insertionColumnsArray = createInsertionArray(persistableObject, 'columns');
     
     const insertionQuery = `insert into ${config.get('tables.messageInstructionTable')} (${insertionQueryArray.join(', ')}) values %L returning insertion_id, creation_time`;
     const insertionColumns = insertionColumnsArray.join(', ');
