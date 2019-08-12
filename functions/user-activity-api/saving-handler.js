@@ -171,14 +171,13 @@ module.exports.settleInitiatedSave = async (event) => {
 const handlePaymentFailure = (failureType) => {
   logger('Payment failed, consider how and return which way');
   if (failureType === 'FAILED') {
-    resultBody = { 
+    return { 
       result: 'PAYMENT_FAILED', 
       messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank' 
     };
-  } else {
-    resultBody = { result: 'PAYMENT_PENDING' };
-  }
-}
+  } 
+  return { result: 'PAYMENT_PENDING' };
+};
 
 /**
  * Checks on the backend whether this payment is done
