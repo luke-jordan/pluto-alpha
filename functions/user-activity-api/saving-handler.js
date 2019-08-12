@@ -17,6 +17,23 @@ const handleError = (err) => {
   return { statusCode: 500, body: JSON.stringify(err.message) };
 };
 
+// const dispatchUserEvent = (userId, eventType) => {
+//   const event = {
+//     userId: userId,
+//     timestamp: (new Date()).getTime(),
+//     eventType: eventType,
+//     interface: eventInterface,
+//     initiator: initiator,
+//     context: context
+//   };
+
+//   return {
+//     Message: JSON.stringify(event),
+//     Subject: eventType,
+//     TopicArn: config.get('logging.arn')
+//   };
+// };
+
 const save = async (eventBody) => {
     const saveInformation = eventBody;
     logger('Have a saving request inbound: ', saveInformation);

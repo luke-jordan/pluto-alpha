@@ -406,10 +406,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testBalance = Math.floor(100 * 100 * 100 * Math.random());
     const testBalanceCents = Math.round(testBalance);
 
-    beforeEach(() => resetStubs());
-
-    it('Obtain the balance of an account at a point in time correctly', async () => {
-        const txTable = config.get('tables.accountTransactions');
+    const txTable = config.get('tables.accountTransactions');
         const transTypes = `('USER_SAVING_EVENT','ACCRUAL','CAPITALIZATION','WITHDRAWAL')`;
         const unitQuery = `select distinct(unit) from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
             `and creation_time < to_timestamp($3)`;
@@ -417,7 +414,10 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
             `and creation_time < to_timestamp($4) and transaction_type in ${transTypes} group by unit`;
         const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
             `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
-        
+
+    beforeEach(() => resetStubs());
+
+    it('Obtain the balance of an account at a point in time correctly', async () => {
         const testTime = moment();
         const testLastTxTime = moment().subtract(5, 'hours');
         const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
@@ -443,6 +443,18 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         const balanceLastTxTime = balanceResult.lastTxTime;
         expect(testLastTxTime.isSame(balanceLastTxTime)).to.be.true;
         // expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', lastTxTime: testHelper.momentMatchertestLastTxTime });
+    });
+
+    it('Handle case of no prior transactions properly', async () => {
+        const testTime = moment();
+        const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
+
+        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([]);
+        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([]);
+        
+        const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
+        expect(balanceResult).to.exist;
+        expect(balanceResult).to.deep.equal({ amount: 0, unit: 'HUNDREDTH_CENT', lastTxTime: null });
     });
 
     it('Find an account ID for a user ID, single and multiple', async () => {

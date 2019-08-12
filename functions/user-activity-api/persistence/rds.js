@@ -96,10 +96,11 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
         `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
     const lastTxTimeResult = await rdsConnection.selectQuery(findMomentOfLastSettlementQuery, [accountId, currency, time.unix()]);
     logger('Retrieved last settled time: ', lastTxTimeResult);
-    const lastSettledTx = lastTxTimeResult[0]['creation_time'];
+    const lastSettledTx = lastTxTimeResult.length > 0 ? lastTxTimeResult[0]['creation_time'] : null;
+    const lastTxTime = lastSettledTx ? moment(lastSettledTx) : null; 
     logger('Last settled TX: ', lastSettledTx);
 
-    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, lastTxTime: moment(lastSettledTx) };
+    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, lastTxTime };
 };
 
 

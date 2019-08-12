@@ -35,5 +35,8 @@
                 "api_key": "EB5758F2C3B4DF3FF4F2669D5FF5B"
             }
         }
+    },
+    "logging": {
+        "enabled": "false"
     }
 }
