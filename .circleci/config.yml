@@ -39,6 +39,7 @@ jobs:
             cd $HOME/app/functions/user-existence-api && npm install
             cd $HOME/app/modules/rds-common && npm install
             cd $HOME/app/modules/dynamo-common && npm install
+            cd $HOME/app/modules/publish-common && npm install
             cd $HOME/app
 
             # Warmup lambda does not need these
@@ -67,6 +68,7 @@ jobs:
             echo "Linting modules"
             cd $HOME/app/modules/dynamo-common && npm run-script lint
             cd ../rds-common && npm run-script lint
+            cd ../publish-common && npm run-script lint
 
             # We skip warmup for the moment
             echo "Linting functions"
@@ -103,6 +105,7 @@ jobs:
             echo "Runing module tests and outputting coverage reports"
             cd $HOME/app/modules/dynamo-common; npm test; npm run-script generate-coverage
             cd ../rds-common; npm test; npm run-script generate-coverage
+            cd ../publish-common; npm test; npm run-script generate-coverage
 
             echo "Uploading coverage reports"
             cd $HOME/app

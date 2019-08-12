@@ -297,6 +297,8 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
         newBalance: { amount: sumOfTestAmounts, unit: 'HUNDREDTH_CENT' }
     };
 
+    const wrapTestParams = (queryParams) => ({ queryStringParameters: queryParams, requestContext: testAuthContext });
+
     beforeEach(() => testHelper.resetStubs(updateSaveRdsStub));
 
     it('Check for payment settles if payment has been successful', async () => {
@@ -307,7 +309,7 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
         updateSaveRdsStub.withArgs(testPendingTxId, dummyPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
         momentStub.returns(testSettlementTime);
 
-        const paymentCheckSuccessResult = await handler.checkPendingPayment({ queryStringParameters: { transactionId: testPendingTxId }});
+        const paymentCheckSuccessResult = await handler.checkPendingPayment(wrapTestParams({ transactionId: testPendingTxId }));
         expect(paymentCheckSuccessResult).to.have.property('statusCode', 200);
         expect(paymentCheckSuccessResult).to.have.property('body');
         const resultOfCheck = JSON.parse(paymentCheckSuccessResult.body);
