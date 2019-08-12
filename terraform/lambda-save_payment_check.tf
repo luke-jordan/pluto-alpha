@@ -22,6 +22,9 @@ resource "aws_lambda_function" "save_payment_check" {
       NODE_CONFIG = "${
         jsonencode(
           {
+              "aws": {
+                "region": "${var.aws_default_region[terraform.workspace]}"
+              },
               "tables": {
                   "accountTransactions": "transaction_data.core_transaction_ledger",
                   "rewardTransactions": "transaction_data.core_transaction_ledger",
@@ -85,6 +88,11 @@ resource "aws_iam_role_policy_attachment" "save_payment_check_basic_execution_po
 resource "aws_iam_role_policy_attachment" "save_payment_check_vpc_execution_policy" {
   role = "${aws_iam_role.save_payment_check_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "save_payment_check_user_event_publish_policy" {
+  role = "${aws_iam_role.save_payment_check_role.name}"
+  policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

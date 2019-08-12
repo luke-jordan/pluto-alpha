@@ -23,6 +23,9 @@ resource "aws_lambda_function" "save_initiate" {
       NODE_CONFIG = "${
         jsonencode(
           {
+              "aws": {
+                "region": "${var.aws_default_region[terraform.workspace]}"
+              },
               "tables": {
                   "accountTransactions": "transaction_data.core_transaction_ledger",
                   "rewardTransactions": "transaction_data.core_transaction_ledger",
