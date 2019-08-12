@@ -18,6 +18,14 @@ variable jwt_authorizer_arn {
   type = "string"
 }
 
+variable user_event_topic_arn {
+    default = {
+        "staging" = "arn:aws:sns:us-east-1:455943420663:staging_user_event_topic"
+        "master" = "arn:aws:sns:eu-west-1:455943420663:master_user_event_topic"
+    }
+    type = "map"
+}
+
 variable "dynamo_tables_read_capacity" {
     default = {
         "staging"  = {

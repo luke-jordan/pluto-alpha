@@ -33,6 +33,11 @@ resource "aws_lambda_function" "save_initiate" {
                 "database": "${var.db_name}",
                 "port" :"${aws_db_instance.rds[0].port}"
               }
+              "publishing": {
+                "userEvents": {
+                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                }
+              }
           }
       )}"
     }

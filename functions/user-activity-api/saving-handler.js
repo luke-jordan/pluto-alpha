@@ -5,6 +5,8 @@ const config = require('config');
 const moment = require('moment-timezone');
 const status = require('statuses');
 
+const publisher = require('publish-common');
+
 const persistence = require('./persistence/rds');
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
@@ -16,23 +18,6 @@ const handleError = (err) => {
   logger('FATAL_ERROR: ', err);
   return { statusCode: 500, body: JSON.stringify(err.message) };
 };
-
-// const dispatchUserEvent = (userId, eventType) => {
-//   const event = {
-//     userId: userId,
-//     timestamp: (new Date()).getTime(),
-//     eventType: eventType,
-//     interface: eventInterface,
-//     initiator: initiator,
-//     context: context
-//   };
-
-//   return {
-//     Message: JSON.stringify(event),
-//     Subject: eventType,
-//     TopicArn: config.get('logging.arn')
-//   };
-// };
 
 const save = async (eventBody) => {
     const saveInformation = eventBody;
@@ -113,6 +98,10 @@ module.exports.initiatePendingSave = async (event) => {
     if (!authParams || !authParams.systemWideUserId) {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
+    
+    logger('Verified user system ID, publishing event');
+    await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_INITIATED');
+    logger('Finished publishing event');
 
     const saveInformation = JSON.parse(event.body);
     if (!saveInformation.accountId) {
@@ -179,6 +168,17 @@ module.exports.settleInitiatedSave = async (event) => {
   }
 };
 
+const handlePaymentFailure = (failureType) => {
+  logger('Payment failed, consider how and return which way');
+  if (failureType === 'FAILED') {
+    return { 
+      result: 'PAYMENT_FAILED', 
+      messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank' 
+    };
+  } 
+  return { result: 'PAYMENT_PENDING' };
+};
+
 /**
  * Checks on the backend whether this payment is done
  * todo: validation that the TX belongs to the user
@@ -186,11 +186,18 @@ module.exports.settleInitiatedSave = async (event) => {
  */
 module.exports.checkPendingPayment = async (event) => {
   try {
+    const authParams = event.requestContext ? event.requestContext.authorizer : null;
+    if (!authParams || !authParams.systemWideUserId) {
+      return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
+    }
+    
     logger('Checking for payment with inbound event: ', event);
     const params = event.queryStringParameters || event;
     logger('Extracted params: ', params);
     const transactionId = params.transactionId;
     logger('Transaction ID: ', transactionId);
+
+    await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_PAYMENT_CHECK', { context: { transactionId }});
 
     let resultBody = { };
     const paymentSuccessful = !params.failureType; // for now
@@ -200,16 +207,9 @@ module.exports.checkPendingPayment = async (event) => {
       logger('Result of save: ', resultOfSave);
       resultBody = JSON.parse(resultOfSave.body);
       resultBody.result = 'PAYMENT_SUCCEEDED';
+      await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_PAYMENT_SUCCESSFUL', { context: { transactionId }});
     } else {
-      logger('Payment failed, consider how and return which way');
-      if (params.failureType === 'FAILED') {
-        resultBody = { 
-          result: 'PAYMENT_FAILED', 
-          messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank' 
-        };
-      } else {
-        resultBody = { result: 'PAYMENT_PENDING' };
-      }
+      resultBody = handlePaymentFailure(params.failureType);
     }
 
     return { statusCode: 200, body: JSON.stringify(resultBody)};
