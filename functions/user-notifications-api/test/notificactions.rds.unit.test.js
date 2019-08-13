@@ -1,4 +1,4 @@
-'use_strict';
+'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:rds-test');
 const uuid = require('uuid/v4');
@@ -39,8 +39,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     const mockInstructionId = uuid();
     const mockBoostId = uuid();
 
-    const createPersistableInstruction = (mockInstructionId) => ({
-        instructionId: mockInstructionId,
+    const createPersistableInstruction = (instructionId) => ({
+        instructionId: instructionId,
         presentationType: 'ONCE_OFF',
         active: true,
         audienceType: 'ALL_USERS',
@@ -79,7 +79,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         [createPersistableInstruction(mockInstructionId)]
     ];
 
-    const mockUpdateRecordArgs = (instructionId, property, newValue) => [
+    const mockUpdateRecordArgs = (instructionId) => [
         `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning insertion_id, update_time`,
         ['active', false, instructionId]
     ];

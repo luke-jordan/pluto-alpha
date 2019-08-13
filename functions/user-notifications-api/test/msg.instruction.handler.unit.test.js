@@ -58,22 +58,22 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         mockEvent.defaultTemplate = config.get('instruction.templates.default');
     };
 
-    const mockPersistableObject = (mockEvent) => ({
+    const mockPersistableObject = (mockInstruction) => ({
         instructionId: mockInstructionId,
-        presentationType: mockEvent.presentationType,
+        presentationType: mockInstruction.presentationType,
         active: true,
-        audienceType: mockEvent.audienceType,
+        audienceType: mockInstruction.audienceType,
         templates: {
-            default: mockEvent.defaultTemplate,
-            otherTemplates: mockEvent.otherTemplates? mockEvent.otherTemplates: null
+            default: mockInstruction.defaultTemplate,
+            otherTemplates: mockInstruction.otherTemplates ? mockInstruction.otherTemplates : null
         },
-        selectionInstruction: mockEvent.selectionInstruction? mockEvent.selectionInstruction: null,
-        recurrenceInstruction: mockEvent.recurrenceInstruction? mockEvent.recurrenceInstruction: null,
-        responseAction: mockEvent.responseAction? mockEvent.responseAction: null,
-        responseContext: mockEvent.responseContext? mockEvent.responseContext: null,
-        startTime: mockEvent.startTime? mockEvent.startTime: moment().format(),
-        endTime: mockEvent.endTime? mockEvent.endTime: moment().add(500, 'years').format(),
-        priority: mockEvent.priority? mockEvent.priority: 0
+        selectionInstruction: mockInstruction.selectionInstruction ? mockInstruction.selectionInstruction : null,
+        recurrenceInstruction: mockInstruction.recurrenceInstruction ? mockInstruction.recurrenceInstruction : null,
+        responseAction: mockInstruction.responseAction ? mockInstruction.responseAction : null,
+        responseContext: mockInstruction.responseContext ? mockInstruction.responseContext : null,
+        startTime: mockInstruction.startTime ? mockInstruction.startTime : moment().format(),
+        endTime: mockInstruction.endTime ? mockInstruction.endTime : moment().add(500, 'years').format(),
+        priority: mockInstruction.priority ? mockInstruction.priority : 0
     });
 
     const commonAssertions = (result, statusCode, expectedResult) => {

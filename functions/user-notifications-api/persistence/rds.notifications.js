@@ -1,4 +1,4 @@
-'use_strict';
+'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:rds');
 const config = require('config');
@@ -9,9 +9,7 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 
 const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
-
 const createQueryArray = (object) => Object.keys(decamelizeKeys(object));
-
 const createColumnArray = (object) => {
     const result = [];
     const keyArray = Object.keys(object);

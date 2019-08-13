@@ -45,15 +45,16 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error('Templates cannot be null.');
         default: 
            return;
-    };
+    }
 };
 
 /**
  * This function takes the instruction passed by the caller, assigns it an instruction id, activates it,
- * and assigns default values where none are provided by the input object. Minimum required input properties are described below: 
+ * and assigns default values where none are provided by the input object. Minimum required instruction properties are described below: 
  * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
+ * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
+ * @param {string} otherTemplates Required when defaultTemplate is null.
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
  * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  */
@@ -64,15 +65,15 @@ const createPersistableObject = (instruction) => ({
     audienceType: instruction.audienceType,
     templates: {
         default: instruction.defaultTemplate,
-        otherTemplates: instruction.otherTemplates? instruction.otherTemplates: null
+        otherTemplates: instruction.otherTemplates ? instruction.otherTemplates : null
     },
-    selectionInstruction: instruction.selectionInstruction? instruction.selectionInstruction: null,
-    recurrenceInstruction: instruction.recurrenceInstruction? instruction.recurrenceInstruction: null,
-    responseAction: instruction.responseAction? instruction.responseAction: null,
-    responseContext: instruction.responseContext? instruction.responseContext: null,
-    startTime: instruction.startTime? instruction.startTime: moment().format(),
-    endTime: instruction.endTime? instruction.endTime: moment().add(500, 'years').format(),
-    priority: instruction.priority? instruction.priority: 0
+    selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
+    recurrenceInstruction: instruction.recurrenceInstruction ? instruction.recurrenceInstruction : null,
+    responseAction: instruction.responseAction ? instruction.responseAction : null,
+    responseContext: instruction.responseContext ? instruction.responseContext : null,
+    startTime: instruction.startTime ? instruction.startTime : moment().format(),
+    endTime: instruction.endTime ? instruction.endTime : moment().add(500, 'years').format(),
+    priority: instruction.priority ? instruction.priority : 0
 });
 
 
@@ -83,7 +84,8 @@ const createPersistableObject = (instruction) => ({
  * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
+ * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
+ * @param {string} otherTemplates Required when defaultTemplate is null.
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
  * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
