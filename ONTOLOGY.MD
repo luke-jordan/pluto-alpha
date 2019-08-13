@@ -68,3 +68,4 @@ Notes on requirements for some of these selections:
 * `match_other` requires matching_entity
 
 **NB**: In general, the use of this language biases to containing mistakes, i.e., if things are left out or left vague the minimal possible interpretation will be taken. For example, setting client_id and specific_users without specifying @cumulative as true will message one user, not all users for a client.
+

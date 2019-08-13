@@ -4,5 +4,11 @@
     },
     "db": {
         
+    },
+    "time": {
+        "defaultEnd": {
+            "number": "50",
+            "unit": "years"
+        }
     }
 }
