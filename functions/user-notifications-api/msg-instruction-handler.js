@@ -2,139 +2,61 @@
 
 const logger = require('debug')('jupiter:user-notifications:create-msg-instructions');
 const config = require('config');
+
 const moment = require('moment');
 const uuid = require('uuid/v4');
-const decamelize = require('decamelize')
-const RdsConnection = require('rds-common');
-
-const rdsConnection = new RdsConnection(config.get('db'));
+const rdsUtil = require('./persistence/rds.notifications');
 
 
-module.exports.insertMessageInstruction = async (event) => {
-    try {
-        logger('msg instruction inserter received:', event);
-        const params = event; // normalise event
-        const persistableObject = createPersistableObject(params);
-        logger('created persistable object:', persistableObject);
-        const instructionEvalResult = exports.evaluateMessageInstruction(persistableObject);
-        logger('Message instruction evaluation resulted in:', instructionEvalResult);
-        const databaseResponse = await insertMessageInstruction(persistableObject);
-        logger('Recieved this back from message instruction insertion:', databaseResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: databaseResponse
-            })
-        };
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
-    }
-};
-
-
-module.exports.deactivateMessageInstruction = async (event) => {
-    try {
-        logger('instruction deactivator recieved:', event);
-        const params = event; // normalize
-        const instructionId = params.instructionId;
-        const databaseResponse = await updateMessageInstruction(instructionId, 'active', false);
-        logger('Result of instruction deactivation:', databaseResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: databaseResponse
-            })
-        };
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
-    }
-};
-
-
-module.exports.getMessageInstruction = async (event) => {
-    try {
-        logger('instruction retreiver recieved:', event);
-        const params = event; // normalize
-        const instructionId = params.instructionId;
-        const databaseResponse = await rdsGetMessageInstruction(instructionId);
-        logger('Result of message instruction extraction:', databaseResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: databaseResponse
-            })
-        };
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return { statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
-    }
-};
-
-// to be moved to persistence/ directory
-const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
-
-// to be moved to persistence/ directory
-const createInsertionArray = (object, outputType = 'columns') => {
-    if (outputType === 'query') {
-        return Object.keys(decamelizeKeys(object));
-    }
-    if (outputType === 'columns') {
-        let result = [];
-        const keyArray = Object.keys(object);
-        for (let i = 0; i < keyArray.length; i++) {
-            result.push(`\${${keyArray[i]}}`);
+/**
+ * Enforces instruction rules and ensures the message instruction is valid before it is persisted.
+ * First it asserts whether all required properties are present in the instruction object. If so, then
+ * condtional required properties are asserted. These are properties that are only required under certain condtions.
+ * For example, if the message instruction has a recurring presentation then a recurrance instruction is required to
+ * describe how frequently the notification should recur. The object properties recieved by this function are described below:
+ * @param {string} instructionId The instruction unique id, useful in persistence operations.
+ * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {boolean} active Indicates whether the message is active or not.
+ * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
+ * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
+ * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
+ * @param {object} responseContext An object that includes details such as the boost ID.
+ * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
+ * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
+ * @param {number} priority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
+ */
+module.exports.validateMessageInstruction = (instruction) => {
+    const requiredProperties = config.get('instruction.requiredProperties');
+    for (let i = 0; i < requiredProperties.length; i++) {
+        if (!instruction[requiredProperties[i]]) {
+            throw new Error(`Missing required property value: ${requiredProperties[i]}`);
         }
-        return result;
     }
+    switch (true) {
+        case instruction.presentationType === 'RECURRING' && !instruction.recurrenceInstruction:
+            throw new Error('recurrenceInstruction is required where presentationType is set to RECURRING.');
+        case instruction.audienceType === 'INDIVIDUAL' && !instruction.selectionInstruction:
+            throw new Error('selectionInstruction required on indivdual notification.');
+        case instruction.audienceType === 'GROUP' && !instruction.selectionInstruction:
+            throw new Error('selectionInstruction required on group notification.');
+        case !instruction.templates.default && !instruction.templates.otherTemplates:
+            throw new Error('Templates cannot be null.');
+        default: 
+           return;
+    };
 };
 
-// to be moved to persistence/ directory
-const insertMessageInstruction = async (persistableObject) => {
-    const insertionQueryArray = createInsertionArray(persistableObject, 'query');
-    const insertionColumnsArray = createInsertionArray(persistableObject, 'columns');
-    
-    const insertionQuery = `insert into ${config.get('tables.messageInstructionTable')} (${insertionQueryArray.join(', ')}) values %L returning insertion_id, creation_time`;
-    const insertionColumns = insertionColumnsArray.join(', ');
-    const insertArray = [persistableObject];
-    const databaseResponse = await rdsConnection.insertRecords(insertionQuery, insertionColumns, insertArray);
-    return databaseResponse.rows;
-};
-
-
-// to be moved to persistence/ directory
-const rdsGetMessageInstruction = async (instructionId) => {
-    const query = `select * from ${config.get('tables.messageInstructionTable')} where instruction_id = $1`;
-    const value = [instructionId];
-
-    const response = await rdsConnection.selectQuery(query, value);
-    logger('Got this back from user message instruction extraction:', response);
-
-    return response[0];
-};
-
-// to be moved to persistence/ directory
-const updateMessageInstruction = async (instructionId, property, newValue) => {
-    logger('About to update message instruction.');
-    const query = `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning insertion_id, update_time`;
-    const values = [property, newValue, instructionId];
-
-    const response = await rdsConnection.updateRecord(query, values);
-    logger('Result of message instruction update:', response);
-
-    return response.rows;
-};
-
-
+/**
+ * This function takes the instruction passed by the caller, assigns it an instruction id, activates it,
+ * and assigns default values where none are provided by the input object. Minimum required input properties are described below: 
+ * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
+ * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
+ * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ */
 const createPersistableObject = (instruction) => ({
     instructionId: uuid(),
     presentationType: instruction.presentationType,
@@ -148,29 +70,103 @@ const createPersistableObject = (instruction) => ({
     recurrenceInstruction: instruction.recurrenceInstruction? instruction.recurrenceInstruction: null,
     responseAction: instruction.responseAction? instruction.responseAction: null,
     responseContext: instruction.responseContext? instruction.responseContext: null,
-    startTime: instruction.startTime? instruction.startTime: moment()._d,
-    endTime: instruction.endTime? instruction.endTime: moment().add(500, 'years')._d, // notifications that will outlive us all
+    startTime: instruction.startTime? instruction.startTime: moment().format(),
+    endTime: instruction.endTime? instruction.endTime: moment().add(500, 'years').format(),
     priority: instruction.priority? instruction.priority: 0
 });
 
 
-module.exports.evaluateMessageInstruction = (instruction) => {
-    const requiredProperties = ['presentationType', 'audienceType', 'templates'];
-    for (let i = 0; i < requiredProperties.length; i++) {
-        if (!instruction[requiredProperties[i]]) {
-            throw new Error(`Missing required property value: ${requiredProperties[i]}`);
-        }
+/**
+ * This function accepts a new instruction, validates the instruction, then persists it. Depending on the instruction, either
+ * the whole or a subset of properties described below may provided as input. 
+ * @param {string} instructionId The instruction unique id, useful in persistence operations.
+ * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {boolean} active Indicates whether the message is active or not.
+ * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
+ * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
+ * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
+ * @param {object} responseContext An object that includes details such as the boost ID.
+ * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
+ * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
+ * @param {number} priority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
+ */
+module.exports.insertMessageInstruction = async (event) => {
+    try {
+        logger('msg instruction inserter received:', event);
+        const params = event; // normalise event
+        const persistableObject = createPersistableObject(params);
+        logger('created persistable object:', persistableObject);
+        const instructionEvalResult = exports.validateMessageInstruction(persistableObject);
+        logger('Message instruction evaluation resulted in:', instructionEvalResult);
+        const databaseResponse = await rdsUtil.insertMessageInstruction(persistableObject);
+        logger('Recieved this back from message instruction insertion:', databaseResponse);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: databaseResponse
+            })
+        };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ message: err.message })
+        };
     }
-    if (instruction.presentationType === 'RECURRING' && !instruction.recurrenceInstruction) {
-        throw new Error('recurrenceInstruction is required where presentationType is set to RECURRING.');
+};
+
+/**
+ * This function deactivates a message instruction, stopping all future notifications from message instruction.
+ * @param {string} instructionId The message instruction ID assigned during instruction creation.
+ */
+module.exports.deactivateMessageInstruction = async (event) => {
+    try {
+        logger('instruction deactivator recieved:', event);
+        const params = event; // normalize
+        const instructionId = params.instructionId;
+        const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, 'active', false);
+        logger('Result of instruction deactivation:', databaseResponse);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: databaseResponse
+            })
+        };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return {
+            statusCode: 500,
+            body: JSON.stringify({ message: err.message })
+        };
     }
-    if (instruction.audienceType === 'INDIVIDUAL' && !instruction.selectionInstruction) {
-        throw new Error('selectionInstruction required on indivdual notification.');
-    }
-    if (instruction.audienceType === 'GROUP' && !instruction.selectionInstruction) {
-        throw new Error('selectionInstruction required on group notification.');
-    }
-    if (!instruction.templates.default && !instruction.templates.otherTemplates) {
-        throw new Error('Templates cannot be null.');
+};
+
+/**
+ * This function accepts an instruction id and returns a message instruction from the database.
+ * @param {string} instructionId The message instruction ID assigned during instruction creation.
+ */
+module.exports.getMessageInstruction = async (event) => {
+    try {
+        logger('instruction retreiver recieved:', event);
+        const params = event; // normalize 
+        const instructionId = params.instructionId;
+        const databaseResponse = await rdsUtil.getMessageInstruction(instructionId);
+        logger('Result of message instruction extraction:', databaseResponse);
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                message: databaseResponse
+            })
+        };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { statusCode: 500,
+            body: JSON.stringify({ message: err.message })
+        };
     }
 };
