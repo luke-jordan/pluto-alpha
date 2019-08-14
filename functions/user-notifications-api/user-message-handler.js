@@ -22,14 +22,15 @@ const rdsUtil = require('./persistence/rds.notifications');
  * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
  */
 module.exports.createUserMessages = async (instruction) => {
-    logger('Found selection instruction:', instruction.selectionInstruction);
+    const selectionInstruction = instruction.selectionInstruction ? JSON.parse(instruction.selectionInstruction) : null;
+    logger('Found selection instruction:', selectionInstruction);
     let userIds = [];
     switch (true) {
         case instruction.audienceType === 'INDIVIDUAL':
-            userIds.push(instruction.selectionInstruction.userId);
+            userIds.push(selectionInstruction.userId);
             break;
         case instruction.audienceType === 'GROUP':
-            userIds = await rdsUtil.getUserIds(instruction.selectionInstruction.selectionType, instruction.selectionInstruction.proportionUsers);
+            userIds = await rdsUtil.getUserIds(selectionInstruction.selectionType, selectionInstruction.proportionUsers);
             break;
         case instruction.audienceType === 'ALL_USERS':
             userIds = await rdsUtil.getUserIds();
@@ -38,7 +39,7 @@ module.exports.createUserMessages = async (instruction) => {
             throw new Error(`Unsupperted message audience type: ${instruction.audienceType}`);
     };
     const rows = [];
-    const userMessage = instruction.templates.otherTemplates ? instruction.templates.otherTemplates : instruction.templates.default;
+    const userMessage = JSON.parse(instruction.templates).otherTemplates ? JSON.parse(instruction.templates).otherTemplates : JSON.parse(instruction.templates).default;
     for (let i = 0; i < userIds.length; i++) {
         rows.push({
             systemWideUserId: userIds[i],

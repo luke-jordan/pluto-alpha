@@ -68,14 +68,14 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         presentationType: mockInstruction.presentationType,
         active: true,
         audienceType: mockInstruction.audienceType,
-        templates: {
+        templates: JSON.stringify({
             default: mockInstruction.defaultTemplate,
             otherTemplates: mockInstruction.otherTemplates ? mockInstruction.otherTemplates : null
-        },
-        selectionInstruction: mockInstruction.selectionInstruction ? mockInstruction.selectionInstruction : null,
-        recurrenceInstruction: mockInstruction.recurrenceInstruction ? mockInstruction.recurrenceInstruction : null,
+        }),
+        selectionInstruction: mockInstruction.selectionInstruction ? JSON.stringify(mockInstruction.selectionInstruction) : null,
+        recurrenceInstruction: mockInstruction.recurrenceInstruction ? JSON.stringify(mockInstruction.recurrenceInstruction) : null,
         responseAction: mockInstruction.responseAction ? mockInstruction.responseAction : null,
-        responseContext: mockInstruction.responseContext ? mockInstruction.responseContext : null,
+        responseContext: mockInstruction.responseContext ? JSON.stringify(mockInstruction.responseContext) : null,
         startTime: mockInstruction.startTime ? mockInstruction.startTime : moment().format(),
         endTime: mockInstruction.endTime ? mockInstruction.endTime : moment().add(500, 'years').format(),
         lastProcessedTime: testTime.format(),

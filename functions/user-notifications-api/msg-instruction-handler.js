@@ -42,7 +42,7 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error('selectionInstruction required on indivdual notification.');
         case instruction.audienceType === 'GROUP' && !instruction.selectionInstruction:
             throw new Error('selectionInstruction required on group notification.');
-        case !instruction.templates.default && !instruction.templates.otherTemplates:
+        case !JSON.parse(instruction.templates).default && !JSON.parse(instruction.templates).otherTemplates:
             throw new Error('Templates cannot be null.');
         default: 
            return;
@@ -64,14 +64,14 @@ const createPersistableObject = (instruction) => ({
     presentationType: instruction.presentationType,
     active: true,
     audienceType: instruction.audienceType,
-    templates: {
+    templates: JSON.stringify({
         default: instruction.defaultTemplate,
         otherTemplates: instruction.otherTemplates ? instruction.otherTemplates : null
-    },
-    selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
-    recurrenceInstruction: instruction.recurrenceInstruction ? instruction.recurrenceInstruction : null,
+    }),
+    selectionInstruction: instruction.selectionInstruction ? JSON.stringify(instruction.selectionInstruction) : null,
+    recurrenceInstruction: instruction.recurrenceInstruction ? JSON.stringify(instruction.recurrenceInstruction) : null,
     responseAction: instruction.responseAction ? instruction.responseAction : null,
-    responseContext: instruction.responseContext ? instruction.responseContext : null,
+    responseContext: instruction.responseContext ? JSON.stringify(instruction.responseContext) : null,
     startTime: instruction.startTime ? instruction.startTime : moment().format(),
     endTime: instruction.endTime ? instruction.endTime : moment().add(500, 'years').format(),
     lastProcessedTime: moment().format(),

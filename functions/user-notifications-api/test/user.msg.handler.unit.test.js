@@ -50,19 +50,20 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     const mockUpdateTime = '2059-06-22T07:38:30.016Z';
     const mockInsertionId = 111;
 
+    // decamelize (or camelize in get call to db) and add properties appended by database
     const mockInstruction = {
         instructionId: mockInstructionId,
         presentationType: 'ONCE_OFF',
         active: true,
         audienceType: 'ALL_USERS',
-        templates: {
+        templates: JSON.stringify({
             default: config.get('instruction.templates.default'),
             otherTemplates: null
-        },
-        selectionInstruction: { selectionType: 'whole_universe', proportionUsers: 1.0 },
+        }),
+        selectionInstruction: JSON.stringify({ selectionType: 'whole_universe', proportionUsers: 1 }),
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
-        responseContext: { boostId: mockBoostId },
+        responseContext: JSON.stringify({ boostId: mockBoostId }),
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
         lastProcessedTime: moment().format(),
@@ -71,7 +72,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
     const resetInstruction = () => {
         mockInstruction.audienceType = 'ALL_USERS';
-        mockInstruction.selectionInstruction = { selectionType: 'whole_universe', proportionUsers: 1.0 };
+        mockInstruction.selectionInstruction = JSON.stringify({ selectionType: 'whole_universe', proportionUsers: 1.0 });
     };
 
     const createMockUserIds = (quantity) => {
@@ -128,8 +129,32 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(updateMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'last_processed_time', testTime.format());
     });
 
-    it('should user other template where provided', async () => {
-        mockInstruction.templates.otherTemplates = 'The world ends at sunrise.';
+    it('should user user other template over default template where provided', async () => {
+        mockInstruction.templates = JSON.stringify({
+            default: config.get('instruction.templates.default'),
+            otherTemplates: 'The world ends at sunrise.'
+        });
+        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
+        getUserIdsStub.withArgs().returns(createMockUserIds(1000));
+        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
+        updateMessageInstructionStub.withArgs(mockInstructionId, 'last_processed_time', testTime.format()).returns([ { insertion_id: mockInsertionId, update_time: mockUpdateTime } ]);
+        const expectedResult = expectedInsertionResult;
+        const mockEvent = {
+            instructionId: mockInstructionId
+        };
+
+        const result = await handler.populateUserMessages(mockEvent);
+        logger('Result of user messages insertion:', result);
+
+        commonAssertions(200, result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly();
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+        expect(updateMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'last_processed_time', testTime.format());
+    });
+
+    it('should selection instruction should default to null where not provided (for the love of full coverage)', async () => {
+        mockInstruction.selectionInstruction = null;
         getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
         getUserIdsStub.withArgs().returns(createMockUserIds(1000));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
@@ -151,7 +176,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
     it('should insert user message on individual user', async () => {
         mockInstruction.audienceType = 'INDIVIDUAL';
-        mockInstruction.selectionInstruction = { userId: mockUserId };
+        mockInstruction.selectionInstruction = JSON.stringify({ userId: mockUserId });
         getMessageInstructionStub.withArgs(mockInstructionIdOnIndividual).returns(mockInstruction);
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
         updateMessageInstructionStub.withArgs(mockInstructionIdOnIndividual, 'last_processed_time', testTime.format()).returns([ { insertion_id: mockInsertionId, update_time: mockUpdateTime } ]);
@@ -172,7 +197,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
     it('should insert user messages on a group of users', async () => {
         mockInstruction.audienceType = 'GROUP';
-        mockInstruction.selectionInstruction = { selectionType: 'whole_universe', proportionUsers: 0.75 };
+        mockInstruction.selectionInstruction = JSON.stringify({ selectionType: 'whole_universe', proportionUsers: 0.75 });
         getMessageInstructionStub.withArgs(mockInstructionIdOnGroup).returns(mockInstruction);
         getUserIdsStub.withArgs().returns(createMockUserIds(750));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
