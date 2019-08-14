@@ -68,7 +68,8 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         conditionClause: 'save_event_greater_than #{threshold}',
         conditionValue: 'threshold: 2000000',
         boostAudience: 'GENERAL',
-        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`
+        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+        defaultStatus: 'CREATED'
     };
 
     it('Happy path creating a time-limited simple, general boost', async () => {
@@ -127,7 +128,8 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         boostEndTime: referralWindowEnd,
         conditionClause: `save_completed_by #{${testReferredUser}}`,
         boostAudience: 'INDIVIDUAL',
-        boostAudienceSelection: `whole_universe from #{'{"specific_users": ["${testReferringUser}","${testReferredUser}"]}'}`
+        boostAudienceSelection: `whole_universe from #{'{"specific_users": ["${testReferringUser}","${testReferredUser}"]}'}`,
+        defaultStatus: 'PENDING'
     };
 
     it('Happy path inserting a referral-based individual boost', async () => {
@@ -154,7 +156,8 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             endTimeMillis: referralWindowEnd.valueOf(),
             conditionClause: `save_completed_by #{${testReferredUser}}`,
             boostAudience: 'INDIVIDUAL',
-            boostAudienceSelection: `whole_universe from #{'{"specific_users": ["${testReferringUser}","${testReferredUser}"]}'}`
+            boostAudienceSelection: `whole_universe from #{'{"specific_users": ["${testReferringUser}","${testReferredUser}"]}'}`,
+            status: 'PENDING'
         };
 
         const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, testReferredUser, 'ORDINARY_USER'));

@@ -58,7 +58,7 @@ The universe for selection must be a stringified JSON dict, with the following p
 * `client_id`: all users for a specific client (can be an array)
 * `float_id`: all users for a specific float (can also be an array)
 * `matching_entity`: a sub-object, of the form: { entityType, entityId }
-* `specific_users`: a specific set of user IDs, as an array
+* `specific_users`: a specific set of user IDs, as an array. *Variant*: `specific_accounts` where accounts are provided instead of users directly.
 * `@cumulative`: a true/false flag (default is false) that switches between conditions being "and" vs "or", i.e., if users are selected at the intersection of the conditions or if they meet just one
 
 Notes on requirements for some of these selections:

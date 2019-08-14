@@ -59,7 +59,8 @@ module.exports.createBoost = async (event) => {
             conditionClause: params.conditionClause,
             conditionValue: params.conditionValue,
             boostAudience: params.boostAudience,
-            boostAudienceSelection: params.boostAudienceSelection 
+            boostAudienceSelection: params.boostAudienceSelection,
+            defaultStatus: params.status || 'CREATED'
         };
 
         // logger('Sending to persistence: ', instructionToRds);
