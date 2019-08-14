@@ -92,7 +92,15 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             insertion_id: mockInsertionId,
             update_time: mockUpdateTime
         }]
-    }
+    };
+
+    const commonAssertions = (statusCode, result, expectedResult) => {
+        expect(result).to.exist;
+        expect(result.statusCode).to.deep.equal(statusCode);
+        expect(result).to.have.property('body');
+        const parsedResult = JSON.parse(result.body);
+        expect(parsedResult).to.deep.equal(expectedResult);
+    };
 
     beforeEach(() => {
         resetStubs();
@@ -113,11 +121,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         const result = await handler.populateUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(200);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
+        commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly();
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -138,11 +142,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         const result = await handler.populateUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(200);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
+        commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly();
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -163,11 +163,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         const result = await handler.populateUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(200);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
+        commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnIndividual);
         expect(getUserIdsStub).to.have.not.been.called;
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -189,11 +185,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         const result = await handler.populateUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(200);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
+        commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnGroup);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly('whole_universe', 0.75);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -211,11 +203,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         const result = await handler.populateUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(500);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
+        commonAssertions(500, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnError);
         expect(getUserIdsStub).to.have.not.been.called;
         expect(insertUserMessagesStub).to.have.not.been.called;

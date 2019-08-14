@@ -33,7 +33,7 @@ const createColumnArray = (object) => {
  * @param {object} responseContext An object that includes details such as the boost ID.
  * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
  * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
- * @param {string} lastUpdateTime This property is updated eah time the message instruction is processed.
+ * @param {string} lastProcessedTime This property is updated eah time the message instruction is processed.
  * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller
  */
 module.exports.insertMessageInstruction = async (persistableObject) => {
