@@ -54,7 +54,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         responseContext: { boostId: mockBoostId },
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
-        priority: 0
+        lastProcessedTime: '2060-11-11T11:47:41.596Z',
+        messagePriority: 0
     });
 
     // legacy implementation tests whether new implementation achieved same result.
@@ -70,13 +71,14 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         'response_context',
         'start_time',
         'end_time',
-        'priority' 
+        'last_processed_time',
+        'message_priority' 
     ];
 
-    const mockInsertRecordsArgs = [
-        `insert into ${config.get('tables.messageInstructionTable')} (${insertionQueryArray.join(', ')}) values %L returning insertion_id, creation_time`,
-        '${instructionId}, ${presentationType}, ${active}, ${audienceType}, ${templates}, ${selectionInstruction}, ${recurrenceInstruction}, ${responseAction}, ${responseContext}, ${startTime}, ${endTime}, ${priority}',
-        [createPersistableInstruction(mockInstructionId)]
+    const mockInsertRecordsArgs = (instructionId) => [
+        `insert into ${config.get('tables.messageInstructionTable')} (${insertionQueryArray.join(', ')}) values %L returning instruction_id, insertion_id, creation_time`,
+        '${instructionId}, ${presentationType}, ${active}, ${audienceType}, ${templates}, ${selectionInstruction}, ${recurrenceInstruction}, ${responseAction}, ${responseContext}, ${startTime}, ${endTime}, ${lastProcessedTime}, ${messagePriority}',
+        [createPersistableInstruction(instructionId)]
     ];
 
     const mockUpdateRecordArgs = (instructionId) => [
@@ -95,15 +97,17 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
     it('should insert message instruction', async () => {
         const mockPersistableInstruction = createPersistableInstruction(mockInstructionId);
-        insertRecordsStub.withArgs(...mockInsertRecordsArgs).returns({ rows: [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ] });
+        insertRecordsStub.withArgs(...mockInsertRecordsArgs(mockInstructionId)).returns({ rows: [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ] });
         const expectedResult = [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ];
 
         const result = await rdsUtil.insertMessageInstruction(mockPersistableInstruction);
         logger('Result of message instruction insertion:', result);
+        logger('insert rec args:', insertRecordsStub.getCall(0).args);
+        logger('expected:', mockInsertRecordsArgs(mockInstructionId));
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-        expect(insertRecordsStub).to.have.been.calledOnceWithExactly(...mockInsertRecordsArgs);        
+        expect(insertRecordsStub).to.have.been.calledOnceWithExactly(...mockInsertRecordsArgs(mockInstructionId));
     });
 
     it('should get message instruction', async () => {

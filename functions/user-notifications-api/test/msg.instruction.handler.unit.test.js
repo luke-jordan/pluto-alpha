@@ -14,6 +14,7 @@ const proxyquire = require('proxyquire');
 const insertMessageInstructionStub = sinon.stub();
 const updateMessageInstructionStub = sinon.stub();
 const getMessageInstructionStub = sinon.stub();
+const momentStub = sinon.stub();
 const uuidStub = sinon.stub();
 
 const handler = proxyquire('../msg-instruction-handler', {
@@ -22,7 +23,8 @@ const handler = proxyquire('../msg-instruction-handler', {
         'getMessageInstruction': getMessageInstructionStub,
         'updateMessageInstruction': updateMessageInstructionStub
     },
-    'uuid/v4': uuidStub, 
+    'uuid/v4': uuidStub,
+    'moment': momentStub,
     '@noCallThru': true
 });
 
@@ -37,6 +39,9 @@ const resetStubs = () => {
 describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     
     const mockInstructionId = uuid();
+    const mockCreationTime = '2049-06-22T07:38:30.016Z';
+    const mockInsertionId = 111;
+    const testTime = moment();
 
     const mockEvent = {
         presentationType: 'ONCE_OFF',
@@ -49,7 +54,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         responseContext: { boostId: uuid() },
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
-        priority: 0
+        messagePriority: 0
     };
 
     const resetEvent = () => {
@@ -73,7 +78,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         responseContext: mockInstruction.responseContext ? mockInstruction.responseContext : null,
         startTime: mockInstruction.startTime ? mockInstruction.startTime : moment().format(),
         endTime: mockInstruction.endTime ? mockInstruction.endTime : moment().add(500, 'years').format(),
-        priority: mockInstruction.priority ? mockInstruction.priority : 0
+        lastProcessedTime: testTime.format(),
+        messagePriority: mockInstruction.messagePriority ? mockInstruction.messagePriority : 0
     });
 
     const commonAssertions = (result, statusCode, expectedResult) => {
@@ -88,11 +94,12 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         resetStubs();
         resetEvent();
         uuidStub.returns(mockInstructionId);
+        momentStub.returns({ format: () => testTime.format() });
     });
 
     it('should insert new message intruction', async () => {
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockEvent)).returns([ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ]);
-        const expectedResult = { message: [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ] };
+        insertMessageInstructionStub.withArgs(mockPersistableObject(mockEvent)).returns([ { instruction_id: mockInstructionId, insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
+        const expectedResult = { message: [ { instruction_id: mockInstructionId, insertion_id: mockInsertionId, creation_time: mockCreationTime } ] };
         const result = await handler.insertMessageInstruction(mockEvent);
 
         logger('Result of message instruction creation:', result);
@@ -227,7 +234,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
         responseContext: { boostId: boostId },
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
-        priority: 0
+        messagePriority: 0
     });
 
     const commonAssertions = (result, statusCode, expectedResult) => {
