@@ -1,0 +1,10 @@
+{
+    "aws": {
+        "region": "us-east-1"
+    },
+    "publishing": {
+        "userEvents": {
+            "topicArn": "<insert arn here>"
+        }
+    }
+}

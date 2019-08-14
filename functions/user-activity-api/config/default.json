@@ -20,7 +20,23 @@
         "region": "eu-west-1"
     },
     "projection": {
-        "defaultDays": "5",
-        "maxDays": "5"
+        "defaultDays": 3,
+        "maxDays": 5
+    },
+    "payment": {
+        "default": {
+            "name": "STRIPE"
+        },
+        "credentials": {
+            "ozow": {
+                "request_link": "https://pay.ozow.com",
+                "site_code": "TSTSTE0001",
+                "private_key": "215114531AFF7134A94C88CEEA48E",
+                "api_key": "EB5758F2C3B4DF3FF4F2669D5FF5B"
+            }
+        }
+    },
+    "logging": {
+        "enabled": "false"
     }
 }

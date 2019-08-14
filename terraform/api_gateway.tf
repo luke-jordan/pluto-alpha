@@ -11,9 +11,11 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 
   depends_on = [
   aws_api_gateway_integration.float_api,
-  aws_api_gateway_integration.saving_record,
+  aws_api_gateway_integration.save_initiate,
+  aws_api_gateway_integration.save_payment_check,
   aws_api_gateway_integration.account_create,
-  aws_api_gateway_integration.balance_fetch_wrapper
+  aws_api_gateway_integration.balance_fetch_wrapper,
+  aws_api_gateway_integration.ops_warmup
   ]
 
   variables = {
@@ -26,11 +28,6 @@ resource "aws_api_gateway_deployment" "api_deployment" {
 }
 
 /////////////////////// API GW AUTHORIZER ///////////////////////////////////////////////////////////////
-
-variable jwt_authorizer_arn {
-  default = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
-  type = "string"
-}
 
 resource "aws_api_gateway_authorizer" "jwt_authorizer" {
   name = "api_gateway_jwt_authorizer_${terraform.workspace}"
@@ -205,37 +202,76 @@ resource "aws_api_gateway_integration" "float_api" {
   uri                     = "${aws_lambda_function.float_api.invoke_arn}"
 }
 
-/////////////// SAVE API LAMBDA //////////////////////////////////////////////////////////////////////////
+/////////////// SAVE API LAMBDA (INITIATE & CHECK) //////////////////////////////////////////////////////////////////////////
 
-resource "aws_api_gateway_method" "saving_record" {
-  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.saving_record.id}"
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_resource" "saving_record" {
+resource "aws_api_gateway_resource" "save_path_root" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "saving_record"
+  path_part   = "addcash"
 }
 
-resource "aws_lambda_permission" "saving_record" {
+resource "aws_api_gateway_resource" "save_initiate" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.save_path_root.id}"
+  path_part   = "initiate"
+}
+
+resource "aws_api_gateway_method" "save_initiate" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.save_initiate.id}"
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "save_initiate" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.saving_record.function_name}"
+  function_name = "${aws_lambda_function.save_initiate.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
-resource "aws_api_gateway_integration" "saving_record" {
+resource "aws_api_gateway_integration" "save_initiate" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id = "${aws_api_gateway_method.saving_record.resource_id}"
-  http_method = "${aws_api_gateway_method.saving_record.http_method}"
+  resource_id = "${aws_api_gateway_method.save_initiate.resource_id}"
+  http_method = "${aws_api_gateway_method.save_initiate.http_method}"
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.saving_record.invoke_arn}"
+  uri                     = "${aws_lambda_function.save_initiate.invoke_arn}"
 }
+
+resource "aws_api_gateway_resource" "save_payment_check" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.save_path_root.id}"
+  path_part   = "check"
+}
+
+resource "aws_api_gateway_method" "save_payment_check" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.save_payment_check.id}"
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "save_payment_check" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.save_payment_check.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "save_payment_check" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.save_payment_check.resource_id}"
+  http_method = "${aws_api_gateway_method.save_payment_check.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.save_payment_check.invoke_arn}"
+}
+
 
 /////////////// ACCOUNT CREATE API LAMBDA //////////////////////////////////////////////////////////////////////////
 
@@ -300,4 +336,36 @@ resource "aws_api_gateway_integration" "balance_fetch_wrapper" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.balance_fetch_wrapper.invoke_arn}"
+}
+
+/////////////// WARMUP LAMBDA //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_method" "ops_warmup" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.ops_warmup.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_resource" "ops_warmup" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "warmup"
+}
+
+resource "aws_lambda_permission" "ops_warmup" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.ops_warmup.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "ops_warmup" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.ops_warmup.resource_id}"
+  http_method = "${aws_api_gateway_method.ops_warmup.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.ops_warmup.invoke_arn}"
 }

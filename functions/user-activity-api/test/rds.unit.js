@@ -2,9 +2,10 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('pluto:save:test');
+const logger = require('debug')('jupiter:activity-rds:test');
 const config = require('config');
 const moment = require('moment-timezone');
+const testHelper = require('./test.helper');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -18,24 +19,28 @@ const uuid = require('uuid/v4');
 const queryStub = sinon.stub();
 const insertStub = sinon.stub();
 const multiTableStub = sinon.stub();
+const multiOpStub = sinon.stub();
+
+const uuidStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
         this.largeMultiTableInsert = multiTableStub;
+        this.multiTableUpdateAndInsert = multiOpStub;
     }
 }
 
 const rds = proxyquire('../persistence/rds', {
     'rds-common': MockRdsConnection,
+    'uuid/v4': uuidStub,
     '@noCallThru': true
 });
 
 const resetStubs = () => {
-    queryStub.reset();
-    insertStub.reset();
-    multiTableStub.reset();
+    testHelper.resetStubs(queryStub, insertStub, multiTableStub, uuidStub);
+    uuidStub.callsFake(uuid); // not actually a fake but call through is tricky, so this is simpler
 };
 
 const expectNoCalls = (stubList) => stubList.forEach((stub) => expect(stub).to.not.have.been.called);
@@ -113,19 +118,110 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
 
 describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and with float', () => {
 
-    before(() => resetStubs());
+    beforeEach(() => resetStubs());
 
     const testSaveAmount = 1050000;
 
-    const insertAccountTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
-        `amount, float_id, client_id, settlement_status, initiation_time, settlement_time, payment_reference, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
+    const insertAccNotSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
+        `amount, float_id, client_id, settlement_status, initiation_time) values %L returning transaction_id, creation_time`;
+    const insertAccSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
+        `amount, float_id, client_id, settlement_status, initiation_time, settlement_time, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
     const insertFloatTxQuery = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, ` +
         `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
-
-    const accountColumnKeys = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
-        '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
+    
+    const accountColKeysNotSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
+        '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}'; 
+    const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' +
+        '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${savedCurrency}, ${savedUnit}, ${savedAmount}, ' + 
-        '${allocatedToType}, ${allocatedToId}, *{USER_SAVING_EVENT}, ${accountTransactionId}';
+        '${allocatedToType}, ${allocatedToId}, ${transactionType}, ${accountTransactionId}';
+
+    const createFloatQueryDef = (txIds) => {
+        const expectedRowItem = {
+            accountTransactionId: txIds[0],
+            accountId: testAccountId,
+            savedCurrency: 'ZAR',
+            savedUnit: 'HUNDREDTH_CENT',
+            savedAmount: testSaveAmount,
+            floatId: testFloatId,
+            clientId: testClientId
+        };
+
+        const expectedFloatAdditionRow = JSON.parse(JSON.stringify(expectedRowItem));
+        expectedFloatAdditionRow.accountTransactionId = txIds[0];
+        expectedFloatAdditionRow.floatTransactionId = txIds[1];
+        expectedFloatAdditionRow.transactionType = 'USER_SAVING_EVENT';
+        expectedFloatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
+        expectedFloatAdditionRow.allocatedToId = testFloatId;
+
+        const expectedFloatAllocationRow = JSON.parse(JSON.stringify(expectedRowItem));
+        expectedFloatAllocationRow.accountTransactionId = txIds[0];
+        expectedFloatAllocationRow.floatTransactionId = txIds[2];
+        expectedFloatAllocationRow.transactionType = 'ALLOCATION';
+        expectedFloatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
+        expectedFloatAllocationRow.allocatedToId = testAccountId;
+
+        const floatRows = sinon.match([sinon.match(expectedFloatAdditionRow), sinon.match(expectedFloatAllocationRow)]);
+        return { 
+            query: insertFloatTxQuery,
+            columnTemplate: floatColumnKeys,
+            rows: floatRows
+        };
+    };
+
+    it('Insert a pending state save, if status is initiated', async () => { 
+        const testAcTxId = uuid();
+        const testInitiationTime = moment().subtract(5, 'minutes');
+
+        logger('Test TX ID for account: ', testAcTxId);
+        uuidStub.onFirstCall().returns(testAcTxId);
+        
+        const expectedRowItem = {
+            accountTransactionId: testAcTxId,
+            accountId: testAccountId,
+            savedCurrency: 'ZAR',
+            savedUnit: 'HUNDREDTH_CENT',
+            savedAmount: testSaveAmount,
+            settlementStatus: 'INITIATED',
+            initiationTime: testInitiationTime.format(),
+            floatId: testFloatId,
+            clientId: testClientId
+        };
+        
+        const expectedAccountQueryDef = {
+            query: insertAccNotSettledTxQuery,
+            columnTemplate: accountColKeysNotSettled,
+            rows: [expectedRowItem]
+        };
+
+        const expectedTxDetails = [{ 
+            'accountTransactionId': testAcTxId,
+            'creationTimeEpochMillis': sinon.match.number
+        }];
+
+        multiTableStub.withArgs(sinon.match([expectedAccountQueryDef])).resolves([[{ 'transaction_id': testAcTxId, 'creation_time': moment().format() }]]);
+
+        const testNotSettledArgs = { 
+            accountId: testAccountId,
+            savedCurrency: 'ZAR',
+            savedUnit: 'HUNDREDTH_CENT',
+            savedAmount: testSaveAmount, 
+            initiationTime: testInitiationTime,
+            settlementStatus: 'INITIATED',
+            floatId: testFloatId,
+            clientId: testClientId
+        };
+
+        const resultOfInsertion = await rds.addSavingToTransactions(testNotSettledArgs);
+        
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('transactionDetails');
+        expect(resultOfInsertion.transactionDetails).to.be.an('array').that.has.length(1);
+        expect(sinon.match(expectedTxDetails[0]).test(resultOfInsertion.transactionDetails[0])).to.be.true;
+
+        // unsettled means no balance call
+        expectNoCalls([queryStub, insertStub]);
+    });
 
     it('Insert a settled save with float id, payment ref, etc., performing matching sides', async () => {
         const testAcTxId = sinon.match.string;
@@ -151,41 +247,23 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         const expectedAccountRow = JSON.parse(JSON.stringify(expectedRowItem));
         expectedAccountRow.accountTransactionId = testAcTxId;
         expectedAccountRow.paymentRef = testPaymentRef;
+        expectedAccountRow.paymentProvider = 'STRIPE';
         expectedAccountRow.floatAddTransactionId = testFlTxAddId;
         expectedAccountRow.floatAllocTransactionId = testFlTxAllocId;
         
         const expectedAccountQueryDef = { 
-            query: insertAccountTxQuery,
-            columnTemplate: accountColumnKeys,
+            query: insertAccSettledTxQuery,
+            columnTemplate: accountColKeysSettled,
             rows: sinon.match([expectedAccountRow])
         };
 
-        const expectedFloatAdditionRow = JSON.parse(JSON.stringify(expectedRowItem));
-        expectedFloatAdditionRow.accountTransactionId = testAcTxId;
-        expectedFloatAdditionRow.floatTransactionId = testFlTxAddId;
-        expectedFloatAdditionRow.transactionType = 'USER_SAVING_EVENT';
-        expectedFloatAdditionRow.allocatedToType = 'FLOAT_ITSELF';
-        expectedFloatAdditionRow.allocatedToId = testFloatId;
-
-        const expectedFloatAllocationRow = JSON.parse(JSON.stringify(expectedRowItem));
-        expectedFloatAllocationRow.accountTransactionId = testAcTxId;
-        expectedFloatAllocationRow.floatTransactionId = testFlTxAllocId;
-        expectedFloatAllocationRow.transactionType = 'ALLOCATION';
-        expectedFloatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
-        expectedFloatAllocationRow.allocatedToId = testAccountId;
-
-        const floatRows = sinon.match([sinon.match(expectedFloatAdditionRow), sinon.match(expectedFloatAllocationRow)]);
-        const expectedFloatQueryDef = { 
-            query: insertFloatTxQuery,
-            columnTemplate: floatColumnKeys,
-            rows: floatRows
-        };
+        const expectedFloatQueryDef = createFloatQueryDef([testAcTxId, testFlTxAddId, testFlTxAllocId]);
         
         const expectedArgs = sinon.match([expectedAccountQueryDef, expectedFloatQueryDef]);
-        const txDetailsFromRds = [[ 
-            { 'transaction_id': uuid(), 'creation_time': moment().format() }],
-            [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }
-        ]];
+        const txDetailsFromRds = [
+            [{ 'transaction_id': uuid(), 'creation_time': moment().format() }],
+            [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }]
+        ];
         const expectedTxDetails = [{ 
             'accountTransactionId': testAcTxId,
             'creationTimeEpochMillis': sinon.match.number
@@ -213,6 +291,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             initiationTime: testInitiationTime,
             settlementTime: testSettlementTime,
             paymentRef: testPaymentRef,
+            paymentProvider: 'STRIPE',
             settlementStatus: 'SETTLED'
         };
 
@@ -229,16 +308,89 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(resultOfSaveInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
 
         expect(multiTableStub).to.have.been.calledOnceWithExactly(expectedArgs);
-        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledThrice; // because also fetches timestamp
         expectNoCalls([insertStub]);
+    });
+
+    it('Updates a pending save to settled and ties up all parts of float, etc.', async () => {
+        const testAcTxId = uuid();
+        const testFlTxAddId = uuid();
+        const testFlTxAllocId = uuid();
+
+        const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: testPaymentRef };
+        const testSettlementTime = moment();
+
+        const expectedTable = config.get('tables.accountTransactions');
+        const expectedRetrieveTxQuery = `select * from ${expectedTable} where transaction_id = $1`;
+        
+        const expectedUpdateKey = { transactionId: testAcTxId };
+        const expectedUpdateValue = {
+            settlementStatus: 'SETTLED',
+            settlementTime: testSettlementTime.format(),
+            floatAdjustTxId: testFlTxAddId,
+            floatAllocTxId: testFlTxAllocId,
+            paymentReference: testPaymentRef,
+            paymentProvider: 'STRIPE'
+        };
+        const expectedReturnClause = 'transaction_id, updated_time';
+        const expectedUpdateDef = { table: expectedTable, key: expectedUpdateKey, value: expectedUpdateValue, returnClause: expectedReturnClause };
+        
+        const expectedFloatQueryDef = createFloatQueryDef([testAcTxId, testFlTxAddId, testFlTxAllocId]);
+        
+        const txDetailsFromRdsOnFetch = [{ 
+            'transaction_id': testAcTxId, 'account_id': testAccountId, 'currency': 'ZAR', 'unit': 'HUNDREDTH_CENT', 'amount': 1050000,
+            'float_id': testFloatId, 'client_id': testClientId
+        }];
+        const txDetailsFromRdsPostUpdate = [
+            [{ 'transaction_id': testAcTxId, 'updated_time': moment().format() }],
+            [{ 'transaction_id': testFlTxAddId, 'creation_time': moment().format()}, { 'transaction_id': testFlTxAllocId, 'creation_time': moment().format() }]
+        ];
+
+        // and, now, set up the stubs at last
+        uuidStub.onFirstCall().returns(testFlTxAddId);
+        uuidStub.onSecondCall().returns(testFlTxAllocId);
+
+        queryStub.withArgs(expectedRetrieveTxQuery, [testAcTxId]).resolves(txDetailsFromRdsOnFetch);
+        multiOpStub.withArgs([expectedUpdateDef], [expectedFloatQueryDef]).resolves(txDetailsFromRdsPostUpdate);
+
+        // as above: this is tested elsewhere and is quite complex so no point repeating here
+        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.any]).resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);        
+
+        const expectedTxDetails = [{ 
+            'accountTransactionId': testAcTxId,
+            'updatedTimeEpochMillis': sinon.match.number
+        }, { 
+            'floatAdditionTransactionId': sinon.match.string,
+            'creationTimeEpochMillis': sinon.match.number
+        }, {
+            'floatAllocationTransactionId': sinon.match.string,
+            'creationTimeEpochMillis': sinon.match.number
+        }];
+
+        // logger('Expected float query def: ', expectedFloatQueryDef);
+
+        const resultOfSaveUpdate = await rds.updateSaveTxToSettled(testAcTxId, testPaymentDetails, testSettlementTime);
+
+        // testHelper.logNestedMatches(expectedUpdateDef, multiOpStub.getCall(0).args[0][0]);
+        // testHelper.logNestedMatches(expectedFloatQueryDef, multiOpStub.getCall(0).args[1][0]);
+
+        expect(resultOfSaveUpdate).to.exist;
+        expect(resultOfSaveUpdate).to.have.property('transactionDetails');
+        expect(resultOfSaveUpdate.transactionDetails).to.be.an('array').that.has.length(3);
+
+        testHelper.logNestedMatches(expectedTxDetails[0], resultOfSaveUpdate.transactionDetails[0]);
+
+        expect(sinon.match(expectedTxDetails[0]).test(resultOfSaveUpdate.transactionDetails[0])).to.be.true;
+        expect(sinon.match(expectedTxDetails[1]).test(resultOfSaveUpdate.transactionDetails[1])).to.be.true;
+        expect(sinon.match(expectedTxDetails[2]).test(resultOfSaveUpdate.transactionDetails[2])).to.be.true;
+
+        expect(resultOfSaveUpdate).to.have.property('newBalance');
+        expect(resultOfSaveUpdate.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
     });
 
     // todo: restore
     // it('Throw an error if state is SETTLED but no float id', () => { });
-
-    // it('Insert a pending state save, if no float id', () => { });
-
-    // it('Update transaction to settled on instruction', () => { });
 
     // it('Throws errors if missing necessary arguments (times, etc)', () => {    });
 
@@ -254,17 +406,20 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testBalance = Math.floor(100 * 100 * 100 * Math.random());
     const testBalanceCents = Math.round(testBalance);
 
-    beforeEach(() => resetStubs());
-
-    it('Obtain the balance of an account at a point in time correctly', async () => {
-        const txTable = config.get('tables.accountTransactions');
+    const txTable = config.get('tables.accountTransactions');
         const transTypes = `('USER_SAVING_EVENT','ACCRUAL','CAPITALIZATION','WITHDRAWAL')`;
         const unitQuery = `select distinct(unit) from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
             `and creation_time < to_timestamp($3)`;
         const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` +
             `and creation_time < to_timestamp($4) and transaction_type in ${transTypes} group by unit`;
-        
+        const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
+            `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
+
+    beforeEach(() => resetStubs());
+
+    it('Obtain the balance of an account at a point in time correctly', async () => {
         const testTime = moment();
+        const testLastTxTime = moment().subtract(5, 'hours');
         const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
         
         logger('Test time value of: ', testTime.valueOf());
@@ -274,12 +429,32 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
             returns(Promise.resolve([{ 'sum': testBalance, 'unit': 'HUNDREDTH_CENT' }]));
         queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'WHOLE_CENT', testTime.unix()]).
             returns(Promise.resolve([{ 'sum': testBalanceCents, 'unit': 'WHOLE_CENT' }]));
+        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).
+            returns(Promise.resolve([{ 'creation_time': testLastTxTime._d }]));
         const expectedBalance = testBalance + (100 * testBalanceCents);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
 
         expect(balanceResult).to.exist;
-        expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT' });
+        expect(balanceResult).to.have.property('amount', expectedBalance);
+        expect(balanceResult).to.have.property('unit', 'HUNDREDTH_CENT');
+        expect(balanceResult).to.have.property('lastTxTime');
+        // result of sinon hatred
+        const balanceLastTxTime = balanceResult.lastTxTime;
+        expect(testLastTxTime.isSame(balanceLastTxTime)).to.be.true;
+        // expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', lastTxTime: testHelper.momentMatchertestLastTxTime });
+    });
+
+    it('Handle case of no prior transactions properly', async () => {
+        const testTime = moment();
+        const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
+
+        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([]);
+        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([]);
+        
+        const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
+        expect(balanceResult).to.exist;
+        expect(balanceResult).to.deep.equal({ amount: 0, unit: 'HUNDREDTH_CENT', lastTxTime: null });
     });
 
     it('Find an account ID for a user ID, single and multiple', async () => {

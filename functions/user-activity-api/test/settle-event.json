@@ -1,0 +1,8 @@
+{
+    "body": "{\"transactionId\":\"243b0dff-fca3-48c6-946e-0701ad4c1dd1\",\"paymentProfider\":\"OZOW\",\"paymentRef\":\"thisisarefhereforlater\"}",
+    "requestContext": {
+        "authorizer": {
+            "systemWideUserId": "hereitis"
+        }
+    }
+}

@@ -14,6 +14,9 @@ psql -f ../templates/rds/create_db_roles.sql
 echo "Creating enum types"
 psql -f ../templates/rds/create_enums.sql
 
+echo "Creating functions"
+psql -f ../templates/rds/create_functions.sql
+
 echo "Setting up account ledger in RDS local"
 psql -f ../templates/rds/create_account_ledger.sql
 

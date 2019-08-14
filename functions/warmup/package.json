@@ -1,0 +1,17 @@
+{
+  "name": "warmup",
+  "version": "0.0.1",
+  "description": "Simple function to warmup other lambdas",
+  "main": "index.js",
+  "dependencies": {
+    "aws-sdk": "^2.501.0",
+    "config": "^3.2.2",
+    "debug": "^4.1.1"
+  },
+  "devDependencies": {},
+  "scripts": {
+    "test": "DEBUG=jupiter* mocha"
+  },
+  "author": "Luke Jordan",
+  "license": "ISC"
+}

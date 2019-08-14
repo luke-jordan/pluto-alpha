@@ -1,9 +1,11 @@
 'use strict';
 
-const logger = require('debug')('pluto:account:handler');
+const logger = require('debug')('jupiter:account:handler');
 
 const uuid = require('uuid/v4');
+const moment = require('moment');
 const validator = require('validator');
+
 const persistence = require('./persistence/rds');
 
 // point of this is to choose whether to use API calls or Lambda invocations
@@ -27,10 +29,7 @@ module.exports.validateRequest = (creationRequest) => {
   } else if (!validator.isUUID(creationRequest['ownerUserId'])) {
     logger('Creation request contains an invalid system user id');
     return false;
-  } else if (!creationRequest['userFirstName'] || !creationRequest['userFamilyName']) {
-    logger('Account creation request is missting user first name or family name');
-    return false;
-  } 
+  }
     
   logger('Incoming event validated');
   return true;
@@ -39,17 +38,13 @@ module.exports.validateRequest = (creationRequest) => {
 /**
  * Creates an account within the core ledgers for a user. Returns the persistence result of the transaction.
  * @param {string} clientId The id of the client company responsible for this user and account
- * @param {string} floatId The id for the _default_ float that the user will save to (can be overriden on specific transactions)
+ * @param {string} defaultFloatId The id for the _default_ float that the user will save to (can be overriden on specific transactions)
  * @param {string} ownerUserId The system wide ID of the user opening the account
- * @param {string} userFirstName The first name of the user
- * @param {string} userFamilyName The family name of the user
  */
 module.exports.createAccount = async (creationRequest = {
   'clientId': 'zar_savings_co', 
-  'floatId': 'zar_cash_float',
-  'ownerUserId': '2c957aca-47f9-4b4d-857f-a3205bfc6a78',
-  'userFirstName': 'Luke',
-  'userFamilyName': 'Jordan'}) => {
+  'defaultFloatId': 'zar_cash_float',
+  'ownerUserId': '2c957aca-47f9-4b4d-857f-a3205bfc6a78'}) => {
   
   const accountId = uuid();
   logger('Creating an account with ID: ', accountId);
@@ -58,13 +53,14 @@ module.exports.createAccount = async (creationRequest = {
     'accountId': accountId, 
     'clientId': creationRequest.clientId,
     'defaultFloatId': creationRequest.defaultFloatId,
-    'ownerUserId': creationRequest.ownerUserId, 
-    'userFirstName': creationRequest.userFirstName,
-    'userFamilyName': creationRequest.userFamilyName
+    'ownerUserId': creationRequest.ownerUserId
   });
   
   logger('Received from persistence: ', persistenceResult);
-  return persistenceResult;
+
+  const persistenceMoment = moment(persistenceResult.persistedTime);
+
+  return { accountId: persistenceResult.accountId, persistedTimeMillis: persistenceMoment.valueOf() };
 };
 
 
@@ -79,7 +75,7 @@ module.exports.create = async (event) => {
     if (!requestValid) {
       return {
         statusCode: 400,
-        body: `Error! Invalid request. All valid requests require a responsible client id, float id, the owner's user id, and user's names`
+        body: `Error! Invalid request. All valid requests require a responsible client id, float id, and the owner's user id`
       };
     }
 

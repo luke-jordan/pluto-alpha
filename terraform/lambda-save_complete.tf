@@ -7,7 +7,7 @@ resource "aws_lambda_function" "saving_record" {
 
   function_name                  = "${var.saving_record_lambda_function_name}"
   role                           = "${aws_iam_role.saving_record_role.arn}"
-  handler                        = "handler.save"
+  handler                        = "saving-handler.settleInitiatedSave"
   memory_size                    = 256
   reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
@@ -73,11 +73,10 @@ resource "aws_cloudwatch_log_group" "saving_record" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "user_activity_client_float_table_access" {
+resource "aws_iam_role_policy_attachment" "save_initiate_client_float_table_access" {
   role = "${aws_iam_role.saving_record_role.name}"
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
-
 
 resource "aws_iam_role_policy_attachment" "saving_record_basic_execution_policy" {
   role = "${aws_iam_role.saving_record_role.name}"

@@ -1,0 +1,9 @@
+{
+    "aws": {
+        "region": "us-east-1",
+        "apiVersion": "2012-08-10"
+    },
+    "lambdas": [
+        "balance_fetch", "balance_fetch_wrapper", "save_initiate", "save_payment_check"
+    ]
+}

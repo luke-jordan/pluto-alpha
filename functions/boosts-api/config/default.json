@@ -1,0 +1,19 @@
+{
+    "aws": {
+        "region": "us-east-1"
+    },
+    "db": {
+        
+    },
+    "time": {
+        "defaultEnd": {
+            "number": "50",
+            "unit": "years"
+        }
+    },
+    "tables": {
+        "accountLedger": "account_data.core_account_ledger",
+        "boostTable": "boost_data.boost",
+        "boostAccountJoinTable": "boost_account_join_table"
+    }
+}

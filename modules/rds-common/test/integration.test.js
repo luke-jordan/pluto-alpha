@@ -22,8 +22,9 @@ const pool = new Pool({
 });
 
 const createFreshDb = async (done) => {
+    logger('Creating DB');
     const client = await pool.connect();
-    await client.query('DROP SCHEMA public CASCADE');
+    await client.query('DROP SCHEMA IF EXISTS public CASCADE');
     await client.query('CREATE SCHEMA public');
     await client.query('GRANT ALL ON SCHEMA public TO postgres');
     client.query('GRANT ALL ON SCHEMA public TO public', (err) => {
