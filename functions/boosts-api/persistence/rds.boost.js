@@ -16,6 +16,10 @@ const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
+module.exports.findBoost = (attributes) => {
+
+};
+
 const validateAndExtractUniverse = (universeComponent) => {
     logger('Universe component: ', universeComponent);
     const universeMatch = universeComponent.match(/#{(.*)}/);
