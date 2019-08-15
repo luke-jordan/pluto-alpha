@@ -23,7 +23,7 @@ const createColumnArray = (object) => {
  * This function accepts a persistable instruction object and inserts it into the database. It is vital that input to this function must
  * have gone through the message instruction handlers createPersistableObject function.
  * @param {string} instructionId The instruction unique id, useful in persistence operations.
- * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
@@ -69,7 +69,7 @@ module.exports.getMessageInstruction = async (instructionId) => {
     const response = await rdsConnection.selectQuery(query, value);
     logger('Got this back from user message instruction extraction:', response);
 
-    return response[0];
+    return response[0]; // camelize
 };
 
 

@@ -1,14 +1,26 @@
 'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler');
+const config = require('config');
+const util = require('util');
 const moment = require('moment');
 const rdsUtil = require('./persistence/rds.notifications');
 
+const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
+
+module.exports.assembleMessage = (template, requestDetails) => {
+    switch (true) {
+        case Object.keys(requestDetails).includes('parameters') && Object.keys(requestDetails.parameters).includes('boostAmount'):
+            return util.format(template, requestDetails.parameters.boostAmount);
+        default:
+            return template;
+    };
+};
 
 /**
  * This function takes a message instruction and returns an array of user message rows. Instruction properties are as follows:
  * @param {string} instructionId The instruction unique id, useful in persistence operations.
- * @param {string} presentationType How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {string} presentationType How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @param {object} templates Message instruction must include at least one template, ie, the notification message to be displayed
@@ -24,10 +36,11 @@ const rdsUtil = require('./persistence/rds.notifications');
 module.exports.createUserMessages = async (instruction) => {
     const selectionInstruction = instruction.selectionInstruction ? JSON.parse(instruction.selectionInstruction) : null;
     logger('Found selection instruction:', selectionInstruction);
+    logger('Message assembler recieved instruction:', instruction);
     let userIds = [];
     switch (true) {
         case instruction.audienceType === 'INDIVIDUAL':
-            userIds.push(selectionInstruction.userId);
+            userIds = instruction.requestDetails.destination ? [instruction.requestDetails.destination] : [selectionInstruction.userId];
             break;
         case instruction.audienceType === 'GROUP':
             userIds = await rdsUtil.getUserIds(selectionInstruction.selectionType, selectionInstruction.proportionUsers);
@@ -39,12 +52,14 @@ module.exports.createUserMessages = async (instruction) => {
             throw new Error(`Unsupperted message audience type: ${instruction.audienceType}`);
     };
     const rows = [];
-    const userMessage = JSON.parse(instruction.templates).otherTemplates ? JSON.parse(instruction.templates).otherTemplates : JSON.parse(instruction.templates).default;
+    let template = JSON.parse(instruction.templates).otherTemplates ? JSON.parse(instruction.templates).otherTemplates : JSON.parse(instruction.templates).default;
+    const userMessage = exports.assembleMessage(template, instruction.requestDetails); // to become a generic way of formatting variables into template.
     for (let i = 0; i < userIds.length; i++) {
         rows.push({
-            systemWideUserId: userIds[i],
+            destinationUserId: instruction.destination ? instruction.destination : userIds[i],
             instructionId: instruction.instructionId,
-            message: userMessage
+            message: userMessage,
+            presentationInstruction: null // possible property for instructions to be executed before message display
         });
     }
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
@@ -57,21 +72,19 @@ module.exports.createUserMessages = async (instruction) => {
  */
 module.exports.populateUserMessages = async (event) => {
     try {
-        const params = event; // normalize
+        const params = extractEventBody(event);
         logger('Receieved params:', params);
         const instructionId = params.instructionId;
         const instruction = await rdsUtil.getMessageInstruction(instructionId);
         logger('Result of instruction extraction:', instruction);
+        instruction.requestDetails = params;
         const payload = await exports.createUserMessages(instruction);
         const insertionResponse = await rdsUtil.insertUserMessages(payload);
         logger('User messages insertion resulted in:', insertionResponse);
-        const updateResponse = await rdsUtil.updateMessageInstruction(instructionId, 'last_processed_time', moment().format());
-        logger('Instruction update resulted in:', updateResponse);
         return {
             statusCode: 200,
             body: JSON.stringify({
-                messageInsertionResult: insertionResponse,
-                instructionUpdateResult: updateResponse
+                messageInsertionResult: insertionResponse
             })
         };
     } catch (err) {

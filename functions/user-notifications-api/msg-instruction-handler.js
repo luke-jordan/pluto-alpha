@@ -7,6 +7,7 @@ const moment = require('moment');
 const uuid = require('uuid/v4');
 const rdsUtil = require('./persistence/rds.notifications');
 
+const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 
 /**
  * Enforces instruction rules and ensures the message instruction is valid before it is persisted.
@@ -15,7 +16,7 @@ const rdsUtil = require('./persistence/rds.notifications');
  * For example, if the message instruction has a recurring presentation then a recurrance instruction is required to
  * describe how frequently the notification should recur. The object properties recieved by this function are described below:
  * @param {string} instructionId The instruction unique id, useful in persistence operations.
- * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
@@ -52,7 +53,7 @@ module.exports.validateMessageInstruction = (instruction) => {
 /**
  * This function takes the instruction passed by the caller, assigns it an instruction id, activates it,
  * and assigns default values where none are provided by the input object. Minimum required instruction properties are described below: 
- * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
  * @param {string} otherTemplates Required when defaultTemplate is null.
@@ -83,7 +84,7 @@ const createPersistableObject = (instruction) => ({
  * This function accepts a new instruction, validates the instruction, then persists it. Depending on the instruction, either
  * the whole or a subset of properties described below may provided as input. 
  * @param {string} instructionId The instruction unique id, useful in persistence operations.
- * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING and ONCE_OFF.
+ * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
@@ -100,7 +101,7 @@ const createPersistableObject = (instruction) => ({
 module.exports.insertMessageInstruction = async (event) => {
     try {
         logger('msg instruction inserter received:', event);
-        const params = event; // normalise event
+        const params = extractEventBody(event);
         const persistableObject = createPersistableObject(params);
         logger('created persistable object:', persistableObject);
         const instructionEvalResult = exports.validateMessageInstruction(persistableObject);
@@ -130,7 +131,7 @@ module.exports.insertMessageInstruction = async (event) => {
 module.exports.deactivateMessageInstruction = async (event) => {
     try {
         logger('instruction deactivator recieved:', event);
-        const params = event; // normalize
+        const params = extractEventBody(event);
         const instructionId = params.instructionId;
         const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, 'active', false);
         logger('Result of instruction deactivation:', databaseResponse);
@@ -157,7 +158,7 @@ module.exports.deactivateMessageInstruction = async (event) => {
 module.exports.getMessageInstruction = async (event) => {
     try {
         logger('instruction retreiver recieved:', event);
-        const params = event; // normalize 
+        const params = extractEventBody(event);
         const instructionId = params.instructionId;
         const databaseResponse = await rdsUtil.getMessageInstruction(instructionId);
         logger('Result of message instruction extraction:', databaseResponse);
