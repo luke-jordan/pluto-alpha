@@ -134,17 +134,19 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             boostAudienceSelection: `whole_universe from #{'{"specific_users": ["${testReferringUser}","${testReferredUser}"]}'}`,
             initialStatus: 'PENDING',
             statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
-            redemptionMsgInstructions: { [testReferringUser]: testReferringMsgId, [testReferredUser]: testReferredMsgId }
+            redemptionMsgInstructions: [
+                { accountId: testReferringUser, msgInstructionId: testReferringMsgId}, 
+                { accountId: testReferredUser, msgInstructionId: testReferredMsgId }
+            ]
         };
 
         const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, testReferredUser, 'ORDINARY_USER'));
-        // testHelper.logNestedMatches(mockRdsInstruction, insertBoostStub.getCall(0).args[0]);
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
         expect(bodyOfResult).to.deep.equal(expectedFromRds);
     });
 
-    it.only('Happy path closing out a referral after referred user adds cash', async () => {
+    it('Happy path closing out a referral after referred user adds cash', async () => {
         logger('Testing instruction received to redeem the boost, as a result of referred user making first save');
         const testUserId = uuid();
         const testOriginalUserId = uuid(); // i.e., referrer
@@ -173,6 +175,8 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
         // then we will have to do a condition check, after which decide that the boost has been redeemed
         // and get the accounts that are affected by the redemption
+        
+        // todo : status
         findAccountsStub.withArgs(testBoostId, null).resolves({ 
             boostId: testBoostId,
             accountUserMap: {
@@ -211,6 +215,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         // then we update the boost to being redeemed, and insert the relevant logs
         const updateProcessedTime = moment();
         const testUpdateInstruction = [{
+            boostId: testBoostId,
             accountId: [testReferredUser, testReferringUser],
             newStatus: 'REDEEMED',
             stillActive: false,
@@ -310,12 +315,14 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
             boostSource: {
                 bonusPoolId: 'primary_bonus_pool',
-                clientId: 'some_client_co'
+                clientId: 'some_client_co',
+                floatId: 'primary_cash'
             },
             endTimeMillis: testEndTime.valueOf(),
             statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}' ] },
             boostAudience: 'GENERAL',
-            boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`
+            boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+            redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
         };
 
         const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, testMktingAdmin, 'SYSTEM_ADMIN'));
@@ -324,7 +331,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(bodyOfResult).to.deep.equal(persistenceResult);
     });
 
-    it.only('Happy path awarding a boost after a user has saved enough', async () => {
+    it('Happy path awarding a boost after a user has saved enough', async () => {
         const testUserId = uuid();
         const timeSaveCompleted = moment();
         
@@ -383,6 +390,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         // then we update the boost to being redeemed, and insert the relevant logs
         const updateProcessedTime = moment();
         const testUpdateInstruction = {
+            boostId: testBoostId,
             accountId: [testAccountId],
             newStatus: 'REDEEMED',
             stillActive: true,

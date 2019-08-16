@@ -60,14 +60,18 @@ module.exports.createBoost = async (event) => {
             boostUnit: boostAmountDetails[1],
             boostCurrency: boostAmountDetails[2],
             fromBonusPoolId: params.boostSource.bonusPoolId,
+            fromFloatId: params.boostSource.floatId,
             forClientId: params.boostSource.clientId,
-            conditionClause: params.conditionClause,
-            conditionValue: params.conditionValue,
+            statusConditions: params.statusConditions,
             boostAudience: params.boostAudience,
             boostAudienceSelection: params.boostAudienceSelection,
             redemptionMsgInstructions: params.redemptionMsgInstructions,
-            defaultStatus: params.status || 'CREATED'
+            defaultStatus: params.initialStatus || 'CREATED'
         };
+
+        if (boostType === 'REFERRAL') {
+            instructionToRds.flags = [ 'REDEEM_ALL_AT_ONCE' ]
+        }
 
         // logger('Sending to persistence: ', instructionToRds);
         const resultOfCall = await persistence.insertBoost(instructionToRds);

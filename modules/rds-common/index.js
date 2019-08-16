@@ -252,6 +252,11 @@ class RdsConnection {
         return results;
     }
 
+    /**
+     * For running multiple updates all at once
+     * @param {list} updateQueryDefs Each definition takes: table, key (to select row/rows), value, and a return clause; decamelize run on object keys
+     * @param {list} insertQueryDefs As above in multi table inserts
+     */
     async multiTableUpdateAndInsert (updateQueryDefs, insertQueryDefs) {
         // updates with no inserts permitted, but reverse not, as have dedicated method for it
         if (!Array.isArray(updateQueryDefs) || updateQueryDefs.length === 0) {
@@ -369,6 +374,7 @@ class RdsConnection {
         return nestedArray;
     }
 
+    // update query def takes: table, key (to select row/rows), value, and a return clause; decamelize run on object keys
     // todo : validation before getting here
     static compileUpdateQueryAndArray (updateQueryDef) {
         const keyObject = updateQueryDef.skipDecamelize ? updateQueryDef.key : decamelizeKeys(updateQueryDef.key, '_');

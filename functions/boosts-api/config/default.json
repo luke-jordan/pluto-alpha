@@ -14,7 +14,8 @@
     "tables": {
         "accountLedger": "account_data.core_account_ledger",
         "boostTable": "boost_data.boost",
-        "boostAccountJoinTable": "boost_account_join_table"
+        "boostAccountJoinTable": "boost_data.boost_account_status",
+        "boostLogTable": "boost_data.boost_log"
     },
     "lambdas": {
         "floatTransfer": "float_transfer",

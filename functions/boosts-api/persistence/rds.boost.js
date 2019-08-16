@@ -16,8 +16,17 @@ const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
-module.exports.findBoost = (attributes) => {
+module.exports.findBoost = async (attributes) => {
+    
+};
 
+module.exports.findAccountsForBoost = async () => {
+
+};
+
+module.exports.updateBoostAccountStatus = async () => {
+    // todo : make sure to only updates status upwards, to prevent corner case of false positive on one user triggered downward move on others
+    
 };
 
 const validateAndExtractUniverse = (universeComponent) => {
