@@ -37,6 +37,7 @@ const resetStubs = () => {
 describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
     const mockUserId = uuid();
+    const mockClientId = uuid();
     const mockInstructionId = uuid();
     const mockInstructionIdOnIndividual = uuid();
     const mockInstructionIdOnGroup = uuid();
@@ -57,7 +58,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             default: config.get('instruction.templates.default'),
             otherTemplates: null
         }),
-        selectionInstruction: JSON.stringify({ selectionType: 'whole_universe', proportionUsers: 1 }),
+        selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
         responseContext: JSON.stringify({ boostId: mockBoostId }),
@@ -69,7 +70,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
     const resetInstruction = () => {
         mockInstruction.audienceType = 'ALL_USERS';
-        mockInstruction.selectionInstruction = JSON.stringify({ selectionType: 'whole_universe', proportionUsers: 1.0 });
+        mockInstruction.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
     };
 
     const createMockUserIds = (quantity) => {
@@ -104,7 +105,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
     it('should insert notification messages for all users in current universe', async () => {
         getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs().returns(createMockUserIds(1000));
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
         const expectedResult = expectedInsertionResult;
         const mockEvent = {
@@ -116,7 +117,27 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
         commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly();
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+    });
+
+    it('should normalize event in body', async () => {
+        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
+        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
+        const expectedResult = expectedInsertionResult;
+        const mockEvent = {
+            body: JSON.stringify({
+                instructionId: mockInstructionId
+            })
+        };
+
+        const result = await handler.populateUserMessages(mockEvent);
+        logger('Result of user messages insertion:', result);
+
+        commonAssertions(200, result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
     });
 
@@ -126,7 +147,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             otherTemplates: 'The world ends at sunrise.'
         });
         getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs().returns(createMockUserIds(1000));
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
         const expectedResult = expectedInsertionResult;
         const mockEvent = {
@@ -138,14 +159,14 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
         commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly();
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
     });
 
     it('should selection instruction should default to null where not provided (for the love of full coverage)', async () => {
         mockInstruction.selectionInstruction = null;
         getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs().returns(createMockUserIds(1000));
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
         const expectedResult = expectedInsertionResult;
         const mockEvent = {
@@ -157,14 +178,15 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
         commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly();
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
     });
 
     it('should insert user message on individual user', async () => {
         mockInstruction.audienceType = 'INDIVIDUAL';
-        mockInstruction.selectionInstruction = JSON.stringify({ userId: mockUserId });
+        mockInstruction.selectionInstruction = `whole_universe from #{'{"specific_users":["${mockUserId}"]}'}`;
         getMessageInstructionStub.withArgs(mockInstructionIdOnIndividual).returns(mockInstruction);
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
         const expectedResult = expectedInsertionResult;
         const mockEvent = {
@@ -176,15 +198,15 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
         commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnIndividual);
-        expect(getUserIdsStub).to.have.not.been.called;
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
     });
 
     it('should insert user messages on a group of users', async () => {
         mockInstruction.audienceType = 'GROUP';
-        mockInstruction.selectionInstruction = JSON.stringify({ selectionType: 'whole_universe', proportionUsers: 0.75 });
+        mockInstruction.selectionInstruction = `random_sample #{0.75} from #{'{"client_id":"${mockClientId}"}'}`;
         getMessageInstructionStub.withArgs(mockInstructionIdOnGroup).returns(mockInstruction);
-        getUserIdsStub.withArgs().returns(createMockUserIds(750));
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(750));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
         const expectedResult = expectedInsertionResult;
         const mockEvent = {
@@ -196,28 +218,15 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
         commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnGroup);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly('whole_universe', 0.75);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
     });
 
-    it('should throw an error on invalid audience type (edge case)', async () => {
-        mockInstruction.audienceType = 'UNIT';
-        getMessageInstructionStub.withArgs(mockInstructionIdOnError).returns(mockInstruction);
-        const expectedResult = { message: `Unsupperted message audience type: ${mockInstruction.audienceType}`};
-        const mockEvent = {
-            instructionId: mockInstructionIdOnError
-        };
-
-        const result = await handler.populateUserMessages(mockEvent);
-        logger('Result of user messages insertion:', result);
-
-        commonAssertions(500, result, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnError);
-        expect(getUserIdsStub).to.have.not.been.called;
-        expect(insertUserMessagesStub).to.have.not.been.called;
-    });
-
     it('should insert boost notification message from boost api', async () => {
+
+        const testReferringUser = uuid();
+        const testReferredUser = uuid();
+
         const mockBoostInstruction = {
             instructionId: mockInstructionId,
             presentationType: 'EVENT_DRIVEN',
@@ -227,7 +236,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
                 default: config.get('instruction.templates.default'),
                 otherTemplates: config.get('instruction.templates.boost')
             }),
-            selectionInstruction: JSON.stringify({ userId: mockUserId }), // or read from event?
+            selectionInstruction: `whole_universe from #{{"specific_users":["${testReferringUser}","${testReferredUser}"]}}`,
             recurrenceInstruction: null,
             responseAction: 'VIEW_HISTORY',
             responseContext: JSON.stringify({ boostId: mockBoostId }),
@@ -238,6 +247,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         };
 
         getMessageInstructionStub.withArgs(mockInstructionIdOnBoost).returns(mockBoostInstruction);
+        getUserIdsStub.withArgs(mockBoostInstruction.selectionInstruction).returns(createMockUserIds(2));
         insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
         const expectedResult = expectedInsertionResult;
         const mockEvent = {
@@ -252,6 +262,23 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
         commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnBoost);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockBoostInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
+    });
+
+    it('should return an error on instruction extraction failure', async () => {
+        getMessageInstructionStub.withArgs(mockInstructionIdOnError).throws(new Error('Error extracting message instruction'));
+        const mockEvent = {
+            instructionId: mockInstructionIdOnError
+        };
+        const expectedResult = { message: 'Error extracting message instruction' };
+
+        const result = await handler.populateUserMessages(mockEvent);
+        logger('Result of failing intruction extraction:', result);
+
+        commonAssertions(500, result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnError);
+        expect(getUserIdsStub).to.have.not.been.called;
+        expect(insertUserMessagesStub).to.have.not.been.called;
     });
 });

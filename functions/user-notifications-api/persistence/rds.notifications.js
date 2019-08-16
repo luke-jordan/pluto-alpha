@@ -3,21 +3,14 @@
 const logger = require('debug')('jupiter:user-notifications:rds');
 const config = require('config');
 const decamelize = require('decamelize');
-const RdsConnection = require('rds-common');
 
+const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
+const accountsTable = config.get('tables.accountLedger');
 
-const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
-const createQueryArray = (object) => Object.keys(decamelizeKeys(object));
-const createColumnArray = (object) => {
-    const result = [];
-    const keyArray = Object.keys(object);
-    for (let i = 0; i < keyArray.length; i++) {
-        result.push(`\${${keyArray[i]}}`);
-    }
-    return result;
-};
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', '); // stolen with pride
+const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', '); // and absolutely no shame
 
 /**
  * This function accepts a persistable instruction object and inserts it into the database. It is vital that input to this function must
@@ -37,26 +30,32 @@ const createColumnArray = (object) => {
  * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller
  */
 module.exports.insertMessageInstruction = async (persistableObject) => {
-    const insertionQueryArray = createQueryArray(persistableObject);
-    const insertionColumnsArray = createColumnArray(persistableObject);
-    
-    const insertionQuery = `insert into ${config.get('tables.messageInstructionTable')} (${insertionQueryArray.join(', ')}) values %L returning instruction_id, insertion_id, creation_time`;
-    const insertionColumns = insertionColumnsArray.join(', ');
+    const objectKeys = Object.keys(persistableObject);
+    const insertionQuery = `insert into ${config.get('tables.messageInstructionTable')} (${extractQueryClause(objectKeys)}) values %L returning instruction_id, insertion_id, creation_time`;
+    const insertionColumns = extractColumnTemplate(objectKeys);
     const insertArray = [persistableObject];
     const databaseResponse = await rdsConnection.insertRecords(insertionQuery, insertionColumns, insertArray);
     logger('Instruction insertion db response:', databaseResponse);
     return databaseResponse.rows;
 };
 
-
 /**
- * 
+ * This function inserts user messages in bulk. It accepts an array of user message objects and an array of a user message object's keys.
  * @param {array} rows An array of persistable user message rows.
- */
-// module.exports.insertUserMessages = async (rows) => {
-//     // see float api accrual handler flow
-// };
+ * @param {array} objectKeys An array of a rows object keys.
+ */ 
+module.exports.insertUserMessages = async (rows, objectKeys) => {
+    const messageQueryDef = {
+        query: `insert into ${config.get('tables.userMessagesTable')} (${extractQueryClause(objectKeys)}) values %L returning insertion_id, creation_time`,
+        columnTemplate: extractColumnTemplate(objectKeys),
+        rows: rows
+    };
+    logger('Created insertion query:', messageQueryDef);
 
+    const insertionResult = await rdsConnection.largeMultiTableInsert([messageQueryDef]);
+    logger('User messages insertion resulted in:', insertionResult);
+    return insertionResult;
+};
 
 /**
  * This function accepts an instruction ID and returns a message instruction from the database.
@@ -71,7 +70,6 @@ module.exports.getMessageInstruction = async (instructionId) => {
 
     return response[0]; // camelize
 };
-
 
 /**
  * This function accepts an message instruction id, a message instruction property, and the new value to be assigned to the property.
@@ -88,11 +86,98 @@ module.exports.updateMessageInstruction = async (instructionId, property, newVal
     return response.rows;
 };
 
+const validateAndExtractUniverse = (universeComponent) => {
+    logger('Universe component: ', universeComponent);
+    const universeMatch = universeComponent.match(/#{(.*)}/);
+    logger('Universe match: ', universeMatch);
+    if (!universeMatch || universeMatch.length === 0) {
+        throw new Error('Error! Universe definition passed incorrectly: ', universeComponent);
+    }
+
+    logger('Parsing: ', universeMatch[1]);
+    const universeDefinition = JSON.parse(universeMatch[1]);
+    logger('Resulting definition: ', universeDefinition);
+    if (typeof universeDefinition !== 'object' || Object.keys(universeDefinition) === 0) {
+        throw new Error('Error! Universe definition not a valid object');
+    }
+
+    return universeDefinition;
+};
+
+// note : this _could_ be simplified by relying on ordering of Object.keys, but that would be dangerous/fragile
+const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey) => {
+    if (currentKey === 'specific_accounts') {
+        logger('Sepcific account IDs selected');
+        const accountIds = universeDefinition[currentKey];
+        const placeHolders = accountIds.map((_, index) => `$${currentIndex + index + 1}`).join(', ');
+        logger('Created place holder: ', placeHolders);
+        const assembledClause = `account_id in (${placeHolders})`;
+        return [assembledClause, accountIds, currentIndex + accountIds.length];
+    }
+    const newIndex = currentIndex + 1;
+    return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
+}
+
+// const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
+
+const extractWhereClausesValues = (universeDefinition) => {
+    const [clauseStrings, clauseValues] = [[], []];
+    const universeKeys = Object.keys(universeDefinition);
+    let currentIndex = 0;
+    universeKeys.forEach((key) => {
+        logger('Next clause extraction, current key: ', key, ' and current index: ', currentIndex);
+        const [nextClause, nextValues, newCurrentIndex] = extractSubClauseAndValues(universeDefinition, currentIndex, key);
+        clauseStrings.push(nextClause);
+        clauseValues.push(...nextValues);
+        currentIndex = newCurrentIndex;
+    });
+    return [clauseStrings, clauseValues];
+};
+
+const assembleQueryClause = (selectionMethod, universeDefinition) => {
+    if (selectionMethod === 'whole_universe') {
+        logger('We are selecting all parts of the universe');
+        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
+        const whereClause = conditionClauses.join(' and ');
+        const selectionQuery = `select account_id from ${accountsTable} where ${whereClause}`;
+        return [selectionQuery, conditionValues];
+    } else if (selectionMethod === 'random_sample') {
+        logger('We are selecting some random sample of a universe')
+    } else if (selectionMethod === 'match_other') {
+        logger('We are selecting so as to match another entity');
+    }
+
+    throw new Error('Invalid selection method provided: ', selectionMethod);
+};
+
+const extractAccountIds = async (selectionClause) => {
+    logger('Selecting accounts according to: ', selectionClause);
+    const clauseComponents = selectionClause.split(' ');
+    logger('Split pieces: ', clauseComponents);
+    const hasMethodParameters = clauseComponents[1] !== 'from';
+    
+    const selectionMethod = clauseComponents[0];
+    const universeComponent = selectionClause.match(/#{.*}/g)[hasMethodParameters ? 1 : 0];
+    const universeDefinition = validateAndExtractUniverse(universeComponent);
+    
+    const [selectionQuery, selectionValues] = assembleQueryClause(selectionMethod, universeDefinition);
+    logger('Assembled selection clause: ', selectionQuery);
+    logger('And selection values: ', selectionValues);
+
+    const queryResult = await rdsConnection.selectQuery(selectionQuery, selectionValues);
+    logger('Number of records from query: ', queryResult.length);
+
+    return queryResult.map((row) => row['account_id']);
+};
+
+
 /**
- * 
+ * This function accepts a selection instruction and returns an array of user ids.
  * @param {string} selectionType
  * @param {number} proportionUsers
  */
-// module.exports.getUserIds = async (selectionType = 'whole_universe', proportionUsers = 1) => {
-//     // implement DSL
-// };
+module.exports.getUserIds = async (selectionInstruction) => {
+    const userIds = await extractAccountIds(selectionInstruction);
+    logger('Got this back from user ids extraction:', userIds);
+    return userIds;
+};

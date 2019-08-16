@@ -69,7 +69,7 @@ const createPersistableObject = (instruction) => ({
         default: instruction.defaultTemplate,
         otherTemplates: instruction.otherTemplates ? instruction.otherTemplates : null
     }),
-    selectionInstruction: instruction.selectionInstruction ? JSON.stringify(instruction.selectionInstruction) : null,
+    selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
     recurrenceInstruction: instruction.recurrenceInstruction ? JSON.stringify(instruction.recurrenceInstruction) : null,
     responseAction: instruction.responseAction ? instruction.responseAction : null,
     responseContext: instruction.responseContext ? JSON.stringify(instruction.responseContext) : null,

@@ -1,9 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler');
-const config = require('config');
 const util = require('util');
-const moment = require('moment');
 const rdsUtil = require('./persistence/rds.notifications');
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
@@ -34,29 +32,17 @@ module.exports.assembleMessage = (template, requestDetails) => {
  * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
  */
 module.exports.createUserMessages = async (instruction) => {
-    const selectionInstruction = instruction.selectionInstruction ? JSON.parse(instruction.selectionInstruction) : null;
+    const selectionInstruction = instruction.selectionInstruction ? instruction.selectionInstruction : null;
     logger('Found selection instruction:', selectionInstruction);
     logger('Message assembler recieved instruction:', instruction);
-    let userIds = [];
-    switch (true) {
-        case instruction.audienceType === 'INDIVIDUAL':
-            userIds = instruction.requestDetails.destination ? [instruction.requestDetails.destination] : [selectionInstruction.userId];
-            break;
-        case instruction.audienceType === 'GROUP':
-            userIds = await rdsUtil.getUserIds(selectionInstruction.selectionType, selectionInstruction.proportionUsers);
-            break;
-        case instruction.audienceType === 'ALL_USERS':
-            userIds = await rdsUtil.getUserIds();
-            break
-        default:
-            throw new Error(`Unsupperted message audience type: ${instruction.audienceType}`);
-    };
+    const userIds = await rdsUtil.getUserIds(selectionInstruction);
+    logger(`Got ${userIds.length} user id(s)`);
     const rows = [];
     let template = JSON.parse(instruction.templates).otherTemplates ? JSON.parse(instruction.templates).otherTemplates : JSON.parse(instruction.templates).default;
     const userMessage = exports.assembleMessage(template, instruction.requestDetails); // to become a generic way of formatting variables into template.
     for (let i = 0; i < userIds.length; i++) {
         rows.push({
-            destinationUserId: instruction.destination ? instruction.destination : userIds[i],
+            destinationUserId: instruction.requestDetails.destination ? instruction.requestDetails.destination : userIds[i],
             instructionId: instruction.instructionId,
             message: userMessage,
             presentationInstruction: null // possible property for instructions to be executed before message display
@@ -78,8 +64,10 @@ module.exports.populateUserMessages = async (event) => {
         const instruction = await rdsUtil.getMessageInstruction(instructionId);
         logger('Result of instruction extraction:', instruction);
         instruction.requestDetails = params;
-        const payload = await exports.createUserMessages(instruction);
-        const insertionResponse = await rdsUtil.insertUserMessages(payload);
+        const rows = await exports.createUserMessages(instruction);
+        const rowKeys = Object.keys(rows[0]);
+        logger('Got keys:', rowKeys);
+        const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
         logger('User messages insertion resulted in:', insertionResponse);
         return {
             statusCode: 200,

@@ -4,7 +4,7 @@ create table if not exists message_instructions (
     active boolean not null,
     audience_type varchar (100) not null,
     templates jsonb not null,
-    selection_instruction jsonb,
+    selection_instruction varchar,
     recurrence_instruction jsonb,
     response_action varchar (100) not null,
     response_context jsonb,

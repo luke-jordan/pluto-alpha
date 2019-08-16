@@ -41,6 +41,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     const mockInstructionId = uuid();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
     const mockInsertionId = 111;
+    const mockClientId = uuid();
     const testTime = moment();
 
     const mockEvent = {
@@ -48,7 +49,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         audienceType: 'ALL_USERS',
         defaultTemplate: config.get('instruction.templates.default'),
         otherTemplates: null,
-        selectionInstruction: null,
+        selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
         responseContext: { boostId: uuid() },
@@ -61,6 +62,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         mockEvent.presentationType = 'ONCE_OFF';
         mockEvent.audienceType = 'ALL_USERS';
         mockEvent.defaultTemplate = config.get('instruction.templates.default');
+        mockEvent.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`
     };
 
     const mockPersistableObject = (mockInstruction) => ({
@@ -72,7 +74,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             default: mockInstruction.defaultTemplate,
             otherTemplates: mockInstruction.otherTemplates ? mockInstruction.otherTemplates : null
         }),
-        selectionInstruction: mockInstruction.selectionInstruction ? JSON.stringify(mockInstruction.selectionInstruction) : null,
+        selectionInstruction: mockInstruction.selectionInstruction ? mockInstruction.selectionInstruction : null,
         recurrenceInstruction: mockInstruction.recurrenceInstruction ? JSON.stringify(mockInstruction.recurrenceInstruction) : null,
         responseAction: mockInstruction.responseAction ? mockInstruction.responseAction : null,
         responseContext: mockInstruction.responseContext ? JSON.stringify(mockInstruction.responseContext) : null,
@@ -121,6 +123,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should throw an error on missing selection instruction on individual notification', async () => {
+        mockEvent.selectionInstruction = null;
         const expectedResult = { message: 'selectionInstruction required on indivdual notification.' };
         mockEvent.audienceType = 'INDIVIDUAL';
 
@@ -132,6 +135,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should throw an error on missing selection instruction on group notification', async () => {
+        mockEvent.selectionInstruction = null;
         const expectedResult = { message: 'selectionInstruction required on group notification.' };
         mockEvent.audienceType = 'GROUP';
 
@@ -217,6 +221,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
 
     const mockInstructionId = uuid();
     const mockInstructionIdOnError = uuid();
+    const mockClientId = uuid();
     const boostId = uuid();
 
     const mockPersistedInstuction = (instructionId) => ({
@@ -228,7 +233,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
             default: config.get('instruction.templates.default'),
             otherTemplates: null
         },
-        selectionInstruction: null,
+        selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
         responseContext: { boostId: boostId },
