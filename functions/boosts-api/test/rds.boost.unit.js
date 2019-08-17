@@ -38,6 +38,8 @@ const rds = proxyquire('../persistence/rds.boost', {
 });
 
 const resetStubs = () => testHelper.resetStubs(queryStub, insertStub, multiTableStub, multiOpStub);
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 const accountTable = config.get('tables.accountLedger');
 const boostTable = config.get('tables.boostTable');
@@ -54,9 +56,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         'fromBonusPoolId', 'forClientId', 'boostAudience', 'audienceSelection', 'conditionClause'];
     const boostUserKeys = ['boostId', 'accountId', 'status'];
     
-    const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
-    const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
-
     beforeEach(() => (resetStubs()));
 
     // todo : also add the logs
@@ -161,12 +160,16 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         returnClause: 'updated_time'
     });
 
-    const logColumns = ['boostId', 'logType', 'accountId', 'logContext'];
-    const assembleLogInsertDef = (logRows) => ({
-        query: `insert into ${boostLogTable} (${extractQueryClause(logColumns)}) values %L returning insertion_id, creation_time`,
-        columnTemplate: extractColumnTemplate(logColumns),
-        rows: logRows 
-    });
+    const logColumnsWithAccount = ['boostId', 'accountId', 'logType', 'logContext'];
+    const logColumnsWithoutAccount = ['boostId', 'logType', 'logContext'];
+    const assembleLogInsertDef = (logRows, haveAccountId = false) => {
+        const columns = haveAccountId ? logColumnsWithAccount : logColumnsWithoutAccount;
+        return {
+            query: `insert into ${boostLogTable} (${extractQueryClause(columns)}) values %L returning insertion_id, creation_time`,
+            columnTemplate: extractColumnTemplate(columns),
+            rows: logRows
+        };
+    };
 
     const boostFromPersistence = {
         'boost_id': testBoostId,
@@ -184,6 +187,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         'boost_audience': 'INDIVIDUAL',
         'audience_selection':JSON.stringify(testAudienceSelection),
         'redemption_messages': JSON.stringify(testRedemptionMsgs),
+        'initial_status': 'PENDING',
         'flags': ['REDEEM_ALL_AT_ONCE']
     };
 
@@ -197,8 +201,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         fromBonusPoolId: 'primary_bonus_pool',
         fromFloatId: 'primary_cash',
         forClientId: 'some_client_co',
-        boostStartTime: testStartTime,
-        boostEndTime: testEndTime,
+        boostStartTime: moment(testStartTime.format()),
+        boostEndTime: moment(testEndTime.format()),
         statusConditions: testStatusCondition,
         boostAudience: 'INDIVIDUAL',
         boostAudienceSelection: testAudienceSelection,
@@ -222,27 +226,33 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         newBoost.boostCategory = 'TIME_LIMITED';
         newBoost.flags = [];
         newBoost.boostId = boostId;
+        newBoost.boostStartTime = moment(testStartTime.format());
+        newBoost.boostEndTime = moment(testEndTime.format());
         return newBoost;
     };
 
-    const accountUserIdRow = (accountId, userId, boostId = testBoostId) => ({ 'boost_id': boostId, 'account_id': accountId, 'user_id': userId });
+    const accountUserIdRow = (accountId, userId, status = 'PENDING', boostId = testBoostId) => 
+        ({ 'boost_id': boostId, 'account_id': accountId, 'owner_user_id': userId, 'status': status });
 
     beforeEach(() => resetStubs());
 
     it('Finds one active boost correctly, assembling query as needed, including current status', async () => {
-        const expectedFindBoostQuery = `select boost_id from ${boostUserTable} where account_id in ($1) and status in ($2, $3)`;
+        const expectedFindBoostQuery = `select distinct(boost_id) from ${boostUserTable} where account_id in ($1) and status in ($2, $3)`;
         const retrieveBoostDetailsQuery = `select * from ${boostTable} where boost_id in ($1) and active = true`;
 
         const testInput = {
             accountId: [testAccountId], status: ['OFFERED', 'PENDING'], active: true
         };
 
-        queryStub.withArgs(expectedFindBoostQuery, [testAccountId, 'OFFERED', 'PENDING']).resolves({ 'boost_id': testBoostId });
+        queryStub.withArgs(expectedFindBoostQuery, [testAccountId, 'OFFERED', 'PENDING']).resolves([{ 'boost_id': testBoostId }]);
         queryStub.withArgs(retrieveBoostDetailsQuery, [testBoostId]).resolves([boostFromPersistence]);
 
         const findBoostResponse = await rds.findBoost(testInput);
+        
         expect(findBoostResponse).to.exist;
         expect(findBoostResponse).to.deep.equal([expectedBoostResult]);
+
+
     });
 
     it('Finds multiple active boosts correctly', async () => {
@@ -252,13 +262,13 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         const boostIdsFromPersistence = testBoostIds.map((boostId) => ({ 'boost_id': boostId }));
         const testBoostsFromPersistence = testBoostIds.map(generateSimpleBoostFromPersistence);
         
-        const expectedFindBoostQuery = `select boost_id from ${boostUserTable} where account_id in ($1, $2) and status in $(3)`;
+        const expectedFindBoostQuery = `select distinct(boost_id) from ${boostUserTable} where account_id in ($1, $2) and status in ($3)`;
         const retrieveBoostDetailsQuery = `select * from ${boostTable} where boost_id in ($1, $2, $3)`;
 
         const testInput = { accountId: testAccountIds, status: ['OFFERED'] };
         const expectedResult = testBoostIds.map(generateSimpleExpectedBoost);
 
-        queryStub.withArgs(expectedFindBoostQuery, [testAccountIds[0], testAccountIds[1], 'OFFERED']).resolves(boostIdsFromPersistence);
+        queryStub.withArgs(expectedFindBoostQuery, sinon.match([testAccountIds[0], testAccountIds[1], 'OFFERED'])).resolves(boostIdsFromPersistence);
         queryStub.withArgs(retrieveBoostDetailsQuery, testBoostIds).resolves(testBoostsFromPersistence);
 
         const findBoostResponse = await rds.findBoost(testInput);
@@ -270,21 +280,23 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     // boosts only ever affect (1) all related accounts of a certain current status in relation to that boost, or (2) a specific account
     it('Finds account IDs and user IDs correctly for a boost, find all pending', async () => {
         const testAccountId2 = uuid();
-        const [testUserId1, testUserId2] = [uuid(), uuid()];
-        const expectedResult = {
+        const testUserIds = [uuid(), uuid()];
+        const [testUserId1, testUserId2] = testUserIds;
+        const expectedResult = [{
             boostId: testBoostId,
             accountUserMap: {
-                [testAccountId]: testUserId1,
-                [testAccountId2]: testUserId2
+                [testAccountId]: { userId: testUserId1, status: 'PENDING' },
+                [testAccountId2]: { userId: testUserId2, status: 'PENDING' }
             }
-        };
+        }];
 
-        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id from ${boostUserTable} inner join ` + 
-            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and status in ($2)`;
+        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, status from ${boostUserTable} inner join ` + 
+            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and status in ($2) ` +
+            `order by boost_id, account_id`;
 
-        const testInput = { boostId: [testBoostId], status: ['PENDING'] };
+        const testInput = { boostIds: [testBoostId], status: ['PENDING'] };
 
-        const mockPersistenceReturn = [testAccountId, testAccountId2].map((accountId, index) => accountUserIdRow(accountId, testUserIds[index]));
+        const mockPersistenceReturn = [testAccountId, testAccountId2].map((accountId, index) => accountUserIdRow(accountId, testUserIds[index], 'PENDING'));
         queryStub.withArgs(retrieveAccountsQuery, [testBoostId, 'PENDING']).resolves(mockPersistenceReturn);
 
         const findUserAccountMap = await rds.findAccountsForBoost(testInput);
@@ -295,22 +307,28 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     // todo: throw an error if the account ID to which to limit does not exist
     it('Finds account ID and user ID correctly for a boost, limited', async () => {
         const testUserId = uuid();
-        const expectedResult = {
+        const expectedResult = [{
             boostId: testBoostId,
             accountUserMap: {
-                [testAccountId]: testUserId
+                [testAccountId]: {
+                    userId: testUserId,
+                    status: 'PENDING'
+                }
             }
-        };
+        }];
         
-        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id from ${boostUserTable} inner join ` +
-            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and account_id in ($2)`;
+        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, status from ${boostUserTable} inner join ` +
+            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and account_id in ($2) ` +
+            `order by boost_id, account_id`;
         
-        const testInput = { boostId: [testBoostId], accountId: [testAccountId] };
+        const testInput = { boostIds: [testBoostId], accountIds: [testAccountId] };
 
-        const mockPersistenceReturn = accountUserIdRow(testAccountId, testUserId);
+        const mockPersistenceReturn = [accountUserIdRow(testAccountId, testUserId)];
         queryStub.withArgs(retrieveAccountsQuery, [testBoostId, testAccountId]).resolves(mockPersistenceReturn);
 
         const findUserAccountMap = await rds.findAccountsForBoost(testInput);
+        logger('Resulting map: ', findUserAccountMap);
+
         expect(findUserAccountMap).to.exist;
         expect(findUserAccountMap).to.deep.equal(expectedResult);
     });
@@ -319,25 +337,26 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         const testAccountId2 = uuid();
         const testLogContext = { newStatus: 'REDEEMED', transactionId: uuid() };
 
-        const mockUpdatedTime = moment();
-        const secondTime = moment().add(1, 'second');
-        const expectedResult = [{ boostId: testBoostId, updatedTime: mockUpdatedTime }];
+        const mockUpdatedTime = moment().add(1, 'second');
+        const secondTime = moment();
+        const expectedResult = [{ boostId: testBoostId, updatedTime: moment(mockUpdatedTime.format()) }];
         
-        const updateAccount1 = updateAccountStatusDef(testBoostId, testAccountId, 'updated_time');
-        const updateAccount2 = updateAccountStatusDef(testBoostId, testAccountId2, 'updated_time');
+        const updateAccount1 = updateAccountStatusDef(testBoostId, testAccountId, 'REDEEMED');
+        const updateAccount2 = updateAccountStatusDef(testBoostId, testAccountId2, 'REDEEMED');
 
         const updateBoost = { table: boostTable, key: { boostId: testBoostId }, value: { active: false }, returnClause: 'updated_time' };
         
         // also log the boost being deactivated
         const logRowStatus = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId, logContext: testLogContext };
         const logRowStatus2 = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId2, logContext: testLogContext };
-        const logRowBoost = { boostId: testBoostId, logType: 'BOOST_DEACTIVATED', accountId: null, logContext: testLogContext };
+        const logRowBoost = { boostId: testBoostId, logType: 'BOOST_DEACTIVATED', logContext: testLogContext };
 
-        const logInsertDef = assembleLogInsertDef([logRowStatus, logRowStatus2, logRowBoost]);
+        const logStatusDef = assembleLogInsertDef([logRowStatus, logRowStatus2], true);
+        const logBoostDef = assembleLogInsertDef([logRowBoost], false);
 
         const testInput = {
             boostId: testBoostId,
-            accountId: [testAccountId, testAccountId2],
+            accountIds: [testAccountId, testAccountId2],
             newStatus: 'REDEEMED',
             stillActive: false,
             logType: 'USER_STATUS_CHANGE',
@@ -349,27 +368,30 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             [{ 'updated_time': secondTime.format()}], [{ 'updated_time': moment().format() }], [{ 'updated_time': mockUpdatedTime.format() }],
             [{ 'creation_time': moment().format() }]
         ];
-        multiOpStub.withArgs([updateAccount1, updateAccount2, updateBoost], [logInsertDef]).resolves(mockResponseFromPersistence);
+        multiOpStub.withArgs([updateAccount1, updateAccount2, updateBoost], [logStatusDef, logBoostDef]).resolves(mockResponseFromPersistence);
 
-        const updateBoostResult = await rds.updateBoostResult([testInput]);
+        const updateBoostResult = await rds.updateBoostAccountStatus([testInput]);
+        
         expect(updateBoostResult).to.exist;
-        expect(updateBoost).to.deep.equal(expectedResult);
+        expect(updateBoostResult).to.deep.equal(expectedResult);
     });
 
     it('Updates boosts, just one account update', async () => {
-        const updateAccount = updateAccountStatusDef(testBoostId, testAccountId, 'updated_time');
+        const updateAccount = updateAccountStatusDef(testBoostId, testAccountId, 'REDEEMED');
         const mockUpdatedTime = moment();
-        const expectedResult = [{ boostId: testBoostId, updatedTime: mockUpdatedTime }];
+        const testLogContext = { newStatus: 'REDEEMED', transactionId: uuid() };
+
+        const expectedResult = [{ boostId: testBoostId, updatedTime: moment(mockUpdatedTime.format()) }];
         
         const logRowStatus = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId, logContext: testLogContext };
-        const logInsertDef = assembleLogInsertDef([logRowStatus]);
+        const logInsertDef = assembleLogInsertDef([logRowStatus], true);
 
         const testInput = {
             boostId: testBoostId,
-            accountId: [testAccountId],
+            accountIds: [testAccountId],
             newStatus: 'REDEEMED',
             logType: 'USER_STATUS_CHANGE',
-            logContext: { newStatus: 'REDEEMED', transactionId: uuid() }
+            logContext: testLogContext
         };
 
         // format is : list of query def responses, each such response being a list of rows with return values
@@ -378,7 +400,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         ];
         multiOpStub.withArgs([updateAccount], [logInsertDef]).resolves(mockResponseFromPersistence);
 
-        const updateBoostResult = await rds.updateBoostResult([testInput]);
+        const updateBoostResult = await rds.updateBoostAccountStatus([testInput]);
+        
         expect(updateBoostResult).to.exist;
         expect(updateBoostResult).to.deep.equal(expectedResult);
     });
