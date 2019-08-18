@@ -95,6 +95,11 @@ resource "aws_iam_role_policy_attachment" "account_create_vpc_execution_policy" 
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "account_create_secret_get" {
+  role = "${aws_iam_role.balance_fetch_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_account_worker"
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_account_create" {

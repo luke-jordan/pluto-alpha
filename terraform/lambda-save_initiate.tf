@@ -107,6 +107,11 @@ resource "aws_iam_role_policy_attachment" "save_initiate_user_event_publish_poli
   policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
 }
 
+resource "aws_iam_role_policy_attachment" "save_initiate_secret_get" {
+  role = "${aws_iam_role.save_initiate_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_save_initiate" {

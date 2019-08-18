@@ -94,6 +94,11 @@ resource "aws_iam_role_policy_attachment" "saving_record_vpc_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "save_complete_secret_get" {
+  role = "${aws_iam_role.saving_record_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_saving_record" {

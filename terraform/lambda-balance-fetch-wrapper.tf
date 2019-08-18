@@ -100,6 +100,11 @@ resource "aws_iam_role_policy_attachment" "balance_fetch_wrapper_client_float_ta
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
 
+resource "aws_iam_role_policy_attachment" "balance_fetch_wrapper_transaction_secret_get" {
+  role = "${aws_iam_role.balance_fetch_wrapper_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_balance_fetch_wrapper" {
