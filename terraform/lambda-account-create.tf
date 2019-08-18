@@ -35,11 +35,15 @@ resource "aws_lambda_function" "account_create" {
                 "accountData": "account_data.core_account_ledger"
             },
             "db": {
-                "user": "account_api_worker",
                 "host": "${aws_db_instance.rds[0].address}",
                 "database": "${var.db_name}",
-                "password": "pwd_for_account_api",
                 "port" :"${aws_db_instance.rds[0].port}"
+            },
+            "secrets": {
+                "enabled": true,
+                "names": {
+                    "account_api_worker": "${terraform.workspace}/ops/psql/accounts"
+                }
             }
         }
       )}"

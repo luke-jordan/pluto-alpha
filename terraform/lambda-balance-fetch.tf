@@ -38,6 +38,12 @@ resource "aws_lambda_function" "balance_fetch" {
                 "host": "${aws_db_instance.rds[0].address}",
                 "database": "${var.db_name}",
                 "port" :"${aws_db_instance.rds[0].port}"
+            },
+            "secrets": {
+                "enabled": true,
+                "names": {
+                    "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
+                }
             }
         }
       )}"

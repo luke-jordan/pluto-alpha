@@ -164,6 +164,7 @@ jobs:
           command: |
              export TF_VERSION=$(cat $HOME/app/terraform/terraform_version)
              cd $HOME/app
+             ./audit_iam.sh
 
              if [ ! -f /tmp/terraform/terraform ]; then
                 wget -O /tmp/terraform.zip https://releases.hashicorp.com/terraform/$TF_VERSION/terraform_$(echo "$TF_VERSION")_linux_amd64.zip

@@ -35,7 +35,13 @@ resource "aws_lambda_function" "save_initiate" {
                 "host": "${aws_db_instance.rds[0].address}",
                 "database": "${var.db_name}",
                 "port" :"${aws_db_instance.rds[0].port}"
-              }
+              },
+            "secrets": {
+                "enabled": true,
+                "names": {
+                    "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
+                }
+              },
               "publishing": {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
