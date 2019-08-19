@@ -24,9 +24,9 @@ const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) =
 const transformBoostFromRds = (boost) => {
     const transformedBoost = camelizeKeys(boost);
     // logger('Working? : ', transformedBoost);
-    transformedBoost.redemptionMsgInstructions = JSON.parse(transformedBoost.redemptionMessages);
-    transformedBoost.statusConditions = JSON.parse(transformedBoost.statusConditions);
-    transformedBoost.boostAudienceSelection = JSON.parse(transformedBoost.audienceSelection);
+    transformedBoost.redemptionMsgInstructions = transformedBoost.redemptionMessages.instructions;
+    // transformedBoost.statusConditions = JSON.parse(transformedBoost.statusConditions);
+    transformedBoost.boostAudienceSelection = transformedBoost.audienceSelection;
     transformedBoost.boostStartTime = moment(transformedBoost.startTime);
     transformedBoost.boostEndTime = moment(transformedBoost.endTime);
     transformedBoost.defaultStatus = transformedBoost.initialStatus;
@@ -56,7 +56,7 @@ module.exports.findBoost = async (attributes) => {
     });
     const numberAccount = accountPortion.indices.length;
     const statusPortion = { values: [], indices: [] };
-    attributes.status.forEach((status, index) => {
+    attributes.boostStatus.forEach((status, index) => {
         statusPortion.values.push(status);
         statusPortion.indices.push(numberAccount + index + 1);
     });
@@ -65,7 +65,7 @@ module.exports.findBoost = async (attributes) => {
     const statusIndices = statusPortion.indices.map(index => `$${index}`).join(', ');
     const queryValues = accountPortion.values.concat(statusPortion.values);
 
-    const findBoostQuery = `select distinct(boost_id) from ${boostAccountJoinTable} where account_id in (${accountIndices}) and status in (${statusIndices})`;
+    const findBoostQuery = `select distinct(boost_id) from ${boostAccountJoinTable} where account_id in (${accountIndices}) and boost_status in (${statusIndices})`;
     const findBoostIdsResult = await rdsConnection.selectQuery(findBoostQuery, queryValues);
     logger('Result of finding boost IDs: ', findBoostIdsResult);
     
@@ -89,21 +89,21 @@ module.exports.findBoost = async (attributes) => {
  */
 module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) => {
     // todo : validation, etc. (lots)
-    const queryBase = `select boost_id, account_id, owner_user_id, status from ${boostAccountJoinTable} inner join ${accountsTable} on ` +
-        `${boostAccountJoinTable}.account_id = ${accountsTable}.account_id`;
+    const queryBase = `select boost_id, ${accountsTable}.account_id, owner_user_id, boost_status from ${boostAccountJoinTable} ` +
+        `inner join ${accountsTable} on ${boostAccountJoinTable}.account_id = ${accountsTable}.account_id`;
 
     let querySuffix = `where boost_id in (${extractArrayIndices(boostIds)})`;
     let runningIndex = boostIds.length + 1;
     let runningValues = [].concat(boostIds);
     
     if (accountIds) {
-        querySuffix = `${querySuffix} and account_id in (${extractArrayIndices(accountIds, runningIndex)})`;
+        querySuffix = `${querySuffix} and ${accountsTable}.account_id in (${extractArrayIndices(accountIds, runningIndex)})`;
         runningValues = runningValues.concat(accountIds);
         runningIndex = runningIndex + accountIds.length;
     }
 
     if (status) {
-        querySuffix = `${querySuffix} and status in (${extractArrayIndices(status, runningIndex)})`;
+        querySuffix = `${querySuffix} and boost_status in (${extractArrayIndices(status, runningIndex)})`;
         runningValues = runningValues.concat(status);
         runningIndex = runningIndex + status.length;
     }
@@ -120,13 +120,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
             const currentRow = resultOfQuery[rowIndex];
             accountUserMap[currentRow['account_id']] = { 
                 userId: currentRow['owner_user_id'],
-                status: currentRow['status']
+                status: currentRow['boost_status']
             };
             rowIndex++;
         };
         return ({ boostId, accountUserMap });
     });
-
+    logger('Assembled: ', resultObject);
     return resultObject;
 };
 
@@ -134,12 +134,12 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
 const updateAccountDefinition = (boostId, accountId, newStatus) => ({
     table: boostAccountJoinTable,
     key: { boostId, accountId },
-    value: { status: newStatus },
+    value: { boostStatus: newStatus },
     returnClause: 'updated_time'
 });
 
 const constructLogDefinition = (columnKeys, rows) => ({
-    query: `insert into ${boostLogTable} (${extractQueryClause(columnKeys)}) values %L returning insertion_id, creation_time`,
+    query: `insert into ${boostLogTable} (${extractQueryClause(columnKeys)}) values %L returning log_id, creation_time`,
     columnTemplate: extractColumnTemplate(columnKeys),
     rows
 });
@@ -301,6 +301,7 @@ module.exports.insertBoost = async (boostDetails) => {
     const boostId = uuid();
     const boostObject = {
         boostId: boostId,
+        creatingUserId: boostDetails.creatingUserId,
         startTime: boostDetails.boostStartTime.format(),
         endTime: boostDetails.boostEndTime.format(),
         boostType: boostDetails.boostType,
@@ -309,10 +310,12 @@ module.exports.insertBoost = async (boostDetails) => {
         boostUnit: boostDetails.boostUnit,
         boostCurrency: boostDetails.boostCurrency,
         fromBonusPoolId: boostDetails.fromBonusPoolId,
+        fromFloatId: boostDetails.fromFloatId,
         forClientId: boostDetails.forClientId,
         boostAudience: boostDetails.boostAudience,
         audienceSelection: boostDetails.boostAudienceSelection,
-        conditionClause: boostDetails.conditionClause
+        statusConditions: boostDetails.statusConditions,
+        redemptionMessages: { instructions: boostDetails.redemptionMsgInstructions }
     };
 
     if (boostDetails.conditionValues) {
@@ -328,12 +331,14 @@ module.exports.insertBoost = async (boostDetails) => {
     };
 
     const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
-    const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, status: initialStatus }));
+    const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));
     const boostJoinQueryDef = {
-        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, status) values %L returning insertion_id, creation_time`,
-        columnTemplate: '${boostId}, ${accountId}, ${status}',
+        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
+        columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
         rows: boostAccountJoins
     };
+
+    // logger('Sending to insertion: ', boostQueryDef);
 
     const resultOfInsertion = await rdsConnection.largeMultiTableInsert([boostQueryDef, boostJoinQueryDef]);
     logger('Insertion result: ', resultOfInsertion);

@@ -3,7 +3,11 @@
         "region": "us-east-1"
     },
     "db": {
-        
+        "user": "boost_worker",
+        "host": "localhost",
+        "database": "jupiter",
+        "password": "pwd_for_boost_worker",
+        "port" :"5430"
     },
     "time": {
         "defaultEnd": {

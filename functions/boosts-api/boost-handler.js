@@ -26,6 +26,7 @@ module.exports.createBoost = async (event) => {
     try {
 
         const userDetails = extractUserDetails(event);
+        logger('Event: ', event);
         if (!userDetails) {
             return { statusCode: status('Forbidden') };
         }
@@ -50,8 +51,10 @@ module.exports.createBoost = async (event) => {
         const boostEndTime = params.endTimeMillis ? moment(params.endTimeMillis) : moment().add(config.get('time.defaultEnd.number'), config.get('time.defaultEnd.unit'));
 
         logger(`Boost start time: ${boostStartTime.format()} and end time: ${boostEndTime.format()}`);
+        logger('Boost source: ', params.boostSource);
         
         const instructionToRds = {
+            creatingUserId: userDetails.systemWideUserId,
             boostType,
             boostCategory,
             boostStartTime,
@@ -93,7 +96,7 @@ module.exports.createBoost = async (event) => {
 // this takes the event and creates the arguments to pass to persistence to get applicable boosts
 const extractFindBoostKey = (event) => {
     const persistenceKey = event.accountId ? { accountId: [event.accountId] } : { userId: [event.userId] };
-    persistenceKey.status = ['OFFERED', 'PENDING'];
+    persistenceKey.boostStatus = ['OFFERED', 'PENDING'];
     persistenceKey.active = true;
     return persistenceKey;
 };
@@ -144,15 +147,21 @@ const extractStatusChangesMet = (event, boost) => {
 // is only possible on 'INDIVIDUAL' or 'GROUP' boosts (eg in the case of referrals, later on, friend saving
 // const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
 
-const extractAffectedAccountsAndUserIds = async (initiatingAccountId, boosts) => {
+const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
     const selectPromises = boosts.map((boost) => {
         const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
-        const restrictToInitiator = boost.boostAudience === 'GENERAL' || !redeemsAll; 
-        return persistence.findPendingAccountsForBoost(boost.boostId, restrictToInitiator ? initiatingAccountId : null);
+        const restrictToInitiator = boost.boostAudience === 'GENERAL' || !redeemsAll;
+        const findAccountsParams = { boostIds: [boost.boostId], status: ['PENDING'] };
+        if (restrictToInitiator) {
+            findAccountsParams.accountIds = [initiatingAccountId];
+        }
+        return persistence.findAccountsForBoost(findAccountsParams);
     });
 
     const affectedAccountArray = await Promise.all(selectPromises);
-    return affectedAccountArray.reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
+    logger('Affected accounts: ', affectedAccountArray);
+    return affectedAccountArray.map((result) => result[0]).
+        reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
 }
 
 // note: this is only called for redeemed boosts, by definition
@@ -198,7 +207,8 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
         const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
         const logContext = { newStatus: highestStatus, transactionId };
         return {
-            accountId: Object.keys(affectedAccountsUsersDict[boostId]),
+            boostId,
+            accountIds: Object.keys(affectedAccountsUsersDict[boostId]),
             newStatus: highestStatus,
             stillActive: !(isChangeRedemption && appliesToAll),
             logType: 'STATUS_CHANGE',
@@ -312,7 +322,7 @@ module.exports.processEvent = async (event) => {
     }
 
     logger('At least one boost was triggered. First step is to extract affected accounts, then tell the float to transfer from bonus pool');
-    const affectedAccountsDict = await extractAffectedAccountsAndUserIds(event.accountId, boostsForStatusChange);
+    const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange);
     logger('Retrieved affected accounts and user IDs: ', affectedAccountsDict);
 
     // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
@@ -322,12 +332,13 @@ module.exports.processEvent = async (event) => {
     const transferInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
     logger('Transfer instructions: ', transferInstructions);
 
-    const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
+    // const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
+    const resultOfTransfers = { };
     logger('Result of transfers: ', resultOfTransfers);
 
     // then we update the statuses of the boosts to redeemed
     const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, event.eventContext.transactionId);
-    logger('Sending these instructions to persistence: ', updateInstructions);
+    logger('Sending these update instructions to persistence: ', updateInstructions);
     const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('Result of update operation: ', resultOfUpdates);
 
@@ -336,28 +347,28 @@ module.exports.processEvent = async (event) => {
     const messageInstructionsFlat = [].concat.apply([], messageInstructionsNested);
     logger('Passing message instructions: ', messageInstructionsFlat);
     
-    const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();
+    // const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();
     logger('Obtained message promise');
     
     // then: assemble the event publishing
-    let finalPromises = [messagePromise];
+    // let finalPromises = [messagePromise];
 
-    boostsToRedeem.forEach((boost) => {
-        const boostId = boost.boostId;
-        const boostUpdateTime = (resultOfUpdates.filter((row) => row.boostId === boostId)[0]).updatedTime;
-        finalPromises = finalPromises.concat(createPublishEventPromises({ 
-            boost,
-            boostUpdateTime,
-            affectedAccountsUserDict: affectedAccountsDict[boostId],
-            transferResults: resultOfTransfers[boostId],
-            event
-        }));
-    });
+    // boostsToRedeem.forEach((boost) => {
+    //     const boostId = boost.boostId;
+    //     const boostUpdateTime = (resultOfUpdates.filter((row) => row.boostId === boostId)[0]).updatedTime;
+    //     finalPromises = finalPromises.concat(createPublishEventPromises({ 
+    //         boost,
+    //         boostUpdateTime,
+    //         affectedAccountsUserDict: affectedAccountsDict[boostId],
+    //         transferResults: resultOfTransfers[boostId],
+    //         event
+    //     }));
+    // });
 
-    logger('Final promises: ', finalPromises);
-    // then: fire all of them off, and we are done
-    const resultOfFinalCalls = await Promise.all(finalPromises);
-    logger('Result of final calls: ', resultOfFinalCalls);
+    // logger('Final promises: ', finalPromises);
+    // // then: fire all of them off, and we are done
+    // const resultOfFinalCalls = await Promise.all(finalPromises);
+    // logger('Result of final calls: ', resultOfFinalCalls);
 
     const resultToReturn = {
         result: 'SUCCESS',

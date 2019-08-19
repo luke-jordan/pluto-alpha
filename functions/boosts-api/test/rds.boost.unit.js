@@ -49,12 +49,12 @@ const boostLogTable = config.get('tables.boostLogTable');
 describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-user records', () => {
 
     const testBoostId = uuid();
+    const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
 
     const audienceQueryBase = `select account_id from ${accountTable}`;
-
     const standardBoostKeys = ['boostId', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 'boostUnit', 'boostCurrency', 
         'fromBonusPoolId', 'forClientId', 'boostAudience', 'audienceSelection', 'conditionClause'];
-    const boostUserKeys = ['boostId', 'accountId', 'status'];
+    const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
 
@@ -67,8 +67,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const testReferringAccountId = uuid();
         const testReferredUserAccountId = uuid();
         const relevantUsers = [testReferringAccountId, testReferredUserAccountId];
-
-        logger('Here we go');
 
         // first, obtain the audience & generate a UID
         const expectedSelectQuery = `${audienceQueryBase} where account_id in ($1, $2)`;
@@ -94,15 +92,15 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             forClientId: 'some_client_co',
             boostAudience: 'INDIVIDUAL',
             audienceSelection: `whole_universe from #{ {"specific_accounts": ["${testReferringAccountId}","${testReferredUserAccountId}"]} }`,
-            conditionClause: `save_completed_by #{${testReferredUserAccountId}}`
+            statusConditions: testStatusCondition
         };
         const insertFirstDef = { query: expectedFirstQuery, columnTemplate: extractColumnTemplate(standardBoostKeys), rows: [expectedFirstRow]};
 
         // then, the instruction for the user - boost join entries
         const expectedSecondQuery = `insert into ${boostUserTable} (${extractQueryClause(boostUserKeys)}) values %L returning insertion_id, creation_time`;
         const expectedJoinTableRows = [
-            { boostId: testBoostId, accountId: testReferringAccountId, status: 'PENDING' },
-            { boostId: testBoostId, accountId: testReferredUserAccountId, status: 'PENDING' }
+            { boostId: testBoostId, accountId: testReferringAccountId, boostStatus: 'PENDING' },
+            { boostId: testBoostId, accountId: testReferredUserAccountId, boostStatus: 'PENDING' }
         ];
         const expectedSecondDef = { query: expectedSecondQuery, columnTemplate: extractColumnTemplate(boostUserKeys), rows: expectedJoinTableRows};
 
@@ -232,16 +230,16 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     };
 
     const accountUserIdRow = (accountId, userId, status = 'PENDING', boostId = testBoostId) => 
-        ({ 'boost_id': boostId, 'account_id': accountId, 'owner_user_id': userId, 'status': status });
+        ({ 'boost_id': boostId, 'account_id': accountId, 'owner_user_id': userId, 'boost_status': status });
 
     beforeEach(() => resetStubs());
 
     it('Finds one active boost correctly, assembling query as needed, including current status', async () => {
-        const expectedFindBoostQuery = `select distinct(boost_id) from ${boostUserTable} where account_id in ($1) and status in ($2, $3)`;
+        const expectedFindBoostQuery = `select distinct(boost_id) from ${boostUserTable} where account_id in ($1) and boost_status in ($2, $3)`;
         const retrieveBoostDetailsQuery = `select * from ${boostTable} where boost_id in ($1) and active = true`;
 
         const testInput = {
-            accountId: [testAccountId], status: ['OFFERED', 'PENDING'], active: true
+            accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true
         };
 
         queryStub.withArgs(expectedFindBoostQuery, [testAccountId, 'OFFERED', 'PENDING']).resolves([{ 'boost_id': testBoostId }]);
@@ -262,10 +260,10 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         const boostIdsFromPersistence = testBoostIds.map((boostId) => ({ 'boost_id': boostId }));
         const testBoostsFromPersistence = testBoostIds.map(generateSimpleBoostFromPersistence);
         
-        const expectedFindBoostQuery = `select distinct(boost_id) from ${boostUserTable} where account_id in ($1, $2) and status in ($3)`;
+        const expectedFindBoostQuery = `select distinct(boost_id) from ${boostUserTable} where account_id in ($1, $2) and boost_status in ($3)`;
         const retrieveBoostDetailsQuery = `select * from ${boostTable} where boost_id in ($1, $2, $3)`;
 
-        const testInput = { accountId: testAccountIds, status: ['OFFERED'] };
+        const testInput = { accountId: testAccountIds, boostStatus: ['OFFERED'] };
         const expectedResult = testBoostIds.map(generateSimpleExpectedBoost);
 
         queryStub.withArgs(expectedFindBoostQuery, sinon.match([testAccountIds[0], testAccountIds[1], 'OFFERED'])).resolves(boostIdsFromPersistence);
@@ -290,8 +288,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             }
         }];
 
-        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, status from ${boostUserTable} inner join ` + 
-            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and status in ($2) ` +
+        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, boost_status from ${boostUserTable} inner join ` + 
+            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and boost_status in ($2) ` +
             `order by boost_id, account_id`;
 
         const testInput = { boostIds: [testBoostId], status: ['PENDING'] };
@@ -317,7 +315,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             }
         }];
         
-        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, status from ${boostUserTable} inner join ` +
+        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, boost_status from ${boostUserTable} inner join ` +
             `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and account_id in ($2) ` +
             `order by boost_id, account_id`;
         

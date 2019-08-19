@@ -86,6 +86,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
     const testReferredMsgId = uuid();
 
     const mockBoostToFromPersistence = {
+        creatingUserId: uuid(),
         boostType: 'REFERRAL',
         boostCategory: 'USER_CODE_USED',
         boostAmount: 100000,
@@ -140,13 +141,16 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             ]
         };
 
+        // logger('COPY::::::::::::::::');
+        // logger(JSON.stringify(testHelper.wrapEvent(testBodyOfEvent).body));
+
         const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, testReferredUser, 'ORDINARY_USER'));
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
         expect(bodyOfResult).to.deep.equal(expectedFromRds);
     });
 
-    it('Happy path closing out a referral after referred user adds cash', async () => {
+    it.only('Happy path closing out a referral after referred user adds cash', async () => {
         logger('Testing instruction received to redeem the boost, as a result of referred user making first save');
         const testUserId = uuid();
         const testOriginalUserId = uuid(); // i.e., referrer
@@ -166,11 +170,14 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             }
         };
 
+        logger('**** COPY');
+        logger(JSON.stringify(testEvent));
+
         const boostFromPersistence = JSON.parse(JSON.stringify(mockBoostToFromPersistence));
         boostFromPersistence.boostId = testBoostId;
 
         // first, see if this account has offered or pending boosts against it
-        findBoostStub.withArgs({ accountId: [testReferredUser], status: ['OFFERED', 'PENDING'], active: true}).resolves([boostFromPersistence]);
+        findBoostStub.withArgs({ accountId: [testReferredUser], boostStatus: ['OFFERED', 'PENDING'], active: true}).resolves([boostFromPersistence]);
         findBoostStub.withArgs({ boostId: testBoostId }).resolves(mockBoostToFromPersistence);
 
         // then we will have to do a condition check, after which decide that the boost has been redeemed
@@ -277,6 +284,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     const testRedemptionMsgId = uuid();
 
     const mockBoostToFromPersistence = {
+        creatingUserId: uuid(),
         boostType: 'SIMPLE',
         boostCategory: 'TIME_LIMITED',
         boostAmount: 100000,
@@ -354,7 +362,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         boostFromPersistence.boostId = testBoostId;
         
         // first, see if this account has offered or pending boosts against it
-        findBoostStub.withArgs({ accountId: [testAccountId], status: ['OFFERED', 'PENDING'], active: true}).resolves([boostFromPersistence]);
+        findBoostStub.withArgs({ accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true}).resolves([boostFromPersistence]);
         
         findAccountsStub.withArgs(testBoostId, testAccountId).resolves({
             boostId: testBoostId,
