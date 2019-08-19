@@ -219,7 +219,7 @@ const validateAndExtractUniverse = (universeComponent) => {
     const universeDefinition = JSON.parse(universeMatch[1]);
     logger('Resulting definition: ', universeDefinition);
     if (typeof universeDefinition !== 'object' || Object.keys(universeDefinition) === 0) {
-        throw new Error('Error! Universe definitino not a validt object');
+        throw new Error('Error! Universe definition not a valid object');
     }
 
     return universeDefinition;
