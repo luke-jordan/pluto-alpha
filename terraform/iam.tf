@@ -10,9 +10,10 @@ resource "aws_iam_policy" "dynamo_table_client_float_table_access" {
             "Sid": "AccessClientFloatTable",
             "Effect": "Allow",
             "Action": [
-                "dynamodb:*"
+                "dynamodb:GetItem",
+                "dynamodb:Query"
             ],
-            "Resource": "arn:aws:dynamodb:${var.aws_default_region["${terraform.workspace}"]}:*:table/ClientFloatTable"
+            "Resource": "arn:aws:dynamodb:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:table/ClientFloatTable"
         }
     ]
 }
@@ -31,7 +32,7 @@ resource "aws_iam_policy" "migration_script_s3_access" {
             "Sid": "MigrationScriptAccess",
             "Effect": "Allow",
             "Action": [
-                "s3:*"
+                "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::jupiter.db.migration.scripts/${terraform.workspace}/*"
         }
@@ -58,7 +59,8 @@ resource "aws_iam_policy" "lambda_invoke_warmup_access" {
             "Resource": [
                 "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch",
                 "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch_wrapper",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:saving_record"
+                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_initiate",
+                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_payment_check"
             ]
         }
     ]

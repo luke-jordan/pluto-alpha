@@ -38,6 +38,12 @@ resource "aws_lambda_function" "balance_fetch" {
                 "host": "${aws_db_instance.rds[0].address}",
                 "database": "${var.db_name}",
                 "port" :"${aws_db_instance.rds[0].port}"
+            },
+            "secrets": {
+                "enabled": true,
+                "names": {
+                    "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
+                }
             }
         }
       )}"
@@ -92,6 +98,11 @@ resource "aws_iam_role_policy_attachment" "balance_fetch_vpc_execution_policy" {
 resource "aws_iam_role_policy_attachment" "balance_fetch_client_float_table_access" {
   role = "${aws_iam_role.balance_fetch_role.name}"
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "balance_fetch_transaction_secret_get" {
+  role = "${aws_iam_role.balance_fetch_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

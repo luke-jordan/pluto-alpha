@@ -35,6 +35,12 @@ resource "aws_lambda_function" "save_payment_check" {
                 "database": "${var.db_name}",
                 "port" :"${aws_db_instance.rds[0].port}"
               },
+              "secrets": {
+                "enabled": true,
+                "names": {
+                    "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
+                }
+              },
               "publishing": {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
@@ -93,6 +99,11 @@ resource "aws_iam_role_policy_attachment" "save_payment_check_vpc_execution_poli
 resource "aws_iam_role_policy_attachment" "save_payment_check_user_event_publish_policy" {
   role = "${aws_iam_role.save_payment_check_role.name}"
   policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "save_payment_check_secret_get" {
+  role = "${aws_iam_role.save_payment_check_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

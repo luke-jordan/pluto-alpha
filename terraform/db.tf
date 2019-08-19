@@ -34,7 +34,7 @@ resource "aws_db_instance" "rds" {
   db_subnet_group_name   = "${aws_db_subnet_group.rds_subnet_group.id}"
   vpc_security_group_ids = ["${aws_security_group.sg_db_5432_ingress.id}"]
 
-  skip_final_snapshot    = true
+  skip_final_snapshot    = terraform.workspace == "staging" ? true : false
 }
 
 resource "aws_rds_cluster" "pg_rds" {
@@ -50,7 +50,7 @@ resource "aws_rds_cluster" "pg_rds" {
   db_subnet_group_name   = "${aws_db_subnet_group.rds_subnet_group.id}"
   vpc_security_group_ids = ["${aws_security_group.sg_db_5432_ingress.id}"]
   preferred_backup_window = "07:00-09:00"
-  skip_final_snapshot     = true
+  skip_final_snapshot     = terraform.workspace == "staging" ? true : false
   final_snapshot_identifier = "final"
   storage_encrypted       = true
 }
