@@ -32,7 +32,7 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ..
  */
 module.exports.insertMessageInstruction = async (persistableObject) => {
     const objectKeys = Object.keys(persistableObject);
-    const insertionQuery = `insert into ${config.get('tables.messageInstructionTable')} (${extractQueryClause(objectKeys)}) values %L returning instruction_id, insertion_id, creation_time`;
+    const insertionQuery = `insert into ${config.get('tables.messageInstructionTable')} (${extractQueryClause(objectKeys)}) values %L returning instruction_id, creation_time`;
     const insertionColumns = extractColumnTemplate(objectKeys);
     const insertArray = [persistableObject];
     const databaseResponse = await rdsConnection.insertRecords(insertionQuery, insertionColumns, insertArray);

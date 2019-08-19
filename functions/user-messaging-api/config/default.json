@@ -8,8 +8,8 @@
         "host": "localhost",
         "port": "5430",
         "database": "jupiter",
-        "user": "user_notifications_worker",
-        "password": "pwd_for_user_notifications_worker"
+        "user": "message_api_worker",
+        "password": "pwd_for_message_worker"
     },
     "instruction": {
         "requiredProperties": [
@@ -18,7 +18,7 @@
             "templates"
         ],
         "templates": {
-            "default": "Hello! Jupiter is now live. To celebrate, we are asking everyone to say something foul. Thank you.",
+            "default": "Hello! Jupiter is now live. To celebrate, we are asking everyone to say something. Thank you.",
             "boost": "Hello! You have been awarded a boost of %s. Thank you for choosing Jupiter Savings."
         }
     }

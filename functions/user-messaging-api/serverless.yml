@@ -1,0 +1,41 @@
+# Unnamed serverless API
+
+service: message-api
+
+# plugins:
+#   - serverless-localstack
+
+custom:
+#   localstack:
+#     host: http://localhost
+#     stages:
+#       - dev
+#       - local
+#     debug: true
+#   stages:
+#     - local
+#     - dev
+  thisStage: ${opt:stage, self:provider.stage}
+  thisProcess:
+    NODE_ENV:
+      prod: "production"
+      dev: "development"
+      local: "lamblocal"
+
+provider:
+  name: aws
+  runtime: nodejs8.10
+  region: eu-west-1
+  stage: dev
+
+functions:
+  instruction_create:
+    handler: msg-instruction-handler.insertMessageInstruction
+    name: instruction_create
+    events:
+      - http:
+          path: create
+          method: post
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
