@@ -167,13 +167,18 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
 // note: this is only called for redeemed boosts, by definition
 const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
     let recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
-    let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
+    // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
+    let recipients = recipientAccounts.map(recipientId => ({ 
+        recipientId, amount: boost.boostAmount, recipientType: 'END_USER_ACCOUNT'
+    }));
     return {
         floatId: boost.fromFloatId,
         fromId: boost.fromBonusPoolId,
+        fromType: 'BONUS_POOL',
         currency: boost.boostCurrency,
         unit: boost.boostUnit,
         identifier: boost.boostId,
+        relatedEntityType: 'BOOST_EVENT',
         recipients
     };
 };
@@ -330,8 +335,8 @@ module.exports.processEvent = async (event) => {
     const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') != -1);
     logger('Boosts to redeem: ', boostsToRedeem);
     const transferInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
-    logger('Transfer instructions: ', transferInstructions);
-
+    logger('***** Transfer instructions: ', JSON.stringify(transferInstructions));
+    
     // const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
     const resultOfTransfers = { };
     logger('Result of transfers: ', resultOfTransfers);

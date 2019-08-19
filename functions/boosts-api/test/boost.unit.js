@@ -200,6 +200,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 fromId: mockBoostToFromPersistence.fromBonusPoolId,
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
+                relatedEntityType: 'BOOST_EVENT',
                 recipients: {
                     [testReferringUser]: mockBoostToFromPersistence.boostAmount,
                     [testReferredUser]: mockBoostToFromPersistence.boostAmount
