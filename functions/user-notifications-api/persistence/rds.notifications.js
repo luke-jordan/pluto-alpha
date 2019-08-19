@@ -3,14 +3,15 @@
 const logger = require('debug')('jupiter:user-notifications:rds');
 const config = require('config');
 const decamelize = require('decamelize');
+const camelcase = require('camelcase');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
-
 const accountsTable = config.get('tables.accountLedger');
 
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', '); // stolen with pride
-const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', '); // and absolutely no shame
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
+const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [camelcase(key)]: object[key] }), {});
 
 /**
  * This function accepts a persistable instruction object and inserts it into the database. It is vital that input to this function must
@@ -50,7 +51,7 @@ module.exports.insertUserMessages = async (rows, objectKeys) => {
         columnTemplate: extractColumnTemplate(objectKeys),
         rows: rows
     };
-    logger('Created insertion query:', messageQueryDef);
+    // logger('Created insertion query:', messageQueryDef);
 
     const insertionResult = await rdsConnection.largeMultiTableInsert([messageQueryDef]);
     logger('User messages insertion resulted in:', insertionResult);
@@ -68,7 +69,18 @@ module.exports.getMessageInstruction = async (instructionId) => {
     const response = await rdsConnection.selectQuery(query, value);
     logger('Got this back from user message instruction extraction:', response);
 
-    return response[0]; // camelize
+    return camelCaseKeys(response[0]);
+};
+
+
+module.exports.getInstructionsByType = async (audienceType, presentationType) => {
+    const query = `select * from ${config.get('tables.messageInstructionTable')} where audience_type = $1 and presentation_type = $2 and active = true`;
+    const value = [audienceType, presentationType];
+
+    const response = await rdsConnection.selectQuery(query, value);
+    logger('Got this back from user message instruction extraction:', response);
+
+    return response.map((instruction) => camelCaseKeys(instruction));
 };
 
 /**
@@ -173,8 +185,7 @@ const extractAccountIds = async (selectionClause) => {
 
 /**
  * This function accepts a selection instruction and returns an array of user ids.
- * @param {string} selectionType
- * @param {number} proportionUsers
+ * @param {string} selectionInstruction see DSL documentation.
  */
 module.exports.getUserIds = async (selectionInstruction) => {
     const userIds = await extractAccountIds(selectionInstruction);

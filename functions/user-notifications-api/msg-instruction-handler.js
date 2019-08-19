@@ -103,11 +103,11 @@ module.exports.insertMessageInstruction = async (event) => {
         logger('msg instruction inserter received:', event);
         const params = extractEventBody(event);
         const persistableObject = createPersistableObject(params);
-        logger('created persistable object:', persistableObject);
+        logger('Created persistable object:', persistableObject);
         const instructionEvalResult = exports.validateMessageInstruction(persistableObject);
-        logger('Message instruction evaluation resulted in:', instructionEvalResult);
+        logger('Message instruction evaluation result:', instructionEvalResult);
         const databaseResponse = await rdsUtil.insertMessageInstruction(persistableObject);
-        logger('Recieved this back from message instruction insertion:', databaseResponse);
+        logger('Message instruction insertion result:', databaseResponse);
         return {
             statusCode: 200,
             body: JSON.stringify({

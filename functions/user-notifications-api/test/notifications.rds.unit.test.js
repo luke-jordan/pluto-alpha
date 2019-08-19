@@ -56,7 +56,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
     const createPersistableInstruction = (instructionId) => ({
         instructionId: instructionId,
-        presentationType: 'ONCE_OFF',
+        presentationType: 'RECURRING',
         active: true,
         audienceType: 'ALL_USERS',
         templates: {
@@ -135,6 +135,23 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectQueryArgs(instructionTable, '*', mockInstructionId, 'instruction_id'));
+    });
+
+    it('should get message instructions that match specified audience and presentation type', async () => {
+        const mockInstruction = createPersistableInstruction(mockInstructionId);
+        const mockSelectArgs = [
+            `select * from ${config.get('tables.messageInstructionTable')} where audience_type = $1 and presentation_type = $2 and active = true`,
+            ['ALL_USERS', 'RECURRING']
+        ];
+        selectQueryStub.withArgs(...mockSelectArgs).returns([mockInstruction, mockInstruction, mockInstruction]);
+        const expectedResult = [mockInstruction, mockInstruction, mockInstruction];
+
+        const result = await rdsUtil.getInstructionsByType('ALL_USERS', 'RECURRING');
+        logger('Result of instruction extraction from db:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
     });
 
     it('should update message instruction', async () => {

@@ -1,8 +1,8 @@
 {
     "tables": {
         "accountLedger": "account_data.core_account_ledger",
-        "messageInstructionTable": "message_instruction",
-        "userMessagesTable": "user_messages"
+        "messageInstructionTable": "message_data.message_instruction",
+        "userMessagesTable": "message_data.user_message"
     },
     "db": {
         "host": "localhost",

@@ -15,13 +15,15 @@ const proxyquire = require('proxyquire');
 const getMessageInstructionStub = sinon.stub();
 const getUserIdsStub = sinon.stub();
 const insertUserMessagesStub = sinon.stub();
+const getInstructionsByTypeStub = sinon.stub();
 const momentStub = sinon.stub();
 
 const handler = proxyquire('../user-message-handler', {
     './persistence/rds.notifications': {
         'getMessageInstruction': getMessageInstructionStub,
         'getUserIds': getUserIdsStub,
-        'insertUserMessages': insertUserMessagesStub
+        'insertUserMessages': insertUserMessagesStub,
+        'getInstructionsByType': getInstructionsByTypeStub
     },
     'moment': momentStub
 });
@@ -30,6 +32,7 @@ const resetStubs = () => {
     getMessageInstructionStub.reset();
     getUserIdsStub.reset();
     insertUserMessagesStub.reset();
+    getInstructionsByTypeStub.reset();
     momentStub.reset();
 }
 
@@ -56,7 +59,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         audienceType: 'ALL_USERS',
         templates: JSON.stringify({
             default: config.get('instruction.templates.default'),
-            otherTemplates: null
+            otherTemplates: null // test on array of template objects of the form {title, body}
         }),
         selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
@@ -83,7 +86,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     };
 
     const expectedInsertionResult = {
-        messageInsertionResult: [{
+        message: [{
             insertion_id: mockInsertionId,
             creation_time: mockCreationTime
         }]
@@ -112,7 +115,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             instructionId: mockInstructionId
         };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
         commonAssertions(200, result, expectedResult);
@@ -132,7 +135,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             })
         };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
         commonAssertions(200, result, expectedResult);
@@ -154,7 +157,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             instructionId: mockInstructionId
         };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
         commonAssertions(200, result, expectedResult);
@@ -173,7 +176,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             instructionId: mockInstructionId
         };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
         commonAssertions(200, result, expectedResult);
@@ -193,7 +196,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             instructionId: mockInstructionIdOnIndividual
         };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
         commonAssertions(200, result, expectedResult);
@@ -213,7 +216,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             instructionId: mockInstructionIdOnGroup
         };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
         commonAssertions(200, result, expectedResult);
@@ -257,7 +260,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             triggerBalanceFetch: true // consider how to store this in user message
         };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('result of boost message insertion:', result);
 
         commonAssertions(200, result, expectedResult);
@@ -273,11 +276,95 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         };
         const expectedResult = { message: 'Error extracting message instruction' };
 
-        const result = await handler.populateUserMessages(mockEvent);
+        const result = await handler.createUserMessages(mockEvent);
         logger('Result of failing intruction extraction:', result);
 
         commonAssertions(500, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnError);
+        expect(getUserIdsStub).to.have.not.been.called;
+        expect(insertUserMessagesStub).to.have.not.been.called;
+    });
+});
+
+
+describe('*** UNIT TESTING NEW USER MESSAGE SYNC ***', () => {
+    const mockCreationTime = '2049-06-22T07:38:30.016Z';
+    const mockInstructionId = uuid();
+    const mockClientId = uuid();
+    const mockUserId = uuid();
+    const mockUserIdOnError = uuid();
+
+    const mockInstruction = {
+        instructionId: mockInstructionId,
+        presentationType: 'RECURRING',
+        active: true,
+        audienceType: 'ALL_USERS',
+        templates: JSON.stringify({
+            default: config.get('instruction.templates.default'),
+            otherTemplates: 'Welcome to Jupiter savings.'
+        }),
+        selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+        recurrenceInstruction: null,
+        responseAction: 'VIEW_HISTORY',
+        responseContext: null,
+        startTime: '2050-09-01T11:47:41.596Z',
+        endTime: '2061-01-09T11:47:41.596Z',
+        lastProcessedTime: moment().format(),
+        messagePriority: 0
+    };
+
+    const commonAssertions = (statusCode, result, expectedResult) => {
+        expect(result).to.exist;
+        expect(result.statusCode).to.deep.equal(statusCode);
+        expect(result).to.have.property('body');
+        const parsedResult = JSON.parse(result.body);
+        expect(parsedResult).to.deep.equal(expectedResult);
+    };
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('should populate a new users messages with recurring messages targeted at all users', async () => {
+        getInstructionsByTypeStub.withArgs('ALL_USERS', 'RECURRING').resolves([mockInstruction, mockInstruction, mockInstruction]);
+        insertUserMessagesStub.returns([
+            { insertion_id: 1, creation_time: mockCreationTime },
+            { insertion_id: 2, creation_time: mockCreationTime },
+            { insertion_id: 3, creation_time: mockCreationTime }
+        ]);
+        const expectedResult = { 
+            message: [
+                { insertion_id: 1, creation_time: mockCreationTime },
+                { insertion_id: 2, creation_time: mockCreationTime },
+                { insertion_id: 3, creation_time: mockCreationTime }
+            ]
+        };
+        
+        const mockEvent = {
+            systemWideUserId: mockUserId
+        };
+
+        const result = await handler.syncUserMessages(mockEvent);
+        logger('Result of user messages sync:', result);
+
+        commonAssertions(200, result, expectedResult);
+        expect(getInstructionsByTypeStub).to.have.been.calledOnceWithExactly('ALL_USERS', 'RECURRING');
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+    });
+
+    it('should return an error on process failure', async () => {
+        getInstructionsByTypeStub.withArgs('ALL_USERS', 'RECURRING').throws(new Error('Error extracting instructions'));
+        const expectedResult = { message: 'Error extracting instructions' };
+
+        const mockEvent = {
+            systemWideUserId: mockUserIdOnError
+        };
+
+        const result = await handler.syncUserMessages(mockEvent);
+        logger('Result of user messages sync on error:', result);
+
+        commonAssertions(500, result, expectedResult);
+        expect(getInstructionsByTypeStub).to.have.been.calledOnceWithExactly('ALL_USERS', 'RECURRING');
         expect(getUserIdsStub).to.have.not.been.called;
         expect(insertUserMessagesStub).to.have.not.been.called;
     });

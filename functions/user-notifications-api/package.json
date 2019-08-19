@@ -10,6 +10,7 @@
   "author": "Busani Ndlovu",
   "license": "ISC",
   "dependencies": {
+    "camelcase": "^5.3.1",
     "config": "^3.2.2",
     "debug": "^4.1.1",
     "decamelize": "^3.2.0",

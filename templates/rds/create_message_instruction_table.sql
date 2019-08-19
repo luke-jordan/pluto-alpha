@@ -1,4 +1,6 @@
-create table if not exists message_instructions (
+create schema if not exists message_data.message_instruction;
+
+create table if not exists message_data.message_instruction (
     instruction_id uuid not null,
     presentation_type varchar (100) not null,
     active boolean not null,
@@ -17,12 +19,12 @@ create table if not exists message_instructions (
     primary key (instruction_id)
 );
 
-create index idx_creation_time on message_instructions (creation_time);
+create index idx_creation_time on message_data.message_instruction (creation_time);
 
-grant usage on message_instructions to notifications_api_worker;
+grant usage on message_data.message_instruction to notifications_api_worker;
 
-revoke all on message_instructions from public;
+revoke all on message_data.message_instruction from public;
 
-grant select on message_instructions to notifications_api_worker;
-grant insert on message_instructions to notifications_api_worker;
-grant update on message_instructions to notifications_api_worker;
+grant select on message_data.message_instruction to notifications_api_worker;
+grant insert on message_data.message_instruction to notifications_api_worker;
+grant update on message_data.message_instruction to notifications_api_worker;
