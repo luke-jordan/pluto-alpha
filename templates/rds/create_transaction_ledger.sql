@@ -24,11 +24,12 @@ create table if not exists transaction_data.core_transaction_ledger (
     flags text[] default '{}'
 );
 
+drop trigger if exists update_transaction_modtime on transaction_data.core_transaction_ledger;
 create trigger update_transaction_modtime before update on transaction_data.core_transaction_ledger 
     for each row execute procedure trigger_set_updated_timestamp();
 
 -- as with float, replace with proper before production (as well as general migration)
-drop constraint account_transaction_type_check; 
+alter table transaction_data.core_transaction_ledger drop constraint account_transaction_type_check; 
 alter table transaction_data.core_transaction_ledger add constraint account_transaction_type_check check (
         transaction_type in ('ACCRUAL', 'FLOAT_ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION')
 );
