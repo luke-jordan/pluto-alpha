@@ -11,11 +11,11 @@ module.exports.resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
-module.exports.wrapEvent = (requestBody, systemWiderUserId, userRole) => ({
+module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     body: JSON.stringify(requestBody),
     requestContext: {
         authorizer: {
-            systemWiderUserId,
+            systemWideUserId,
             userRole
         }
     }

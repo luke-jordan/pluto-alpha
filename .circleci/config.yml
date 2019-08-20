@@ -37,6 +37,9 @@ jobs:
             cd $HOME/app/functions/float-api && npm install
             cd $HOME/app/functions/user-activity-api && npm install
             cd $HOME/app/functions/user-existence-api && npm install
+            cd $HOME/app/functions/boost-api && npm install
+            cd $HOME/app/functions/user-messaging-api && npm install
+
             cd $HOME/app/modules/rds-common && npm install
             cd $HOME/app/modules/dynamo-common && npm install
             cd $HOME/app/modules/publish-common && npm install
@@ -47,6 +50,8 @@ jobs:
             cp -r modules/* $HOME/app/functions/float-api/node_modules
             cp -r modules/* $HOME/app/functions/user-activity-api/node_modules
             cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
+            cp -r modules/* $HOME/app/functions/boost-api/node_modules
+            cp -r modules/* $HOME/app/functions/user-messaging-api/node_modules
 
       - run:
           name: install aws cli
@@ -101,6 +106,8 @@ jobs:
             cd $HOME/app/functions/user-existence-api; npm test; npm run-script generate-coverage
             cd ../user-activity-api; npm test; npm run-script generate-coverage
             cd ../float-api; npm test; npm run-script generate-coverage
+            cd ../boosts-api; npm test; npm run-script generate-coverage
+            cd ../user-messaging-api; npm test; npm run-script generate-coverage
             
             echo "Runing module tests and outputting coverage reports"
             cd $HOME/app/modules/dynamo-common; npm test; npm run-script generate-coverage
@@ -137,6 +144,14 @@ jobs:
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip .
 
+                cd $HOME/app/functions/boosts-api
+                echo $CIRCLE_SHA1 > last_commit.txt
+                zip -rq $HOME/deploy_boosts_api_$CIRCLE_SHA1.zip .
+
+                cd $HOME/app/functions/user-messaging-api
+                echo $CIRCLE_SHA1 > last_commit.txt
+                zip -rq $HOME/deploy_user_messaging_api_$CIRCLE_SHA1.zip .
+
                 cd $HOME/app/functions/warmup
                 echo $CIRCLE_SHA1 > last_commit.text
                 zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip .
@@ -155,6 +170,8 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_activity_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_existence_api/$CIRCLE_SHA1.zip
+                /home/circleci/bin/aws s3 cp deploy_boosts_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/boosts_api/$CIRCLE_SHA1.zip
+                /home/circleci/bin/aws s3 cp deploy_user_messaging_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_messaging_api/$CIRCLE_SHA1.zip
 
                 /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip
              fi

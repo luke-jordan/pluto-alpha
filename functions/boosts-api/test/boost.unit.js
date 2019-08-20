@@ -32,7 +32,7 @@ const handler = proxyquire('../boost-handler', {
     './persistence/rds.boost': {
         'insertBoost': insertBoostStub,
         'findBoost': findBoostStub,
-        'findPendingAccountsForBoost': findAccountsStub,
+        'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub
     },
     'aws-sdk': {
@@ -99,7 +99,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         boostEndTime: referralWindowEnd,
         statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
         boostAudience: 'INDIVIDUAL',
-        boostAudienceSelection: `whole_universe from #{'{"specific_users": ["${testReferringUser}","${testReferredUser}"]}'}`,
+        boostAudienceSelection: `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`,
         defaultStatus: 'PENDING',
         redemptionMsgInstructions: [
             { accountId: testReferringUser, msgInstructionId: testReferringMsgId }, 
@@ -132,7 +132,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             },
             endTimeMillis: referralWindowEnd.valueOf(),
             boostAudience: 'INDIVIDUAL',
-            boostAudienceSelection: `whole_universe from #{'{"specific_users": ["${testReferringUser}","${testReferredUser}"]}'}`,
+            boostAudienceSelection: `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`,
             initialStatus: 'PENDING',
             statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
             redemptionMsgInstructions: [
@@ -144,13 +144,14 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         // logger('COPY::::::::::::::::');
         // logger(JSON.stringify(testHelper.wrapEvent(testBodyOfEvent).body));
 
-        const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, testReferredUser, 'ORDINARY_USER'));
+        const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, 
+            mockBoostToFromPersistence.creatingUserId, 'ORDINARY_USER'));
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
         expect(bodyOfResult).to.deep.equal(expectedFromRds);
     });
 
-    it.only('Happy path closing out a referral after referred user adds cash', async () => {
+    it('Happy path closing out a referral after referred user adds cash', async () => {
         logger('Testing instruction received to redeem the boost, as a result of referred user making first save');
         const testUserId = uuid();
         const testOriginalUserId = uuid(); // i.e., referrer
@@ -184,13 +185,13 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         // and get the accounts that are affected by the redemption
         
         // todo : status
-        findAccountsStub.withArgs(testBoostId, null).resolves({ 
+        findAccountsStub.withArgs({ boostIds: [testBoostId], status: ['PENDING'] }).resolves([{ 
             boostId: testBoostId,
             accountUserMap: {
                 [testReferredUser]: testUserId,
                 [testReferringUser]: testOriginalUserId
             }
-        });
+        }]);
         
         // then we invoke the float allocation lambda
         const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
@@ -198,13 +199,14 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 identifier: testBoostId,
                 floatId: mockBoostToFromPersistence.fromFloatId,
                 fromId: mockBoostToFromPersistence.fromBonusPoolId,
+                fromType: 'BONUS_POOL',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
                 relatedEntityType: 'BOOST_EVENT',
-                recipients: {
-                    [testReferringUser]: mockBoostToFromPersistence.boostAmount,
-                    [testReferredUser]: mockBoostToFromPersistence.boostAmount
-                }
+                recipients: [
+                    { recipientId: testReferredUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' },
+                    { recipientId: testReferringUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
+                ]
             }]
         });
 
@@ -224,7 +226,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         const updateProcessedTime = moment();
         const testUpdateInstruction = [{
             boostId: testBoostId,
-            accountId: [testReferredUser, testReferringUser],
+            accountIds: [testReferredUser, testReferringUser],
             newStatus: 'REDEEMED',
             stillActive: false,
             logType: 'STATUS_CHANGE',
@@ -285,7 +287,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     const testRedemptionMsgId = uuid();
 
     const mockBoostToFromPersistence = {
-        creatingUserId: uuid(),
+        creatingUserId: testMktingAdmin,
         boostType: 'SIMPLE',
         boostCategory: 'TIME_LIMITED',
         boostAmount: 100000,
@@ -365,10 +367,11 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         // first, see if this account has offered or pending boosts against it
         findBoostStub.withArgs({ accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true}).resolves([boostFromPersistence]);
         
-        findAccountsStub.withArgs(testBoostId, testAccountId).resolves({
+        const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: ['PENDING'] };
+        findAccountsStub.withArgs(findAccountArgs).resolves([{
             boostId: testBoostId,
             accountUserMap: { [testAccountId]: testUserId }
-        });
+        }]);
 
         // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the float allocation lambda
         const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
@@ -376,11 +379,13 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 identifier: testBoostId,
                 floatId: mockBoostToFromPersistence.fromFloatId,
                 fromId: mockBoostToFromPersistence.fromBonusPoolId,
+                fromType: 'BONUS_POOL',
+                relatedEntityType: 'BOOST_EVENT',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
-                recipients: {
-                    [testAccountId]: mockBoostToFromPersistence.boostAmount
-                }
+                recipients: [
+                    { recipientId: testAccountId, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
+                ]
             }]
         });
 
@@ -400,7 +405,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const updateProcessedTime = moment();
         const testUpdateInstruction = {
             boostId: testBoostId,
-            accountId: [testAccountId],
+            accountIds: [testAccountId],
             newStatus: 'REDEEMED',
             stillActive: true,
             logType: 'STATUS_CHANGE',

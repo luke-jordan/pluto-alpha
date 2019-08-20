@@ -39,3 +39,13 @@ functions:
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: jupiter:*
+  instruction_spawn:
+    handler: user-message-handler.createUserMessages
+    name: instruction_spawn
+    events:
+      - http:
+          path: create
+          method: post
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*

@@ -1,11 +1,11 @@
 {
     "presentationType": "ONCE_OFF",
     "audienceType": "ALL_USERS",
-    "defaultTemplate": "Hello! Jupiter is now live. To celebrate, we are asking everyone to say something. Thank you",
-    "selectionInstruction": "whole_universe from #{{\"client_id\":\"${mockClientId}\"}}",
+    "defaultTemplate": "Third attempt. Hello! Jupiter is now live. To celebrate, we are asking everyone to say something. Thank you",
+    "selectionInstruction": "whole_universe from #{{\"client_id\": \"some_client_co\"}}",
     "responseAction": "VIEW_HISTORY",
     "responseContext": { "boostId": "27632316-d468-4790-8b24-c70c9dd3504a" },
-    "startTime": "2050-09-01T11:47:41.596Z",
+    "startTime": "2019-08-01T11:47:41.596Z",
     "endTime": "2061-01-09T11:47:41.596Z",
-    "messagePriority": 0
+    "messagePriority": 1
 }

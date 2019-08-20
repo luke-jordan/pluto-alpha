@@ -4,7 +4,8 @@
   "description": "Set of lambdas for managing boosts",
   "main": "boost-handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* nyc mocha"
+    "test": "DEBUG=jupiter:* nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov"
   },
   "author": "Luke Jordan",
   "license": "ISC",

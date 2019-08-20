@@ -50,10 +50,12 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
     const testBoostId = uuid();
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
+    const testRedemptionMsgs = [{ accountId: 'ALL', msgInstructionId: uuid() }];
 
     const audienceQueryBase = `select account_id from ${accountTable}`;
-    const standardBoostKeys = ['boostId', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 'boostUnit', 'boostCurrency', 
-        'fromBonusPoolId', 'forClientId', 'boostAudience', 'audienceSelection', 'conditionClause'];
+    const standardBoostKeys = ['boostId', 'creatingUserId', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
+        'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 'boostAudience', 'audienceSelection', 
+        'statusConditions', 'redemptionMessages'];
     const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
@@ -64,6 +66,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const testBoostStartTime = moment();
         const testBoostEndTime = moment();
 
+        const testCreatingUserId = uuid();
         const testReferringAccountId = uuid();
         const testReferredUserAccountId = uuid();
         const relevantUsers = [testReferringAccountId, testReferredUserAccountId];
@@ -81,6 +84,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const expectedFirstQuery = `insert into ${boostTable} (${extractQueryClause(standardBoostKeys)}) values %L returning boost_id, creation_time`;
         const expectedFirstRow = {
             boostId: testBoostId,
+            creatingUserId: testCreatingUserId,
             startTime: testBoostStartTime.format(),
             endTime: testBoostEndTime.format(),
             boostType: 'REFERRAL',
@@ -89,10 +93,12 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostUnit: 'HUNDREDTH_CENT',
             boostCurrency: 'USD',
             fromBonusPoolId: 'primary_bonus_pool',
+            fromFloatId: 'primary_float',
             forClientId: 'some_client_co',
             boostAudience: 'INDIVIDUAL',
             audienceSelection: `whole_universe from #{ {"specific_accounts": ["${testReferringAccountId}","${testReferredUserAccountId}"]} }`,
-            statusConditions: testStatusCondition
+            statusConditions: testStatusCondition,
+            redemptionMessages: { instructions: testRedemptionMsgs }
         };
         const insertFirstDef = { query: expectedFirstQuery, columnTemplate: extractColumnTemplate(standardBoostKeys), rows: [expectedFirstRow]};
 
@@ -106,12 +112,14 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
         // then transact them
         const insertionTime = moment();
-        multiTableStub.withArgs([insertFirstDef, expectedSecondDef]).resolves([
+        // this is not great but Sinon matching is just the worst thing in the world and is failing abysmally on complex matches, hence
+        multiTableStub.resolves([
             [{ 'boost_id': testBoostId, 'creation_time': insertionTime.format() }],
             [{ 'insertion_id': 100, 'creation_time': moment().format() }, { 'insertion_id': 101, 'creation_time': moment().format() }]
         ]);
 
         const testInstruction = {
+            creatingUserId: testCreatingUserId,
             boostType: 'REFERRAL',
             boostCategory: 'USER_CODE_USED',
             boostAmount: 100000,
@@ -119,11 +127,13 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostCurrency: 'USD',
             fromBonusPoolId: 'primary_bonus_pool',
             forClientId: 'some_client_co',
+            fromFloatId: 'primary_float',
             boostStartTime: testBoostStartTime,
             boostEndTime: testBoostEndTime,
-            conditionClause: `save_completed_by #{${testReferredUserAccountId}}`,
+            statusConditions: testStatusCondition,
             boostAudience: 'INDIVIDUAL',
             boostAudienceSelection: `whole_universe from #{ {"specific_accounts": ["${testReferringAccountId}","${testReferredUserAccountId}"]} }`,
+            redemptionMsgInstructions: testRedemptionMsgs,
             defaultStatus: 'PENDING'
         };
 
@@ -135,6 +145,11 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(resultOfInsertion).to.have.property('boostId', testBoostId);
         expect(resultOfInsertion).to.have.property('persistedTimeMillis', expectedMillis);
         expect(resultOfInsertion).to.have.property('numberOfUsersEligible', relevantUsers.length);
+
+        expect(multiTableStub).to.have.been.calledOnce;
+        const multiTableArgs = multiTableStub.getCall(0).args[0];
+        expect(multiTableArgs[1]).to.deep.equal(expectedSecondDef);
+        expect(multiTableArgs[0]).to.deep.equal(insertFirstDef);
     });
 
 });
@@ -154,7 +169,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     const updateAccountStatusDef = (boostId, accountId, newStatus) => ({
         table: boostUserTable,
         key: { boostId, accountId },
-        value: { status: newStatus },
+        value: { boostStatus: newStatus },
         returnClause: 'updated_time'
     });
 
@@ -163,7 +178,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     const assembleLogInsertDef = (logRows, haveAccountId = false) => {
         const columns = haveAccountId ? logColumnsWithAccount : logColumnsWithoutAccount;
         return {
-            query: `insert into ${boostLogTable} (${extractQueryClause(columns)}) values %L returning insertion_id, creation_time`,
+            query: `insert into ${boostLogTable} (${extractQueryClause(columns)}) values %L returning log_id, creation_time`,
             columnTemplate: extractColumnTemplate(columns),
             rows: logRows
         };
@@ -181,10 +196,10 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         'for_client_id': 'some_client_co',
         'start_time': testStartTime.format(),
         'end_time': testEndTime.format(),
-        'status_conditions': JSON.stringify(testStatusCondition),
+        'status_conditions': testStatusCondition,
         'boost_audience': 'INDIVIDUAL',
-        'audience_selection':JSON.stringify(testAudienceSelection),
-        'redemption_messages': JSON.stringify(testRedemptionMsgs),
+        'audience_selection': testAudienceSelection,
+        'redemption_messages': { instructions: testRedemptionMsgs },
         'initial_status': 'PENDING',
         'flags': ['REDEEM_ALL_AT_ONCE']
     };
@@ -272,6 +287,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         const findBoostResponse = await rds.findBoost(testInput);
         expect(findBoostResponse).to.exist;
         expect(findBoostResponse).to.be.an('array').of.length(3);
+        // testHelper.logNestedMatches(expectedResult[0], findBoostResponse[0]);
         expect(sinon.match(expectedResult).test(findBoostResponse)).to.be.true;
     });
 
@@ -288,9 +304,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             }
         }];
 
-        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, boost_status from ${boostUserTable} inner join ` + 
-            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and boost_status in ($2) ` +
-            `order by boost_id, account_id`;
+        const retrieveAccountsQuery = `select boost_id, ${accountTable}.account_id, owner_user_id, boost_status from ` +
+            `${boostUserTable} inner join ${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id ` +
+            `where boost_id in ($1) and boost_status in ($2) order by boost_id, account_id`;
 
         const testInput = { boostIds: [testBoostId], status: ['PENDING'] };
 
@@ -315,9 +331,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             }
         }];
         
-        const retrieveAccountsQuery = `select boost_id, account_id, owner_user_id, boost_status from ${boostUserTable} inner join ` +
-            `${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id where boost_id in ($1) and account_id in ($2) ` +
-            `order by boost_id, account_id`;
+        const retrieveAccountsQuery = `select boost_id, ${accountTable}.account_id, owner_user_id, boost_status from ` +
+            `${boostUserTable} inner join ${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id ` +
+            `where boost_id in ($1) and ${accountTable}.account_id in ($2) order by boost_id, account_id`;
         
         const testInput = { boostIds: [testBoostId], accountIds: [testAccountId] };
 
@@ -366,12 +382,14 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             [{ 'updated_time': secondTime.format()}], [{ 'updated_time': moment().format() }], [{ 'updated_time': mockUpdatedTime.format() }],
             [{ 'creation_time': moment().format() }]
         ];
-        multiOpStub.withArgs([updateAccount1, updateAccount2, updateBoost], [logStatusDef, logBoostDef]).resolves(mockResponseFromPersistence);
+        multiOpStub.resolves(mockResponseFromPersistence);
 
         const updateBoostResult = await rds.updateBoostAccountStatus([testInput]);
-        
+    
         expect(updateBoostResult).to.exist;
         expect(updateBoostResult).to.deep.equal(expectedResult);
+        expect(multiOpStub).to.have.been.calledOnce;
+        expect(multiOpStub).to.have.been.calledWith([updateAccount1, updateAccount2, updateBoost], [logStatusDef, logBoostDef]);
     });
 
     it('Updates boosts, just one account update', async () => {
