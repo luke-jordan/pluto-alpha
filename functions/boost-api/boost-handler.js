@@ -24,6 +24,10 @@ const handleError = (err) => {
 
 module.exports.createBoost = async (event) => {
     try {
+        if (!event) {
+            logger('Test run on lambda, exiting');
+            return { statusCode: 400 };
+        }
 
         const userDetails = extractUserDetails(event);
         logger('Event: ', event);

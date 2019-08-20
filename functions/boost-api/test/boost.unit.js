@@ -26,7 +26,7 @@ class MockLambdaClient {
     }
 }
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const handler = proxyquire('../boost-handler', {
     './persistence/rds.boost': {

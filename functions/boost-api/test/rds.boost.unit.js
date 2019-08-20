@@ -13,7 +13,7 @@ const chai = require('chai');
 const expect = chai.expect;
 chai.use(require('sinon-chai'));
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const queryStub = sinon.stub();
 const insertStub = sinon.stub();
