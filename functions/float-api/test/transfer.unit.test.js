@@ -47,15 +47,27 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         recipients: testRecipients
     };
 
+    const floatTxIds = [uuid(), uuid(), uuid()];
+    const accountTxIds = [uuid(), uuid()];
+
+    const poolAllocResult = [{ 'id': floatTxIds[0] }];
+    const userAllocResult = {
+        floatTxIds: floatTxIds.slice(1).map((id) => ({ 'transaction_id': id})),
+        accountTxIds: accountTxIds.map((id) => ({ 'transaction_id': id }))
+    };
+
     const expectedResult = {
         'this_transaction': {
-            result: 'SUCCESS' ,
-            floatTxIds: [uuid(), uuid(), uuid()],
-            accountTxIds: [uuid(), uuid()]
+            result: 'SUCCESS',
+            floatTxIds,
+            accountTxIds 
         }
     };
 
-    it.only('Happy path, pretty simple, for now', async () => {
+    it('Happy path, pretty simple, for now', async () => {
+        logger('Testing a basic transfer');
+        allocatePoolStub.resolves(poolAllocResult);
+        allocateUserStub.resolves(userAllocResult);
         const resultOfTransfer = await handler.floatTransfer({ instructions: [testInstruction]});
         expect(resultOfTransfer).to.exist;
         expect(resultOfTransfer).to.have.property('statusCode', 200);
