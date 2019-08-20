@@ -139,15 +139,22 @@ module.exports.syncUserMessages = async (event) => {
 module.exports.insertPushToken = async (event) => {
     try {
         // add request context validation ensuring that the user id in context matches the event provider.
+        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        logger('User details: ', userDetails);
+        if (!userDetails) {
+            return { statusCode: 403 }
+        };
+
         const params = extractEventBody(event); // validate params
         logger('Got event:', params);
-        const pushToken = await rdsUtil.getPushToken(params.provider);
+        const pushToken = await rdsUtil.getPushToken(params.provider, userDetails.systemWideUserId);
         logger('Got push token:', pushToken);
         if (pushToken) {
-            const deletionResult = await rdsUtil.deletePushToken(params.provider); // replace with new token?
+            const deletionResult = await rdsUtil.deletePushToken(params.provider, userDetails.systemWideUserId); // replace with new token?
             logger('Push token deletion resulted in:', deletionResult);
         }
-        const newPushToken = { userId: params.userId, pushProvider: params.provider, pushToken: params.token };
+        const newPushToken = { userId: userDetails.systemWideUserId, pushProvider: params.provider, pushToken: params.token };
+        logger('Sending to RDS: ', newPushToken);
         const insertionResult = await rdsUtil.insertPushToken(newPushToken);
         return { result: 'SUCCESS', details: insertionResult };
 

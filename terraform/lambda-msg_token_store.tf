@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_token_store" {
 
   function_name                  = "${var.message_token_store_lambda_function_name}"
   role                           = "${aws_iam_role.message_token_store_role.arn}"
-  handler                        = "msg-instruction-handler.insertMessageInstruction"
+  handler                        = "user-message-handler.insertPushToken"
   memory_size                    = 256
   runtime                        = "nodejs8.10"
   timeout                        = 900

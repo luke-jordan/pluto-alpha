@@ -9,7 +9,7 @@ const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const getMessageInstructionStub = sinon.stub();
 const getUserIdsStub = sinon.stub();
@@ -379,26 +379,26 @@ describe('*** UNIT TESTING NEW USER MESSAGE SYNC ***', () => {
 });
 
 describe('*** UNIT TESTING PUSH TOKEN HANDLER ***', () => {
+    
+    const mockProvider = 'EXPO';
+    
     const mockUserId = uuid();
     const mockPushToken = uuid();
     const mockPersistedToken = uuid();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
 
+    const wrapEvent = (event, systemWideUserId) => ({
+        requestContext: { authorizer: { systemWideUserId }},
+        body: JSON.stringify(event)
+    });
 
     beforeEach(() => {
         resetStubs();
     })
 
     it('should persist provider-token pair', async () => {
-        const mockProvider = uuid();
         const mockTokenObject = { userId: mockUserId, pushProvider: mockProvider, pushToken: mockPushToken };
-        getPushTokenStub.withArgs(mockProvider).resolves();
-        deletePushTokenStub.withArgs(mockProvider).resolves({
-            command: 'DELETE',
-            rowCount: 1,
-            oid: null,
-            rows: []
-        });
+        getPushTokenStub.withArgs(mockProvider).resolves(null);
         insertPushTokenStub.withArgs(mockTokenObject).resolves([ { insertion_id: 1, creation_time: mockCreationTime }]);
 
         const expectedResult = {
@@ -407,26 +407,24 @@ describe('*** UNIT TESTING PUSH TOKEN HANDLER ***', () => {
         };
         
         const mockEvent = {
-            userId: mockUserId,
             provider: mockProvider,
             token: mockPushToken
         };
 
-        const result = await handler.insertPushToken(mockEvent);
+        const result = await handler.insertPushToken(wrapEvent(mockEvent, mockUserId));
         logger('Result of push token persistence:', result);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-        expect(getPushTokenStub).to.has.been.calledOnceWithExactly(mockEvent.provider);
+        expect(getPushTokenStub).to.has.been.calledOnceWithExactly(mockEvent.provider, mockUserId);
         expect(deletePushTokenStub).to.have.not.been.called;
         expect(insertPushTokenStub).to.have.been.calledOnceWithExactly(mockTokenObject);
     });
     
     it('should replace old push token if exists', async () => {
-        const mockPersistedProvider = uuid();
-        const mockTokenObject = { userId: mockUserId, pushProvider: mockPersistedProvider, pushToken: mockPushToken };
-        getPushTokenStub.withArgs(mockPersistedProvider).resolves({ provider: mockPersistedProvider, token: mockPersistedToken });
-        deletePushTokenStub.withArgs(mockPersistedProvider).resolves({
+        const mockTokenObject = { userId: mockUserId, pushProvider: mockProvider, pushToken: mockPushToken };
+        getPushTokenStub.withArgs(mockProvider, mockUserId).resolves({ provider: mockProvider, token: mockPersistedToken });
+        deletePushTokenStub.withArgs(mockProvider, mockUserId).resolves({
             command: 'DELETE',
             rowCount: 1,
             oid: null,
@@ -440,39 +438,36 @@ describe('*** UNIT TESTING PUSH TOKEN HANDLER ***', () => {
         };
         
         const mockEvent = {
-            userId: mockUserId,
-            provider: mockPersistedProvider,
+            provider: mockProvider,
             token: mockPushToken
         };
 
-        const result = await handler.insertPushToken(mockEvent);
+        const result = await handler.insertPushToken(wrapEvent(mockEvent, mockUserId));
         logger('Result of push token persistence:', result);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-        expect(getPushTokenStub).to.has.been.calledOnceWithExactly(mockEvent.provider);
-        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(mockEvent.provider);
+        expect(getPushTokenStub).to.has.been.calledOnceWithExactly(mockEvent.provider, mockUserId);
+        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(mockEvent.provider, mockUserId);
         expect(insertPushTokenStub).to.have.been.calledOnceWithExactly(mockTokenObject);
     });
 
     it('should return error on push token persistence failure', async () => {
-        const mockProviderOnError = uuid();
-        getPushTokenStub.withArgs(mockProviderOnError).throws(new Error('A persistence derived error.'));
+        getPushTokenStub.withArgs(mockProvider, mockUserId).throws(new Error('A persistence derived error.'));
        
         const expectedResult = { result: 'ERROR', details: 'A persistence derived error.' };
 
         const mockEvent = {
-            userId: mockUserId,
-            provider: mockProviderOnError,
+            provider: mockProvider,
             token: mockPushToken
         };
 
-        const result = await handler.insertPushToken(mockEvent);
+        const result = await handler.insertPushToken(wrapEvent(mockEvent, mockUserId));
         logger('Result of push token insertion on persistence failure:', result);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-        expect(getPushTokenStub).to.have.been.calledOnceWithExactly(mockProviderOnError);
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly(mockProvider, mockUserId);
         expect(deletePushTokenStub).to.have.not.been.called;
         expect(insertPushTokenStub).to.have.not.been.called;
     });
