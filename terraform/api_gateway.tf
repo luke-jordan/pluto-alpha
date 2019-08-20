@@ -13,6 +13,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.save_initiate,
   aws_api_gateway_integration.save_payment_check,
   aws_api_gateway_integration.balance_fetch_wrapper,
+  aws_api_gateway_integration.message_token_store,
   aws_api_gateway_integration.ops_warmup
   ]
 
