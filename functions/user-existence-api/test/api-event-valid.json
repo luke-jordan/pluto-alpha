@@ -53,6 +53,6 @@
         "httpMethod": "POST",
         "apiId": "j3azlsj0c4"
     },
-    "body": "{\"ownerUserId\": \"2c957aca-47f9-4b4d-857f-a3205bfc6a78\", \"clientId\": \"some_client_co\", \"defaultFloatId\": \"primary_cash\"}",
+    "body": "{\"ownerUserId\": \"2c957aca-47f9-4b4d-857f-a3205bfc6a78\", \"clientId\": \"some_country_client\", \"defaultFloatId\": \"usd_primary_mmkt\"}",
     "isBase64Encoded": false
 }

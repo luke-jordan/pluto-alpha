@@ -41,7 +41,7 @@ const handleInstruction = async (instruction) => {
     const totalFrom = instruction.recipients.reduce((sum, recipient) => sum - recipient.amount, 0);
     if (instruction.fromType === constants.entityTypes.END_USER_ACCOUNT) {
         userAllocRequests.push(allocationForUser({ recipientId: instruction.fromId, amount: totalFrom}, instruction));        
-    } else if (instruction.fromType === constants.entityTypes.BONUS_POOL || fromType === constants.entityTypes.COMPANY_SHARE) {
+    } else if (instruction.fromType === constants.entityTypes.BONUS_POOL || instruction.fromType === constants.entityTypes.COMPANY_SHARE) {
         nonUserAllocRequests.push(allocationFromNonUser(instruction, totalFrom));
     } else {
         throw new Error('Cannot handle from type passed to transfer');

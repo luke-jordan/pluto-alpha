@@ -47,7 +47,7 @@ module.exports.insertMessageInstruction = async (persistableObject) => {
  */ 
 module.exports.insertUserMessages = async (rows, objectKeys) => {
     const messageQueryDef = {
-        query: `insert into ${config.get('tables.userMessagesTable')} (${extractQueryClause(objectKeys)}) values %L returning insertion_id, creation_time`,
+        query: `insert into ${config.get('tables.userMessagesTable')} (${extractQueryClause(objectKeys)}) values %L returning message_id, creation_time`,
         columnTemplate: extractColumnTemplate(objectKeys),
         rows: rows
     };
@@ -89,7 +89,7 @@ module.exports.getInstructionsByType = async (audienceType, presentationType) =>
  */
 module.exports.updateMessageInstruction = async (instructionId, property, newValue) => {
     logger('About to update message instruction.');
-    const query = `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning insertion_id, update_time`;
+    const query = `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning instruction_id, update_time`;
     const values = [property, newValue, instructionId];
 
     const response = await rdsConnection.updateRecord(query, values);
@@ -125,6 +125,10 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
         logger('Created place holder: ', placeHolders);
         const assembledClause = `owner_user_id in (${placeHolders})`;
         return [assembledClause, accountIds, currentIndex + accountIds.length];
+    } else if (currentKey === 'client_id') {
+        const newIndex = currentIndex + 1;
+        const assembledClause = `responsible_client_id = $${newIndex}`;
+        return [assembledClause, [universeDefinition[currentKey]], newIndex];
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
@@ -151,7 +155,7 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         logger('We are selecting all parts of the universe');
         const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
         const whereClause = conditionClauses.join(' and ');
-        const selectionQuery = `select owner_user_id from ${accountsTable} where ${whereClause}`;
+        const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
         return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'random_sample') {
         logger('We are selecting some random sample of a universe');
@@ -166,7 +170,7 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
     throw new Error('Invalid selection method provided: ', selectionMethod);
 };
 
-const extractAccountIds = async (selectionClause) => {
+const extractUserIds = async (selectionClause) => {
     logger('Selecting accounts according to: ', selectionClause);
     const clauseComponents = selectionClause.split(' ');
     logger('Split pieces: ', clauseComponents);
@@ -185,7 +189,7 @@ const extractAccountIds = async (selectionClause) => {
     const queryResult = await rdsConnection.selectQuery(selectionQuery, selectionValues);
     logger('Number of records from query: ', queryResult.length);
 
-    return queryResult.map((row) => row['owner_user_id']); // owner_user_id
+    return queryResult.map((row) => row['owner_user_id']);
 };
 
 
@@ -194,7 +198,7 @@ const extractAccountIds = async (selectionClause) => {
  * @param {string} selectionInstruction see DSL documentation.
  */
 module.exports.getUserIds = async (selectionInstruction) => {
-    const userIds = await extractAccountIds(selectionInstruction);
+    const userIds = await extractUserIds(selectionInstruction);
     logger('Got this back from user ids extraction:', userIds);
     return userIds;
 };

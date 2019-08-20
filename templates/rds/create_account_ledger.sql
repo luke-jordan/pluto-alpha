@@ -32,6 +32,9 @@ grant update on account_data.core_account_ledger to account_api_worker;
 grant usage on schema account_data to save_tx_api_worker;
 grant select on account_data.core_account_ledger to save_tx_api_worker;
 
--- Likewise, so boost worker can find account ids and users
+-- Likewise, so boost worker can find account ids and users, and so can message worker
 grant usage on schema account_data to boost_worker;
 grant select (account_id, owner_user_id, responsible_client_id, default_float_id, frozen) on account_data.core_account_ledger to boost_worker;
+
+grant usage on schema account_data to message_api_worker;
+grant select (account_id, owner_user_id, responsible_client_id, frozen) on account_data.core_account_ledger to message_api_worker;

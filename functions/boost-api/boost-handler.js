@@ -24,9 +24,14 @@ const handleError = (err) => {
 
 module.exports.createBoost = async (event) => {
     try {
+        if (!event) {
+            logger('Test run on lambda, exiting');
+            return { statusCode: 400 };
+        }
 
         const userDetails = extractUserDetails(event);
         logger('Event: ', event);
+        logger('User details: ', userDetails);
         if (!userDetails) {
             return { statusCode: status('Forbidden') };
         }
@@ -52,6 +57,7 @@ module.exports.createBoost = async (event) => {
 
         logger(`Boost start time: ${boostStartTime.format()} and end time: ${boostEndTime.format()}`);
         logger('Boost source: ', params.boostSource);
+        logger('Creating user: ', userDetails.systemWideUserId);
         
         const instructionToRds = {
             creatingUserId: userDetails.systemWideUserId,
@@ -155,6 +161,7 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
         if (restrictToInitiator) {
             findAccountsParams.accountIds = [initiatingAccountId];
         }
+        logger('Assembled params: ', findAccountsParams);
         return persistence.findAccountsForBoost(findAccountsParams);
     });
 
@@ -337,8 +344,7 @@ module.exports.processEvent = async (event) => {
     const transferInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
     logger('***** Transfer instructions: ', JSON.stringify(transferInstructions));
     
-    // const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
-    const resultOfTransfers = { };
+    const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
     logger('Result of transfers: ', resultOfTransfers);
 
     // then we update the statuses of the boosts to redeemed
@@ -352,28 +358,28 @@ module.exports.processEvent = async (event) => {
     const messageInstructionsFlat = [].concat.apply([], messageInstructionsNested);
     logger('Passing message instructions: ', messageInstructionsFlat);
     
-    // const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();
+    const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();
     logger('Obtained message promise');
     
     // then: assemble the event publishing
-    // let finalPromises = [messagePromise];
+    let finalPromises = [messagePromise];
 
-    // boostsToRedeem.forEach((boost) => {
-    //     const boostId = boost.boostId;
-    //     const boostUpdateTime = (resultOfUpdates.filter((row) => row.boostId === boostId)[0]).updatedTime;
-    //     finalPromises = finalPromises.concat(createPublishEventPromises({ 
-    //         boost,
-    //         boostUpdateTime,
-    //         affectedAccountsUserDict: affectedAccountsDict[boostId],
-    //         transferResults: resultOfTransfers[boostId],
-    //         event
-    //     }));
-    // });
+    boostsToRedeem.forEach((boost) => {
+        const boostId = boost.boostId;
+        const boostUpdateTime = (resultOfUpdates.filter((row) => row.boostId === boostId)[0]).updatedTime;
+        finalPromises = finalPromises.concat(createPublishEventPromises({ 
+            boost,
+            boostUpdateTime,
+            affectedAccountsUserDict: affectedAccountsDict[boostId],
+            transferResults: resultOfTransfers[boostId],
+            event
+        }));
+    });
 
-    // logger('Final promises: ', finalPromises);
-    // // then: fire all of them off, and we are done
-    // const resultOfFinalCalls = await Promise.all(finalPromises);
-    // logger('Result of final calls: ', resultOfFinalCalls);
+    logger('Final promises: ', finalPromises);
+    // then: fire all of them off, and we are done
+    const resultOfFinalCalls = await Promise.all(finalPromises);
+    logger('Result of final calls: ', resultOfFinalCalls);
 
     const resultToReturn = {
         result: 'SUCCESS',

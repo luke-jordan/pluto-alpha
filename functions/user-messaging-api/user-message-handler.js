@@ -42,14 +42,15 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
     logger(`Got ${userIds.length} user id(s)`);
     // logger('Assembler recieved destination id:', destinationUserId);
     const rows = [];
-    let template = JSON.parse(instruction.templates).otherTemplates ? JSON.parse(instruction.templates).otherTemplates : JSON.parse(instruction.templates).default;
+    const templates = typeof instruction.templates === 'string' ? JSON.parse(instruction.templates) : instruction.templates;
+    const template = templates.otherTemplates ? templates.otherTemplates : templates.default;
     const userMessage = assembleTemplate(template, instruction.requestDetails); // to become a generic way of formatting variables into template.
     for (let i = 0; i < userIds.length; i++) {
         rows.push({
             messageId: uuid(),
             destinationUserId: instruction.requestDetails.destination ? instruction.requestDetails.destination : userIds[i],
             instructionId: instruction.instructionId,
-            message: userMessage,
+            userMessage,
             startTime: instruction.startTime,
             endTime: instruction.endTime,
             presentationType: instruction.presentationType,
@@ -62,7 +63,7 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
 };
 
 /**
- * 
+ * Primary method. Takes an instruction and creates the relevant user messages.
  * @param {string} instructionId The instruction id assigned during instruction creation.
  */
 module.exports.createUserMessages = async (event) => {
