@@ -61,3 +61,4 @@ grant select, insert, update on message_data.message_instruction to message_api_
 grant select, insert, update on message_data.user_message to message_api_worker;
 
 grant select, insert, delete on message_data.user_push_token to message_api_worker;
+grant usage, select on message_data.user_push_token_insertion_id_seq to message_api_worker;

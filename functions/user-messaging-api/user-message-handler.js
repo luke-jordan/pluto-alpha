@@ -156,8 +156,7 @@ module.exports.insertPushToken = async (event) => {
         const newPushToken = { userId: userDetails.systemWideUserId, pushProvider: params.provider, pushToken: params.token };
         logger('Sending to RDS: ', newPushToken);
         const insertionResult = await rdsUtil.insertPushToken(newPushToken);
-        return { result: 'SUCCESS', details: insertionResult };
-
+        return { statusCode: 200, body: JSON.stringify(insertionResult[0]) };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return {

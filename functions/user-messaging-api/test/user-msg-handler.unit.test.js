@@ -402,8 +402,8 @@ describe('*** UNIT TESTING PUSH TOKEN HANDLER ***', () => {
         insertPushTokenStub.withArgs(mockTokenObject).resolves([ { insertion_id: 1, creation_time: mockCreationTime }]);
 
         const expectedResult = {
-            result: 'SUCCESS',
-            details: [ { insertion_id: 1, creation_time: mockCreationTime }]
+            statusCode: 200,
+            body: JSON.stringify({ insertion_id: 1, creation_time: mockCreationTime })
         };
         
         const mockEvent = {
@@ -433,8 +433,8 @@ describe('*** UNIT TESTING PUSH TOKEN HANDLER ***', () => {
         insertPushTokenStub.withArgs(mockTokenObject).resolves([ { insertion_id: 1, creation_time: mockCreationTime }]);
 
         const expectedResult = {
-            result: 'SUCCESS',
-            details: [ { insertion_id: 1, creation_time: mockCreationTime }]
+            statusCode: 200,
+            body: JSON.stringify({ insertion_id: 1, creation_time: mockCreationTime })
         };
         
         const mockEvent = {
