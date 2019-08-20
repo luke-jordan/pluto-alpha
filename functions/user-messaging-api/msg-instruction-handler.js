@@ -157,7 +157,7 @@ module.exports.deactivateMessageInstruction = async (event) => {
 module.exports.getMessageInstruction = async (event) => {
     try {
         logger('instruction retreiver recieved:', event);
-        const params = extractEventBody(event);
+        const params = extractEventBody(event); // extract event from query params
         const instructionId = params.instructionId;
         const databaseResponse = await rdsUtil.getMessageInstruction(instructionId);
         logger('Result of message instruction extraction:', databaseResponse);

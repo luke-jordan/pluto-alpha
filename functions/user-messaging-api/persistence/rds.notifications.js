@@ -123,7 +123,7 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
         const accountIds = universeDefinition[currentKey];
         const placeHolders = accountIds.map((_, index) => `$${currentIndex + index + 1}`).join(', ');
         logger('Created place holder: ', placeHolders);
-        const assembledClause = `account_id in (${placeHolders})`;
+        const assembledClause = `owner_user_id in (${placeHolders})`;
         return [assembledClause, accountIds, currentIndex + accountIds.length];
     }
     const newIndex = currentIndex + 1;
@@ -151,10 +151,14 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         logger('We are selecting all parts of the universe');
         const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
         const whereClause = conditionClauses.join(' and ');
-        const selectionQuery = `select account_id from ${accountsTable} where ${whereClause}`;
+        const selectionQuery = `select owner_user_id from ${accountsTable} where ${whereClause}`;
         return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'random_sample') {
-        logger('We are selecting some random sample of a universe')
+        logger('We are selecting some random sample of a universe');
+        const samplePercentage = universeDefinition.replace(/^0./, '');
+        const selectionQuery = `select owner_user_id from ${accountsTable} tablesample ($1)`;
+        const conditionValues = samplePercentage;
+        return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'match_other') {
         logger('We are selecting so as to match another entity');
     }
@@ -169,7 +173,9 @@ const extractAccountIds = async (selectionClause) => {
     const hasMethodParameters = clauseComponents[1] !== 'from';
     
     const selectionMethod = clauseComponents[0];
-    const universeComponent = selectionClause.match(/#{.*}/g)[hasMethodParameters ? 1 : 0];
+    logger('selectionMethod:', selectionMethod);
+    const universeComponent = selectionClause.match(/#{.*}/g)[hasMethodParameters ? 1 : 0]; // edit
+    logger('universeCompnent:', universeComponent);
     const universeDefinition = validateAndExtractUniverse(universeComponent);
     
     const [selectionQuery, selectionValues] = assembleQueryClause(selectionMethod, universeDefinition);
@@ -179,7 +185,7 @@ const extractAccountIds = async (selectionClause) => {
     const queryResult = await rdsConnection.selectQuery(selectionQuery, selectionValues);
     logger('Number of records from query: ', queryResult.length);
 
-    return queryResult.map((row) => row['account_id']);
+    return queryResult.map((row) => row['owner_user_id']); // owner_user_id
 };
 
 
@@ -191,4 +197,46 @@ module.exports.getUserIds = async (selectionInstruction) => {
     const userIds = await extractAccountIds(selectionInstruction);
     logger('Got this back from user ids extraction:', userIds);
     return userIds;
+};
+
+
+module.exports.getPushToken = async (provider) => {
+    const query = `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1`;
+    const value = [provider];
+
+    const result = await rdsConnection.selectQuery(query, value);
+    logger('Got this back from user push token extraction:', result);
+
+    return camelCaseKeys(result[0]);
+};
+
+module.exports.deletePushToken = async (provider) => {
+    const columns = ['push_provider']
+    const value = [provider];
+
+    const result = await rdsConnection.deleteRow(config.get('tables.pushTokenTable'), columns, value);
+    logger('Push token deletion resulted in:', result);
+
+    return result.rows;
+};
+
+module.exports.insertPushToken = async (pushTokenObject) => {
+    const objectKeys = Object.keys(pushTokenObject);
+    const insertionQuery = `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(objectKeys)}) values %L returning insertion_id, creation_time`;
+    const insertionColumns = extractColumnTemplate(objectKeys);
+    const insertArray = [pushTokenObject];
+    const databaseResponse = await rdsConnection.insertRecords(insertionQuery, insertionColumns, insertArray);
+    logger('Push token insertion resulted in:', databaseResponse);
+    return databaseResponse.rows;
+};
+
+module.exports.deactivatePushToken = async (provider) => {
+    logger('About to update push token.');
+    const query = `update ${config.get('tables.pushTokenTable')} set active = false where push_provider = $1 returning insertion_id, update_time`;
+    const values = [provider];
+
+    const response = await rdsConnection.updateRecord(query, values);
+    logger('Push token deactivation resulted in:', response);
+
+    return response.rows;
 };

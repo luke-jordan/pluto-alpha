@@ -10,6 +10,7 @@ const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 const assembleTemplate = (template, requestDetails) => {
     switch (true) {
         case Object.keys(requestDetails).includes('parameters') && Object.keys(requestDetails.parameters).includes('boostAmount'):
+            // if triggerBalanceFetch === true: get balance and include in template
             return util.format(template, requestDetails.parameters.boostAmount);
         default:
             return template;
@@ -46,7 +47,7 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
     for (let i = 0; i < userIds.length; i++) {
         rows.push({
             messageId: uuid(),
-            destinationUserId: userIds[i],
+            destinationUserId: instruction.requestDetails.destination ? instruction.requestDetails.destination : userIds[i],
             instructionId: instruction.instructionId,
             message: userMessage,
             startTime: instruction.startTime,
@@ -128,3 +129,36 @@ module.exports.syncUserMessages = async (event) => {
         };
     }
 };
+
+/**
+ * 
+ * @param {string} provider
+ * @param {string} token
+ */
+module.exports.insertPushToken = async (event) => {
+    try {
+        // add request context validation ensuring that the user id in context matches the event provider.
+        const params = extractEventBody(event); // validate params
+        logger('Got event:', params);
+        const pushToken = await rdsUtil.getPushToken(params.provider);
+        logger('Got push token:', pushToken);
+        if (pushToken) {
+            const deletionResult = await rdsUtil.deletePushToken(params.provider); // replace with new token?
+            logger('Push token deletion resulted in:', deletionResult);
+        }
+        const newPushToken = { userId: params.userId, pushProvider: params.provider, pushToken: params.token };
+        const insertionResult = await rdsUtil.insertPushToken(newPushToken);
+        return { result: 'SUCCESS', details: insertionResult };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return {
+            result: 'ERROR',
+            details: err.message
+        };
+    }
+};
+
+// module.exports.deactivatePushToken = async (event) => {
+//     try { } catch (err) { }
+// };
