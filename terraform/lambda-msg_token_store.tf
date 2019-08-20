@@ -88,7 +88,7 @@ resource "aws_iam_role_policy_attachment" "message_token_store_vpc_execution_pol
 
 resource "aws_iam_role_policy_attachment" "message_token_store_secret_get" {
   role = "${aws_iam_role.message_token_store_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_messages_worker_read"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
