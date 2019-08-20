@@ -78,6 +78,8 @@ module.exports.addOrSubtractFloat = async (request = {
     };
 };
 
+// todo : construct a generic version of the below, or at least one wrapping all in a single transaction
+
 /**
  * Simple allocation of the float, to either a bonus or company share (do not user this for user accruals)
  * @param {string} clientId The global system ID of the client that intermediates this float 
@@ -152,7 +154,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
         'transaction_id': request.floatTxId || uuid(),
         'client_id': clientId,
         'float_id': floatId,
-        't_type': constants.floatTransTypes.ALLOCATION,
+        't_type': request.allocType || constants.floatTransTypes.ALLOCATION,
         'amount': request.amount,
         'currency': request.currency,
         'unit': request.unit,
@@ -180,7 +182,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
         return {
             'transaction_id': request.accountTxId || uuid(),
             'account_id': request.accountId,
-            'transaction_type': 'FLOAT_ALLOCATION',
+            'transaction_type': request.allocType || 'FLOAT_ALLOCATION',
             'settlement_status': 'ACCRUED',
             'amount': request.amount,
             'currency': request.currency,

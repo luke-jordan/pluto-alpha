@@ -1,20 +1,20 @@
 # Unnamed serverless API
 
-service: float-api # NOTE: update this with your service name
+service: boost-api
 
 # plugins:
 #   - serverless-localstack
 
 custom:
-  # localstack:
-  #   host: http://localhost
-  #   stages:
-  #     - dev
-  #     - local
-  #   debug: true
-  # stages:
-  #   - local
-  #   - dev
+#   localstack:
+#     host: http://localhost
+#     stages:
+#       - dev
+#       - local
+#     debug: true
+#   stages:
+#     - local
+#     - dev
   thisStage: ${opt:stage, self:provider.stage}
   thisProcess:
     NODE_ENV:
@@ -27,29 +27,25 @@ provider:
   runtime: nodejs8.10
   region: eu-west-1
   stage: dev
-  deploymentBucket:
-    pluto.float.lambdas
 
 functions:
-  accrue:
-    handler: handler.accrue
-    name: float-accrue
+  create:
+    handler: boost-handler.createBoost
+    name: boost_create
     events:
       - http:
-          path: save
+          path: create
           method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: jupiter:*
-
-  transfer:
-    handler: transfer-handler.floatTransfer
-    name: float_transfer
+  process:
+    handler: boost-handler.processEvent
+    name: boost_process
     events:
       - http:
-          path: transfer
+          path: process
           method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: jupiter:*
-      

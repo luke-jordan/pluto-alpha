@@ -1,0 +1,1 @@
+../../../templates/rds/create_boost_tables.sql

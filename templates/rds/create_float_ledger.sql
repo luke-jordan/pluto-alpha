@@ -5,7 +5,7 @@ create table if not exists float_data.float_transaction_ledger (
     creation_time timestamp with time zone not null default current_timestamp,
     client_id varchar(255) not null, 
     float_id varchar(255) not null,
-    t_type varchar(50) not null check (t_type in ('ACCRUAL', 'ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION')),
+    t_type varchar(50) not null,
     currency varchar(10) not null,
     unit base_unit not null,
     amount integer not null,
@@ -13,6 +13,12 @@ create table if not exists float_data.float_transaction_ledger (
     allocated_to_id varchar(50),
     related_entity_type varchar(50),
     related_entity_id varchar(50)
+);
+
+-- todo : definitely do not do this once into production
+drop constraint if exists float_transaction_type_check;
+alter table float_data.float_transaction_ledger add constraint float_transaction_type_check check (
+    t_type in ('ACCRUAL', 'ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION')
 );
 
 -- todo: indices

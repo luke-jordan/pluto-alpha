@@ -1,0 +1,10 @@
+{
+    "accountId": "0e78aab2-4197-42bd-8d06-42678b5f519e",
+    "eventType": "SAVING_EVENT_COMPLETED",
+    "timeInMillis": 1566221756427,
+    "eventContext": {
+        "transactionId": "2348f851-3189-435a-8d01-364c1922ec57",
+        "savedAmount": "5000000::HUNDREDTH_CENT::USD",
+        "firstSave": true
+    }
+}

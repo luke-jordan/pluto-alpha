@@ -1,0 +1,25 @@
+{
+    "tables": {
+        "accountLedger": "account_data.core_account_ledger",
+        "messageInstructionTable": "message_data.message_instruction",
+        "userMessagesTable": "message_data.user_message"
+    },
+    "db": {
+        "host": "localhost",
+        "port": "5430",
+        "database": "jupiter",
+        "user": "message_api_worker",
+        "password": "pwd_for_message_worker"
+    },
+    "instruction": {
+        "requiredProperties": [
+            "presentationType",
+            "audienceType",
+            "templates"
+        ],
+        "templates": {
+            "default": "Hello! Jupiter is now live. To celebrate, we are asking everyone to say something. Thank you.",
+            "boost": "Hello! You have been awarded a boost of %s. Thank you for choosing Jupiter Savings."
+        }
+    }
+}

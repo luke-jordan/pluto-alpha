@@ -25,3 +25,9 @@ psql -f ../templates/rds/create_transaction_ledger.sql
 
 echo "Setting up float ledger in RDS local"
 psql -f ../templates/rds/create_float_ledger.sql
+
+echo "Setting up boost tables in RDS local"
+psql -f ../templates/rds/create_boost_tables.sql
+
+echo "Setting up message tables in RDS local"
+psql -f ../templates/rds/create_boost_tables.sql

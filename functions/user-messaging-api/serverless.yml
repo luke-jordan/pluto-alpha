@@ -1,20 +1,20 @@
 # Unnamed serverless API
 
-service: float-api # NOTE: update this with your service name
+service: message-api
 
 # plugins:
 #   - serverless-localstack
 
 custom:
-  # localstack:
-  #   host: http://localhost
-  #   stages:
-  #     - dev
-  #     - local
-  #   debug: true
-  # stages:
-  #   - local
-  #   - dev
+#   localstack:
+#     host: http://localhost
+#     stages:
+#       - dev
+#       - local
+#     debug: true
+#   stages:
+#     - local
+#     - dev
   thisStage: ${opt:stage, self:provider.stage}
   thisProcess:
     NODE_ENV:
@@ -27,29 +27,25 @@ provider:
   runtime: nodejs8.10
   region: eu-west-1
   stage: dev
-  deploymentBucket:
-    pluto.float.lambdas
 
 functions:
-  accrue:
-    handler: handler.accrue
-    name: float-accrue
+  instruction_create:
+    handler: msg-instruction-handler.insertMessageInstruction
+    name: instruction_create
     events:
       - http:
-          path: save
+          path: create
           method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: jupiter:*
-
-  transfer:
-    handler: transfer-handler.floatTransfer
-    name: float_transfer
+  instruction_spawn:
+    handler: user-message-handler.createUserMessages
+    name: instruction_spawn
     events:
       - http:
-          path: transfer
+          path: create
           method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
       DEBUG: jupiter:*
-      

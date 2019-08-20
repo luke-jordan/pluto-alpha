@@ -30,7 +30,7 @@ const rds = require('../persistence/rds');
 const dynamo = require('../persistence/dynamodb');
 const constants = require('../constants');
 
-let handler = require('../handler');
+let handler = require('../accrual-handler');
 
 describe('Single apportionment operations', () => {
 
@@ -160,7 +160,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
 
         calculateFloatBalanceStub.withArgs(common.testValidFloatId, 'ZAR').resolves({ balance: 1000 });
         
-        handler = proxyquire('../handler', createStubs({
+        handler = proxyquire('../accrual-handler', createStubs({
             [dynamoPath]: { 
                 fetchConfigVarsForFloat: fetchFloatConfigVarsStub 
             },
@@ -315,7 +315,7 @@ describe('Primary allocation of unallocated float lamdba', () => {
 
         fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFloat');
 
-        handler = proxyquire('../handler', createStubs({
+        handler = proxyquire('../accrual-handler', createStubs({
             [rdsPath]: { 
                 obtainAllAccountsWithPriorAllocations: obtainAccountBalancesStub,
                 allocateFloat: allocateFloatStub,

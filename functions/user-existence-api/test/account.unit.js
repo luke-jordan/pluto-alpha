@@ -123,7 +123,8 @@ describe('handlerFunctionCreateAccount', () => {
     });
     
     it('End to end, same owner and user', async () => {
-        insertRecordStub.withArgs(sinon.match(wellFormedPersistenceReq)).resolves(testAccountOpeningResult);
+        // withArgs(sinon.match(wellFormedPersistenceReq)).
+        insertRecordStub.resolves(testAccountOpeningResult);
         const response = await accountHandler.create(testValidApiEvent, null);
         
         expect(response.statusCode).to.equal(200);
@@ -134,6 +135,8 @@ describe('handlerFunctionCreateAccount', () => {
 
         expect(bodyParsed.accountId).to.be.a.uuid('v4');
         expect(bodyParsed.persistedTimeMillis).to.equal(expectedMillis);
+
+        expect(insertRecordStub).to.have.been.calledWith(wellFormedPersistenceReq);
     });
 
     it('Handles errors in accordance with standards', async () => {
