@@ -4,7 +4,9 @@ const logger = require('debug')('jupiter:user-notifications:rds-test');
 const uuid = require('uuid/v4');
 const config = require('config');
 const moment = require('moment');
+
 const decamelize = require('decamelize');
+const camelcase = require('camelcase');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -15,6 +17,7 @@ const proxyquire = require('proxyquire');
 const insertRecordsStub = sinon.stub();
 const updateRecordStub = sinon.stub();
 const selectQueryStub = sinon.stub();
+const deleteRowStub = sinon.stub();
 const multiTableStub = sinon.stub();
 const uuidStub = sinon.stub();
 
@@ -23,6 +26,7 @@ class MockRdsConnection {
         this.insertRecords = insertRecordsStub;
         this.updateRecord = updateRecordStub;
         this.selectQuery = selectQueryStub;
+        this.deleteRow = deleteRowStub;
         this.largeMultiTableInsert = multiTableStub;
     }
 }
@@ -37,12 +41,14 @@ const resetStubs = () => {
     insertRecordsStub.reset();
     updateRecordStub.reset();
     selectQueryStub.reset();
+    deleteRowStub.reset();
     multiTableStub.reset();
     uuidStub.reset();
 };
 
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
+const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [camelcase(key)]: object[key] }), {});
 
 
 describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
@@ -168,21 +174,39 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
     it('should get user ids', async () => {
         const mockSelectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
+<<<<<<< HEAD
+        selectQueryStub.withArgs(...mockSelectQueryArgs(accountTable, 'owner_user_id', mockClientId, 'client_id')).resolves([ 
+            { 'owner_user_id': mockAccoutId }, { 'owner_user_id': mockAccoutId }, { 'owner_user_id': mockAccoutId }
+        ]);
+        const expectedResult = [ mockAccoutId, mockAccoutId, mockAccoutId ];
+=======
         const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1`;
         selectQueryStub.withArgs(expectedQuery, [mockClientId]).resolves([{ 'account_id': mockAccoutId, 'owner_user_id': mockAccoutId }]);
         // selectQueryStub.withArgs(...mockSelectQueryArgs(accountTable, 'account_id', mockClientId, 'client_id')).resolves([ 
         //     { 'account_id': mockAccoutId }, { 'account_id': mockAccoutId }, { 'account_id': mockAccoutId }
         // ]);
         const expectedResult = [ mockAccoutId ];
+>>>>>>> wip-boosts-dev
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
         
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
+<<<<<<< HEAD
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectQueryArgs(accountTable, 'owner_user_id', mockClientId, 'client_id'));
+=======
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId]);
         // expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectQueryArgs(accountTable, 'account_id', mockClientId, 'client_id'));
+>>>>>>> wip-boosts-dev
     });
+
+    // it('should get user ids where selection clause is random_sample:', async () => {
+    //     const mockSelectionInstruction = 'random_sample #{0.33} from #{{"client_id":"${mockClientId}"}}';
+
+    //     const result = await rdsUtil.getUserIds(mockSelectionInstruction);
+    //     logger('got this back from user id extraction:', result);
+    // });
 
     it('should insert user messages', async () => {
         const mockCreationTime = moment().format();
@@ -211,5 +235,116 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(insertionResult);
         expect(multiTableStub).to.have.been.calledOnceWithExactly([mockInsertionArgs]);
+    });
+});
+
+describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
+    const mockUserId = uuid();
+    const mockPushToken = uuid();
+    const mockProvider = uuid();
+    const mockCreationTime = '2030-01-01T00:00:01.016Z';
+    const mockUpdateTime = '2030-01-01T00:00:02.016Z';
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('should persist push token', async () => {
+        const mockTokenObject = {
+            userId: mockUserId,
+            pushProvider: mockProvider,
+            pushToken: mockPushToken
+        };
+
+        const mockInsertionArgs = [ 
+            `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(Object.keys(mockTokenObject))}) values %L returning insertion_id, creation_time`,
+            extractColumnTemplate(Object.keys(mockTokenObject)),
+            [ mockTokenObject ]
+        ];
+
+        insertRecordsStub.withArgs(...mockInsertionArgs).resolves({ rows: [{ insertion_id: 1, creation_time: mockCreationTime }] });
+        const expectedResult = [{ insertion_id: 1, creation_time: mockCreationTime }];
+
+        const result = await rdsUtil.insertPushToken(mockTokenObject);
+        logger('Result of push token insertion:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(insertRecordsStub).to.have.been.calledOnceWithExactly(...mockInsertionArgs);
+    });
+
+    it('should get push token', async () => {
+        const mockPersistedToken = [{
+            insertion_id: 1,
+            creation_time: mockCreationTime,
+            user_id: mockUserId,
+            push_provider: mockProvider,
+            push_token: mockPushToken,
+            active: true
+        }];
+        const mockSelectArgs = [
+            `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1`,
+            [ mockProvider ]
+        ];
+
+        selectQueryStub.withArgs(...mockSelectArgs).resolves(mockPersistedToken);
+
+        const expectedResult = camelCaseKeys(mockPersistedToken[0]);
+
+        const result = await rdsUtil.getPushToken(mockProvider);
+        logger('Result of push token extraction:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
+    });
+
+    it('should deactivate push token', async () => {
+        
+        const mockUpdateArgs = [
+            `update ${config.get('tables.pushTokenTable')} set active = false where push_provider = $1 returning insertion_id, update_time`,
+            [ mockProvider ]
+        ];
+
+        updateRecordStub.withArgs(...mockUpdateArgs).resolves({
+            command: 'UPDATE',
+            rowCount: 1,
+            oid: null,
+            rows: [ { insertion_id: 2, update_time: mockUpdateTime } ]
+        });
+
+        const expectedResult = [ { insertion_id: 2, update_time: mockUpdateTime } ];
+
+        const result = await rdsUtil.deactivatePushToken(mockProvider);
+        logger('Result of push token deactivation:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(...mockUpdateArgs);
+    });
+
+    it('should delete push token', async () => {
+        
+        const mockDeleteRowArgs = [
+            config.get('tables.pushTokenTable'),
+            [ 'push_provider'],
+            [ mockProvider ]
+        ];
+
+        deleteRowStub.withArgs(...mockDeleteRowArgs).resolves({
+            command: 'DELETE',
+            rowCount: 1,
+            oid: null,
+            rows: []
+        });
+
+        const expectedResult = [];
+
+        const result = await rdsUtil.deletePushToken(mockProvider);
+        logger('Result of push token deletion:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(deleteRowStub).to.have.been.calledOnceWithExactly(...mockDeleteRowArgs);
     });
 });
