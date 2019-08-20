@@ -12,7 +12,6 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   depends_on = [
   aws_api_gateway_integration.save_initiate,
   aws_api_gateway_integration.save_payment_check,
-  aws_api_gateway_integration.account_create,
   aws_api_gateway_integration.balance_fetch_wrapper,
   aws_api_gateway_integration.ops_warmup
   ]
@@ -239,39 +238,6 @@ resource "aws_api_gateway_integration" "save_payment_check" {
   uri                     = "${aws_lambda_function.save_payment_check.invoke_arn}"
 }
 
-
-/////////////// ACCOUNT CREATE API LAMBDA //////////////////////////////////////////////////////////////////////////
-
-resource "aws_api_gateway_method" "account_create" {
-  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.account_create.id}"
-  http_method   = "POST"
-  authorization = "NONE"
-}
-
-resource "aws_api_gateway_resource" "account_create" {
-  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
-  path_part   = "account-create"
-}
-
-resource "aws_lambda_permission" "account_create" {
-  action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.account_create.function_name}"
-  principal     = "apigateway.amazonaws.com"
-  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
-}
-
-resource "aws_api_gateway_integration" "account_create" {
-  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id = "${aws_api_gateway_method.account_create.resource_id}"
-  http_method = "${aws_api_gateway_method.account_create.http_method}"
-
-  integration_http_method = "POST"
-  type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.account_create.invoke_arn}"
-}
-
 /////////////// ACCOUNT BALANCE LAMBDA (WRAPPER ONLY, SIMPLE GET) -- MAIN LAMBDA ONLY FOR INVOKE /////////////////////////////////////////////////
 
 resource "aws_api_gateway_method" "balance_fetch_wrapper" {
@@ -304,6 +270,46 @@ resource "aws_api_gateway_integration" "balance_fetch_wrapper" {
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.balance_fetch_wrapper.invoke_arn}"
 }
+
+/////////////// MESSAGING LAMBDAS //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "message_path_root" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "message"
+}
+
+resource "aws_api_gateway_resource" "message_token_store" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.message_path_root.id}"
+  path_part   = "token"
+}
+
+resource "aws_api_gateway_method" "message_token_store" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.message_token_store.id}"
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "message_token_store" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.message_token_store.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "message_token_store" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.message_token_store.resource_id}"
+  http_method = "${aws_api_gateway_method.message_token_store.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.message_token_store.invoke_arn}"
+}
+
 
 /////////////// WARMUP LAMBDA //////////////////////////////////////////////////////////////////////////
 
