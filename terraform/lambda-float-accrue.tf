@@ -7,7 +7,7 @@ resource "aws_lambda_function" "float_accrue" {
 
   function_name                  = "${var.float_accrue_lambda_function_name}"
   role                           = "${aws_iam_role.float_accrue_role.arn}"
-  handler                        = "index.handler"
+  handler                        = "accrual-handler.accrue"
   memory_size                    = 256
   runtime                        = "nodejs8.10"
   timeout                        = 900
@@ -103,6 +103,11 @@ resource "aws_iam_role_policy_attachment" "float_accrue_vpc_execution_policy" {
 resource "aws_iam_role_policy_attachment" "float_accrue_client_float_table_access" {
   role = "${aws_iam_role.float_accrue_role.name}"
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "float_accrue_secret_get" {
+  role = "${aws_iam_role.float_accrue_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_float_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
