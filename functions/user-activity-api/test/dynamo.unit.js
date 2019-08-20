@@ -12,7 +12,7 @@ const chaiAsPromised = require('chai-as-promised');
 chai.use(chaiAsPromised);
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const fetchStub = sinon.stub();
 
 const dynamo = proxyquire('../persistence/dynamodb', {

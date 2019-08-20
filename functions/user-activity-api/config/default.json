@@ -38,5 +38,10 @@
     },
     "logging": {
         "enabled": "false"
+    },
+    "publishing": {
+        "userEvents": {
+            "topicArn": "<<override here>>"
+        }
     }
 }
