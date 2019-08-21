@@ -65,74 +65,51 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         presentationType: 'RECURRING',
         active: true,
         audienceType: 'ALL_USERS',
-        templates: {
+        templates: JSON.stringify({
             default: config.get('instruction.templates.default'),
             otherTemplates: null
-        },
+        }),
         selectionInstruction: null,
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
-        responseContext: { boostId: mockBoostId },
+        responseContext: JSON.stringify({ boostId: mockBoostId }),
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
         lastProcessedTime: '2060-11-11T11:47:41.596Z',
         messagePriority: 0
     });
 
-    // legacy implementation tests whether new implementation achieved same result.
-    const insertionQueryArray = [
-        'instruction_id',
-        'presentation_type',
-        'active',
-        'audience_type',
-        'templates',
-        'selection_instruction',
-        'recurrence_instruction',
-        'response_action',
-        'response_context',
-        'start_time',
-        'end_time',
-        'last_processed_time',
-        'message_priority' 
-    ];
-
-    const mockInsertRecordsArgs = (instructionId) => [
-        `insert into ${config.get('tables.messageInstructionTable')} (${insertionQueryArray.join(', ')}) values %L returning instruction_id, creation_time`,
-        '${instructionId}, ${presentationType}, ${active}, ${audienceType}, ${templates}, ${selectionInstruction}, ${recurrenceInstruction}, ${responseAction}, ${responseContext}, ${startTime}, ${endTime}, ${lastProcessedTime}, ${messagePriority}',
-        [createPersistableInstruction(instructionId)]
-    ];
-
-    const mockUpdateRecordArgs = (instructionId) => [
-        `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning instruction_id, update_time`,
-        ['active', false, instructionId]
-    ];
-    
-    const mockSelectQueryArgs = (table, property, value, condition) => [
-        `select ${property} from ${table} where ${condition} = $1`,
-        [value]
-    ];
-
     beforeEach(() => {
         resetStubs();
     });
 
     it('should insert message instruction', async () => {
-        const mockPersistableInstruction = createPersistableInstruction(mockInstructionId);
-        insertRecordsStub.withArgs(...mockInsertRecordsArgs(mockInstructionId)).returns({ rows: [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ] });
-        const expectedResult = [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ];
+   
+        const instructionObject = createPersistableInstruction(mockInstructionId);
+        const instructionKeys = Object.keys(instructionObject);
 
-        const result = await rdsUtil.insertMessageInstruction(mockPersistableInstruction);
+        const mockInsertRecordsArgs = [
+            `insert into ${config.get('tables.messageInstructionTable')} (${extractQueryClause(instructionKeys)}) values %L returning instruction_id, creation_time`,
+            extractColumnTemplate(instructionKeys),
+            [instructionObject]
+        ];
+        logger('Created select args:', mockInsertRecordsArgs);
+
+        insertRecordsStub.withArgs(...mockInsertRecordsArgs).returns({ rows: [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ] });
+        const expectedResult = [ { insertionId: 111, creationTime: '2049-06-22T07:38:30.016Z' } ];
+
+        const result = await rdsUtil.insertMessageInstruction(instructionObject);
         logger('Result of message instruction insertion:', result);
         logger('insert rec args:', insertRecordsStub.getCall(0).args);
-        logger('expected:', mockInsertRecordsArgs(mockInstructionId));
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-        expect(insertRecordsStub).to.have.been.calledOnceWithExactly(...mockInsertRecordsArgs(mockInstructionId));
+        expect(insertRecordsStub).to.have.been.calledOnceWithExactly(...mockInsertRecordsArgs);
     });
 
     it('should get message instruction', async () => {
-        selectQueryStub.withArgs(...mockSelectQueryArgs(instructionTable, '*', mockInstructionId, 'instruction_id')).returns([createPersistableInstruction(mockInstructionId)]);
+        const expectedQuery = `select * from ${instructionTable} where instruction_id = $1`;
+        selectQueryStub.withArgs(expectedQuery, [mockInstructionId]).returns([createPersistableInstruction(mockInstructionId)]);
         const expectedResult = createPersistableInstruction(mockInstructionId);
 
         const result = await rdsUtil.getMessageInstruction(mockInstructionId);
@@ -140,7 +117,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectQueryArgs(instructionTable, '*', mockInstructionId, 'instruction_id'));
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockInstructionId]);
     });
 
     it('should get message instructions that match specified audience and presentation type', async () => {
@@ -161,8 +138,13 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     });
 
     it('should update message instruction', async () => {
+        const mockUpdateRecordArgs = (instructionId) => [
+            `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning instruction_id, update_time`,
+            ['active', false, instructionId]
+        ];
+    
         updateRecordStub.withArgs(...mockUpdateRecordArgs(mockInstructionId)).returns({ rows: [ { insertion_id: 111, update_time: '2049-06-22T07:38:30.016Z' } ] });
-        const expectedResult = [ { insertion_id: 111, update_time: '2049-06-22T07:38:30.016Z' } ];
+        const expectedResult = [ { insertionId: 111, updateTime: '2049-06-22T07:38:30.016Z' } ];
 
         const result = await rdsUtil.updateMessageInstruction(mockInstructionId, 'active', false);
         logger('Result of message instruction update (deactivation):', result);
@@ -174,39 +156,52 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
     it('should get user ids', async () => {
         const mockSelectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
-<<<<<<< HEAD
-        selectQueryStub.withArgs(...mockSelectQueryArgs(accountTable, 'owner_user_id', mockClientId, 'client_id')).resolves([ 
-            { 'owner_user_id': mockAccoutId }, { 'owner_user_id': mockAccoutId }, { 'owner_user_id': mockAccoutId }
-        ]);
-        const expectedResult = [ mockAccoutId, mockAccoutId, mockAccoutId ];
-=======
         const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1`;
         selectQueryStub.withArgs(expectedQuery, [mockClientId]).resolves([{ 'account_id': mockAccoutId, 'owner_user_id': mockAccoutId }]);
-        // selectQueryStub.withArgs(...mockSelectQueryArgs(accountTable, 'account_id', mockClientId, 'client_id')).resolves([ 
-        //     { 'account_id': mockAccoutId }, { 'account_id': mockAccoutId }, { 'account_id': mockAccoutId }
-        // ]);
+
         const expectedResult = [ mockAccoutId ];
->>>>>>> wip-boosts-dev
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
         
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-<<<<<<< HEAD
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectQueryArgs(accountTable, 'owner_user_id', mockClientId, 'client_id'));
-=======
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId]);
-        // expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectQueryArgs(accountTable, 'account_id', mockClientId, 'client_id'));
->>>>>>> wip-boosts-dev
     });
 
-    // it('should get user ids where selection clause is random_sample:', async () => {
-    //     const mockSelectionInstruction = 'random_sample #{0.33} from #{{"client_id":"${mockClientId}"}}';
+    it('should get user ids where selection clause is random_sample', async () => {
+        const mockPercentage = '0.33';
+        const mockClientId = uuid();
+        const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
+        const mockSelectArgs = [
+            'select owner_user_id from account_data.core_account_ledger tablesample bernoulli ($1)',
+            [Number(mockPercentage.replace(/^0./, ''))]
+        ];
+        const mockSelectResult = [
+            { 'account_id': mockAccoutId, 'owner_user_id': mockAccoutId },
+            { 'account_id': mockAccoutId, 'owner_user_id': mockAccoutId },
+            { 'account_id': mockAccoutId, 'owner_user_id': mockAccoutId }
+        ];
+        selectQueryStub.withArgs(...mockSelectArgs).resolves(mockSelectResult);
 
-    //     const result = await rdsUtil.getUserIds(mockSelectionInstruction);
-    //     logger('got this back from user id extraction:', result);
-    // });
+        const expectedResult = [ mockAccoutId, mockAccoutId, mockAccoutId ];
+
+        const result = await rdsUtil.getUserIds(mockSelectionInstruction);
+        logger('got this back from user id extraction:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
+    });
+
+    it('should throw an error on invalid row percentage in radom sample selection instruction', async () => {
+        const mockClientId = uuid();
+        const mockPercentage = 'half';
+        const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
+
+        // find way to catch expected error
+        expect(await rdsUtil.getUserIds(mockSelectionInstruction)).to.throw(new Error('Invalid row percentage.'));
+    });
 
     it('should insert user messages', async () => {
         const mockCreationTime = moment().format();
@@ -224,16 +219,21 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             rows: mockRows
         };
         const insertionResult = [
-            [{ 'insertion_id': 99, 'creation_time': mockCreationTime },
-            { 'insertion_id': 100, 'creation_time': mockCreationTime }, { 'insertion_id': 101, 'creation_time': mockCreationTime }]
+            { 'insertion_id': 99, 'creation_time': mockCreationTime },
+            { 'insertion_id': 100, 'creation_time': mockCreationTime }, { 'insertion_id': 101, 'creation_time': mockCreationTime }
         ];
         multiTableStub.withArgs([mockInsertionArgs]).resolves(insertionResult);
+
+        const expectedResult = [
+            { 'insertionId': 99, 'creationTime': mockCreationTime },
+            { 'insertionId': 100, 'creationTime': mockCreationTime }, { 'insertionId': 101, 'creationTime': mockCreationTime }
+        ];
 
         const result = await rdsUtil.insertUserMessages(mockRows, rowObjectKeys);
         logger('Result of bulk user message insertion:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal(insertionResult);
+        expect(result).to.deep.equal(expectedResult);
         expect(multiTableStub).to.have.been.calledOnceWithExactly([mockInsertionArgs]);
     });
 });
@@ -250,22 +250,22 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
     });
 
     it('should persist push token', async () => {
-        const mockTokenObject = {
+        const mockPersistableToken = {
             userId: mockUserId,
             pushProvider: mockProvider,
             pushToken: mockPushToken
         };
 
         const mockInsertionArgs = [ 
-            `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(Object.keys(mockTokenObject))}) values %L returning insertion_id, creation_time`,
-            extractColumnTemplate(Object.keys(mockTokenObject)),
-            [ mockTokenObject ]
+            `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(Object.keys(mockPersistableToken))}) values %L returning insertion_id, creation_time`,
+            extractColumnTemplate(Object.keys(mockPersistableToken)),
+            [ mockPersistableToken ]
         ];
 
         insertRecordsStub.withArgs(...mockInsertionArgs).resolves({ rows: [{ insertion_id: 1, creation_time: mockCreationTime }] });
-        const expectedResult = [{ insertion_id: 1, creation_time: mockCreationTime }];
+        const expectedResult = [{ insertionId: 1, creationTime: mockCreationTime }];
 
-        const result = await rdsUtil.insertPushToken(mockTokenObject);
+        const result = await rdsUtil.insertPushToken(mockPersistableToken);
         logger('Result of push token insertion:', result);
 
         expect(result).to.exist;
@@ -283,15 +283,15 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
             active: true
         }];
         const mockSelectArgs = [
-            `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1`,
-            [ mockProvider ]
+            `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1 and user_id = $2`,
+            [ mockProvider, mockUserId ]
         ];
 
         selectQueryStub.withArgs(...mockSelectArgs).resolves(mockPersistedToken);
 
         const expectedResult = camelCaseKeys(mockPersistedToken[0]);
 
-        const result = await rdsUtil.getPushToken(mockProvider);
+        const result = await rdsUtil.getPushToken(mockProvider, mockUserId);
         logger('Result of push token extraction:', result);
 
         expect(result).to.exist;
@@ -313,7 +313,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
             rows: [ { insertion_id: 2, update_time: mockUpdateTime } ]
         });
 
-        const expectedResult = [ { insertion_id: 2, update_time: mockUpdateTime } ];
+        const expectedResult = [ { insertionId: 2, updateTime: mockUpdateTime } ];
 
         const result = await rdsUtil.deactivatePushToken(mockProvider);
         logger('Result of push token deactivation:', result);
@@ -325,13 +325,14 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
 
     it('should delete push token', async () => {
         
+        // observe during integration tests
         const mockDeleteRowArgs = [
             config.get('tables.pushTokenTable'),
-            [ 'push_provider'],
-            [ mockProvider ]
+            [ 'push_provider', 'user_id' ],
+            [ mockProvider, mockUserId ]
         ];
 
-        deleteRowStub.withArgs(...mockDeleteRowArgs).resolves({
+        deleteRowStub.resolves({
             command: 'DELETE',
             rowCount: 1,
             oid: null,
@@ -340,7 +341,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
 
         const expectedResult = [];
 
-        const result = await rdsUtil.deletePushToken(mockProvider);
+        const result = await rdsUtil.deletePushToken(mockProvider, mockUserId);
         logger('Result of push token deletion:', result);
 
         expect(result).to.exist;

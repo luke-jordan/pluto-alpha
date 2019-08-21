@@ -37,7 +37,7 @@ module.exports.insertMessageInstruction = async (persistableObject) => {
     const insertArray = [persistableObject];
     const databaseResponse = await rdsConnection.insertRecords(insertionQuery, insertionColumns, insertArray);
     logger('Instruction insertion db response:', databaseResponse);
-    return databaseResponse.rows;
+    return databaseResponse.rows.map((insertionResult) => camelCaseKeys(insertionResult));
 };
 
 /**
@@ -55,7 +55,7 @@ module.exports.insertUserMessages = async (rows, objectKeys) => {
 
     const insertionResult = await rdsConnection.largeMultiTableInsert([messageQueryDef]);
     logger('User messages insertion resulted in:', insertionResult);
-    return insertionResult;
+    return insertionResult.map((insertResult) => camelCaseKeys(insertResult));
 };
 
 /**
@@ -95,7 +95,7 @@ module.exports.updateMessageInstruction = async (instructionId, property, newVal
     const response = await rdsConnection.updateRecord(query, values);
     logger('Result of message instruction update:', response);
 
-    return response.rows;
+    return response.rows.map((insertionResult) => camelCaseKeys(insertionResult));
 };
 
 const validateAndExtractUniverse = (universeComponent) => {
@@ -159,10 +159,13 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'random_sample') {
         logger('We are selecting some random sample of a universe');
-        const samplePercentage = universeDefinition.replace(/^0./, '');
-        const selectionQuery = `select owner_user_id from ${accountsTable} tablesample ($1)`;
+        const samplePercentage = Number(universeDefinition.replace(/^0./, '')); // validate integer
+        if (isNaN(samplePercentage)) {
+            throw new Error('Invalid row percentage.');
+        }
+        const selectionQuery = `select owner_user_id from ${accountsTable} tablesample bernoulli ($1)`;
         const conditionValues = samplePercentage;
-        return [selectionQuery, conditionValues];
+        return [selectionQuery, [conditionValues]];
     } else if (selectionMethod === 'match_other') {
         logger('We are selecting so as to match another entity');
     }
@@ -177,10 +180,14 @@ const extractUserIds = async (selectionClause) => {
     const hasMethodParameters = clauseComponents[1] !== 'from';
     
     const selectionMethod = clauseComponents[0];
-    logger('selectionMethod:', selectionMethod);
-    const universeComponent = selectionClause.match(/#{.*}/g)[hasMethodParameters ? 1 : 0]; // edit
-    logger('universeCompnent:', universeComponent);
-    const universeDefinition = validateAndExtractUniverse(universeComponent);
+    const universeComponents = selectionClause.match(/#{{.*?}}|#{.*?}/g);
+    const universeComponent = universeComponents[hasMethodParameters ? 1 : 0];
+    let universeDefinition;
+    if (selectionMethod === 'random_sample') {
+        universeDefinition = universeComponents[0].replace(/#{|\}/g, '');
+    } else {
+        universeDefinition = validateAndExtractUniverse(universeComponent);
+    }
     
     const [selectionQuery, selectionValues] = assembleQueryClause(selectionMethod, universeDefinition);
     logger('Assembled selection clause: ', selectionQuery);
@@ -192,7 +199,6 @@ const extractUserIds = async (selectionClause) => {
     return queryResult.map((row) => row['owner_user_id']);
 };
 
-
 /**
  * This function accepts a selection instruction and returns an array of user ids.
  * @param {string} selectionInstruction see DSL documentation.
@@ -203,27 +209,6 @@ module.exports.getUserIds = async (selectionInstruction) => {
     return userIds;
 };
 
-
-module.exports.getPushToken = async (provider) => {
-    const query = `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1`;
-    const value = [provider];
-
-    const result = await rdsConnection.selectQuery(query, value);
-    logger('Got this back from user push token extraction:', result);
-
-    return camelCaseKeys(result[0]);
-};
-
-module.exports.deletePushToken = async (provider) => {
-    const columns = ['push_provider']
-    const value = [provider];
-
-    const result = await rdsConnection.deleteRow(config.get('tables.pushTokenTable'), columns, value);
-    logger('Push token deletion resulted in:', result);
-
-    return result.rows;
-};
-
 module.exports.insertPushToken = async (pushTokenObject) => {
     const objectKeys = Object.keys(pushTokenObject);
     const insertionQuery = `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(objectKeys)}) values %L returning insertion_id, creation_time`;
@@ -231,7 +216,17 @@ module.exports.insertPushToken = async (pushTokenObject) => {
     const insertArray = [pushTokenObject];
     const databaseResponse = await rdsConnection.insertRecords(insertionQuery, insertionColumns, insertArray);
     logger('Push token insertion resulted in:', databaseResponse);
-    return databaseResponse.rows;
+    return databaseResponse.rows.map((insertionResult) => camelCaseKeys(insertionResult));
+};
+
+module.exports.getPushToken = async (provider, userId) => {
+    const query = `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1 and user_id = $2`;
+    const value = [provider, userId];
+
+    const result = await rdsConnection.selectQuery(query, value);
+    logger('Got this back from user push token extraction:', result);
+
+    return camelCaseKeys(result[0]);
 };
 
 module.exports.deactivatePushToken = async (provider) => {
@@ -242,5 +237,15 @@ module.exports.deactivatePushToken = async (provider) => {
     const response = await rdsConnection.updateRecord(query, values);
     logger('Push token deactivation resulted in:', response);
 
-    return response.rows;
+    return response.rows.map((deactivationResult) => camelCaseKeys(deactivationResult));
+};
+
+module.exports.deletePushToken = async (provider, userId) => {
+    const columns = ['push_provider', 'user_id']
+    const values = [provider, userId];
+
+    const result = await rdsConnection.deleteRow(config.get('tables.pushTokenTable'), columns, values);
+    logger('Push token deletion resulted in:', result);
+
+    return result.rows.map((deletionResult) => camelCaseKeys(deletionResult));
 };

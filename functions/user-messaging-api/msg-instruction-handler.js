@@ -151,7 +151,7 @@ module.exports.deactivateMessageInstruction = async (event) => {
 };
 
 /**
- * This function accepts an instruction id and returns a message instruction from the database.
+ * This function accepts an instruction id and returns the associated message instruction from the database.
  * @param {string} instructionId The message instruction ID assigned during instruction creation.
  */
 module.exports.getMessageInstruction = async (event) => {

@@ -7,6 +7,12 @@ const rdsUtil = require('./persistence/rds.notifications');
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 
+
+/**
+ * doc
+ * @param {*} template 
+ * @param {*} requestDetails 
+ */
 const assembleTemplate = (template, requestDetails) => {
     switch (true) {
         case Object.keys(requestDetails).includes('parameters') && Object.keys(requestDetails.parameters).includes('boostAmount'):
@@ -63,6 +69,7 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
 };
 
 /**
+ * doc
  * Primary method. Takes an instruction and creates the relevant user messages.
  * @param {string} instructionId The instruction id assigned during instruction creation.
  */
@@ -95,7 +102,7 @@ module.exports.createUserMessages = async (event) => {
 };
 
 /**
- * 
+ * doc
  * @param {string} systemWideUserId The users system wide id.
  */
 module.exports.syncUserMessages = async (event) => {
@@ -132,7 +139,7 @@ module.exports.syncUserMessages = async (event) => {
 };
 
 /**
- * 
+ * doc
  * @param {string} provider
  * @param {string} token
  */
@@ -144,7 +151,7 @@ module.exports.insertPushToken = async (event) => {
         const pushToken = await rdsUtil.getPushToken(params.provider);
         logger('Got push token:', pushToken);
         if (pushToken) {
-            const deletionResult = await rdsUtil.deletePushToken(params.provider); // replace with new token?
+            const deletionResult = await rdsUtil.deletePushToken(params.provider);
             logger('Push token deletion resulted in:', deletionResult);
         }
         const newPushToken = { userId: params.userId, pushProvider: params.provider, pushToken: params.token };
@@ -160,6 +167,24 @@ module.exports.insertPushToken = async (event) => {
     }
 };
 
-// module.exports.deactivatePushToken = async (event) => {
-//     try { } catch (err) { }
-// };
+
+/**
+ * doc
+ * 
+ */
+module.exports.deletePushToken = async (event) => {
+    try {
+        // validate requestContext as above
+        const params = extractEventBody(event); // validate params
+        logger('Got event:', params);
+        const deletionResult = await rdsUtil.deletePushToken(params.provider);
+        logger('Push token deletion resulted in:', deletionResult);
+        return { result: 'SUCCESS', details: deletionResult };
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return {
+            result: 'ERROR',
+            details: err.message
+        };
+    }
+};
