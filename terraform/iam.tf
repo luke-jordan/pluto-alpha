@@ -88,3 +88,51 @@ resource "aws_iam_policy" "ops_sns_user_event_publish" {
 }
 EOF
 }
+
+resource "aws_iam_policy" "lambda_invoke_float_transfer_access" {
+    name = "warmup_lambda_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "WarmupLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.float_transfer.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "lambda_invoke_message_create_access" {
+    name = "warmup_lambda_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "WarmupLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.message_user_create.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}

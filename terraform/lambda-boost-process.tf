@@ -7,7 +7,7 @@ resource "aws_lambda_function" "boost_process" {
 
   function_name                  = "${var.boost_process_lambda_function_name}"
   role                           = "${aws_iam_role.boost_process_role.arn}"
-  handler                        = "boost-handler.createBoost"
+  handler                        = "boost-handler.processEvent"
   memory_size                    = 512
   runtime                        = "nodejs8.10"
   timeout                        = 900
@@ -91,6 +91,16 @@ resource "aws_iam_role_policy_attachment" "boost_process_vpc_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "boost_process_invoke_transfer_policy" {
+  role = "${aws_iam_role.boost_process_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_float_transfer_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "boost_process_invoke_message_create_policy" {
+  role = "${aws_iam_role.boost_process_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
+}
+
 resource "aws_iam_role_policy_attachment" "boost_process_user_event_publish_policy" {
   role = "${aws_iam_role.boost_process_role.name}"
   policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
@@ -100,6 +110,8 @@ resource "aws_iam_role_policy_attachment" "boost_process_secret_get" {
   role = "${aws_iam_role.boost_process_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
 }
+
+
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 

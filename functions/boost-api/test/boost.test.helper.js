@@ -40,7 +40,7 @@ module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
 
 module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
     FunctionName: functionName,
-    RequestType: async ? 'Event' : 'RequestResponse',
+    InvocationType: async ? 'Event' : 'RequestResponse',
     Payload: stringify(payload)
 });
 

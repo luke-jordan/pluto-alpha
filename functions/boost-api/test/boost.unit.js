@@ -202,7 +202,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 fromType: 'BONUS_POOL',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
-                relatedEntityType: 'BOOST_EVENT',
+                relatedEntityType: 'BOOST_REDEMPTION',
                 recipients: [
                     { recipientId: testReferredUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' },
                     { recipientId: testReferringUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
@@ -380,7 +380,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 floatId: mockBoostToFromPersistence.fromFloatId,
                 fromId: mockBoostToFromPersistence.fromBonusPoolId,
                 fromType: 'BONUS_POOL',
-                relatedEntityType: 'BOOST_EVENT',
+                relatedEntityType: 'BOOST_REDEMPTION',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
                 recipients: [

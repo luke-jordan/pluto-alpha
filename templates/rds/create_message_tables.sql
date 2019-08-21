@@ -15,7 +15,8 @@ create table if not exists message_data.message_instruction (
     last_processed_time timestamp with time zone not null,
     message_priority int not null,
     creation_time timestamp with time zone not null default current_timestamp,
-    update_time timestamp with time zone not null default current_timestamp,
+    updated_time timestamp with time zone not null default current_timestamp,
+    flags text[] default '{}'
     primary key (instruction_id)
 );
 
@@ -25,15 +26,19 @@ create trigger update_msg_instruction_modtime before update on message_data.mess
 
 create table if not exists message_data.user_message (
     message_id uuid not null,
+    creation_time timestamp with time zone not null default current_timestamp,
     destination_user_id uuid not null,
     instruction_id uuid not null,
-    user_message varchar not null,
+    user_message text not null,
     start_time timestamp with time zone not null,
     end_time timestamp with time zone not null,
     presentation_type varchar (100) not null,
     message_priority int not null,
-    creation_time timestamp with time zone not null default current_timestamp,
-    update_time timestamp with time zone not null default current_timestamp,
+    updated_time timestamp with time zone not null default current_timestamp,
+    processed_status varchar (100) not null,
+    deliveries_max integer not null default 1,
+    deliveries_done integer not null default 0,
+    flags text[] default '{}',
     primary key (message_id)
 );
 
