@@ -238,7 +238,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         // then we get the message instructions for each of the users, example within instruction:
         // message: `Congratulations! By signing up using your friend's referral code, you have earned a R10 boost to your savings`,
         // message: 'Congratulations! Busani Ndlovu has signed up to Jupiter using your referral code, earning you a R10 boost to your savings',
-        const triggerMessagesInvocation = testHelper.wrapLambdaInvoc('message_assemble', true, {
+        const triggerMessagesInvocation = testHelper.wrapLambdaInvoc('message_user_create', true, {
             instructions: [{
                 instructionId: testReferringMsgId,
                 destinationUserId: testOriginalUserId,
@@ -415,7 +415,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         // then we get the message instructions for each of the users, example within instruction:
         // message: 'Congratulations! We have boosted your savings by R10. Keep saving to keep earning more boosts!',
-        const triggerMessagesInvocation = testHelper.wrapLambdaInvoc('message_assemble', true, {
+        const triggerMessagesInvocation = testHelper.wrapLambdaInvoc('message_user_create', true, {
             instructions: [{
                 instructionId: testRedemptionMsgId,
                 destinationUserId: testUserId,
