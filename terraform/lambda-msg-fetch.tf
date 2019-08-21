@@ -7,15 +7,14 @@ resource "aws_lambda_function" "message_user_fetch" {
 
   function_name                  = "${var.message_user_fetch_function_name}"
   role                           = "${aws_iam_role.message_user_fetch_role.arn}"
-  handler                        = "balance-handler.balance"
+  handler                        = "message-picking-handler.getNextMessageForUser"
   memory_size                    = 512
-  reserved_concurrent_executions = 20
   runtime                        = "nodejs8.10"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
-  s3_key = "user_activity_api/${var.deploy_code_commit_hash}.zip"
+  s3_key = "user_messaging_api/${var.deploy_code_commit_hash}.zip"
 
   environment {
     variables = {

@@ -3,6 +3,8 @@
 const logger = require('debug')('jupiter:message:picker');
 const config = require('config');
 const moment = require('moment');
+const uuid = require('uuid');
+
 const util = require('util');
 
 const persistence = require('./persistence/rds.msgpicker');

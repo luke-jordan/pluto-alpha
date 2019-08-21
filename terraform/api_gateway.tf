@@ -290,7 +290,7 @@ resource "aws_api_gateway_resource" "message_fetch_wrapper" {
 resource "aws_api_gateway_method" "message_fetch_wrapper" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
   resource_id   = "${aws_api_gateway_resource.message_fetch_wrapper.id}"
-  http_method   = "POST"
+  http_method   = "GET"
   authorization = "CUSTOM"
   authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
 }
