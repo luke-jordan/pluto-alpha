@@ -90,7 +90,7 @@ EOF
 }
 
 resource "aws_iam_policy" "lambda_invoke_float_transfer_access" {
-    name = "warmup_lambda_invoke_access_${terraform.workspace}"
+    name = "lambda_float_transfer_invoke_access_${terraform.workspace}"
     path = "/"
 
     policy = <<EOF
@@ -114,7 +114,7 @@ EOF
 }
 
 resource "aws_iam_policy" "lambda_invoke_message_create_access" {
-    name = "warmup_lambda_invoke_access_${terraform.workspace}"
+    name = "lambda_message_user_create_invoke_access_${terraform.workspace}"
     path = "/"
 
     policy = <<EOF
