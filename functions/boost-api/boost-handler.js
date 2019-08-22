@@ -22,6 +22,26 @@ const handleError = (err) => {
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
 }
 
+// this one will be for API gateway, later
+module.exports.createBoostWrapper = async (event) => {
+    const userDetails = extractUserDetails(event);
+        logger('Event: ', event);
+        logger('User details: ', userDetails);
+        if (!userDetails) {
+            return { statusCode: status('Forbidden') };
+        }
+
+    const params = extractEventBody(event);
+    params.creatingUserId = userDetails.systemWideUserId;
+
+    const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
+    if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) === -1) {
+        return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
+    }
+
+    return exports.createBoost(params);
+};
+
 module.exports.createBoost = async (event) => {
     try {
         if (!event) {
@@ -29,18 +49,7 @@ module.exports.createBoost = async (event) => {
             return { statusCode: 400 };
         }
 
-        const userDetails = extractUserDetails(event);
-        logger('Event: ', event);
-        logger('User details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: status('Forbidden') };
-        }
-
-        const params = extractEventBody(event);
-        const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
-        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) === -1) {
-            return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
-        }
+        const params = event;
 
         // todo : extensive validation
         const boostType = params.boostTypeCategory.split('::')[0];
@@ -57,10 +66,10 @@ module.exports.createBoost = async (event) => {
 
         logger(`Boost start time: ${boostStartTime.format()} and end time: ${boostEndTime.format()}`);
         logger('Boost source: ', params.boostSource);
-        logger('Creating user: ', userDetails.systemWideUserId);
+        logger('Creating user: ', params.systemWideUserId);
         
         const instructionToRds = {
-            creatingUserId: userDetails.systemWideUserId,
+            creatingUserId: params.creatingUserId,
             boostType,
             boostCategory,
             boostStartTime,
