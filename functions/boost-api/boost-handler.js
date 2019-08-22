@@ -185,7 +185,7 @@ const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
         currency: boost.boostCurrency,
         unit: boost.boostUnit,
         identifier: boost.boostId,
-        relatedEntityType: 'BOOST_EVENT',
+        relatedEntityType: 'BOOST_REDEMPTION',
         recipients
     };
 };
@@ -193,7 +193,7 @@ const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
 const triggerFloatTransfers = async (transferInstructions) => {
     const lambdaInvocation = {
         FunctionName: config.get('lambdas.floatTransfer'),
-        RequestType: 'RequestResponse',
+        InvocationType: 'RequestResponse',
         Payload: stringify({ instructions: transferInstructions })
     };
 
@@ -278,7 +278,7 @@ const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
 
 const generateMessageSendInvocation = (messageInstructions) => ({
     FunctionName: config.get('lambdas.messageSend'),
-    RequestType: 'Event',
+    InvocationType: 'Event',
     Payload: stringify({ instructions: messageInstructions })
 });
 

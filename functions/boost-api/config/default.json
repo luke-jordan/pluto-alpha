@@ -23,6 +23,6 @@
     },
     "lambdas": {
         "floatTransfer": "float_transfer",
-        "messageSend": "message_assemble"
+        "messageSend": "message_user_create"
     }
 }

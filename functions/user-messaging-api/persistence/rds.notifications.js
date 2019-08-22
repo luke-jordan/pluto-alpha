@@ -209,6 +209,17 @@ module.exports.getUserIds = async (selectionInstruction) => {
     return userIds;
 };
 
+
+module.exports.getPushToken = async (provider, userId) => {
+    const query = `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1 and user_id = $2`;
+    const value = [provider, userId];
+
+    const result = await rdsConnection.selectQuery(query, value);
+    logger('Got this back from user push token extraction:', result);
+
+    return Array.isArray(result) && result.length > 0 ? camelCaseKeys(result[0]) : null;
+};
+
 module.exports.insertPushToken = async (pushTokenObject) => {
     const objectKeys = Object.keys(pushTokenObject);
     const insertionQuery = `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(objectKeys)}) values %L returning insertion_id, creation_time`;
@@ -229,10 +240,10 @@ module.exports.getPushToken = async (provider, userId) => {
     return camelCaseKeys(result[0]);
 };
 
-module.exports.deactivatePushToken = async (provider) => {
+module.exports.deactivatePushToken = async (provider, userId) => {
     logger('About to update push token.');
-    const query = `update ${config.get('tables.pushTokenTable')} set active = false where push_provider = $1 returning insertion_id, update_time`;
-    const values = [provider];
+    const query = `update ${config.get('tables.pushTokenTable')} set active = false where push_provider = $1 and user_id = $2 returning insertion_id, update_time`;
+    const values = [provider, userId];
 
     const response = await rdsConnection.updateRecord(query, values);
     logger('Push token deactivation resulted in:', response);

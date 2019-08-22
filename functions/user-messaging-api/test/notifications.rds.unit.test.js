@@ -12,7 +12,7 @@ const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const insertRecordsStub = sinon.stub();
 const updateRecordStub = sinon.stub();
@@ -262,8 +262,8 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
             [ mockPersistableToken ]
         ];
 
-        insertRecordsStub.withArgs(...mockInsertionArgs).resolves({ rows: [{ insertion_id: 1, creation_time: mockCreationTime }] });
-        const expectedResult = [{ insertionId: 1, creationTime: mockCreationTime }];
+        insertRecordsStub.withArgs(...mockInsertionArgs).resolves({ rows: [{ 'insertion_id': 1, 'creation_time': mockCreationTime }] });
+        const expectedResult = [{ 'insertion_id': 1, 'creation_time': mockCreationTime }];
 
         const result = await rdsUtil.insertPushToken(mockPersistableToken);
         logger('Result of push token insertion:', result);
@@ -275,13 +275,14 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
 
     it('should get push token', async () => {
         const mockPersistedToken = [{
-            insertion_id: 1,
-            creation_time: mockCreationTime,
-            user_id: mockUserId,
-            push_provider: mockProvider,
-            push_token: mockPushToken,
-            active: true
+            'insertion_id': 1,
+            'creation_time': mockCreationTime,
+            'user_id': mockUserId,
+            'push_provider': mockProvider,
+            'push_token': mockPushToken,
+            'active': true
         }];
+
         const mockSelectArgs = [
             `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1 and user_id = $2`,
             [ mockProvider, mockUserId ]
@@ -293,7 +294,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
 
         const result = await rdsUtil.getPushToken(mockProvider, mockUserId);
         logger('Result of push token extraction:', result);
-
+        
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
@@ -302,8 +303,8 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
     it('should deactivate push token', async () => {
         
         const mockUpdateArgs = [
-            `update ${config.get('tables.pushTokenTable')} set active = false where push_provider = $1 returning insertion_id, update_time`,
-            [ mockProvider ]
+            `update ${config.get('tables.pushTokenTable')} set active = false where push_provider = $1 and user_id = $2 returning insertion_id, update_time`,
+            [ mockProvider, mockUserId ]
         ];
 
         updateRecordStub.withArgs(...mockUpdateArgs).resolves({
@@ -315,7 +316,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
 
         const expectedResult = [ { insertionId: 2, updateTime: mockUpdateTime } ];
 
-        const result = await rdsUtil.deactivatePushToken(mockProvider);
+        const result = await rdsUtil.deactivatePushToken(mockProvider, mockUserId);
         logger('Result of push token deactivation:', result);
 
         expect(result).to.exist;

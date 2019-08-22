@@ -7,14 +7,14 @@ resource "aws_lambda_function" "float_transfer" {
 
   function_name                  = "${var.float_transfer_lambda_function_name}"
   role                           = "${aws_iam_role.float_transfer_role.arn}"
-  handler                        = "index.handler"
+  handler                        = "transfer-handler.floatTransfer"
   memory_size                    = 256
   runtime                        = "nodejs8.10"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
-  s3_key = "${var.float_transfer_lambda_function_name}/${var.deploy_code_commit_hash}.zip"
+  s3_key = "float_api/${var.deploy_code_commit_hash}.zip"
 
   environment {
     variables = {
@@ -89,6 +89,11 @@ resource "aws_iam_role_policy_attachment" "float_transfer_basic_execution_policy
 resource "aws_iam_role_policy_attachment" "float_transfer_vpc_execution_policy" {
   role = "${aws_iam_role.float_transfer_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "float_transfer_secret_get" {
+  role = "${aws_iam_role.float_transfer_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_float_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

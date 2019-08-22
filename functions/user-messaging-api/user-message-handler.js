@@ -47,10 +47,16 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
     const userIds = destinationUserId ? [ destinationUserId ] : await rdsUtil.getUserIds(selectionInstruction);
     logger(`Got ${userIds.length} user id(s)`);
     // logger('Assembler recieved destination id:', destinationUserId);
+    if (!Array.isArray(userIds) || userIds.length === 0) {
+        logger('No users match this selection criteria, exiting');
+        return [];
+    }
+
     const rows = [];
     const templates = typeof instruction.templates === 'string' ? JSON.parse(instruction.templates) : instruction.templates;
     const template = templates.otherTemplates ? templates.otherTemplates : templates.default;
     const userMessage = assembleTemplate(template, instruction.requestDetails); // to become a generic way of formatting variables into template.
+    
     for (let i = 0; i < userIds.length; i++) {
         rows.push({
             messageId: uuid(),
@@ -60,10 +66,10 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
             startTime: instruction.startTime,
             endTime: instruction.endTime,
             presentationType: instruction.presentationType,
-            // presentationInstruction: null, // possible property for instructions to be executed before message display
             messagePriority: instruction.messagePriority
         });
     }
+    
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
     return rows;
 };
@@ -81,7 +87,12 @@ module.exports.createUserMessages = async (event) => {
         const instruction = await rdsUtil.getMessageInstruction(instructionId);
         logger('Result of instruction extraction:', instruction);
         instruction.requestDetails = params;
-        const rows = await assembleUserMessages(instruction);
+        const rows = await assembleUserMessages(instruction, params.destinationUserId);
+        if (!rows || rows.length === 0) {
+            logger('No user messages generated, exiting');
+            return { statusCode: 200, body: JSON.stringify({ result: 'NO_USERS' })};
+        }
+
         const rowKeys = Object.keys(rows[0]);
         logger('Got keys:', rowKeys);
         const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
@@ -146,18 +157,24 @@ module.exports.syncUserMessages = async (event) => {
 module.exports.insertPushToken = async (event) => {
     try {
         // add request context validation ensuring that the user id in context matches the event provider.
+        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        logger('User details: ', userDetails);
+        if (!userDetails) {
+            return { statusCode: 403 }
+        };
+
         const params = extractEventBody(event); // validate params
         logger('Got event:', params);
-        const pushToken = await rdsUtil.getPushToken(params.provider);
+        const pushToken = await rdsUtil.getPushToken(params.provider, userDetails.systemWideUserId);
         logger('Got push token:', pushToken);
         if (pushToken) {
-            const deletionResult = await rdsUtil.deletePushToken(params.provider);
+            const deletionResult = await rdsUtil.deletePushToken(params.provider, userDetails.systemWideUserId); // replace with new token?
             logger('Push token deletion resulted in:', deletionResult);
         }
-        const newPushToken = { userId: params.userId, pushProvider: params.provider, pushToken: params.token };
+        const newPushToken = { userId: userDetails.systemWideUserId, pushProvider: params.provider, pushToken: params.token };
+        logger('Sending to RDS: ', newPushToken);
         const insertionResult = await rdsUtil.insertPushToken(newPushToken);
-        return { result: 'SUCCESS', details: insertionResult };
-
+        return { statusCode: 200, body: JSON.stringify(insertionResult[0]) };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return {

@@ -10,7 +10,7 @@ const testHelper = require('./test.helper');
 const chai = require('chai');
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 

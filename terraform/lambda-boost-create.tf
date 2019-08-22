@@ -91,11 +91,6 @@ resource "aws_iam_role_policy_attachment" "boost_create_vpc_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_create_user_event_publish_policy" {
-  role = "${aws_iam_role.boost_create_role.name}"
-  policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
-}
-
 resource "aws_iam_role_policy_attachment" "boost_create_secret_get" {
   role = "${aws_iam_role.boost_create_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"

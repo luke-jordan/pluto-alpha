@@ -7,7 +7,7 @@ const logger = require('debug')('jupiter:save:test');
 const chai = require('chai');
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 
@@ -44,6 +44,8 @@ const findFloatStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
 const updateSaveRdsStub = sinon.stub();
 
+const publishStub = sinon.stub();
+
 const momentStub = sinon.stub();
 
 const handler = proxyquire('../saving-handler', {
@@ -51,8 +53,10 @@ const handler = proxyquire('../saving-handler', {
         'findMatchingTransaction': findMatchingTxStub,
         'findClientAndFloatForAccount': findFloatStub, 
         'addSavingToTransactions': addSavingsRdsStub,
-        'updateSaveTxToSettled': updateSaveRdsStub,
-        '@noCallThru': true
+        'updateSaveTxToSettled': updateSaveRdsStub
+    },
+    'publish-common': {
+        'publishUserEvent': publishStub
     },
     'moment-timezone': momentStub
 });
