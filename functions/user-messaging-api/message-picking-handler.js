@@ -3,7 +3,6 @@
 const logger = require('debug')('jupiter:message:picker');
 const config = require('config');
 const moment = require('moment');
-const uuid = require('uuid');
 
 const util = require('util');
 
@@ -117,79 +116,121 @@ const fillInTemplate = async (template, destinationUserId) => {
     return completedTemplate;
 };
 
-module.exports.fetchAndFillInNextMessage = async (destinationUserId) => {
-    const retrievedMessage = await persistence.getNextMessage({ destinationUserId });
-    logger('Retrieved message from persistence: ', retrievedMessage);
-    const completedMessage = await fillInTemplate(retrievedMessage.template, retrievedMessage.destinationUserId);
-    logger('Completed message construction: ', completedMessage);
-    return { messageBody: completedMessage, messageDetails: retrievedMessage };
+const assembleMessage = async (msgDetails) => {
+    const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
+    const displayDetails = { type: msgDetails.displayType, ...msgDetails.displayInstructions };
+    const messageBase = {
+        messageId: msgDetails.messageId,
+        title: msgDetails.messageTitle,
+        body: completedMessageBody,
+        priority: msgDetails.messagePriority,
+        display: displayDetails,
+        hasFollowingMsg: msgDetails.hasFollowingMsg
+    };
+    
+    let actionContextForReturn = { };
+    if (msgDetails.actionContext) {
+        messageBase.actionToTake = msgDetails.actionContext.actionToTake;
+        messageBase.triggerBalanceFetch = msgDetails.actionContext.triggerBalanceFetch;
+        const strippedContext = JSON.parse(JSON.stringify(msgDetails.actionContext));
+        Reflect.deleteProperty(strippedContext, 'actionToTake');
+        Reflect.deleteProperty(strippedContext, 'triggerBalanceFetch');
+        actionContextForReturn = { ...actionContextForReturn, ...strippedContext };   
+    }
+    
+    if (msgDetails.followingMessages) {
+        actionContextForReturn = { ... actionContextForReturn, ...msgDetails.followingMessages };
+    }
+
+    if (!msgDetails.followsPriorMsg) {
+        actionContextForReturn = { ...actionContextForReturn, sequenceExpiryTimeMillis: msgDetails.endTime.valueOf() };
+    }
+
+    messageBase.actionContext = actionContextForReturn;
+    return messageBase;
+};
+
+const fetchMsgSequenceIds = (anchorMessage, retrievedMessages) => {
+    // logger('Fetching sequence IDs from anchor: ', anchorMessage);
+    if (!anchorMessage) {
+        return [];
+    }
+
+    let thisAndFollowingIds = [anchorMessage.messageId];
+    if (!anchorMessage.hasFollowingMsg || typeof anchorMessage.followingMessages !== 'object') {
+        return thisAndFollowingIds;
+    }
+
+    Object.values(anchorMessage.followingMessages).forEach((msgId) => {
+        const msgWithId = retrievedMessages.find((msg) => msg.messageId === msgId);
+        thisAndFollowingIds = thisAndFollowingIds.concat(fetchMsgSequenceIds(msgWithId, retrievedMessages));
+    });
+
+    return thisAndFollowingIds;
+};
+
+const assembleSequence = async (anchorMessage, retrievedMessages) => {
+    const sequenceIds = fetchMsgSequenceIds(anchorMessage, retrievedMessages);
+    logger('Retrieved sequence IDs: ', sequenceIds);
+    // this is a slightly inefficient double iteration, but it's in memory and the lists are going to be very small
+    // in almost all cases, never more than a few messages (active/non-expired filter means only a handful at a time)
+    // monitor and if that becomes untrue, then ajust, e.g., go to persistence or cache to extract IDs
+    const sequenceMsgDetails = sequenceIds.map((msgId) => retrievedMessages.find((msg) => msg.messageId === msgId));
+    return await Promise.all(sequenceMsgDetails.map((messageDetails) => assembleMessage(messageDetails)));
+};
+
+const determineAnchorMsg = (openingMessages) => {
+    // if there is only one, then it is trivial
+    if (openingMessages.length === 1) {
+        return openingMessages[0];
+    }
+
+    // then, find the highest priority, using neat trick: https://stackoverflow.com/questions/4020796/finding-the-max-value-of-an-attribute-in-an-array-of-objects
+    const highestPriorityAmongOpening = Math.max.apply(Math, openingMessages.map((msg) => msg.messagePriority));
+    logger('Highest priority among current messages: ', highestPriorityAmongOpening);
+
+    const messagesWithHighestPriority = openingMessages.filter((msg) => msg.messagePriority === highestPriorityAmongOpening);
+    // again, if only one left, return it
+    if (messagesWithHighestPriority.length === 1) {
+        return messagesWithHighestPriority[0];
+    }
+
+    // otherwise, return the oldest one. note: any expired ones, or max read ones, are removed during RDS selection.
+    // second note: adopting FIFO here because: (1) makes this deterministic on subsequent calls, (2) coin toss between principle of show
+    // user the latest thing, and show user the oldest thing, which may have the earliest deadline. Could also use earliest deadline.
+    // can adjust this in the future depending. Implemented by compare function: (a, b) => a - b puts a first if it is less than b.
+    messagesWithHighestPriority.sort((msg1, msg2) => msg1.startTime.valueOf() - msg2.startTime.valueOf()); 
+
+    return messagesWithHighestPriority[0];
+};
+
+module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowFromMsgId = null) => {
+    logger('Initiating message retrieval');
+    const retrievedMessages = await persistence.getNextMessage(destinationUserId);
+    // first, check it's not empty. if so, return empty.
+    if (!Array.isArray(retrievedMessages) || retrievedMessages.length === 0) {
+        return [];
+    }
+
+    // second, select only the messages that do not depend on prior ones (i.e., that anchor chains)
+    const openingMessages = retrievedMessages.filter((msg) => !msg.followsPriorMsg);
+
+    // third, either just continue with the prior one, or find whatever should be the anchor
+    let anchorMessage = null;
+    if (withinFlowFromMsgId) {
+        flowMessage = openingMessages.find((msg) => msg.messageId = withinFlowFromMsgId);
+        anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage; 
+    } else {
+        anchorMessage = determineAnchorMsg(openingMessages);
+    }
+
+    const assembledMessages = await assembleSequence(anchorMessage, retrievedMessages);
+    logger('Message retrieval complete');
+    return assembledMessages;
 };
 
 // For now, for mobile test
-const dryRunGameResponseOpening = () => {
-    const boostId = uuid();
-    const msgIds = [uuid(), uuid(), uuid(), uuid()];
-
-    return {
-        messagesToDisplay: [{
-            msgId: msgIds[0],
-            title: 'Win big with the next boost challenge',
-            body: 'Top-up with R20.00 to unlock this boost challenge. Once unlocked, you will stand a chance to win R20.00 after completing a fun challenge!',
-            priority: 100,
-            type: 'CARD',
-            triggerBalanceFetch: false,
-            actionToTake: 'ADD_CASH',
-            actionContext: {
-                boostId,
-                msgOnSuccess: msgIds[1],
-                sequenceExpiryTimeMillis: moment().add(10, 'minutes').valueOf()
-            }
-        }, {
-            msgId: msgIds[1],
-            title: 'Boost Challenge Unlocked!',
-            body: 'Your top up was successful and you now stand a chance to win R20.00. Follow the instructions below to play the game:',
-            priority: 100,
-            type: 'MODAL',
-            triggerBalanceFetch: false,
-            actionToTake: 'PLAY_GAME',
-            actionContext: {
-                boostId,
-                gameType: 'TAP_SCREEN',
-                gameParams: {
-                    timeLimitSeconds: '20',
-                    instructionBand: 'Tap the screen as many times as you can in 20 seconds',
-                    waitMessage: msgIds[2],
-                    finishedMessage: msgIds[3]
-                }
-            }
-        }, {
-            msgId: msgIds[2],
-            title: 'Boost challenge unlocked!',
-            body: 'You’ve unlocked this challenge and stand a chance of winning R20.00, which will be added to your savings. Challenge will remain open until the end of the day.',
-            priority: 100,
-            type: 'CARD',
-            actionToTake: 'PLAY_GAME',
-            actionContext: {
-                boostId,
-                gameType: 'TAP_SCREEN',
-                gameParams: {
-                    openingMsg: msgIds[1]
-                }
-            },
-        }, {
-            msgId: msgIds[3],
-            title: 'Nice Work!',
-            body: 'You tapped #{numberUserTaps} in 20 seconds! Winners of the challenge will be notified later today. Good luck!',
-            priority: 100,
-            type: 'MODAL',
-            actionToTake: 'DONE',
-            actionContext: {
-                boostId,
-                checkOnDismissal: true
-            }
-        }]
-    };
-}
+const dryRunGameResponseOpening = require('./dry-run-messages');
 
 /**
  * Wrapper for the above, based on token
@@ -202,13 +243,16 @@ module.exports.getNextMessageForUser = async (event) => {
         };
 
         if (event.queryStringParameters && event.queryStringParameters.gameDryRun) {
-            return { statusCode: 200, body: JSON.stringify(dryRunGameResponseOpening())}
+            return { statusCode: 200, body: JSON.stringify(dryRunGameResponseOpening)}
         }
 
-        const userMessage = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId);
-        logger('Retrieved user message: ', userMessage);
+        const userMessages = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId);
+        logger('Retrieved user messages: ', userMessages);
+        const resultBody = {
+            messagesToDisplay: userMessages
+        };
 
-        return { statusCode: 200, body: JSON.stringify(userMessage) };
+        return { statusCode: 200, body: JSON.stringify(resultBody) };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500, body: JSON.stringify(err.message) };
