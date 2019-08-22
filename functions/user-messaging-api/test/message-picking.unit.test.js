@@ -64,4 +64,4 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY ****', () => {
         expect(dryRunMessages).to.exist;
     });
 
-})
+});

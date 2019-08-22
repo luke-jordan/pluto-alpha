@@ -62,7 +62,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         mockEvent.presentationType = 'ONCE_OFF';
         mockEvent.audienceType = 'ALL_USERS';
         mockEvent.defaultTemplate = config.get('instruction.templates.default');
-        mockEvent.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`
+        mockEvent.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
     };
 
     const mockPersistableObject = (mockInstruction) => ({

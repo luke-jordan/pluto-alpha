@@ -20,5 +20,5 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     logger('User ID: ', systemWideUserId);
     const operationParams = operation.split('::');
     logger('Params for operation: ', operationParams);
-    return { amount: 100, currency: 'USD', unit: 'WHOLE_CURRENCY' }
+    return { amount: 100, currency: 'USD', unit: 'WHOLE_CURRENCY' };
 };

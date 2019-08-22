@@ -24,7 +24,7 @@ const UNIT_DIVISORS = {
     'HUNDREDTH_CENT': 100 * 100,
     'WHOLE_CENT': 100,
     'WHOLE_CURRENCY': 1 
-}
+};
 
 const getSubParamOrDefault = (paramSplit, defaultValue) => paramSplit.length > 1 ? paramSplit[1] : defaultValue;
 
@@ -39,7 +39,7 @@ const formatAmountResult = (amountResult) => {
     
     const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
     return numberFormat.format(wholeCurrencyAmount);
-}
+};
 
 const fetchUserName = async (systemWideUserId, firstNameOnly = true) => {
     const profileFetch = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId }, ['personal_name', 'family_name']);
@@ -102,7 +102,7 @@ const retrieveParamValue = async (param, destinationUserId) => {
         return fetchCurrentBalance(destinationUserId, defaultCurrency);
     }
     return '';
-}
+};
 
 const fillInTemplate = async (template, destinationUserId) => {
     logger('Filling in: ', template);
@@ -189,7 +189,7 @@ const dryRunGameResponseOpening = () => {
             }
         }]
     };
-}
+};
 
 /**
  * Wrapper for the above, based on token
@@ -198,11 +198,11 @@ module.exports.getNextMessageForUser = async (event) => {
     try {
         const userDetails = event.requestContext ? event.requestContext.authorizer : null;
         if (!userDetails) {
-            return { statusCode: 403 }
-        };
+            return { statusCode: 403 };
+        }
 
         if (event.queryStringParameters && event.queryStringParameters.gameDryRun) {
-            return { statusCode: 200, body: JSON.stringify(dryRunGameResponseOpening())}
+            return { statusCode: 200, body: JSON.stringify(dryRunGameResponseOpening()) };
         }
 
         const userMessage = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId);
@@ -213,4 +213,4 @@ module.exports.getNextMessageForUser = async (event) => {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500, body: JSON.stringify(err.message) };
     }
-}
+};

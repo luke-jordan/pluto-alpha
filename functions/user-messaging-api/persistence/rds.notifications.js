@@ -132,7 +132,7 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
-}
+};
 
 // const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
 
@@ -159,7 +159,7 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'random_sample') {
         logger('We are selecting some random sample of a universe');
-        const samplePercentage = Number(universeDefinition.replace(/^0./, '')); // validate integer
+        const samplePercentage = Number(universeDefinition.replace(/^0./, ''));
         if (isNaN(samplePercentage)) {
             throw new Error('Invalid row percentage.');
         }
@@ -182,7 +182,7 @@ const extractUserIds = async (selectionClause) => {
     const selectionMethod = clauseComponents[0];
     const universeComponents = selectionClause.match(/#{{.*?}}|#{.*?}/g);
     const universeComponent = universeComponents[hasMethodParameters ? 1 : 0];
-    let universeDefinition;
+    let universeDefinition = '';
     if (selectionMethod === 'random_sample') {
         universeDefinition = universeComponents[0].replace(/#{|\}/g, '');
     } else {
@@ -209,17 +209,6 @@ module.exports.getUserIds = async (selectionInstruction) => {
     return userIds;
 };
 
-
-module.exports.getPushToken = async (provider, userId) => {
-    const query = `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1 and user_id = $2`;
-    const value = [provider, userId];
-
-    const result = await rdsConnection.selectQuery(query, value);
-    logger('Got this back from user push token extraction:', result);
-
-    return Array.isArray(result) && result.length > 0 ? camelCaseKeys(result[0]) : null;
-};
-
 module.exports.insertPushToken = async (pushTokenObject) => {
     const objectKeys = Object.keys(pushTokenObject);
     const insertionQuery = `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(objectKeys)}) values %L returning insertion_id, creation_time`;
@@ -237,7 +226,7 @@ module.exports.getPushToken = async (provider, userId) => {
     const result = await rdsConnection.selectQuery(query, value);
     logger('Got this back from user push token extraction:', result);
 
-    return camelCaseKeys(result[0]);
+    return Array.isArray(result) && result.length > 0 ? camelCaseKeys(result[0]) : null;
 };
 
 module.exports.deactivatePushToken = async (provider, userId) => {
@@ -252,11 +241,11 @@ module.exports.deactivatePushToken = async (provider, userId) => {
 };
 
 module.exports.deletePushToken = async (provider, userId) => {
-    const columns = ['push_provider', 'user_id']
+    const columns = ['push_provider', 'user_id'];
     const values = [provider, userId];
 
     const result = await rdsConnection.deleteRow(config.get('tables.pushTokenTable'), columns, values);
     logger('Push token deletion resulted in:', result);
 
-    return result.rows.map((deletionResult) => camelCaseKeys(deletionResult));
+    return result.rows;
 };

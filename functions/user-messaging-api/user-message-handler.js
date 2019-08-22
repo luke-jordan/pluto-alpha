@@ -6,12 +6,13 @@ const util = require('util');
 const rdsUtil = require('./persistence/rds.notifications');
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-
+const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
 
 /**
- * doc
- * @param {*} template 
- * @param {*} requestDetails 
+ * This function assembles the selected template and inserts relevent data where required.
+ * @param {*} template The selected template.
+ * @param {*} requestDetails Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated are executed.
+ * With regards to boost amount it is extracted from request parameters and inserted into the boost template.
  */
 const assembleTemplate = (template, requestDetails) => {
     switch (true) {
@@ -20,7 +21,7 @@ const assembleTemplate = (template, requestDetails) => {
             return util.format(template, requestDetails.parameters.boostAmount);
         default:
             return template;
-    };
+    }
 };
 
 /**
@@ -75,9 +76,13 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
 };
 
 /**
- * doc
- * Primary method. Takes an instruction and creates the relevant user messages.
+ * This function accepts an instruction id, retrieves the associated instruction from persistence, assembles the user message, and finally
+ * persists the assembled user message to RDS. The minimum required parameter that must be passed to this function is the instruction. Without
+ * it the sun does not shine. Other properties may be included in the parameters, such as destinationId
  * @param {string} instructionId The instruction id assigned during instruction creation.
+ * @param {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's selectionInstruction property.
+ * @param {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.
+ * @param {boolean} triggerBalanceFetch Required on boost message assembly. Indicates whether to include the users new balance in the boost message.
  */
 module.exports.createUserMessages = async (event) => {
     try {
@@ -113,7 +118,9 @@ module.exports.createUserMessages = async (event) => {
 };
 
 /**
- * doc
+ * This function accepts a system wide user id. It then retrieves all recurring messages targeted at all users and includes the recieved
+ * user id in the table of reciepients. This function essentially includes a new user into the loop, or the system wide 'mailing list'.
+ * After running this function, the user should be able to recieve system wide recurring messages like everyone else.
  * @param {string} systemWideUserId The users system wide id.
  */
 module.exports.syncUserMessages = async (event) => {
@@ -126,7 +133,7 @@ module.exports.syncUserMessages = async (event) => {
         let rows = [];
         for (let i = 0; i < instructions.length; i++) {
             instructions[i].requestDetails = params;
-            let result = await assembleUserMessages(instructions[i], systemWideUserId)
+            const result = await assembleUserMessages(instructions[i], systemWideUserId);
             rows = [...rows, ...result];
         }
         logger('Assembled user messages:', rows);
@@ -150,21 +157,28 @@ module.exports.syncUserMessages = async (event) => {
 };
 
 /**
- * doc
- * @param {string} provider
- * @param {string} token
+ * This function inserts a push token object into RDS. It requires that the user calling this function also owns the token.
+ * An evaluation of the requestContext is run prior to token manipulation. If request context evaluation fails access is forbidden.
+ * Non standared propertied are ignored during the assembly of the persistable token object.
+ * @param {string} userId The push tokens owner.
+ * @param {string} provider The push tokens provider.
+ * @param {string} token The push token.
  */
 module.exports.insertPushToken = async (event) => {
     try {
-        // add request context validation ensuring that the user id in context matches the event provider.
         const userDetails = event.requestContext ? event.requestContext.authorizer : null;
         logger('User details: ', userDetails);
         if (!userDetails) {
-            return { statusCode: 403 }
-        };
+            return { statusCode: 403 };
+        }
 
-        const params = extractEventBody(event); // validate params
+        const params = extractEventBody(event);
         logger('Got event:', params);
+        // uncomment if needed. along with tests. 
+        // if (userDetails.systemWideUserId !== params.userId) {
+        //     return { statusCode: 403 };
+        // }
+
         const pushToken = await rdsUtil.getPushToken(params.provider, userDetails.systemWideUserId);
         logger('Got push token:', pushToken);
         if (pushToken) {
@@ -184,24 +198,42 @@ module.exports.insertPushToken = async (event) => {
     }
 };
 
-
 /**
- * doc
- * 
+ * This function accepts a token provider and its owners user id. It then searches for the associated persisted token object and deletes it from the 
+ * database. As during insertion, only the tokens owner can execute this action. This is implemented through request context evaluation, where the userId
+ * found within the requestContext object must much the value of the tokens owner user id.
+ * @param {string} userId The tokens owner user id.
+ * @param {string} provider The tokens provider.
  */
 module.exports.deletePushToken = async (event) => {
     try {
-        // validate requestContext as above
-        const params = extractEventBody(event); // validate params
-        logger('Got event:', params);
-        const deletionResult = await rdsUtil.deletePushToken(params.provider);
+        const userDetails = extractUserDetails(event);
+        logger('Event: ', event);
+        logger('User details: ', userDetails);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+        const params = extractEventBody(event);
+        if (userDetails.systemWideUserId !== params.userId) {
+            return { statusCode: 403 };
+        }
+        const deletionResult = await rdsUtil.deletePushToken(params.provider, params.userId);
         logger('Push token deletion resulted in:', deletionResult);
-        return { result: 'SUCCESS', details: deletionResult };
+        return {
+            statusCode: 200,
+            body: JSON.stringify({
+                result: 'SUCCESS',
+                details: deletionResult
+            })
+        };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return {
-            result: 'ERROR',
-            details: err.message
+            statusCode: 500,
+            body: JSON.stringify({
+                result: 'ERROR',
+                details: err.message
+            })
         };
     }
 };

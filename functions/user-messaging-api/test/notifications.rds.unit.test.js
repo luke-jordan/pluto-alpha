@@ -52,10 +52,7 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ..
 
 
 describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
-    const mockInstructionId = uuid();
-    const mockClientId = uuid();
     const mockBoostId = uuid();
-    const mockAccoutId = uuid();
 
     const instructionTable = config.get('tables.messageInstructionTable');
     const accountTable = config.get('tables.accountLedger');
@@ -84,6 +81,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     });
 
     it('should insert message instruction', async () => {
+        const mockInstructionId = uuid();
    
         const instructionObject = createPersistableInstruction(mockInstructionId);
         const instructionKeys = Object.keys(instructionObject);
@@ -108,6 +106,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     });
 
     it('should get message instruction', async () => {
+        const mockInstructionId = uuid();
         const expectedQuery = `select * from ${instructionTable} where instruction_id = $1`;
         selectQueryStub.withArgs(expectedQuery, [mockInstructionId]).returns([createPersistableInstruction(mockInstructionId)]);
         const expectedResult = createPersistableInstruction(mockInstructionId);
@@ -121,6 +120,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     });
 
     it('should get message instructions that match specified audience and presentation type', async () => {
+        const mockInstructionId = uuid();
         const mockInstruction = createPersistableInstruction(mockInstructionId);
         const mockSelectArgs = [
             `select * from ${config.get('tables.messageInstructionTable')} where audience_type = $1 and presentation_type = $2 and active = true`,
@@ -138,6 +138,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     });
 
     it('should update message instruction', async () => {
+        const mockInstructionId = uuid();
         const mockUpdateRecordArgs = (instructionId) => [
             `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning instruction_id, update_time`,
             ['active', false, instructionId]
@@ -155,6 +156,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     });
 
     it('should get user ids', async () => {
+        const mockClientId = uuid();
+        const mockAccoutId = uuid();
         const mockSelectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
         const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1`;
         selectQueryStub.withArgs(expectedQuery, [mockClientId]).resolves([{ 'account_id': mockAccoutId, 'owner_user_id': mockAccoutId }]);
@@ -172,6 +175,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     it('should get user ids where selection clause is random_sample', async () => {
         const mockPercentage = '0.33';
         const mockClientId = uuid();
+        const mockAccoutId = uuid();
         const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
         const mockSelectArgs = [
             'select owner_user_id from account_data.core_account_ledger tablesample bernoulli ($1)',
@@ -204,6 +208,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     });
 
     it('should insert user messages', async () => {
+        const mockAccoutId = uuid();
+        const mockInstructionId = uuid();
         const mockCreationTime = moment().format();
         const row = {
             destinationUserId: mockAccoutId,
@@ -263,7 +269,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
         ];
 
         insertRecordsStub.withArgs(...mockInsertionArgs).resolves({ rows: [{ 'insertion_id': 1, 'creation_time': mockCreationTime }] });
-        const expectedResult = [{ 'insertion_id': 1, 'creation_time': mockCreationTime }];
+        const expectedResult = [{ 'insertionId': 1, 'creationTime': mockCreationTime }];
 
         const result = await rdsUtil.insertPushToken(mockPersistableToken);
         logger('Result of push token insertion:', result);
