@@ -1,0 +1,78 @@
+{
+    "messagesToDisplay": [
+        {
+            "messageId": "eb105f23-28fb-411d-8e3c-ddd98da197b2",
+            "title": "Win big with the next boost challenge",
+            "body": "Top-up with R20.00 to unlock this boost challenge. Once unlocked, you will stand a chance to win R20.00 after completing a fun challenge!",
+            "priority": 100,
+            "display": {
+                "type": "CARD",
+                "titleType": "EMPHASIS",
+                "iconType": "BOOST_ROCKET"
+            },
+            "triggerBalanceFetch": false,
+            "actionToTake": "ADD_CASH",
+            "actionContext": {
+                "boostId": "6876dd73-516e-44d4-a59c-60258f29c9c8",
+                "msgOnSuccess": "b477c950-fd65-441f-8328-7a80a9bb80d9",
+                "sequenceExpiryTimeMillis": 1566502332908
+            }
+        },
+        {
+            "messageId": "b477c950-fd65-441f-8328-7a80a9bb80d9",
+            "title": "Boost Challenge Unlocked!",
+            "body": "Your top up was successful and you now stand a chance to win R20.00. Follow the instructions below to play the game:",
+            "priority": 100,
+            "display": {
+                "type": "MODAL",
+                "iconType": "SMILEY_FACE"
+            },
+            "triggerBalanceFetch": false,
+            "actionToTake": "PLAY_GAME",
+            "actionContext": {
+                "boostId": "6876dd73-516e-44d4-a59c-60258f29c9c8",
+                "gameType": "TAP_SCREEN",
+                "gameParams": {
+                    "timeLimitSeconds": "20",
+                    "instructionBand": "Tap the screen as many times as you can in 20 seconds",
+                    "waitMessage": "adaf4f36-d600-4927-8347-8faf1ae87a02",
+                    "finishedMessage": "2a3cc620-a22b-4c1e-848e-2321e174381f"
+                }
+            }
+        },
+        {
+            "messageId": "adaf4f36-d600-4927-8347-8faf1ae87a02",
+            "title": "Boost challenge unlocked!",
+            "body": "You’ve unlocked this challenge and stand a chance of winning R20.00, which will be added to your savings. Challenge will remain open until the end of the day.",
+            "priority": 100,
+            "display": {
+                "type": "CARD",
+                "titleType": "EMPHASIS",
+                "iconType": "UNLOCKED"
+            },
+            "actionToTake": "PLAY_GAME",
+            "actionContext": {
+                "boostId": "6876dd73-516e-44d4-a59c-60258f29c9c8",
+                "gameType": "TAP_SCREEN",
+                "gameParams": {
+                    "openingMsg": "b477c950-fd65-441f-8328-7a80a9bb80d9"
+                }
+            }
+        },
+        {
+            "messageId": "2a3cc620-a22b-4c1e-848e-2321e174381f",
+            "title": "Nice Work!",
+            "body": "You tapped #{numberUserTaps} in 20 seconds! Winners of the challenge will be notified later today. Good luck!",
+            "priority": 100,
+            "display": {
+                "type": "MODAL",
+                "iconType": "THUMBS_UP"
+            },
+            "actionToTake": "DONE",
+            "actionContext": {
+                "boostId": "6876dd73-516e-44d4-a59c-60258f29c9c8",
+                "checkOnDismissal": true
+            }
+        }
+    ]
+}

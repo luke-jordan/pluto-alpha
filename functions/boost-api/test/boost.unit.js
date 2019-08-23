@@ -54,19 +54,19 @@ const testMktingAdmin = uuid();
 describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () => {
 
     it('Rejects event without authorization', async () => {
-        const resultOfCall = await handler.createBoost({ boostType: 'FRAUD' });
+        const resultOfCall = await handler.createBoostWrapper({ boostType: 'FRAUD' });
         expect(resultOfCall).to.exist;
         expect(resultOfCall).to.deep.equal({ statusCode: 403 });
     });
 
     it('Rejects all categories except referrals if user is ordinary role', async () => {
-        const resultOfCall = await handler.createBoost(testHelper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER' ));
+        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER' ));
         expect(resultOfCall).to.exist;
         expect(resultOfCall).to.deep.equal({ statusCode: 403, body: 'Ordinary users cannot create boosts'});
     });
 
     it('Swallows an error and return its message', async () => {
-        const resultOfCall = await handler.createBoost(testHelper.wrapEvent({ badObject: 'This is bad' }));
+        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ badObject: 'This is bad' }));
         expect(resultOfCall).to.exist;
         expect(resultOfCall).to.have.property('statusCode', 500);
     });
@@ -144,7 +144,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         // logger('COPY::::::::::::::::');
         // logger(JSON.stringify(testHelper.wrapEvent(testBodyOfEvent).body));
 
-        const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, 
+        const resultOfInstruction = await handler.createBoostWrapper(testHelper.wrapEvent(testBodyOfEvent, 
             mockBoostToFromPersistence.creatingUserId, 'ORDINARY_USER'));
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
@@ -336,7 +336,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
         };
 
-        const resultOfInstruction = await handler.createBoost(testHelper.wrapEvent(testBodyOfEvent, testMktingAdmin, 'SYSTEM_ADMIN'));
+        const resultOfInstruction = await handler.createBoostWrapper(testHelper.wrapEvent(testBodyOfEvent, testMktingAdmin, 'SYSTEM_ADMIN'));
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
         expect(bodyOfResult).to.deep.equal(persistenceResult);
