@@ -11,6 +11,7 @@ const camelcase = require('camelcase');
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -174,9 +175,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
     it('should get user ids where selection clause is random_sample', async () => {
         const mockPercentage = '0.33';
-        const mockClientId = uuid();
         const mockAccoutId = uuid();
-        const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
+        const mockSelectionInstruction = `random_sample #{${mockPercentage}}`;
         const mockSelectArgs = [
             'select owner_user_id from account_data.core_account_ledger tablesample bernoulli ($1)',
             [Number(mockPercentage.replace(/^0./, ''))]
@@ -203,8 +203,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const mockPercentage = 'half';
         const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
 
-        // find way to catch expected error
-        expect(await rdsUtil.getUserIds(mockSelectionInstruction)).to.throw(new Error('Invalid row percentage.'));
+        const expectedResult = 'Invalid row percentage.';
+        await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.be.rejectedWith(expectedResult);
     });
 
     it('should insert user messages', async () => {
@@ -255,7 +255,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
         resetStubs();
     });
 
-    it('should persist push token', async () => {
+    it.only('should persist push token', async () => {
         const mockPersistableToken = {
             userId: mockUserId,
             pushProvider: mockProvider,

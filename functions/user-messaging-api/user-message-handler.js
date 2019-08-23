@@ -185,9 +185,13 @@ module.exports.insertPushToken = async (event) => {
             const deletionResult = await rdsUtil.deletePushToken(params.provider, userDetails.systemWideUserId); // replace with new token?
             logger('Push token deletion resulted in:', deletionResult);
         }
-        const newPushToken = { userId: userDetails.systemWideUserId, pushProvider: params.provider, pushToken: params.token };
-        logger('Sending to RDS: ', newPushToken);
-        const insertionResult = await rdsUtil.insertPushToken(newPushToken);
+        const persistablePushToken = { 
+            userId: userDetails.systemWideUserId,
+            pushProvider: params.provider,
+            pushToken: params.token
+        };
+        logger('Sending to RDS: ', persistablePushToken);
+        const insertionResult = await rdsUtil.insertPushToken(persistablePushToken);
         return { statusCode: 200, body: JSON.stringify(insertionResult[0]) };
     } catch (err) {
         logger('FATAL_ERROR:', err);

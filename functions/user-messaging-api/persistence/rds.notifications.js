@@ -182,7 +182,7 @@ const extractUserIds = async (selectionClause) => {
     const selectionMethod = clauseComponents[0];
     const universeComponents = selectionClause.match(/#{{.*?}}|#{.*?}/g);
     const universeComponent = universeComponents[hasMethodParameters ? 1 : 0];
-    let universeDefinition = '';
+    let universeDefinition = null;
     if (selectionMethod === 'random_sample') {
         universeDefinition = universeComponents[0].replace(/#{|\}/g, '');
     } else {
@@ -210,9 +210,12 @@ module.exports.getUserIds = async (selectionInstruction) => {
 };
 
 module.exports.insertPushToken = async (pushTokenObject) => {
-    const objectKeys = Object.keys(pushTokenObject);
-    const insertionQuery = `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(objectKeys)}) values %L returning insertion_id, creation_time`;
-    const insertionColumns = extractColumnTemplate(objectKeys);
+    const insertionQueryArray = [
+        'userId', 'pushProvider', 'pushToken'
+    ];
+    const insertionQuery = `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(insertionQueryArray)}) values %L returning insertion_id, creation_time`;
+    const insertionColumns = extractColumnTemplate(insertionQueryArray);
+
     const insertArray = [pushTokenObject];
     const databaseResponse = await rdsConnection.insertRecords(insertionQuery, insertionColumns, insertArray);
     logger('Push token insertion resulted in:', databaseResponse);
