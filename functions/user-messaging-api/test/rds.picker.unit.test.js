@@ -17,6 +17,7 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
 const userMessageTable = config.get('tables.userMessagesTable');
+const userAccountTable = config.get('tables.accountLedger');
 
 const testMsgId = uuid();
 const testFollowingMsgId = uuid();
@@ -88,7 +89,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
     it('Finds messages for user correctly and transforms them', async () => {
         const expectedQuery = `select * from ${userMessageTable} where destination_user_id = $1 and ` + 
-            `processed_status = $2 and end_time > $3 and deliveries_done < deliveries_max`;
+            `processed_status = $2 and end_time > current_timestamp and deliveries_done < deliveries_max`;
         selectQueryStub.resolves([msgRawFromRds]);
 
         const resultOfFetch = await persistence.getNextMessage(testUserId);
@@ -98,12 +99,45 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING']);
     });
 
+    it('Retrieves user balance correctly', async () => {
+        const expectedBalanceQuery = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
+            `currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
+        const expectedBalanceTypes = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`];
+        const expectedBalanceValues = [testUserId, 'USD', 'SETTLED', expectedBalanceTypes.join(',')];
+
+        selectQueryStub.resolves([{ amount: 100, unit: 'WHOLE_CURRENCY' }, { amount: 10000, unit: 'WHOLE_CENT' }, { amount: 1000000, unit: 'HUNDREDTH_CENT' }]);
+        
+        const resultOfSum = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' });
+        logger('Result of sum: ', resultOfSum);
+
+        expect(resultOfSum).to.deep.equal({ amount: 30000, unit: 'WHOLE_CENT', currency: 'USD' });
+        expect(selectQueryStub).to.have.been.calledWith(expectedBalanceQuery, expectedBalanceValues);
+    });
+
+    it('Retrieves and sums user interest correctly', async () => {
+        const expectedInterestQuery = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
+            `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
+        const expectedTxTypes = [`'ACCRUAL'`, `'CAPITALIZATION'`];
+        const expectedValues = [testUserId, 'USD', 'SETTLED', expectedTxTypes.join(','), moment(0).format()];
+
+        selectQueryStub.resolves([{ amount: 10, unit: 'WHOLE_CURRENCY' }, { amount: 100000, unit: 'HUNDREDTH_CENT' }]);
+        const resultOfInterest = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CURRENCY::USD::0'});
+        logger('Result of interest calc: ', resultOfInterest);
+
+        expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
+        expect(selectQueryStub).to.have.been.calledWith(expectedInterestQuery, expectedValues);
+    });
+
+    it('Gracefully handles unknown parameter', async () => {
+        const resultOfBadQuery = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
+        logger('Result of bad query: ', resultOfBadQuery);
+        expect(resultOfBadQuery).to.be.undefined;
+    });
+
+
     // it.only('Updates message processed status correctly', () => {
         
     // });
 
-    // it.only('Retrieves user account interest and balance correctly', () => {
-
-    // });
 
 });

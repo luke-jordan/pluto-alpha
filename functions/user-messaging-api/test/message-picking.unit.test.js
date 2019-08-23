@@ -25,7 +25,7 @@ const profileTable = config.get('tables.dynamoProfileTable');
 const testUserId = uuid();
 const testBoostId = uuid();
 
-const testOpenMoment = moment().subtract(3, 'months');
+const testOpenMoment = moment('2019-07-01');
 const testExpiryMoment = moment().add(6, 'hours');
 
 const handler = proxyquire('../message-picking-handler', {
@@ -42,25 +42,51 @@ const handler = proxyquire('../message-picking-handler', {
 
 describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
+    const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
+
+    const minimalMsgFromTemplate = (template) => ({
+        destinationUserId: testUserId,
+        followsPriorMsg: false,
+        messagePriority: 10,
+        endTime: testExpiryMoment,
+        messageBody: template
+    });
+
     before(() => {
-        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, ['personal_name', 'family_name']).
-            resolves({ personalName: 'Luke', familyName: 'Jordan' });
-        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, ['creation_time_epoch_millis']).
-            resolves({ creationTimeEpochMillis: testOpenMoment.valueOf() });
-        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'interest::sum::0' }).
-            resolves({ currency: 'VND', unit: 'WHOLE_CURRENCY', amount: 100000 });
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
+            systemWideUserId: testUserId, 
+            personalName: 'Luke', 
+            familyName: 'Jordan', 
+            creationTimeEpochMillis: testOpenMoment.valueOf(), 
+            defaultCurrency: 'USD'
+        });
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CENT::USD::0' }).
+            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 10000 });
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' }).
+            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 800000 })
     });
 
     it('Fills in message templates properly', async () => {
-        getMessagesStub.withArgs({ destinationUserId: testUserId }).resolves({ 
-            destinationUserId: testUserId,
-            template: 'Hello #{user_full_name}. Did you know you have earned #{total_interest} since you opened ' + 
-                'your account in #{opened_date}.' 
-        });
+        const expectedMessage = 'Hello Luke Jordan. Did you know you have earned $100 in interest since you opened your account in July 2019?';
+        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+            'Hello #{user_full_name}. Did you know you have earned #{total_interest} in interest since you opened your account in #{opened_date}?' 
+        )]);
 
         const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
         logger('Filled message: ', filledMessage);
         expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+    });
+
+    it('Fills in account balances properly', async () => {
+        const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
+        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+            'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
+        )]);
+
+        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
     });
 
     it('Dry run triggers without touching RDS etc', async () => {
@@ -120,6 +146,20 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         hasFollowingMsg: false
     };
 
+    const anotherHighPriorityMsg = {
+        messageId: uuid(),
+        messageTitle: 'Congratulations on something else!',
+        messageBody: 'You earned a boost! But you should not see this yet',
+        startTime: moment().subtract(1, 'minutes'),
+        endTime: testExpiryMoment,
+        messagePriority: 20,
+        displayType: 'MODAL',
+        displayInstructions: { iconType: 'SMILEY_FACE' },
+        actionContext: { triggerBalanceFetch: true, boostId: testBoostId },
+        followsPriorMsg: false,
+        hasFollowingMsg: false
+    };
+
     const expectedFirstMessage = {
         messageId: testMsgId,
         title: 'Boost available!',
@@ -167,6 +207,26 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(bodyOfFetch.messagesToDisplay).to.be.an('array');
         expect(bodyOfFetch.messagesToDisplay[0]).to.deep.equal(expectedFirstMessage);
         expect(bodyOfFetch.messagesToDisplay[1]).to.deep.equal(expectedSecondMsg);
+    });
+
+    it('Within flow message parameter works', async () => {
+        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
+        const requestContext = { authorizer: { systemWideUserId: testUserId }};
+        const queryStringParameters = { anchorMessageId: testMsgId };
+        
+        const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
+        expect(fetchResult).to.exist;
+        const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
+        expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
+    });
+
+    it('Sorts same priority messages by creation time properly', async () => {
+        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
+        
+        const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
+        expect(fetchResult).to.exist;
+        const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
+        expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
     });
 
 

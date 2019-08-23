@@ -25,6 +25,8 @@ const UNIT_DIVISORS = {
     'WHOLE_CURRENCY': 1 
 };
 
+const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
+
 const getSubParamOrDefault = (paramSplit, defaultValue) => paramSplit.length > 1 ? paramSplit[1] : defaultValue;
 
 const formatAmountResult = (amountResult) => {
@@ -40,28 +42,31 @@ const formatAmountResult = (amountResult) => {
     return numberFormat.format(wholeCurrencyAmount);
 };
 
-const fetchUserName = async (systemWideUserId, firstNameOnly = true) => {
-    const profileFetch = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId }, ['personal_name', 'family_name']);
-    return firstNameOnly ? profileFetch.personalName : `${profileFetch.personalName} ${profileFetch.familyName}`;
+const fetchUserName = async (systemWideUserId, userProfile, firstNameOnly = true) => {
+    let profileToUse = {};
+    if (userProfile.systemWideUserId === systemWideUserId) {
+        profileToUse = userProfile;
+    } else {
+        profileToUse = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId }, ['personal_name', 'family_name']);
+    }
+    return firstNameOnly ? profileToUse.personalName : `${profileToUse.personalName} ${profileToUse.familyName}`;
 };
 
-const fetchAccountOpenDates = async (systemWideUserId, dateFormat) => {
-    const profileFetch = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId }, ['creation_time_epoch_millis']);
-    const openMoment = moment(profileFetch.creationTimeEpochMillis);
+const fetchAccountOpenDates = (userProfile, dateFormat) => {
+    const openMoment = moment(userProfile.creationTimeEpochMillis);
     return openMoment.format(dateFormat);
 };
 
-const fetchAccountInterest = async (systemWideUserId, sinceTimeMillis) => {
-    const amountResult = await persistence.getUserAccountFigure({
-        systemWideUserId, operation: `interest::sum::${sinceTimeMillis}`
-    });
+const fetchAccountInterest = async (systemWideUserId, currency, sinceTimeMillis) => {
+    const operation = `interest::WHOLE_CENT::${currency}::${sinceTimeMillis}`;
+    const amountResult = await persistence.getUserAccountFigure({ systemWideUserId, operation });
     logger('Retrieved from persistence: ', amountResult);
     return formatAmountResult(amountResult);
 };
 
-const fetchCurrentBalance = async (systemWideUserId, defaultCurrency = null) => {
+const fetchCurrentBalance = async (systemWideUserId, currency) => {
     const amountResult = await persistence.getUserAccountFigure({
-        systemWideUserId, operation: defaultCurrency ? 'balance::sum' : `balance::sum::${defaultCurrency}`
+        systemWideUserId, operation: `balance::WHOLE_CENT::${currency}`
     });
     logger('For balance, from persistence: ', fetchCurrentBalance);
     return formatAmountResult(amountResult);
@@ -77,7 +82,7 @@ const extractParamsFromTemplate = (template) => {
     return extractedParams;
 };
 
-const retrieveParamValue = async (param, destinationUserId) => {
+const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramSplit = param.split('::');
     const paramName = paramSplit[0];
     logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
@@ -85,31 +90,34 @@ const retrieveParamValue = async (param, destinationUserId) => {
         return '';
     } else if (paramName === 'user_first_name') {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId);
-        return fetchUserName(userId, true);
+        return fetchUserName(userId, userProfile, true);
     } else if (paramName === 'user_full_name') {
-        const userId = getSubParamOrDefault(paramSplit, destinationUserId);
+        const userId = getSubParamOrDefault(paramSplit, destinationUserId, userProfile);
         logger('Fetching username with ID: ', userId);
-        return fetchUserName(userId, false);
+        return fetchUserName(userId, userProfile, false);
     } else if (paramName === 'opened_date') {
         const specifiedDateFormat = getSubParamOrDefault(paramSplit, config.get('picker.defaults.dateFormat'));
-        return fetchAccountOpenDates(destinationUserId, specifiedDateFormat);  
+        return fetchAccountOpenDates(userProfile, specifiedDateFormat);
     } else if (paramName === 'total_interest') {
         const sinceMillis = getSubParamOrDefault(paramSplit, 0); // i.e., beginning of time
-        return fetchAccountInterest(destinationUserId, sinceMillis);
+        return fetchAccountInterest(destinationUserId, userProfile.defaultCurrency, sinceMillis);
     } else if (paramName === 'current_balance') {
-        const defaultCurrency = getSubParamOrDefault(paramSplit, null);
-        return fetchCurrentBalance(destinationUserId, defaultCurrency);
+        const defaultCurrency = getSubParamOrDefault(paramSplit, userProfile.defaultCurrency);
+        return fetchCurrentBalance(destinationUserId, defaultCurrency, userProfile);
     }
-    return '';
 };
 
 const fillInTemplate = async (template, destinationUserId) => {
-    logger('Filling in: ', template);
     const paramsToFillIn = extractParamsFromTemplate(template);
+    if (!Array.isArray(paramsToFillIn) || paramsToFillIn.length === 0) {
+        logger('Message template has no parameters, return it as is');
+        return template;
+    }
+
     const replacedString = template.replace(paramRegex, '%s');
-    logger('Extracted params: ', paramsToFillIn);
-    logger('Altered template: ', replacedString);
-    const paramValues = await Promise.all(paramsToFillIn.map((param) => retrieveParamValue(param, destinationUserId)));
+    const userProfile = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId: destinationUserId }, PROFILE_COLS);
+    logger('Obtained user profile: ', userProfile);
+    const paramValues = await Promise.all(paramsToFillIn.map((param) => retrieveParamValue(param, destinationUserId, userProfile)));
     logger('Obtained values: ', paramValues);
     const completedTemplate = util.format(replacedString, ...paramValues);
     logger('Here it is: ', completedTemplate);
@@ -218,7 +226,7 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     // third, either just continue with the prior one, or find whatever should be the anchor
     let anchorMessage = null;
     if (withinFlowFromMsgId) {
-        flowMessage = openingMessages.find((msg) => msg.messageId = withinFlowFromMsgId);
+        const flowMessage = openingMessages.find((msg) => msg.messageId = withinFlowFromMsgId);
         anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage; 
     } else {
         anchorMessage = determineAnchorMsg(openingMessages);
@@ -246,7 +254,8 @@ module.exports.getNextMessageForUser = async (event) => {
             return { statusCode: 200, body: JSON.stringify(dryRunGameResponseOpening)}
         }
 
-        const userMessages = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId);
+        const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : undefined;
+        const userMessages = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId, withinFlowFromMsgId);
         logger('Retrieved user messages: ', userMessages);
         const resultBody = {
             messagesToDisplay: userMessages

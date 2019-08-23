@@ -11,6 +11,8 @@ const camelcase = require('camelcase');
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
+
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -204,7 +206,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
 
         // find way to catch expected error
-        expect(await rdsUtil.getUserIds(mockSelectionInstruction)).to.throw(new Error('Invalid row percentage.'));
+        await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.eventually.be.rejected;
     });
 
     it('should insert user messages', async () => {
