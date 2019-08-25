@@ -118,6 +118,7 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
 module.exports.updateUserMessage = async (messageId, updateValues) => {
     logger('Update message with ID: ', messageId, 'to: ', updateValues);
     const updateDef = {
+        table: userMessageTable,
         key: { messageId },
         value: updateValues,
         returnClause: 'message_id, updated_time' 

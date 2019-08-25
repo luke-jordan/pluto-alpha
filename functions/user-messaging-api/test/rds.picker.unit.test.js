@@ -136,6 +136,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     it('Updates message processed status correctly', async () => {
         const updatedTime = moment();
         const expectedUpdateDef = { 
+            table: userMessageTable,
             key: { messageId: testMsgId }, 
             value: { processedStatus: 'DISMISSED' }, 
             returnClause: 'message_id, updated_time' 
