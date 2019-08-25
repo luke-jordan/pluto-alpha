@@ -235,7 +235,7 @@ class RdsConnection {
         }
         
         let results = null;
-        const client = await this._pool.connect();
+        const client = await this._getConnection();
         try {
             await client.query('BEGIN');
             await client.query('SET TRANSACTION READ WRITE');
@@ -266,7 +266,7 @@ class RdsConnection {
         // todo : same for updates
         insertQueryDefs.forEach((insert) => RdsConnection._validateInsertParams(insert.query, insert.columnTemplate, insert.rows));
 
-        const client = await this._pool.connect();
+        const client = await this._getConnection();
         
         let results = null;
         try {
