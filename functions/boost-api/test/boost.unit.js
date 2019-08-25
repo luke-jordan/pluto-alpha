@@ -444,3 +444,75 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(publishStub).to.be.calledWithExactly(testUserId, 'SIMPLE_REDEEMED', publishOptions);
     });
 });
+
+describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
+
+    beforeEach(() => resetStubs());
+
+    // will have to turn those into message instructions, which should be possible.
+    // use jsonb for templates. define structure as: default // variant. and within default,
+    // can be a single title/body, or can be a sequence. then user-message creater does the
+    // relevant assembling, based on the sequence & construction of those templates
+    const messageDefinitions = {
+        OFFERED: {
+            title: '',
+            body: '',
+            type: 'CARD',
+            style: {
+                title: 'EMPHASIS',
+                icon: 'BOOST_ROCKET'
+            }
+        },
+        UNLOCKED: {
+            title: '',
+            body: '',
+            type: 'CARD',
+            style: {
+                title: 'EMPHASIS',
+                icon: 'UNLOCKED'
+            }
+        },
+        INSTRUCTION: {
+            title: '',
+            body: '',
+            type: 'MODAL'
+        },
+        REDEEMED: {
+            title: '',
+            body: '',
+            type: 'MODAL'
+        },
+        FAILURE: {
+            title: '',
+            body: '',
+            type: 'MODAL'
+        }
+    };
+
+    const testStatusConditions = {
+        OFFERED: ['message_instruction_created'],
+        UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
+        REDEEMED: ['taps_submitted', 'number_taps_greater_than #{20::20000}']
+    };
+
+    const testBodyOfEvent = {
+        boostTypeCategory: 'GAME::TAP_SCREEN',
+        boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+        boostSource: {
+            bonusPoolId: 'primary_bonus_pool',
+            clientId: 'some_client_co',
+            floatId: 'primary_cash'
+        },
+        endTimeMillis: testEndTime.valueOf(),
+        statusConditions: testStatusConditions,
+        boostAudience: 'GENERAL',
+        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+        messagesToCreate: messageDefinitions,
+        gameParameters: {
+            requiredTaps: 20
+        }
+    };
+
+    logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
+
+});

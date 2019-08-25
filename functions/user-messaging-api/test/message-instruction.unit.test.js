@@ -9,7 +9,7 @@ const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const insertMessageInstructionStub = sinon.stub();
 const updateMessageInstructionStub = sinon.stub();
@@ -21,7 +21,8 @@ const handler = proxyquire('../msg-instruction-handler', {
     './persistence/rds.notifications': {
         'insertMessageInstruction': insertMessageInstructionStub,
         'getMessageInstruction': getMessageInstructionStub,
-        'updateMessageInstruction': updateMessageInstructionStub
+        'updateMessageInstruction': updateMessageInstructionStub,
+        '@noCallThru': true
     },
     'uuid/v4': uuidStub,
     'moment': momentStub,

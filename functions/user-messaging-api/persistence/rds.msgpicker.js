@@ -110,3 +110,24 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     }
     return undefined;
 };
+
+
+/**
+ * Updates a message
+ */
+module.exports.updateUserMessage = async (messageId, updateValues) => {
+    logger('Update message with ID: ', messageId, 'to: ', updateValues);
+    const updateDef = {
+        key: { messageId },
+        value: updateValues,
+        returnClause: 'message_id, updated_time' 
+    };
+
+    const resultOfUpdate = await rdsConnection.multiTableUpdateAndInsert([updateDef], []);
+    logger('Update result from RDS: ', resultOfUpdate);
+
+    const resultToReturn = camelcaseKeys(resultOfUpdate[0]);
+    resultToReturn.updatedTime = moment(resultToReturn.updatedTime);
+
+    return resultToReturn;
+};

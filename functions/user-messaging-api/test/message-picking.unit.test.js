@@ -17,8 +17,11 @@ const expect = chai.expect;
 
 const getMessagesStub = sinon.stub();
 const getAccountFigureStub = sinon.stub();
+const updateMessageStub = sinon.stub();
+
 const fetchDynamoRowStub = sinon.stub();
-const resetStubs = () => testHelper.resetStubs(getMessagesStub, getAccountFigureStub, fetchDynamoRowStub);
+
+const resetStubs = () => testHelper.resetStubs(getMessagesStub, getAccountFigureStub, updateMessageStub, fetchDynamoRowStub);
 
 const profileTable = config.get('tables.dynamoProfileTable');
 
@@ -32,6 +35,7 @@ const handler = proxyquire('../message-picking-handler', {
     './persistence/rds.msgpicker': {
         'getNextMessage': getMessagesStub, 
         'getUserAccountFigure': getAccountFigureStub,
+        'updateUserMessage': updateMessageStub,
         '@noCallThru': true
     },
     'dynamo-common': {
@@ -229,5 +233,43 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
     });
 
+});
+
+describe('*** UNIT TESTING MESSAGE PROCESSING *** Update message acknowledged status', () => {
+
+    const testMsgId = uuid();
+    const testUpdatedTime = moment();
+
+    beforeEach(() => resetStubs());
+
+    it('Handles user dismissing a message', async () => {
+        updateMessageStub.withArgs(testMsgId, { processedStatus: 'DISMISSED' }).resolves({ updatedTime: testUpdatedTime });
+
+        const event = { messageId: testMsgId, userAction: 'DISMISSED' };
+        const updateResult = await handler.updateUserMessage(testHelper.wrapEvent(event, testUserId, 'ORDINARY_USER'));
+        logger('Result of update: ', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal({
+            statusCode: 200, body: JSON.stringify({ result: 'SUCCESS', processedTimeMillis: testUpdatedTime.valueOf() })
+        });
+    });
+
+    it('Gives an appropriate error on unknown user action', async () => {
+        const badEvent = { messageId: testMsgId, userAction: 'BADVALUE' };
+        const errorResult = await handler.updateUserMessage(testHelper.wrapEvent(badEvent, testUserId, 'ORDINARY_USER'));
+
+        expect(errorResult).to.exist;
+        expect(errorResult).to.deep.equal({ statusCode: 400, body: 'UNKNOWN_ACTION' });
+        expect(updateMessageStub).to.not.have.been.called;
+    });
+
+    it('Swallows persistence error properly', async () => {
+        updateMessageStub.rejects(new Error('Error! Something nasty in persistence'));
+        const weirdEvent = { messageId: testMsgId, userAction: 'DISMISSED' };
+        const errorResult = await handler.updateUserMessage(testHelper.wrapEvent(weirdEvent, testUserId, 'ORDINARY_USER'));
+
+        expect(errorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify('Error! Something nasty in persistence')});
+    });
 
 });

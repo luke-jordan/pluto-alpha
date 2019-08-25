@@ -7,9 +7,6 @@ const moment = require('moment');
 
 const testHelper = require('./message.test.helper');
 
-const decamelize = require('decamelize');
-const camelcase = require('camelcase');
-
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
@@ -24,13 +21,14 @@ const testFollowingMsgId = uuid();
 const testBoostId = uuid();
 const testUserId = uuid();
 
+// todo : alter update record in RDS module to use same pattern as multi
 const updateRecordStub = sinon.stub();
 const selectQueryStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
-        this.updateRecord = updateRecordStub;
         this.selectQuery = selectQueryStub;
+        this.multiTableUpdateAndInsert = updateRecordStub;
     }
 }
 
@@ -135,9 +133,22 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     });
 
 
-    // it.only('Updates message processed status correctly', () => {
+    it('Updates message processed status correctly', async () => {
+        const updatedTime = moment();
+        const expectedUpdateDef = { 
+            key: { messageId: testMsgId }, 
+            value: { processedStatus: 'DISMISSED' }, 
+            returnClause: 'message_id, updated_time' 
+        };
+        updateRecordStub.resolves([{ 'message_id': testMsgId, 'updated_time': updatedTime.format() }]);
         
-    // });
+        const resultOfUpdateQ = await persistence.updateUserMessage(testMsgId, { processedStatus: 'DISMISSED' });
+        logger('Result of query: ', resultOfUpdateQ);
+        
+        expect(resultOfUpdateQ).to.exist;
+        expect(resultOfUpdateQ).to.deep.equal({ messageId: testMsgId, updatedTime: moment(updatedTime.format()) });
+        expect(updateRecordStub).to.have.been.calledOnceWith([expectedUpdateDef], []);
+    });
 
 
 });

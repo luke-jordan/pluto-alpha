@@ -267,3 +267,35 @@ module.exports.getNextMessageForUser = async (event) => {
         return { statusCode: 500, body: JSON.stringify(err.message) };
     }
 };
+
+/**
+ * Simple (ish) method for updating a message once it has been delivered, etc.
+ */
+module.exports.updateUserMessage = async (event) => {
+    try {
+        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        // todo : validate that the message corresponds to the user ID
+        const { messageId, userAction }= JSON.parse(event.body);
+        logger('Processing message ID update, based on user action: ', userAction);
+
+        let response = { };
+        switch (userAction) {
+            case 'DISMISSED':
+                const updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
+                const bodyOfResponse = { result: 'SUCCESS', processedTimeMillis: updateResult.updatedTime.valueOf() };
+                response = { statusCode: 200, body: JSON.stringify(bodyOfResponse) };
+                break;
+            default:
+                response = { statusCode: 400, body: 'UNKNOWN_ACTION' }
+        };
+
+        return response;
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500, body: JSON.stringify(err.message) };
+    }
+}
