@@ -356,3 +356,8 @@ module.exports.insertBoost = async (boostDetails) => {
     return resultObject;
 
 };
+
+
+module.exports.alterBoost = (boostId, updateValues) => {
+    
+};

@@ -100,6 +100,13 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(dryRunMessages).to.exist;
     });
 
+    it('Arrow chase dry run triggers without touching RDS and returns properly', async () => {
+        const authContext= { authorizer: { systemWideUserId: testUserId }};
+        const testEvent = { queryStringParameters: { gameDryRun: true, gameType: 'CHASE_ARROW' }, requestContext: authContext };
+        const dryRunMessages = await handler.getNextMessageForUser(testEvent);
+        expect(dryRunMessages).to.exist;
+    });
+
     it('Returns unauthorized if no authorization', async () => {
         const unauthorizedResponse = await handler.getNextMessageForUser({});
         expect(unauthorizedResponse).to.deep.equal({ statusCode: 403 });

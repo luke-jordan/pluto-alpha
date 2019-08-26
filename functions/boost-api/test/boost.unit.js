@@ -15,6 +15,7 @@ const insertBoostStub = sinon.stub();
 const findBoostStub = sinon.stub();
 const findAccountsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
+const alterBoostStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
@@ -33,7 +34,8 @@ const handler = proxyquire('../boost-handler', {
         'insertBoost': insertBoostStub,
         'findBoost': findBoostStub,
         'findAccountsForBoost': findAccountsStub,
-        'updateBoostAccountStatus': updateBoostAccountStub
+        'updateBoostAccountStatus': updateBoostAccountStub,
+        'alterBoost': alterBoostStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -45,7 +47,7 @@ const handler = proxyquire('../boost-handler', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(insertBoostStub);
+const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub);
 
 const testStartTime = moment();
 const testEndTime = moment().add(7, 'days');
@@ -268,12 +270,8 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
-        // testHelper.logNestedMatches(triggerMessagesInvocation, lamdbaInvokeStub.getCall(1).args[0]);
 
         expect(resultOfEventRecord).to.exist;
-
-        // testHelper.logNestedMatches(publishOptions, publishStub.getCall(0).args[2]);
-
         expect(publishStub).to.be.calledWithExactly(testUserId, 'REFERRAL_REDEEMED', publishOptions);
         expect(publishStub).to.be.calledWithExactly(testOriginalUserId, 'REFERRAL_REDEEMED', publishOptions);
     });
@@ -445,20 +443,24 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     });
 });
 
+// The single most complicated operation in probably the entire system: creating a boost-game, with attendant conditions,
+// messages (the most complex), and much else.
 describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
     beforeEach(() => resetStubs());
 
-    // will have to turn those into message instructions, which should be possible.
-    // use jsonb for templates. define structure as: default // variant. and within default,
-    // can be a single title/body, or can be a sequence. then user-message creater does the
-    // relevant assembling, based on the sequence & construction of those templates
+    const testBoostId = uuid();
+    const testMsgIds = [uuid(), uuid(), uuid(), uuid(), uuid()];
+    
+    const testExpiryTime = moment().add(1, 'day');
+    const testPersistedTime = moment().add(1, 'second');
+
     const messageDefinitions = {
         OFFERED: {
             title: '',
             body: '',
-            type: 'CARD',
-            style: {
+            display: {
+                type: 'CARD',
                 title: 'EMPHASIS',
                 icon: 'BOOST_ROCKET'
             }
@@ -466,8 +468,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         UNLOCKED: {
             title: '',
             body: '',
-            type: 'CARD',
-            style: {
+            display: {
+                type: 'CARD',
                 title: 'EMPHASIS',
                 icon: 'UNLOCKED'
             }
@@ -475,19 +477,27 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         INSTRUCTION: {
             title: '',
             body: '',
-            type: 'MODAL'
+            display: {
+                type: 'MODAL'
+            }
         },
         REDEEMED: {
             title: '',
             body: '',
-            type: 'MODAL'
+            display: {
+                type: 'MODAL'
+            }
         },
         FAILURE: {
             title: '',
             body: '',
-            type: 'MODAL'
+            display: {
+                type: 'MODAL'
+            }
         }
     };
+
+    const msgIdDict = Object.keys(messageDefinitions).map((key, index) => ({ identifier: key, msgInstructionId: testMsgIds[index] }));
 
     const testStatusConditions = {
         OFFERED: ['message_instruction_created'],
@@ -513,6 +523,96 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         }
     };
 
-    logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
+    const mockBoostToFromPersistence = {
+        boostId: testBoostId,
+        creatingUserId: uuid(),
+        boostType: 'GAME',
+        boostCategory: 'TAP_SCREEN',
+        boostAmount: 100000,
+        boostUnit: 'HUNDREDTH_CENT',
+        boostCurrency: 'USD',
+        fromBonusPoolId: 'primary_bonus_pool',
+        fromFloatId: 'primary_cash',
+        forClientId: 'some_client_co',
+        boostStartTime: testStartTime,
+        boostEndTime: testExpiryTime,
+        statusConditions: testStatusConditions,
+        boostAudience: 'GENERAL',
+        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+        defaultStatus: 'CREATED',
+        redemptionMsgInstructions: { } 
+    };
+
+    // use jsonb for templates. define structure as: default // variant. and within default,
+    // can be a single title/body, or can be a sequence. then user-message creater does the
+    // relevant assembling, based on the sequence & construction of those templates
+    const createMsgPayload = ({ title, body, display, responseAction, responseContext }) => ({
+        messageTitle: title,
+        messageBody: body,
+        messageDisplay: display,
+        presentationType: 'EVENT_DRIVEN',
+        audienceType: 'GROUP',
+        selectionInstruction: `match_other from #{entityType: 'boost', entityId: ${testBoostId}}`,
+        responseAction,
+        responseContext
+    });
+
+    const gameParams = {
+        gameType: 'TAP_SCREEN',
+        gameParams: {
+            timeLimitSeconds: 20,
+            instructionBand: 'Tap the screen as many times as you can in 20 seconds'
+        }
+    };
+
+    const standardMsgActions = {
+        'OFFERED': { action: 'ADD_CASH', context: { boostId: testBoostId, sequenceExpiryTimeMillis: testExpiryTime.valueOf() } },
+        'UNLOCKED': { action: 'PLAY_GAME', context: { boostId: testBoostId, gameParams }},
+        'INSTRUCTION': { action: 'PLAY_GAME', context: { boostId: testBoostId, gameParams }},
+        'REDEEMED': { action: 'DONE', context: { checkOnDismissal: true } },
+        'FAILURE': { action: 'DONE' }
+    };
+
+    const msgPayloadDict = Object.keys(messageDefinitions).reduce((obj, key) => {
+        const thisMsgInstruction = JSON.parse(JSON.stringify(messageDefinitions[key]));
+        thisMsgInstruction.responseAction = standardMsgActions[key].action;
+        thisMsgInstruction.responseContext = standardMsgActions[key].context;
+        return { ...obj, [key]: createMsgPayload(thisMsgInstruction) }
+    }, {});
+
+    const mockMsgIdDict = [
+        { accountId: 'ALL', status: 'OFFERED', msgInstructionId: testMsgIds[0] }, 
+        { accountId: 'ALL', status: 'UNLOCKED', msgInstructionId: testMsgIds[1] },
+        { accountId: 'ALL', status: 'INSTRUCTION', msgInstructionId: testMsgIds[2] },
+        { accountId: 'ALL', status: 'REDEEMED', msgInstructionId: testMsgIds[3] },
+        { accountId: 'ALL', status: 'FAILURE', msgInstructionId: testMsgIds[4] },
+    ];
+
+    // logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
+
+    // it('Happy path creates a game boost, including setting up the messages', async () => {
+    
+    //     const mockResultFromRds = {
+    //         boostId: testBoostId,
+    //         persistedTimeMillis: testPersistedTime.valueOf(),
+    //         numberOfUsersEligible: 100
+    //     };
+
+    //     insertBoostStub.resolves(mockResultFromRds);
+    //     lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(msgIdDict) });
+    //     alterBoostStub.resolves({ updatedTime: moment() });
+
+    //     const expectedResult = JSON.parse(JSON.stringify(mockResultFromRds));
+    //     expectedResult.messageInstructionIds = msgIdDict;
+
+    //     const resultOfCreate = await handler.createBoost(testBodyOfEvent);
+    //     expect(resultOfCreate).to.exist;
+    //     expect(resultOfCreate).to.deep.equal(expectedResult);
+        
+    //     expect(insertBoostStub).to.have.been.calledOnceWithExactly(mockBoostToFromPersistence);
+    //     expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('message_instruct_create', false, msgPayloadDict));
+    //     expect(alterBoostStub).to,have.been.calledOnceWithExactly(testBoostId, { redemptionMsgInstructions: mockMsgIdDict });        
+        
+    // });
 
 });

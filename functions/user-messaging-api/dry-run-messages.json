@@ -31,8 +31,8 @@
             "actionToTake": "PLAY_GAME",
             "actionContext": {
                 "boostId": "6876dd73-516e-44d4-a59c-60258f29c9c8",
-                "gameType": "TAP_SCREEN",
                 "gameParams": {
+                    "gameType": "TAP_SCREEN",
                     "timeLimitSeconds": "20",
                     "instructionBand": "Tap the screen as many times as you can in 20 seconds",
                     "waitMessage": "adaf4f36-d600-4927-8347-8faf1ae87a02",
@@ -53,8 +53,8 @@
             "actionToTake": "PLAY_GAME",
             "actionContext": {
                 "boostId": "6876dd73-516e-44d4-a59c-60258f29c9c8",
-                "gameType": "TAP_SCREEN",
                 "gameParams": {
+                    "gameType": "TAP_SCREEN",
                     "openingMsg": "b477c950-fd65-441f-8328-7a80a9bb80d9"
                 }
             }

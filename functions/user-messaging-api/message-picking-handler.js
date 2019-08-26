@@ -239,6 +239,7 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
 
 // For now, for mobile test
 const dryRunGameResponseOpening = require('./dry-run-messages');
+const dryRunGameChaseArrows = require('./dry-run-arrow');
 
 /**
  * Wrapper for the above, based on token
@@ -250,8 +251,11 @@ module.exports.getNextMessageForUser = async (event) => {
             return { statusCode: 403 };
         }
 
-        if (event.queryStringParameters && event.queryStringParameters.gameDryRun) {
-            return { statusCode: 200, body: JSON.stringify(dryRunGameResponseOpening)}
+        const queryParams = event.queryStringParameters;
+        if (queryParams && queryParams.gameDryRun) {
+            const relevantGame = queryParams.gameType || 'TAP_SCREEN';
+            const messagesToReturn = relevantGame === 'CHASE_ARROW' ? dryRunGameChaseArrows : dryRunGameResponseOpening;
+            return { statusCode: 200, body: JSON.stringify(messagesToReturn)}
         }
 
         const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : undefined;
