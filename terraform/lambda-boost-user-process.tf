@@ -1,13 +1,13 @@
-variable "boost_process_lambda_function_name" {
-  default = "boost_process"
+variable "boost_user_process_lambda_function_name" {
+  default = "boost_user_process"
   type = "string"
 }
 
-resource "aws_lambda_function" "boost_process" {
+resource "aws_lambda_function" "boost_user_process" {
 
-  function_name                  = "${var.boost_process_lambda_function_name}"
-  role                           = "${aws_iam_role.boost_process_role.arn}"
-  handler                        = "boost-handler.processEvent"
+  function_name                  = "${var.boost_user_process_lambda_function_name}"
+  role                           = "${aws_iam_role.boost_user_process_role.arn}"
+  handler                        = "boost-process-handler.processUserBoostResponse"
   memory_size                    = 512
   runtime                        = "nodejs8.10"
   timeout                        = 900
@@ -50,11 +50,11 @@ resource "aws_lambda_function" "boost_process" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.boost_process]
+  depends_on = [aws_cloudwatch_log_group.boost_user_process]
 }
 
-resource "aws_iam_role" "boost_process_role" {
-  name = "${var.boost_process_lambda_function_name}_role_${terraform.workspace}"
+resource "aws_iam_role" "boost_user_process_role" {
+  name = "${var.boost_user_process_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -73,41 +73,41 @@ resource "aws_iam_role" "boost_process_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "boost_process" {
-  name = "/aws/lambda/${var.boost_process_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "boost_user_process" {
+  name = "/aws/lambda/${var.boost_user_process_lambda_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
   }
 }
 
-resource "aws_iam_role_policy_attachment" "boost_process_basic_execution_policy" {
-  role = "${aws_iam_role.boost_process_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_user_process_basic_execution_policy" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_process_vpc_execution_policy" {
-  role = "${aws_iam_role.boost_process_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_user_process_vpc_execution_policy" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_process_invoke_transfer_policy" {
-  role = "${aws_iam_role.boost_process_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_transfer_policy" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "${aws_iam_policy.lambda_invoke_float_transfer_access.arn}"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_process_invoke_message_create_policy" {
-  role = "${aws_iam_role.boost_process_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_message_create_policy" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_process_user_event_publish_policy" {
-  role = "${aws_iam_role.boost_process_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_user_process_user_event_publish_policy" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_process_secret_get" {
-  role = "${aws_iam_role.boost_process_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_user_process_secret_get" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
 }
 
@@ -115,22 +115,22 @@ resource "aws_iam_role_policy_attachment" "boost_process_secret_get" {
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_boost_process" {
-  log_group_name = "${aws_cloudwatch_log_group.boost_process.name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_boost_user_process" {
+  log_group_name = "${aws_cloudwatch_log_group.boost_user_process.name}"
   metric_transformation {
-    name = "${var.boost_process_lambda_function_name}_fatal_api_alarm"
+    name = "${var.boost_user_process_lambda_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.boost_process_lambda_function_name}_fatal_api_alarm"
+  name = "${var.boost_user_process_lambda_function_name}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_process" {
-  alarm_name = "${var.boost_process_lambda_function_name}_fatal_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_user_process" {
+  alarm_name = "${var.boost_user_process_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_boost_process.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_boost_user_process.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
@@ -138,22 +138,22 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_process" {
   alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
 }
 
-resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_boost_process" {
-  log_group_name = "${aws_cloudwatch_log_group.boost_process.name}"
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_boost_user_process" {
+  log_group_name = "${aws_cloudwatch_log_group.boost_user_process.name}"
   metric_transformation {
-    name = "${var.boost_process_lambda_function_name}_security_api_alarm"
+    name = "${var.boost_user_process_lambda_function_name}_security_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.boost_process_lambda_function_name}_security_api_alarm"
+  name = "${var.boost_user_process_lambda_function_name}_security_api_alarm"
   pattern = "SECURITY_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_boost_process" {
-  alarm_name = "${var.boost_process_lambda_function_name}_security_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_boost_user_process" {
+  alarm_name = "${var.boost_user_process_lambda_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_boost_process.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_boost_user_process.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0

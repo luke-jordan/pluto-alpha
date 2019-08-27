@@ -7,7 +7,7 @@ resource "aws_lambda_function" "boost_create" {
 
   function_name                  = "${var.boost_create_lambda_function_name}"
   role                           = "${aws_iam_role.boost_create_role.arn}"
-  handler                        = "boost-handler.createBoost"
+  handler                        = "boost-create-handler.createBoost"
   memory_size                    = 512
   runtime                        = "nodejs8.10"
   timeout                        = 900

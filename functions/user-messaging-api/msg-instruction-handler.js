@@ -82,6 +82,20 @@ const createPersistableObject = (instruction) => ({
 /**
  * This function accepts a new instruction, validates the instruction, then persists it. Depending on the instruction, either
  * the whole or a subset of properties described below may provided as input. 
+ * 
+ * Note on templates: They can construct linked series of messages for users, depending on the top-level key, which can be either
+ * "template", or "sequence". If it template, then only one message is generated, if it is sequence, then multiple are, and are linked.
+ * Template contains the following: at least one top-level key, DEFAULT. Other variants (e.g., for A/B testing), can be defined as 
+ * other top-level keys (e.g., VARIANT_A or TREATMENT). Underneath that key comes the message definition proper, as follows:
+ * { title: 'title of the message', body: 'body of the message', display: { displayDict }, responseAction: { }, responseContext: { dict }} 
+ * 
+ * If the top-level key is sequence, then an array should follow. The first message in the array must be the opening message, and will be 
+ * marked as hasFollowingMessage. All the others will be marked as followsPriorMessage. Each element of the array will be identical to 
+ * that for a single template, as above, but will also include the key, "identifier". This will be used to construct the messageIdsDict
+ * that will be sent with each of the messages, so that the app or any other consumers can follow the sequences. Note that it is important
+ * to keep the two identifiers distinct here: one, embedded within the template, is an identifier within the sequence of messages, the other,
+ * at top level, identifies across variants.
+ * 
  * @param {string} instructionId The instruction unique id, useful in persistence operations.
  * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.

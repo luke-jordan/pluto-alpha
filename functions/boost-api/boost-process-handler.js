@@ -2,7 +2,7 @@
 
 const logger = require('debug')('jupiter:boosts:handler');
 const config = require('config');
-const moment = require('moment');
+// const moment = require('moment');
 const stringify = require('json-stable-stringify');
 const status = require('statuses');
 
@@ -15,97 +15,12 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
 
-const ALLOWABLE_ORDINARY_USER = ['REFERRAL::USER_CODE_USED'];
-
 const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
 }
 
-// this one will be for API gateway, later
-module.exports.createBoostWrapper = async (event) => {
-    try {
-        const userDetails = extractUserDetails(event);
-        logger('Event: ', event);
-        logger('User details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: status('Forbidden') };
-        }
-
-        const params = extractEventBody(event);
-        params.creatingUserId = userDetails.systemWideUserId;
-
-        const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
-        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) === -1) {
-            return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
-        }
-
-        const resultOfCall = await exports.createBoost(params);
-        return {
-            statusCode: status('Ok'),
-            body: JSON.stringify(resultOfCall)
-        };    
-    } catch (err) {
-        return handleError(err);
-    }
-};
-
-module.exports.createBoost = async (event) => {
-    if (!event) {
-        logger('Test run on lambda, exiting');
-        return { statusCode: 400 };
-    }
-
-    const params = event;
-
-    // todo : extensive validation
-    const boostType = params.boostTypeCategory.split('::')[0];
-    const boostCategory = params.boostTypeCategory.split('::')[1];
-
-    logger(`Boost type: ${boostType} and category: ${boostCategory}`);
-
-    const boostAmountDetails = params.boostAmountOffered.split('::');
-    logger('Boost amount details: ', boostAmountDetails);
-
-    // start now if nothing provided
-    const boostStartTime = params.startTimeMillis ? moment(params.startTimeMillis) : moment();
-    const boostEndTime = params.endTimeMillis ? moment(params.endTimeMillis) : moment().add(config.get('time.defaultEnd.number'), config.get('time.defaultEnd.unit'));
-
-    logger(`Boost start time: ${boostStartTime.format()} and end time: ${boostEndTime.format()}`);
-    logger('Boost source: ', params.boostSource);
-    logger('Creating user: ', params.systemWideUserId);
-    
-    const instructionToRds = {
-        creatingUserId: params.creatingUserId,
-        boostType,
-        boostCategory,
-        boostStartTime,
-        boostEndTime,
-        boostAmount: parseInt(boostAmountDetails[0], 10),
-        boostUnit: boostAmountDetails[1],
-        boostCurrency: boostAmountDetails[2],
-        fromBonusPoolId: params.boostSource.bonusPoolId,
-        fromFloatId: params.boostSource.floatId,
-        forClientId: params.boostSource.clientId,
-        statusConditions: params.statusConditions,
-        boostAudience: params.boostAudience,
-        boostAudienceSelection: params.boostAudienceSelection,
-        redemptionMsgInstructions: params.redemptionMsgInstructions,
-        defaultStatus: params.initialStatus || 'CREATED'
-    };
-
-    if (boostType === 'REFERRAL') {
-        instructionToRds.flags = [ 'REDEEM_ALL_AT_ONCE' ]
-    }
-
-    // logger('Sending to persistence: ', instructionToRds);
-    const resultOfCall = await persistence.insertBoost(instructionToRds);
-    logger('Result of RDS call: ', resultOfCall);
-    return resultOfCall;
-
-};
-
-////////////////////////////// DEALING WITH BOOSTS ///////////////////////////////////////////
+////////////////////////////// HELPER METHODS ///////////////////////////////////////////
 
 // this takes the event and creates the arguments to pass to persistence to get applicable boosts
 const extractFindBoostKey = (event) => {
@@ -265,19 +180,22 @@ const generateMsgInstruction = (instructionId, destinationUserId, boost) => {
 };
 
 const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
-    const boostMessageInstructions = boost.redemptionMsgInstructions;
+    const boostMessageInstructions = boost.messageInstructionIds;
     logger('Boost msg instructions: ', boostMessageInstructions);
     let assembledMessages = [];
-    boostMessageInstructions.forEach((entry) => {
-        const target = entry.accountId;
-        const instructionId = entry.msgInstructionId;
-        if (target === 'ALL') {
-            const messages = Object.values(affectedAccountUserDict).map((userId) => generateMsgInstruction(instructionId, userId, boost));
-            assembledMessages.push(...messages);
-        } else if (Reflect.has(affectedAccountUserDict, target)) {
-            const userIdForTarget = affectedAccountUserDict[target];
-            assembledMessages.push(generateMsgInstruction(instructionId, userIdForTarget, boost));
-        }
+    // todo : make work for other statuses
+    boostMessageInstructions.
+        filter((entry) => entry.status === 'REDEEMED').
+        forEach((entry) => {
+            const target = entry.accountId;
+            const instructionId = entry.msgInstructionId;
+            if (target === 'ALL') {
+                const messages = Object.values(affectedAccountUserDict).map((userId) => generateMsgInstruction(instructionId, userId, boost));
+                assembledMessages.push(...messages);
+            } else if (Reflect.has(affectedAccountUserDict, target)) {
+                const userIdForTarget = affectedAccountUserDict[target];
+                assembledMessages.push(generateMsgInstruction(instructionId, userIdForTarget, boost));
+            }
     });
     logger('Assembled messages: ', assembledMessages);
 
@@ -399,4 +317,29 @@ module.exports.processEvent = async (event) => {
         statusCode: 200,
         body: JSON.stringify(resultToReturn)
     };
+};
+
+module.exports.processUserBoostResponse = async (event) => {
+    try {
+        if (!event) {
+            logger('Test run on lambda, exiting');
+            return { statusCode: 400 };
+        }
+        
+        const userDetails = extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: status('Forbidden') };
+        }
+
+        const params = extractEventBody(event);
+        logger('Event params: ', params);
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify(params)
+        };
+        
+    } catch (err) {
+        return handleError(err);
+    }
 };
