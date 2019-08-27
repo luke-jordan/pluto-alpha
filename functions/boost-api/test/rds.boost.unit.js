@@ -422,4 +422,37 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         expect(updateBoostResult).to.deep.equal(expectedResult);
     });
 
+    // note: although top-level arrays are part of JSON spec, somewhere between Postgres and Node-PG they tend to get
+    // unreliable and throw errors, so wrapping them in case 
+    it('Alters boosts and records logs', async () => {
+        const testMsgInstructId = uuid();
+        const mockUpdatedTime = moment();
+
+        const alterBoostValue = { 
+            messageInstructionIds: {
+                instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }]
+            }
+        };
+
+        const expectedUpdateDef = {
+            table: boostTable,
+            key: { boostId: testBoostId },
+            value: alterBoostValue,
+            returnClause: 'updated_time'
+        };
+        const expectedLogDef = assembleLogInsertDef([{ boostId: testBoostId, logType: 'BOOST_ALTERED', logContext: alterBoostValue }]);
+
+        const mockResponseFromPersistence = [
+            [{ 'updated_time': mockUpdatedTime.format()}], [{ 'creation_time': moment().format() }]
+        ];
+
+        multiOpStub.resolves(mockResponseFromPersistence);
+
+        const alterBoostResult = await rds.alterBoost(testBoostId, alterBoostValue);
+        expect(alterBoostResult).to.exist;
+        expect(alterBoostResult).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
+
+        expect(multiOpStub).to.have.been.calledOnceWithExactly([expectedUpdateDef], [expectedLogDef]);
+    });
+
 });

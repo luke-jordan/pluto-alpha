@@ -292,7 +292,6 @@ const extractAccountIds = async (selectionClause) => {
 };
 
 module.exports.insertBoost = async (boostDetails) => {
-    
     logger('Instruction received to insert boost: ', boostDetails);
     
     const accountIds = await extractAccountIds(boostDetails.boostAudienceSelection);
@@ -358,6 +357,22 @@ module.exports.insertBoost = async (boostDetails) => {
 };
 
 
-module.exports.alterBoost = (boostId, updateValues) => {
-    
+module.exports.alterBoost = async (boostId, updateValues) => {
+    const boostUpdateDef = {
+        table: boostTable,
+        key: { boostId },
+        value: updateValues,
+        returnClause: 'updated_time'
+    };
+
+    const boostLog = {
+        boostId, logType: 'BOOST_ALTERED', logContext: updateValues
+    };
+    const logDef = constructLogDefinition(Object.keys(boostLog), [boostLog]);    
+
+    const resultOfUpdate = await rdsConnection.multiTableUpdateAndInsert([boostUpdateDef], [logDef]);
+    logger('Result of update from RDS: ', resultOfUpdate);
+
+    const updatedTime = moment(resultOfUpdate[0][0]['updated_time']);
+    return { updatedTime };
 };
