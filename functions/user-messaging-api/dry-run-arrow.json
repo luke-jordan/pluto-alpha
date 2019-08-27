@@ -1,0 +1,103 @@
+{
+    "messagesToDisplay": [
+        {
+            "messageId": "d05c90c1-aaec-43fc-9526-76dd7f13f16f",
+            "title": "Can you beat this challenge?",
+            "body": "Congratulations! You have saved so much you've unlocked a special challenge. Save R100 now to unlock it!",
+            "priority": 100,
+            "display": {
+                "type": "CARD",
+                "titleType": "EMPHASIS",
+                "iconType": "BOOST_ROCKET"
+            },
+            "triggerBalanceFetch": false,
+            "actionToTake": "ADD_CASH",
+            "actionContext": {
+                "boostId": "9746751d-e200-4971-be38-76e6b950a663",
+                "requiredCash": "100::WHOLE_CURRENCY::ZAR",
+                "msgOnSuccess": "fb3e2546-1aa9-4bad-9b7f-16f17608a79b",
+                "sequenceExpiryTimeMillis": 1566502332908
+            }
+        },
+        {
+            "messageId": "fb3e2546-1aa9-4bad-9b7f-16f17608a79b",
+            "title": "Boost challenge unlocked!",
+            "body": "Your top up was successful and you stand a chance to win R20. Follow the instructions below to play the game:",
+            "priority": 100,
+            "display": {
+                "type": "MODAL",
+                "iconType": "SMILEY_FACE"
+            },
+            "triggerBalanceFetch": false,
+            "actionToTake": "PLAY_GAME",
+            "actionContext": {
+                "boostId": "9746751d-e200-4971-be38-76e6b950a663",
+                "gameParams": {
+                    "gameType": "CHASE_ARROW",
+                    "timeLimitSeconds": "20",
+                    "arrowSpeedMultiplier": "5",
+                    "arrowFuzziness": "10%",
+                    "winningThreshold": "10",
+                    "instructionBand": "Tap the arrow of the circle as it spins around 10 times in 20 seconds",
+                    "waitMessage": "c011182d-c3ff-4df1-9958-ce39942734b0",
+                    "finishedMessage": "da619cff-c852-462a-baea-9209bb36ee99",
+                    "failedMessage": ""
+                }
+            }
+        },
+        {
+            "messageId": "c011182d-c3ff-4df1-9958-ce39942734b0",
+            "title": "Boost challenge unlocked!",
+            "body": "You’ve unlocked this challenge and stand a chance of winning R20, but only if you can catch the arrow. Challenge will remain open until the end of the day.",
+            "priority": 100,
+            "display": {
+                "type": "CARD",
+                "titleType": "EMPHASIS",
+                "iconType": "UNLOCKED"
+            },
+            "actionToTake": "PLAY_GAME",
+            "actionContext": {
+                "boostId": "9746751d-e200-4971-be38-76e6b950a663",
+                "gameType": "TAP_SCREEN",
+                "gameParams": {
+                    "gameType": "CHASE_ARROW",
+                    "timeLimitSeconds": "20",
+                    "arrowSpeedMultiplier": "5",
+                    "arrowFuzziness": "10%",
+                    "winningThreshold": "10",
+                    "openingMsg": "fb3e2546-1aa9-4bad-9b7f-16f17608a79b"
+                }
+            }
+        },
+        {
+            "messageId": "da619cff-c852-462a-baea-9209bb36ee99",
+            "title": "Well Done!",
+            "body": "You caught the arrow #{numberUserTaps} times! You won the challenge and R20 has been boosted to your account!",
+            "priority": 100,
+            "display": {
+                "type": "MODAL",
+                "iconType": "THUMBS_UP"
+            },
+            "actionToTake": "DONE",
+            "actionContext": {
+                "boostId": "9746751d-e200-4971-be38-76e6b950a663",
+                "checkOnDismissal": true
+            }
+        },
+        {
+            "messageId": "ad069b04-b2a1-455a-8c06-eca1470b4d97",
+            "title": "Sorry, better luck next time!",
+            "body": "You missed out on this boost challenge, but keep an eye out for future boosts to earn more towards your savings!",
+            "priority": 100,
+            "display": {
+                "type": "MODAL",
+                "iconType": "SAD_FACE"
+            },
+            "actionToTake": "DONE",
+            "actionContext": {
+                "boostId": "9746751d-e200-4971-be38-76e6b950a663",
+                "checkOnDismissal": true
+            }
+        }
+    ]
+}

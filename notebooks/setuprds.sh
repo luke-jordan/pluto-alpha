@@ -14,6 +14,9 @@ psql -f ../templates/rds/create_db_roles.sql
 echo "Creating enum types"
 psql -f ../templates/rds/create_enums.sql
 
+echo "Creating functions"
+psql -f ../templates/rds/create_functions.sql
+
 echo "Setting up account ledger in RDS local"
 psql -f ../templates/rds/create_account_ledger.sql
 
@@ -22,3 +25,9 @@ psql -f ../templates/rds/create_transaction_ledger.sql
 
 echo "Setting up float ledger in RDS local"
 psql -f ../templates/rds/create_float_ledger.sql
+
+echo "Setting up boost tables in RDS local"
+psql -f ../templates/rds/create_boost_tables.sql
+
+echo "Setting up message tables in RDS local"
+psql -f ../templates/rds/create_boost_tables.sql

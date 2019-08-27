@@ -2,8 +2,8 @@
 
 service: user-activity-api
 
-plugins:
-  - serverless-localstack
+# plugins:
+#   - serverless-localstack
 
 custom:
   localstack:
@@ -31,16 +31,18 @@ provider:
     pluto.user.action.lambdas
 
 functions:
-  # save:
-  #   handler: handler.save
-  #   name: activity-save
-  #   events:
-  #     - http:
-  #         path: save
-  #         method: post
-  #   environment:
-  #     NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
-  #     DEBUG: jupiter:*
+  save_initiate:
+    handler: saving-handler.initatePendingSave
+    name: save_initiate
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
+  save_settle:
+    handler: saving-handler.settleInitiatedSave
+    name: save_settle
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
   balance:
     handler: handler.balance
     name: balance_fetch

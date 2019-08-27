@@ -35,11 +35,15 @@ resource "aws_lambda_function" "account_create" {
                 "accountData": "account_data.core_account_ledger"
             },
             "db": {
-                "user": "account_api_worker",
                 "host": "${aws_db_instance.rds[0].address}",
                 "database": "${var.db_name}",
-                "password": "pwd_for_account_api",
                 "port" :"${aws_db_instance.rds[0].port}"
+            },
+            "secrets": {
+                "enabled": true,
+                "names": {
+                    "account_api_worker": "${terraform.workspace}/ops/psql/accounts"
+                }
             }
         }
       )}"
@@ -89,6 +93,11 @@ resource "aws_iam_role_policy_attachment" "account_create_basic_execution_policy
 resource "aws_iam_role_policy_attachment" "account_create_vpc_execution_policy" {
   role = "${aws_iam_role.account_create_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "account_create_secret_get" {
+  role = "${aws_iam_role.balance_fetch_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_account_worker"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

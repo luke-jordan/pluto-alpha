@@ -5,5 +5,9 @@
         "database": "plutotest",
         "password": "pwd_for_transaction_api",
         "port" :"5432"
+    },
+    "logging": {
+        "enabled": "true",
+        "arn": "<insert-arn-here>"
     }
 }

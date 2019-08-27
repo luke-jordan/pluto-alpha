@@ -1,0 +1,1 @@
+../../../templates/rds/create_message_tables.sql

@@ -2,19 +2,19 @@
 
 service: float-api # NOTE: update this with your service name
 
-plugins:
-  - serverless-localstack
+# plugins:
+#   - serverless-localstack
 
 custom:
-  localstack:
-    host: http://localhost
-    stages:
-      - dev
-      - local
-    debug: true
-  stages:
-    - local
-    - dev
+  # localstack:
+  #   host: http://localhost
+  #   stages:
+  #     - dev
+  #     - local
+  #   debug: true
+  # stages:
+  #   - local
+  #   - dev
   thisStage: ${opt:stage, self:provider.stage}
   thisProcess:
     NODE_ENV:
@@ -40,4 +40,16 @@ functions:
           method: post
     environment:
       NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
-      DEBUG: pluto:*
+      DEBUG: jupiter:*
+
+  transfer:
+    handler: transfer-handler.floatTransfer
+    name: float_transfer
+    events:
+      - http:
+          path: transfer
+          method: post
+    environment:
+      NODE_ENV: ${self:custom.thisProcess.NODE_ENV.${self:custom.thisStage}}
+      DEBUG: jupiter:*
+      

@@ -1,9 +1,0 @@
-{
-    "accountId": "0c3caa51-ce5f-467c-9470-3fc34f93b5cc",
-    "savedAmount": 50000,
-    "savedCurrency": "ZAR",
-    "prizePoints": 100,
-    "offerId": "id-of-preceding-offer",
-    "tags": ["TIME_BASED"],
-    "flags": ["RESTRICTED"]
-}

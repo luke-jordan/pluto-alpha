@@ -3,6 +3,8 @@
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('jupiter:balance:test');
+const config = require('config');
+
 const BigNumber = require('bignumber.js');
 const moment = require('moment-timezone');
 const fs = require('fs');
@@ -10,7 +12,7 @@ const fs = require('fs');
 const chai = require('chai');
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 
@@ -21,11 +23,13 @@ const testHelper = require('./test.helper');
 
 const testAccountId = uuid();
 const testUserId = '27b00e1c-4f32-4631-a67b-88aaf5a01d0c';
+const errorCausingUser = 'look-this-is-no-good';
 
 // note : in future at some time will need to handle user in different time zone to float
 const testTimeZone = 'America/New_York';
 const testTimeNow = moment.tz(testTimeZone);
-logger('Set test time now to : ', testTimeNow);
+// logger('Set test time now to : ', testTimeNow);
+const testTimeBOD = testTimeNow.clone().startOf('day');
 const testTimeEOD = testTimeNow.clone().endOf('day');
 
 const testClientId = 'a_client_somewhere';
@@ -39,7 +43,7 @@ const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce project
 const divisorForAccrual = 365;
 const expectedNetAccrualRateBps = new BigNumber(testAccrualRateBps / divisorForAccrual).
     times(new BigNumber(1 - testBonusPoolShare - testClientCoShare - testPrudentialDiscountFactor));
-logger('Net daily rate: ', expectedNetAccrualRateBps.toNumber());
+// logger('Net daily rate: ', expectedNetAccrualRateBps.toNumber());
 
 // const testAccumulatedBalance = BigNumber(Math.floor(10000 * 100 * 100 * Math.random()));
 const toHundredthCent = 100 * 100;
@@ -49,16 +53,25 @@ const expectedAmountAccruedToday = testAccumulatedBalance.times(expectedNetAccru
 
 const expectedBalanceToday = testAccumulatedBalance.plus(expectedAmountAccruedToday).decimalPlaces(0).toNumber();
 
-const expectedNumberOfDays = 5;
+const expectedNumberOfDays = config.get('projection.defaultDays');
 const effectiveDailyRate = expectedAmountAccruedToday.dividedBy(testAccumulatedBalance);
-logger('Effective daily rate: ', effectiveDailyRate.toNumber());
+// logger('Effective daily rate: ', effectiveDailyRate.toNumber());
+
+const secondsInDay = 24 * 60 * 60;
+const linearAmountPerSecond = expectedAmountAccruedToday.dividedBy(secondsInDay);
+// logger('Effective linear amount per second: ', linearAmountPerSecond.toString());
+const secondsSinceBOD = testTimeNow.unix() - testTimeBOD.unix();
+// logger('Seconds since start of day: ', secondsSinceBOD);
+const immediateBalance = testAccumulatedBalance.plus(linearAmountPerSecond.times(secondsSinceBOD));
+// logger('Current time expected balance: ', immediateBalance.toNumber());
+
 const expectedBalanceSubsequentDays = Array.from(Array(expectedNumberOfDays).keys()).map((day) => {
     // note: lots of bignumber and fp weirdness to watch out for in here, hence splitting it and making very explicit
     const rebasedDay = day + 1;
     const multiplier = effectiveDailyRate.plus(1).pow(rebasedDay + 1);
     const endOfDay = testTimeEOD.clone().add(rebasedDay, 'days');
     const balanceEndOfDay = testAccumulatedBalance.times(multiplier); 
-    logger('Test end of day: ', balanceEndOfDay.toNumber());
+    // logger('Test end of day: ', balanceEndOfDay.toNumber());
     return {
         'amount': balanceEndOfDay.decimalPlaces(0).toNumber(),
         'currency': 'USD',
@@ -74,7 +87,7 @@ const accountClientFloatStub = sinon.stub();
 const findAccountsForUserStub = sinon.stub();
 const floatPrincipalVarsStub = sinon.stub();
 
-const handler = proxyquire('../handler', {
+const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
         'findClientAndFloatForAccount': accountClientFloatStub,
@@ -101,15 +114,32 @@ const resetStubs = (historyOnly = true) => {
 };
 
 describe('Fetches user balance and makes projections', () => {
+
+    const createUserIdEvent = (userId) => ({ 
+        userId, 
+        currency: 'USD', 
+        atEpochMillis: testTimeNow.valueOf(),
+        timezone: testTimeZone,
+        clientId: testClientId,
+        floatId: testFloatId 
+    });
     
     const wellFormedResultBody = {
         accountId: [testAccountId],
         currentBalance: {
-            'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
+            'amount': immediateBalance.decimalPlaces(0).toNumber(),
             'unit': 'HUNDREDTH_CENT',
             'currency': 'USD',
             'datetime': testTimeNow.format(),
             'epochMilli': testTimeNow.valueOf(),
+            'timezone': testTimeZone
+        },
+        balanceStartDayOrLastSettled: {
+            'amount': testAccumulatedBalance.decimalPlaces(0).toNumber(),
+            'unit': 'HUNDREDTH_CENT',
+            'currency': 'USD',
+            'datetime': testTimeBOD.format(),
+            'epochMilli': testTimeBOD.valueOf(),
             'timezone': testTimeZone
         },
         balanceEndOfToday: {
@@ -122,6 +152,8 @@ describe('Fetches user balance and makes projections', () => {
         },
         balanceSubsequentDays: expectedBalanceSubsequentDays
     };
+
+    // logger('Expected body: ', wellFormedResultBody);
 
     const checkResultIsWellFormed = (balanceAndProjections, expectedBody = wellFormedResultBody) => {
         expect(balanceAndProjections).to.exist;
@@ -146,18 +178,15 @@ describe('Fetches user balance and makes projections', () => {
     };
 
     before(() => {
-        // logger('Test time now: ', testTimeNow.format(), ' and end of day: ', testTimeEOD.format());
-        // logger('Expected balance at end of day: ', expectedBalanceToday);
-        // logger('Effective daily rate: ', effectiveDailyRate.toNumber());
-        // logger('Balances subsequent days, first: ', expectedBalanceSubsequentDays[0]);
-        // resetStubs(false);
-        
         accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment).resolves({ 
             amount: testAccumulatedBalance.decimalPlaces(0).toNumber(), 
-            unit: 'HUNDREDTH_CENT'
+            unit: 'HUNDREDTH_CENT',
+            lastTxTime: testTimeBOD
         });
         accountClientFloatStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
         findAccountsForUserStub.withArgs(testUserId).resolves([testAccountId]);
+        findAccountsForUserStub.withArgs('user-has-no-account').resolves([]);
+        findAccountsForUserStub.withArgs(errorCausingUser).rejects(new Error('Something went wrong with DynamoDB (for example)'));
         
         floatPrincipalVarsStub.withArgs(testClientId, testFloatId).resolves({ 
             accrualRateAnnualBps: testAccrualRateBps, 
@@ -194,14 +223,30 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Wrapper returns appropriate error if no authorizer', async () => {
-        const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' } });
-        expect(balanceError1).to.exist;
+        const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' }, requestContext: {} });
+        logger('This error: ', balanceError1);
+        expect(balanceError1).to.have.property('statusCode', 403);
         // const balanceError2 = await handler.balanceWrapper(); 
     });
 
-    // it('Wrapper swallows error & logs it correctly', async () => {
+    it('Warmup handled gracefully', async () => {
+        const expectedWarmupResponse = await handler.balanceWrapper({});
+        expect(expectedWarmupResponse).to.exist;
+        expect(expectedWarmupResponse).to.have.property('statusCode', 400);
+        expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
 
-    // });
+        const expectedWarmupFull = await handler.balance({});
+        expect(expectedWarmupFull).to.exist;
+        expect(expectedWarmupFull).to.have.property('statusCode', 400);
+        expect(expectedWarmupFull).to.have.property('body', 'Empty invocation');
+    });
+
+    it('Wrapper swallows error & logs it correctly', async () => {
+        const expectedErrorWrapper = await handler.balanceWrapper({ requestContext: { authorizer: { systemWideUserId: errorCausingUser }}});
+        expect(expectedErrorWrapper).to.exist;
+        expect(expectedErrorWrapper).to.have.property('statusCode', 500);
+        expect(expectedErrorWrapper).to.have.property('body', JSON.stringify('Something went wrong with DynamoDB (for example)'));
+    });
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
         const balanceAndProjections = await handler.balance({ 
@@ -217,16 +262,22 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Obtains balance and future projections correctly when given a system wide user ID, single and multiple accounts', async () => {
-        const balanceAndProjections = await handler.balance({ 
-            userId: testUserId, 
-            currency: 'USD', 
-            atEpochMillis: testTimeNow.valueOf(),
-            timezone: testTimeZone,
-            clientId: testClientId,
-            floatId: testFloatId 
-        });
-
+        const balanceAndProjections = await handler.balance(createUserIdEvent(testUserId));
         checkResultIsWellFormed(balanceAndProjections);
+    });
+
+    it('Handles no account ID properly', async () => {
+        const errorResult = await handler.balance(createUserIdEvent('user-has-no-account'));
+        expect(errorResult).to.exist;
+        expect(errorResult).to.have.property('statusCode', 404);
+        expect(errorResult).to.have.property('body', 'User does not have an account open yet');
+    });
+
+    it('Full lambda wraps errors properly', async () => {
+        const expectedError = await handler.balance(createUserIdEvent(errorCausingUser));
+        expect(expectedError).to.exist;
+        expect(expectedError).to.have.property('statusCode', 500);
+        expect(expectedError).to.have.property('body', JSON.stringify('Something went wrong with DynamoDB (for example)'));
     });
 
     it('Obtains balance and future projections for default client and float when given an account Id or user Id', async () => {

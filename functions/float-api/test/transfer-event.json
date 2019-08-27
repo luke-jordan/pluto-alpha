@@ -1,0 +1,25 @@
+{
+    "instructions": [
+        {
+            "floatId": "primary_cash",
+            "fromId": "primary_bonus_pool",
+            "fromType": "BONUS_POOL",
+            "currency": "USD",
+            "unit": "HUNDREDTH_CENT",
+            "identifier": "6a2549c9-c98d-4e01-b4e3-b8fac532a6f5",
+            "relatedEntityType": "BOOST_REDEMPTION",
+            "recipients": [
+                {
+                    "recipientId": "0e78aab2-4197-42bd-8d06-42678b5f519e",
+                    "amount": "100000",
+                    "recipientType": "END_USER_ACCOUNT"
+                },
+                {
+                    "recipientId": "96faba31-09fe-4e2f-9cd2-1d23213c5f78",
+                    "amount": "100000",
+                    "recipientType": "END_USER_ACCOUNT"
+                }
+            ]
+        }
+    ]
+}

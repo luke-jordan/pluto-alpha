@@ -8,6 +8,24 @@ variable "aws_default_region" {
     }
 }
 
+variable "aws_account" {
+    default=  "455943420663"
+    type = "string"
+}
+
+variable jwt_authorizer_arn {
+  default = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
+  type = "string"
+}
+
+variable user_event_topic_arn {
+    default = {
+        "staging" = "arn:aws:sns:us-east-1:455943420663:staging_user_event_topic"
+        "master" = "arn:aws:sns:eu-west-1:455943420663:master_user_event_topic"
+    }
+    type = "map"
+}
+
 variable "dynamo_tables_read_capacity" {
     default = {
         "staging"  = {
@@ -46,7 +64,6 @@ variable "az_count" {
   description = "Number of AZs to cover in a given AWS region"
   default     = "2"
 }
-
 
 variable "db_allocated_storage" {
   default = "20"

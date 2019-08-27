@@ -7,8 +7,6 @@ create table if not exists account_data.core_account_ledger (
     account_id uuid not null primary key,
     owner_user_id uuid not null,
     opening_user_id uuid not null,
-    user_first_name varchar (100) not null,
-    user_last_name varchar (100) not null,
     responsible_client_id varchar(50) not null,
     default_float_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
@@ -33,3 +31,10 @@ grant update on account_data.core_account_ledger to account_api_worker;
 -- And these are so save event handler can find default floats if necessary (+ validate)
 grant usage on schema account_data to save_tx_api_worker;
 grant select on account_data.core_account_ledger to save_tx_api_worker;
+
+-- Likewise, so boost worker can find account ids and users, and so can message worker
+grant usage on schema account_data to boost_worker;
+grant select (account_id, owner_user_id, responsible_client_id, default_float_id, frozen) on account_data.core_account_ledger to boost_worker;
+
+grant usage on schema account_data to message_api_worker;
+grant select (account_id, owner_user_id, responsible_client_id, frozen) on account_data.core_account_ledger to message_api_worker;
