@@ -11,6 +11,8 @@ chai.use(require('sinon-chai'));
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
+const testHelper = require('./message.test.helper');
+
 const getMessageInstructionStub = sinon.stub();
 const getUserIdsStub = sinon.stub();
 const insertUserMessagesStub = sinon.stub();
@@ -20,7 +22,7 @@ const deletePushTokenStub = sinon.stub();
 const insertPushTokenStub = sinon.stub();
 const momentStub = sinon.stub();
 
-const handler = proxyquire('../user-message-handler', {
+const handler = proxyquire('../message-creating-handler', {
     './persistence/rds.notifications': {
         'getMessageInstruction': getMessageInstructionStub,
         'getUserIds': getUserIdsStub,
@@ -34,235 +36,221 @@ const handler = proxyquire('../user-message-handler', {
     'moment': momentStub
 });
 
-const resetStubs = () => {
-    getMessageInstructionStub.reset();
-    getUserIdsStub.reset();
-    insertUserMessagesStub.reset();
-    getInstructionsByTypeStub.reset();
-    getPushTokenStub.reset();
-    deletePushTokenStub.reset();
-    insertPushTokenStub.reset();
-    momentStub.reset();
-};
+const resetStubs = () => testHelper.resetStubs(getMessageInstructionStub, getUserIdsStub, insertUserMessagesStub,
+    getInstructionsByTypeStub, getPushTokenStub, deletePushTokenStub, insertPushTokenStub, momentStub);
 
-const wrapEvent = (requestBody, systemWideUserId, userRole) => ({
-    body: JSON.stringify(requestBody),
-    requestContext: {
-        authorizer: {
-            systemWideUserId,
-            userRole
-        }
-    }
-});
+const simpleCardMsgTemplate = require('./templates/simpleTemplate');
+const simpleMsgVariant = require('./templates/variantTemplate');
+const referralMsgVariant = require('./templates/referralTemplate');
+const recurringMsgTemplate = require('./templates/recurringTemplate')
 
 describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
+    const mockInstructionId = uuid();
     const mockUserId = uuid();
     const mockClientId = uuid();
-    const mockInstructionId = uuid();
-    const mockInstructionIdOnIndividual = uuid();
-    const mockInstructionIdOnGroup = uuid();
-    const mockInstructionIdOnBoost = uuid();
-    const mockInstructionIdOnError = uuid();
     const mockBoostId = uuid();
+    
+    const createMockUserIds = (quantity) => Array(quantity).fill().map(() => uuid());
+    
     const testTime = moment();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
-    const mockInsertionId = 111;
+
+    const mockTemplate = {
+        template: {
+            DEFAULT: simpleCardMsgTemplate
+        }
+    };
 
     const mockInstruction = {
         instructionId: mockInstructionId,
         presentationType: 'ONCE_OFF',
         active: true,
         audienceType: 'ALL_USERS',
-        templates: JSON.stringify({
-            default: config.get('instruction.templates.default'),
-            otherTemplates: null // test on array of template objects of the form {title, body}
-        }),
+        templates: mockTemplate,
         selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
-        responseAction: 'VIEW_HISTORY',
-        responseContext: JSON.stringify({ boostId: mockBoostId }),
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
         lastProcessedTime: moment().format(),
-        messagePriority: 0
+        messagePriority: 100
     };
+
+    // not including message ID else have either spurious fails or a lot of unnecessary complexity
+    const mockUserMessage = (userId, msgTemplate = mockTemplate.template['DEFAULT'], variant = 'DEFAULT') => ({
+        destinationUserId: userId,
+        startTime: '2050-09-01T11:47:41.596Z',
+        endTime: '2061-01-09T11:47:41.596Z', 
+        messageTitle: msgTemplate.title,
+        messageBody: msgTemplate.body,
+        messageVariant: variant,
+        display: msgTemplate.display,
+        instructionId: mockInstructionId,
+        messagePriority: 100,
+        presentationType: 'ONCE_OFF',
+        followsPriorMessage: false,
+        hasFollowingMessage: false,
+        actionContext: {
+            actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext
+        }
+    }); 
 
     const resetInstruction = () => {
         mockInstruction.audienceType = 'ALL_USERS';
         mockInstruction.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
-        mockInstruction.templates = JSON.stringify({default: config.get('instruction.templates.default'), otherTemplates: null});
+        mockInstruction.templates = mockTemplate;
     };
-
-    const createMockUserIds = (quantity) => {
-        const mockUserIds = [];
-        for (let i = 0; i < quantity; i++) {
-            mockUserIds.push(uuid());
-        }
-        logger('created userIds of length:', mockUserIds.length);
-        return mockUserIds;
-    };
-
-    const expectedInsertionResult = {
-        message: [{
-            insertion_id: mockInsertionId,
-            creation_time: mockCreationTime
-        }]
-    };
-
-    const commonAssertions = (statusCode, result, expectedResult) => {
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(statusCode);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
-    };
+    
+    const expectedInsertionRows = (quantity, start = 1) => 
+        Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
 
     beforeEach(() => {
         resetStubs();
         resetInstruction();
-        momentStub.returns({ format: () => testTime.format() });
+        momentStub.returns(testTime);
     });
 
-    it('should insert notification messages for all users in current universe', async () => {
-        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
-        const mockEvent = {
-            instructionId: mockInstructionId
-        };
+    it('Should insert notification messages for all users in current universe', async () => {
+        const testNumberUsers = 1000;
 
-        const result = await handler.createUserMessages(mockEvent);
+        const testUserIds = createMockUserIds(testNumberUsers);
+        
+        getMessageInstructionStub.withArgs(mockInstructionId).resolves(mockInstruction);
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).resolves(testUserIds);
+        insertUserMessagesStub.resolves(expectedInsertionRows(testNumberUsers));
+        
+        const expectedResult = { numberMessagesCreated: testNumberUsers, creationTimeMillis: mockCreationTime.valueOf() };
+        
+        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
         logger('Result of user messages insertion:', result);
 
-        commonAssertions(200, result, expectedResult);
+        testHelper.standardOkayChecks(result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
+
+        // testing all one thousand would be very painful, so we sample and test
+        const testUserMsgs = testUserIds.map((userId) => mockUserMessage(userId));
+        const insertUserMsgArgs = insertUserMessagesStub.getCall(0).args[0];
+
+        expect(insertUserMsgArgs).to.be.an('array').of.length(testNumberUsers);
+        
+        const userIdToTest = testUserIds[Math.floor(Math.random() * testNumberUsers)];
+        logger('Testing for user ID: ', userIdToTest);
+
+        const testMessage = insertUserMsgArgs[0];
+        expect(testMessage).to.have.property('messageId');
+        Reflect.deleteProperty(testMessage, 'messageId');
+        expect(testMessage).to.deep.equal(testUserMsgs[0]);
     });
 
     it('should use other templates over default where provided', async () => {
+        const testNumberUsers = 1000;
+        const testUserIds = createMockUserIds(testNumberUsers);
+
         mockInstruction.templates = {
-            default: config.get('instruction.templates.default'),
-            otherTemplates: 'Greetings from Jupiter.'
-        };
-        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
-        const mockEvent = {
-            instructionId: mockInstructionId
+            template: {
+                DEFAULT: simpleCardMsgTemplate,
+                VARIANT: simpleMsgVariant
+            }
         };
 
-        const result = await handler.createUserMessages(mockEvent);
+        getMessageInstructionStub.resolves(mockInstruction);
+        getUserIdsStub.resolves(testUserIds);
+        insertUserMessagesStub.resolves(expectedInsertionRows(testNumberUsers));
+        
+        const expectedResult = { numberMessagesCreated: testNumberUsers, creationTimeMillis: mockCreationTime.valueOf() };
+        
+        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
         logger('Result of user messages insertion:', result);
+        
+        testHelper.standardOkayChecks(result, expectedResult);
 
-        commonAssertions(200, result, expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
+
+        const insertUserMsgArgs = insertUserMessagesStub.getCall(0).args[0];
+
+        const testDefaultMsg = mockUserMessage(testUserIds[0]);
+        const testVariantMsg = mockUserMessage(testUserIds[1], simpleMsgVariant, 'VARIANT');
+        
+        const defaultTester = (msg) => Object.keys(testDefaultMsg).filter((key) => key !== 'destinationUserId')
+            .reduce((soFar, key) => soFar && JSON.stringify(msg[key]) === JSON.stringify(testDefaultMsg[key]), true);
+        const variantTester = (msg) => Object.keys(testVariantMsg).filter((key) => key !== 'destinationUserId')
+            .reduce((soFar, key) => soFar && JSON.stringify(msg[key]) === JSON.stringify(testVariantMsg[key]), true);
+        logger('Tester works? : ', defaultTester(insertUserMsgArgs[0]));
+        logger('And other tests? : ', variantTester(insertUserMsgArgs[0]));
+        
+        expect(insertUserMsgArgs).to.be.an('array').of.length(testNumberUsers);
+        const defaultCount = insertUserMsgArgs.map((msg) => defaultTester(msg) ? 1 : 0).reduce((sum, cum) => sum + cum, 0);
+        const variantCount = insertUserMsgArgs.map((msg) => variantTester(msg) ? 1 : 0).reduce((sum, cum) => sum + cum, 0);
+        logger('Default count: ', defaultCount, ' and variant count: ', variantCount);
+        
+        // we might want to range these in future, but for now, make sure not all default
+        expect(defaultCount + variantCount).to.equal(testNumberUsers);
+        expect(defaultCount).to.be.lessThan(testNumberUsers);
+        expect(variantCount).to.be.greaterThan(0);
     });
 
-    it('should normalize event in body', async () => {
-        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
-        const mockEvent = {
-            body: JSON.stringify({
-                instructionId: mockInstructionId
-            })
+    it('Should insert sequences properly', async () => {
+        const testNumberUsers = 10;
+        const testUserIds = createMockUserIds(testNumberUsers);
+
+        mockInstruction.templates = {
+            sequence: [
+                { DEFAULT: simpleCardMsgTemplate, identifier: 'openingMsg' },
+                { DEFAULT: simpleMsgVariant, identifier: 'unlockedMsg' }
+            ]
         };
 
-        const result = await handler.createUserMessages(mockEvent);
-        logger('Result of user messages insertion:', result);
+        const expectedNumberMessages = testNumberUsers * mockInstruction.templates.sequence.length;
+        logger('Expecting ', expectedNumberMessages, ' messages');
 
-        commonAssertions(200, result, expectedResult);
+        getMessageInstructionStub.resolves(mockInstruction);
+        getUserIdsStub.resolves(testUserIds);
+        insertUserMessagesStub.resolves(expectedInsertionRows(expectedNumberMessages));
+
+        const expectedResult = { numberMessagesCreated: expectedNumberMessages, creationTimeMillis: mockCreationTime.valueOf() };
+        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+
+        testHelper.standardOkayChecks(result, expectedResult);
+
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
-    });
+        
+        // and todo : also check for inserting message sequence dict
+        const insertUserMsgArgs = insertUserMessagesStub.getCall(0).args[0];
+        expect(insertUserMsgArgs).to.be.an('array').of.length(expectedNumberMessages);
+        const expectedOpeningMsg = mockUserMessage(testUserIds[0]);
+        expectedOpeningMsg.hasFollowingMessage = true;
+        const expectedSecondMsg = mockUserMessage(testUserIds[0], mockInstruction.templates.sequence[1].DEFAULT);  // still 'DEFAULT' in its position
+        expectedSecondMsg.followsPriorMessage = true;
 
-    it('should user user other template over default template where provided', async () => {
-        mockInstruction.templates = JSON.stringify({
-            default: config.get('instruction.templates.default'),
-            otherTemplates: 'The world ends at sunrise.'
-        });
-        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
-        const mockEvent = {
-            instructionId: mockInstructionId
+        const firstMsgToPers = insertUserMsgArgs[0];
+        const secondMsgToPers = insertUserMsgArgs[1];
+
+        expect(firstMsgToPers).to.have.property('messageId');
+        expect(secondMsgToPers).to.have.property('messageId');
+
+        const expectedMsgSequence = {
+            'openingMsg': firstMsgToPers.messageId,
+            'unlockedMsg': secondMsgToPers.messageId
         };
 
-        const result = await handler.createUserMessages(mockEvent);
-        logger('Result of user messages insertion:', result);
+        expect(firstMsgToPers).to.have.property('messageSequence');
+        expect(firstMsgToPers.messageSequence).to.deep.equal(expectedMsgSequence);
+        expect(secondMsgToPers).to.have.property('messageSequence');
+        expect(secondMsgToPers.messageSequence).to.deep.equal(expectedMsgSequence);
 
-        commonAssertions(200, result, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
-        expect(insertUserMessagesStub).to.have.been.calledOnce;
-    });
+        expectedOpeningMsg.messageId = firstMsgToPers.messageId;
+        expectedOpeningMsg.messageSequence=  firstMsgToPers.messageSequence;
+        expectedSecondMsg.messageId = secondMsgToPers.messageId;
+        expectedSecondMsg.messageSequence = secondMsgToPers.messageSequence;
 
-    it('should selection instruction should default to null where not provided (for the love of full coverage)', async () => {
-        mockInstruction.selectionInstruction = null;
-        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockInstruction);
-        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1000));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
-        const mockEvent = {
-            instructionId: mockInstructionId
-        };
-
-        const result = await handler.createUserMessages(mockEvent);
-        logger('Result of user messages insertion:', result);
-
-        commonAssertions(200, result, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
-        expect(insertUserMessagesStub).to.have.been.calledOnce;
-    });
-
-    it('should insert user message on individual user', async () => {
-        mockInstruction.audienceType = 'INDIVIDUAL';
-        mockInstruction.selectionInstruction = `whole_universe from #{'{"specific_users":["${mockUserId}"]}'}`;
-        getMessageInstructionStub.withArgs(mockInstructionIdOnIndividual).returns(mockInstruction);
-        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(1));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
-        const mockEvent = {
-            instructionId: mockInstructionIdOnIndividual
-        };
-
-        const result = await handler.createUserMessages(mockEvent);
-        logger('Result of user messages insertion:', result);
-
-        commonAssertions(200, result, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnIndividual);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
-        expect(insertUserMessagesStub).to.have.been.calledOnce;
-    });
-
-    it('should insert user messages on a group of users', async () => {
-        mockInstruction.audienceType = 'GROUP';
-        mockInstruction.selectionInstruction = `random_sample #{0.75} from #{'{"client_id":"${mockClientId}"}'}`;
-        getMessageInstructionStub.withArgs(mockInstructionIdOnGroup).returns(mockInstruction);
-        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns(createMockUserIds(750));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
-        const mockEvent = {
-            instructionId: mockInstructionIdOnGroup
-        };
-
-        const result = await handler.createUserMessages(mockEvent);
-        logger('Result of user messages insertion:', result);
-
-        commonAssertions(200, result, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnGroup);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
-        expect(insertUserMessagesStub).to.have.been.calledOnce;
+        expect(insertUserMsgArgs[0]).to.deep.equal(expectedOpeningMsg);
+        expect(insertUserMsgArgs[1]).to.deep.equal(expectedSecondMsg);
     });
 
     it('should insert boost notification message from boost api', async () => {
@@ -275,10 +263,11 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             presentationType: 'EVENT_DRIVEN',
             active: true,
             audienceType: 'INDIVIDUAL',
-            templates: JSON.stringify({
-                default: config.get('instruction.templates.default'),
-                otherTemplates: config.get('instruction.templates.boost')
-            }),
+            templates: { 
+                template: {
+                    DEFAULT: referralMsgVariant
+                }
+            },
             selectionInstruction: `whole_universe from #{{"specific_users":["${testReferringUser}","${testReferredUser}"]}}`,
             recurrenceInstruction: null,
             responseAction: 'VIEW_HISTORY',
@@ -289,38 +278,123 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
             messagePriority: 0
         };
 
-        getMessageInstructionStub.withArgs(mockInstructionIdOnBoost).returns(mockBoostInstruction);
-        getUserIdsStub.withArgs(mockBoostInstruction.selectionInstruction).returns(createMockUserIds(2));
-        insertUserMessagesStub.returns([ { insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = expectedInsertionResult;
+        getMessageInstructionStub.resolves(mockBoostInstruction);
+        getUserIdsStub.withArgs(mockBoostInstruction.selectionInstruction).resolves(createMockUserIds(1));
+        insertUserMessagesStub.resolves(expectedInsertionRows(1));
+
+        const expectedResult = { numberMessagesCreated: 1, creationTimeMillis: mockCreationTime.valueOf() };
         const mockEvent = {
-            instructionId: mockInstructionIdOnBoost,
+            instructionId: mockInstructionId,
             destination: mockUserId,
-            parameters: { boostAmount: '$10' },
+            parameters: { boostAmount: '$10', boostAmountOther: '$20' },
             triggerBalanceFetch: true
         };
 
         const result = await handler.createUserMessages(mockEvent);
         logger('result of boost message insertion:', result);
 
-        commonAssertions(200, result, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnBoost);
+        testHelper.standardOkayChecks(result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockBoostInstruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+
+        const insertUserMsgArgs = insertUserMessagesStub.getCall(0).args[0];
+        expect(insertUserMsgArgs).to.be.an('array').of.length(1);
+
+        const messageBody = insertUserMsgArgs[0].messageBody;
+        const expectedMsgBody = 'Busani Ndlovu has signed up to Jupiter using your referral code, earning you a $10 boost to your savings. He also earned $20';
+        logger('Message body: ', messageBody);
+        expect(messageBody).to.be.equal(expectedMsgBody);
+    });
+
+    it('should normalize event in body', async () => {
+        const testNumberUsers = 1;
+        const testUserIds = createMockUserIds(testNumberUsers);
+        
+        getMessageInstructionStub.withArgs(mockInstructionId).resolves(mockInstruction);
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).resolves(testUserIds);
+        insertUserMessagesStub.resolves(expectedInsertionRows(testNumberUsers));
+        
+        const expectedResult = { numberMessagesCreated: testNumberUsers, creationTimeMillis: mockCreationTime.valueOf() };
+        
+        const mockEvent = { body: JSON.stringify({ instructionId: mockInstructionId })};
+
+        const result = await handler.createUserMessages(mockEvent);
+        logger('Result of user messages insertion:', result);
+
+        testHelper.standardOkayChecks(result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
     });
 
-    it('should return an error on instruction extraction failure', async () => {
-        getMessageInstructionStub.withArgs(mockInstructionIdOnError).throws(new Error('Error extracting message instruction'));
-        const mockEvent = {
-            instructionId: mockInstructionIdOnError
-        };
-        const expectedResult = { message: 'Error extracting message instruction' };
+    it('should selection instruction should default to null where not provided (for the love of full coverage)', async () => {
+        mockInstruction.selectionInstruction = null;
+        getMessageInstructionStub.withArgs(mockInstructionId).resolves(mockInstruction);
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns([]);
+        
+        const expectedResult = { result: 'NO_USERS' };
+        const mockEvent = { instructionId: mockInstructionId };
 
         const result = await handler.createUserMessages(mockEvent);
+        
+        testHelper.standardOkayChecks(result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.not.have.been.called;
+    });
+
+    it('should insert user message on individual user', async () => {
+        mockInstruction.audienceType = 'INDIVIDUAL';
+        mockInstruction.selectionInstruction = `whole_universe from #{'{"specific_users":["${mockUserId}"]}'}`;
+        
+        getMessageInstructionStub.resolves(mockInstruction);
+        getUserIdsStub.resolves(createMockUserIds(1));
+        insertUserMessagesStub.resolves(expectedInsertionRows(1));
+        
+        const expectedResult = { numberMessagesCreated: 1, creationTimeMillis: mockCreationTime.valueOf() };
+
+        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        
+        testHelper.standardOkayChecks(result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+    });
+
+    it('should insert user messages on a group of users', async () => {
+        const numberSampledUsers = 7500;
+
+        mockInstruction.audienceType = 'GROUP';
+        mockInstruction.selectionInstruction = `random_sample #{0.75} from #{'{"client_id":"${mockClientId}"}'}`;
+        
+        getMessageInstructionStub.withArgs(mockInstructionId).resolves(mockInstruction);
+        getUserIdsStub.withArgs(mockInstruction.selectionInstruction).resolves(createMockUserIds(numberSampledUsers));
+        insertUserMessagesStub.resolves(expectedInsertionRows(numberSampledUsers));
+        
+        const expectedResult = { numberMessagesCreated: numberSampledUsers, creationTimeMillis: mockCreationTime.valueOf() };
+        
+        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        
+        testHelper.standardOkayChecks(result, expectedResult);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+        const insertedMessages = insertUserMessagesStub.getCall(0).args[0];
+        expect(insertedMessages).to.be.an('array').of.length(numberSampledUsers);
+    });
+
+    it('should return an error on instruction extraction failure', async () => {
+        getMessageInstructionStub.withArgs(mockInstructionId).rejects(new Error('Error extracting message instruction'));
+        const expectedResult = { message: 'Error extracting message instruction' };
+
+        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
         logger('Result of failing intruction extraction:', result);
 
-        commonAssertions(500, result, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnError);
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 500);
+        expect(result).to.have.property('body', JSON.stringify(expectedResult));
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.not.been.called;
         expect(insertUserMessagesStub).to.have.not.been.called;
     });
@@ -339,10 +413,7 @@ describe('*** UNIT TESTING NEW USER MESSAGE SYNC ***', () => {
         presentationType: 'RECURRING',
         active: true,
         audienceType: 'ALL_USERS',
-        templates: JSON.stringify({
-            default: config.get('instruction.templates.default'),
-            otherTemplates: 'Welcome to Jupiter savings.'
-        }),
+        templates: { template: { DEFAULT: recurringMsgTemplate }},
         selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
@@ -368,15 +439,15 @@ describe('*** UNIT TESTING NEW USER MESSAGE SYNC ***', () => {
     it('should populate a new users messages with recurring messages targeted at all users', async () => {
         getInstructionsByTypeStub.withArgs('ALL_USERS', 'RECURRING').resolves([mockInstruction, mockInstruction, mockInstruction]);
         insertUserMessagesStub.returns([
-            { insertion_id: 1, creation_time: mockCreationTime },
-            { insertion_id: 2, creation_time: mockCreationTime },
-            { insertion_id: 3, creation_time: mockCreationTime }
+            { insertionId: 1, creationTime: mockCreationTime },
+            { insertionId: 2, creationTime: mockCreationTime },
+            { insertionId: 3, creationTime: mockCreationTime }
         ]);
         const expectedResult = { 
             message: [
-                { insertion_id: 1, creation_time: mockCreationTime },
-                { insertion_id: 2, creation_time: mockCreationTime },
-                { insertion_id: 3, creation_time: mockCreationTime }
+                { insertionId: 1, creationTime: mockCreationTime },
+                { insertionId: 2, creationTime: mockCreationTime },
+                { insertionId: 3, creationTime: mockCreationTime }
             ]
         };
         
@@ -447,7 +518,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
             token: mockPushToken
         };
 
-        const mockEvent = wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
+        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
 
         const result = await handler.insertPushToken(mockEvent);
         logger('Result of push token persistence:', result);
@@ -491,7 +562,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
             token: mockPushToken
         };
 
-        const mockEvent = wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
+        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
 
         const result = await handler.insertPushToken(mockEvent);
         logger('Result of push token persistence:', result);
@@ -538,7 +609,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
     //         token: mockPushToken
     //     };
 
-    //     const mockEvent = wrapEvent(mockBody, mockAlienUserId, 'ORDINARY_USER');
+    //     const mockEvent = testHelper.wrapEvent(mockBody, mockAlienUserId, 'ORDINARY_USER');
 
     //     const expectedResult = { statusCode: 403 };
 
@@ -566,7 +637,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
             token: mockPushToken
         };
 
-        const mockEvent = wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
+        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
 
         const result = await handler.insertPushToken(mockEvent);
         logger('Result of push token insertion on persistence failure:', result);
@@ -597,7 +668,7 @@ describe('*** UNIT TESTING DELETE PUSH TOKEN HANDLER ***', () => {
     
         deletePushTokenStub.withArgs(mockProvider, mockUserId).resolves([]);
 
-        const mockEvent = wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
+        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
         const expectedResult = { result: 'SUCCESS', details: [] };
 
         const result = await handler.deletePushToken(mockEvent);
@@ -633,7 +704,7 @@ describe('*** UNIT TESTING DELETE PUSH TOKEN HANDLER ***', () => {
             userId: mockUserId
         };
 
-        const mockEvent = wrapEvent(mockBody, mockAlienUserId, 'ORDINARY');
+        const mockEvent = testHelper.wrapEvent(mockBody, mockAlienUserId, 'ORDINARY');
         const expectedResult = { statusCode: 403 };
 
         const result = await handler.deletePushToken(mockEvent);
@@ -651,7 +722,7 @@ describe('*** UNIT TESTING DELETE PUSH TOKEN HANDLER ***', () => {
         };
 
         deletePushTokenStub.withArgs(mockProvider, mockUserIdOnError).throws(new Error('Persistence error'));
-        const mockEvent = wrapEvent(mockBody, mockUserIdOnError, 'ORDINARY_USER');
+        const mockEvent = testHelper.wrapEvent(mockBody, mockUserIdOnError, 'ORDINARY_USER');
 
         const expectedResult = { result: 'ERROR', details: 'Persistence error' };
 

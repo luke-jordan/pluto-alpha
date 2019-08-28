@@ -286,6 +286,10 @@ module.exports.updateUserMessage = async (event) => {
         const { messageId, userAction }= JSON.parse(event.body);
         logger('Processing message ID update, based on user action: ', userAction);
 
+        if (!messageId || messageId.length === 0) {
+            return { statusCode: 400 }
+        };
+
         let response = { };
         switch (userAction) {
             case 'DISMISSED':

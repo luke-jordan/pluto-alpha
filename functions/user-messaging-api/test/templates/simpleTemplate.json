@@ -1,0 +1,13 @@
+{
+    "title": "Great things!",
+    "body": "Hello great things are happening and this is a message about it",
+    "display": {
+        "type": "CARD",
+        "titleType": "EMPHASIS",
+        "iconType": "BOOST_ROCKET"
+    },
+    "actionToTake": "ADD_CASH",
+    "actionContext": {
+        "boostId": "ab439794-fade-4c9e-aa3a-c32c5b85287b"
+    }
+}

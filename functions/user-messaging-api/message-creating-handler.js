@@ -2,31 +2,100 @@
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler');
 const uuid = require('uuid/v4');
-const util = require('util');
 const rdsUtil = require('./persistence/rds.notifications');
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
 
+// todo : stick in a common file
+const paramRegex = /#{([^}]*)}/g;
+const STANDARD_PARAMS = [
+    'user_first_name',
+    'user_full_name',
+    'current_balance',
+    'opened_date',
+    'total_interest'
+];
+
 /**
+ * NOTE: This is only for custom params supplied with the message-creation event. System defined params should be left alone.
  * This function assembles the selected template and inserts relevent data where required.
+ * todo : make sure this handles subparams on standard params (e.g., total_interest::since etc)
  * @param {*} template The selected template.
- * @param {*} requestDetails Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated are executed.
+ * @param {*} passedParameters Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated are executed.
  * With regards to boost amount it is extracted from request parameters and inserted into the boost template.
  */
-const assembleTemplate = (template, requestDetails) => {
-    switch (true) {
-        case Object.keys(requestDetails).includes('parameters') && Object.keys(requestDetails.parameters).includes('boostAmount'):
-            // if triggerBalanceFetch === true: get balance and include in template
-            return util.format(template, requestDetails.parameters.boostAmount);
-        default:
-            return template;
+const assembleTemplate = (template, passedParameters) => {
+    if (!passedParameters || typeof passedParameters !== 'object') {
+        return template;
     }
+
+    let match = paramRegex.exec(template);
+
+    // todo : make less ugly, possibly
+    while (match !== null) {
+        const param = match[1];
+        if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) === -1) {
+            template = template.replace(`#{${param}}`, passedParameters[param]);
+        }
+        match = paramRegex.exec(template);
+    }
+
+    return template;
+};
+
+const generateMessageFromTemplate = ({ destinationUserId, template, instruction, requestDetails }) => {
+    const msgVariants = Object.keys(template);
+    const thisVariant = msgVariants[Math.floor(Math.random() * msgVariants.length)];
+    const msgTemplate = template[thisVariant];
+    const messageBody = assembleTemplate(msgTemplate.body, requestDetails); // to become a generic way of formatting variables into template.
+    const actionContext = msgTemplate.actionToTake ? { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext } : undefined;
+    
+    return {
+        messageId: uuid(),
+        destinationUserId,
+        instructionId: instruction.instructionId,
+        messageTitle: msgTemplate.title,
+        messageBody,
+        actionContext,
+        messageVariant: thisVariant,
+        display: msgTemplate.display,
+        startTime: instruction.startTime,
+        endTime: instruction.endTime,
+        presentationType: instruction.presentationType,
+        messagePriority: instruction.messagePriority,
+        followsPriorMessage: false,
+        hasFollowingMessage: false
+    };
+};
+
+const generateAndAddMessageSequence = (rows, { destinationUserId, templateSequence, instruction, requestDetails }) => {
+    const msgsForUser = [];
+    const identifierDict = { };
+    templateSequence.forEach((templateDef, idx) => {
+        const template = JSON.parse(JSON.stringify(templateDef));
+        Reflect.deleteProperty(template, 'identifier');
+        
+        const userMessage = generateMessageFromTemplate({ 
+            destinationUserId, template, instruction, requestDetails 
+        });
+        
+        if (idx === 0) {
+            userMessage.hasFollowingMessage = true;
+        } else {
+            userMessage.followsPriorMessage = true;
+        }
+        
+        identifierDict[templateDef.identifier] = userMessage.messageId;
+        msgsForUser.push(userMessage);
+    });
+    // logger('Identifier dict: ', identifierDict);
+    msgsForUser.forEach((msg) => msg.messageSequence = identifierDict);
+    rows.push(...msgsForUser);
 };
 
 /**
  * This function takes a message instruction and returns an array of user message rows. Instruction properties are as follows:
- * @param {string} instructionId The instruction unique id, useful in persistence operations.
  * @param {string} presentationType How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
@@ -42,33 +111,37 @@ const assembleTemplate = (template, requestDetails) => {
  * @param {object} requestDetails An object containing parameters past by the caller. These may include template format values as well as notification display instruction.
  */
 const assembleUserMessages = async (instruction, destinationUserId = null) => {
-    logger('Message assembler recieved instruction:', instruction);
-    const selectionInstruction = instruction.selectionInstruction ? instruction.selectionInstruction : null;
-    logger('Found selection instruction:', selectionInstruction);
+    const selectionInstruction = instruction.selectionInstruction || null;
     const userIds = destinationUserId ? [ destinationUserId ] : await rdsUtil.getUserIds(selectionInstruction);
-    logger(`Got ${userIds.length} user id(s)`);
-    // logger('Assembler recieved destination id:', destinationUserId);
+    logger(`Retrieved ${userIds.length} user id(s) for instruction`);
+    
     if (!Array.isArray(userIds) || userIds.length === 0) {
         logger('No users match this selection criteria, exiting');
         return [];
     }
 
-    const rows = [];
-    const templates = typeof instruction.templates === 'string' ? JSON.parse(instruction.templates) : instruction.templates;
-    const template = templates.otherTemplates ? templates.otherTemplates : templates.default;
-    const userMessage = assembleTemplate(template, instruction.requestDetails); // to become a generic way of formatting variables into template.
+    const templates = instruction.templates;
+    if (typeof templates !== 'object' || Object.keys(templates).length !== 1) {
+        throw new Error('Malformed template instruction: ', instruction.templates);
+    }
+    const requestDetails = instruction.requestDetails ? instruction.requestDetails.parameters : undefined;
+
+    let rows = [];
     
-    for (let i = 0; i < userIds.length; i++) {
-        rows.push({
-            messageId: uuid(),
-            destinationUserId: instruction.requestDetails.destination ? instruction.requestDetails.destination : userIds[i],
-            instructionId: instruction.instructionId,
-            userMessage,
-            startTime: instruction.startTime,
-            endTime: instruction.endTime,
-            presentationType: instruction.presentationType,
-            messagePriority: instruction.messagePriority
-        });
+    const topLevelKey = Object.keys(templates)[0];
+    if (topLevelKey === 'template') {
+        rows = userIds.map((destinationUserId) => (generateMessageFromTemplate({ 
+            destinationUserId,
+            template: templates.template,
+            instruction,
+            requestDetails
+         })));
+    } else if (topLevelKey === 'sequence') {
+        logger('Implement sequences');
+        const templateSequence = templates.sequence;
+        // alternate is home grown flat map using eg reduce & concat, but that will be _very_ inefficient at high numbers, so might as well
+        userIds.forEach((userId) => generateAndAddMessageSequence(rows,
+            { destinationUserId: userId, templateSequence, instruction, requestDetails }));        
     }
     
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
@@ -99,14 +172,16 @@ module.exports.createUserMessages = async (event) => {
         }
 
         const rowKeys = Object.keys(rows[0]);
-        logger('Got keys:', rowKeys);
         const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
-        logger('User messages insertion resulted in:', insertionResponse);
+        
+        const handlerResponse = {
+            numberMessagesCreated: insertionResponse.length,
+            creationTimeMillis: insertionResponse[0].creationTime.valueOf()
+        };
+
         return {
             statusCode: 200,
-            body: JSON.stringify({
-                message: insertionResponse
-            })
+            body: JSON.stringify(handlerResponse)
         };
     } catch (err) {
         logger('FATAL_ERROR:', err);
