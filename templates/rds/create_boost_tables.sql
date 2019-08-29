@@ -64,3 +64,7 @@ grant select, insert on boost_data.boost_log to boost_worker;
 
 grant usage, select on boost_data.boost_account_status_insertion_id_seq to boost_worker;
 grant usage, select on boost_data.boost_log_log_id_seq to boost_worker;
+
+-- for message picking & sending
+grant usage on schema boost_data to message_api_worker;
+grant select on boost_data.boost_account_status to message_api_worker;

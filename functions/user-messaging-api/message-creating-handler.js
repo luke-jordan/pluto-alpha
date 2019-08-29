@@ -1,7 +1,9 @@
 'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler');
+const config = require('config');
 const uuid = require('uuid/v4');
+
 const rdsUtil = require('./persistence/rds.notifications');
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
@@ -51,10 +53,23 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
     const messageBody = assembleTemplate(msgTemplate.body, requestDetails); // to become a generic way of formatting variables into template.
     const actionContext = msgTemplate.actionToTake ? { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext } : undefined;
     
+    let processedStatus = null;
+    const overrideStatusPassed = typeof requestDetails === 'object' && typeof requestDetails.processedStatus === 'string' && 
+        requestDetails.processedStatus.length > 0;
+
+    if (overrideStatusPassed) {
+        processedStatus = requestDetails.defaultStatus;
+    } else if (typeof instruction.defaultStatus === 'string' && instruction.defaultStatus.length > 0) {
+        processedStatus = instruction.defaultStatus;
+    } else  {
+        processedStatus = config.get('creating.defaultStatus');
+    }
+    
     return {
         messageId: uuid(),
         destinationUserId,
         instructionId: instruction.instructionId,
+        processedStatus,
         messageTitle: msgTemplate.title,
         messageBody,
         actionContext,

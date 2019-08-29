@@ -50,6 +50,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     const minimalMsgFromTemplate = (template) => ({
         destinationUserId: testUserId,
+        creationTime: testOpenMoment,
         followsPriorMsg: false,
         messagePriority: 10,
         endTime: testExpiryMoment,
@@ -127,48 +128,49 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
 
     const testMsgId = uuid();
     const testSuccessMsgId = uuid();
+    const testCreationTime = moment().subtract(10, 'minutes');
 
     const firstMsgFromRds = {
         messageId: testMsgId,
         messageTitle: 'Boost available!',
         messageBody: 'Hello! Jupiter is now live. To celebrate, if you add $10, you get $10 boost',
+        creationTime: testCreationTime,
         startTime: moment().subtract(10, 'minutes'),
         endTime: testExpiryMoment,
         messagePriority: 20,
-        displayType: 'CARD',
-        displayInstructions: { titleType: 'EMPHASIS', iconType: 'BOOST_ROCKET' },
+        display: { type: 'CARD', titleType: 'EMPHASIS', iconType: 'BOOST_ROCKET' },
         actionContext: { actionToTake: 'ADD_CASH', boostId: testBoostId },
-        followsPriorMsg: false,
-        hasFollowingMsg: true,
-        followingMessages: { msgOnSuccess: testSuccessMsgId }
+        followsPriorMessage: false,
+        hasFollowingMessage: true,
+        messageSequence: { msgOnSuccess: testSuccessMsgId }
     };
 
     const secondMsgFromRds = {
         messageId: testSuccessMsgId,
         messageTitle: 'Congratulations!',
         messageBody: 'You earned a boost! Jupiter rewards you for saving, not spending',
+        creationTime: testCreationTime,
         startTime: moment().subtract(10, 'minutes'),
         endTime: testExpiryMoment,
         messagePriority: 10,
-        displayType: 'MODAL',
-        displayInstructions: { iconType: 'SMILEY_FACE' },
+        display: { type: 'MODAL', iconType: 'SMILEY_FACE' },
         actionContext: { triggerBalanceFetch: true, boostId: testBoostId },
-        followsPriorMsg: true,
-        hasFollowingMsg: false
+        followsPriorMessage: true,
+        hasFollowingMessage: false
     };
 
     const anotherHighPriorityMsg = {
         messageId: uuid(),
         messageTitle: 'Congratulations on something else!',
         messageBody: 'You earned a boost! But you should not see this yet',
+        creationTime: moment().subtract(1, 'minutes'),
         startTime: moment().subtract(1, 'minutes'),
         endTime: testExpiryMoment,
         messagePriority: 20,
-        displayType: 'MODAL',
-        displayInstructions: { iconType: 'SMILEY_FACE' },
+        display: { type: 'MODAL', iconType: 'SMILEY_FACE' },
         actionContext: { triggerBalanceFetch: true, boostId: testBoostId },
-        followsPriorMsg: false,
-        hasFollowingMsg: false
+        followsPriorMessage: false,
+        hasFollowingMessage: false
     };
 
     const expectedFirstMessage = {
@@ -184,10 +186,13 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         },
         actionContext: {
             boostId: testBoostId,
-            msgOnSuccess: testSuccessMsgId,
             sequenceExpiryTimeMillis: testExpiryMoment.valueOf()
         },
-        hasFollowingMsg: true
+        messageSequence: {
+            msgOnSuccess: testSuccessMsgId
+        },
+        hasFollowingMessage: true,
+        persistedTimeMillis: testCreationTime.valueOf()
     };
 
     const expectedSecondMsg = {
@@ -203,7 +208,8 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         actionContext: {
             boostId: testBoostId
         },
-        hasFollowingMsg: false
+        hasFollowingMessage: false,
+        persistedTimeMillis: testCreationTime.valueOf()
     };
 
     beforeEach(() => resetStubs());

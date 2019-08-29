@@ -230,7 +230,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             { 'insertion_id': 99, 'creation_time': mockCreationTime },
             { 'insertion_id': 100, 'creation_time': mockCreationTime }, { 'insertion_id': 101, 'creation_time': mockCreationTime }
         ];
-        multiTableStub.withArgs([mockInsertionArgs]).resolves(insertionResult);
+        multiTableStub.withArgs([mockInsertionArgs]).resolves([insertionResult]);
 
         const expectedResult = [
             { 'insertionId': 99, 'creationTime': mockCreationTime },

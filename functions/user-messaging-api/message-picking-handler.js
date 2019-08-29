@@ -79,7 +79,8 @@ const extractParamsFromTemplate = (template) => {
         extractedParams.push(match[1]);
         match = paramRegex.exec(template);
     }
-    return extractedParams;
+    // do not include any that are non-standard
+    return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) !== -1);
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
@@ -87,7 +88,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramName = paramSplit[0];
     logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
     if (STANDARD_PARAMS.indexOf(paramName) === -1) {
-        return '';
+        return paramName;
     } else if (paramName === 'user_first_name') {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId);
         return fetchUserName(userId, userProfile, true);
@@ -126,14 +127,14 @@ const fillInTemplate = async (template, destinationUserId) => {
 
 const assembleMessage = async (msgDetails) => {
     const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
-    const displayDetails = { type: msgDetails.displayType, ...msgDetails.displayInstructions };
     const messageBase = {
         messageId: msgDetails.messageId,
         title: msgDetails.messageTitle,
         body: completedMessageBody,
         priority: msgDetails.messagePriority,
-        display: displayDetails,
-        hasFollowingMsg: msgDetails.hasFollowingMsg
+        display: msgDetails.display,
+        persistedTimeMillis: msgDetails.creationTime.valueOf(),
+        hasFollowingMessage: msgDetails.hasFollowingMessage
     };
     
     let actionContextForReturn = { };
@@ -146,11 +147,14 @@ const assembleMessage = async (msgDetails) => {
         actionContextForReturn = { ...actionContextForReturn, ...strippedContext };   
     }
     
-    if (msgDetails.followingMessages) {
-        actionContextForReturn = { ... actionContextForReturn, ...msgDetails.followingMessages };
+    if (msgDetails.messageSequence) {
+        const sequenceDict = msgDetails.messageSequence;
+        messageBase.messageSequence = sequenceDict;
+        const thisMessageIdentifier = Object.keys(sequenceDict).find((key) => sequenceDict[key] === msgDetails.messageId);
+        messageBase.identifier = thisMessageIdentifier;
     }
 
-    if (!msgDetails.followsPriorMsg) {
+    if (!msgDetails.followsPriorMessage) {
         actionContextForReturn = { ...actionContextForReturn, sequenceExpiryTimeMillis: msgDetails.endTime.valueOf() };
     }
 
@@ -165,16 +169,14 @@ const fetchMsgSequenceIds = (anchorMessage, retrievedMessages) => {
     }
 
     let thisAndFollowingIds = [anchorMessage.messageId];
-    if (!anchorMessage.hasFollowingMsg || typeof anchorMessage.followingMessages !== 'object') {
+    
+    if (!anchorMessage.hasFollowingMessage || typeof anchorMessage.messageSequence !== 'object') {
         return thisAndFollowingIds;
     }
 
-    Object.values(anchorMessage.followingMessages).forEach((msgId) => {
-        const msgWithId = retrievedMessages.find((msg) => msg.messageId === msgId);
-        thisAndFollowingIds = thisAndFollowingIds.concat(fetchMsgSequenceIds(msgWithId, retrievedMessages));
-    });
+    const otherMsgIds = Object.values(anchorMessage.messageSequence).filter((msgId) => msgId !== anchorMessage.messageId);
 
-    return thisAndFollowingIds;
+    return thisAndFollowingIds.concat(otherMsgIds);
 };
 
 const assembleSequence = async (anchorMessage, retrievedMessages) => {
@@ -221,7 +223,8 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     }
 
     // second, select only the messages that do not depend on prior ones (i.e., that anchor chains)
-    const openingMessages = retrievedMessages.filter((msg) => !msg.followsPriorMsg);
+    const openingMessages = retrievedMessages.filter((msg) => !msg.followsPriorMessage);
+    logger('Possible opening messages: ', openingMessages);
 
     // third, either just continue with the prior one, or find whatever should be the anchor
     let anchorMessage = null;
@@ -265,6 +268,7 @@ module.exports.getNextMessageForUser = async (event) => {
             messagesToDisplay: userMessages
         };
 
+        logger(JSON.stringify(resultBody));
         return { statusCode: 200, body: JSON.stringify(resultBody) };
     } catch (err) {
         logger('FATAL_ERROR: ', err);

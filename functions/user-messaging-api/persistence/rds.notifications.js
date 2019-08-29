@@ -20,11 +20,9 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ..
  * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
+ * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed, includes response actions, context, etc (see handler for more)
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
  * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
- * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
- * @param {object} responseContext An object that includes details such as the boost ID.
  * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
  * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
  * @param {string} lastProcessedTime This property is updated eah time the message instruction is processed.
@@ -32,6 +30,7 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ..
  */
 module.exports.insertMessageInstruction = async (persistableObject) => {
     const objectKeys = Object.keys(persistableObject);
+    logger('Inserting object with keys: ', objectKeys);
     const insertionQuery = `insert into ${config.get('tables.messageInstructionTable')} (${extractQueryClause(objectKeys)}) values %L returning instruction_id, creation_time`;
     const insertionColumns = extractColumnTemplate(objectKeys);
     const insertArray = [persistableObject];
@@ -55,7 +54,8 @@ module.exports.insertUserMessages = async (rows, objectKeys) => {
 
     const insertionResult = await rdsConnection.largeMultiTableInsert([messageQueryDef]);
     logger('User messages insertion resulted in:', insertionResult);
-    return insertionResult.map((insertResult) => camelCaseKeys(insertResult));
+    const insertionRows = insertionResult[0]; // as multi table returns array of query
+    return insertionRows.map((insertResult) => camelCaseKeys(insertResult));
 };
 
 /**
@@ -150,6 +150,18 @@ const extractWhereClausesValues = (universeDefinition) => {
     return [clauseStrings, clauseValues];
 };
 
+const assembleMatchEntityClauseValues = (universeDefinition) => {
+    const entityType = universeDefinition.entityType;
+    logger('Matching entity of type: ', entityType);
+    if (entityType === 'boost') {
+        const boostAccountTable = config.get('tables.boostAccountTable');
+        const selectQuery = `select distinct(owner_user_id) from ${accountsTable} inner join ${boostAccountTable} on ` +
+            `${accountsTable}.account_id = ${boostAccountTable}.account_id where boost_id = $1`;
+        return [selectQuery, [universeDefinition.entityId]];
+    }
+    throw new Error('Unimplemented matching entity');
+};
+
 const assembleQueryClause = (selectionMethod, universeDefinition) => {
     if (selectionMethod === 'whole_universe') {
         logger('We are selecting all parts of the universe');
@@ -167,7 +179,8 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         const conditionValues = samplePercentage;
         return [selectionQuery, [conditionValues]];
     } else if (selectionMethod === 'match_other') {
-        logger('We are selecting so as to match another entity');
+        logger('We are selecting so as to match another entity: ', universeDefinition);
+        return assembleMatchEntityClauseValues(universeDefinition);
     }
 
     throw new Error('Invalid selection method provided: ', selectionMethod);

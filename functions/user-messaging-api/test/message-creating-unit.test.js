@@ -79,6 +79,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     // not including message ID else have either spurious fails or a lot of unnecessary complexity
     const mockUserMessage = (userId, msgTemplate = mockTemplate.template['DEFAULT'], variant = 'DEFAULT') => ({
         destinationUserId: userId,
+        processedStatus: 'READY_FOR_SENDING',
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z', 
         messageTitle: msgTemplate.title,
