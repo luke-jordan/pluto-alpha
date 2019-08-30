@@ -1,0 +1,127 @@
+{
+    "audienceType": "GENERAL",
+    "presentationType": "EVENT_DRIVEN",
+    "selectionInstruction": "match_other from #{{\"entityType\": \"boost\", \"entityId\": \"9fb77846-12ae-4c04-a129-32a3f858f9bf\"}}",
+    "templates": {
+        "sequence": [
+            {
+                "DEFAULT": {
+                    "title": "Can you beat this challenge?",
+                    "body": "Congratulations! You have saved so much you've unlocked a special challenge. Save R100 now to unlock it!",
+                    "display": {
+                        "type": "CARD",
+                        "title": "EMPHASIS",
+                        "icon": "BOOST_ROCKET"
+                    },
+                    "actionToTake": "ADD_CASH",
+                    "actionContext": {
+                        "boostId": "9fb77846-12ae-4c04-a129-32a3f858f9bf",
+                        "sequenceExpiryTimeMillis": 1567690807905,
+                        "gameParams": {
+                            "gameType": "CHASE_ARROW",
+                            "timeLimitSeconds": 20,
+                            "winningThreshold": 20,
+                            "instructionBand": "Tap the screen as many times as you can in 20 seconds",
+                            "entryCondition": "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+                        }
+                    }
+                },
+                "identifier": "OFFERED"
+            },
+            {
+                "DEFAULT": {
+                    "title": "Boost challenge unlocked!",
+                    "body": "Your top up was successful and you stand a chance to win R20. Follow the instructions below to play the game",
+                    "display": {
+                        "type": "MODAL",
+                        "iconType": "SMILEY_FACE"
+                    },
+                    "actionToTake": "PLAY_GAME",
+                    "actionContext": {
+                        "boostId": "9fb77846-12ae-4c04-a129-32a3f858f9bf",
+                        "sequenceExpiryTimeMillis": 1567690807905,
+                        "gameParams": {
+                            "gameType": "CHASE_ARROW",
+                            "timeLimitSeconds": 20,
+                            "winningThreshold": 20,
+                            "instructionBand": "Tap the screen as many times as you can in 20 seconds",
+                            "entryCondition": "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+                        }
+                    }
+                },
+                "identifier": "UNLOCKED"
+            },
+            {
+                "DEFAULT": {
+                    "title": "Boost challenge unlocked!",
+                    "body": "You’ve unlocked this challenge and stand a chance of winning R20, but only if you can catch the arrow. Challenge will remain open until the end of the day",
+                    "display": {
+                        "type": "CARD",
+                        "titleType": "EMPHASIS",
+                        "iconType": "UNLOCKED"
+                    },
+                    "actionToTake": "PLAY_GAME",
+                    "identifier": "INSTRUCTION",
+                    "actionContext": {
+                        "boostId": "9fb77846-12ae-4c04-a129-32a3f858f9bf",
+                        "sequenceExpiryTimeMillis": 1567690807905,
+                        "gameParams": {
+                            "gameType": "CHASE_ARROW",
+                            "timeLimitSeconds": 20,
+                            "winningThreshold": 20,
+                            "instructionBand": "Tap the screen as many times as you can in 20 seconds",
+                            "entryCondition": "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+                        }
+                    }
+                },
+                "identifier": "INSTRUCTION"
+            },
+            {
+                "DEFAULT": {
+                    "title": "Well Done!",
+                    "body": "You caught the arrow #{numberUserTaps} times! You won the challenge and R20 has been boosted to your account!",
+                    "display": {
+                        "type": "MODAL",
+                        "iconType": "THUMBS_UP"
+                    },
+                    "actionToTake": "DONE",
+                    "actionContext": {
+                        "boostId": "9fb77846-12ae-4c04-a129-32a3f858f9bf",
+                        "sequenceExpiryTimeMillis": 1567690807905,
+                        "gameParams": {
+                            "gameType": "CHASE_ARROW",
+                            "timeLimitSeconds": 20,
+                            "winningThreshold": 20,
+                            "instructionBand": "Tap the screen as many times as you can in 20 seconds",
+                            "entryCondition": "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+                        }
+                    }
+                },
+                "identifier": "REDEEMED"
+            },
+            {
+                "DEFAULT": {
+                    "title": "Sorry, better luck next time!",
+                    "body": "You missed out on this boost challenge, but keep an eye out for future boosts to earn more towards your savings!",
+                    "display": {
+                        "type": "MODAL",
+                        "iconType": "SAD_FACE"
+                    },
+                    "actionToTake": "DONE",
+                    "actionContext": {
+                        "boostId": "9fb77846-12ae-4c04-a129-32a3f858f9bf",
+                        "sequenceExpiryTimeMillis": 1567690807905,
+                        "gameParams": {
+                            "gameType": "CHASE_ARROW",
+                            "timeLimitSeconds": 20,
+                            "winningThreshold": 20,
+                            "instructionBand": "Tap the screen as many times as you can in 20 seconds",
+                            "entryCondition": "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+                        }
+                    }
+                },
+                "identifier": "FAILURE"
+            }
+        ]
+    }
+}

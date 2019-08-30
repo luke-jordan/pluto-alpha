@@ -207,10 +207,14 @@ module.exports.updateBoostAccountStatus = async (instructions) => {
     return resultOfAll;
 };
 
+/////////////////////////////////////////////////////////////////
+////////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
+/////////////////////////////////////////////////////////////////
+
 const validateAndExtractUniverse = (universeComponent) => {
     logger('Universe component: ', universeComponent);
+    
     const universeMatch = universeComponent.match(/#{(.*)}/);
-    logger('Universe match: ', universeMatch);
     if (!universeMatch || universeMatch.length === 0) {
         throw new Error('Error! Universe definition passed incorrectly: ', universeComponent);
     }
@@ -228,12 +232,16 @@ const validateAndExtractUniverse = (universeComponent) => {
 // note : this _could_ be simplified by relying on ordering of Object.keys, but that would be dangerous/fragile
 const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey) => {
     if (currentKey === 'specific_accounts') {
-        logger('Sepcific account IDs selected');
+        logger('Specific account IDs selected');
         const accountIds = universeDefinition[currentKey];
         const placeHolders = accountIds.map((_, index) => `$${currentIndex + index + 1}`).join(', ');
         logger('Created place holder: ', placeHolders);
         const assembledClause = `account_id in (${placeHolders})`;
         return [assembledClause, accountIds, currentIndex + accountIds.length];
+    } else if (currentKey === 'client_id') {
+        const newIndex = currentIndex + 1;
+        const assembledClause = `responsible_client_id = $${newIndex}`;
+        return [assembledClause, [universeDefinition[currentKey]], newIndex];
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];

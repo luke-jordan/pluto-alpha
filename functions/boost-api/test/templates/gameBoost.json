@@ -1,0 +1,70 @@
+{
+    "onlyRdsCalls": "true",
+    "creatingUserId": "872dbb93-f9ae-4ab9-8da5-c4900b4c4d89",
+    "boostTypeCategory": "GAME::TAP_SCREEN",
+    "boostAmountOffered": "100000::HUNDREDTH_CENT::USD",
+    "boostSource": {
+        "bonusPoolId": "primary_bonus_pool",
+        "clientId": "some_client_co",
+        "floatId": "primary_cash"
+    },
+    "endTimeMillis": 1567690807905,
+    "boostAudience": "GENERAL",
+    "boostAudienceSelection": "whole_universe from #{{\"client_id\": \"some_client_co\"}}",
+    "messagesToCreate": {
+        "OFFERED": {
+            "title": "Can you beat this challenge?",
+            "body": "Congratulations! You have saved so much you've unlocked a special challenge. Save R100 now to unlock it!",
+            "display": {
+                "type": "CARD",
+                "title": "EMPHASIS",
+                "icon": "BOOST_ROCKET"
+            },
+            "actionToTake": "ADD_CASH"
+        },
+        "UNLOCKED": {
+            "title": "Boost challenge unlocked!",
+            "body": "Your top up was successful and you stand a chance to win R20. Follow the instructions below to play the game",
+            "display": {
+                "type": "MODAL",
+                "iconType": "SMILEY_FACE"
+            },
+            "actionToTake": "PLAY_GAME"
+        },
+        "INSTRUCTION": {
+            "title": "Boost challenge unlocked!",
+            "body": "You’ve unlocked this challenge and stand a chance of winning R20, but only if you can catch the arrow. Challenge will remain open until the end of the day",
+            "display": {
+                "type": "CARD",
+                "titleType": "EMPHASIS",
+                "iconType": "UNLOCKED"
+            },
+            "actionToTake": "PLAY_GAME"
+        },
+        "REDEEMED": {
+            "title": "Well Done!",
+            "body": "You caught the arrow #{numberUserTaps} times! You won the challenge and R20 has been boosted to your account!",
+            "display": {
+                "type": "MODAL",
+                "iconType": "THUMBS_UP"
+            },
+            "actionToTake": "DONE"
+        },
+        "FAILURE": {
+            "title": "Sorry, better luck next time!",
+            "body": "You missed out on this boost challenge, but keep an eye out for future boosts to earn more towards your savings!",
+            "display": {
+                "type": "MODAL",
+                "iconType": "SAD_FACE"
+            },
+            "actionToTake": "DONE"
+        }
+    },
+    "gameParams": {
+        "gameType": "CHASE_ARROW",
+        "timeLimitSeconds": 20,
+        "winningThreshold": 20,
+        "instructionBand": "Tap the screen as many times as you can in 20 seconds",
+        "entryCondition": "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+    }
+}

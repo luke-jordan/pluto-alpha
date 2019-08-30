@@ -64,6 +64,7 @@ const constructMsgInstructionPayload = (messageDefinitions, boostParams, gamePar
     const msgPayload = {};
     
     msgPayload.audienceType = boostParams.audienceType;
+    msgPayload.presentationType = 'EVENT_DRIVEN'; // constant
     msgPayload.selectionInstruction = `match_other from #{entityType: 'boost', entityId: ${boostParams.boostId}}`;
 
     const actionContext = { 
@@ -74,13 +75,12 @@ const constructMsgInstructionPayload = (messageDefinitions, boostParams, gamePar
 
     const messageTemplates = Object.keys(messageDefinitions).map((key) => {
         const msgTemplate = messageDefinitions[key];
-        msgTemplate.identifier = key;
         msgTemplate.actionToTake = msgTemplate.actionToTake || obtainStdAction(key);
         msgTemplate.actionContext = actionContext;
-        return { 'DEFAULT': msgTemplate }
+        return { 'DEFAULT': msgTemplate, identifier: key }
     });
 
-    msgPayload.template = { 
+    msgPayload.templates = { 
         sequence: messageTemplates 
     };
 
@@ -194,15 +194,19 @@ module.exports.createBoost = async (event) => {
             InvocationType: 'RequestResponse',
             Payload: stringify(messagePayload) 
         };
-        const resultOfMsgCreation = await lambda.invoke(messageInstructInvocation).promise();
-        logger('Result of message instruct invocation: ', resultOfMsgCreation);
-        // todo : handle errors
-        const resultPayload = JSON.parse(resultOfMsgCreation.Payload);
-        const resultBody = JSON.parse(resultPayload.body);
-        const messageInstructionIds = { instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: resultBody[0].instructionId }] };
-        const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
-        logger('And result of update: ', updatedBoost);
-        persistedBoost.messageInstructions = messageInstructionIds.instructions;
+        if (!params.onlyRdsCalls) {
+            const resultOfMsgCreation = await lambda.invoke(messageInstructInvocation).promise();
+            logger('Result of message instruct invocation: ', resultOfMsgCreation);
+            // todo : handle errors
+            const resultPayload = JSON.parse(resultOfMsgCreation.Payload);
+            const resultBody = JSON.parse(resultPayload.body);
+            const messageInstructionIds = { instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: resultBody[0].instructionId }] };
+            const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
+            logger('And result of update: ', updatedBoost);
+            persistedBoost.messageInstructions = messageInstructionIds.instructions;
+        } else {
+            logger('Would send to Lambda: ', JSON.stringify(messagePayload));
+        }
     };
 
     return persistedBoost;

@@ -17,6 +17,8 @@ const getMessageInstructionStub = sinon.stub();
 const momentStub = sinon.stub();
 const uuidStub = sinon.stub();
 
+const testRecurringTemplate = require('./templates/recurringTemplate');
+
 const handler = proxyquire('../msg-instruction-handler', {
     './persistence/rds.notifications': {
         'insertMessageInstruction': insertMessageInstructionStub,
@@ -41,19 +43,15 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     
     const mockInstructionId = uuid();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
-    const mockInsertionId = 111;
     const mockClientId = uuid();
     const testTime = moment();
 
     const mockEvent = {
         presentationType: 'ONCE_OFF',
         audienceType: 'ALL_USERS',
-        defaultTemplate: config.get('instruction.templates.default'),
-        otherTemplates: null,
+        templates: { template: { 'DEFAULT': testRecurringTemplate }},
         selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
-        responseAction: 'VIEW_HISTORY',
-        responseContext: { boostId: uuid() },
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
         messagePriority: 0
@@ -71,14 +69,9 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         presentationType: mockInstruction.presentationType,
         active: true,
         audienceType: mockInstruction.audienceType,
-        templates: JSON.stringify({
-            default: mockInstruction.defaultTemplate,
-            otherTemplates: mockInstruction.otherTemplates ? mockInstruction.otherTemplates : null
-        }),
+        templates: mockInstruction.templates,
         selectionInstruction: mockInstruction.selectionInstruction ? mockInstruction.selectionInstruction : null,
         recurrenceInstruction: mockInstruction.recurrenceInstruction ? JSON.stringify(mockInstruction.recurrenceInstruction) : null,
-        responseAction: mockInstruction.responseAction ? mockInstruction.responseAction : null,
-        responseContext: mockInstruction.responseContext ? JSON.stringify(mockInstruction.responseContext) : null,
         startTime: mockInstruction.startTime ? mockInstruction.startTime : moment().format(),
         endTime: mockInstruction.endTime ? mockInstruction.endTime : moment().add(500, 'years').format(),
         lastProcessedTime: testTime.format(),
@@ -101,8 +94,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should insert new message intruction', async () => {
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockEvent)).returns([ { instruction_id: mockInstructionId, insertion_id: mockInsertionId, creation_time: mockCreationTime } ]);
-        const expectedResult = { message: [ { instruction_id: mockInstructionId, insertion_id: mockInsertionId, creation_time: mockCreationTime } ] };
+        insertMessageInstructionStub.resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
+        const expectedResult = { message: [ { instructionId: mockInstructionId, creationTime: mockCreationTime } ] };
         const result = await handler.insertMessageInstruction(mockEvent);
 
         logger('Result of message instruction creation:', result);
@@ -148,8 +141,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should throw an error on missing templates', async () => {
-        const expectedResult = { message: 'Templates cannot be null.' };
-        mockEvent.defaultTemplate = null;
+        const expectedResult = { message: 'Missing required property value: templates' };
+        mockEvent.templates = null;
 
         const result = await handler.insertMessageInstruction(mockEvent);
         logger('Result of message instruction insertion on missing templates:', result);

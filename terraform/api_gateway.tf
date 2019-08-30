@@ -17,6 +17,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.message_process,
   aws_api_gateway_integration.message_token_store,
   aws_api_gateway_integration.message_instruct_create,
+  aws_api_gateway_integration.boost_user_process,
   aws_api_gateway_integration.ops_warmup
   ]
 
