@@ -212,6 +212,8 @@ describe('Fetches user balance and makes projections', () => {
         
         // usual sinon annoying stubornness on matching means passing to helper isn't working, so unspooling
         expect(balanceAndProjections).to.exist.and.have.property('statusCode', 200);
+        expect(balanceAndProjections).to.have.property('headers');
+        expect(balanceAndProjections.headers).to.have.property('Access-Control-Allow-Origin');
         const bodyReturned = JSON.parse(balanceAndProjections.body);
         expect(bodyReturned).to.exist;
         expect(bodyReturned.currentBalance.datetime).to.be.a.string;

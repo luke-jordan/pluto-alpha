@@ -274,14 +274,11 @@ resource "aws_api_gateway_integration" "balance_fetch_wrapper" {
   uri                     = "${aws_lambda_function.balance_fetch_wrapper.invoke_arn}"
 }
 
-module "cors" {
+module "balance_cors" {
   source = "./modules/cors"
-  # version = "0.3.0"
-
   api_id          = "${aws_api_gateway_rest_api.api_gateway.id}"
   api_resource_id = "${aws_api_gateway_resource.balance_fetch_wrapper.id}"
 }
-
 
 /////////////// MESSAGING LAMBDAS //////////////////////////////////////////////////////////////////////////
 
