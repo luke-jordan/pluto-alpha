@@ -10,6 +10,9 @@ const persistence = require('./persistence/rds.msgpicker');
 const dynamo = require('dynamo-common');
 const userProfileTable = config.get('tables.dynamoProfileTable');
 
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
+
 const paramRegex = /#{([^}]*)}/g;
 const STANDARD_PARAMS = [
     'user_first_name',
@@ -104,6 +107,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         return fetchAccountInterest(destinationUserId, userProfile.defaultCurrency, sinceMillis);
     } else if (paramName === 'current_balance') {
         const defaultCurrency = getSubParamOrDefault(paramSplit, userProfile.defaultCurrency);
+        logger('Have currency: ', defaultCurrency);
         return fetchCurrentBalance(destinationUserId, defaultCurrency, userProfile);
     }
 };
@@ -116,6 +120,7 @@ const fillInTemplate = async (template, destinationUserId) => {
     }
 
     const replacedString = template.replace(paramRegex, '%s');
+    logger('Fetching user profile for ID: ', destinationUserId);
     const userProfile = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId: destinationUserId }, PROFILE_COLS);
     logger('Obtained user profile: ', userProfile);
     const paramValues = await Promise.all(paramsToFillIn.map((param) => retrieveParamValue(param, destinationUserId, userProfile)));
@@ -240,12 +245,31 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     return assembledMessages;
 };
 
+// And last, we update. todo : update all of them?
+const fireOffMsgStatusUpdate = async (userMessages, requestContext) => {
+    const updateMsgPayload = {
+        requestContext,
+        body: JSON.stringify({ messageId: userMessages[0].messageId, userAction: 'FETCHED' })
+    };
+
+    const updateMsgLambdaParams = {
+        FunctionName: config.get('lambdas.updateMessageStatus'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify(updateMsgPayload) 
+    };
+
+    logger('Invoking Lambda to update message status');
+    const invocationResult = await lambda.invoke(updateMsgLambdaParams).promise();
+    logger('Completed invocation: ', invocationResult);
+
+}
+
 // For now, for mobile test
 const dryRunGameResponseOpening = require('./dry-run-messages');
 const dryRunGameChaseArrows = require('./dry-run-arrow');
 
 /**
- * Wrapper for the above, based on token
+ * Wrapper for the above, based on token, i.e., direct fetch
  */
 module.exports.getNextMessageForUser = async (event) => {
     try {
@@ -268,6 +292,10 @@ module.exports.getNextMessageForUser = async (event) => {
             messagesToDisplay: userMessages
         };
 
+        if (Array.isArray(userMessages) && userMessages.length > 0) {
+            await fireOffMsgStatusUpdate(userMessages, event.requestContext);
+        }
+
         logger(JSON.stringify(resultBody));
         return { statusCode: 200, body: JSON.stringify(resultBody) };
     } catch (err) {
@@ -287,7 +315,7 @@ module.exports.updateUserMessage = async (event) => {
         }
 
         // todo : validate that the message corresponds to the user ID
-        const { messageId, userAction }= JSON.parse(event.body);
+        const { messageId, userAction } = JSON.parse(event.body);
         logger('Processing message ID update, based on user action: ', userAction);
 
         if (!messageId || messageId.length === 0) {
@@ -295,9 +323,14 @@ module.exports.updateUserMessage = async (event) => {
         };
 
         let response = { };
+        let updateResult = undefined;
         switch (userAction) {
+            case 'FETCHED':
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'FETCHED' });
+                logger('Result of updating message: ', updateResult);
+                return { statusCode: 200 };
             case 'DISMISSED':
-                const updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
                 const bodyOfResponse = { result: 'SUCCESS', processedTimeMillis: updateResult.updatedTime.valueOf() };
                 response = { statusCode: 200, body: JSON.stringify(bodyOfResponse) };
                 break;

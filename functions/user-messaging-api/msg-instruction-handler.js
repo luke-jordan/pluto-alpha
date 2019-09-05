@@ -5,7 +5,12 @@ const config = require('config');
 
 const moment = require('moment');
 const uuid = require('uuid/v4');
+
 const rdsUtil = require('./persistence/rds.notifications');
+const msgUtil = require('./msg.util');
+
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 
@@ -49,7 +54,7 @@ module.exports.validateMessageInstruction = (instruction) => {
     }
 };
 
-/**
+/** todo : validate templates
  * This function takes the instruction passed by the caller, assigns it an instruction id, activates it,
  * and assigns default values where none are provided by the input object. Minimum required instruction properties are described below: 
  * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
@@ -59,20 +64,56 @@ module.exports.validateMessageInstruction = (instruction) => {
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
  * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  */
-const createPersistableObject = (instruction) => ({
-    instructionId: uuid(),
-    presentationType: instruction.presentationType,
-    active: true,
-    audienceType: instruction.audienceType,
-    templates: instruction.templates,
-    selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
-    recurrenceInstruction: instruction.recurrenceInstruction ? JSON.stringify(instruction.recurrenceInstruction) : null,
-    startTime: instruction.startTime ? instruction.startTime : moment().format(),
-    endTime: instruction.endTime ? instruction.endTime : moment().add(500, 'years').format(),
-    lastProcessedTime: moment().format(),
-    messagePriority: instruction.messagePriority ? instruction.messagePriority : 0
-});
+const createPersistableObject = (instruction, creatingUserId) => {
+    
+    const instructionId = uuid();
+    const startTime = instruction.startTime || moment().format();
+    const endTime = instruction.endTime || moment().add(500, 'years').format();
+    const messagePriority = instruction.messagePriority || 0;
 
+    const presentationType = instruction.presentationType;
+    let processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_SENDING' : 'CREATED';
+
+    return {
+        instructionId,
+        creatingUserId,
+        startTime,
+        endTime,
+        presentationType,
+        processedStatus,
+        active: true,
+        audienceType: instruction.audienceType,
+        templates: instruction.templates,
+        selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
+        recurrenceInstruction: instruction.recurrenceInstruction ? JSON.stringify(instruction.recurrenceInstruction) : null,
+        lastProcessedTime: moment().format(),
+        messagePriority
+    };
+};
+
+const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
+    const createMessagesFunction = config.get('lambdas.generateUserMessages');
+
+    // first, we check if there should be a test first. if so, we process for that user.
+    if (typeof params.fireTestMessage === 'boolean' && params.fireTestMessage) {
+        const instructionPayload = { instructionId, destinationUserId: creatingUserId };
+        const testRes = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, instructionPayload)).promise();
+        logger('Fired off test result: ', testRes);
+        return { result: 'FIRED_TEST' };
+    };
+
+    // second, if there was no test instruction, then unless we have an explicit 'hold', we create the messages for 
+    // once off messages right away (on assumption they should go out)
+    const holdOffInstructed = typeof params.holdFire === 'boolean' && params.holdFire;
+    if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed) {
+        const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, { instructionId })).promise();
+        logger('Fired off process instruction: ', fireResult);
+        return { result: 'FIRED_INSTRUCT' };
+    };
+
+    return { result: 'INSTRUCT_STORED '};
+
+};
 
 /**
  * This function accepts a new instruction, validates the instruction, then persists it. Depending on the instruction, either
@@ -108,27 +149,29 @@ const createPersistableObject = (instruction) => ({
  */
 module.exports.insertMessageInstruction = async (event) => {
     try {
-        logger('msg instruction inserter received:', event);
+        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        // todo : add in validation of role, but also allow for system call (e.g., boosts, but those can pass along)
+        if (!userDetails || !userDetails.systemWideUserId) {
+            return msgUtil.wrapHttpResponse({}, 403);
+        }
+
         const params = extractEventBody(event);
-        const persistableObject = createPersistableObject(params);
+        const creatingUserId = userDetails.systemWideUserId;
+        
+        const persistableObject = createPersistableObject(params, creatingUserId);
         logger('Created persistable object:', persistableObject);
         const instructionEvalResult = exports.validateMessageInstruction(persistableObject);
         logger('Message instruction evaluation result:', instructionEvalResult);
         const databaseResponse = await rdsUtil.insertMessageInstruction(persistableObject);
         logger('Message instruction insertion result:', databaseResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: databaseResponse
-            })
-        };
+        const message = databaseResponse[0];
+        const processNowResult = await triggerTestOrProcess(message.instructionId, creatingUserId, params);
+
+        return msgUtil.wrapHttpResponse({ message, processResult: processNowResult.result });
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
+        return msgUtil.wrapHttpResponse({ message: err.message }, 500);
     }
 };
 

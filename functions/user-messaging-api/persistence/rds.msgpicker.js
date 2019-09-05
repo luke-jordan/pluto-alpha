@@ -11,6 +11,7 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 const userMessageTable = config.get('tables.userMessagesTable');
 const userAccountTable = config.get('tables.accountLedger');
+const userTransactionTable = config.get('tables.transactionLedger');
 
 // format: from key into values, e.g., UNIT_MULTIPLIERS[WHOLE_CURRENCY][WHOLE_CENT] = 100;
 const UNIT_MULTIPLIERS = {
@@ -38,8 +39,7 @@ const transformMsg = (msgRawFromRds) => {
     msgObject.startTime = moment(msgObject.startTime);
     msgObject.endTime = moment(msgObject.endTime);
     // remove some unnecessary objects
-    const keysToRemove = ['deliveriesDone', 'deliveriesMax', 'destinationUserId', 'flags', 'instructionId', 
-            'processedStatus', 'updatedTime'];
+    const keysToRemove = ['deliveriesDone', 'deliveriesMax', 'flags', 'instructionId', 'processedStatus', 'updatedTime'];
     return Object.keys(msgObject).filter((key) => keysToRemove.indexOf(key) === -1).
         reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
 };
@@ -58,8 +58,9 @@ const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT') =>
 
 const accountSumQuery = async (params, systemWideUserId) => {
     const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
-    const query = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
-        `currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
+    const query = `select sum(amount), unit from ${userAccountTable} inner join ${userTransactionTable} ` +
+        `on ${userAccountTable}.account_id = ${userTransactionTable}.account_id ` +
+        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
     const fetchRows = await rdsConnection.selectQuery(query, [systemWideUserId, params.currency, 'SETTLED', transTypesToInclude]);
     logger('Result from select: ', fetchRows);
     return { ...params, amount: sumOverUnits(fetchRows, params.unit) };
@@ -68,7 +69,7 @@ const accountSumQuery = async (params, systemWideUserId) => {
 const interestHistoryQuery = async (params, systemWideUserId) => {
     const transTypesToInclude = [`'ACCRUAL'`, `'CAPITALIZATION'`].join(',');
     const cutOffMoment = moment(params.startTimeMillis, 'x');
-    const query = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
+    const query = `select sum(amount), unit from ${userTransactionTable} where owner_user_id = $1 and ` +
         `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
     const values = [systemWideUserId, params.currency, 'SETTLED', transTypesToInclude, cutOffMoment.format()];
     const fetchRows = await rdsConnection.selectQuery(query, values);

@@ -145,14 +145,9 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
     
     const topLevelKey = Object.keys(templates)[0];
     if (topLevelKey === 'template') {
-        rows = userIds.map((destinationUserId) => (generateMessageFromTemplate({ 
-            destinationUserId,
-            template: templates.template,
-            instruction,
-            requestDetails
-         })));
+        rows = userIds.map((destinationUserId) => (
+            generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, requestDetails })));
     } else if (topLevelKey === 'sequence') {
-        logger('Implement sequences');
         const templateSequence = templates.sequence;
         // alternate is home grown flat map using eg reduce & concat, but that will be _very_ inefficient at high numbers, so might as well
         userIds.forEach((userId) => generateAndAddMessageSequence(rows,
@@ -188,10 +183,15 @@ module.exports.createUserMessages = async (event) => {
 
         const rowKeys = Object.keys(rows[0]);
         const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
+
+        // todo : check if there is only the one user
+        const updateInstructionResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_CREATED');
+        logger('Update result: ', updateInstructionResult);
         
         const handlerResponse = {
             numberMessagesCreated: insertionResponse.length,
-            creationTimeMillis: insertionResponse[0].creationTime.valueOf()
+            creationTimeMillis: insertionResponse[0].creationTime.valueOf(),
+            instructionUpdateTime: updateInstructionResult.updatedTime
         };
 
         return {

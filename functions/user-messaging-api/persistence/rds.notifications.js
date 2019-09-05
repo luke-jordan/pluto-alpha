@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:user-notifications:rds');
 const config = require('config');
+const moment = require('moment');
 const decamelize = require('decamelize');
 const camelcase = require('camelcase');
 
@@ -53,7 +54,7 @@ module.exports.insertUserMessages = async (rows, objectKeys) => {
     // logger('Created insertion query:', messageQueryDef);
 
     const insertionResult = await rdsConnection.largeMultiTableInsert([messageQueryDef]);
-    logger('User messages insertion resulted in:', insertionResult);
+    // logger('User messages insertion resulted in:', insertionResult);
     const insertionRows = insertionResult[0]; // as multi table returns array of query
     return insertionRows.map((insertResult) => camelCaseKeys(insertResult));
 };
@@ -67,7 +68,7 @@ module.exports.getMessageInstruction = async (instructionId) => {
     const value = [instructionId];
 
     const response = await rdsConnection.selectQuery(query, value);
-    logger('Got this back from user message instruction extraction:', response);
+    // logger('Got this back from user message instruction extraction:', response);
 
     return camelCaseKeys(response[0]);
 };
@@ -94,6 +95,15 @@ module.exports.updateMessageInstruction = async (instructionId, property, newVal
 
     const response = await rdsConnection.updateRecord(query, values);
     logger('Result of message instruction update:', response);
+
+    return response.rows.map((insertionResult) => camelCaseKeys(insertionResult));
+};
+
+module.exports.updateInstructionState = async (instructionId, newProcessedStatus) => {
+    const currentTime = moment().format();
+    const query = `update ${config.get('tables.messageInstructionTable')} set processed_status = $1, last_processed_time = $2 where instruction_id = $3 returning update_time`;
+    const response = await rdsConnection.updateRecord(query, [newProcessedStatus, currentTime, instructionId]);
+    logger('Result of update: ', response);
 
     return response.rows.map((insertionResult) => camelCaseKeys(insertionResult));
 };

@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_user_create" {
 
   function_name                  = "${var.message_user_create_lambda_function_name}"
   role                           = "${aws_iam_role.message_user_create_role.arn}"
-  handler                        = "user-message-handler.createUserMessages"
+  handler                        = "message-creating-handler.createUserMessages"
   memory_size                    = 256
   runtime                        = "nodejs8.10"
   timeout                        = 900

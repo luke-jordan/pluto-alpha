@@ -86,6 +86,11 @@ resource "aws_iam_role_policy_attachment" "message_instruct_create_vpc_execution
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "message_instruct_message_create_policy" {
+  role = "${aws_iam_role.message_instruct_create_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
+}
+
 resource "aws_iam_role_policy_attachment" "message_instruct_create_secret_get" {
   role = "${aws_iam_role.message_instruct_create_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"

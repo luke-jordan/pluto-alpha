@@ -26,6 +26,14 @@ variable user_event_topic_arn {
     type = "map"
 }
 
+variable user_profile_table_read_policy_arn {
+    default = {
+        "staging" = "arn:aws:iam::455943420663:policy/UserProfileTableRead_access_staging"
+        "master" = "arn:aws:iam::455943420663:policy/UserProfileTableRead_access_master"
+    }
+    type = "map"
+}
+
 variable "dynamo_tables_read_capacity" {
     default = {
         "staging"  = {

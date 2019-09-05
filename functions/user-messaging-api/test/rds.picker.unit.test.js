@@ -71,6 +71,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
     const expectedTransformedMsg = {
         messageId: testMsgId,
+        destinationUserId: testUserId,
         messageTitle: 'Boost available!',
         messageBody: 'Hello! Jupiter is now live. To celebrate, if you add $10, you get $10 boost',
         creationTime: moment(testStartTime.format()),
