@@ -40,5 +40,8 @@
         "defaults": {
             "dateFormat": "MMMM YYYY"
         }
+    },
+    "security": {
+        "roleRequired": false
     }
 }

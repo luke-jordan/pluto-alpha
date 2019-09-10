@@ -5,9 +5,7 @@ const config = require('config');
 const uuid = require('uuid/v4');
 
 const rdsUtil = require('./persistence/rds.notifications');
-
-const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
+const msgUtil = require('./msg.util');
 
 // todo : stick in a common file
 const paramRegex = /#{([^}]*)}/g;
@@ -169,7 +167,7 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
  */
 module.exports.createUserMessages = async (event) => {
     try {
-        const params = extractEventBody(event);
+        const params = msgUtil.extractEventBody(event);
         logger('Receieved params:', params);
         const instructionId = params.instructionId;
         const instruction = await rdsUtil.getMessageInstruction(instructionId);
@@ -215,7 +213,7 @@ module.exports.createUserMessages = async (event) => {
  */
 module.exports.syncUserMessages = async (event) => {
     try {
-        const params = extractEventBody(event);
+        const params = msgUtil.extractEventBody(event);
         const systemWideUserId = params.systemWideUserId; // validation
         logger('Got user id:', systemWideUserId);
         const instructions = await rdsUtil.getInstructionsByType('ALL_USERS', 'RECURRING');
@@ -246,84 +244,17 @@ module.exports.syncUserMessages = async (event) => {
     }
 };
 
-/**
- * This function inserts a push token object into RDS. It requires that the user calling this function also owns the token.
- * An evaluation of the requestContext is run prior to token manipulation. If request context evaluation fails access is forbidden.
- * Non standared propertied are ignored during the assembly of the persistable token object.
- * @param {string} userId The push tokens owner.
- * @param {string} provider The push tokens provider.
- * @param {string} token The push token.
- */
-module.exports.insertPushToken = async (event) => {
+module.exports.transformPendingInstructions = async (event) => {
     try {
-        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
-        logger('User details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
+        // this is just going to go in and find the pending instructions and then transform them
 
-        const params = extractEventBody(event);
-        logger('Got event:', params);
-        // uncomment if needed. along with tests. 
-        // if (userDetails.systemWideUserId !== params.userId) {
-        //     return { statusCode: 403 };
-        // }
+        // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
 
-        const pushToken = await rdsUtil.getPushToken(params.provider, userDetails.systemWideUserId);
-        logger('Got push token:', pushToken);
-        if (pushToken) {
-            const deletionResult = await rdsUtil.deletePushToken(params.provider, userDetails.systemWideUserId); // replace with new token?
-            logger('Push token deletion resulted in:', deletionResult);
-        }
-        const newPushToken = { userId: userDetails.systemWideUserId, pushProvider: params.provider, pushToken: params.token };
-        logger('Sending to RDS: ', newPushToken);
-        const insertionResult = await rdsUtil.insertPushToken(newPushToken);
-        return { statusCode: 200, body: JSON.stringify(insertionResult[0]) };
+        // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next
+        // which implies: first get the recurring instructions, then expire old messages, then add new to the queue; okay.
+        
     } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return {
-            result: 'ERROR',
-            details: err.message
-        };
-    }
-};
-
-/**
- * This function accepts a token provider and its owners user id. It then searches for the associated persisted token object and deletes it from the 
- * database. As during insertion, only the tokens owner can execute this action. This is implemented through request context evaluation, where the userId
- * found within the requestContext object must much the value of the tokens owner user id.
- * @param {string} userId The tokens owner user id.
- * @param {string} provider The tokens provider.
- */
-module.exports.deletePushToken = async (event) => {
-    try {
-        const userDetails = extractUserDetails(event);
-        logger('Event: ', event);
-        logger('User details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-        const params = extractEventBody(event);
-        if (userDetails.systemWideUserId !== params.userId) {
-            return { statusCode: 403 };
-        }
-        const deletionResult = await rdsUtil.deletePushToken(params.provider, params.userId);
-        logger('Push token deletion resulted in:', deletionResult);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                result: 'SUCCESS',
-                details: deletionResult
-            })
-        };
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({
-                result: 'ERROR',
-                details: err.message
-            })
-        };
+        logger('FATAL_ERROR', err);
+        
     }
 };

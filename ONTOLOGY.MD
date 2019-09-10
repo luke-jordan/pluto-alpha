@@ -69,3 +69,17 @@ Notes on requirements for some of these selections:
 
 **NB**: In general, the use of this language biases to containing mistakes, i.e., if things are left out or left vague the minimal possible interpretation will be taken. For example, setting client_id and specific_users without specifying @cumulative as true will message one user, not all users for a client.
 
+## SENDING & RECURRENCE INSTRUCTIONS
+
+Note: Messages are 'sent' when they are dispatched via PN or when they are fetched by a pull call from the app.
+
+Messages and boosts can be programmed to "recur". That means they will be created again on a regular basis. This is used for generic placeholder type messages, such as descriptions of the user's prior saving history or reminders about the possibility of random boosts.
+These instructions follow a DSL with the following elements:
+
+* `min_interval`: Minimum interval between messages being shown to user. Measured in days.
+* `max_other_messages`: The maximum number of messages in the user's queue before this message is skipped. If it is 0, the message will only be assembled for the user if nothing else is in the queue.
+
+In future we may also add a means to weight the recurrence. For now, setting priorities will achieve much the same. If two recurrent messages are due for presentation, and one is higher priority than the other, it will be processed first, after which max other messages may be triggered. So a recurrent message with a priority of 0 and a max other message setting of 0 will only ever be shown if there is nothing else.
+
+Message statusses:
+

@@ -34,6 +34,15 @@ const getSubParamOrDefault = (paramSplit, defaultValue) => paramSplit.length > 1
 
 const formatAmountResult = (amountResult) => {
     logger('Formatting amount result: ', amountResult);
+    const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
+
+    // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
+    // implement for those countries where client opcos have launched
+    if (amountResult.currency === 'ZAR') {
+        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+        return `R${emFormat.format(wholeCurrencyAmount)}`;
+    }
+
     const numberFormat = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: amountResult.currency,
@@ -41,7 +50,6 @@ const formatAmountResult = (amountResult) => {
         minimumFractionDigits: 0
     });
     
-    const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
     return numberFormat.format(wholeCurrencyAmount);
 };
 

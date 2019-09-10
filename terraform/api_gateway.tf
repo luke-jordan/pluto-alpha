@@ -17,6 +17,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.message_process,
   aws_api_gateway_integration.message_token_store,
   aws_api_gateway_integration.message_instruct_create,
+  aws_api_gateway_integration.message_instruct_list,
   aws_api_gateway_integration.boost_user_process,
   aws_api_gateway_integration.ops_warmup
   ]
@@ -390,11 +391,17 @@ resource "aws_api_gateway_integration" "message_token_store" {
 }
 
 // CREATE A MESSAGE INSTRUCTION
-
-resource "aws_api_gateway_resource" "message_instruct_create" {
+// this is for the couple of message instruct endpoints
+resource "aws_api_gateway_resource" "message_instruct_path_root" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_resource.message_path_root.id}"
   path_part   = "instruct"
+}
+
+resource "aws_api_gateway_resource" "message_instruct_create" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.message_instruct_path_root.id}"
+  path_part   = "create"
 }
 
 resource "aws_api_gateway_method" "message_instruct_create" {
@@ -426,6 +433,44 @@ module "message_create_cors" {
   source = "./modules/cors"
   api_id          = "${aws_api_gateway_rest_api.api_gateway.id}"
   api_resource_id = "${aws_api_gateway_resource.message_instruct_create.id}"
+}
+
+// LIST MESSAGE INSTRUCTIONS (ALSO ONLY FOR ADMIN -- ADD TO AUTHORIZER IN TIME)
+resource "aws_api_gateway_resource" "message_instruct_list" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.message_instruct_path_root.id}"
+  path_part   = "list"
+}
+
+resource "aws_api_gateway_method" "message_instruct_list" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.message_instruct_list.id}"
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "message_instruct_list" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.message_instruct_list.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "message_instruct_list" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.message_instruct_list.resource_id}"
+  http_method = "${aws_api_gateway_method.message_instruct_list.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.message_instruct_list.invoke_arn}"
+}
+
+module "message_list_cors" {
+  source = "./modules/cors"
+  api_id          = "${aws_api_gateway_rest_api.api_gateway.id}"
+  api_resource_id = "${aws_api_gateway_resource.message_instruct_list.id}"
 }
 
 /////////////// BOOST LAMBDAS //////////////////////////////////////////////////////////////////////////

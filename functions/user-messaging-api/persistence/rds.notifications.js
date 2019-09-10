@@ -85,6 +85,53 @@ module.exports.getInstructionsByType = async (audienceType, presentationType) =>
 };
 
 /**
+ * This returns a list of message instructions that are still set to active true and not past their expiry. If the boolean is set to true
+ * then it will also return instructions that in themselves are expired, but where there are still messages ready for sending
+ * todo : clean up and optimize pretty soon
+ */
+module.exports.getCurrentInstructions = async (includePendingUserView = false) => {
+    const instructTable = config.get('tables.messageInstructionTable');
+    const messageTable = config.get('tables.userMessagesTable');
+
+    // todo : when the last message is fetch, have a job that switches this to ended
+    const activeSubClause = 'instruction.active = true and instruction.end_time > current_timestamp';
+
+    // so first we get a list of instructions that are either recurring, event based, or once off but have some number unfetched
+    const handledStatuses = `'FETCHED', 'DELIVERED', 'DISMISSED`;
+    const selectNonZeroIds = `select instruction.instruction_id, count(message_id) as unfetched_message_count from ${instructTable} as instruction ` +
+        `inner join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id ` +
+        `where messages.processed_status not in ($1) group by instruction.instruction_id`;
+
+    const firstQueryResult = await rdsConnection.selectQuery(selectNonZeroIds, [handledStatuses]);
+    logger('Result of first query: ', firstQueryResult);
+    const nonZeroIds = firstQueryResult.filter((row) => row['unfetched_message_count'] > 0).map((row) => row['instruction_id']);
+    logger('Filtered non zero IDs: ', nonZeroIds);
+    
+    const nonZeroIdSet = nonZeroIds.map((id) => `'${id}'`).join(',');
+    
+    const idKeyedCounts = firstQueryResult.reduce((obj, row) => ({ ...obj, [row['instruction_id']]: row['unfetched_message_count']}), {});
+    logger('ID keyed counts: ', idKeyedCounts);
+
+    const queryBase = `select instruction.*, count(message_id) as total_message_count from ${instructTable} as instruction ` + 
+        `left join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id`;
+    const whereClause = !includePendingUserView ? `where (${activeSubClause})` :
+        `where (instruction.presentation_type in ('RECURRING', 'EVENT_DRIVEN') and ${activeSubClause}) ` +
+        `or (instruction.presentation_type in ('ONCE_OFF') and instruction.instruction_id in (${nonZeroIdSet}))`;
+    const queryEnd = 'group by instruction.instruction_id';
+
+    const assembledQuery = `${queryBase} ${whereClause} ${queryEnd}`;
+    logger('Executing query: ', assembledQuery);
+    const secondQueryResult = await rdsConnection.selectQuery(assembledQuery, []);
+    logger('Result of second query, IDs: ', secondQueryResult.map((row) => row['instruction_id']));
+
+    const transformedInstructions = secondQueryResult.map((row) => 
+        ({...camelCaseKeys(row), unfetchedMessageCount: idKeyedCounts[row['instruction_id']]}));
+    logger('Transformed: ', transformedInstructions);
+
+    return transformedInstructions;
+};
+
+/**
  * This function accepts an message instruction id, a message instruction property, and the new value to be assigned to the property.
  * @param {string} instructionId The message instruction ID assigned during instruction creation.
  */

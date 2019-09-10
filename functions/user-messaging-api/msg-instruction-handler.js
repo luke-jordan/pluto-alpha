@@ -227,3 +227,26 @@ module.exports.getMessageInstruction = async (event) => {
         };
     }
 };
+
+/** 
+ * This function (which will only be available to users with the right roles/permissions) will list currently active messages,
+ * i.e., those that are marked as active, and, optionally, those that still have messages unread by users
+ */
+module.exports.listActiveMessages = async (event) => {
+    try {
+        const userDetails = msgUtil.extractUserDetails(event);
+        if (!msgUtil.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
+            return msgUtil.unauthorizedResponse;
+        }
+
+        const params = msgUtil.extractEventBody(event);
+        const includeStillDelivering = params.includeStillDelivering || false;
+        const activeMessages = await rdsUtil.getCurrentInstructions(includeStillDelivering);
+        logger('Active instructions: ', activeMessages);
+
+        return msgUtil.wrapHttpResponse(activeMessages);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return msgUtil.wrapHttpResponse(err.message, 500);
+    }
+};

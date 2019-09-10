@@ -53,15 +53,17 @@ module.exports.getNextMessage = async (destinationUserId) => {
     return result.map((msg) => transformMsg(msg));
 };
 
-const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT') => 
-    rows.reduce((sum, row) => sum + row['amount'] * UNIT_MULTIPLIERS[row['unit']][targetUnit], 0);
+// Possibly over-concise, but allows us to sum these on a single query
+const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => 
+    rows.reduce((sum, row) => sum + parseInt(row[amountKey], 10) * UNIT_MULTIPLIERS[row['unit']][targetUnit], 0);
 
+    //and transaction_type in ($4) 
 const accountSumQuery = async (params, systemWideUserId) => {
     const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
     const query = `select sum(amount), unit from ${userAccountTable} inner join ${userTransactionTable} ` +
         `on ${userAccountTable}.account_id = ${userTransactionTable}.account_id ` +
-        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
-    const fetchRows = await rdsConnection.selectQuery(query, [systemWideUserId, params.currency, 'SETTLED', transTypesToInclude]);
+        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
+    const fetchRows = await rdsConnection.selectQuery(query, [systemWideUserId, params.currency, 'SETTLED']);
     logger('Result from select: ', fetchRows);
     return { ...params, amount: sumOverUnits(fetchRows, params.unit) };
 };

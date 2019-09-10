@@ -276,3 +276,9 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnError);
     });
 });
+
+describe('*** UNIT TESTING MESSAGE LISTING ****', async () => {
+
+    
+
+});
