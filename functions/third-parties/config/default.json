@@ -1,0 +1,35 @@
+{
+    "ozow": {
+        "endpoints": {
+            "payment": "https://pay.ozow.com",
+            "warmup": "",
+            "successUrl": "",
+            "cancelUrl": "",
+            "errorUrl": "",
+            "dryRun": "https://dry.run.com/p/2AATFG45"
+        },
+        "siteCode": "",
+        "privateKey": "",
+        "apiKey": "",
+        "requiredProperties": [
+            "countryCode",
+            "currencyCode",
+            "amount",
+            "transactionReference",
+            "bankReference",
+            "isTest"
+        ],
+        "postKeyOrder": [
+            "SiteCode",
+            "CountryCode",
+            "CurrencyCode",
+            "Amount",
+            "TransactionReference",
+            "BankReference",
+            "CancelUrl",
+            "ErrorUrl",
+            "SuccessUrl",
+            "IsTest"
+        ]
+    }
+}
