@@ -60,12 +60,12 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
     it('Gets payment url from third party', async () => {
         requestStub.throws(mockRedirectionError);
-        const mockEvent = Object.assign({}, mockMinimalEvent);
+        const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
-        // commonExpectations(resultOfRequest);
+        commonExpectations(resultOfRequest);
         resetStubs(requestStub);
 
         requestStub.throws(mockRedirectionError);
@@ -105,7 +105,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     });
 
     it('Throws error on missing required properties', async () => {
-        const mockEvent = Object.assign({}, mockMinimalEvent);
+        const mockEvent = { ...mockMinimalEvent };
         Reflect.deleteProperty(mockEvent, 'countryCode');
 
         const resultOfRequest = await handler.payment(mockEvent);
@@ -119,7 +119,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
     it('Throws error on redirection failure', async () => {
         requestStub.returns('HonestlyItsTheWildWestOutHere');
-        const mockEvent = Object.assign({}, mockMinimalEvent);
+        const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
@@ -132,7 +132,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
     it('Throws an err where non-Object error or missing status code', async () => {
         requestStub.throws('SomeAlamoLikeError');
-        const mockEvent = Object.assign({}, mockMinimalEvent);
+        const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
@@ -145,7 +145,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
     it('Throws an err where non-Object error or missing status code', async () => {
         requestStub.throws({ statusCode: 400, body: 'ERROR' });
-        const mockEvent = Object.assign({}, mockMinimalEvent);
+        const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
