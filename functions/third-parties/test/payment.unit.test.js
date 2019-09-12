@@ -1,7 +1,6 @@
 'use strict';
 
 const logger = require('debug')('jupiter:third-parties:payment-unit-test');
-const uuid = require('uuid/v4');
 const config = require('config');
 
 const sinon = require('sinon');
@@ -26,13 +25,23 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     
     const mockPaymentEndpoint = '/3d0b3420-8595-40b6-ab87-38f4d476ca17/Secure';
     const mockPaymentUrl = config.get('ozow.endpoints.payment');
-    const redirectionError = {
+    const mockRedirectionError = {
         statusCode: 302,
         response: {
             headers: {
                 location: mockPaymentEndpoint
             }
         }
+    };
+
+    const mockMinimalEvent = {
+        amount: 156,
+        transactionReference: 'TEST_REFERENCE',
+        bankReference: 'TEST_REFERENCE',
+        isTest: false,
+        siteCode: config.get('ozow.siteCode'),
+        countryCode: 'ZA',
+        currencyCode: 'ZAR'
     };
 
     beforeEach(() => {
@@ -49,29 +58,23 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     };
 
     it('Gets payment url from third party', async () => {
-        requestStub.throws(redirectionError);
-        const mockEvent = {
-            amount: 156,
-            transactionReference: 'TEST_REFERENCE',
-            bankReference: 'TEST_REFERENCE',
-            isTest: false,
-            siteCode: config.get('ozow.siteCode'),
-            countryCode: 'ZA',
-            currencyCode: 'ZAR'
-        };
+        requestStub.throws(mockRedirectionError);
+        const mockEvent = Object.assign({}, mockMinimalEvent);
 
         const resultOfRequest = await handler.getPaymentUrl(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
+
         commonExpectations(resultOfRequest);
         resetStubs(requestStub);
 
-        requestStub.throws(redirectionError);
+        requestStub.throws(mockRedirectionError);
         mockEvent.cancelUrl = 'https://mock.cancel.url.com/';
         mockEvent.successUrl = 'https://mock.success.url.com/';
         mockEvent.errorUrl = 'https://mock.error.url.com/';
 
         const resultOfFullRequest = await handler.getPaymentUrl(mockEvent);
         logger('Result of payment url extraction:', resultOfFullRequest);
+
         commonExpectations(resultOfFullRequest);
     });
 
@@ -81,6 +84,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
         const resultOfWarmup = await handler.getPaymentUrl(mockEvent);
         logger('Result of warmup call:', resultOfWarmup);
+
         expect(resultOfWarmup).to.exist;
         expect(resultOfWarmup).to.have.property('statusCode', 200);
         expect(resultOfWarmup).to.have.property('body', JSON.stringify({ State: 'ACTIVE' }));
@@ -91,6 +95,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
         const resultOfDryrun = await handler.getPaymentUrl(mockEvent);
         logger('Result of dry run:', resultOfDryrun);
+
         expect(resultOfDryrun).to.exist;
         expect(resultOfDryrun).to.have.property('statusCode', 200);
         expect(resultOfDryrun).to.have.property('body');
@@ -99,23 +104,57 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     });
 
     it('Throws error on missing required properties', async () => {
-        const mockEvent = {
-            transactionReference: 'TEST_REFERENCE',
-            bankReference: 'TEST_REFERENCE',
-            isTest: true,
-            siteCode: config.get('ozow.siteCode'),
-            countryCode: 'ZA',
-            currencyCode: 'ZAR',
-            amount: 10
-        };
+        const mockEvent = Object.assign({}, mockMinimalEvent);
         Reflect.deleteProperty(mockEvent, 'countryCode');
 
         const resultOfRequest = await handler.getPaymentUrl(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
+
         expect(resultOfRequest).to.exist;
         expect(resultOfRequest).to.have.property('statusCode', 500); // ultimately should return 400
         expect(resultOfRequest).to.have.property('body', JSON.stringify('Missing required property: countryCode'));
         expect(requestStub).to.have.not.been.called;
     });
 
+    it('Throws error on redirection failure', async () => {
+        requestStub.returns('HonestlyItsTheWildWestOutHere');
+        const mockEvent = Object.assign({}, mockMinimalEvent);
+
+        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        logger('Result of payment url extraction:', resultOfRequest);
+
+        expect(resultOfRequest).to.exist;
+        expect(resultOfRequest).to.have.property('statusCode', 500);
+        expect(resultOfRequest).to.have.property('body', JSON.stringify('Payment url resulted in: HonestlyItsTheWildWestOutHere'));
+        expect(requestStub).to.have.been.calledOnce;
+    });
+
+    it('Throws an err where non-Object error or missing status code', async () => {
+        requestStub.throws('SomeAlamoLikeError');
+        const mockEvent = Object.assign({}, mockMinimalEvent);
+
+        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        logger('Result of payment url extraction:', resultOfRequest);
+
+        expect(resultOfRequest).to.exist;
+        expect(resultOfRequest).to.have.property('statusCode', 500);
+        expect(resultOfRequest).to.have.property('body', JSON.stringify('SomeAlamoLikeError'));
+        expect(requestStub).to.have.been.calledOnce;
+    });
+
+    it('Throws an err where non-Object error or missing status code', async () => {
+        requestStub.throws({ statusCode: 400, body: 'ERROR' });
+        const mockEvent = Object.assign({}, mockMinimalEvent);
+
+        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        logger('Result of payment url extraction:', resultOfRequest);
+
+        expect(resultOfRequest).to.exist;
+        expect(resultOfRequest).to.have.property('statusCode', 500);
+        expect(resultOfRequest).to.have.property('body');
+        const body = JSON.parse(JSON.parse(resultOfRequest.body));
+        expect(body).to.have.property('statusCode', 400);
+        expect(body).to.have.property('body', 'ERROR');
+        expect(requestStub).to.have.been.calledOnce;
+    });
 });

@@ -57,8 +57,7 @@ const assembleRequest = (method, endpoint, body) => ({
 
 
 /**
- * This function gets a payment url from a third-party. All possible properties are included in the request
- * object but many are optional. Property descriptions for the event object accepted by this function are provided below.
+ * This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below.
  * @param {string} siteCode A unique code for the site currently in use.
  * @param {string} countryCode  The ISO 3166-1 alpha-2 code for the user's country. The country code will determine which banks will be displayed to the customer.
  * @param {string} currencyCode The ISO 4217 3 letter code for the transaction currency.
@@ -93,23 +92,24 @@ module.exports.getPaymentUrl = async (event) => {
         logger('Created body:', body);
         const options = assembleRequest('POST', config.get('ozow.endpoints.payment'), body);
         logger('Created request options:', options);
+        let paymentUrlResponse = null;
         try {
-            const paymentUrlResponse = await request(options); // throws a redirection error on success
-            throw new Error(paymentUrlResponse);
+            paymentUrlResponse = await request(options); // throws a redirection error on success
         } catch (err) {
             if (typeof err === 'object' && 'statusCode' in err) {
                 if (err.statusCode === 302) {
-                    const paymentEndpoint = err.response.headers.location; // how to get request id
+                    const paymentEndpoint = err.response.headers.location;
                     return { statusCode: 200, body: JSON.stringify({ paymentUrl: `${config.get('ozow.endpoints.payment')}${paymentEndpoint}` }) };
                 } else {
-                    throw err;
+                    throw new Error(JSON.stringify(err));
                 }
             } else {
-                throw err;
+                throw new Error(err);
             }
         }
+        throw new Error(`Payment url resulted in: ${paymentUrlResponse}`);
     } catch (err) {
-        logger('FATAL_ERROR:', JSON.stringify(err));
+        logger('FATAL_ERROR:', err);
         return {
             statusCode: 500,
             body: JSON.stringify(err.message)
