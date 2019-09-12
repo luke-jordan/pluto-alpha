@@ -12,7 +12,7 @@
         "dynamoProfileTable": "UserProfileTable"
     },
     "lambdas": {
-        "generateUserMessages": "message_user_create",
+        "generateUserMessages": "message_user_create_once",
         "updateMessageStatus": "message_user_process"
     },
     "db": {

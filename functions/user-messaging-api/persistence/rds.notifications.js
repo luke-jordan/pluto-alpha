@@ -12,7 +12,10 @@ const accountsTable = config.get('tables.accountLedger');
 
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
+const extractParamIndices = (values, startIndex = 1) => values.map((_, idx) => `$${idx + startIndex}`).join(', ');
+
 const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [camelcase(key)]: object[key] }), {});
+
 
 /**
  * This function accepts a persistable instruction object and inserts it into the database. It is vital that input to this function must
@@ -23,7 +26,7 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ..
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed, includes response actions, context, etc (see handler for more)
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
  * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
  * @param {string} lastProcessedTime This property is updated eah time the message instruction is processed.
@@ -73,12 +76,28 @@ module.exports.getMessageInstruction = async (instructionId) => {
     return camelCaseKeys(response[0]);
 };
 
+/**
+ * Used for obtaining messages during regular processing or at user start
+ */
+module.exports.getInstructionsByType = async (presentationType, audienceTypes, processedStatuses) => {
+    let query = `select * from ${config.get('tables.messageInstructionTable')} where presentation_type = $1 ` + 
+        `and active = true and end_time > current_timestamp`;
+    let values = [presentationType];
 
-module.exports.getInstructionsByType = async (audienceType, presentationType) => {
-    const query = `select * from ${config.get('tables.messageInstructionTable')} where audience_type = $1 and presentation_type = $2 and active = true`;
-    const value = [audienceType, presentationType];
+    let paramStartIndex = 2;
+    if (Array.isArray(audienceTypes) && audienceTypes.length > 0) {
+        query = `${query} and audience_type in (${extractParamIndices(audienceTypes, paramStartIndex)})`;
+        values = values.concat(audienceTypes);
+        paramStartIndex = paramStartIndex + audienceTypes.length;
+    }
 
-    const response = await rdsConnection.selectQuery(query, value);
+    if (Array.isArray(processedStatuses) && processedStatuses.length > 0) {
+        query = `${query} and processed_status in (${extractParamIndices(processedStatuses, paramStartIndex)})`;
+        values = values.concat(processedStatuses);
+        paramStartIndex = paramStartIndex + processedStatuses.length;
+    }
+
+    const response = await rdsConnection.selectQuery(query, values);
     logger('Got this back from user message instruction extraction:', response);
 
     return response.map((instruction) => camelCaseKeys(instruction));
@@ -97,12 +116,13 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
     const activeSubClause = 'instruction.active = true and instruction.end_time > current_timestamp';
 
     // so first we get a list of instructions that are either recurring, event based, or once off but have some number unfetched
-    const handledStatuses = `'FETCHED', 'DELIVERED', 'DISMISSED`;
-    const selectNonZeroIds = `select instruction.instruction_id, count(message_id) as unfetched_message_count from ${instructTable} as instruction ` +
-        `inner join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id ` +
-        `where messages.processed_status not in ($1) group by instruction.instruction_id`;
+    const handledStatuses = ['FETCHED', 'DELIVERED', 'DISMISSED'];
+    const statusParamIdx = extractParamIndices(handledStatuses)
+    const selectNonZeroIds = `select instruction.instruction_id, count(message_id) as unfetched_message_count from ` +
+        `${instructTable} as instruction inner join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id ` +
+        `where messages.processed_status not in (${statusParamIdx}) group by instruction.instruction_id`;
 
-    const firstQueryResult = await rdsConnection.selectQuery(selectNonZeroIds, [handledStatuses]);
+    const firstQueryResult = await rdsConnection.selectQuery(selectNonZeroIds, handledStatuses);
     logger('Result of first query: ', firstQueryResult);
     const nonZeroIds = firstQueryResult.filter((row) => row['unfetched_message_count'] > 0).map((row) => row['instruction_id']);
     logger('Filtered non zero IDs: ', nonZeroIds);
@@ -135,25 +155,43 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
  * This function accepts an message instruction id, a message instruction property, and the new value to be assigned to the property.
  * @param {string} instructionId The message instruction ID assigned during instruction creation.
  */
-module.exports.updateMessageInstruction = async (instructionId, property, newValue) => {
+module.exports.updateMessageInstruction = async (instructionId, valuesToUpdate) => {
     logger('About to update message instruction.');
-    const query = `update ${config.get('tables.messageInstructionTable')} set $1 = $2 where instruction_id = $3 returning instruction_id, update_time`;
-    const values = [property, newValue, instructionId];
-
-    const response = await rdsConnection.updateRecord(query, values);
+    const table = config.get('tables.messageInstructionTable');
+    const key = { instructionId };
+    const value = valuesToUpdate;
+    const returnClause = 'updated_time';
+    
+    const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });
     logger('Result of message instruction update:', response);
 
-    return response.rows.map((insertionResult) => camelCaseKeys(insertionResult));
+    return response.map((updateResult) => camelCaseKeys(updateResult));
 };
 
 module.exports.updateInstructionState = async (instructionId, newProcessedStatus) => {
     const currentTime = moment().format();
-    const query = `update ${config.get('tables.messageInstructionTable')} set processed_status = $1, last_processed_time = $2 where instruction_id = $3 returning update_time`;
-    const response = await rdsConnection.updateRecord(query, [newProcessedStatus, currentTime, instructionId]);
-    logger('Result of update: ', response);
-
-    return response.rows.map((insertionResult) => camelCaseKeys(insertionResult));
+    const valueMap = { processedStatus: newProcessedStatus, lastProcessedTime: currentTime };
+    return exports.updateMessageInstruction(instructionId, valueMap);
 };
+
+module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses, newStatus) => {
+    const table = config.get('tables.userMessagesTable');
+    const statusParams = extractParamIndices(oldStatuses, 2);
+    const seekMsgsQuery = `select message_id from ${table} where instruction_id = $1 and processed_status in (${statusParams})`;
+    const messageIdRows = await rdsConnection.selectQuery(seekMsgsQuery, [instructionId, ...oldStatuses]);
+    const messageIds = messageIdRows.map((row) => row['message_id']);
+    
+    const value = { processedStatus: newStatus };
+    const messageUpdateDefs = messageIds.map((messageId) => ({ table, key: { messageId }, value, returnClause: 'updated_time'}));
+
+    const updateResponse = await rdsConnection.multiTableUpdateAndInsert(messageUpdateDefs, []);
+    logger('Result of update on batch of messages: ', updateResponse);
+    return updateResponse;
+}
+
+/////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////// User ID extraction begins here ////////////////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////
 
 const validateAndExtractUniverse = (universeComponent) => {
     logger('Universe component: ', universeComponent);
@@ -172,6 +210,7 @@ const validateAndExtractUniverse = (universeComponent) => {
 
     return universeDefinition;
 };
+
 
 // note : this _could_ be simplified by relying on ordering of Object.keys, but that would be dangerous/fragile
 const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey) => {
@@ -278,6 +317,49 @@ module.exports.getUserIds = async (selectionInstruction) => {
     logger('Got this back from user ids extraction:', userIds);
     return userIds;
 };
+
+const executeQueryAndGetIds = async (query, values, idColumn = 'destination_user_id') => {
+    const rows = await rdsConnection.selectQuery(query, values);
+    return rows.map((row) => row[idColumn]);
+};
+
+/**
+ * This will find those user IDs in the list that are not disqualified by the recurrence parameters. Note: ugly as hell.
+ */
+module.exports.filterUserIdsForRecurrence = async (userIds, { instructionId, recurrenceParameters }) => {
+    // in time, some of these will be optional, for now just use each of them
+    // also in time, do this in a single join query reusing most of the components above (though not sure how sampling will work)
+    // on the other hand, sampling on recurrence becomes difficult to handle generally (different sample all the time?), so
+    // will want to think through that (todo : JIRA issue)
+    
+    const messageTable = config.get('tables.userMessagesTable');
+    logger('Filtering recurrence for ID: ', instructionId, 'on parameters: ', recurrenceParameters);
+
+    // min days, means exclude owner user IDs where this recurrence occurred within that period, so we find those that have a 
+    // message which is more recent than that and related to this instruction; see note below re inclusion of user_ids, for now
+    // note : could have used postgres current_timestamp - interval but it does not play well with parameters, hence
+    const minIntervalQuery = `select distinct(destination_user_id) from ${messageTable} where instruction_id = $1 and ` +
+        `creation_time > $2`;
+    const durationClause = moment().subtract(recurrenceParameters.minIntervalDays, 'days').format();
+    const intervalPromise = executeQueryAndGetIds(minIntervalQuery, [instructionId, durationClause])
+
+    // here consciously allowing this to be everything -- could do an 'in' clause with user IDs but very complex and probably 
+    // has little gain, esp as might create enourmous query when have 100k + users and evaluating a generic recurrence
+    const minQueueQuery = `select destination_user_id from ${messageTable} where processed_status = $1 ` + 
+        `group by destination_user_id having count(*) > $2`;
+    const queueSizePromise = executeQueryAndGetIds(minQueueQuery, ['READY_FOR_SENDING', recurrenceParameters.maxInQueue]);
+
+    const [usersWithinInterval, usersWithQueue] = await Promise.all([intervalPromise, queueSizePromise]);
+    // this will mean redundancy but removing overlap would serve little purpose, hence leaving it
+    const idsToFilter = usersWithinInterval.concat(usersWithQueue);
+    logger('And have these IDs to remove: ', idsToFilter);
+
+    return userIds.filter((id) => !idsToFilter.includes(id));
+};
+
+/////////////////////////////////////////////////////////////////////////////////////////
+///////////////////////// Final: push token extraction begins here //////////////////////
+/////////////////////////////////////////////////////////////////////////////////////////
 
 module.exports.insertPushToken = async (pushTokenObject) => {
     const objectKeys = Object.keys(pushTokenObject);

@@ -134,7 +134,7 @@ resource "aws_iam_policy" "lambda_invoke_message_create_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.message_user_create.arn}"
+                "${aws_lambda_function.message_user_create_once.arn}"
             ]
         }
     ]

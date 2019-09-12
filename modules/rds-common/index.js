@@ -252,6 +252,30 @@ class RdsConnection {
         return results;
     }
 
+    // see below for definition of update query def
+    async updateRecordObject (updateQueryDef) {
+        const { query, values } = RdsConnection.compileUpdateQueryAndArray(updateQueryDef);
+        
+        let result = null;
+        const client = await this._getConnection();
+        
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            const rawResult = await client.query(query, values);
+            result = RdsConnection._extractRowsIfExist(rawResult);
+            await client.query('COMMIT');
+        } catch (err) {
+            logger('Error running update: ', e);
+            await client.query('ROLLBACK');
+            throw new CommitError();
+        } finally {
+            await client.release();
+        }
+
+        return result;
+    }
+
     /**
      * For running multiple updates all at once
      * @param {list} updateQueryDefs Each definition takes: table, key (to select row/rows), value, and a return clause; decamelize run on object keys

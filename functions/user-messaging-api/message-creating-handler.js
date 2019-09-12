@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler');
 const config = require('config');
+const moment = require('moment');
 const uuid = require('uuid/v4');
 
 const rdsUtil = require('./persistence/rds.notifications');
@@ -18,6 +19,23 @@ const STANDARD_PARAMS = [
 ];
 
 /**
+ * This sequences of functions take a message instruction and returns an array of user message rows. Instruction properties are as follows:
+ * @param {string} presentationType How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
+ * @param {boolean} active Indicates whether the message is active or not.
+ * @param {string} audienceType Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
+ * @param {object} templates Message instruction must include at least one template, ie, the notification message to be displayed
+ * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
+ * @param {object} responseContext An object that includes details such as the boost ID.
+ * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
+ * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
+ * @param {string} lastProcessedTime This property is updated eah time the message instruction is processed.
+ * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
+ * @param {object} requestDetails An object containing parameters past by the caller. These may include template format values as well as notification display instruction.
+ */
+
+/**
  * NOTE: This is only for custom params supplied with the message-creation event. System defined params should be left alone.
  * This function assembles the selected template and inserts relevent data where required.
  * todo : make sure this handles subparams on standard params (e.g., total_interest::since etc)
@@ -25,7 +43,7 @@ const STANDARD_PARAMS = [
  * @param {*} passedParameters Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated are executed.
  * With regards to boost amount it is extracted from request parameters and inserted into the boost template.
  */
-const assembleTemplate = (template, passedParameters) => {
+const placeParamsInTemplate = (template, passedParameters) => {
     if (!passedParameters || typeof passedParameters !== 'object') {
         return template;
     }
@@ -44,19 +62,19 @@ const assembleTemplate = (template, passedParameters) => {
     return template;
 };
 
-const generateMessageFromTemplate = ({ destinationUserId, template, instruction, requestDetails }) => {
+const generateMessageFromTemplate = ({ destinationUserId, template, instruction, parameters }) => {
     const msgVariants = Object.keys(template);
     const thisVariant = msgVariants[Math.floor(Math.random() * msgVariants.length)];
     const msgTemplate = template[thisVariant];
-    const messageBody = assembleTemplate(msgTemplate.body, requestDetails); // to become a generic way of formatting variables into template.
+    const messageBody = placeParamsInTemplate(msgTemplate.body, parameters); // to become a generic way of formatting variables into template.
     const actionContext = msgTemplate.actionToTake ? { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext } : undefined;
     
     let processedStatus = null;
-    const overrideStatusPassed = typeof requestDetails === 'object' && typeof requestDetails.processedStatus === 'string' && 
-        requestDetails.processedStatus.length > 0;
+    const overrideStatusPassed = typeof parameters === 'object' && typeof parameters.processedStatus === 'string' && 
+        parameters.processedStatus.length > 0;
 
     if (overrideStatusPassed) {
-        processedStatus = requestDetails.defaultStatus;
+        processedStatus = parameters.defaultStatus;
     } else if (typeof instruction.defaultStatus === 'string' && instruction.defaultStatus.length > 0) {
         processedStatus = instruction.defaultStatus;
     } else  {
@@ -82,7 +100,7 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
     };
 };
 
-const generateAndAddMessageSequence = (rows, { destinationUserId, templateSequence, instruction, requestDetails }) => {
+const generateAndAppendMessageSequence = (rows, { destinationUserId, templateSequence, instruction, parameters }) => {
     const msgsForUser = [];
     const identifierDict = { };
     templateSequence.forEach((templateDef, idx) => {
@@ -90,7 +108,7 @@ const generateAndAddMessageSequence = (rows, { destinationUserId, templateSequen
         Reflect.deleteProperty(template, 'identifier');
         
         const userMessage = generateMessageFromTemplate({ 
-            destinationUserId, template, instruction, requestDetails 
+            destinationUserId, template, instruction, parameters
         });
         
         if (idx === 0) {
@@ -107,27 +125,7 @@ const generateAndAddMessageSequence = (rows, { destinationUserId, templateSequen
     rows.push(...msgsForUser);
 };
 
-/**
- * This function takes a message instruction and returns an array of user message rows. Instruction properties are as follows:
- * @param {string} presentationType How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
- * @param {boolean} active Indicates whether the message is active or not.
- * @param {string} audienceType Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {object} templates Message instruction must include at least one template, ie, the notification message to be displayed
- * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
- * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
- * @param {object} responseContext An object that includes details such as the boost ID.
- * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
- * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
- * @param {string} lastProcessedTime This property is updated eah time the message instruction is processed.
- * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
- * @param {object} requestDetails An object containing parameters past by the caller. These may include template format values as well as notification display instruction.
- */
-const assembleUserMessages = async (instruction, destinationUserId = null) => {
-    const selectionInstruction = instruction.selectionInstruction || null;
-    const userIds = destinationUserId ? [ destinationUserId ] : await rdsUtil.getUserIds(selectionInstruction);
-    logger(`Retrieved ${userIds.length} user id(s) for instruction`);
-    
+const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) => {
     if (!Array.isArray(userIds) || userIds.length === 0) {
         logger('No users match this selection criteria, exiting');
         return [];
@@ -137,24 +135,30 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
     if (typeof templates !== 'object' || Object.keys(templates).length !== 1) {
         throw new Error('Malformed template instruction: ', instruction.templates);
     }
-    const requestDetails = instruction.requestDetails ? instruction.requestDetails.parameters : undefined;
-
+    
     let rows = [];
     
     const topLevelKey = Object.keys(templates)[0];
+
+    // i.e., if the instruction holds a sequence of messages (like in a boost offer), generate all of those for each user, else just the one
     if (topLevelKey === 'template') {
         rows = userIds.map((destinationUserId) => (
-            generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, requestDetails })));
+            generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
     } else if (topLevelKey === 'sequence') {
         const templateSequence = templates.sequence;
-        // alternate is home grown flat map using eg reduce & concat, but that will be _very_ inefficient at high numbers, so might as well
-        userIds.forEach((userId) => generateAndAddMessageSequence(rows,
-            { destinationUserId: userId, templateSequence, instruction, requestDetails }));        
+        userIds.forEach((userId) => 
+            generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
     }
     
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
-    return rows;
-};
+    if (!rows || rows.length === 0) {
+        logger('No user messages generated, exiting');
+        return { instructionId, result: 'NO_USERS' };
+    }
+
+    const rowKeys = Object.keys(rows[0]);
+    return rdsUtil.insertUserMessages(rows, rowKeys);
+}
 
 /**
  * This function accepts an instruction id, retrieves the associated instruction from persistence, assembles the user message, and finally
@@ -165,45 +169,104 @@ const assembleUserMessages = async (instruction, destinationUserId = null) => {
  * @param {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.
  * @param {boolean} triggerBalanceFetch Required on boost message assembly. Indicates whether to include the users new balance in the boost message.
  */
+const processNonRecurringInstruction = async ({ instructionId, destinationUserId, parameters }) => {
+    const instruction = await rdsUtil.getMessageInstruction(instructionId);
+    
+    const selectionInstruction = instruction.selectionInstruction || null;
+    const userIds = destinationUserId ? [ destinationUserId ] : await rdsUtil.getUserIds(selectionInstruction);
+    logger(`Retrieved ${userIds.length} user id(s) for instruction`);
+    
+    const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
+    if (!Array.isArray(insertionResponse)) {
+        return { instructionId, insertionResponse };
+    }
+    
+    // todo : check if there is only the one user
+    const updateInstructionResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_CREATED');
+    logger('Update result: ', updateInstructionResult);
+    
+    const handlerResponse = {
+        instructionId,
+        instructionType: instruction.presentationType,
+        numberMessagesCreated: insertionResponse.length,
+        creationTimeMillis: insertionResponse[0].creationTime.valueOf(),
+        instructionUpdateTime: updateInstructionResult.updatedTime
+    };
+
+    return handlerResponse;
+}
+
+// a wrapper for simple instruction processing
 module.exports.createUserMessages = async (event) => {
     try {
-        const params = msgUtil.extractEventBody(event);
-        logger('Receieved params:', params);
-        const instructionId = params.instructionId;
-        const instruction = await rdsUtil.getMessageInstruction(instructionId);
-        logger('Result of instruction extraction:', instruction);
-        instruction.requestDetails = params;
-        const rows = await assembleUserMessages(instruction, params.destinationUserId);
-        if (!rows || rows.length === 0) {
-            logger('No user messages generated, exiting');
-            return { statusCode: 200, body: JSON.stringify({ result: 'NO_USERS' })};
-        }
-
-        const rowKeys = Object.keys(rows[0]);
-        const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
-
-        // todo : check if there is only the one user
-        const updateInstructionResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_CREATED');
-        logger('Update result: ', updateInstructionResult);
-        
-        const handlerResponse = {
-            numberMessagesCreated: insertionResponse.length,
-            creationTimeMillis: insertionResponse[0].creationTime.valueOf(),
-            instructionUpdateTime: updateInstructionResult.updatedTime
-        };
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify(handlerResponse)
-        };
+        const createDetails = msgUtil.extractEventBody(event);
+        logger('Receieved params:', createDetails);
+        return processNonRecurringInstruction(createDetails);
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
+        return { message: err.message };
     }
 };
+
+const generateRecurringMessages = async (recurringInstruction) => {
+    const instructionId = recurringInstruction.instructionId;
+    
+    const userIds = await rdsUtil.getUserIds(recurringInstruction.selectionInstruction);
+    const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
+    
+    const userMessages = await createAndStoreMsgsForUserIds(usersForMessages, recurringInstruction);
+    if (!Array.isArray(userMessages) || userMessages.length === 0) {
+        return { instructionId, userMessages };
+    }
+
+    if (recurringInstruction.processedStatus !== 'MESSAGES_CREATED') {
+        const updateStatusResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_CREATED');
+        logger('Result of updating status: ', updateStatusResult);
+    }
+
+    const updateProcessedTime = await rdsUtil.updateMessageInstruction(instructionId, 'last_processed_time', moment().format());
+
+    return {
+        instructionId: recurringInstruction.instructionId,
+        instructionType: recurringInstruction.presentationType,
+        numberMessagesCreated: userMessages.length,
+        creationTimeMillis: userMessages[0].creationTime.valueOf(),
+        instructionUpdateTime: updateProcessedTime.updatedTime
+    };
+};
+
+/**
+ * This runs on a scheduled job. It processes any once off instructions that have not been processed yet. Otherwise, it 
+ */
+module.exports.createFromPendingInstructions = async () => {
+    try {
+        // this is just going to go in and find the pending instructions and then transform them
+        // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
+        // include within a fail-safe check that once-off messages are not regenerated when they already exist (simple count should do)
+        const unprocessedOnceOffsReady = await rdsUtil.getInstructionsByType('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
+        const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructionId: instruction.instructionId }));
+        
+        // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next
+        // which implies: first get the recurring instructions, then expire old messages, then add new to the queue; okay.
+        const obtainRecurringMessages = await rdsUtil.getInstructionsByType('RECURRING');
+        logger('Obtained recurring instruction: ', obtainRecurringMessages);
+
+        const recurringPromises = obtainRecurringMessages.map((instruction) => generateRecurringMessages(instruction));
+
+        const allPromises = onceOffPromises.concat(recurringPromises);
+
+        const processResults = await Promise.all(allPromises);
+        logger('Results of message processing: ', processResults);
+
+        const messagesProcessed = processResults.length;
+
+        return { messagesProcessed, processResults };
+    } catch (err) {
+        logger('FATAL_ERROR', err);
+        return { result: 'ERROR', message: err.message };
+    }
+};
+
 
 /**
  * This function accepts a system wide user id. It then retrieves all recurring messages targeted at all users and includes the recieved
@@ -216,7 +279,7 @@ module.exports.syncUserMessages = async (event) => {
         const params = msgUtil.extractEventBody(event);
         const systemWideUserId = params.systemWideUserId; // validation
         logger('Got user id:', systemWideUserId);
-        const instructions = await rdsUtil.getInstructionsByType('ALL_USERS', 'RECURRING');
+        const instructions = await rdsUtil.getInstructionsByType('RECURRING', ['ALL_USERS']);
         logger('Got instructions:', instructions);
         let rows = [];
         for (let i = 0; i < instructions.length; i++) {
@@ -241,20 +304,5 @@ module.exports.syncUserMessages = async (event) => {
             statusCode: 500,
             body: JSON.stringify({ message: err.message })
         };
-    }
-};
-
-module.exports.transformPendingInstructions = async (event) => {
-    try {
-        // this is just going to go in and find the pending instructions and then transform them
-
-        // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
-
-        // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next
-        // which implies: first get the recurring instructions, then expire old messages, then add new to the queue; okay.
-        
-    } catch (err) {
-        logger('FATAL_ERROR', err);
-        
     }
 };

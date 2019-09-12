@@ -26,7 +26,7 @@ const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
  * @param {object} responseContext An object that includes details such as the boost ID.
  * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
@@ -41,8 +41,8 @@ module.exports.validateMessageInstruction = (instruction) => {
         }
     }
     switch (true) {
-        case instruction.presentationType === 'RECURRING' && !instruction.recurrenceInstruction:
-            throw new Error('recurrenceInstruction is required where presentationType is set to RECURRING.');
+        case instruction.presentationType === 'RECURRING' && !instruction.recurrenceParameters:
+            throw new Error('recurrenceParameters is required where presentationType is set to RECURRING.');
         case instruction.audienceType === 'INDIVIDUAL' && !instruction.selectionInstruction:
             throw new Error('selectionInstruction required on indivdual notification.');
         case instruction.audienceType === 'GROUP' && !instruction.selectionInstruction:
@@ -62,13 +62,14 @@ module.exports.validateMessageInstruction = (instruction) => {
  * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
  * @param {string} otherTemplates Required when defaultTemplate is null.
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  */
 const createPersistableObject = (instruction, creatingUserId) => {
     
     const instructionId = uuid();
     const startTime = instruction.startTime || moment().format();
     const endTime = instruction.endTime || moment().add(500, 'years').format();
+    logger('Received message priority: ', instruction.messagePriority);
     const messagePriority = instruction.messagePriority || 0;
 
     const presentationType = instruction.presentationType;
@@ -85,7 +86,7 @@ const createPersistableObject = (instruction, creatingUserId) => {
         audienceType: instruction.audienceType,
         templates: instruction.templates,
         selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
-        recurrenceInstruction: instruction.recurrenceInstruction ? JSON.stringify(instruction.recurrenceInstruction) : null,
+        recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: moment().format(),
         messagePriority
     };
@@ -139,7 +140,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
  * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
  * @param {string} otherTemplates Required when defaultTemplate is null.
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
  * @param {object} responseContext An object that includes details such as the boost ID.
  * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
@@ -176,29 +177,31 @@ module.exports.insertMessageInstruction = async (event) => {
 };
 
 /**
- * This function deactivates a message instruction, stopping all future notifications from message instruction.
+ * This function can be used to update various aspects of a message. Note that if it 
+ * deactivates the message instruction, that will stop all future notifications from message instruction,
+ * and removes existing ones from the fetch queue.
  * @param {string} instructionId The message instruction ID assigned during instruction creation.
  */
-module.exports.deactivateMessageInstruction = async (event) => {
+module.exports.updateInstruction = async (event) => {
     try {
         logger('instruction deactivator recieved:', event);
+        const userDetails = msgUtil.extractUserDetails(event);
+        if (!msgUtil.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
+            return msgUtil.unauthorizedResponse;
+        }
+
         const params = extractEventBody(event);
         const instructionId = params.instructionId;
-        const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, 'active', false);
+        const updateValues = params.updateValues;
+        const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, updateValues);
+        if (Reflect.has(updateValues, 'active') && !Boolean(updateValues.active)) {
+            await rdsUtil.alterInstructionMessageStates(instructionId, ['CREATED', 'READY_FOR_SENDING'], 'DEACTIVATED');
+        }
         logger('Result of instruction deactivation:', databaseResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: databaseResponse
-            })
-        };
-
+        return msgUtil.wrapHttpResponse(databaseResponse);
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
+        return msgUtil.wrapHttpResponse({ message: err.message }, 500);
     }
 };
 

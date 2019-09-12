@@ -8,7 +8,7 @@ create table if not exists message_data.message_instruction (
     audience_type varchar (100) not null,
     templates jsonb not null,
     selection_instruction varchar,
-    recurrence_instruction jsonb,
+    recurrence_parameters jsonb,
     response_action varchar (100),
     response_context jsonb,
     start_time timestamp with time zone not null,
