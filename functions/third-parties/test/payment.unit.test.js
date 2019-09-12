@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:third-parties:payment-unit-test');
 const config = require('config');
+const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -61,10 +62,10 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.throws(mockRedirectionError);
         const mockEvent = Object.assign({}, mockMinimalEvent);
 
-        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
-        commonExpectations(resultOfRequest);
+        // commonExpectations(resultOfRequest);
         resetStubs(requestStub);
 
         requestStub.throws(mockRedirectionError);
@@ -72,7 +73,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         mockEvent.successUrl = 'https://mock.success.url.com/';
         mockEvent.errorUrl = 'https://mock.error.url.com/';
 
-        const resultOfFullRequest = await handler.getPaymentUrl(mockEvent);
+        const resultOfFullRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfFullRequest);
 
         commonExpectations(resultOfFullRequest);
@@ -82,7 +83,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.returns({ State: 'ACTIVE' }); // with args
         const mockEvent = { };
 
-        const resultOfWarmup = await handler.getPaymentUrl(mockEvent);
+        const resultOfWarmup = await handler.payment(mockEvent);
         logger('Result of warmup call:', resultOfWarmup);
 
         expect(resultOfWarmup).to.exist;
@@ -93,7 +94,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     it('Handles dry run', async () => {
         const mockEvent = { dryRunFakeSuccess: true };
 
-        const resultOfDryrun = await handler.getPaymentUrl(mockEvent);
+        const resultOfDryrun = await handler.payment(mockEvent);
         logger('Result of dry run:', resultOfDryrun);
 
         expect(resultOfDryrun).to.exist;
@@ -107,7 +108,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         const mockEvent = Object.assign({}, mockMinimalEvent);
         Reflect.deleteProperty(mockEvent, 'countryCode');
 
-        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
@@ -120,7 +121,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.returns('HonestlyItsTheWildWestOutHere');
         const mockEvent = Object.assign({}, mockMinimalEvent);
 
-        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
@@ -133,7 +134,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.throws('SomeAlamoLikeError');
         const mockEvent = Object.assign({}, mockMinimalEvent);
 
-        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
@@ -146,7 +147,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.throws({ statusCode: 400, body: 'ERROR' });
         const mockEvent = Object.assign({}, mockMinimalEvent);
 
-        const resultOfRequest = await handler.getPaymentUrl(mockEvent);
+        const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
@@ -157,4 +158,57 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         expect(body).to.have.property('body', 'ERROR');
         expect(requestStub).to.have.been.calledOnce;
     });
+
+});
+
+
+describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
+
+    const mockTransactionReference = 'TEST_REFERENCE';
+    const mockTransactionStatus = {
+        transactionId: uuid(),
+        merchantCode: 'TestMerch',
+        siteCode: config.get('ozow.siteCode'),
+        transactionReference: mockTransactionReference,
+        currencyCode: 'ZAR',
+        amount: 10,
+        status: 'Abandoned',
+        statusMessage: 'Test transaction completed',
+        subStatus: null,
+        createdDate: '2019-09-11T13:14:21.807',
+        paymentDate: '0001-01-01T00:00:00'
+    };
+
+    beforeEach(() => {
+        resetStubs(requestStub);
+    });
+
+    it('Gets transaction status', async () => {
+        requestStub.resolves([mockTransactionStatus, mockTransactionStatus, mockTransactionStatus]);
+        const mockEvent = { transactionReference: mockTransactionReference, isTest: true };
+
+        const transactionStatus = await handler.status(mockEvent);
+        logger('Transaction status result:', transactionStatus);
+
+        expect(transactionStatus).to.exist;
+        expect(transactionStatus).to.have.property('statusCode', 200);
+        expect(transactionStatus).to.have.property('body');
+        const body = JSON.parse(transactionStatus.body);
+        expect(body).to.have.deep.equal([mockTransactionStatus, mockTransactionStatus, mockTransactionStatus]);
+        expect(requestStub).to.have.been.called;
+    });
+
+    it('Catched thrown errors', async () => {
+        requestStub.throws(new Error('RequestError'));
+        const mockEvent = { transactionReference: mockTransactionReference };
+
+        const transactionStatus = await handler.status(mockEvent);
+        logger('Transaction status result on error:', transactionStatus);
+
+        expect(transactionStatus).to.exist;
+        expect(transactionStatus).to.have.property('statusCode', 500);
+        expect(transactionStatus).to.have.property('body', JSON.stringify('RequestError'));
+        expect(requestStub).to.have.been.calledOnce;
+    });
+
 });

@@ -2,6 +2,7 @@
     "ozow": {
         "endpoints": {
             "payment": "https://pay.ozow.com",
+            "transactionStatus": "https://api.ozow.com/GetTransactionByReference",
             "warmup": "",
             "successUrl": "",
             "cancelUrl": "",

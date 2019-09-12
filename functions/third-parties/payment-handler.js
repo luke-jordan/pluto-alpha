@@ -49,8 +49,8 @@ const assembleRequest = (method, endpoint, body) => ({
     uri: endpoint,
     qs: body,
     headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${config.get('ozow.apiKey')}` // base64 encode?
+        'Accept': 'application/json',
+        'ApiKey': config.get('ozow.apiKey')
     },
     json: true
 });
@@ -58,20 +58,19 @@ const assembleRequest = (method, endpoint, body) => ({
 
 /**
  * This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below.
- * @param {string} siteCode A unique code for the site currently in use.
- * @param {string} countryCode  The ISO 3166-1 alpha-2 code for the user's country. The country code will determine which banks will be displayed to the customer.
- * @param {string} currencyCode The ISO 4217 3 letter code for the transaction currency.
- * @param {number} amount The transaction amount. The amount is in the currency specified by the currency code posted.
- * @param {string} transactionReference The merchant's reference for the transaction.
- * @param {string} bankReference The reference that will be prepopulated in the "their reference" field in the customers online banking site.
- * @param {string} cancelUrl The Url that the third party should post the redirect result to if the customer cancels the payment, this will also be the page the customer gets redirected back to.
- * @param {string} errorUrl The Url that the third party should post the redirect result to if an error occurred while trying to process the payment, this will also be the page the customer gets redirect back to.
- * @param {string} successUrl The Url that we should post the redirect result to if the payment was successful, this will also be the page the customer gets redirect back to.
- * @param {boolean} isTest Send true to test your request posting and response handling. If set to true you will be redirected to a page where you can select whether you would like a successful or unsuccessful redirect response sent back. 
+ * @param {string} countryCode  Required. The ISO 3166-1 alpha-2 code for the user's country. The country code will determine which banks will be displayed to the customer.
+ * @param {string} currencyCode Required. The ISO 4217 3 letter code for the transaction currency.
+ * @param {number} amount Required. The transaction amount. The amount is in the currency specified by the currency code posted.
+ * @param {string} transactionReference Required. The merchant's reference for the transaction.
+ * @param {string} bankReference Required. The reference that will be prepopulated in the "their reference" field in the customers online banking site.
+ * @param {string} cancelUrl Optional. The Url that the third party should post the redirect result to if the customer cancels the payment, this will also be the page the customer gets redirected back to.
+ * @param {string} errorUrl Optional. The Url that the third party should post the redirect result to if an error occurred while trying to process the payment, this will also be the page the customer gets redirect back to.
+ * @param {string} successUrl Optional. The Url that the third party should post the redirect result to if the payment was successful, this will also be the page the customer gets redirect back to.
+ * @param {boolean} isTest Required. Send true to test your request posting and response handling. If set to true you will be redirected to a page where you can select whether you would like a successful or unsuccessful redirect response sent back. 
  * 
  * @returns {object} The payment url and request id.
  */
-module.exports.getPaymentUrl = async (event) => {
+module.exports.payment = async (event) => {
     try {
         if (warmupCheck(event)) {
             logger('Recieved warm up event');
@@ -111,6 +110,37 @@ module.exports.getPaymentUrl = async (event) => {
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return {
+            statusCode: 500,
+            body: JSON.stringify(err.message)
+        };
+    }
+};
+
+
+/**
+ * This method gets the tranaction status of a specified payment. Accepted event properties are defined below.
+ * @param {string} transactionReference The merchant's reference for the transaction.
+ * @param {boolean} IsTest Defaults to true. Use true only to get results for test requests.
+ * @returns {Array} An aarray of up to 10 transaction status objects matching the tranctionReference.
+ */
+
+module.exports.status = async (event) => {
+    try {
+        const params = {
+            SiteCode: config.get('ozow.siteCode'),
+            TransactionReference: event.transactionReference,
+            IsTest: event.isTest ? event.isTest : true
+        };
+        const options = assembleRequest('GET', config.get('ozow.endpoints.transactionStatus'), params);
+        logger('Created status options:', options);
+        const paymentStatus = await request(options);
+        logger('Recieved payment status:', paymentStatus);
+
+        return { statusCode: 200, body: JSON.stringify(paymentStatus) };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', JSON.stringify(err));
+        return { 
             statusCode: 500,
             body: JSON.stringify(err.message)
         };
