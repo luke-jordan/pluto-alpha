@@ -26,7 +26,7 @@ const assembleBody = (params) => {
     });
 
     const body = {
-        TransactionReference: params.transactionReference,
+        TransactionReference: params.transactionId,
         BankReference: params.bankReference,
         CancelUrl: params.cancelUrl ? params.cancelUrl : config.get('ozow.endpoints.cancelUrl'),
         ErrorUrl: params.errorUrl ? params.errorUrl : config.get('ozow.endpoints.errorUrl'),
@@ -57,18 +57,18 @@ const assembleRequest = (method, endpoint, body) => ({
 
 
 /**
- * This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below.
+ * This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below. Further information may be found here https://ozow.com/integrations/ .
  * @param {string} countryCode  Required. The ISO 3166-1 alpha-2 code for the user's country. The country code will determine which banks will be displayed to the customer.
  * @param {string} currencyCode Required. The ISO 4217 3 letter code for the transaction currency.
  * @param {number} amount Required. The transaction amount. The amount is in the currency specified by the currency code posted.
- * @param {string} transactionReference Required. The merchant's reference for the transaction.
+ * @param {string} transactionId Required. The merchant's reference for the transaction.
  * @param {string} bankReference Required. The reference that will be prepopulated in the "their reference" field in the customers online banking site.
  * @param {string} cancelUrl Optional. The Url that the third party should post the redirect result to if the customer cancels the payment, this will also be the page the customer gets redirected back to.
  * @param {string} errorUrl Optional. The Url that the third party should post the redirect result to if an error occurred while trying to process the payment, this will also be the page the customer gets redirect back to.
  * @param {string} successUrl Optional. The Url that the third party should post the redirect result to if the payment was successful, this will also be the page the customer gets redirect back to.
  * @param {boolean} isTest Required. Send true to test your request posting and response handling. If set to true you will be redirected to a page where you can select whether you would like a successful or unsuccessful redirect response sent back. 
  * 
- * @returns {object} The payment url and request id.
+ * @returns {object} The payment url.
  */
 module.exports.payment = async (event) => {
     try {
@@ -77,14 +77,11 @@ module.exports.payment = async (event) => {
             const options = assembleRequest('POST', config.get('ozow.endpoints.warmup'), {});
             logger('Created warm up options:', options);
             const warmupResult = await request(options);
-            return { statusCode: 200, body: JSON.stringify(warmupResult) };
+            return { result: warmupResult.state }; // TRANSFORM
         }
 
         if (event.dryRunFakeSuccess) {
-            return {
-                statusCode: 200,
-                body: JSON.stringify({ paymentUrl: config.get('ozow.endpoints.dryRun') })
-            };
+            return { result: 'PAYMENT_INITIATED', paymentUrl: config.get('ozow.endpoints.dryRun') };
         }
 
         const body = assembleBody(event);
@@ -98,7 +95,7 @@ module.exports.payment = async (event) => {
             if (typeof err === 'object' && 'statusCode' in err) {
                 if (err.statusCode === 302) {
                     const paymentEndpoint = err.response.headers.location;
-                    return { statusCode: 200, body: JSON.stringify({ paymentUrl: `${config.get('ozow.endpoints.payment')}${paymentEndpoint}` }) };
+                    return { result: 'PAYMENT_INITIATED', paymentUrl: `${config.get('ozow.endpoints.payment')}${paymentEndpoint}` };
                 } else {
                     throw new Error(JSON.stringify(err));
                 }
@@ -110,8 +107,8 @@ module.exports.payment = async (event) => {
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return {
-            statusCode: 500,
-            body: JSON.stringify(err.message)
+            result: 'PAYMENT_FAILED',
+            details: err.message
         };
     }
 };
@@ -119,16 +116,16 @@ module.exports.payment = async (event) => {
 
 /**
  * This method gets the tranaction status of a specified payment. Accepted event properties are defined below.
- * @param {string} transactionReference The merchant's reference for the transaction.
- * @param {boolean} IsTest Defaults to true. Use true only to get results for test requests.
- * @returns {Array} An aarray of up to 10 transaction status objects matching the tranctionReference.
+ * @param {string} transactionId The merchant's reference for the transaction.
+ * @param {boolean} IsTest Defaults to true. All calls in production must include this property set to false.
+ * @returns {Array} An array of up to 10 transaction status objects matching the transactionId.
  */
 
 module.exports.status = async (event) => {
     try {
         const params = {
             SiteCode: config.get('ozow.siteCode'),
-            TransactionReference: event.transactionReference,
+            TransactionReference: event.transactionId,
             IsTest: event.isTest ? event.isTest : true
         };
         const options = assembleRequest('GET', config.get('ozow.endpoints.transactionStatus'), params);
@@ -136,13 +133,19 @@ module.exports.status = async (event) => {
         const paymentStatus = await request(options);
         logger('Recieved payment status:', paymentStatus);
 
-        return { statusCode: 200, body: JSON.stringify(paymentStatus) };
+        const formattedResponse = {
+            result: paymentStatus[0].statusMessage.replace(/ /g, '_').toUpperCase(),
+            createdDate: paymentStatus[0].createdDate,
+            paymentDate: paymentStatus[0].paymentDate
+        };
+
+        return formattedResponse;
 
     } catch (err) {
-        logger('FATAL_ERROR:', JSON.stringify(err));
-        return { 
-            statusCode: 500,
-            body: JSON.stringify(err.message)
+        logger('FATAL_ERROR:', err);
+        return {
+            result: 'ERROR',
+            details: err.message
         };
     }
 };

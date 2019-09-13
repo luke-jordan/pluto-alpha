@@ -37,7 +37,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
     const mockMinimalEvent = {
         amount: 156,
-        transactionReference: 'TEST_REFERENCE',
+        transactionId: 'TEST_REFERENCE',
         bankReference: 'TEST_REFERENCE',
         isTest: false,
         siteCode: config.get('ozow.siteCode'),
@@ -51,10 +51,8 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
     const commonExpectations = (result) => {
         expect(result).to.exist;
-        expect(result).to.have.property('statusCode', 200);
-        expect(result).to.have.property('body');
-        const body = JSON.parse(result.body);
-        expect(body).to.have.property('paymentUrl', `${mockPaymentUrl}${mockPaymentEndpoint}`);
+        expect(result).to.have.property('result', 'PAYMENT_INITIATED');
+        expect(result).to.have.property('paymentUrl', `${mockPaymentUrl}${mockPaymentEndpoint}`);
         expect(requestStub).to.have.been.calledOnce;
     };
 
@@ -80,15 +78,15 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     });
 
     it('Handles warmup event', async () => {
-        requestStub.returns({ State: 'ACTIVE' }); // with args
+        requestStub.resolves({ state: 'ACTIVE' }); // with args
         const mockEvent = { };
 
         const resultOfWarmup = await handler.payment(mockEvent);
         logger('Result of warmup call:', resultOfWarmup);
 
         expect(resultOfWarmup).to.exist;
-        expect(resultOfWarmup).to.have.property('statusCode', 200);
-        expect(resultOfWarmup).to.have.property('body', JSON.stringify({ State: 'ACTIVE' }));
+        expect(resultOfWarmup).to.have.property('result', 'ACTIVE');
+        expect(requestStub).to.have.been.called;
     });
 
     it('Handles dry run', async () => {
@@ -98,10 +96,9 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         logger('Result of dry run:', resultOfDryrun);
 
         expect(resultOfDryrun).to.exist;
-        expect(resultOfDryrun).to.have.property('statusCode', 200);
-        expect(resultOfDryrun).to.have.property('body');
-        const body = JSON.parse(resultOfDryrun.body);
-        expect(body).to.have.property('paymentUrl', config.get('ozow.endpoints.dryRun'));
+        expect(resultOfDryrun).to.have.property('result', 'PAYMENT_INITIATED');
+        expect(resultOfDryrun).to.have.property('paymentUrl', config.get('ozow.endpoints.dryRun'));
+        expect(requestStub).to.have.not.been.called;
     });
 
     it('Throws error on missing required properties', async () => {
@@ -112,34 +109,34 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
-        expect(resultOfRequest).to.have.property('statusCode', 500); // ultimately should return 400
-        expect(resultOfRequest).to.have.property('body', JSON.stringify('Missing required property: countryCode'));
+        expect(resultOfRequest).to.have.property('result', 'PAYMENT_FAILED'); // ultimately should return 400
+        expect(resultOfRequest).to.have.property('details', 'Missing required property: countryCode');
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Throws error on redirection failure', async () => {
-        requestStub.returns('HonestlyItsTheWildWestOutHere');
+         requestStub.resolves('ERROR');
         const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
-        expect(resultOfRequest).to.have.property('statusCode', 500);
-        expect(resultOfRequest).to.have.property('body', JSON.stringify('Payment url resulted in: HonestlyItsTheWildWestOutHere'));
+        expect(resultOfRequest).to.have.property('result', 'PAYMENT_FAILED');
+        expect(resultOfRequest).to.have.property('details', 'Payment url resulted in: ERROR');
         expect(requestStub).to.have.been.calledOnce;
     });
 
     it('Throws an err where non-Object error or missing status code', async () => {
-        requestStub.throws('SomeAlamoLikeError');
+        requestStub.throws('ERROR');
         const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
-        expect(resultOfRequest).to.have.property('statusCode', 500);
-        expect(resultOfRequest).to.have.property('body', JSON.stringify('SomeAlamoLikeError'));
+        expect(resultOfRequest).to.have.property('result', 'PAYMENT_FAILED');
+        expect(resultOfRequest).to.have.property('details', 'ERROR');
         expect(requestStub).to.have.been.calledOnce;
     });
 
@@ -151,9 +148,9 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
-        expect(resultOfRequest).to.have.property('statusCode', 500);
-        expect(resultOfRequest).to.have.property('body');
-        const body = JSON.parse(JSON.parse(resultOfRequest.body));
+        expect(resultOfRequest).to.have.property('result', 'PAYMENT_FAILED');
+        expect(resultOfRequest).to.have.property('details');
+        const body = JSON.parse(resultOfRequest.details);
         expect(body).to.have.property('statusCode', 400);
         expect(body).to.have.property('body', 'ERROR');
         expect(requestStub).to.have.been.calledOnce;
@@ -169,7 +166,7 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         transactionId: uuid(),
         merchantCode: 'TestMerch',
         siteCode: config.get('ozow.siteCode'),
-        transactionReference: mockTransactionReference,
+        transactionId: mockTransactionReference,
         currencyCode: 'ZAR',
         amount: 10,
         status: 'Abandoned',
@@ -185,29 +182,28 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
 
     it('Gets transaction status', async () => {
         requestStub.resolves([mockTransactionStatus, mockTransactionStatus, mockTransactionStatus]);
-        const mockEvent = { transactionReference: mockTransactionReference, isTest: true };
+        const mockEvent = { transactionId: mockTransactionReference, isTest: true };
 
         const transactionStatus = await handler.status(mockEvent);
         logger('Transaction status result:', transactionStatus);
 
         expect(transactionStatus).to.exist;
-        expect(transactionStatus).to.have.property('statusCode', 200);
-        expect(transactionStatus).to.have.property('body');
-        const body = JSON.parse(transactionStatus.body);
-        expect(body).to.have.deep.equal([mockTransactionStatus, mockTransactionStatus, mockTransactionStatus]);
+        expect(transactionStatus).to.have.property('result', 'TEST_TRANSACTION_COMPLETED');
+        expect(transactionStatus).to.have.property('createdDate', mockTransactionStatus.createdDate);
+        expect(transactionStatus).to.have.property('paymentDate', mockTransactionStatus.paymentDate);
         expect(requestStub).to.have.been.called;
     });
 
     it('Catched thrown errors', async () => {
         requestStub.throws(new Error('RequestError'));
-        const mockEvent = { transactionReference: mockTransactionReference };
+        const mockEvent = { transactionId: mockTransactionReference };
 
         const transactionStatus = await handler.status(mockEvent);
         logger('Transaction status result on error:', transactionStatus);
 
         expect(transactionStatus).to.exist;
-        expect(transactionStatus).to.have.property('statusCode', 500);
-        expect(transactionStatus).to.have.property('body', JSON.stringify('RequestError'));
+        expect(transactionStatus).to.have.property('result', 'ERROR');
+        expect(transactionStatus).to.have.property('details', 'RequestError');
         expect(requestStub).to.have.been.calledOnce;
     });
 

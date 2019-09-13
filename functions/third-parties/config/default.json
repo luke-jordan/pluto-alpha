@@ -16,7 +16,7 @@
             "countryCode",
             "currencyCode",
             "amount",
-            "transactionReference",
+            "transactionId",
             "bankReference",
             "isTest"
         ],
