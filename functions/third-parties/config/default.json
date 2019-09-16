@@ -1,9 +1,9 @@
 {
     "ozow": {
         "endpoints": {
-            "payment": "https://pay.ozow.com",
+            "payment": "https://api.ozow.com/PostPaymentRequest",
             "transactionStatus": "https://api.ozow.com/GetTransactionByReference",
-            "warmup": "",
+            "warmup": "https://api.ozow.com/",
             "successUrl": "",
             "cancelUrl": "",
             "errorUrl": "",
@@ -31,6 +31,16 @@
             "ErrorUrl",
             "SuccessUrl",
             "IsTest"
+        ],
+        "responseKeyOrder": [
+            "SiteCode",
+            "TransactionId",
+            "TransactionReference",
+            "Amount",
+            "Status",
+            "CurrencyCode",
+            "IsTest",
+            "StatusMessage"
         ]
     }
 }

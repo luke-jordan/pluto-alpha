@@ -2,20 +2,29 @@
 
 const logger = require('debug')('jupiter:third-parties:payment-handler');
 const config = require('config');
+const uuid = require('uuid/v4');
 const request = require('request-promise');
 const crypto = require('crypto');
 
 const POST_KEY_ORDER = config.get('ozow.postKeyOrder');
+const RESPONSE_KEY_ORDER = config.get('ozow.responseKeyOrder');
+const pvtkey = config.get('ozow.privateKey');
 
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 
 const generateHashCheck = (params) => {
-    const pvtKey = config.get('ozow.privateKey');
-    const hashFeed = (POST_KEY_ORDER.map((key) => '' + params[key]).join('') + pvtKey).toLowerCase();
-    logger('Generated concat string:', hashFeed);
+    const hashFeed = (POST_KEY_ORDER.map((key) => '' + params[key]).join('') + pvtkey).toLowerCase();
+    logger('Created hash feed:', hashFeed);
     return crypto.createHash('sha512').update(hashFeed).digest('hex');
 };
+
+// const isValidHash = (response) => {
+//     const hashCheck = response.Hash;
+//     const hashFeed = (RESPONSE_KEY_ORDER.map((key) => '' + response[key]).join('') + pvtkey).toLowerCase();
+//     const derivedHash = crypto.createHash('sha512').update(hashFeed).digest('hex');
+//     return (hashCheck === derivedHash);
+// };
 
 const assembleBody = (params) => {
     const requiredProperties = config.get('ozow.requiredProperties');
@@ -47,7 +56,7 @@ const assembleBody = (params) => {
 const assembleRequest = (method, endpoint, body) => ({
     method: method,
     uri: endpoint,
-    qs: body,
+    body: body,
     headers: {
         'Accept': 'application/json',
         'ApiKey': config.get('ozow.apiKey')
@@ -68,42 +77,40 @@ const assembleRequest = (method, endpoint, body) => ({
  * @param {string} successUrl Optional. The Url that the third party should post the redirect result to if the payment was successful, this will also be the page the customer gets redirect back to.
  * @param {boolean} isTest Required. Send true to test your request posting and response handling. If set to true you will be redirected to a page where you can select whether you would like a successful or unsuccessful redirect response sent back. 
  * 
- * @returns {object} The payment url.
+ * @returns {object} The payment url and request id.
  */
 module.exports.payment = async (event) => {
     try {
         if (warmupCheck(event)) {
-            logger('Recieved warm up event');
             const options = assembleRequest('POST', config.get('ozow.endpoints.warmup'), {});
-            logger('Created warm up options:', options);
             const warmupResult = await request(options);
-            return { result: warmupResult.state }; // TRANSFORM
+            logger('Warm up result:', warmupResult); 
+            return { result: 'WARMUP_COMPLETE' };
         }
 
         if (event.dryRunFakeSuccess) {
-            return { result: 'PAYMENT_INITIATED', paymentUrl: config.get('ozow.endpoints.dryRun') };
+            return { result: 'PAYMENT_INITIATED', paymentUrl: config.get('ozow.endpoints.dryRun'), requestId: uuid() };
         }
 
         const body = assembleBody(event);
-        logger('Created body:', body);
         const options = assembleRequest('POST', config.get('ozow.endpoints.payment'), body);
         logger('Created request options:', options);
-        let paymentUrlResponse = null;
-        try {
-            paymentUrlResponse = await request(options); // throws a redirection error on success
-        } catch (err) {
-            if (typeof err === 'object' && 'statusCode' in err) {
-                if (err.statusCode === 302) {
-                    const paymentEndpoint = err.response.headers.location;
-                    return { result: 'PAYMENT_INITIATED', paymentUrl: `${config.get('ozow.endpoints.payment')}${paymentEndpoint}` };
-                } else {
-                    throw new Error(JSON.stringify(err));
-                }
-            } else {
-                throw new Error(err);
-            }
+        const paymentResponse = await request(options); // throws a redirection error on success
+        logger('Payment url ?', paymentResponse);
+
+        if (!paymentResponse || typeof paymentResponse !== 'object') {
+            throw new Error(`Unexpected response from third party: ${paymentResponse}`);
         }
-        throw new Error(`Payment url resulted in: ${paymentUrlResponse}`);
+
+        if (paymentResponse.errorMessage) {
+            throw new Error(paymentResponse.errorMessage);
+        };
+
+        return {
+            result: 'PAYMENT_INITIATED',
+            paymentUrl: paymentResponse.url,
+            requestId: paymentResponse.paymentRequestId
+        };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return {
@@ -118,7 +125,20 @@ module.exports.payment = async (event) => {
  * This method gets the tranaction status of a specified payment. Accepted event properties are defined below.
  * @param {string} transactionId The merchant's reference for the transaction.
  * @param {boolean} IsTest Defaults to true. All calls in production must include this property set to false.
- * @returns {Array} An array of up to 10 transaction status objects matching the transactionId.
+ * 
+ * @returns {object} A subset of the returned status object containing the transaction status (result), createdDate, and paymentDate.
+ * All properties (including those not returned to the caller) are listed below.
+ * @property {string} transactionId The third parties unique reference for the transaction.
+ * @property {string} merchantCode Unique code assigned to each merchant.
+ * @property {string} siteCode Unique code assigned to each merchant site.
+ * @property {string} transactionReference The merchants transaction reference (The transaction id passed during payment initialisation).
+ * @property {string} currencyCode The transaction currency code.
+ * @property {number} amount The transaction amount.
+ * @property {string} status The transaction status. Possible values are 'Complete', 'Cancelled', and 'Error'.
+ * @property {string} statusMessage Message regarding the status of the transaction. This field will not always have a value.
+ * @property {datetime} createdDate Transaction created date and time.
+ * @property {datetime} paymentDate Transaction payment date and time.
+ * @see {@link https://ozow.com/integrations/} for further information.
  */
 
 module.exports.status = async (event) => {
@@ -134,7 +154,7 @@ module.exports.status = async (event) => {
         logger('Recieved payment status:', paymentStatus);
 
         const formattedResponse = {
-            result: paymentStatus[0].statusMessage.replace(/ /g, '_').toUpperCase(),
+            result: paymentStatus[0].status.toUpperCase(),
             createdDate: paymentStatus[0].createdDate,
             paymentDate: paymentStatus[0].paymentDate
         };

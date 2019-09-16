@@ -12,9 +12,11 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 
 const requestStub = sinon.stub();
+const uuidStub = sinon.stub();
 
 const handler = proxyquire('../payment-handler', {
     'request-promise': requestStub,
+    'uuid/v4': uuidStub
 });
 
 const resetStubs = (...stubs) => {
@@ -26,15 +28,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     
     const mockPaymentEndpoint = '/3d0b3420-8595-40b6-ab87-38f4d476ca17/Secure';
     const mockPaymentUrl = config.get('ozow.endpoints.payment');
-    const mockRedirectionError = {
-        statusCode: 302,
-        response: {
-            headers: {
-                location: mockPaymentEndpoint
-            }
-        }
-    };
-
+    const mockRequestId = uuid();
     const mockMinimalEvent = {
         amount: 156,
         transactionId: 'TEST_REFERENCE',
@@ -53,11 +47,18 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         expect(result).to.exist;
         expect(result).to.have.property('result', 'PAYMENT_INITIATED');
         expect(result).to.have.property('paymentUrl', `${mockPaymentUrl}${mockPaymentEndpoint}`);
+        expect(result).to.have.property('requestId', mockRequestId);
         expect(requestStub).to.have.been.calledOnce;
     };
 
     it('Gets payment url from third party', async () => {
-        requestStub.throws(mockRedirectionError);
+        const mockPaymentResponse = {
+            paymentRequestId: mockRequestId,
+            url:`${mockPaymentUrl}${mockPaymentEndpoint}`,
+            errorMessage: null
+        };
+
+        requestStub.resolves(mockPaymentResponse);
         const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
@@ -66,7 +67,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         commonExpectations(resultOfRequest);
         resetStubs(requestStub);
 
-        requestStub.throws(mockRedirectionError);
+        requestStub.resolves(mockPaymentResponse);
         mockEvent.cancelUrl = 'https://mock.cancel.url.com/';
         mockEvent.successUrl = 'https://mock.success.url.com/';
         mockEvent.errorUrl = 'https://mock.error.url.com/';
@@ -78,18 +79,19 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     });
 
     it('Handles warmup event', async () => {
-        requestStub.resolves({ state: 'ACTIVE' }); // with args
+        requestStub.resolves(); // intentionally resolves undefined
         const mockEvent = { };
 
         const resultOfWarmup = await handler.payment(mockEvent);
         logger('Result of warmup call:', resultOfWarmup);
 
         expect(resultOfWarmup).to.exist;
-        expect(resultOfWarmup).to.have.property('result', 'ACTIVE');
+        expect(resultOfWarmup).to.have.property('result', 'WARMUP_COMPLETE');
         expect(requestStub).to.have.been.called;
     });
 
     it('Handles dry run', async () => {
+        uuidStub.returns(mockRequestId);
         const mockEvent = { dryRunFakeSuccess: true };
 
         const resultOfDryrun = await handler.payment(mockEvent);
@@ -98,6 +100,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         expect(resultOfDryrun).to.exist;
         expect(resultOfDryrun).to.have.property('result', 'PAYMENT_INITIATED');
         expect(resultOfDryrun).to.have.property('paymentUrl', config.get('ozow.endpoints.dryRun'));
+        expect(resultOfDryrun).to.have.property('requestId', mockRequestId);
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -114,8 +117,14 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         expect(requestStub).to.have.not.been.called;
     });
 
-    it('Throws error on redirection failure', async () => {
-         requestStub.resolves('ERROR');
+    it('Throws error on where error message detected in response', async () => {
+        const mockPaymentResponse = {
+            paymentRequestId: null,
+            url: null,
+            errorMessage: 'The hash check has failed'
+        };
+    
+        requestStub.resolves(mockPaymentResponse);
         const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
@@ -123,12 +132,12 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
         expect(resultOfRequest).to.exist;
         expect(resultOfRequest).to.have.property('result', 'PAYMENT_FAILED');
-        expect(resultOfRequest).to.have.property('details', 'Payment url resulted in: ERROR');
+        expect(resultOfRequest).to.have.property('details', 'The hash check has failed');
         expect(requestStub).to.have.been.calledOnce;
     });
 
-    it('Throws an err where non-Object error or missing status code', async () => {
-        requestStub.throws('ERROR');
+    it('Throws an error one non-object response', async () => {
+        requestStub.resolves('ERROR');
         const mockEvent = { ...mockMinimalEvent };
 
         const resultOfRequest = await handler.payment(mockEvent);
@@ -136,23 +145,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
         expect(resultOfRequest).to.exist;
         expect(resultOfRequest).to.have.property('result', 'PAYMENT_FAILED');
-        expect(resultOfRequest).to.have.property('details', 'ERROR');
-        expect(requestStub).to.have.been.calledOnce;
-    });
-
-    it('Throws an err where non-Object error or missing status code', async () => {
-        requestStub.throws({ statusCode: 400, body: 'ERROR' });
-        const mockEvent = { ...mockMinimalEvent };
-
-        const resultOfRequest = await handler.payment(mockEvent);
-        logger('Result of payment url extraction:', resultOfRequest);
-
-        expect(resultOfRequest).to.exist;
-        expect(resultOfRequest).to.have.property('result', 'PAYMENT_FAILED');
-        expect(resultOfRequest).to.have.property('details');
-        const body = JSON.parse(resultOfRequest.details);
-        expect(body).to.have.property('statusCode', 400);
-        expect(body).to.have.property('body', 'ERROR');
+        expect(resultOfRequest).to.have.property('details', 'Unexpected response from third party: ERROR');
         expect(requestStub).to.have.been.calledOnce;
     });
 
@@ -169,7 +162,7 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         transactionId: mockTransactionReference,
         currencyCode: 'ZAR',
         amount: 10,
-        status: 'Abandoned',
+        status: 'Complete',
         statusMessage: 'Test transaction completed',
         subStatus: null,
         createdDate: '2019-09-11T13:14:21.807',
@@ -188,13 +181,13 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         logger('Transaction status result:', transactionStatus);
 
         expect(transactionStatus).to.exist;
-        expect(transactionStatus).to.have.property('result', 'TEST_TRANSACTION_COMPLETED');
+        expect(transactionStatus).to.have.property('result', 'COMPLETE');
         expect(transactionStatus).to.have.property('createdDate', mockTransactionStatus.createdDate);
         expect(transactionStatus).to.have.property('paymentDate', mockTransactionStatus.paymentDate);
         expect(requestStub).to.have.been.called;
     });
 
-    it('Catched thrown errors', async () => {
+    it('Catches thrown errors', async () => {
         requestStub.throws(new Error('RequestError'));
         const mockEvent = { transactionId: mockTransactionReference };
 
@@ -205,6 +198,29 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         expect(transactionStatus).to.have.property('result', 'ERROR');
         expect(transactionStatus).to.have.property('details', 'RequestError');
         expect(requestStub).to.have.been.calledOnce;
+    });
+
+
+    describe.skip('*** UNIT TEST HASH EVALUATOR ***', () => {
+
+        const mockThirdPartyResponse = {
+            CurrencyCode: 'ZAR',
+            IsTest: false,
+            StatusMessage: 'Transaction complete',
+            SiteCode: config.get('ozow.siteCode'),
+            TransactionId: 'TEST_ID',
+            TransactionReference: 'TEST_REFERENCE',
+            Amount: 10,
+            Status: 'Abandoned',
+            Hash: '78ba37f123005d09dc0c0dfea4ecc000e322ba579859545f95977576c6ff9f6d76d138e4128a9507a366bfdd28c41ecdb6e036d9a66dcf2ebab723642a320973'
+        };
+
+        it('Authenticates recieved response', async () => {
+            requestStub.returns(mockThirdPartyResponse);
+
+            const resultOfAuthentication = await handler.auth({});
+            logger('Result of authentication:', resultOfAuthentication);
+        });
     });
 
 });
