@@ -115,7 +115,7 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
     const activeSubClause = 'instruction.active = true and instruction.end_time > current_timestamp';
 
     // so first we get a list of instructions that are either recurring, event based, or once off but have some number unfetched
-    const handledStatuses = ['FETCHED', 'DELIVERED', 'DISMISSED'];
+    const handledStatuses = ['FETCHED', 'SENT', 'DELIVERED', 'DISMISSED', 'UNDELIVERABLE'];
     const statusParamIdx = extractParamIndices(handledStatuses)
     const selectNonZeroIds = `select instruction.instruction_id, count(message_id) as unfetched_message_count from ` +
         `${instructTable} as instruction inner join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id ` +
@@ -143,8 +143,10 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
     const secondQueryResult = await rdsConnection.selectQuery(assembledQuery, []);
     logger('Result of second query, IDs: ', secondQueryResult.map((row) => row['instruction_id']));
 
+
+    const extractUnfetchedCount = (instructionId) => nonZeroIdSet.indexOf(instructionId) === -1 ? 0 : idKeyedCounts[instructionId];
     const transformedInstructions = secondQueryResult.map((row) => 
-        ({...camelCaseKeys(row), unfetchedMessageCount: idKeyedCounts[row['instruction_id']]}));
+        ({...camelCaseKeys(row), unfetchedMessageCount: extractUnfetchedCount(row['instruction_id']) }));
     logger('Transformed: ', transformedInstructions);
 
     return transformedInstructions;

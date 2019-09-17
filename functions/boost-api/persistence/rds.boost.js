@@ -364,7 +364,6 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
-
 module.exports.alterBoost = async (boostId, updateValues) => {
     const boostUpdateDef = {
         table: boostTable,
@@ -383,4 +382,21 @@ module.exports.alterBoost = async (boostId, updateValues) => {
 
     const updatedTime = moment(resultOfUpdate[0][0]['updated_time']);
     return { updatedTime };
+};
+
+/////////////////////////////////////////////////////////////////
+//////// SIMPLE AUX METHOD TO FIND MSG INSTRUCTION IDS //////////
+/////////////////////////////////////////////////////////////////
+
+module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
+    // find the most recent matching the flag (just in case);
+    const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
+        `flags && ARRAY[$1] order by creation_time desc limit 1`;
+    const result  = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
+    logger('Got an instruction? : ', result);
+    if (Array.isArray(result) && result.length > 0) {
+        return result[0]['instruction_id'];
+    }
+
+    return undefined;
 };

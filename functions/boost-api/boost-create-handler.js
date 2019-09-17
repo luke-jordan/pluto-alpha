@@ -115,8 +115,40 @@ module.exports.createBoostWrapper = async (event) => {
     }
 };
 
+// const find default message instruction
+const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
+    logger('Alright, got some message flags, we can go find the instructions, from: ', messageInstructionFlags);
+    
+    const messageInstructions = [];
+    // cycle through the keys, which will represent the statuses (um, clean this up a lot, and especially parallelize it)
+    const statuses = Object.keys(messageInstructionFlags);
+    logger('Have statuses: ', statuses);
+    for (let status of statuses) {
+        const messageFlags = messageInstructionFlags[status];
+        logger('Message flags: ', messageFlags);
+        for (let flagDef of messageFlags) {
+            const { accountId, msgInstructionFlag } = flagDef;
+            const msgInstructionId = await persistence.findMsgInstructionByFlag(msgInstructionFlag);
+            logger('Result of flag hunt: ', msgInstructionId);
+            if (typeof msgInstructionId === 'string') {
+                messageInstructions.push({ accountId, status, msgInstructionId });
+            }
+        }
+    }
+    
+    logger('Finished hunting by flag, have result: ', messageInstructions);
+    return messageInstructions;
+};
+
 /**
  * The primary method here. Creates a boost and sets various other methods into action
+ * Note, there are three ways boosts can have their messages assigned:
+ * (1) Include an explicit set of redemption message instructions
+ * (2) Include a set of message instruction flags (i.e., ways to find defaults), as a dict with top-level key being the status
+ * (3) Include the message definitions in messages to create
+ * 
+ * Note that if multiple are passed, (3) will override the others (as it is called last)
+ * Also note that if none are provided the boost will have no message and just hang in the ether
  */
 module.exports.createBoost = async (event) => {
     if (!event) {
@@ -153,6 +185,8 @@ module.exports.createBoost = async (event) => {
     // many boosts will just do it this way, or else will use the more complex one below
     if (params.redemptionMsgInstructions) {
         messageInstructionIds = params.redemptionMsgInstructions.map((msgInstructId) => ({ ...msgInstructId, status: 'REDEEMED' }));
+    } else if (params.messageInstructionFlags) {
+        messageInstructionIds = await obtainDefaultMessageInstructions(params.messageInstructionFlags);
     }
     
     const instructionToRds = {
