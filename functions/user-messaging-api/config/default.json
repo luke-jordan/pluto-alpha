@@ -39,6 +39,9 @@
     "picker": {
         "defaults": {
             "dateFormat": "MMMM YYYY"
+        },
+        "push": {
+            "running": false
         }
     },
     "security": {

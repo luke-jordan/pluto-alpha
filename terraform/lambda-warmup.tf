@@ -86,12 +86,6 @@ resource "aws_iam_role_policy_attachment" "warmup_lambda_invoke_policy" {
 
 /////////////////// CLOUD WATCH FOR EVENT SOURCE ///////////////////////
 
-resource "aws_cloudwatch_event_rule" "ops_every_five_minutes" {
-    name = "ops_regular_call"
-    description = "Fires every five minutes for ops tasks"
-    schedule_expression = "rate(5 minutes)"
-}
-
 resource "aws_cloudwatch_event_target" "trigger_ops_warmup_every_five_minutes" {
     rule = "${aws_cloudwatch_event_rule.ops_every_five_minutes.name}"
     target_id = "${aws_lambda_function.ops_warmup.id}"

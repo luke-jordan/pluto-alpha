@@ -138,7 +138,7 @@ const fillInTemplate = async (template, destinationUserId) => {
     return completedTemplate;
 };
 
-const assembleMessage = async (msgDetails) => {
+module.exports.assembleMessage = async (msgDetails) => {
     const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
     const messageBase = {
         messageId: msgDetails.messageId,
@@ -199,7 +199,7 @@ const assembleSequence = async (anchorMessage, retrievedMessages) => {
     // in almost all cases, never more than a few messages (active/non-expired filter means only a handful at a time)
     // monitor and if that becomes untrue, then ajust, e.g., go to persistence or cache to extract IDs
     const sequenceMsgDetails = sequenceIds.map((msgId) => retrievedMessages.find((msg) => msg.messageId === msgId));
-    return await Promise.all(sequenceMsgDetails.map((messageDetails) => assembleMessage(messageDetails)));
+    return await Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails)));
 };
 
 const determineAnchorMsg = (openingMessages) => {

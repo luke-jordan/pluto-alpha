@@ -16,7 +16,6 @@ const extractParamIndices = (values, startIndex = 1) => values.map((_, idx) => `
 
 const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [camelcase(key)]: object[key] }), {});
 
-
 /**
  * This function accepts a persistable instruction object and inserts it into the database. It is vital that input to this function must
  * have gone through the message instruction handlers createPersistableObject function.
@@ -179,6 +178,11 @@ module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses
     const statusParams = extractParamIndices(oldStatuses, 2);
     const seekMsgsQuery = `select message_id from ${table} where instruction_id = $1 and processed_status in (${statusParams})`;
     const messageIdRows = await rdsConnection.selectQuery(seekMsgsQuery, [instructionId, ...oldStatuses]);
+    if (!Array.isArray(messageIdRows) || messageIdRows.length === 0) {
+        logger('No messages found to update, returning');
+        return 'NO_MESSAGES_TO_UPDATE';
+    }
+    
     const messageIds = messageIdRows.map((row) => row['message_id']);
     
     const value = { processedStatus: newStatus };
@@ -374,14 +378,23 @@ module.exports.insertPushToken = async (pushTokenObject) => {
     return databaseResponse.rows.map((insertionResult) => camelCaseKeys(insertionResult));
 };
 
-module.exports.getPushToken = async (provider, userId) => {
-    const query = `select * from ${config.get('tables.pushTokenTable')} where push_provider = $1 and user_id = $2`;
-    const value = [provider, userId];
+module.exports.getPushTokens = async (userIds, provider) => {
+    const haveProvider = typeof provider === 'string';
+    const idParamIdxs = extractParamIndices(userIds, haveProvider ? 2 : 1);
+    
+    // note : ordering by creation time ascending means that the dict assembly will retain only the most recently
+    // created in the edge case where provider is not given and there are duplicates for a user id (todo : test this)
+    const query = `select user_id, push_token from ${config.get('tables.pushTokenTable')} where active = true and ` +
+        `${haveProvider ? 'push_provider = $1 and ' : ''} user_id in (${idParamIdxs}) order by creation_time asc`;
+    const values = haveProvider ? [provider, ...userIds] : userIds;
+    
+    logger('Query for tokens: ', query);
+    logger('Values for tokens: ', values);
 
-    const result = await rdsConnection.selectQuery(query, value);
+    const result = await rdsConnection.selectQuery(query, values);
     logger('Got this back from user push token extraction:', result);
 
-    return Array.isArray(result) && result.length > 0 ? camelCaseKeys(result[0]) : null;
+    return result.reduce((obj, row) => ({ ...obj, [row['user_id']]: row['push_token']}), {});
 };
 
 module.exports.deactivatePushToken = async (provider, userId) => {

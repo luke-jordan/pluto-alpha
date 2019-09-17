@@ -181,10 +181,11 @@ module.exports.insertMessageInstruction = async (event) => {
  * deactivates the message instruction, that will stop all future notifications from message instruction,
  * and removes existing ones from the fetch queue.
  * @param {string} instructionId The message instruction ID assigned during instruction creation.
+ * @param {object} updateValues Key-values of properties to update (e.g., { active: false })
  */
 module.exports.updateInstruction = async (event) => {
     try {
-        logger('instruction deactivator recieved:', event);
+        logger('Instruction update recieved:', event);
         const userDetails = msgUtil.extractUserDetails(event);
         if (!msgUtil.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
             return msgUtil.unauthorizedResponse;

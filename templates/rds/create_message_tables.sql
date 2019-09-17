@@ -38,14 +38,14 @@ create table if not exists message_data.user_message (
     message_priority int not null,
     updated_time timestamp with time zone not null default current_timestamp,
     processed_status varchar (100) not null,
-    display_type varchar (100) not null,
-    display_instructions jsonb,
+    display jsonb not null,
     action_context jsonb,
     follows_prior_message boolean not null default false,
     has_following_message boolean not null default true,
-    following_messages jsonb,
+    message_sequence jsonb,
     deliveries_max integer not null default 1,
     deliveries_done integer not null default 0,
+    message_variant varchar(255) default 'DEFAULT' not null,
     flags text[] default '{}',
     primary key (message_id)
 );

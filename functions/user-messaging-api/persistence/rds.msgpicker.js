@@ -44,6 +44,7 @@ const transformMsg = (msgRawFromRds) => {
         reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
 };
 
+// todo : decide whether to exclude push notifications here
 module.exports.getNextMessage = async (destinationUserId) => {
     const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status = $2 ` + 
         `and end_time > current_timestamp and deliveries_done < deliveries_max`;
@@ -51,6 +52,14 @@ module.exports.getNextMessage = async (destinationUserId) => {
     const result = await rdsConnection.selectQuery(query, values);
     logger('Retrieved next message from RDS: ', result);
     return result.map((msg) => transformMsg(msg));
+};
+
+module.exports.getPendingPushMessages = async () => {
+    const query = `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
+        `deliveries_done < deliveries_max and display ->> 'type' = $2`;
+    const values = ['READY_FOR_SENDING', 'PUSH'];
+    const resultOfQuery = await rdsConnection.selectQuery(query, values);
+    return resultOfQuery.map((msg) => transformMsg(msg));
 };
 
 // Possibly over-concise, but allows us to sum these on a single query
@@ -114,6 +123,9 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     return undefined;
 };
 
+//////////////////////////////////////////////////////////////////////////////////
+/////////////////////////// MESSAGE STATUS HANDLING //////////////////////////////
+//////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Updates a message
@@ -134,4 +146,13 @@ module.exports.updateUserMessage = async (messageId, updateValues) => {
     resultToReturn.updatedTime = moment(resultToReturn.updatedTime);
 
     return resultToReturn;
+};
+
+/* Batch updates status */
+module.exports.bulkUpdateStatus = async (messageIds, newStatus) => {
+    const idIndices = messageIds.map((_, idx) => `$${idx + 2}`).join(', ');
+    const updateQuery = `update ${userMessageTable} set processed_status = $1 where message_id in (${idIndices})`;
+    const values = [newStatus, ...messageIds];
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, values);
+    return resultOfUpdate;
 };
