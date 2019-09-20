@@ -158,7 +158,7 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
 
     const rowKeys = Object.keys(rows[0]);
     return rdsUtil.insertUserMessages(rows, rowKeys);
-}
+};
 
 /**
  * This function accepts an instruction id, retrieves the associated instruction from persistence, assembles the user message, and finally
@@ -175,6 +175,10 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     const selectionInstruction = instruction.selectionInstruction || null;
     const userIds = destinationUserId ? [ destinationUserId ] : await rdsUtil.getUserIds(selectionInstruction);
     logger(`Retrieved ${userIds.length} user id(s) for instruction`);
+    if (!userIds || userIds.length === 0) {
+        logger('No user id(s) found for instruction, exiting');
+        return { instructionId, result: 'NO_USERS' };
+    }
     
     const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
     if (!Array.isArray(insertionResponse)) {
@@ -194,14 +198,14 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     };
 
     return handlerResponse;
-}
+};
 
 // a wrapper for simple instruction processing
 module.exports.createUserMessages = async (event) => {
     try {
         const createDetails = msgUtil.extractEventBody(event);
         logger('Receieved params:', createDetails);
-        return processNonRecurringInstruction(createDetails);
+        return await processNonRecurringInstruction(createDetails);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { message: err.message };
@@ -213,7 +217,7 @@ const generateRecurringMessages = async (recurringInstruction) => {
     
     const userIds = await rdsUtil.getUserIds(recurringInstruction.selectionInstruction);
     const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
-    
+   
     const userMessages = await createAndStoreMsgsForUserIds(usersForMessages, recurringInstruction);
     if (!Array.isArray(userMessages) || userMessages.length === 0) {
         return { instructionId, userMessages };
@@ -274,35 +278,35 @@ module.exports.createFromPendingInstructions = async () => {
  * After running this function, the user should be able to recieve system wide recurring messages like everyone else.
  * @param {string} systemWideUserId The users system wide id.
  */
-module.exports.syncUserMessages = async (event) => {
-    try {
-        const params = msgUtil.extractEventBody(event);
-        const systemWideUserId = params.systemWideUserId; // validation
-        logger('Got user id:', systemWideUserId);
-        const instructions = await rdsUtil.getInstructionsByType('RECURRING', ['ALL_USERS']);
-        logger('Got instructions:', instructions);
-        let rows = [];
-        for (let i = 0; i < instructions.length; i++) {
-            instructions[i].requestDetails = params;
-            const result = await assembleUserMessages(instructions[i], systemWideUserId);
-            rows = [...rows, ...result];
-        }
-        logger('Assembled user messages:', rows);
-        const rowKeys = Object.keys(rows[0]);
-        logger('Got keys:', rowKeys);
-        const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
-        logger('User messages insertion resulted in:', insertionResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: insertionResponse
-            })
-        };
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
-    }
-};
+// module.exports.syncUserMessages = async (event) => {
+//     try {
+//         const params = msgUtil.extractEventBody(event);
+//         const systemWideUserId = params.systemWideUserId; // validation
+//         logger('Got user id:', systemWideUserId);
+//         const instructions = await rdsUtil.getInstructionsByType('RECURRING', ['ALL_USERS']);
+//         logger('Got instructions:', instructions);
+//         let rows = [];
+//         for (let i = 0; i < instructions.length; i++) {
+//             instructions[i].requestDetails = params;
+//             const result = await assembleUserMessages(instructions[i], systemWideUserId);
+//             rows = [...rows, ...result];
+//         }
+//         logger('Assembled user messages:', rows);
+//         const rowKeys = Object.keys(rows[0]);
+//         logger('Got keys:', rowKeys);
+//         const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
+//         logger('User messages insertion resulted in:', insertionResponse);
+//         return {
+//             statusCode: 200,
+//             body: JSON.stringify({
+//                 message: insertionResponse
+//             })
+//         };
+//     } catch (err) {
+//         logger('FATAL_ERROR:', err);
+//         return {
+//             statusCode: 500,
+//             body: JSON.stringify({ message: err.message })
+//         };
+//     }
+// };

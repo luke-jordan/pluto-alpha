@@ -255,7 +255,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
         resetStubs();
     });
 
-    it.only('should persist push token', async () => {
+    it('should persist push token', async () => {
         const mockPersistableToken = {
             userId: mockUserId,
             pushProvider: mockProvider,
