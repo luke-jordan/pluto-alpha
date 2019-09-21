@@ -18,7 +18,7 @@ create table if not exists boost_data.boost (
     status_conditions jsonb not null,
     boost_audience varchar (255) not null,
     audience_selection text not null,
-    redemption_messages jsonb not null,
+    message_instruction_ids jsonb,
     initial_status varchar (100) check (initial_status in ('CREATED', 'OFFERED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED')),
     flags text[] default '{}',
     updated_time timestamp with time zone not null default current_timestamp

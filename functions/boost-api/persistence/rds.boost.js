@@ -24,7 +24,7 @@ const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) =
 const transformBoostFromRds = (boost) => {
     const transformedBoost = camelizeKeys(boost);
     // logger('Working? : ', transformedBoost);
-    transformedBoost.redemptionMsgInstructions = transformedBoost.redemptionMessages.instructions;
+    transformedBoost.messageInstructions = transformedBoost.messageInstructionIds.instructions;
     // transformedBoost.statusConditions = JSON.parse(transformedBoost.statusConditions);
     transformedBoost.boostAudienceSelection = transformedBoost.audienceSelection;
     transformedBoost.boostStartTime = moment(transformedBoost.startTime);
@@ -32,7 +32,7 @@ const transformBoostFromRds = (boost) => {
     transformedBoost.defaultStatus = transformedBoost.initialStatus;
 
     // then clean up
-    Reflect.deleteProperty(transformedBoost, 'redemptionMessages');
+    Reflect.deleteProperty(transformedBoost, 'messageInstructionIds');
     Reflect.deleteProperty(transformedBoost, 'audienceSelection');
     Reflect.deleteProperty(transformedBoost, 'startTime');
     Reflect.deleteProperty(transformedBoost, 'endTime');
@@ -68,7 +68,10 @@ module.exports.findBoost = async (attributes) => {
     const findBoostQuery = `select distinct(boost_id) from ${boostAccountJoinTable} where account_id in (${accountIndices}) and boost_status in (${statusIndices})`;
     const findBoostIdsResult = await rdsConnection.selectQuery(findBoostQuery, queryValues);
     logger('Result of finding boost IDs: ', findBoostIdsResult);
-    
+    if (findBoostIdsResult.length === 0) {
+        return [];
+    }
+
     const boostIdArray = findBoostIdsResult.map((row) => row['boost_id']);
     const querySuffix = typeof attributes.active === 'boolean' ? ` and active = ${attributes.active}` : '';
     const retrieveBoostQuery = `select * from ${boostTable} where boost_id in (${extractArrayIndices(boostIdArray)})${querySuffix}`;
@@ -322,12 +325,17 @@ module.exports.insertBoost = async (boostDetails) => {
         boostAudience: boostDetails.boostAudience,
         audienceSelection: boostDetails.boostAudienceSelection,
         statusConditions: boostDetails.statusConditions,
-        redemptionMessages: { instructions: boostDetails.redemptionMsgInstructions }
+        messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };
 
     if (boostDetails.conditionValues) {
         logger('This boost has conditions: ', boostDetails);
         boostObject.conditionValues = boostDetails.conditionClause;
+    }
+
+    // be careful here, array handling is a little more sensitive than most types in node-pg
+    if (Array.isArray(boostDetails.flags) && boostDetails.flags.length > 0) {
+        boostObject.flags = boostDetails.flags;
     }
 
     const boostKeys = Object.keys(boostObject);
@@ -336,6 +344,8 @@ module.exports.insertBoost = async (boostDetails) => {
         columnTemplate: extractColumnTemplate(boostKeys),
         rows: [boostObject]
     };
+
+    logger('Inserting boost: ', boostObject);
 
     const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
     const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));

@@ -105,7 +105,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
 
     // first, we check if there should be a test first. if so, we process for that user.
     if (typeof params.fireTestMessage === 'boolean' && params.fireTestMessage) {
-        const instructionPayload = { instructionId, destinationUserId: creatingUserId };
+        const instructionPayload = { instructions: [{ instructionId, destinationUserId: creatingUserId }] };
         const testRes = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, instructionPayload)).promise();
         logger('Fired off test result: ', testRes);
         return { result: 'FIRED_TEST' };
@@ -115,7 +115,8 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
     // once off messages right away (on assumption they should go out)
     const holdOffInstructed = typeof params.holdFire === 'boolean' && params.holdFire;
     if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed) {
-        const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, { instructionId })).promise();
+        const lambdaPaylod = { instructions: [{ instructionId }]};
+        const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, lambdaPaylod)).promise();
         logger('Fired off process instruction: ', fireResult);
         return { result: 'FIRED_INSTRUCT' };
     };

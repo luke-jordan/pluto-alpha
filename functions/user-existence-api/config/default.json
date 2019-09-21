@@ -22,9 +22,10 @@
         "password": "pwd_for_account_api",
         "port" :"5430"
     },
-    "test": {
-        "nock": {
-            "dynamodb": "http://localhost:4569"
-        }
+    "referral": {
+        "expiryTimeDays": 7
+    },
+    "lambda": {
+        "createBoost": "boost_create"
     }
 }

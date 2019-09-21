@@ -81,7 +81,7 @@ resource "aws_iam_role_policy_attachment" "ops_warmup_vpc_execution_policy" {
 
 resource "aws_iam_role_policy_attachment" "warmup_lambda_invoke_policy" {
   role = "${aws_iam_role.ops_warmup_role.name}"
-  policy_arn = "${aws_iam_policy.lambda_invoke_warmup_access.arn}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_ops_warmup_access.arn}"
 }
 
 /////////////////// CLOUD WATCH FOR EVENT SOURCE ///////////////////////
