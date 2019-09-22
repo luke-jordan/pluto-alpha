@@ -16,6 +16,7 @@ const findBoostStub = sinon.stub();
 const findAccountsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const alterBoostStub = sinon.stub();
+const findMsgInstructStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
@@ -35,7 +36,8 @@ const handler = proxyquire('../boost-create-handler', {
         'findBoost': findBoostStub,
         'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
-        'alterBoost': alterBoostStub
+        'alterBoost': alterBoostStub,
+        'findMsgInstructionByFlag': findMsgInstructStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -117,11 +119,15 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         momentStub.withArgs().returns(testStartTime);
         momentStub.withArgs(referralWindowEnd.valueOf()).returns(referralWindowEnd);
 
+        findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRER').resolves(testReferringMsgId);
+        findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRED').resolves(testReferredMsgId);
+
         const expectedFromRds = {
             boostId: uuid(),
             persistedTimeMillis: testPersistedTime.valueOf(),
             numberOfUsersEligible: 2
         };
+
         insertBoostStub.resolves(expectedFromRds);
 
         const testBodyOfEvent = {
@@ -137,10 +143,12 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             boostAudienceSelection: `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`,
             initialStatus: 'PENDING',
             statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
-            redemptionMsgInstructions: [
-                { accountId: testReferringUser, msgInstructionId: testReferringMsgId}, 
-                { accountId: testReferredUser, msgInstructionId: testReferredMsgId }
-            ]
+            messageInstructionFlags: {
+                'REDEEMED': [
+                    { accountId: testReferringUser, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' }, 
+                    { accountId: testReferredUser, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }
+                ]
+            }
         };
 
         // logger('COPY::::::::::::::::');

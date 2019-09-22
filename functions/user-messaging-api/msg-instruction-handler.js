@@ -39,6 +39,7 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error(`Missing required property value: ${requiredProperties[i]}`);
         }
     }
+
     switch (true) {
         case instruction.presentationType === 'RECURRING' && !instruction.recurrenceParameters:
             throw new Error('recurrenceParameters is required where presentationType is set to RECURRING.');
@@ -48,6 +49,8 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error('selectionInstruction required on group notification.');
         case !instruction.templates.sequence && !instruction.templates.template:
             throw new Error('Templates must define either a sequence or a single template.');
+        case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory:
+            throw new Error('Instructions for event driven must specify the event type');
         default: 
            return;
     }
@@ -62,6 +65,7 @@ module.exports.validateMessageInstruction = (instruction) => {
  * @param {string} otherTemplates Required when defaultTemplate is null.
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
  * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @param {string} eventTypeCategory The event type and category for this instruction, controlled by caller's logic (e.g., REFERRAL::REDEEMED::REFERRER);
  */
 const createPersistableObject = (instruction, creatingUserId) => {
     
@@ -73,6 +77,9 @@ const createPersistableObject = (instruction, creatingUserId) => {
 
     const presentationType = instruction.presentationType;
     let processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_SENDING' : 'CREATED';
+
+    const flags = presentationType === 'EVENT_DRIVEN' ? [instruction.eventTypeCategory] : undefined;
+    logger('Object created with flags: ', flags);
 
     return {
         instructionId,
@@ -87,7 +94,8 @@ const createPersistableObject = (instruction, creatingUserId) => {
         selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
         recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: moment().format(),
-        messagePriority
+        messagePriority,
+        flags
     };
 };
 
@@ -157,11 +165,11 @@ module.exports.insertMessageInstruction = async (event) => {
 
         const params = msgUtil.extractEventBody(event);
         const creatingUserId = userDetails.systemWideUserId;
-        
+
+        const instructionEvalResult = exports.validateMessageInstruction(params);
+        logger('Message instruction evaluation result:', instructionEvalResult);
         const persistableObject = createPersistableObject(params, creatingUserId);
         logger('Created persistable object:', persistableObject);
-        const instructionEvalResult = exports.validateMessageInstruction(persistableObject);
-        logger('Message instruction evaluation result:', instructionEvalResult);
         const databaseResponse = await rdsUtil.insertMessageInstruction(persistableObject);
         logger('Message instruction insertion result:', databaseResponse);
         const message = databaseResponse[0];
