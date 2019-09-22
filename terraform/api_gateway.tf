@@ -20,6 +20,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.message_instruct_list,
   aws_api_gateway_integration.message_instruct_update,
   aws_api_gateway_integration.boost_user_process,
+  aws_api_gateway_integration.admin_user_count,
   aws_api_gateway_integration.ops_warmup
   ]
 
@@ -584,4 +585,43 @@ resource "aws_api_gateway_integration" "ops_warmup" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = "${aws_lambda_function.ops_warmup.invoke_arn}"
+}
+
+/////////////// ADMIN LAMBDAS //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "admin_path_root" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "admin"
+}
+
+resource "aws_api_gateway_resource" "admin_user_count" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.admin_path_root.id}"
+  path_part   = "user"
+}
+
+resource "aws_api_gateway_method" "admin_user_count" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.admin_user_count.id}"
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "admin_user_count" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.admin_user_count.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "admin_user_count" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.admin_user_count.resource_id}"
+  http_method = "${aws_api_gateway_method.admin_user_count.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.admin_user_count.invoke_arn}"
 }

@@ -38,3 +38,6 @@ grant select (account_id, owner_user_id, responsible_client_id, default_float_id
 
 grant usage on schema account_data to message_api_worker;
 grant select (account_id, owner_user_id, responsible_client_id, frozen) on account_data.core_account_ledger to message_api_worker;
+
+grant usage on schema account_data to admin_api_worker;
+grant select (account_id, owner_user_id, creation_time) on account_data.core_account_ledger to admin_api_worker;

@@ -1,0 +1,17 @@
+{
+  "name": "admin-api",
+  "version": "0.0.1",
+  "description": "A few functions for the admin panel",
+  "main": "index.js",
+  "scripts": {
+    "test": "DEBUG=jupiter:* mocha"
+  },
+  "author": "Luke Jordan",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.533.0",
+    "config": "^3.2.2",
+    "debug": "^4.1.1",
+    "moment": "^2.24.0"
+  }
+}

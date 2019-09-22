@@ -5,6 +5,7 @@
         "save_tx_api_worker": "pwd_for_transaction_api",
         "float_api_worker": "pwd_for_float_api",
         "boost_worker": "pwd_for_boost_worker",
-        "message_api_worker": "pwd_for_message_worker"
+        "message_api_worker": "pwd_for_message_worker",
+        "admin_api_worker": "pwd_for_admin_api"
     }
 }
