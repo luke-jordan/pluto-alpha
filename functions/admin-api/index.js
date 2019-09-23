@@ -16,9 +16,9 @@ const util = require('./admin.util');
  */
 module.exports.fetchUserCounts = async (event) => {
     // introduce once going live
-    if (!util.isUserAuthorized(event)) {
-        return util.unauthorizedResponse;
-    }
+    // if (!util.isUserAuthorized(event)) {
+    //     return util.unauthorizedResponse;
+    // }
 
     const params = util.extractEventBody(event);
     logger('Finding user Ids with params: ', params);

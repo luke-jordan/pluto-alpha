@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:boosts:handler');
+const logger = require('debug')('jupiter:boosts:create');
 const config = require('config');
 const moment = require('moment');
 const status = require('statuses');

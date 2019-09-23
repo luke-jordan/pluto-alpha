@@ -1,0 +1,18 @@
+{
+    "db": {
+        "user": "admin_api_worker",
+        "host": "localhost",
+        "database": "pluto",
+        "password": "pwd_for_admin_api",
+        "port" :"5430"
+    },
+    "tables": {
+        "accountTable": "account_data.core_account_ledger",
+        "transactionTable": "transaction_data.core_transaction_ledger"
+    },
+    "defaults": {
+        "userCounts": {
+            "daysBack": 180
+        }
+    }
+}

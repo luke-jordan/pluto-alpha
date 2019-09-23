@@ -17,12 +17,13 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
 
     let joinType = '';
     let whereClause = '';
-
-    const txTimeClause = `${transactionTable}.creation_time between ${sinceMoment.format()} and ${untilMoment.format()}`;
+    
+    const txTimeClause = `${transactionTable}.creation_time between $3 and $4`; // see below for 1 and 2
+    const values = ['USER_SAVING_EVENT', 'SETTLED', sinceMoment.format(), untilMoment.format()];
 
     if (includeNoSave) {
         joinType = 'left join';
-        whereClause = `((${txTimeClause}) or (${accountTable}.creation_time between ${sinceMoment.format()} and ${untilMoment.format()})`;
+        whereClause = `((${txTimeClause}) or (${accountTable}.creation_time between $3 and $4)`;
     } else {
         joinType = 'inner join';
         whereClause = txTimeClause;
@@ -33,7 +34,7 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
             `${whereClause}`;
 
     logger('Assembled count query: ', countQuery);
-    const resultOfCount = await rdsConnection.selectQuery(countQuery, ['USER_SAVING_EVENT', 'SETTLED']);
+    const resultOfCount = await rdsConnection.selectQuery(countQuery, values);
     logger('Result of count: ', resultOfCount);
     return resultOfCount[0]['count'];
 };
