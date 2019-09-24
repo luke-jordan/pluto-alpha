@@ -203,6 +203,7 @@ const assembleSequence = async (anchorMessage, retrievedMessages) => {
 };
 
 const determineAnchorMsg = (openingMessages) => {
+    logger('Determining anchor message')
     // if there is only one, then it is trivial
     if (openingMessages.length === 1) {
         return openingMessages[0];
@@ -351,4 +352,4 @@ module.exports.updateUserMessage = async (event) => {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500, body: JSON.stringify(err.message) };
     }
-}
+};

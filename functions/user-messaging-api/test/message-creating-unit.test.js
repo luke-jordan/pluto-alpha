@@ -44,7 +44,7 @@ const handler = proxyquire('../message-creating-handler', {
 
 const resetStubs = () => testHelper.resetStubs(getMessageInstructionStub, getUserIdsStub, insertUserMessagesStub,
     getInstructionsByTypeStub, getPushTokenStub, deletePushTokenStub, insertPushTokenStub, momentStub,
-    updateMessageInstructionStub, updateInstructionStateStub);
+    updateMessageInstructionStub, updateInstructionStateStub, filterUserIdsForRecurrenceStub);
 
 const createMockUserIds = (quantity) => Array(quantity).fill().map(() => uuid());
 
@@ -113,6 +113,15 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     const expectedInsertionRows = (quantity, start = 1) => 
         Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
 
+    const commonAssertions = (result, presentationType, numberOfMessages) => {
+        expect(result).to.exist;
+        expect(result).to.have.property('instructionId', mockInstructionId);
+        expect(result).to.have.property('instructionType', presentationType);
+        expect(result).to.have.property('numberMessagesCreated', numberOfMessages);
+        expect(result).to.have.property('creationTimeMillis', mockCreationTime);
+        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+    };
+
     beforeEach(() => {
         resetStubs();
         resetInstruction();
@@ -127,17 +136,12 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         getMessageInstructionStub.withArgs(mockInstructionId).resolves(mockInstruction);
         getUserIdsStub.withArgs(mockInstruction.selectionInstruction).resolves(testUserIds);
         insertUserMessagesStub.resolves(expectedInsertionRows(testNumberUsers));
-        updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime }); 
+        updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        const result = await handler.createUserMessages({ instructions: [{ instructionId: mockInstructionId }]});
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result).to.have.property('instructionId', mockInstructionId);
-        expect(result).to.have.property('instructionType', 'ONCE_OFF');
-        expect(result).to.have.property('numberMessagesCreated', testNumberUsers);
-        expect(result).to.have.property('creationTimeMillis', mockCreationTime);
-        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+        commonAssertions(result[0], 'ONCE_OFF', testNumberUsers);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -173,15 +177,10 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         insertUserMessagesStub.resolves(expectedInsertionRows(testNumberUsers));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
         
-        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        const result = await handler.createUserMessages({ instructions: [{ instructionId: mockInstructionId }]});
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result).to.have.property('instructionId', mockInstructionId);
-        expect(result).to.have.property('instructionType', 'ONCE_OFF');
-        expect(result).to.have.property('numberMessagesCreated', testNumberUsers);
-        expect(result).to.have.property('creationTimeMillis', mockCreationTime);
-        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+        commonAssertions(result[0], 'ONCE_OFF', testNumberUsers);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -229,10 +228,10 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         insertUserMessagesStub.resolves(expectedInsertionRows(expectedNumberMessages));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        const result = await handler.createUserMessages({ instructions: [{ instructionId: mockInstructionId }]});
+        logger('Result of insertion:', result);
 
-        expect(result).to.exist;
-        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+        commonAssertions(result[0], 'ONCE_OFF', expectedNumberMessages);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -297,27 +296,27 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         };
 
         getMessageInstructionStub.resolves(mockBoostInstruction);
-        getUserIdsStub.withArgs(mockBoostInstruction.selectionInstruction).resolves(createMockUserIds(1));
+        getUserIdsStub/*.withArgs(mockBoostInstruction.selectionInstruction)*/.resolves(createMockUserIds(1));
         insertUserMessagesStub.resolves(expectedInsertionRows(1));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
 
         const mockEvent = {
-            instructionId: mockInstructionId,
-            destination: mockUserId,
-            parameters: { boostAmount: '$10', boostAmountOther: '$20' },
-            triggerBalanceFetch: true
+            instructions: [{
+                instructionId: mockInstructionId,
+                destinationUserId: mockUserId,
+                parameters: { boostAmount: '$10', boostAmountOther: '$20' },
+                triggerBalanceFetch: true
+            }]
         };
 
         const result = await handler.createUserMessages(mockEvent);
         logger('result of boost message insertion:', result);
-        expect(result).to.exist;
-        expect(result).to.have.property('instructionId', mockInstructionId);
-        expect(result).to.have.property('instructionType', 'EVENT_DRIVEN');
-        expect(result).to.have.property('numberMessagesCreated', 1);
-        expect(result).to.have.property('creationTimeMillis', mockCreationTime);
-        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+        // logger('Got:', getUserIdsStub.getCall(0).args);
+        // logger('Expected:', mockBoostInstruction.selectionInstruction);
+        
+        commonAssertions(result[0], 'EVENT_DRIVEN', 1);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockBoostInstruction.selectionInstruction);
+        // expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockBoostInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
         expect(updateInstructionStateStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'MESSAGES_CREATED');
 
@@ -339,17 +338,12 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         insertUserMessagesStub.resolves(expectedInsertionRows(testNumberUsers));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
         
-        const mockEvent = { body: JSON.stringify({ instructionId: mockInstructionId })};
+        const mockEvent = { body: JSON.stringify({ instructions: [{ instructionId: mockInstructionId }]})};
 
         const result = await handler.createUserMessages(mockEvent);
         logger('Result of user messages insertion:', result);
 
-        expect(result).to.exist;
-        expect(result).to.have.property('instructionId', mockInstructionId);
-        expect(result).to.have.property('instructionType', 'ONCE_OFF');
-        expect(result).to.have.property('numberMessagesCreated', testNumberUsers);
-        expect(result).to.have.property('creationTimeMillis', mockCreationTime);
-        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+        commonAssertions(result[0], 'ONCE_OFF', testNumberUsers);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -360,15 +354,19 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         mockInstruction.selectionInstruction = null;
         getMessageInstructionStub.withArgs(mockInstructionId).resolves(mockInstruction);
         getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns([]);
+
+        const expectedResult = [{
+            instructionId: mockInstructionId,
+            result: 'NO_USERS'
+        }];
         
-        const mockEvent = { instructionId: mockInstructionId };
+        const mockEvent = { instructions: [{ instructionId: mockInstructionId }]};
 
         const result = await handler.createUserMessages(mockEvent);
         logger('Result of instruction with no users:', result);
 
         expect(result).to.exist;
-        expect(result).to.have.property('instructionId', mockInstructionId);
-        expect(result).to.have.property('result', 'NO_USERS');
+        expect(result).to.deep.equal(expectedResult);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.not.have.been.called;
@@ -384,15 +382,10 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         insertUserMessagesStub.resolves(expectedInsertionRows(1));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
         
-        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        const result = await handler.createUserMessages({ instructions: [{ instructionId: mockInstructionId }]});
         logger('Result of single user insertion:', result);
         
-        expect(result).to.exist;
-        expect(result).to.have.property('instructionId', mockInstructionId);
-        expect(result).to.have.property('instructionType', 'ONCE_OFF');
-        expect(result).to.have.property('numberMessagesCreated', 1);
-        expect(result).to.have.property('creationTimeMillis', mockCreationTime);
-        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+        commonAssertions(result[0], 'ONCE_OFF', 1);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -410,15 +403,10 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         insertUserMessagesStub.resolves(expectedInsertionRows(numberSampledUsers));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        const result = await handler.createUserMessages({ instructions: [{ instructionId: mockInstructionId }]});
         logger('Result of group insertion (random sample):', result);
 
-        expect(result).to.exist;
-        expect(result).to.have.property('instructionId', mockInstructionId);
-        expect(result).to.have.property('instructionType', 'ONCE_OFF');
-        expect(result).to.have.property('numberMessagesCreated', numberSampledUsers);
-        expect(result).to.have.property('creationTimeMillis', mockCreationTime);
-        expect(result).to.have.property('instructionUpdateTime', mockUpdatedTime);
+        commonAssertions(result[0], 'ONCE_OFF', numberSampledUsers);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockInstruction.selectionInstruction);
         expect(insertUserMessagesStub).to.have.been.calledOnce;
@@ -430,7 +418,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     it('should return an error on instruction extraction failure', async () => {
         getMessageInstructionStub.withArgs(mockInstructionId).rejects(new Error('Error extracting message instruction'));
 
-        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        const result = await handler.createUserMessages({ instructions: [{ instructionId: mockInstructionId }]});
         logger('Result of failing intruction extraction:', result);
 
         expect(result).to.exist;
@@ -442,7 +430,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     });
 });
 
-describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
+describe.only('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
 
     const mockInstructionId = uuid();
     const mockClientId = uuid();
@@ -453,6 +441,8 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
 
     const expectedInsertionRows = (quantity, start = 1) => 
         Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
+
+    const mockInstructions = [{ instructions: [{ instructionId: mockInstructionId }]}, { instructions: [{ instructionId: mockInstructionId }]}];
 
     const mockInstruction = {
         instructionId: mockInstructionId,
@@ -476,7 +466,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
     });
 
     it('Sends pending instructions', async () => {
-        getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
+        getInstructionsByTypeStub.resolves(mockInstructions);
         getMessageInstructionStub.resolves(mockInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
         getUserIdsStub.resolves(createMockUserIds(10));

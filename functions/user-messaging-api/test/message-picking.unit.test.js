@@ -18,10 +18,11 @@ const expect = chai.expect;
 const getMessagesStub = sinon.stub();
 const getAccountFigureStub = sinon.stub();
 const updateMessageStub = sinon.stub();
+const lamdbaInvokeStub = sinon.stub();
 
 const fetchDynamoRowStub = sinon.stub();
 
-const resetStubs = () => testHelper.resetStubs(getMessagesStub, getAccountFigureStub, updateMessageStub, fetchDynamoRowStub);
+const resetStubs = () => testHelper.resetStubs(getMessagesStub, getAccountFigureStub, updateMessageStub, fetchDynamoRowStub, lamdbaInvokeStub);
 
 const profileTable = config.get('tables.dynamoProfileTable');
 
@@ -31,12 +32,21 @@ const testBoostId = uuid();
 const testOpenMoment = moment('2019-07-01');
 const testExpiryMoment = moment().add(6, 'hours');
 
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
+    }
+}
+
 const handler = proxyquire('../message-picking-handler', {
     './persistence/rds.msgpicker': {
         'getNextMessage': getMessagesStub, 
         'getUserAccountFigure': getAccountFigureStub,
         'updateUserMessage': updateMessageStub,
         '@noCallThru': true
+    },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient  
     },
     'dynamo-common': {
         'fetchSingleRow': fetchDynamoRowStub
@@ -108,13 +118,22 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(dryRunMessages).to.exist;
     });
 
+    it('Returns empty where no messages are found', async () => {
+        getMessagesStub.withArgs(testUserId).resolves({});
+        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        logger('Filled message: ', filledMessage);
+
+        expect(filledMessage).to.exist;
+        expect(filledMessage).to.deep.equal([]);
+    });
+
     it('Returns unauthorized if no authorization', async () => {
         const unauthorizedResponse = await handler.getNextMessageForUser({});
         expect(unauthorizedResponse).to.deep.equal({ statusCode: 403 });
     });
 
     it('Catches errors properly', async () => {
-        const authContext= { authorizer: { systemWideUserId: 'this-is-a-bad-user' }};
+        const authContext = { authorizer: { systemWideUserId: 'this-is-a-bad-user' }};
         getMessagesStub.withArgs('this-is-a-bad-user').rejects(new Error('Bad user caused error!'));
         const testEvent = { requestContext: authContext };
         const errorEvent = await handler.getNextMessageForUser(testEvent);
@@ -124,7 +143,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
 });
 
-describe.only('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly', () => {
+describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly', () => {
 
     const testMsgId = uuid();
     const testSuccessMsgId = uuid();
@@ -214,8 +233,20 @@ describe.only('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assem
 
     beforeEach(() => resetStubs());
 
-    it.only('Fetches and assembles a set of two simple boost messages correctly', async () => {
+    it('Fetches and assembles a set of two simple boost messages correctly', async () => {
+        const mockEvent = testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER');
+
+        const mockInvocation = {
+            FunctionName: config.get('lambdas.updateMessageStatus'),
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+                requestContext: mockEvent.requestContext,
+                body: JSON.stringify({ messageId: firstMsgFromRds.messageId, userAction: 'FETCHED' })
+            }) 
+        };
+
         getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
+        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
@@ -224,26 +255,57 @@ describe.only('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assem
         expect(bodyOfFetch.messagesToDisplay).to.be.an('array');
         expect(bodyOfFetch.messagesToDisplay[0]).to.deep.equal(expectedFirstMessage);
         expect(bodyOfFetch.messagesToDisplay[1]).to.deep.equal(expectedSecondMsg);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
     it('Within flow message parameter works', async () => {
-        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
         const requestContext = { authorizer: { systemWideUserId: testUserId }};
         const queryStringParameters = { anchorMessageId: testMsgId };
+
+        const mockInvocation = {
+            FunctionName: config.get('lambdas.updateMessageStatus'),
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+                requestContext,
+                body: JSON.stringify({ messageId: firstMsgFromRds.messageId, userAction: 'FETCHED' })
+            }) 
+        };
+
+        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
+        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
+        logger('Result of assembly:', fetchResult);
+        logger('lis args:', lamdbaInvokeStub.getCall(0).args);
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
     it('Sorts same priority messages by creation time properly', async () => {
+        const mockEvent = testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER');
+
+        const mockInvocation = {
+            FunctionName: config.get('lambdas.updateMessageStatus'),
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+                requestContext: mockEvent.requestContext,
+                body: JSON.stringify({ messageId: firstMsgFromRds.messageId, userAction: 'FETCHED' })
+            }) 
+        };
+
         getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
+        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
 });
@@ -268,6 +330,17 @@ describe('*** UNIT TESTING MESSAGE PROCESSING *** Update message acknowledged st
         });
     });
 
+    it('Handles user fetching a message', async () => {
+        updateMessageStub.withArgs(testMsgId, { processedStatus: 'FETCHED' }).resolves({ updatedTime: testUpdatedTime });
+
+        const event = { messageId: testMsgId, userAction: 'FETCHED' };
+        const updateResult = await handler.updateUserMessage(testHelper.wrapEvent(event, testUserId, 'ORDINARY_USER'));
+        logger('Result of update: ', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal({ statusCode: 200 });
+    });
+
     it('Gives an appropriate error on unknown user action', async () => {
         const badEvent = { messageId: testMsgId, userAction: 'BADVALUE' };
         const errorResult = await handler.updateUserMessage(testHelper.wrapEvent(badEvent, testUserId, 'ORDINARY_USER'));
@@ -285,4 +358,21 @@ describe('*** UNIT TESTING MESSAGE PROCESSING *** Update message acknowledged st
         expect(errorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify('Error! Something nasty in persistence')});
     });
 
+    it('Fails on missing authorization', async () => {
+        const event = { messageId: testMsgId, userAction: 'FETCHED' };
+        const updateResult = await handler.updateUserMessage(event);
+        logger('Result of update: ', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal({ statusCode: 403 });
+    });
+
+    it('Fails on missing message id', async () => {
+        const event = { userAction: 'FETCHED' };
+        const updateResult = await handler.updateUserMessage(testHelper.wrapEvent(event, testUserId, 'ORDINARY_USER'));
+        logger('Result of update: ', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal({ statusCode: 400 });
+    });
 });
