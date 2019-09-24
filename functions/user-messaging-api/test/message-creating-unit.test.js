@@ -350,14 +350,15 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(updateInstructionStateStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'MESSAGES_CREATED');
     });
 
-    it('Selection instruction should default to null where not provided (for the love of full coverage)', async () => {
+    it('Handles insertions where no user ids are found', async () => {
+        // and selection instruction should default to null where not provided
         mockInstruction.selectionInstruction = null;
         getMessageInstructionStub.withArgs(mockInstructionId).resolves(mockInstruction);
         getUserIdsStub.withArgs(mockInstruction.selectionInstruction).returns([]);
 
         const expectedResult = [{
             instructionId: mockInstructionId,
-            result: 'NO_USERS'
+            insertionResponse: []
         }];
         
         const mockEvent = { instructions: [{ instructionId: mockInstructionId }]};
@@ -415,7 +416,52 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(insertedMessages).to.be.an('array').of.length(numberSampledUsers);
     });
 
-    it('should return an error on instruction extraction failure', async () => {
+    it('Handles extra parameters', async () => {
+        const instruction = { ...mockInstruction };
+        instruction.audienceType = 'INDIVIDUAL';
+        instruction.selectionInstruction = `whole_universe from #{'{"specific_users":["${mockUserId}"]}'}`;
+        
+        getMessageInstructionStub.resolves(instruction);
+        getUserIdsStub.resolves(createMockUserIds(1));
+        insertUserMessagesStub.resolves(expectedInsertionRows(1));
+        updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
+        
+        const mockEvent = { instructions: [{ instructionId: mockInstructionId, parameters: { processedStatus: 'READY_FOR_SENDING' }}]};
+
+        const result = await handler.createUserMessages(mockEvent);
+        logger('Result of single user insertion:', result);
+        
+        commonAssertions(result[0], 'ONCE_OFF', 1);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(instruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+        expect(updateInstructionStateStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'MESSAGES_CREATED');
+    });
+
+    it('Handles defaultStatus included in instruction', async () => {
+        const instruction = { ...mockInstruction };
+        instruction.audienceType = 'INDIVIDUAL';
+        instruction.selectionInstruction = `whole_universe from #{'{"specific_users":["${mockUserId}"]}'}`;
+        instruction.defaultStatus = 'CREATED';
+
+        getMessageInstructionStub.resolves(instruction);
+        getUserIdsStub.resolves(createMockUserIds(1));
+        insertUserMessagesStub.resolves(expectedInsertionRows(1));
+        updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
+        
+        const mockEvent = { instructions: [{ instructionId: mockInstructionId }]};
+
+        const result = await handler.createUserMessages(mockEvent);
+        logger('Result of single user insertion:', result);
+        
+        commonAssertions(result[0], 'ONCE_OFF', 1);
+        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
+        expect(getUserIdsStub).to.have.been.calledOnceWithExactly(instruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.have.been.calledOnce;
+        expect(updateInstructionStateStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'MESSAGES_CREATED');
+    });
+
+    it('Fails on instruction extraction failure', async () => {
         getMessageInstructionStub.withArgs(mockInstructionId).rejects(new Error('Error extracting message instruction'));
 
         const result = await handler.createUserMessages({ instructions: [{ instructionId: mockInstructionId }]});
@@ -428,9 +474,15 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(insertUserMessagesStub).to.have.not.been.called;
         expect(updateInstructionStateStub).to.have.not.been.called;
     });
+
+    it('Fails on missing instruction', async () => {
+        const result = await handler.createUserMessages({ instructionId: mockInstructionId });
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ statusCode: 202, message: 'No instructions provided' });
+    });
 });
 
-describe.only('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
+describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
 
     const mockInstructionId = uuid();
     const mockClientId = uuid();
@@ -441,8 +493,6 @@ describe.only('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
 
     const expectedInsertionRows = (quantity, start = 1) => 
         Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
-
-    const mockInstructions = [{ instructions: [{ instructionId: mockInstructionId }]}, { instructions: [{ instructionId: mockInstructionId }]}];
 
     const mockInstruction = {
         instructionId: mockInstructionId,
@@ -466,7 +516,7 @@ describe.only('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
     });
 
     it('Sends pending instructions', async () => {
-        getInstructionsByTypeStub.resolves(mockInstructions);
+        getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
         getMessageInstructionStub.resolves(mockInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
         getUserIdsStub.resolves(createMockUserIds(10));
@@ -481,11 +531,12 @@ describe.only('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         expect(result).to.have.property('messagesProcessed', 4);
         expect(result).to.have.property('processResults');
         result.processResults.forEach(processResult => {
-            expect(processResult).to.have.property('instructionId', mockInstructionId);
-            expect(processResult).to.have.property('instructionType', 'RECURRING');
-            expect(processResult).to.have.property('numberMessagesCreated', 10);
-            expect(processResult).to.have.property('creationTimeMillis', mockCreationTime);
-            expect(processResult).to.have.property('instructionUpdateTime', mockUpdatedTime);
+            const standardizedResult = Array.isArray(processResult) ? processResult[0] : processResult;
+            expect(standardizedResult).to.have.property('instructionId', mockInstructionId);
+            expect(standardizedResult).to.have.property('instructionType', 'RECURRING');
+            expect(standardizedResult).to.have.property('numberMessagesCreated', 10);
+            expect(standardizedResult).to.have.property('creationTimeMillis', mockCreationTime);
+            expect(standardizedResult).to.have.property('instructionUpdateTime', mockUpdatedTime);
         });
         expect(getInstructionsByTypeStub).to.have.been.calledWith('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
         expect(getInstructionsByTypeStub).to.have.been.calledWith('RECURRING');
@@ -494,6 +545,40 @@ describe.only('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         expect(insertUserMessagesStub).to.have.been.called;
         expect(updateInstructionStateStub).to.have.been.called;
         expect(updateMessageInstructionStub).to.have.been.called;
+    });
+
+    it('Handles empty recurring messages', async () => {
+        getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
+        getMessageInstructionStub.resolves(mockInstruction);
+        getUserIdsStub.resolves([]);
+    
+        const result = await handler.createFromPendingInstructions();
+        logger('Result of pending intruction handling:', result);
+    });
+
+    it('Fails on invalid template', async () => {
+        const mockInstruction = {
+            instructionId: mockInstructionId,
+            selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+            templates: '{ template: { DEFAULT: recurringMsgTemplate }}'
+        };
+
+        getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
+        getMessageInstructionStub.resolves(mockInstruction);
+        filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
+        getUserIdsStub.resolves(createMockUserIds(10));
+
+        const result = await handler.createFromPendingInstructions();
+        logger('Result on malformed template:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ result: 'ERROR', message: 'Malformed template instruction: ' });
+        expect(getInstructionsByTypeStub).to.have.been.calledWith('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
+        expect(filterUserIdsForRecurrenceStub).to.have.been.calledTwice;
+        expect(getUserIdsStub).to.have.been.calledWith(mockInstruction.selectionInstruction);
+        expect(insertUserMessagesStub).to.have.not.been.called;
+        expect(updateInstructionStateStub).to.have.not.been.called;
+        expect(updateMessageInstructionStub).to.have.not.been.called;
     });
 
     it('Catches thrown errors', async () => {

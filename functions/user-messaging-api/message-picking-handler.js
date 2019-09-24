@@ -79,7 +79,7 @@ const fetchCurrentBalance = async (systemWideUserId, currency) => {
     const amountResult = await persistence.getUserAccountFigure({
         systemWideUserId, operation: `balance::WHOLE_CENT::${currency}`
     });
-    logger('For balance, from persistence: ', fetchCurrentBalance);
+    logger('For balance, from persistence: ', amountResult);
     return formatAmountResult(amountResult);
 };
 
@@ -99,7 +99,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramName = paramSplit[0];
     logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
     if (STANDARD_PARAMS.indexOf(paramName) === -1) {
-        return paramName;
+        return paramName; // redundant and unreachable but useful for robustness
     } else if (paramName === 'user_first_name') {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId);
         return fetchUserName(userId, userProfile, true);

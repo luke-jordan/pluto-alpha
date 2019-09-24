@@ -12,6 +12,7 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
 const testRecurringTemplate = require('./templates/recurringTemplate');
+const testHelper = require('./message.test.helper');
 
 const insertMessageInstructionStub = sinon.stub();
 const updateMessageInstructionStub = sinon.stub();
@@ -131,11 +132,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
                 messagePriority: 0,
                 holdFire: true
             }),
-            requestContext: {
-                authorizer: {
-                    systemWideUserId: mockUserId
-                }
-            }
+            requestContext: testHelper.requestContext(mockUserId)
         };
         insertMessageInstructionStub.resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
 
@@ -145,8 +142,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 200);
         expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
         expect(body).to.have.property('processResult', 'INSTRUCT_STORED');
@@ -174,8 +170,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 200);
         expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
         expect(body).to.have.property('processResult', 'FIRED_INSTRUCT');
@@ -205,8 +200,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 200);
         expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
         expect(body).to.have.property('processResult', 'FIRED_TEST');
@@ -240,8 +234,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 200);
         expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
         expect(body).to.have.property('processResult', 'FIRED_TEST');
@@ -261,8 +254,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 403);
         expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body', JSON.stringify({}));
         expect(insertMessageInstructionStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;
@@ -323,8 +315,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 500);
         expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
         expect(body).to.have.property('message', 'Templates must define either a sequence or a single template.')
@@ -341,8 +332,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 500);
         expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
         expect(body).to.have.property('message', 'Instructions for event driven must specify the event type')
@@ -368,11 +358,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         const mockEvent = {
             instructionId: mockInstructionId,
             updateValues: {},
-            requestContext: {
-                authorizer: {
-                    systemWideUserId: mockUserId
-                }
-            }
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
         const resultOfUpdate = await handler.updateInstruction(mockEvent);
@@ -381,8 +367,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.have.property('statusCode', 200);
         expect(resultOfUpdate).to.have.property('headers');
-        expect(resultOfUpdate.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfUpdate.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfUpdate.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfUpdate).to.have.property('body');
         const body = JSON.parse(resultOfUpdate.body)[0];
         expect(body).to.have.property('insertionId', mockInsertionId);
@@ -397,11 +382,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         const mockEvent = {
             instructionId: mockInstructionId,
             updateValues: { active: false },
-            requestContext: {
-                authorizer: {
-                    systemWideUserId: mockUserId
-                }
-            }
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
         const resultOfUpdate = await handler.updateInstruction(mockEvent);
@@ -410,8 +391,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.have.property('statusCode', 200);
         expect(resultOfUpdate).to.have.property('headers');
-        expect(resultOfUpdate.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfUpdate.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfUpdate.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfUpdate).to.have.property('body');
         const body = JSON.parse(resultOfUpdate.body)[0];
         expect(body).to.have.property('insertionId', mockInsertionId);
@@ -432,8 +412,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.have.property('statusCode', 403);
         expect(resultOfUpdate).to.have.property('headers');
-        expect(resultOfUpdate.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfUpdate.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfUpdate.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(updateMessageInstructionStub).to.have.not.been.called;
     });
 
@@ -442,11 +421,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         const mockEvent = {
             instructionId: mockInstructionId,
             updateValues: { active: true },
-            requestContext: {
-                authorizer: {
-                    systemWideUserId: mockUserId
-                }
-            }
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
         const resultOfUpdate = await handler.updateInstruction(mockEvent);
@@ -455,8 +430,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.have.property('statusCode', 500);
         expect(resultOfUpdate).to.have.property('headers');
-        expect(resultOfUpdate.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfUpdate.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfUpdate.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfUpdate).to.have.property('body');
         const body = JSON.parse(resultOfUpdate.body);
         expect(body).to.have.property('message', 'A persistence derived error.');
@@ -557,11 +531,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
         getCurrentInstructionsStub.withArgs(false).resolves([mockActiveInstruction, mockActiveInstruction]);
         const mockEvent = {
             body: JSON.stringify({ includeStillDelivering: false }),
-            requestContext: {
-                authorizer: {
-                    systemWideUserId: mockUserId
-                }
-            }
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
         const result = await handler.listActiveMessages(mockEvent);
@@ -570,8 +540,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
         expect(result).to.have.property('headers');
-        expect(result.headers).to.have.property('Content-Type', 'application/json');
-        expect(result.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(result.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(result).to.have.property('body', JSON.stringify([mockActiveInstruction, mockActiveInstruction]));
         expect(getCurrentInstructionsStub).to.have.been.calledOnceWithExactly(false);
     });
@@ -585,8 +554,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
         expect(resultOfListing).to.exist;
         expect(resultOfListing).to.have.property('statusCode', 403);
         expect(resultOfListing).to.have.property('headers');
-        expect(resultOfListing.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfListing.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfListing.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(getCurrentInstructionsStub).to.have.not.been.called;
     });
 
@@ -594,11 +562,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
         getCurrentInstructionsStub.withArgs(true).throws(new Error('ProcessError'));
         const mockEvent = {
             includeStillDelivering: true,
-            requestContext: {
-                authorizer: {
-                    systemWideUserId: mockUserId
-                }
-            }
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
         const resultOfListing = await handler.listActiveMessages(mockEvent);
@@ -607,8 +571,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
         expect(resultOfListing).to.exist;
         expect(resultOfListing).to.have.property('statusCode', 500);
         expect(resultOfListing).to.have.property('headers');
-        expect(resultOfListing.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfListing.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfListing.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfListing).to.have.property('body', JSON.stringify('ProcessError'));
         expect(getCurrentInstructionsStub).to.have.been.calledOnceWithExactly(true);
     });

@@ -58,16 +58,16 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
 
-    const minimalMsgFromTemplate = (template) => ({
+    const minimalMsgFromTemplate = (template, priority, followsPriorMsg = false) => ({
         destinationUserId: testUserId,
         creationTime: testOpenMoment,
-        followsPriorMsg: false,
-        messagePriority: 10,
+        followsPriorMessage: followsPriorMsg,
+        messagePriority: priority,
         endTime: testExpiryMoment,
         messageBody: template
     });
 
-    before(() => {
+    beforeEach(() => {
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
             systemWideUserId: testUserId, 
             personalName: 'Luke', 
@@ -78,7 +78,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CENT::USD::0' }).
             resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 10000 });
         getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' }).
-            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 800000 })
+            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 800000 });
     });
 
     it('Fills in message templates properly', async () => {
@@ -102,6 +102,49 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
+    });
+
+    it('Handles currencies not supported by JS i18n', async () => {
+        const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is R8,000.';
+        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+            'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
+        )]);
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::ZAR' }).
+            resolves({ currency: 'ZAR', unit: 'WHOLE_CENT', amount: 800000 });
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
+            systemWideUserId: testUserId, 
+            personalName: 'Luke', 
+            familyName: 'Jordan', 
+            creationTimeEpochMillis: testOpenMoment.valueOf(), 
+            defaultCurrency: 'ZAR'
+        });
+
+        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+    });
+
+    it('Sorts messages by priority properly', async () => {
+        const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
+        const temlpate = 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.';
+        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(temlpate, 10), minimalMsgFromTemplate(temlpate, 5)]);
+
+        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        logger('Filled message:', filledMessage);
+
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+    });
+
+    it('Message sequence returns empty array on missing anchor message', async () => {
+        const temlpate = 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.';
+        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(temlpate, 10, true), minimalMsgFromTemplate(temlpate, 5, true)]);
+
+        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        logger('Filled message:', filledMessage);
+
+        expect(filledMessage).to.exist;
+        expect(filledMessage).to.deep.equal([]);
     });
 
     it('Dry run triggers without touching RDS etc', async () => {
@@ -141,6 +184,29 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(errorEvent).to.deep.equal({ statusCode: 500, body: JSON.stringify('Bad user caused error!') });
     });
 
+    it('Fills in account balances properly', async () => {
+        const mockUserId = uuid();
+        const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
+        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+            'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
+        )]);
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' }).
+            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 800000 });
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
+            systemWideUserId: mockUserId, 
+            personalName: 'Luke', 
+            familyName: 'Jordan', 
+            creationTimeEpochMillis: testOpenMoment.valueOf(), 
+            defaultCurrency: 'USD'
+        }).withArgs(profileTable, { systemWideUserId: testUserId }, ['personal_name', 'family_name']).resolves({ 
+            personalName: 'Luke', 
+            familyName: 'Jordan'
+        });
+
+        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+    });
 });
 
 describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly', () => {
