@@ -10,8 +10,8 @@ const corsHeaders = {
 };
 
 module.exports.extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-module.exports.extractQueryParams = (event) => 
-    typeof event.queryStringParameters === 'object' && Object.keys(event.queryStringParameters).length > 0 ? event.queryStringParameters : event;
+module.exports.extractQueryParams = (event) => typeof event.queryStringParameters === 'object' && event.queryStringParameters !== null 
+    && Object.keys(event.queryStringParameters).length > 0 ? event.queryStringParameters : event;
 
 module.exports.extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
 

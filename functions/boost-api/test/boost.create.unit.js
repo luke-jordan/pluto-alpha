@@ -151,9 +151,6 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             }
         };
 
-        // logger('COPY::::::::::::::::');
-        // logger(JSON.stringify(testHelper.wrapEvent(testBodyOfEvent).body));
-
         const resultOfInstruction = await handler.createBoostWrapper(testHelper.wrapEvent(testBodyOfEvent, 
             mockBoostToFromPersistence.creatingUserId, 'ORDINARY_USER'));
 

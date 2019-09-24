@@ -8,7 +8,8 @@
     },
     "tables": {
         "accountTable": "account_data.core_account_ledger",
-        "transactionTable": "transaction_data.core_transaction_ledger"
+        "transactionTable": "transaction_data.core_transaction_ledger",
+        "clientFloatTable": "ClientFloatTable"
     },
     "defaults": {
         "userCounts": {

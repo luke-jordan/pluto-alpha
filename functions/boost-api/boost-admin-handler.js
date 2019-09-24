@@ -17,14 +17,14 @@ module.exports.listBoosts = async (event) => {
         }
 
         const params = util.extractQueryParams(event);
-        logger('Listing boosts, parameters: ', params);
+
         const excludedTypeCategories = params.includeReferrals ? [] : ['REFERRAL::USER_CODE_USED'];
         const includeStatusCounts = typeof params.includeUserCounts === 'boolean' && params.includeStatusCounts;
         const includeExpired = typeof params.includeExpired === 'boolean' && params.includeExpired;
         
         const listBoosts = await persistence.listBoosts(excludedTypeCategories, includeStatusCounts, includeExpired);
 
-        return listBoosts;
+        return util.wrapHttpResponse(listBoosts);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return util.errorResponse(err); 
@@ -47,7 +47,7 @@ module.exports.updateInstruction = async (event) => {
         const updatedBoost = await persistence.updateBoost(params);
         logger('Result from persistence: ', updatedBoost);
 
-        return updatedBoost;
+        return util.wrapHttpResponse(updatedBoost);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return util.errorResponse(err);

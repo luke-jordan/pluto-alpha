@@ -9,7 +9,8 @@
   "author": "Luke Jordan",
   "license": "ISC",
   "dependencies": {
-    "aws-sdk": "^2.533.0",
+    "aws-sdk": "^2.534.0",
+    "camelcase-keys": "^6.0.1",
     "config": "^3.2.2",
     "debug": "^4.1.1",
     "moment": "^2.24.0"

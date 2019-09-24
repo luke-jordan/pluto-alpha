@@ -5,6 +5,7 @@ const config = require('config');
 const moment = require('moment');
 
 const persistence = require('./persistence/rds.analytics');
+const dynamo = require('./persistence/dynamo.float');
 const util = require('./admin.util');
 
 /**
@@ -15,10 +16,9 @@ const util = require('./admin.util');
  * but have not yet had a settled save transaction. This can be useful for diagnosing drop outs
  */
 module.exports.fetchUserCounts = async (event) => {
-    // introduce once going live
-    // if (!util.isUserAuthorized(event)) {
-    //     return util.unauthorizedResponse;
-    // }
+    if (!util.isUserAuthorized(event)) {
+        return util.unauthorizedResponse;
+    }
 
     const params = util.extractEventBody(event);
     logger('Finding user Ids with params: ', params);
@@ -34,4 +34,17 @@ module.exports.fetchUserCounts = async (event) => {
     logger('Obtained user count: ', userIdCount);
 
     return util.wrapHttpResponse({ userCount: userIdCount });
+};
+
+
+module.exports.fetchClientFloatVars = async (event) => {
+    if (!util.isUserAuthorized(event)) {
+        return util.unauthorizedResponse;
+    }
+
+    // in time, will have to extract administered floats from user somehow (or denormalize into appropriate table)
+
+    const clientsAndFloats = await dynamo.listClientFloats();
+
+    return util.wrapHttpResponse(clientsAndFloats);
 };

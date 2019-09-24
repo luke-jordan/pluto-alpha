@@ -13,7 +13,7 @@ module.exports.extractEventBody = (event) => event.body ? JSON.parse(event.body)
 
 const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
 
-module.exports.isUserAuthorized = (event, requiredRole = 'ROLE_SYSTEM_ADMIN') => {
+module.exports.isUserAuthorized = (event, requiredRole = 'SYSTEM_ADMIN') => {
     const userDetails = extractUserDetails(event);
     
     if (!userDetails || !Reflect.has(userDetails, 'systemWideUserId')) {

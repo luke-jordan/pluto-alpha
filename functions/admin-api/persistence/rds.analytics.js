@@ -38,3 +38,11 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
     logger('Result of count: ', resultOfCount);
     return resultOfCount[0]['count'];
 };
+
+module.exports.getFloatBalanceAndFlows = async (floatId) => {
+    
+};
+
+module.exports.getFloatBonusBalanceAndFlows = async (floatId) => {
+
+};
