@@ -9,9 +9,11 @@ const BigNumber = require('bignumber.js');
 
 const persistence = require('./persistence/rds');
 const dynamodb = require('./persistence/dynamodb');
+const opsUtil = require('ops-util-common');
+
+const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
 
 const ACCOUNT_NOT_FOUND_CODE = 404;
-const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
 
 const fetchUserDefaultAccount = async (systemWideUserId) => {
   logger('Fetching user accounts for user ID: ', systemWideUserId);
@@ -192,11 +194,7 @@ module.exports.balanceWrapper = async (event) => {
     const resultObject = await assembleBalanceForUser(accountId, floatParams.currency, timeForBalance, floatParams, config.get('projection.defaultDays'));
     logger('Result object: ', resultObject);
 
-    return {
-      statusCode: 200,
-      body: JSON.stringify(resultObject)
-    };
-
+    return opsUtil.wrapResponse(resultObject);
   } catch (e) {
     logger('FATAL_ERROR: ', e);
     return {

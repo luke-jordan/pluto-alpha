@@ -16,6 +16,7 @@ const findBoostStub = sinon.stub();
 const findAccountsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const alterBoostStub = sinon.stub();
+const findMsgInstructStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
@@ -35,7 +36,8 @@ const handler = proxyquire('../boost-create-handler', {
         'findBoost': findBoostStub,
         'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
-        'alterBoost': alterBoostStub
+        'alterBoost': alterBoostStub,
+        'findMsgInstructionByFlag': findMsgInstructStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -117,11 +119,15 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         momentStub.withArgs().returns(testStartTime);
         momentStub.withArgs(referralWindowEnd.valueOf()).returns(referralWindowEnd);
 
+        findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRER').resolves(testReferringMsgId);
+        findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRED').resolves(testReferredMsgId);
+
         const expectedFromRds = {
             boostId: uuid(),
             persistedTimeMillis: testPersistedTime.valueOf(),
             numberOfUsersEligible: 2
         };
+
         insertBoostStub.resolves(expectedFromRds);
 
         const testBodyOfEvent = {
@@ -137,10 +143,12 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             boostAudienceSelection: `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`,
             initialStatus: 'PENDING',
             statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
-            redemptionMsgInstructions: [
-                { accountId: testReferringUser, msgInstructionId: testReferringMsgId}, 
-                { accountId: testReferredUser, msgInstructionId: testReferredMsgId }
-            ]
+            messageInstructionFlags: {
+                'REDEEMED': [
+                    { accountId: testReferringUser, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' }, 
+                    { accountId: testReferredUser, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }
+                ]
+            }
         };
 
         // logger('COPY::::::::::::::::');
@@ -350,24 +358,24 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
     const assembleMessageInstruction = () => {
         const messagePayload = {};
         messagePayload.audienceType = 'GENERAL';
+        messagePayload.presentationType = 'EVENT_DRIVEN';
         messagePayload.selectionInstruction = `match_other from #{entityType: 'boost', entityId: ${testBoostId}}`;
         
         const messageTemplates = Object.keys(messageDefinitions).map((key) => {
             const msgTemplate = messageDefinitions[key];
-            msgTemplate.identifier = key;
             msgTemplate.actionToTake = standardMsgActions[key].action;
             msgTemplate.actionContext = { ...standardMsgActions[key].context, gameParams: gameParams };
-            return { 'DEFAULT': msgTemplate }
+            return { 'DEFAULT': msgTemplate, identifier: key }
         });
 
-        messagePayload.template = { sequence: messageTemplates };
+        messagePayload.templates = { sequence: messageTemplates };
         return messagePayload;
     };
 
     const mockMsgInstructReturnBody = [{ instructionId: testMsgInstructId, creationTimeMillis: moment().valueOf() }]
     const mockMsgIdDict = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
 
-    // logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
+    logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
 
     it('Happy path creates a game boost, including setting up the messages', async () => {
     
@@ -397,6 +405,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         // then set up invocation checks
         Reflect.deleteProperty(mockBoostToFromPersistence, 'boostId');
         const expectMsgLambdaInvoke = testHelper.wrapLambdaInvoc('message_instruct_create', false, expectedMsgInstruct);
+        // logger('*** EXPECTED MSG INSTRUCTION: ***', JSON.stringify(expectedMsgInstruct));
         
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(mockBoostToFromPersistence);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectMsgLambdaInvoke);

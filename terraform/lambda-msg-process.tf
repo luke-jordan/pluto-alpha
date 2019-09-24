@@ -94,6 +94,22 @@ resource "aws_iam_role_policy_attachment" "message_user_process_transaction_secr
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
 }
 
+////////////////// TRIGGER FOR PROCESSING //////////////////////////////////////////////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_msg_process_five_minutes" {
+    rule = "${aws_cloudwatch_event_rule.ops_every_five_minutes.name}"
+    target_id = "${aws_lambda_function.message_user_process.id}"
+    arn = "${aws_lambda_function.message_user_process.arn}"
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_message_process" {
+    statement_id = "AllowMsgProcessExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = "${aws_lambda_function.message_user_process.function_name}"
+    principal = "events.amazonaws.com"
+    source_arn = "${aws_cloudwatch_event_rule.ops_every_five_minutes.arn}"
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_message_user_process" {

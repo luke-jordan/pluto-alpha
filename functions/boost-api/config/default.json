@@ -19,11 +19,12 @@
         "accountLedger": "account_data.core_account_ledger",
         "boostTable": "boost_data.boost",
         "boostAccountJoinTable": "boost_data.boost_account_status",
-        "boostLogTable": "boost_data.boost_log"
+        "boostLogTable": "boost_data.boost_log",
+        "msgInstructionTable": "message_data.message_instruction"
     },
     "lambdas": {
         "floatTransfer": "float_transfer",
-        "messageSend": "message_user_create",
+        "messageSend": "message_user_create_once",
         "messageInstruct": "message_instruct_create"
     }
 }

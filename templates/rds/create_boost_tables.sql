@@ -18,7 +18,7 @@ create table if not exists boost_data.boost (
     status_conditions jsonb not null,
     boost_audience varchar (255) not null,
     audience_selection text not null,
-    redemption_messages jsonb not null,
+    message_instruction_ids jsonb,
     initial_status varchar (100) check (initial_status in ('CREATED', 'OFFERED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED')),
     flags text[] default '{}',
     updated_time timestamp with time zone not null default current_timestamp
@@ -64,3 +64,7 @@ grant select, insert on boost_data.boost_log to boost_worker;
 
 grant usage, select on boost_data.boost_account_status_insertion_id_seq to boost_worker;
 grant usage, select on boost_data.boost_log_log_id_seq to boost_worker;
+
+-- for message picking & sending
+grant usage on schema boost_data to message_api_worker;
+grant select on boost_data.boost_account_status to message_api_worker;

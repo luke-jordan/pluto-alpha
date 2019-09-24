@@ -1,0 +1,11 @@
+{
+    "title": "Variant things!",
+    "body": "Hello some different things are happening and this is a message about it",
+    "display": {
+        "type": "CARD"
+    },
+    "actionToTake": "ADD_CASH",
+    "actionContext": {
+        "boostId": "ab439794-fade-4c9e-aa3a-c32c5b85287b"
+    }
+}

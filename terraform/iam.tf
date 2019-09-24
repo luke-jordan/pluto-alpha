@@ -41,8 +41,8 @@ resource "aws_iam_policy" "migration_script_s3_access" {
 EOF
 }
 
-resource "aws_iam_policy" "lambda_invoke_warmup_access" {
-    name = "warmup_lambda_invoke_access_${terraform.workspace}"
+resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
+    name = "warmup_ops_lambda_invoke_access_${terraform.workspace}"
     path = "/"
 
     policy = <<EOF
@@ -61,7 +61,12 @@ resource "aws_iam_policy" "lambda_invoke_warmup_access" {
                 "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch_wrapper",
                 "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_initiate",
                 "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_payment_check"
-            ]
+            ],
+            "Condition": {
+                "StringEquals": {
+                    "aws:PrincipalArn": "${aws_iam_role.ops_warmup_role.arn}"
+                }
+            }
         }
     ]
 }
@@ -129,7 +134,55 @@ resource "aws_iam_policy" "lambda_invoke_message_create_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.message_user_create.arn}"
+                "${aws_lambda_function.message_user_create_once.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "lambda_invoke_message_process_access" {
+    name = "lambda_message_user_process_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "MessageProcessInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.message_user_process.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "lambda_invoke_boost_create_access" {
+    name = "lambda_boost_create_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "BoostLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.boost_create.arn}"
             ]
         }
     ]

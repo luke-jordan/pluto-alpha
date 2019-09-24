@@ -1,10 +1,19 @@
 {
+    "aws": {
+        "region": "us-east-1"
+    },
     "tables": {
         "accountLedger": "account_data.core_account_ledger",
         "messageInstructionTable": "message_data.message_instruction",
         "userMessagesTable": "message_data.user_message",
         "pushTokenTable": "message_data.user_push_token",
+        "boostAccountTable": "boost_data.boost_account_status",
+        "transactionLedger": "transaction_data.core_transaction_ledger",
         "dynamoProfileTable": "UserProfileTable"
+    },
+    "lambdas": {
+        "generateUserMessages": "message_user_create_once",
+        "updateMessageStatus": "message_user_process"
     },
     "db": {
         "host": "localhost",
@@ -24,9 +33,18 @@
             "boost": "Hello! You have been awarded a boost of %s. Thank you for choosing Jupiter Savings."
         }
     },
+    "creating": {
+        "defaultStatus": "READY_FOR_SENDING"
+    },
     "picker": {
         "defaults": {
             "dateFormat": "MMMM YYYY"
+        },
+        "push": {
+            "running": false
         }
+    },
+    "security": {
+        "roleRequired": false
     }
 }

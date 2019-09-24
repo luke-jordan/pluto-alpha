@@ -30,7 +30,7 @@ provider:
 
 functions:
   create:
-    handler: boost-handler.createBoost
+    handler: boost-create-handler.createBoost
     name: boost_create
     events:
       - http:

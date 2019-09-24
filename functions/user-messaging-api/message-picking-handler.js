@@ -10,6 +10,9 @@ const persistence = require('./persistence/rds.msgpicker');
 const dynamo = require('dynamo-common');
 const userProfileTable = config.get('tables.dynamoProfileTable');
 
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
+
 const paramRegex = /#{([^}]*)}/g;
 const STANDARD_PARAMS = [
     'user_first_name',
@@ -31,6 +34,15 @@ const getSubParamOrDefault = (paramSplit, defaultValue) => paramSplit.length > 1
 
 const formatAmountResult = (amountResult) => {
     logger('Formatting amount result: ', amountResult);
+    const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
+
+    // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
+    // implement for those countries where client opcos have launched
+    if (amountResult.currency === 'ZAR') {
+        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+        return `R${emFormat.format(wholeCurrencyAmount)}`;
+    }
+
     const numberFormat = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: amountResult.currency,
@@ -38,7 +50,6 @@ const formatAmountResult = (amountResult) => {
         minimumFractionDigits: 0
     });
     
-    const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
     return numberFormat.format(wholeCurrencyAmount);
 };
 
@@ -79,7 +90,8 @@ const extractParamsFromTemplate = (template) => {
         extractedParams.push(match[1]);
         match = paramRegex.exec(template);
     }
-    return extractedParams;
+    // do not include any that are non-standard
+    return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) !== -1);
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
@@ -87,7 +99,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramName = paramSplit[0];
     logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
     if (STANDARD_PARAMS.indexOf(paramName) === -1) {
-        return '';
+        return paramName;
     } else if (paramName === 'user_first_name') {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId);
         return fetchUserName(userId, userProfile, true);
@@ -103,6 +115,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         return fetchAccountInterest(destinationUserId, userProfile.defaultCurrency, sinceMillis);
     } else if (paramName === 'current_balance') {
         const defaultCurrency = getSubParamOrDefault(paramSplit, userProfile.defaultCurrency);
+        logger('Have currency: ', defaultCurrency);
         return fetchCurrentBalance(destinationUserId, defaultCurrency, userProfile);
     }
 };
@@ -115,6 +128,7 @@ const fillInTemplate = async (template, destinationUserId) => {
     }
 
     const replacedString = template.replace(paramRegex, '%s');
+    logger('Fetching user profile for ID: ', destinationUserId);
     const userProfile = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId: destinationUserId }, PROFILE_COLS);
     logger('Obtained user profile: ', userProfile);
     const paramValues = await Promise.all(paramsToFillIn.map((param) => retrieveParamValue(param, destinationUserId, userProfile)));
@@ -124,16 +138,16 @@ const fillInTemplate = async (template, destinationUserId) => {
     return completedTemplate;
 };
 
-const assembleMessage = async (msgDetails) => {
+module.exports.assembleMessage = async (msgDetails) => {
     const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
-    const displayDetails = { type: msgDetails.displayType, ...msgDetails.displayInstructions };
     const messageBase = {
         messageId: msgDetails.messageId,
         title: msgDetails.messageTitle,
         body: completedMessageBody,
         priority: msgDetails.messagePriority,
-        display: displayDetails,
-        hasFollowingMsg: msgDetails.hasFollowingMsg
+        display: msgDetails.display,
+        persistedTimeMillis: msgDetails.creationTime.valueOf(),
+        hasFollowingMessage: msgDetails.hasFollowingMessage
     };
     
     let actionContextForReturn = { };
@@ -146,11 +160,14 @@ const assembleMessage = async (msgDetails) => {
         actionContextForReturn = { ...actionContextForReturn, ...strippedContext };   
     }
     
-    if (msgDetails.followingMessages) {
-        actionContextForReturn = { ... actionContextForReturn, ...msgDetails.followingMessages };
+    if (msgDetails.messageSequence) {
+        const sequenceDict = msgDetails.messageSequence;
+        messageBase.messageSequence = sequenceDict;
+        const thisMessageIdentifier = Object.keys(sequenceDict).find((key) => sequenceDict[key] === msgDetails.messageId);
+        messageBase.identifier = thisMessageIdentifier;
     }
 
-    if (!msgDetails.followsPriorMsg) {
+    if (!msgDetails.followsPriorMessage) {
         actionContextForReturn = { ...actionContextForReturn, sequenceExpiryTimeMillis: msgDetails.endTime.valueOf() };
     }
 
@@ -165,16 +182,14 @@ const fetchMsgSequenceIds = (anchorMessage, retrievedMessages) => {
     }
 
     let thisAndFollowingIds = [anchorMessage.messageId];
-    if (!anchorMessage.hasFollowingMsg || typeof anchorMessage.followingMessages !== 'object') {
+    
+    if (!anchorMessage.hasFollowingMessage || typeof anchorMessage.messageSequence !== 'object') {
         return thisAndFollowingIds;
     }
 
-    Object.values(anchorMessage.followingMessages).forEach((msgId) => {
-        const msgWithId = retrievedMessages.find((msg) => msg.messageId === msgId);
-        thisAndFollowingIds = thisAndFollowingIds.concat(fetchMsgSequenceIds(msgWithId, retrievedMessages));
-    });
+    const otherMsgIds = Object.values(anchorMessage.messageSequence).filter((msgId) => msgId !== anchorMessage.messageId);
 
-    return thisAndFollowingIds;
+    return thisAndFollowingIds.concat(otherMsgIds);
 };
 
 const assembleSequence = async (anchorMessage, retrievedMessages) => {
@@ -184,10 +199,11 @@ const assembleSequence = async (anchorMessage, retrievedMessages) => {
     // in almost all cases, never more than a few messages (active/non-expired filter means only a handful at a time)
     // monitor and if that becomes untrue, then ajust, e.g., go to persistence or cache to extract IDs
     const sequenceMsgDetails = sequenceIds.map((msgId) => retrievedMessages.find((msg) => msg.messageId === msgId));
-    return await Promise.all(sequenceMsgDetails.map((messageDetails) => assembleMessage(messageDetails)));
+    return await Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails)));
 };
 
 const determineAnchorMsg = (openingMessages) => {
+    logger('Determining anchor message')
     // if there is only one, then it is trivial
     if (openingMessages.length === 1) {
         return openingMessages[0];
@@ -221,7 +237,8 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     }
 
     // second, select only the messages that do not depend on prior ones (i.e., that anchor chains)
-    const openingMessages = retrievedMessages.filter((msg) => !msg.followsPriorMsg);
+    const openingMessages = retrievedMessages.filter((msg) => !msg.followsPriorMessage);
+    logger('Possible opening messages: ', openingMessages);
 
     // third, either just continue with the prior one, or find whatever should be the anchor
     let anchorMessage = null;
@@ -237,12 +254,31 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     return assembledMessages;
 };
 
+// And last, we update. todo : update all of them?
+const fireOffMsgStatusUpdate = async (userMessages, requestContext) => {
+    const updateMsgPayload = {
+        requestContext,
+        body: JSON.stringify({ messageId: userMessages[0].messageId, userAction: 'FETCHED' })
+    };
+
+    const updateMsgLambdaParams = {
+        FunctionName: config.get('lambdas.updateMessageStatus'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify(updateMsgPayload) 
+    };
+
+    logger('Invoking Lambda to update message status');
+    const invocationResult = await lambda.invoke(updateMsgLambdaParams).promise();
+    logger('Completed invocation: ', invocationResult);
+
+}
+
 // For now, for mobile test
 const dryRunGameResponseOpening = require('./dry-run-messages');
 const dryRunGameChaseArrows = require('./dry-run-arrow');
 
 /**
- * Wrapper for the above, based on token
+ * Wrapper for the above, based on token, i.e., direct fetch
  */
 module.exports.getNextMessageForUser = async (event) => {
     try {
@@ -265,6 +301,11 @@ module.exports.getNextMessageForUser = async (event) => {
             messagesToDisplay: userMessages
         };
 
+        if (Array.isArray(userMessages) && userMessages.length > 0) {
+            await fireOffMsgStatusUpdate(userMessages, event.requestContext);
+        }
+
+        logger(JSON.stringify(resultBody));
         return { statusCode: 200, body: JSON.stringify(resultBody) };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
@@ -283,13 +324,22 @@ module.exports.updateUserMessage = async (event) => {
         }
 
         // todo : validate that the message corresponds to the user ID
-        const { messageId, userAction }= JSON.parse(event.body);
+        const { messageId, userAction } = JSON.parse(event.body);
         logger('Processing message ID update, based on user action: ', userAction);
 
+        if (!messageId || messageId.length === 0) {
+            return { statusCode: 400 }
+        };
+
         let response = { };
+        let updateResult = undefined;
         switch (userAction) {
+            case 'FETCHED':
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'FETCHED' });
+                logger('Result of updating message: ', updateResult);
+                return { statusCode: 200 };
             case 'DISMISSED':
-                const updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
                 const bodyOfResponse = { result: 'SUCCESS', processedTimeMillis: updateResult.updatedTime.valueOf() };
                 response = { statusCode: 200, body: JSON.stringify(bodyOfResponse) };
                 break;
@@ -302,4 +352,4 @@ module.exports.updateUserMessage = async (event) => {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500, body: JSON.stringify(err.message) };
     }
-}
+};

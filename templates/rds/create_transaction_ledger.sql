@@ -50,3 +50,7 @@ grant update on transaction_data.core_transaction_ledger to save_tx_api_worker;
 grant usage on schema transaction_data to float_api_worker;
 grant select (transaction_id, creation_time, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, tags) on transaction_data.core_transaction_ledger to float_api_worker;
 grant insert on transaction_data.core_transaction_ledger to float_api_worker;
+
+-- So that messaging can do sums (todo : restrict to aggregates)
+grant usage on schema transaction_data to message_api_worker;
+grant select on transaction_data.core_transaction_ledger to message_api_worker;

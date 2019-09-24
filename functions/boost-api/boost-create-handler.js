@@ -64,6 +64,7 @@ const constructMsgInstructionPayload = (messageDefinitions, boostParams, gamePar
     const msgPayload = {};
     
     msgPayload.audienceType = boostParams.audienceType;
+    msgPayload.presentationType = 'EVENT_DRIVEN'; // constant
     msgPayload.selectionInstruction = `match_other from #{entityType: 'boost', entityId: ${boostParams.boostId}}`;
 
     const actionContext = { 
@@ -74,13 +75,12 @@ const constructMsgInstructionPayload = (messageDefinitions, boostParams, gamePar
 
     const messageTemplates = Object.keys(messageDefinitions).map((key) => {
         const msgTemplate = messageDefinitions[key];
-        msgTemplate.identifier = key;
         msgTemplate.actionToTake = msgTemplate.actionToTake || obtainStdAction(key);
         msgTemplate.actionContext = actionContext;
-        return { 'DEFAULT': msgTemplate }
+        return { 'DEFAULT': msgTemplate, identifier: key }
     });
 
-    msgPayload.template = { 
+    msgPayload.templates = { 
         sequence: messageTemplates 
     };
 
@@ -115,8 +115,40 @@ module.exports.createBoostWrapper = async (event) => {
     }
 };
 
+// const find default message instruction
+const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
+    logger('Alright, got some message flags, we can go find the instructions, from: ', messageInstructionFlags);
+    
+    const messageInstructions = [];
+    // cycle through the keys, which will represent the statuses (um, clean this up a lot, and especially parallelize it)
+    const statuses = Object.keys(messageInstructionFlags);
+    logger('Have statuses: ', statuses);
+    for (let status of statuses) {
+        const messageFlags = messageInstructionFlags[status];
+        logger('Message flags: ', messageFlags);
+        for (let flagDef of messageFlags) {
+            const { accountId, msgInstructionFlag } = flagDef;
+            const msgInstructionId = await persistence.findMsgInstructionByFlag(msgInstructionFlag);
+            logger('Result of flag hunt: ', msgInstructionId);
+            if (typeof msgInstructionId === 'string') {
+                messageInstructions.push({ accountId, status, msgInstructionId });
+            }
+        }
+    }
+    
+    logger('Finished hunting by flag, have result: ', messageInstructions);
+    return messageInstructions;
+};
+
 /**
  * The primary method here. Creates a boost and sets various other methods into action
+ * Note, there are three ways boosts can have their messages assigned:
+ * (1) Include an explicit set of redemption message instructions
+ * (2) Include a set of message instruction flags (i.e., ways to find defaults), as a dict with top-level key being the status
+ * (3) Include the message definitions in messages to create
+ * 
+ * Note that if multiple are passed, (3) will override the others (as it is called last)
+ * Also note that if none are provided the boost will have no message and just hang in the ether
  */
 module.exports.createBoost = async (event) => {
     if (!event) {
@@ -125,6 +157,7 @@ module.exports.createBoost = async (event) => {
     }
 
     const params = event;
+    logger('Received boost instruction event: ', params);
 
     // todo : extensive validation
     const boostType = params.boostTypeCategory.split('::')[0];
@@ -153,6 +186,8 @@ module.exports.createBoost = async (event) => {
     // many boosts will just do it this way, or else will use the more complex one below
     if (params.redemptionMsgInstructions) {
         messageInstructionIds = params.redemptionMsgInstructions.map((msgInstructId) => ({ ...msgInstructId, status: 'REDEEMED' }));
+    } else if (params.messageInstructionFlags) {
+        messageInstructionIds = await obtainDefaultMessageInstructions(params.messageInstructionFlags);
     }
     
     const instructionToRds = {
@@ -194,15 +229,19 @@ module.exports.createBoost = async (event) => {
             InvocationType: 'RequestResponse',
             Payload: stringify(messagePayload) 
         };
-        const resultOfMsgCreation = await lambda.invoke(messageInstructInvocation).promise();
-        logger('Result of message instruct invocation: ', resultOfMsgCreation);
-        // todo : handle errors
-        const resultPayload = JSON.parse(resultOfMsgCreation.Payload);
-        const resultBody = JSON.parse(resultPayload.body);
-        const messageInstructionIds = { instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: resultBody[0].instructionId }] };
-        const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
-        logger('And result of update: ', updatedBoost);
-        persistedBoost.messageInstructions = messageInstructionIds.instructions;
+        if (!params.onlyRdsCalls) {
+            const resultOfMsgCreation = await lambda.invoke(messageInstructInvocation).promise();
+            logger('Result of message instruct invocation: ', resultOfMsgCreation);
+            // todo : handle errors
+            const resultPayload = JSON.parse(resultOfMsgCreation.Payload);
+            const resultBody = JSON.parse(resultPayload.body);
+            const messageInstructionIds = { instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: resultBody[0].instructionId }] };
+            const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
+            logger('And result of update: ', updatedBoost);
+            persistedBoost.messageInstructions = messageInstructionIds.instructions;
+        } else {
+            logger('Would send to Lambda: ', JSON.stringify(messagePayload));
+        }
     };
 
     return persistedBoost;

@@ -12,7 +12,6 @@ const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
-
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -176,9 +175,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
     it('should get user ids where selection clause is random_sample', async () => {
         const mockPercentage = '0.33';
-        const mockClientId = uuid();
         const mockAccoutId = uuid();
-        const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
+        const mockSelectionInstruction = `random_sample #{${mockPercentage}}`;
         const mockSelectArgs = [
             'select owner_user_id from account_data.core_account_ledger tablesample bernoulli ($1)',
             [Number(mockPercentage.replace(/^0./, ''))]
@@ -205,8 +203,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const mockPercentage = 'half';
         const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
 
-        // find way to catch expected error
-        await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.eventually.be.rejected;
+        const expectedResult = 'Invalid row percentage.';
+        await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.be.rejectedWith(expectedResult);
     });
 
     it('should insert user messages', async () => {
@@ -230,7 +228,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             { 'insertion_id': 99, 'creation_time': mockCreationTime },
             { 'insertion_id': 100, 'creation_time': mockCreationTime }, { 'insertion_id': 101, 'creation_time': mockCreationTime }
         ];
-        multiTableStub.withArgs([mockInsertionArgs]).resolves(insertionResult);
+        multiTableStub.withArgs([mockInsertionArgs]).resolves([insertionResult]);
 
         const expectedResult = [
             { 'insertionId': 99, 'creationTime': mockCreationTime },

@@ -24,7 +24,7 @@ const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) =
 const transformBoostFromRds = (boost) => {
     const transformedBoost = camelizeKeys(boost);
     // logger('Working? : ', transformedBoost);
-    transformedBoost.redemptionMsgInstructions = transformedBoost.redemptionMessages.instructions;
+    transformedBoost.messageInstructions = transformedBoost.messageInstructionIds.instructions;
     // transformedBoost.statusConditions = JSON.parse(transformedBoost.statusConditions);
     transformedBoost.boostAudienceSelection = transformedBoost.audienceSelection;
     transformedBoost.boostStartTime = moment(transformedBoost.startTime);
@@ -32,7 +32,7 @@ const transformBoostFromRds = (boost) => {
     transformedBoost.defaultStatus = transformedBoost.initialStatus;
 
     // then clean up
-    Reflect.deleteProperty(transformedBoost, 'redemptionMessages');
+    Reflect.deleteProperty(transformedBoost, 'messageInstructionIds');
     Reflect.deleteProperty(transformedBoost, 'audienceSelection');
     Reflect.deleteProperty(transformedBoost, 'startTime');
     Reflect.deleteProperty(transformedBoost, 'endTime');
@@ -68,7 +68,10 @@ module.exports.findBoost = async (attributes) => {
     const findBoostQuery = `select distinct(boost_id) from ${boostAccountJoinTable} where account_id in (${accountIndices}) and boost_status in (${statusIndices})`;
     const findBoostIdsResult = await rdsConnection.selectQuery(findBoostQuery, queryValues);
     logger('Result of finding boost IDs: ', findBoostIdsResult);
-    
+    if (findBoostIdsResult.length === 0) {
+        return [];
+    }
+
     const boostIdArray = findBoostIdsResult.map((row) => row['boost_id']);
     const querySuffix = typeof attributes.active === 'boolean' ? ` and active = ${attributes.active}` : '';
     const retrieveBoostQuery = `select * from ${boostTable} where boost_id in (${extractArrayIndices(boostIdArray)})${querySuffix}`;
@@ -207,10 +210,14 @@ module.exports.updateBoostAccountStatus = async (instructions) => {
     return resultOfAll;
 };
 
+/////////////////////////////////////////////////////////////////
+////////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
+/////////////////////////////////////////////////////////////////
+
 const validateAndExtractUniverse = (universeComponent) => {
     logger('Universe component: ', universeComponent);
+    
     const universeMatch = universeComponent.match(/#{(.*)}/);
-    logger('Universe match: ', universeMatch);
     if (!universeMatch || universeMatch.length === 0) {
         throw new Error('Error! Universe definition passed incorrectly: ', universeComponent);
     }
@@ -228,12 +235,16 @@ const validateAndExtractUniverse = (universeComponent) => {
 // note : this _could_ be simplified by relying on ordering of Object.keys, but that would be dangerous/fragile
 const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey) => {
     if (currentKey === 'specific_accounts') {
-        logger('Sepcific account IDs selected');
+        logger('Specific account IDs selected');
         const accountIds = universeDefinition[currentKey];
         const placeHolders = accountIds.map((_, index) => `$${currentIndex + index + 1}`).join(', ');
         logger('Created place holder: ', placeHolders);
         const assembledClause = `account_id in (${placeHolders})`;
         return [assembledClause, accountIds, currentIndex + accountIds.length];
+    } else if (currentKey === 'client_id') {
+        const newIndex = currentIndex + 1;
+        const assembledClause = `responsible_client_id = $${newIndex}`;
+        return [assembledClause, [universeDefinition[currentKey]], newIndex];
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
@@ -314,12 +325,17 @@ module.exports.insertBoost = async (boostDetails) => {
         boostAudience: boostDetails.boostAudience,
         audienceSelection: boostDetails.boostAudienceSelection,
         statusConditions: boostDetails.statusConditions,
-        redemptionMessages: { instructions: boostDetails.redemptionMsgInstructions }
+        messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };
 
     if (boostDetails.conditionValues) {
         logger('This boost has conditions: ', boostDetails);
         boostObject.conditionValues = boostDetails.conditionClause;
+    }
+
+    // be careful here, array handling is a little more sensitive than most types in node-pg
+    if (Array.isArray(boostDetails.flags) && boostDetails.flags.length > 0) {
+        boostObject.flags = boostDetails.flags;
     }
 
     const boostKeys = Object.keys(boostObject);
@@ -328,6 +344,8 @@ module.exports.insertBoost = async (boostDetails) => {
         columnTemplate: extractColumnTemplate(boostKeys),
         rows: [boostObject]
     };
+
+    logger('Inserting boost: ', boostObject);
 
     const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
     const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));
@@ -356,7 +374,6 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
-
 module.exports.alterBoost = async (boostId, updateValues) => {
     const boostUpdateDef = {
         table: boostTable,
@@ -375,4 +392,21 @@ module.exports.alterBoost = async (boostId, updateValues) => {
 
     const updatedTime = moment(resultOfUpdate[0][0]['updated_time']);
     return { updatedTime };
+};
+
+/////////////////////////////////////////////////////////////////
+//////// SIMPLE AUX METHOD TO FIND MSG INSTRUCTION IDS //////////
+/////////////////////////////////////////////////////////////////
+
+module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
+    // find the most recent matching the flag (just in case);
+    const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
+        `flags && ARRAY[$1] order by creation_time desc limit 1`;
+    const result  = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
+    logger('Got an instruction? : ', result);
+    if (Array.isArray(result) && result.length > 0) {
+        return result[0]['instruction_id'];
+    }
+
+    return undefined;
 };

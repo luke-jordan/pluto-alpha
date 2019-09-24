@@ -89,6 +89,16 @@ resource "aws_iam_role_policy_attachment" "message_user_fetch_vpc_execution_poli
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "message_user_fetch_msg_process_policy" {
+  role = "${aws_iam_role.message_user_fetch_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_message_process_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "message_user_fetch_profile_table_policy" {
+  role = "${aws_iam_role.message_user_fetch_role.name}"
+  policy_arn = "${var.user_profile_table_read_policy_arn[terraform.workspace]}"
+}
+
 resource "aws_iam_role_policy_attachment" "message_user_fetch_transaction_secret_get" {
   role = "${aws_iam_role.message_user_fetch_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
