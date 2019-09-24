@@ -170,6 +170,7 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
  * @param {boolean} triggerBalanceFetch Required on boost message assembly. Indicates whether to include the users new balance in the boost message.
  */
 const processNonRecurringInstruction = async ({ instructionId, destinationUserId, parameters }) => {
+    logger('Processing instruction with ID: ', instructionId);
     const instruction = await rdsUtil.getMessageInstruction(instructionId);
     
     const selectionInstruction = instruction.selectionInstruction || null;
@@ -200,17 +201,29 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     return handlerResponse;
 };
 
-// a wrapper for simple instruction processing
+// a wrapper for simple instruction processing, although can handle multiple at once
+// note: this is only called for once off or event driven messages )i.e., invokes the above)
 module.exports.createUserMessages = async (event) => {
     try {
         const createDetails = msgUtil.extractEventBody(event);
         logger('Receieved params:', createDetails);
-        return await processNonRecurringInstruction(createDetails);
+        const instructionsToProcess = createDetails.instructions;
+        if (!Array.isArray(instructionsToProcess) || instructionsToProcess.length === 0) {
+            return { statusCode: 202, message: 'No instructions provided' };
+        }
+        const processPromises = instructionsToProcess.map((instruction) => processNonRecurringInstruction(instruction));
+        const processResults = await Promise.all(processPromises);
+        return processResults;
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { message: err.message };
     }
 };
+
+/////////////////////////////////////////////////////////////////////////////
+/////////////////////// RECURRING MESSAGE HANDLING //////////////////////////
+/////////////////////////////////////////////////////////////////////////////
+
 
 const generateRecurringMessages = async (recurringInstruction) => {
     const instructionId = recurringInstruction.instructionId;

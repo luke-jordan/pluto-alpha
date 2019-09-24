@@ -475,7 +475,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         momentStub.returns(testTime);
     });
 
-    it('Sends hanging instructions', async () => {
+    it('Sends pending instructions', async () => {
         getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
         getMessageInstructionStub.resolves(mockInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));

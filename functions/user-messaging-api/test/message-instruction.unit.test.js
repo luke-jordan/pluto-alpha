@@ -65,7 +65,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     const mockClientId = uuid();
     const testTime = moment();
 
-    const mockEvent = {
+    const mockInstruction = {
         presentationType: 'ONCE_OFF',
         audienceType: 'ALL_USERS',
         templates: { template: { 'DEFAULT': testRecurringTemplate }},
@@ -73,14 +73,15 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         recurrenceParameters: null,
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
-        messagePriority: 0
+        messagePriority: 0,
+        eventTypeCategory: null
     };
 
     const resetEvent = () => {
-        mockEvent.presentationType = 'ONCE_OFF';
-        mockEvent.audienceType = 'ALL_USERS';
-        mockEvent.defaultTemplate = config.get('instruction.templates.default');
-        mockEvent.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
+        mockInstruction.presentationType = 'ONCE_OFF';
+        mockInstruction.audienceType = 'ALL_USERS';
+        mockInstruction.templates = { template: { 'DEFAULT': testRecurringTemplate }};
+        mockInstruction.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
     };
 
     const mockPersistableObject = (mockInstruction) => ({
@@ -96,7 +97,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         selectionInstruction: mockInstruction.selectionInstruction ? mockInstruction.selectionInstruction : null,
         recurrenceParameters: mockInstruction.recurrenceParameters,
         lastProcessedTime: testTime.format(),
-        messagePriority: mockInstruction.messagePriority
+        messagePriority: mockInstruction.messagePriority,
+        flags: mockInstruction.presentationType === 'EVENT_DRIVEN' ? [mockInstruction.eventTypeCategory] : undefined
     });
 
     const commonAssertions = (result, statusCode, expectedResult) => {
@@ -115,66 +117,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             format: () => testTime.format(),
             add: () => testTime.add(500, 'years')
         });
-        mockEvent.requestContext = { authorizer: { systemWideUserId: mockUserId }};
-    });
-
-    it('Insert new message intruction and populates messages table', async () => {
-        const mockInvocation = {
-            FunctionName: 'message_user_create_once',
-            InvocationType: 'Event',
-            LogType: 'None',
-            Payload: JSON.stringify({instructionId: mockInstructionId})
-        };
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockEvent)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
-
-        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
-        logger('Result of message instruction creation:', resultOfInsertion);
-
-        expect(resultOfInsertion).to.exist;
-        expect(resultOfInsertion).to.have.property('statusCode', 200);
-        expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
-        expect(resultOfInsertion).to.have.property('body');
-        const body = JSON.parse(resultOfInsertion.body);
-        expect(body).to.have.property('processResult', 'FIRED_INSTRUCT');
-        expect(body).to.have.property('message');
-        expect(body.message).to.have.property('instructionId', mockInstructionId);
-        expect(body.message).to.have.property('creationTime', mockCreationTime);
-        expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockEvent));
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
-    });
-
-    it('Inserts new message intruction and tests message process', async () => {
-        const mockInvocation = {
-            FunctionName: 'message_user_create_once',
-            InvocationType: 'Event',
-            LogType: 'None',
-            Payload: JSON.stringify({ instructionId: mockInstructionId, destinationUserId: mockUserId })
-        };
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockEvent)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
-        mockEvent.fireTestMessage = true;
-
-        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
-        logger('Result of message instruction creation:', resultOfInsertion);
-
-        Reflect.deleteProperty(mockEvent, 'fireTestMessage');
-
-        expect(resultOfInsertion).to.exist;
-        expect(resultOfInsertion).to.have.property('statusCode', 200);
-        expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
-        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
-        expect(resultOfInsertion).to.have.property('body');
-        const body = JSON.parse(resultOfInsertion.body);
-        expect(body).to.have.property('processResult', 'FIRED_TEST');
-        expect(body).to.have.property('message');
-        expect(body.message).to.have.property('instructionId', mockInstructionId);
-        expect(body.message).to.have.property('creationTime', mockCreationTime);
-        expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockEvent));
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+        mockInstruction.requestContext = { authorizer: { systemWideUserId: mockUserId }};
     });
 
     it('Inserts new message intruction', async () => {
@@ -214,10 +157,105 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(lamdbaInvokeStub).to.have.not.been.called;
     });
 
-    it('Fails on unauthorized instruction insertion', async () => {
-        Reflect.deleteProperty(mockEvent, 'requestContext');
+    it('Inserts new message intruction and populates messages table', async () => {
+        Reflect.deleteProperty(mockInstruction, 'selectionInstruction'); // sets selection intruction to null where not provided
+        const mockInvocation = {
+            FunctionName: 'message_user_create_once',
+            InvocationType: 'Event',
+            LogType: 'None',
+            Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId }]})
+        };
+        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
 
-        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
+        logger('Result of message instruction creation:', resultOfInsertion);
+     
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 200);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
+        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('processResult', 'FIRED_INSTRUCT');
+        expect(body).to.have.property('message');
+        expect(body.message).to.have.property('instructionId', mockInstructionId);
+        expect(body.message).to.have.property('creationTime', mockCreationTime);
+        expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockInstruction));
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+    });
+
+    it('Inserts new message intruction and tests message process', async () => {
+        const mockInvocation = {
+            FunctionName: 'message_user_create_once',
+            InvocationType: 'Event',
+            LogType: 'None',
+            Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
+        };
+        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
+        mockInstruction.fireTestMessage = true;
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        Reflect.deleteProperty(mockInstruction, 'fireTestMessage');
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 200);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
+        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('processResult', 'FIRED_TEST');
+        expect(body).to.have.property('message');
+        expect(body.message).to.have.property('instructionId', mockInstructionId);
+        expect(body.message).to.have.property('creationTime', mockCreationTime);
+        expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockInstruction));
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+    });
+
+    it('Sets instruction flags based on presentation type', async () => {
+        mockInstruction.presentationType = 'EVENT_DRIVEN';
+        mockInstruction.eventTypeCategory = 'REFERRAL';
+        mockInstruction.fireTestMessage = true;
+
+        const mockInvocation = {
+            FunctionName: 'message_user_create_once',
+            InvocationType: 'Event',
+            LogType: 'None',
+            Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
+        };
+
+        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        Reflect.deleteProperty(mockInstruction, 'fireTestMessage');
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 200);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
+        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('processResult', 'FIRED_TEST');
+        expect(body).to.have.property('message');
+        expect(body.message).to.have.property('instructionId', mockInstructionId);
+        expect(body.message).to.have.property('creationTime', mockCreationTime);
+        expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockInstruction));
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+    });
+
+    it('Fails on unauthorized instruction insertion', async () => {
+        Reflect.deleteProperty(mockInstruction, 'requestContext');
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of unauthorized instruction insertion:', resultOfInsertion);
 
         expect(resultOfInsertion).to.exist;
@@ -230,11 +268,22 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(lamdbaInvokeStub).to.have.not.been.called;
     });
 
+    it('should throw an error on missing required property value', async () => {
+        const expectedResult = { message: 'Missing required property value: presentationType' };
+        mockInstruction.presentationType = null;
+
+        const result = await handler.insertMessageInstruction(mockInstruction);
+        logger('Result of message instruction insertion on missing required property value:', result);
+
+        commonAssertions(result, 500, expectedResult);
+        expect(insertMessageInstructionStub).to.have.not.been.called;
+    });
+
     it('it should throw an error on missing recurrance instruction where presentation type is RECURRING', async () => {
         const expectedResult = { message: 'recurrenceParameters is required where presentationType is set to RECURRING.' };
-        mockEvent.presentationType = 'RECURRING';
+        mockInstruction.presentationType = 'RECURRING';
 
-        const result = await handler.insertMessageInstruction(mockEvent);
+        const result = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of message instruction insertion on missing required recurrance instruction:', result);
 
         commonAssertions(result, 500, expectedResult);
@@ -242,11 +291,11 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should throw an error on missing selection instruction on individual notification', async () => {
-        mockEvent.selectionInstruction = null;
+        mockInstruction.selectionInstruction = null;
         const expectedResult = { message: 'selectionInstruction required on indivdual notification.' };
-        mockEvent.audienceType = 'INDIVIDUAL';
+        mockInstruction.audienceType = 'INDIVIDUAL';
 
-        const result = await handler.insertMessageInstruction(mockEvent);
+        const result = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of message instruction insertion on missing required selection instruction:', result);
 
         commonAssertions(result, 500, expectedResult);
@@ -254,11 +303,11 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should throw an error on missing selection instruction on group notification', async () => {
-        mockEvent.selectionInstruction = null;
+        mockInstruction.selectionInstruction = null;
         const expectedResult = { message: 'selectionInstruction required on group notification.' };
-        mockEvent.audienceType = 'GROUP';
+        mockInstruction.audienceType = 'GROUP';
 
-        const result = await handler.insertMessageInstruction(mockEvent);
+        const result = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of message instruction insertion on missing required selection instruction:', result);
 
         commonAssertions(result, 500, expectedResult);
@@ -266,9 +315,9 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should throw an error on missing templates', async () => {
-        mockEvent.templates = { };
+        mockInstruction.templates = { };
 
-        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of message instruction insertion on missing templates:', resultOfInsertion);
 
         expect(resultOfInsertion).to.exist;
@@ -282,15 +331,23 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(insertMessageInstructionStub).to.have.not.been.called;
     });
 
-    it('should throw an error on missing required property value', async () => {
-        const expectedResult = { message: 'Missing required property value: presentationType' };
-        mockEvent.presentationType = null;
+    it('Fails on missing eventTypeCategory where instruction presentationType is EVENT_DRIVEN', async () => {
+        Reflect.deleteProperty(mockInstruction, 'eventTypeCategory');
+        mockInstruction.presentationType = 'EVENT_DRIVEN';
 
-        const result = await handler.insertMessageInstruction(mockEvent);
-        logger('Result of message instruction insertion on missing required property value:', result);
+        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
+        logger('Result of message instruction insertion on missing event type category:', resultOfInsertion);
 
-        commonAssertions(result, 500, expectedResult);
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 500);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.have.property('Content-Type', 'application/json');
+        expect(resultOfInsertion.headers).to.have.property('Access-Control-Allow-Origin', '*');
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('message', 'Instructions for event driven must specify the event type')
         expect(insertMessageInstructionStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;     
     });
 });
 

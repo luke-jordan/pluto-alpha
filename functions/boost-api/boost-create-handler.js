@@ -157,6 +157,7 @@ module.exports.createBoost = async (event) => {
     }
 
     const params = event;
+    logger('Received boost instruction event: ', params);
 
     // todo : extensive validation
     const boostType = params.boostTypeCategory.split('::')[0];

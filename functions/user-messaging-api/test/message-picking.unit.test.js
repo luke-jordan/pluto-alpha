@@ -124,7 +124,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
 });
 
-describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly', () => {
+describe.only('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly', () => {
 
     const testMsgId = uuid();
     const testSuccessMsgId = uuid();
@@ -214,7 +214,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
 
     beforeEach(() => resetStubs());
 
-    it('Fetches and assembles a set of two simple boost messages correctly', async () => {
+    it.only('Fetches and assembles a set of two simple boost messages correctly', async () => {
         getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
