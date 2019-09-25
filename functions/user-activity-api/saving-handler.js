@@ -79,7 +79,7 @@ module.exports.settle = async (event) => {
   }
 };
   
-/* Wrapper method, calls the above, after verifying the user owns the account, event params are:
+/** Wrapper method, calls the above, after verifying the user owns the account, event params are:
  * @param {string} accountId The account where the save is happening
  * @param {number} savedAmount The amount to be saved
  * @param {string} savedCurrency The account where the save is happening
@@ -126,6 +126,7 @@ module.exports.initiatePendingSave = async (event) => {
       logger('Initiation time: ', saveInformation.initiationTimeEpochMillis);
     }
 
+    // todo : verify user account ownership
     const initiationResult = await save(saveInformation);
     
     initiationResult.paymentRedirectDetails = {

@@ -7,7 +7,7 @@ resource "aws_lambda_function" "withdraw_end" {
 
   function_name                  = "${var.withdraw_end_lambda_function_name}"
   role                           = "${aws_iam_role.withdraw_end_role.arn}"
-  handler                        = "withdrawal-handler.setWithdrawalBankAccount"
+  handler                        = "withdrawal-handler.confirmWithdrawal"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
@@ -84,11 +84,6 @@ resource "aws_cloudwatch_log_group" "withdraw_end" {
   tags = {
     environment = "${terraform.workspace}"
   }
-}
-
-resource "aws_iam_role_policy_attachment" "save_record_client_float_table_access" {
-  role = "${aws_iam_role.withdraw_end_role.name}"
-  policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "withdraw_end_basic_execution_policy" {

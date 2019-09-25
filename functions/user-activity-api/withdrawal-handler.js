@@ -5,7 +5,7 @@ const config = require('config');
 const moment = require('moment');
 
 const status = require('statuses');
-const publisher = require('publish-common');
+// const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
 
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
@@ -15,6 +15,25 @@ const handleError = (err) => {
     return { statusCode: 500, body: JSON.stringify(err.message) };
 };
 
+// note: third use of this. probably want a common location before long. first key is "from", second key is "to"
+const UNIT_MULTIPLIERS = {
+    'WHOLE_CURRENCY': {
+        'HUNDREDTH_CENT': 10000,
+        'WHOLE_CENT': 100,
+        'WHOLE_CURRENCY': 1
+    },
+    'WHOLE_CENT': {
+        'WHOLE_CURRENCY': 0.01,
+        'WHOLE_CENT': 1,
+        'HUNDREDTH_CENT': 100
+    },
+    'HUNDREDTH_CENT': {
+        'WHOLE_CURRENCY': 0.0001,
+        'WHOLE_CENT': 0.01,
+        'HUNDREDTH_CENT': 1
+    }
+};
+
 // note: we are going to need a cache here, since we do not want to persist the bank account details
 
 /**
@@ -22,24 +41,34 @@ const handleError = (err) => {
  */
 module.exports.setWithdrawalBankAccount = async (event) => {
     try {
+        logger('Initiating withdrawal ...');
         const authParams = event.requestContext ? event.requestContext.authorizer : null;
         if (!authParams || !authParams.systemWideUserId) {
           return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
         }
         
-        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_INITIATED');
+        // await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_INITIATED');
         const withdrawalInformation = JSON.parse(event.body);
+        const accountId = withdrawalInformation.accountId;
 
-        // first, verify bank account ownership
+        // first, verify bank account ownership, to be completed
+        const isBankAccountValid = true;
+        if (!isBankAccountValid) {
+            return invalidRequestResponse({ result: 'BANK_ACCOUNT_INVALID' });
+        }
 
-        // then, create a pending withdrawal transaction
+        // then, make sure the user has saved in the past
+        const hasUserSaved = await persistence.hasPriorSave(accountId);
+        if (!hasUserSaved) {            
+            return invalidRequestResponse({ result: 'USER_HAS_NOT_SAVED' });
+        }
 
         // then, get the balance available
-        // todo : get the currency from user (?)
-        const availableBalance = await persistence.sumAccountBalance(withdrawalInformation.accountId, 'ZAR');
+        const currency = await persistence.findMostCommonCurrency(accountId);
+        logger('Most common currency: ', currency);
+        const availableBalance = await persistence.sumAccountBalance(withdrawalInformation.accountId, currency);
 
         const responseObject = {
-            transactionId: uuid(),
             availableBalance,
             cardTitle: 'Did you know?',
             cardBody: 'Over the next two years you could accumulate xx% interest. Why not delay your withdraw to keep these savings and earn more for your future!'
@@ -51,8 +80,15 @@ module.exports.setWithdrawalBankAccount = async (event) => {
     }
 };
 
+// note: _should_ come from client as positive, but just to make sure
+const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
+    const multiplier = UNIT_MULTIPLIERS[balanceInformation.unit][withdrawalInformation.unit];
+    const absValueWithdrawal = Math.abs(withdrawalInformation.amount); 
+    return absValueWithdrawal <= (balanceInformation.amount * multiplier);
+};
+
 /**
- * Proceeds to next item, the withdrawal amount
+ * Proceeds to next item, the withdrawal amount, where we create the pending transaction, and decide whether to make an offer
  */
 module.exports.setWithdrawalAmount = async (event) =>{
     try {
@@ -62,26 +98,43 @@ module.exports.setWithdrawalAmount = async (event) =>{
         }
         
         const withdrawalInformation = JSON.parse(event.body);
-        if (!withdrawalInformation.transactionId) {
-            return invalidRequestResponse('Requires a transaction Id');
-        } else if (!withdrawalInformation.amount) {
-            return invalidRequestResponse('Error, must send amount to withdraw');
+        
+        if (!withdrawalInformation.amount || !withdrawalInformation.unit || !withdrawalInformation.currency) {
+            return invalidRequestResponse('Error, must send amount to withdraw, along with unit and currency');
         }
 
-        const transactionDetails = await persistence.findMatchingTransaction({ transactionId })
-        const availableBalance = await persistence.sumAccountBalance(transactionDetails.accountId);
+        // then, check if amount is above balance
+        const accountId = withdrawalInformation.accountId;
+        const availableBalance = await persistence.sumAccountBalance(accountId, withdrawalInformation.currency);
 
-        if (withdrawalInformation.amount > availableBalance) {
+        if (!checkSufficientBalance(withdrawalInformation, availableBalance)) {
             return invalidRequestResponse('Error, trying to withdraw more than available');
         }
+        
+        // make sure the amount is negative (as that makes the sums etc work)
+        withdrawalInformation.amount = -Math.abs(withdrawalInformation.amount);
+        withdrawalInformation.transactionType = 'WITHDRAWAL';
+        withdrawalInformation.settlementStatus = 'PENDING';
+        withdrawalInformation.initiationTime = moment();
 
-        // (1) update the transaction, and (2) decide if a boost should be offered
+        if (!withdrawalInformation.floatId || !withdrawalInformation.clientId) {
+            const floatAndClient = await persistence.findClientAndFloatForAccount(accountId);
+            withdrawalInformation.floatId = withdrawalInformation.floatId || floatAndClient.floatId;
+            withdrawalInformation.clientId = withdrawalInformation.clientId || floatAndClient.clientId;
+        }
+
+        // (1) create the pending transaction, and (2) decide if a boost should be offered
+        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawalInformation);
+        logger('Transaction details from persistence: ', transactionDetails);
+        const transactionId = transactionDetails[0]['accountTransactionId'];
+
+        // for now, we are just stubbing this
         const delayTime = moment().add(7, 'days');
         const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
+        
         // then, assemble and send back
-
         return {
-            statusCode: 200, body: JSON.stringify({ delayOffer })
+            statusCode: 200, body: JSON.stringify({ transactionId, delayOffer })
         };
     } catch (err) {
         return handleError(err);
@@ -103,16 +156,20 @@ module.exports.confirmWithdrawal = async (event) => {
         }
 
         if (withdrawalInformation.userDecision === 'CANCEL') {
-            // process the boost, and tell the user
-            await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
+            // process the boost, and tell the user, then update the transaction
+            // await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
             return { statusCode: 200 };
         }
 
         // user wants to go through with it, so (1) send an email about it, (2) update the transaction, (3) update 3rd-party
+        const resultOfUpdate = await persistence.updateTxToSettled({
+            transactionId: withdrawalInformation.transactionId,
+            settlementTime: moment()
+        });
 
-        // then, settle the balance
-        const response = { balance: 'TBC' };
-        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED');
+        // then, return the balance
+        const response = { balance: resultOfUpdate.newBalance };
+        // await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED');
 
         return { statusCode: 200, body: JSON.stringify(response) };
     } catch (err) {

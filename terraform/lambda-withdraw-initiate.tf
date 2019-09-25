@@ -86,11 +86,6 @@ resource "aws_cloudwatch_log_group" "withdraw_initiate" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "save_record_client_float_table_access" {
-  role = "${aws_iam_role.withdraw_initiate_role.name}"
-  policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
-}
-
 resource "aws_iam_role_policy_attachment" "withdraw_initiate_basic_execution_policy" {
   role = "${aws_iam_role.withdraw_initiate_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
