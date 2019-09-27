@@ -324,7 +324,7 @@ resource "aws_api_gateway_method" "boost_admin_create" {
 
 resource "aws_lambda_permission" "boost_admin_create" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.boost_create.function_name}"
+  function_name = "${aws_lambda_function.boost_create_wrapper.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.admin_api_gateway.id}/*/*/*"
 }
@@ -336,7 +336,7 @@ resource "aws_api_gateway_integration" "boost_admin_create" {
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.boost_create.invoke_arn}"
+  uri                     = "${aws_lambda_function.boost_create_wrapper.invoke_arn}"
 }
 
 module "boost_admin_create_cors" {

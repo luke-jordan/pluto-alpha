@@ -180,6 +180,23 @@ const handlePaymentFailure = (failureType) => {
   return { result: 'PAYMENT_PENDING' };
 };
 
+// note: we can definitely optimize this guy when combined with the others (e.g., stick the relevant details in return clause on update)
+const publishSaveSucceeded = async (systemWideUserId, transactionId) =>{
+  const txDetails = await persistence.fetchTransaction(transactionId);
+  const count = await persistence.countSettledSaves(txDetails.accountId);
+
+  const context = {
+    transactionId,
+    accountId: txDetails.accountId,
+    timeInMillis: txDetails.settlementTime,
+    firstSave: count === 1,
+    savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`
+  };
+
+  logger('Triggering publish, with context: ', context);
+  await publisher.publishUserEvent(systemWideUserId, 'SAVING_PAYMENT_SUCCESSFUL', { context });
+};
+
 /**
  * Checks on the backend whether this payment is done
  * todo: validation that the TX belongs to the user
@@ -205,10 +222,12 @@ module.exports.checkPendingPayment = async (event) => {
     if (paymentSuccessful) {
       const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
       const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
+      
       logger('Result of save: ', resultOfSave);
       resultBody = JSON.parse(resultOfSave.body);
       resultBody.result = 'PAYMENT_SUCCEEDED';
-      await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_PAYMENT_SUCCESSFUL', { context: { transactionId }});
+      
+      await publishSaveSucceeded(authParams.systemWideUserId, transactionId);
     } else {
       resultBody = handlePaymentFailure(params.failureType);
     }

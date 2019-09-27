@@ -37,7 +37,7 @@ module.exports.listBoosts = async (excludedTypeCategories, includeStatusCounts =
     const hasTypeExclusions =  Array.isArray(excludedTypeCategories) && excludedTypeCategories.length > 0;
     const typeExclusionClause = hasTypeExclusions ? 
         `(boost_type || '::' || boost_category) not in (${extractArrayIndices(excludedTypeCategories)})` : '';
-    const activeClause = includeInactive ? '' : 'active = true and end_time < current_timestamp';
+    const activeClause = includeInactive ? '' : 'active = true and end_time > current_timestamp';
     
     let whereClause = '';
     if (hasTypeExclusions && !includeInactive) {
@@ -50,6 +50,8 @@ module.exports.listBoosts = async (excludedTypeCategories, includeStatusCounts =
 
     const selectBoostQuery = `select * from ${boostMainTable} ${whereClause} order by creation_time desc`;
     const values = hasTypeExclusions ? excludedTypeCategories : [];
+    logger('Assembled select query: ', selectBoostQuery);
+    logger('Values for query: ', values);
     const boostsResult = await rdsConnection.selectQuery(selectBoostQuery, values);
     logger('Retrieved boosts: ', boostsResult);
     

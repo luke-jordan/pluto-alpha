@@ -189,3 +189,51 @@ resource "aws_iam_policy" "lambda_invoke_boost_create_access" {
 }
 EOF
 }
+
+resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
+    name = "lambda_user_event_process_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AllowInvokeBoostProcess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.boost_event_process.arn}"
+            ]
+        },
+        {
+            "Sid": "AllowPublishDLQ",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.user_event_dlq.arn}"
+            ]
+        },
+        {
+            "Sid": "EmailSend",
+            "Effect": "Allow",
+            "Action": [
+                "ses:SendEmail"
+            ],
+            "Resource": "arn:aws:ses:us-east-1:455943420663:identity/jupitersave.com",
+            "Condition": {
+                "StringLike": {
+                    "ses:FromAddress": "noreply@jupitersave.com"
+                }
+            }
+        }
+    ]
+}
+EOF
+}

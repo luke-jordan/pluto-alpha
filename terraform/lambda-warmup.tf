@@ -92,7 +92,7 @@ resource "aws_cloudwatch_event_target" "trigger_ops_warmup_every_five_minutes" {
     arn = "${aws_lambda_function.ops_warmup.arn}"
 }
 
-resource "aws_lambda_permission" "allow_cloudwatch_to_call_auth_warmup" {
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_ops_warmup" {
     statement_id = "AllowOpsWarmupExecutionFromCloudWatch"
     action = "lambda:InvokeFunction"
     function_name = "${aws_lambda_function.ops_warmup.function_name}"

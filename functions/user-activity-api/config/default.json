@@ -41,7 +41,14 @@
     },
     "publishing": {
         "userEvents": {
-            "topicArn": "<<override here>>"
-        }
+            "topicArn": "<<override here>>",
+            "processingDlq": "<<insert_here>>"
+        },
+        "processingLambdas": {
+            "boosts": "boost_event_process"
+        },
+        "withdrawalEmailDestination": ["luke@jupitersave.com"],
+        "saveEmailDestination": ["luke@jupitersave.com"],
+        "eventsEmailAddress": "noreply@jupitersave.com"
     }
 }

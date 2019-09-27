@@ -5,7 +5,7 @@ const config = require('config');
 const moment = require('moment');
 
 const status = require('statuses');
-// const publisher = require('publish-common');
+const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
 
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
@@ -58,8 +58,8 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         }
 
         // then, make sure the user has saved in the past
-        const hasUserSaved = await persistence.hasPriorSave(accountId);
-        if (!hasUserSaved) {            
+        const priorUserSaves = await persistence.countSettledSaves(accountId);
+        if (priorUserSaves === 0) {            
             return invalidRequestResponse({ result: 'USER_HAS_NOT_SAVED' });
         }
 
@@ -157,7 +157,7 @@ module.exports.confirmWithdrawal = async (event) => {
 
         if (withdrawalInformation.userDecision === 'CANCEL') {
             // process the boost, and tell the user, then update the transaction
-            // await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
+            await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
             return { statusCode: 200 };
         }
 
@@ -169,7 +169,7 @@ module.exports.confirmWithdrawal = async (event) => {
 
         // then, return the balance
         const response = { balance: resultOfUpdate.newBalance };
-        // await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED');
+        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED');
 
         return { statusCode: 200, body: JSON.stringify(response) };
     } catch (err) {

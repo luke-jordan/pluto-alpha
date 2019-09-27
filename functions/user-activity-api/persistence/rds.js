@@ -27,7 +27,7 @@ module.exports.findMatchingTransaction = async (txDetails = {
     currency: 'ZAR',
     unit: 'HUNDREDTH_CENT',
     cutOffTime: moment() 
-}) => {
+}) => {    
     // note: we are doing this FIFO (to watch and decide)
     const searchQuery = 'select transaction_id from account_data.core_account_ledger where account_id = $1 and amount = $2 and ' + 
         'currency = $3 and unit = $4 and creation_time < to_timestamp($5) order by creation_time ascending';
@@ -38,11 +38,17 @@ module.exports.findMatchingTransaction = async (txDetails = {
     return resultOfQuery && resultOfQuery.length > 0 ? camelizeKeys(resultOfQuery[0]) : null;
 };
 
-module.exports.hasPriorSave = async (accountId) => {
-    const query = `select transaction_id from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
-        `transaction_type = $2 and settlement_status = $3 limit 1`;
+module.exports.fetchTransaction = async (transactionId) => {
+    const query = `select * from ${config.get('tables.accountTransactions')} where transaction_id = $1`;
+    const row = await rdsConnection.selectQuery(query, [transactionId]);
+    return row.length > 0 ? camelizeKeys(row[0]) : undefined;
+};
+
+module.exports.countSettledSaves = async (accountId) => {
+    const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+        `transaction_type = $2 and settlement_status = $3`;
     const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT', 'SETTLED']);
-    return resultOfQuery.length > 0;
+    return resultOfQuery[0]['count'];
 };
 
 module.exports.findClientAndFloatForAccount = async (accountId = 'some-account-uid') => {
@@ -170,6 +176,7 @@ const assembleAccountTxInsertion = (accountTxId, transactionDetails, floatTxIds)
 
 const assembleFloatTxInsertions = (accountTxId, transactionDetails, floatTxIds) => {
     const floatTxTable = config.get('tables.floatTransactions');
+    logger('Inserting with Ids: ', floatTxIds);
 
     // note: we do this as two matching transactions, a save or withdraw (which adds/subtracts the float itself) and then an
     // allocation (including negative allocation) of that amount
@@ -295,7 +302,7 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     const responseEntity = { };
 
     const accountTxTable = config.get('tables.accountTransactions');
-    const floatAdditionTxId = uuid();
+    const floatAdjustmentTxId = uuid();
     const floatAllocationTxId = uuid();
 
     const pendingTxResult = await rdsConnection.selectQuery(`select * from ${accountTxTable} where transaction_id = $1`, [transactionId]);
@@ -313,14 +320,14 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
         value: {
             settlementStatus: 'SETTLED',
             settlementTime: settlementTime.format(),
-            floatAdjustTxId: floatAdditionTxId,
+            floatAdjustTxId: floatAdjustmentTxId,
             floatAllocTxId: floatAllocationTxId,
             paymentReference: paymentDetails.paymentRef,
             paymentProvider: paymentDetails.paymentProvider
         },
         returnClause: 'transaction_id, updated_time'
     };
-    const floatQueryDef = assembleFloatTxInsertions(transactionId, saveDetails, { floatAdditionTxId, floatAllocationTxId });
+    const floatQueryDef = assembleFloatTxInsertions(transactionId, saveDetails, { floatAdjustmentTxId, floatAllocationTxId });
     logger('Assembled float query def: ', floatQueryDef);
 
     const updateAndInsertResult = await rdsConnection.multiTableUpdateAndInsert([updateQueryDef], [floatQueryDef]);

@@ -17,6 +17,7 @@ module.exports.listBoosts = async (event) => {
         }
 
         const params = util.extractQueryParams(event);
+        logger('Boost list params: ', params);
 
         const excludedTypeCategories = params.includeReferrals ? [] : ['REFERRAL::USER_CODE_USED'];
         const includeStatusCounts = typeof params.includeUserCounts === 'boolean' && params.includeStatusCounts;
