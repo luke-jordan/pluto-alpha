@@ -30,13 +30,8 @@ module.exports.insertPushToken = async (event) => {
 
         const params = msgUtil.extractEventBody(event);
         logger('Got event:', params);
-        // uncomment if needed. along with tests. 
-        // if (userDetails.systemWideUserId !== params.userId) {
-        //     return { statusCode: 403 };
-        // }
 
         const pushToken = await rdsMainUtil.getPushTokens([userDetails.systemWideUserId], params.provider);
-        logger('Got push token:', pushToken);
         if (typeof pushToken === 'object' && Object.keys(pushToken).length > 0) {
             const deletionResult = await rdsMainUtil.deletePushToken(params.provider, userDetails.systemWideUserId); // replace with new token?
             logger('Push token deletion resulted in:', deletionResult);
@@ -50,7 +45,7 @@ module.exports.insertPushToken = async (event) => {
 
         logger('Sending to RDS: ', persistablePushToken);
         const insertionResult = await rdsMainUtil.insertPushToken(persistablePushToken);
-        return { statusCode: 200, body: JSON.stringify(insertionResult[0]) };
+        return { statusCode: 200, body: JSON.stringify(insertionResult[0]) }; // wrap response?
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -115,7 +110,7 @@ const chunkAndSendMessages = async (messages) => {
             logger('Received chunk: ', ticketChunk);
             tickets.push(...ticketChunk);
         } catch (err) {
-            logger('Push error: ', )
+            logger('Push error: ', err)
         }
     }
 
@@ -190,7 +185,7 @@ const generateFromSpecificMsgs = async (params) => {
 
 module.exports.sendPushNotifications = async (params) => {
     try {
-        logger('Sending a notification to user IDs : ', params.systemWideUserIds);
+        logger('Sending a notification to user IDs : ', typeof params === 'object' && Reflect.has(params, 'systemWideUserIds') ? params.systemWideUserId : null);
    
         let result = {};
         if (typeof params === 'object' && Reflect.has(params, 'systemWideUserIds')) {

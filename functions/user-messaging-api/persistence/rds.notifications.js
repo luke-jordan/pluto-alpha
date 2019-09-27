@@ -192,7 +192,7 @@ module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses
 
     const updateResponse = await rdsConnection.multiTableUpdateAndInsert(messageUpdateDefs, []);
     logger('Result of update on batch of messages: ', updateResponse);
-    return updateResponse;
+    return updateResponse; // camelize?
 }
 
 /////////////////////////////////////////////////////////////////////////////////////////
@@ -285,7 +285,7 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         return assembleMatchEntityClauseValues(universeDefinition);
     }
 
-    throw new Error('Invalid selection method provided: ', selectionMethod);
+    throw new Error(`Invalid selection method provided: ${selectionMethod}`);
 };
 
 const extractUserIds = async (selectionClause) => {
@@ -399,15 +399,17 @@ module.exports.getPushTokens = async (userIds, provider) => {
     return result.reduce((obj, row) => ({ ...obj, [row['user_id']]: row['push_token']}), {});
 };
 
-module.exports.deactivatePushToken = async (provider, userId) => {
+module.exports.deactivatePushToken = async (provider, userId, valuesToUpdate) => {
     logger('About to update push token.');
-    const query = `update ${config.get('tables.pushTokenTable')} set active = false where push_provider = $1 and user_id = $2 returning insertion_id, update_time`;
-    const values = [provider, userId];
+    const table = config.get('tables.pushTokenTable');
+    const key = { userId, provider };
+    const value = valuesToUpdate;
+    const returnClause = 'insertion_time';
 
-    const response = await rdsConnection.updateRecord(query, values);
+    const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });
     logger('Push token deactivation resulted in:', response);
 
-    return response.rows.map((deactivationResult) => camelCaseKeys(deactivationResult));
+    return response.map((deactivationResult) => camelCaseKeys(deactivationResult));
 };
 
 module.exports.deletePushToken = async (provider, userId) => {
