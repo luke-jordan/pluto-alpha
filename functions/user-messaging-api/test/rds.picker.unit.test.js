@@ -24,11 +24,13 @@ const testUserId = uuid();
 // todo : alter update record in RDS module to use same pattern as multi
 const updateRecordStub = sinon.stub();
 const selectQueryStub = sinon.stub();
+const multiUpdateInsertStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
         this.selectQuery = selectQueryStub;
-        this.multiTableUpdateAndInsert = updateRecordStub;
+        this.updateRecord = updateRecordStub;
+        this.multiTableUpdateAndInsert = multiUpdateInsertStub;
     }
 }
 
@@ -37,7 +39,7 @@ const persistence = proxyquire('../persistence/rds.msgpicker', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(updateRecordStub, selectQueryStub);
+const resetStubs = () => testHelper.resetStubs(updateRecordStub, selectQueryStub, multiUpdateInsertStub);
 
 describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
@@ -98,6 +100,21 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING']);
     });
 
+    it('Finds pending push messages', async () => {
+        const expectedQuery = [
+            `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2`,
+            [ 'READY_FOR_SENDING', 'PUSH' ]
+        ];
+        selectQueryStub.withArgs(...expectedQuery).resolves([msgRawFromRds, msgRawFromRds]);
+
+        const result = await persistence.getPendingPushMessages();
+        logger('Result of pending messages extraction:', result);
+    
+        expect(result).to.exist;
+        expect(result).to.deep.equal([expectedTransformedMsg, expectedTransformedMsg])
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...expectedQuery);
+    });
+
     it('Retrieves user balance correctly', async () => {
         const expectedBalanceQuery = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
             `currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
@@ -142,15 +159,35 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
             value: { processedStatus: 'DISMISSED' }, 
             returnClause: 'message_id, updated_time' 
         };
-        updateRecordStub.resolves([{ 'message_id': testMsgId, 'updated_time': updatedTime.format() }]);
+        multiUpdateInsertStub.resolves([{ 'message_id': testMsgId, 'updated_time': updatedTime.format() }]);
         
         const resultOfUpdateQ = await persistence.updateUserMessage(testMsgId, { processedStatus: 'DISMISSED' });
         logger('Result of query: ', resultOfUpdateQ);
         
         expect(resultOfUpdateQ).to.exist;
         expect(resultOfUpdateQ).to.deep.equal({ messageId: testMsgId, updatedTime: moment(updatedTime.format()) });
-        expect(updateRecordStub).to.have.been.calledOnceWith([expectedUpdateDef], []);
+        expect(multiUpdateInsertStub).to.have.been.calledOnceWith([expectedUpdateDef], []);
     });
 
+    it('Handles batch status updates', async () => {
+        const mockMessageId = uuid();
+        const mockMessageIds = [mockMessageId, mockMessageId];
+
+        const expectedQuery = [
+            `update ${userMessageTable} set processed_status = $1 where message_id in ($2, $3)`,
+            [ 'DISMISSED', mockMessageId, mockMessageId ]
+        ];
+
+        updateRecordStub.withArgs(...expectedQuery).resolves([]);
+
+        const resultOfUpdate = await persistence.bulkUpdateStatus(mockMessageIds, 'DISMISSED');
+        logger('Result of batch update:', resultOfUpdate);
+    
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([]);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(...expectedQuery);
+
+
+    });
 
 });

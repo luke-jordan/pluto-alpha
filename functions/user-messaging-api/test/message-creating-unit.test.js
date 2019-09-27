@@ -296,7 +296,6 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         };
 
         getMessageInstructionStub.resolves(mockBoostInstruction);
-        getUserIdsStub/*.withArgs(mockBoostInstruction.selectionInstruction)*/.resolves(createMockUserIds(1));
         insertUserMessagesStub.resolves(expectedInsertionRows(1));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_CREATED').resolves({ updatedTime: mockUpdatedTime });
 
@@ -311,12 +310,10 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
         const result = await handler.createUserMessages(mockEvent);
         logger('result of boost message insertion:', result);
-        // logger('Got:', getUserIdsStub.getCall(0).args);
-        // logger('Expected:', mockBoostInstruction.selectionInstruction);
         
         commonAssertions(result[0], 'EVENT_DRIVEN', 1);
         expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-        // expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockBoostInstruction.selectionInstruction);
+        expect(getUserIdsStub).to.have.not.been.called;
         expect(insertUserMessagesStub).to.have.been.calledOnce;
         expect(updateInstructionStateStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'MESSAGES_CREATED');
 

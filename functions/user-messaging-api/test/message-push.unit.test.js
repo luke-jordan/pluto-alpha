@@ -13,259 +13,270 @@ const proxyquire = require('proxyquire').noCallThru();
 
 const testHelper = require('./message.test.helper');
 
-describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
+// config.picker.push.running = true; // todo: modify test order to run this test first
 
-    const commonAssertions = (statusCode, result, expectedResult) => {
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(200);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
-    };
+const sendPushNotificationsAsyncStub = sinon.stub();
+const chunkPushNotificationsStub = sinon.stub();
+const getPendingPushMessagesStub = sinon.stub();
+const bulkUpdateStatusStub = sinon.stub();
+const getPushTokenStub = sinon.stub();
+const insertPushTokenStub = sinon.stub();
+const deletePushTokenStub = sinon.stub();
+const assembleMessageStub = sinon.stub();
+
+class MockExpo {
+    constructor () {
+        this.chunkPushNotifications = expo.chunkPushNotifications;
+        this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub
+    }
+}
+
+const handler = proxyquire('../message-push-handler', {
+    './persistence/rds.notifications': {
+        'getPushTokens': getPushTokenStub,
+        'insertPushToken': insertPushTokenStub,
+        'deletePushToken': deletePushTokenStub
+    },
+    './persistence/rds.msgpicker': {
+        'getPendingPushMessages': getPendingPushMessagesStub,
+        'bulkUpdateStatus': bulkUpdateStatusStub
+    },
+    './message-picking-handler': {
+        'assembleMessage': assembleMessageStub
+    }
+});
+
+const resetStubs = () => testHelper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingPushMessagesStub,
+    bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub);
+
+describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
+    const mockCreationTime = moment().format();
 
     beforeEach(() => {
         resetStubs();
     });
 
-    it('should persist push token pair', async () => {
+    it('Inserts push token:', async () => {
         const mockUserId = uuid();
-        const mockPushToken = uuid();
-        const mockProvider = uuid();
-        const mockCreationTime = '2049-06-22T07:38:30.016Z';
-        const mockTokenObject = { userId: mockUserId, pushProvider: mockProvider, pushToken: mockPushToken };
-        getPushTokenStub.withArgs(mockProvider, mockUserId).resolves();
-        deletePushTokenStub.withArgs(mockProvider, mockUserId).resolves({
-            command: 'DELETE',
-            rowCount: 1,
-            oid: null,
-            rows: []
-        });
-        insertPushTokenStub.withArgs(mockTokenObject).resolves([ { insertionId: 1, creationTime: mockCreationTime }]);
+        const expectedProvider = uuid();
+        const expectedToken = uuid();
+        const persistedToken = uuid();
 
-        const expectedResult = { insertionId: 1, creationTime: mockCreationTime };
-        
-        const mockBody = {
-            userId: mockUserId,
-            provider: mockProvider,
-            token: mockPushToken
-        };
-
-        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
-
-        const result = await handler.insertPushToken(mockEvent);
-        logger('Result of push token persistence:', result);
-
-        commonAssertions(200, result, expectedResult);
-        expect(getPushTokenStub).to.has.been.calledOnceWithExactly(mockProvider, mockUserId);
-        expect(deletePushTokenStub).to.have.not.been.called;
-        expect(insertPushTokenStub).to.have.been.calledOnceWithExactly(mockTokenObject);
-    });
-    
-    it('should replace old push token if exists', async () => {
-        const mockUserId = uuid();
-        const mockPushToken = uuid();
-        const mockPersistedProvider = uuid();
-        const mockCreationTime = '2049-06-22T07:38:30.016Z';
-        const mockPersistableToken = { userId: mockUserId, pushProvider: mockPersistedProvider, pushToken: mockPushToken };
-        const mockPersistedToken = {
-            insertionId: 1,
-            creationTime: mockCreationTime,
-            userId: mockUserId,
-            pushProvider: mockPersistedProvider,
-            pushToken: mockPushToken,
-            active: true
-        };
-
-        getPushTokenStub.withArgs(mockPersistedProvider, mockUserId).resolves(mockPersistedToken);
-        deletePushTokenStub.withArgs(mockPersistedProvider, mockUserId).resolves({
-            command: 'DELETE',
-            rowCount: 1,
-            oid: null,
-            rows: []
-        });
-
-        insertPushTokenStub.withArgs(mockPersistableToken).resolves([ { insertionId: 1, creationTime: mockCreationTime }]);
-
-        const expectedResult = { insertionId: 1, creationTime: mockCreationTime };
-        
-        const mockBody = {
-            userId: mockUserId,
-            provider: mockPersistedProvider,
-            token: mockPushToken
-        };
-
-        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
-
-        const result = await handler.insertPushToken(mockEvent);
-        logger('Result of push token persistence:', result);
-
-        commonAssertions(200, result, expectedResult);
-        expect(getPushTokenStub).to.has.been.calledOnceWithExactly(mockPersistedProvider, mockUserId);
-        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(mockPersistedProvider, mockUserId);
-        expect(insertPushTokenStub).to.have.been.calledOnceWithExactly(mockPersistableToken);
-    });
-
-    it('should return error on missing request context', async () => {
-        const mockUserId = uuid();
-        const mockProvider = uuid();
-        const mockPushToken = uuid();
+        getPushTokenStub.resolves({ [mockUserId]: persistedToken });
+        deletePushTokenStub.resolves([]);
+        insertPushTokenStub.resolves([{ 'insertionId': 1, 'creationTime': mockCreationTime }])
 
         const mockEvent = {
-            userId: mockUserId,
-            provider: mockProvider,
-            token: mockPushToken
+            provider: expectedProvider,
+            token: expectedToken,
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
-        const expectedResult = { statusCode: 403 };
+        const resultOfInsertion = await handler.insertPushToken(mockEvent);
+        logger('Result of token insertion:', resultOfInsertion);
 
-        const result = await handler.insertPushToken(mockEvent);
-        logger('Result of push token insertion on missing request context:', result);
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion.statusCode).to.equal(200);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.deep.equal({ 'insertionId': 1, 'creationTime': mockCreationTime });
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId], expectedProvider);
+        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(expectedProvider, mockUserId);
+        expect(insertPushTokenStub).to.have.been.calledOnceWithExactly({ userId: mockUserId, pushProvider: expectedProvider, pushToken: expectedToken });
+    });
 
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
+    it('Fails on missing authorization', async () => {
+        const expectedProvider = uuid();
+        const expectedToken = uuid();
+        const mockEvent = { provider: expectedProvider, token: expectedToken };
+
+        const resultOfInsertion = await handler.insertPushToken(mockEvent);
+        logger('Result of unauthorized token insertion:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.deep.equal({ statusCode: 403 });
         expect(getPushTokenStub).to.have.not.been.called;
         expect(deletePushTokenStub).to.have.not.been.called;
         expect(insertPushTokenStub).to.have.not.been.called;
     });
 
-    // uncomment if needed. 
-    // it('should return error on user token insertion by different user', async () => {
-    //     const mockUserId = uuid();
-    //     const mockAlienUserId = uuid();
-    //     const mockProvider = uuid();
-    //     const mockPushToken = uuid();
-
-    //     const mockBody = {
-    //         userId: mockUserId,
-    //         provider: mockProvider,
-    //         token: mockPushToken
-    //     };
-
-    //     const mockEvent = testHelper.wrapEvent(mockBody, mockAlienUserId, 'ORDINARY_USER');
-
-    //     const expectedResult = { statusCode: 403 };
-
-    //     const result = await handler.insertPushToken(mockEvent);
-    //     logger('Result of push token insertion on missing request context:', result);
-
-    //     expect(result).to.exist;
-    //     expect(result).to.deep.equal(expectedResult);
-    //     expect(getPushTokenStub).to.have.not.been.called;
-    //     expect(deletePushTokenStub).to.have.not.been.called;
-    //     expect(insertPushTokenStub).to.have.not.been.called;
-    // });
-
-    it('should return error on push token persistence failure', async () => {
+    it('Catches thrown errors', async () => {
         const mockUserId = uuid();
-        const mockPushToken = uuid();
-        const mockProviderOnError = uuid();
-        getPushTokenStub.withArgs(mockProviderOnError, mockUserId).throws(new Error('A persistence derived error.'));
-       
-        const expectedResult = { result: 'ERROR', details: 'A persistence derived error.' };
+        const expectedProvider = uuid();
+        const expectedToken = uuid();
 
-        const mockBody = {
-            userId: mockUserId,
-            provider: mockProviderOnError,
-            token: mockPushToken
+        getPushTokenStub.throws(new Error('PersistenceError'));
+    
+        const mockEvent = {
+            provider: expectedProvider,
+            token: expectedToken,
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
-        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
+        const resultOfInsertion = await handler.insertPushToken(mockEvent);
+        logger('Result of token insertion:', resultOfInsertion);
 
-        const result = await handler.insertPushToken(mockEvent);
-        logger('Result of push token insertion on persistence failure:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
-        expect(getPushTokenStub).to.have.been.calledOnceWithExactly(mockProviderOnError, mockUserId);
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion.statusCode).to.equal(500);
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion.body).to.deep.equal(JSON.stringify('PersistenceError'));
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId], expectedProvider);
         expect(deletePushTokenStub).to.have.not.been.called;
         expect(insertPushTokenStub).to.have.not.been.called;
     });
 });
 
-describe('*** UNIT TESTING DELETE PUSH TOKEN HANDLER ***', () => {
-    const mockUserId = uuid();
-    const mockUserIdOnError = uuid();
-    const mockAlienUserId = uuid();
-    const mockProvider = uuid();
+
+describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
 
     beforeEach(() => {
         resetStubs();
     });
 
-    it('should delete persisted push token', async () => {
-        const mockBody = {
-            provider: mockProvider,
-            userId: mockUserId
-        };
-    
-        deletePushTokenStub.withArgs(mockProvider, mockUserId).resolves([]);
 
-        const mockEvent = testHelper.wrapEvent(mockBody, mockUserId, 'ORDINARY_USER');
-        const expectedResult = { result: 'SUCCESS', details: [] };
+    it('Deletes push token', async () => {
+        const mockUserId = uuid();
+        const expectedProvider = uuid();
+        deletePushTokenStub.resolves([]);
 
-        const result = await handler.deletePushToken(mockEvent);
-        logger('Result of push token deletion:', result);
-
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(200);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
-        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(mockProvider, mockUserId);
-    });
-
-    it('should return an error missing request context', async () => {
         const mockEvent = {
-            provider: mockProvider,
-            userId: mockUserId
+            provider: expectedProvider,
+            userId: mockUserId,
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
-        const expectedResult = { statusCode: 403 };
+        const resultOfDeletion = await handler.deletePushToken(mockEvent);
+        logger('Result of token deletion:', resultOfDeletion);
 
-        const result = await handler.deletePushToken(mockEvent);
-        logger('Result of push token deletion on missing request context:', result);
+        expect(resultOfDeletion).to.exist;
+        expect(resultOfDeletion.statusCode).to.equal(200);
+        expect(resultOfDeletion.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS', details: [] }));
+        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(expectedProvider, mockUserId);
+    });
 
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
+    it('Fails on missing authorization', async () => {
+        const mockUserId = uuid();
+        const expectedProvider = uuid();
+        const mockEvent = { provider: expectedProvider, userId: mockUserId };
+
+        deletePushTokenStub.resolves([]);
+
+        const resultOfDeletion = await handler.deletePushToken(mockEvent);
+        logger('Result of unauthorized token deletion:', resultOfDeletion);
+
+        expect(resultOfDeletion).to.exist;
+        expect(resultOfDeletion).to.deep.equal({ statusCode: 403 });
         expect(deletePushTokenStub).to.have.not.been.called;
     });
 
-    it('should return error when called by different user other that push token owner', async () => {
-        const mockBody = {
-            provider: mockProvider,
-            userId: mockUserId
+    it('Fails on authorization-event user mismatch', async () => {
+        const mockUserId = uuid();
+        const expectedProvider = uuid();
+        deletePushTokenStub.resolves([]);
+
+        const mockEvent = {
+            provider: expectedProvider,
+            userId: uuid(),
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
-        const mockEvent = testHelper.wrapEvent(mockBody, mockAlienUserId, 'ORDINARY');
-        const expectedResult = { statusCode: 403 };
+        const resultOfDeletion = await handler.deletePushToken(mockEvent);
+        logger('Result of token deletion:', resultOfDeletion);
 
-        const result = await handler.deletePushToken(mockEvent);
-        logger('Result of user push token deletion by different user:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
+        expect(resultOfDeletion).to.exist;
+        expect(resultOfDeletion).to.deep.equal({ statusCode: 403 });
         expect(deletePushTokenStub).to.have.not.been.called;
     });
 
-    it('should return error on general process failure', async () => {
-        const mockBody = {
-            provider: mockProvider,
-            userId: mockUserIdOnError
+    it('Catches thrown errors', async () => {
+        const mockUserId = uuid();
+        const expectedProvider = uuid();
+        deletePushTokenStub.throws(new Error('PersistenceError'));
+
+        const mockEvent = {
+            provider: expectedProvider,
+            userId: mockUserId,
+            requestContext: testHelper.requestContext(mockUserId)
         };
 
-        deletePushTokenStub.withArgs(mockProvider, mockUserIdOnError).throws(new Error('Persistence error'));
-        const mockEvent = testHelper.wrapEvent(mockBody, mockUserIdOnError, 'ORDINARY_USER');
+        const resultOfDeletion = await handler.deletePushToken(mockEvent);
+        logger('Result of token deletion:', resultOfDeletion);
 
-        const expectedResult = { result: 'ERROR', details: 'Persistence error' };
+        expect(resultOfDeletion).to.exist;
+        expect(resultOfDeletion.statusCode).to.equal(500);
+        expect(resultOfDeletion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfDeletion.body).to.deep.equal(JSON.stringify('PersistenceError'));
+        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(expectedProvider, mockUserId);
+    });
+});
 
-        const result = await handler.deletePushToken(mockEvent);
-        logger('Result of push token deletion on general process failure:', result);
+describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
+    const mockUserId = uuid();
+    const persistedToken = uuid();
+    const testMsgId = uuid();
+
+    const minimalMessage = { messageId: testMsgId, destinationUserId: mockUserId };
+
+    beforeEach(() => {
+        resetStubs();
+    })
+
+    it('Sends push notifications', async () => {
+        getPushTokenStub.resolves({ [mockUserId]: persistedToken });
+
+        const mockParams = {
+            systemWideUserIds: [ mockUserId, mockUserId ],
+            title: 'TEST_TITLE',
+            body: 'TEST_BODY'
+        };
+
+        const result = await handler.sendPushNotifications(mockParams);
+        logger('Result of push notification sending:', result);
 
         expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(500);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
-        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(mockProvider, mockUserIdOnError);
+        expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 2 });
     });
+
+    // todo: chunking, expected stub args
+    it('Sends pending messages where no user ids are provided', async () => {
+        getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
+        bulkUpdateStatusStub.resolves([]);
+        getPushTokenStub.resolves({ [mockUserId]: persistedToken });
+
+        const result = await handler.sendPushNotifications();
+        logger('Result of push notification sending:', result);  
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 2 });
+        expect(getPendingPushMessagesStub).to.have.been.calledOnce;
+        expect(getPushTokenStub).to.have.been.calledOnce;
+        expect(bulkUpdateStatusStub).to.have.been.calledTwice;
+    });
+    
+    it('Fails on push token extraction failure', async () => {
+        getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
+        bulkUpdateStatusStub.resolves([]);
+        getPushTokenStub.throws(new Error('PersistenceError'));
+
+        const result = await handler.sendPushNotifications();
+        logger('Result of push notification sending:', result); 
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ result: 'ERROR', message: 'PersistenceError' });
+        expect(getPendingPushMessagesStub).to.have.been.calledOnce;
+        expect(getPushTokenStub).to.have.been.calledOnce;
+    });
+
+    it('Catches thrown errors', async () => {
+        getPendingPushMessagesStub.throws(new Error('PersistenceError'));
+
+        const result = await handler.sendPushNotifications();
+        logger('Result of push notification sending:', result);
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ result: 'ERR', message: 'PersistenceError' });
+        expect(getPendingPushMessagesStub).to.have.been.calledOnce;
+        expect(bulkUpdateStatusStub).to.have.not.been.called;
+        expect(getPushTokenStub).to.have.not.been.called;
+    });
+
 });
