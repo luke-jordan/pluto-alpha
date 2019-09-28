@@ -30,6 +30,10 @@ resource "aws_lambda_function" "user_event_process" {
                 "database": "${var.db_name}",
                 "port" :"${aws_db_instance.rds[0].port}"
               },
+              "cache": {
+                "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+                "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+              },
               "secrets": {
                 "enabled": true,
                 "names": {
@@ -44,6 +48,10 @@ resource "aws_lambda_function" "user_event_process" {
                 "processingLambdas": {
                   "boosts": "${aws_lambda_function.boost_event_process.function_name}"
                 }
+              },
+              "templates": {
+                "bucket": "${terraform.workspace}.jupiter.templates",
+                "withdrawal": "emails/withdrawalEmail.html"
               }
           }
       )}"
@@ -51,7 +59,8 @@ resource "aws_lambda_function" "user_event_process" {
   }
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, 
+      aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
   }
 
   depends_on = [aws_cloudwatch_log_group.user_event_process]

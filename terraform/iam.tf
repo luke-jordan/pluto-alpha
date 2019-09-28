@@ -232,6 +232,14 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
                     "ses:FromAddress": "noreply@jupitersave.com"
                 }
             }
+        },
+        {
+            "Sid": "EmailTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
         }
     ]
 }

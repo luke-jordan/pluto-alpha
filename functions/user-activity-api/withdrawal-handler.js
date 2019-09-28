@@ -8,6 +8,9 @@ const status = require('statuses');
 const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
 
+const Redis = require('ioredis');
+const redis = new Redis({ port: config.get('cache.port'), host: config.get('cache.host') });
+
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
 
 const handleError = (err) => { 
@@ -34,7 +37,12 @@ const UNIT_MULTIPLIERS = {
     }
 };
 
-// note: we are going to need a cache here, since we do not want to persist the bank account details
+// note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
+const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails) => {
+    const key = `${systemWideUserId}::BANK_DETAILS`;
+    await redis.set(key, JSON.stringify(bankAccountDetails), 'EX', 900); // i.e., for fifteen minutes
+    logger('Done! Can move along');
+};
 
 /**
  * Initiates a withdrawal by setting the bank account for it, which gets verified, and then we go from there
@@ -63,10 +71,12 @@ module.exports.setWithdrawalBankAccount = async (event) => {
             return invalidRequestResponse({ result: 'USER_HAS_NOT_SAVED' });
         }
 
-        // then, get the balance available
+        // then, get the balance available, and also store the account details
         const currency = await persistence.findMostCommonCurrency(accountId);
         logger('Most common currency: ', currency);
         const availableBalance = await persistence.sumAccountBalance(withdrawalInformation.accountId, currency);
+
+        await cacheBankAccountDetails(authParams.systemWideUserId, withdrawalInformation.bankDetails);
 
         const responseObject = {
             availableBalance,
@@ -155,6 +165,7 @@ module.exports.confirmWithdrawal = async (event) => {
             return invalidRequestResponse('Requires a valid user decision');
         }
 
+        const transactionId = withdrawalInformation.transactionId;
         if (withdrawalInformation.userDecision === 'CANCEL') {
             // process the boost, and tell the user, then update the transaction
             await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
@@ -162,14 +173,20 @@ module.exports.confirmWithdrawal = async (event) => {
         }
 
         // user wants to go through with it, so (1) send an email about it, (2) update the transaction, (3) update 3rd-party
-        const resultOfUpdate = await persistence.updateTxToSettled({
-            transactionId: withdrawalInformation.transactionId,
-            settlementTime: moment()
-        });
+        const resultOfUpdate = await persistence.updateTxToSettled({ transactionId, settlementTime: moment() });
 
         // then, return the balance
         const response = { balance: resultOfUpdate.newBalance };
-        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED');
+        
+        // last, publish this (i.e., so instruction goes out)
+        const txProperties = await persistence.fetchTransaction(transactionId);
+        const context = {
+            transactionId,
+            accountId: txProperties.accountId,
+            timeInMillis: txProperties.settlementTime,
+            withdrawalAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`
+        };
+        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
 
         return { statusCode: 200, body: JSON.stringify(response) };
     } catch (err) {

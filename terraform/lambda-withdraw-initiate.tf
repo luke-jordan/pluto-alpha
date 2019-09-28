@@ -35,7 +35,11 @@ resource "aws_lambda_function" "withdraw_initiate" {
                 "database": "${var.db_name}",
                 "port" :"${aws_db_instance.rds[0].port}"
               },
-            "secrets": {
+              "cache": {
+                "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+                "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+              },
+              "secrets": {
                 "enabled": true,
                 "names": {
                     "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
@@ -52,7 +56,8 @@ resource "aws_lambda_function" "withdraw_initiate" {
   }
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id,
+      aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
   }
 
   depends_on = [aws_cloudwatch_log_group.withdraw_initiate]

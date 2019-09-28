@@ -48,7 +48,13 @@ module.exports.countSettledSaves = async (accountId) => {
     const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
         `transaction_type = $2 and settlement_status = $3`;
     const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT', 'SETTLED']);
-    return resultOfQuery[0]['count'];
+    logger('Result of count : ', resultOfQuery);
+
+    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
+        return 0;
+    }
+
+    return parseInt(resultOfQuery[0]['count'], 10);
 };
 
 module.exports.findClientAndFloatForAccount = async (accountId = 'some-account-uid') => {

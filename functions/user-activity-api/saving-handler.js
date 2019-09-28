@@ -184,12 +184,14 @@ const handlePaymentFailure = (failureType) => {
 const publishSaveSucceeded = async (systemWideUserId, transactionId) =>{
   const txDetails = await persistence.fetchTransaction(transactionId);
   const count = await persistence.countSettledSaves(txDetails.accountId);
+  logger(`For account ${txDetails.accountId}, how many prior saves? : ${count}`);
 
   const context = {
     transactionId,
     accountId: txDetails.accountId,
     timeInMillis: txDetails.settlementTime,
     firstSave: count === 1,
+    saveCount: count,
     savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`
   };
 

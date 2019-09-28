@@ -13,6 +13,9 @@
         "password": "pwd_for_transaction_api",
         "port" :"5430"
     },
+    "cache": {
+        "port": 6739
+    },
     "aws": {
         "endpoints": {
             "dynamodb": "http://localhost:4569"
@@ -49,6 +52,11 @@
         },
         "withdrawalEmailDestination": ["luke@jupitersave.com"],
         "saveEmailDestination": ["luke@jupitersave.com"],
-        "eventsEmailAddress": "noreply@jupitersave.com"
+        "eventsEmailAddress": "noreply@jupitersave.com",
+        "adminSiteUrl": "https://localhost:3000"
+    },
+    "templates": {
+        "bucket": "staging.jupiter.templates",
+        "saveEmail": "emails/savingEventEmail.html"
     }
 }
