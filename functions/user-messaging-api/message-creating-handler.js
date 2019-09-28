@@ -151,14 +151,14 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
     }
     
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
-    if (!rows || rows.length === 0) {
-        logger('No user messages generated, exiting');
-        return { instructionId, result: 'NO_USERS' };
-    }
+    // if (!rows || rows.length === 0) {
+    //     logger('No user messages generated, exiting');
+    //     return { instructionId, result: 'NO_USERS' };
+    // }
 
     const rowKeys = Object.keys(rows[0]);
     return rdsUtil.insertUserMessages(rows, rowKeys);
-}
+};
 
 /**
  * This function accepts an instruction id, retrieves the associated instruction from persistence, assembles the user message, and finally
@@ -178,7 +178,7 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     logger(`Retrieved ${userIds.length} user id(s) for instruction`);
     
     const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
-    if (!Array.isArray(insertionResponse)) {
+    if (!Array.isArray(insertionResponse) || insertionResponse.length === 0) {
         return { instructionId, insertionResponse };
     }
     
@@ -195,7 +195,7 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     };
 
     return handlerResponse;
-}
+};
 
 // a wrapper for simple instruction processing, although can handle multiple at once
 // note: this is only called for once off or event driven messages )i.e., invokes the above)
@@ -226,7 +226,7 @@ const generateRecurringMessages = async (recurringInstruction) => {
     
     const userIds = await rdsUtil.getUserIds(recurringInstruction.selectionInstruction);
     const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
-    
+   
     const userMessages = await createAndStoreMsgsForUserIds(usersForMessages, recurringInstruction);
     if (!Array.isArray(userMessages) || userMessages.length === 0) {
         return { instructionId, userMessages };
@@ -257,7 +257,7 @@ module.exports.createFromPendingInstructions = async () => {
         // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
         // include within a fail-safe check that once-off messages are not regenerated when they already exist (simple count should do)
         const unprocessedOnceOffsReady = await rdsUtil.getInstructionsByType('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
-        const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructionId: instruction.instructionId }));
+        const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructions: [{ instructionId: instruction.instructionId }]}));
         
         // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next
         // which implies: first get the recurring instructions, then expire old messages, then add new to the queue; okay.
@@ -287,36 +287,35 @@ module.exports.createFromPendingInstructions = async () => {
  * After running this function, the user should be able to recieve system wide recurring messages like everyone else.
  * @param {string} systemWideUserId The users system wide id.
  */
-module.exports.syncUserMessages = async (event) => {
-    try {
-        const params = msgUtil.extractEventBody(event);
-        const systemWideUserId = params.systemWideUserId; // validation
-        logger('Got user id:', systemWideUserId);
-        const instructions = await rdsUtil.getInstructionsByType('RECURRING', ['ALL_USERS']);
-        logger('Got instructions:', instructions);
-        let rows = [];
-        for (let i = 0; i < instructions.length; i++) {
-            instructions[i].requestDetails = params;
-            const result = await assembleUserMessages(instructions[i], systemWideUserId);
-            rows = [...rows, ...result];
-        }
-        logger('Assembled user messages:', rows);
-        const rowKeys = Object.keys(rows[0]);
-        logger('Got keys:', rowKeys);
-        const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
-        logger('User messages insertion resulted in:', insertionResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: insertionResponse
-            })
-        };
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return {
-            statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
-    }
-};
-
+// module.exports.syncUserMessages = async (event) => {
+//     try {
+//         const params = msgUtil.extractEventBody(event);
+//         const systemWideUserId = params.systemWideUserId; // validation
+//         logger('Got user id:', systemWideUserId);
+//         const instructions = await rdsUtil.getInstructionsByType('RECURRING', ['ALL_USERS']);
+//         logger('Got instructions:', instructions);
+//         let rows = [];
+//         for (let i = 0; i < instructions.length; i++) {
+//             instructions[i].requestDetails = params;
+//             const result = await assembleUserMessages(instructions[i], systemWideUserId);
+//             rows = [...rows, ...result];
+//         }
+//         logger('Assembled user messages:', rows);
+//         const rowKeys = Object.keys(rows[0]);
+//         logger('Got keys:', rowKeys);
+//         const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
+//         logger('User messages insertion resulted in:', insertionResponse);
+//         return {
+//             statusCode: 200,
+//             body: JSON.stringify({
+//                 message: insertionResponse
+//             })
+//         };
+//     } catch (err) {
+//         logger('FATAL_ERROR:', err);
+//         return {
+//             statusCode: 500,
+//             body: JSON.stringify({ message: err.message })
+//         };
+//     }
+// };

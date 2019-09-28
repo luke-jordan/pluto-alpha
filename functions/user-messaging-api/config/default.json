@@ -41,7 +41,7 @@
             "dateFormat": "MMMM YYYY"
         },
         "push": {
-            "running": false
+            "running": true
         }
     },
     "security": {

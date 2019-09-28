@@ -12,7 +12,6 @@ const msgUtil = require('./msg.util');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
 
-const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 
 /**
  * Enforces instruction rules and ensures the message instruction is valid before it is persisted.
@@ -121,7 +120,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
         return { result: 'FIRED_INSTRUCT' };
     };
 
-    return { result: 'INSTRUCT_STORED '};
+    return { result: 'INSTRUCT_STORED' };
 
 };
 
@@ -142,7 +141,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
  * to keep the two identifiers distinct here: one, embedded within the template, is an identifier within the sequence of messages, the other,
  * at top level, identifies across variants.
  * 
- * @param {string} instructionId The instruction unique id, useful in persistence operations.
+ * @param {string} instructionId The instructions unique id, useful in persistence operations.
  * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
@@ -165,7 +164,7 @@ module.exports.insertMessageInstruction = async (event) => {
             return msgUtil.wrapHttpResponse({}, 403);
         }
 
-        const params = extractEventBody(event);
+        const params = msgUtil.extractEventBody(event);
         const creatingUserId = userDetails.systemWideUserId;
 
         const instructionEvalResult = exports.validateMessageInstruction(params);
@@ -200,7 +199,7 @@ module.exports.updateInstruction = async (event) => {
             return msgUtil.unauthorizedResponse;
         }
 
-        const params = extractEventBody(event);
+        const params = msgUtil.extractEventBody(event);
         const instructionId = params.instructionId;
         const updateValues = params.updateValues;
         const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, updateValues);
@@ -222,7 +221,7 @@ module.exports.updateInstruction = async (event) => {
 module.exports.getMessageInstruction = async (event) => {
     try {
         logger('instruction retreiver recieved:', event);
-        const params = extractEventBody(event); // extract event from query params
+        const params = msgUtil.extractEventBody(event);
         const instructionId = params.instructionId;
         const databaseResponse = await rdsUtil.getMessageInstruction(instructionId);
         logger('Result of message instruction extraction:', databaseResponse);
