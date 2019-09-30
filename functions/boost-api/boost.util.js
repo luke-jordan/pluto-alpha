@@ -1,7 +1,7 @@
 'use strict';
 
 const config = require('config');
-const logger = require('debug')('jupiter:message:util');
+// const logger = require('debug')('jupiter:message:util');
 
 const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
 const corsHeaders = {

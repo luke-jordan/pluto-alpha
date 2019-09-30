@@ -229,8 +229,8 @@ const determineAnchorMsg = (openingMessages) => {
 };
 
 module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowFromMsgId = null) => {
-    logger('Initiating message retrieval');
-    const retrievedMessages = await persistence.getNextMessage(destinationUserId);
+    logger('Initiating message retrieval, excluding push notifications');
+    const retrievedMessages = await persistence.getNextMessage(destinationUserId, true);
     // first, check it's not empty. if so, return empty.
     if (!Array.isArray(retrievedMessages) || retrievedMessages.length === 0) {
         return [];

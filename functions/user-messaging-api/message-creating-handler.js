@@ -183,7 +183,7 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     }
     
     // todo : check if there is only the one user
-    const updateInstructionResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_CREATED');
+    const updateInstructionResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_GENERATED');
     logger('Update result: ', updateInstructionResult);
     
     const handlerResponse = {
@@ -232,8 +232,8 @@ const generateRecurringMessages = async (recurringInstruction) => {
         return { instructionId, userMessages };
     }
 
-    if (recurringInstruction.processedStatus !== 'MESSAGES_CREATED') {
-        const updateStatusResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_CREATED');
+    if (recurringInstruction.processedStatus !== 'MESSAGES_GENERATED') {
+        const updateStatusResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_GENERATED');
         logger('Result of updating status: ', updateStatusResult);
     }
 
@@ -257,6 +257,7 @@ module.exports.createFromPendingInstructions = async () => {
         // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
         // include within a fail-safe check that once-off messages are not regenerated when they already exist (simple count should do)
         const unprocessedOnceOffsReady = await rdsUtil.getInstructionsByType('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
+        
         const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructions: [{ instructionId: instruction.instructionId }]}));
         
         // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next

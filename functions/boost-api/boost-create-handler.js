@@ -6,13 +6,13 @@ const moment = require('moment');
 const status = require('statuses');
 const stringify = require('json-stable-stringify');
 
+const util = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
 
 const ALLOWABLE_ORDINARY_USER = ['REFERRAL::USER_CODE_USED'];
 const STANDARD_GAME_ACTIONS = {
@@ -59,63 +59,7 @@ const extractStatusConditions = (gameParams) => {
     return statusConditions;
 };
 
-// this creates an instruction that has these 
-const constructMsgInstructionPayload = (messageDefinitions, boostParams, gameParams) => {
-    const msgPayload = {};
-    
-    msgPayload.audienceType = boostParams.audienceType;
-    msgPayload.presentationType = 'EVENT_DRIVEN'; // constant
-    msgPayload.selectionInstruction = `match_other from #{entityType: 'boost', entityId: ${boostParams.boostId}}`;
-
-    const actionContext = { 
-        boostId: boostParams.boostId,
-        sequenceExpiryTimeMillis: boostParams.boostEndTime.valueOf(),
-        gameParams: gameParams
-    };
-
-    const messageTemplates = Object.keys(messageDefinitions).map((key) => {
-        const msgTemplate = messageDefinitions[key];
-        msgTemplate.actionToTake = msgTemplate.actionToTake || obtainStdAction(key);
-        msgTemplate.actionContext = actionContext;
-        return { 'DEFAULT': msgTemplate, identifier: key }
-    });
-
-    msgPayload.templates = { 
-        sequence: messageTemplates 
-    };
-
-    return msgPayload;
-};
-
-// Wrapper method for API gateway, for later
-module.exports.createBoostWrapper = async (event) => {
-    try {
-        const userDetails = extractUserDetails(event);
-        logger('Event: ', event);
-        logger('User details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: status('Forbidden') };
-        }
-
-        const params = extractEventBody(event);
-        params.creatingUserId = userDetails.systemWideUserId;
-
-        const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
-        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) === -1) {
-            return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
-        }
-
-        const resultOfCall = await exports.createBoost(params);
-        return {
-            statusCode: status('Ok'),
-            body: JSON.stringify(resultOfCall)
-        };    
-    } catch (err) {
-        return handleError(err);
-    }
-};
-
-// const find default message instruction
+// finds and uses existing message templates based on provided flags
 const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
     logger('Alright, got some message flags, we can go find the instructions, from: ', messageInstructionFlags);
     
@@ -141,13 +85,89 @@ const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
 };
 
 /**
+ * Assembles instruction payloads from messages created by admin user while they create the boost.
+ * This depends on a message definition of the form:
+ * { presentationType, isMessageSequence, msgTemplates }
+ * msgTemplates must be a dict with keys as boost statuses and objects a standard message template (see messages docs for format)
+ * @param {*} boostParams 
+ * @param {*} messageDefinition 
+ * @param {*} gameParams 
+ */
+const createMsgInstructionFromDefinition = (messageDefinition, boostParams, gameParams) => {
+    // first, assemble the basic parameters. note: boost status is not used 
+    logger('Assembling message instruction from: ', messageDefinition);
+
+    const msgPayload = {
+        creatingUserId: boostParams.creatingUserId,
+        boostStatus: messageDefinition.boostStatus,
+        presentationType: messageDefinition.presentationType,
+        audienceType: boostParams.audienceType,
+        endTime: boostParams.boostEndTime.format(),
+        selectionInstruction: `match_other from #{{"entityType": "boost", "entityId": "${boostParams.boostId}"}}`
+    };
+    logger('Base of message payload: ', msgPayload);
+        
+    // then, if the message defines a sequence, assemble those templates together
+    if (messageDefinition.isMessageSequence) {
+        const actionContext = {
+            boostId: boostParams.boostId,
+            sequenceExpiryTimeMillis: boostParams.boostEndTime.valueOf(),
+            gameParams
+        };
+
+        // message definitions are templated by boost status
+        const msgTemplates = messageDefinition.templates;
+        const sequenceOfMessages = Object.keys(msgTemplates).map((boostStatus) => {
+            const msgTemplate = msgTemplates[boostStatus];
+            msgTemplate.actionToTake = msgTemplate.actionToTake || obtainStdAction(boostStatus);
+            msgTemplate.actionContext = actionContext;
+            return { 'DEFAULT': msgTemplate, identifier: boostStatus }
+        });
+
+        msgPayload.templates = { 
+            sequence: sequenceOfMessages
+        };
+    
+    // if it's not a sequence, just put the template in the expected order
+    } else {
+        const template = messageDefinition.template;
+        template.actionContext = { ...template.actionContext, boostId: boostParams.boostId };
+        msgPayload.actionToTake = template.actionToTake;
+        msgPayload.templates = { template: { 'DEFAULT': template }};
+    }
+
+    return msgPayload;
+};
+
+const assembleMsgLamdbaInvocation = async (msgPayload) => {
+    const messageInstructInvocation = {
+        FunctionName: config.get('lambdas.messageInstruct'),
+        InvocationType: 'RequestResponse',
+        Payload: stringify(msgPayload) 
+    };
+
+    const resultOfMsgCreation = await lambda.invoke(messageInstructInvocation).promise();
+    logger('Result of message invocation: ', resultOfMsgCreation);
+
+    const resultPayload = JSON.parse(resultOfMsgCreation.Payload);
+    const resultBody = JSON.parse(resultPayload.body);
+    logger('Result body on invocation: ', resultBody);
+
+    return { accountId: 'ALL', status: msgPayload.boostStatus, msgInstructionId: resultBody.message.instructionId }
+};
+
+/**
  * The primary method here. Creates a boost and sets various other methods into action
  * Note, there are three ways boosts can have their messages assigned:
- * (1) Include an explicit set of redemption message instructions
- * (2) Include a set of message instruction flags (i.e., ways to find defaults), as a dict with top-level key being the status
- * (3) Include the message definitions in messages to create
+ * (1) Include an explicit set of redemption message instructions ('redemptionMsgInstructions')
+ * (2) Include a set of message instruction flags (i.e., ways to find defaults), as a dict with top-level key being the status ('messageInstructionFlags')
+ * (3) Include the message definitions in messages to create ('messagesToCreate')
  * 
- * Note that if multiple are passed, (3) will override the others (as it is called last)
+ * Note (1): There is a distinction between (i) a message that is presented in a linked sequence, as in a game, and (ii) multiple messages
+ * that are independent of each other, e.g., a push notification and an in-app card. The first case comes in a single message definition
+ * because the messages must be sent to the app together; the second comes in multiple definitions.
+ * 
+ * Note (2): If multiple of the types above are passed, (3) will override the others (as it is called last)
  * Also note that if none are provided the boost will have no message and just hang in the ether
  */
 module.exports.createBoost = async (event) => {
@@ -157,7 +177,7 @@ module.exports.createBoost = async (event) => {
     }
 
     const params = event;
-    logger('Received boost instruction event: ', params);
+    // logger('Received boost instruction event: ', params);
 
     // todo : extensive validation
     const boostType = params.boostTypeCategory.split('::')[0];
@@ -221,30 +241,58 @@ module.exports.createBoost = async (event) => {
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
 
-    if (params.messagesToCreate) {
-        const boostParams = { boostId: persistedBoost.boostId, audienceType: params.boostAudience, boostEndTime };
-        const messagePayload = constructMsgInstructionPayload(params.messagesToCreate, boostParams, params.gameParams);
-        const messageInstructInvocation = {
-            FunctionName: config.get('lambdas.messageInstruct'),
-            InvocationType: 'RequestResponse',
-            Payload: stringify(messagePayload) 
+    if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
+        const boostParams = { 
+            boostId: persistedBoost.boostId,
+            creatingUserId: instructionToRds.creatingUserId, 
+            audienceType: params.boostAudience, 
+            boostEndTime
         };
-        if (!params.onlyRdsCalls) {
-            const resultOfMsgCreation = await lambda.invoke(messageInstructInvocation).promise();
-            logger('Result of message instruct invocation: ', resultOfMsgCreation);
-            // todo : handle errors
-            const resultPayload = JSON.parse(resultOfMsgCreation.Payload);
-            const resultBody = JSON.parse(resultPayload.body);
-            const messageInstructionIds = { instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: resultBody[0].instructionId }] };
-            const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
-            logger('And result of update: ', updatedBoost);
-            persistedBoost.messageInstructions = messageInstructionIds.instructions;
-        } else {
-            logger('Would send to Lambda: ', JSON.stringify(messagePayload));
-        }
+
+        const messagePayloads = params.messagesToCreate.map((msg) =>  createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
+        logger('Assembled message payloads: ', messagePayloads);
+
+        const messageInvocations = messagePayloads.map((payload) => assembleMsgLamdbaInvocation(payload));
+        logger(`About to fire off ${messageInvocations.length} invocations ...`);
+        
+        // todo : handle errors
+        const messageInstructionResults = await Promise.all(messageInvocations);
+        logger('Result of message instruct invocation: ', messageInstructionResults);
+                
+        const messageInstructionIds = { instructions: messageInstructionResults };
+        const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
+        logger('And result of update: ', updatedBoost);
+        persistedBoost.messageInstructions = messageInstructionIds.instructions;
     };
 
     return persistedBoost;
 
 };
 
+// Wrapper method for API gateway, handling authorization via the header, extracting body, etc. 
+module.exports.createBoostWrapper = async (event) => {
+    try {
+        const userDetails = util.extractUserDetails(event);
+
+        // logger('Boost create event: ', event);
+        if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
+            return { statusCode: status('Forbidden') };
+        }
+
+        const params = extractEventBody(event);
+        params.creatingUserId = userDetails.systemWideUserId;
+
+        const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
+        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) === -1) {
+            return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
+        }
+
+        const resultOfCall = await exports.createBoost(params);
+        return {
+            statusCode: status('Ok'),
+            body: JSON.stringify(resultOfCall)
+        };    
+    } catch (err) {
+        return handleError(err);
+    }
+};

@@ -44,11 +44,18 @@ const transformMsg = (msgRawFromRds) => {
         reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
 };
 
-// todo : decide whether to exclude push notifications here
-module.exports.getNextMessage = async (destinationUserId) => {
-    const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status = $2 ` + 
-        `and end_time > current_timestamp and deliveries_done < deliveries_max`;
+module.exports.getNextMessage = async (destinationUserId, excludePushNotifications = true) => {
     const values = [destinationUserId, 'READY_FOR_SENDING'];
+    
+    let pushSuffix = '';
+    if (excludePushNotifications) {
+        pushSuffix = `and display ->> 'type' != $3`;
+        values.push('PUSH');
+    }
+
+    const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status = $2 ` + 
+        `and end_time > current_timestamp and deliveries_done < deliveries_max ${pushSuffix}`;
+    
     const result = await rdsConnection.selectQuery(query, values);
     logger('Retrieved next message from RDS: ', result);
     return result.map((msg) => transformMsg(msg));

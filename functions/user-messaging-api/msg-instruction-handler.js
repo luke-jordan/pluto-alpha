@@ -76,7 +76,7 @@ const createPersistableObject = (instruction, creatingUserId) => {
     const messagePriority = instruction.messagePriority || 0;
 
     const presentationType = instruction.presentationType;
-    let processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_SENDING' : 'CREATED';
+    let processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_GENERATING' : 'CREATED';
 
     const flags = presentationType === 'EVENT_DRIVEN' ? [instruction.eventTypeCategory] : undefined;
     logger('Object created with flags: ', flags);
@@ -113,6 +113,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
     // second, if there was no test instruction, then unless we have an explicit 'hold', we create the messages for 
     // once off messages right away (on assumption they should go out)
     const holdOffInstructed = typeof params.holdFire === 'boolean' && params.holdFire;
+    logger(`Fire off now? Presentation type: ${params.presentationType} and hold off instructed ? : ${holdOffInstructed}`);
     if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed) {
         const lambdaPaylod = { instructions: [{ instructionId }]};
         const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, lambdaPaylod)).promise();
@@ -145,8 +146,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
  * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
  * @param {boolean} active Indicates whether the message is active or not.
  * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
- * @param {string} otherTemplates Required when defaultTemplate is null.
+ * @param {string} template Provides message templates, as described above
  * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
  * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
@@ -158,14 +158,16 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
  */
 module.exports.insertMessageInstruction = async (event) => {
     try {
+        const isHttpRequest = Reflect.has(event, 'httpMethod'); // todo : tighten this in time
         const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        logger(`Is HTTP request? : ${isHttpRequest} and user details: ${userDetails}`);
         // todo : add in validation of role, but also allow for system call (e.g., boosts, but those can pass along)
-        if (!userDetails || !userDetails.systemWideUserId) {
+        if (isHttpRequest && !msgUtil.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
             return msgUtil.wrapHttpResponse({}, 403);
         }
 
         const params = msgUtil.extractEventBody(event);
-        const creatingUserId = userDetails.systemWideUserId;
+        const creatingUserId = isHttpRequest ? userDetails.systemWideUserId : params.creatingUserId;
 
         const instructionEvalResult = exports.validateMessageInstruction(params);
         logger('Message instruction evaluation result:', instructionEvalResult);

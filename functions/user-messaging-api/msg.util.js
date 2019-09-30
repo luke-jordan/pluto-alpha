@@ -14,7 +14,7 @@ module.exports.extractEventBody = (event) => event.body ? JSON.parse(event.body)
 module.exports.extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
 
 // todo : transition to using permissions
-module.exports.isUserAuthorized = (userDetails, requiredRole = 'ROLE_SYSTEM_ADMIN') => {
+module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN') => {
     if (!userDetails || !Reflect.has(userDetails, 'systemWideUserId')) {
         return false;
     }

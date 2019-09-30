@@ -190,6 +190,30 @@ resource "aws_iam_policy" "lambda_invoke_boost_create_access" {
 EOF
 }
 
+resource "aws_iam_policy" "lambda_invoke_msg_instruct_access" {
+    name = "lambda_invoke_msg_instruct_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "MsgInstructLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.message_instruct_create.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
     name = "lambda_user_event_process_access_${terraform.workspace}"
     path = "/"

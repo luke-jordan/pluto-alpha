@@ -96,6 +96,7 @@ module.exports.getInstructionsByType = async (presentationType, audienceTypes, p
         paramStartIndex = paramStartIndex + processedStatuses.length;
     }
 
+    logger(`Finding message instructions using query: ${query}, and values: ${JSON.stringify(values)}`);
     const response = await rdsConnection.selectQuery(query, values);
     logger('Got this back from user message instruction extraction:', response);
 

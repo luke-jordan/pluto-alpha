@@ -91,6 +91,11 @@ resource "aws_iam_role_policy_attachment" "boost_create_wrapper_vpc_execution_po
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "boost_create_wrapper_msg_invoke" {
+  role = "${aws_iam_role.boost_create_wrapper_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_msg_instruct_access.arn}"
+}
+
 resource "aws_iam_role_policy_attachment" "boost_create_wrapper_secret_get" {
   role = "${aws_iam_role.boost_create_wrapper_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"

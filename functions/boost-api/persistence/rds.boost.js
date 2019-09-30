@@ -358,7 +358,7 @@ module.exports.insertBoost = async (boostDetails) => {
     // logger('Sending to insertion: ', boostQueryDef);
 
     const resultOfInsertion = await rdsConnection.largeMultiTableInsert([boostQueryDef, boostJoinQueryDef]);
-    logger('Insertion result: ', resultOfInsertion);
+    // logger('Insertion result: ', resultOfInsertion); // spews a lot of line
 
     // first query, first row, creation time
     const persistedTime = moment(resultOfInsertion[0][0]['creation_time']);
