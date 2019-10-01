@@ -43,6 +43,8 @@ const findMatchingTxStub = sinon.stub();
 const findFloatStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
 const updateSaveRdsStub = sinon.stub();
+const fetchTransactionStub = sinon.stub();
+const countSettledSavesStub = sinon.stub();
 
 const publishStub = sinon.stub();
 
@@ -53,7 +55,9 @@ const handler = proxyquire('../saving-handler', {
         'findMatchingTransaction': findMatchingTxStub,
         'findClientAndFloatForAccount': findFloatStub, 
         'addSavingToTransactions': addSavingsRdsStub,
-        'updateSaveTxToSettled': updateSaveRdsStub
+        'updateSaveTxToSettled': updateSaveRdsStub,
+        'fetchTransaction': fetchTransactionStub,
+        'countSettledSaves': countSettledSavesStub
     },
     'publish-common': {
         'publishUserEvent': publishStub
@@ -65,6 +69,10 @@ const resetStubHistory = () => {
     findMatchingTxStub.resetHistory();
     findFloatStub.resetHistory();
     addSavingsRdsStub.resetHistory();
+    updateSaveRdsStub.reset();
+    fetchTransactionStub.reset();
+    countSettledSavesStub.reset();
+    publishStub.reset();
     momentStub.reset();
     momentStub.callsFake(moment); // as with uuid in RDS, too much time being sunk into test framework's design flaws, so a work around here
 };
@@ -292,6 +300,25 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
     const testSettlementTime = moment();
     const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: 'xyz123' };
 
+    const testTxId = uuid();
+    const testAccountId = uuid();
+    const testSaveAmount = 1000;
+    const testFloatId = uuid();
+    const testClientId = uuid();
+
+    const testTransaction = {
+        account_transaction_id: testTxId,
+        accountId: testAccountId,
+        currency: 'ZAR',
+        unit: 'HUNDREDTH_CENT',
+        amount: testSaveAmount,
+        floatId: testFloatId,
+        clientId: testClientId,
+        settlementStatus: 'SETTLED',
+        initiationTime: moment().subtract(5, 'minutes').format(),
+        settlementTime: testSettlementTime
+    };
+
     const responseToTxUpdated = {
         transactionDetails: [
             { accountTransactionId: testPendingTxId, updatedTime: moment().format() }, 
@@ -303,7 +330,7 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
 
     const wrapTestParams = (queryParams) => ({ queryStringParameters: queryParams, requestContext: testAuthContext });
 
-    beforeEach(() => testHelper.resetStubs(updateSaveRdsStub));
+    beforeEach(() => testHelper.resetStubs(updateSaveRdsStub, publishStub, fetchTransactionStub, countSettledSavesStub, momentStub));
 
     it('Check for payment settles if payment has been successful', async () => {
         const expectedResult = JSON.parse(JSON.stringify(responseToTxUpdated));
@@ -311,6 +338,8 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
 
         const dummyPaymentDetails = { paymentRef: sinon.match.string, paymentProvider: 'OZOW' };
         updateSaveRdsStub.withArgs(testPendingTxId, dummyPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
+        fetchTransactionStub.withArgs(testPendingTxId).resolves(testTransaction);
+        countSettledSavesStub.withArgs(testAccountId).resolves(5);
         momentStub.returns(testSettlementTime);
 
         const paymentCheckSuccessResult = await handler.checkPendingPayment(wrapTestParams({ transactionId: testPendingTxId }));
@@ -318,6 +347,55 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
         expect(paymentCheckSuccessResult).to.have.property('body');
         const resultOfCheck = JSON.parse(paymentCheckSuccessResult.body);
         expect(resultOfCheck).to.deep.equal(expectedResult);
+        expect(publishStub).to.have.been.calledTwice;
+        expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly(testPendingTxId, dummyPaymentDetails, testSettlementTime);
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(testPendingTxId);
+        expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(momentStub).to.have.been.called;
+    });
+
+    it('Fails on missing authorization', async () => {
+        const result = await handler.checkPendingPayment({ transactionId: testPendingTxId });
+        expect(result).to.exist;
+        expect(result.statusCode).to.deep.equal(403);
+        expect(result.message).to.deep.equal('User ID not found in context');
+    });
+
+    it('Handles failed payments properly', async () => {
+        const expectedResult = { 
+            messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank',
+            result: 'PAYMENT_FAILED'
+        };
+        const testEvent = { transactionId: testPendingTxId, failureType: 'FAILED' };
+        const paymentCheckFailureResult = await handler.checkPendingPayment(wrapTestParams(testEvent));
+        expect(paymentCheckFailureResult).to.exist;
+        expect(paymentCheckFailureResult).to.have.property('statusCode', 200);
+        expect(paymentCheckFailureResult).to.have.property('body');
+        const resultOfCheck = JSON.parse(paymentCheckFailureResult.body);
+        expect(resultOfCheck).to.deep.equal(expectedResult);
+    });
+
+    it('Handles pending payments properly', async () => {
+        const expectedEvent = { transactionId: testPendingTxId, failureType: 'PENDING' };
+        const paymentCheckPendingResult = await handler.checkPendingPayment(wrapTestParams(expectedEvent));
+        expect(paymentCheckPendingResult).to.exist;
+        expect(paymentCheckPendingResult).to.have.property('statusCode', 200);
+        expect(paymentCheckPendingResult).to.have.property('body');
+        const resultOfCheck = JSON.parse(paymentCheckPendingResult.body);
+        expect(resultOfCheck).to.deep.equal({ result: 'PAYMENT_PENDING' });
+    });
+
+    it('Catches thrown errors', async () => {
+        publishStub.throws(new Error('PublishError'));
+        const paymentCheckErrorResult = await handler.checkPendingPayment(wrapTestParams({ transactionId: testPendingTxId }));
+        logger('Result:', paymentCheckErrorResult);
+        expect(paymentCheckErrorResult).to.exist;
+        expect(paymentCheckErrorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify('PublishError') });
+        expect(publishStub).to.have.been.calledOnce;
+        expect(updateSaveRdsStub).to.have.not.been.called;
+        expect(fetchTransactionStub).to.have.not.been.called;
+        expect(countSettledSavesStub).to.have.not.been.called;
+        expect(momentStub).to.have.not.been.called;        
     });
 
     it('Happy path, completes an update properly, no settlement time', async () => {

@@ -49,7 +49,7 @@ const handler = proxyquire('../boost-create-handler', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub);
+const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub);
 
 const testStartTime = moment();
 const testEndTime = moment().add(7, 'days');
@@ -372,7 +372,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
     const mockMsgInstructReturnBody = [{ instructionId: testMsgInstructId, creationTimeMillis: moment().valueOf() }]
     const mockMsgIdDict = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
 
-    logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
+    // logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
 
     it('Happy path creates a game boost, including setting up the messages', async () => {
     
@@ -408,6 +408,15 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectMsgLambdaInvoke);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, { messageInstructionIds: { instructions: mockMsgIdDict }});        
         
+    });
+
+    it('Handles test call', async () => {
+        const resultOfCreate = await handler.createBoost();
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal({ statusCode: 400 });
+        expect(insertBoostStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(alterBoostStub).to.have.not.been.called;
     });
 
 });

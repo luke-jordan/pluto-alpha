@@ -289,7 +289,7 @@ module.exports.addSavingToTransactions = async (saveDetails) => {
     responseEntity['transactionDetails'] = transactionDetails;
 
     if (isSaveSettled) {
-        const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['savedCurrency'], moment());
+        const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['currency'], moment());
         logger('New balance count: ', balanceCount);
         responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit };
     }
@@ -315,9 +315,9 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     logger('Retrieved pending save: ', pendingTxResult);
 
     const saveDetails = camelizeKeys(pendingTxResult[0]);
-    saveDetails.savedAmount = saveDetails.amount;
-    saveDetails.savedCurrency = saveDetails.currency;
-    saveDetails.savedUnit = saveDetails.unit;
+    saveDetails.amount = saveDetails.amount;
+    saveDetails.currency = saveDetails.currency;
+    saveDetails.unit = saveDetails.unit;
     logger('Resulting save details: ', saveDetails);
 
     const updateQueryDef = {
@@ -348,7 +348,7 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     transactionDetails.push(extractTxDetails('floatAllocationTransactionId', updateAndInsertResult[1][0]));
     responseEntity['transactionDetails'] = transactionDetails;
 
-    const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['savedCurrency'], moment());
+    const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['currency'], moment());
     responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit };
 
     return responseEntity;

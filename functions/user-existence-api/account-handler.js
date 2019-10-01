@@ -126,6 +126,7 @@ module.exports.createAccount = async (creationRequest = {
 
   const persistenceMoment = moment(persistenceResult.persistedTime);
   
+  // redundant
   if (typeof creationRequest.referralCodeDetails === 'object' && Object.keys(creationRequest.referralCodeDetails).length > 0) {
     await handleReferral(persistenceResult.accountId, creationRequest.ownerUserId, creationRequest.referralCodeDetails);
   }
