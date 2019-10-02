@@ -228,7 +228,7 @@ class RdsConnection {
         return results;
     }
 
-    // todo : update to look like handling of update query defs below
+    // more flexible form where we needed it, use the below for more generic ones
     async updateRecord (query = 'UPDATE TABLE SET VALUE = $1 WHERE ID = $2 RETURNING ID', values) {
         if (!Array.isArray(values) || values.length === 0) {
             throw new NoValuesError(query);

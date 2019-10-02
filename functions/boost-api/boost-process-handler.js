@@ -22,11 +22,13 @@ const handleError = (err) => {
 
 ////////////////////////////// HELPER METHODS ///////////////////////////////////////////
 
-// this takes the event and creates the arguments to pass to persistence to get applicable boosts
+// this takes the event and creates the arguments to pass to persistence to get applicable boosts, i.e.,
+// those that still have budget remaining and are in offered or pending state for this user
 const extractFindBoostKey = (event) => {
     const persistenceKey = event.accountId ? { accountId: [event.accountId] } : { userId: [event.userId] };
     persistenceKey.boostStatus = ['OFFERED', 'PENDING'];
     persistenceKey.active = true;
+    persistenceKey.underBudgetOnly = true;
     return persistenceKey;
 };
 
@@ -81,7 +83,7 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
     const selectPromises = boosts.map((boost) => {
         const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
         const restrictToInitiator = boost.boostAudience === 'GENERAL' || !redeemsAll;
-        const findAccountsParams = { boostIds: [boost.boostId], status: ['PENDING'] };
+        const findAccountsParams = { boostIds: [boost.boostId], status: ['OFFERED', 'PENDING'] };
         if (restrictToInitiator) {
             findAccountsParams.accountIds = [initiatingAccountId];
         }
@@ -136,12 +138,14 @@ const triggerFloatTransfers = async (transferInstructions) => {
 };
 
 const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
+    logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
     return alteredBoosts.map((boost) => {
         const boostId = boost.boostId;
         const highestStatus = boostStatusChangeDict[boostId][0]; // but needs a sort
         const isChangeRedemption = highestStatus === 'REDEEMED';
         const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
-        const logContext = { newStatus: highestStatus, transactionId };
+        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount, transactionId };
+
         return {
             boostId,
             accountIds: Object.keys(affectedAccountsUsersDict[boostId]),
@@ -233,7 +237,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
         const initiator = affectedAccountsUserDict[event.accountId];
         const context = {
             boostId: boost.boostId,
-            // boostUpdateTimeMillis: boostUpdateTime.valueOf(),
+            boostUpdateTimeMillis: boostUpdateTime.valueOf(),
             transferResults,
             eventContext: event.eventContext
         }
@@ -294,10 +298,10 @@ module.exports.processEvent = async (event) => {
     logger('Result of transfers: ', resultOfTransfers);
 
     // then we update the statuses of the boosts to redeemed
-    // const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, event.eventContext.transactionId);
-    // logger('Sending these update instructions to persistence: ', updateInstructions);
-    // const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
-    // logger('Result of update operation: ', resultOfUpdates);
+    const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, event.eventContext.transactionId);
+    logger('Sending these update instructions to persistence: ', updateInstructions);
+    const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
+    logger('Result of update operation: ', resultOfUpdates);
 
     // then: construct & send redemption messages
     const messageInstructionsNested = boostsToRedeem.map((boost) => assembleMessageInstructions(boost, affectedAccountsDict[boost.boostId]));
@@ -306,16 +310,19 @@ module.exports.processEvent = async (event) => {
     
     const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();
     logger('Obtained message promise');
+
+    const boostsRedeemedIds = boostsToRedeem.map((boost) => boost.boostId);
+    const updateRedeemedAmount = persistence.updateBoostAmountRedeemed(boostsRedeemedIds);
     
     // then: assemble the event publishing
-    let finalPromises = [messagePromise];
+    let finalPromises = [messagePromise, updateRedeemedAmount];
 
     boostsToRedeem.forEach((boost) => {
         const boostId = boost.boostId;
-        // const boostUpdateTime = (resultOfUpdates.filter((row) => row.boostId === boostId)[0]).updatedTime;
+        const boostUpdateTime = (resultOfUpdates.filter((row) => row.boostId === boostId)[0]).updatedTime;
         finalPromises = finalPromises.concat(createPublishEventPromises({ 
             boost,
-            // boostUpdateTime,
+            boostUpdateTime,
             affectedAccountsUserDict: affectedAccountsDict[boostId],
             transferResults: resultOfTransfers[boostId],
             event
@@ -330,7 +337,7 @@ module.exports.processEvent = async (event) => {
     const resultToReturn = {
         result: 'SUCCESS',
         resultOfTransfers,
-        // resultOfUpdates
+        resultOfUpdates
     }
 
     return {

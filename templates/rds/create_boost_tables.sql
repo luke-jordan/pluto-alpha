@@ -12,6 +12,8 @@ create table if not exists boost_data.boost (
     boost_amount bigint not null default 0,
     boost_unit base_unit not null,
     boost_currency varchar(10) not null,
+    boost_budget bigint not null default 0,
+    boost_redeemed bigint not null default 0,
     from_bonus_pool_id varchar(255) not null,
     from_float_id varchar (255) not null,
     for_client_id varchar (255) not null,

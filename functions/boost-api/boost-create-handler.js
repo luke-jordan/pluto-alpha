@@ -187,6 +187,17 @@ module.exports.createBoost = async (event) => {
 
     const boostAmountDetails = params.boostAmountOffered.split('::');
     logger('Boost amount details: ', boostAmountDetails);
+    
+    let boostBudget = 0;
+    if (typeof params.boostBudget === 'number') {
+        boostBudget = params.boostBudget;
+    } else if (typeof params.boostBudget === 'string') {
+        const boostBudgetParams = params.boostBudget.split('::');
+        if (boostAmountDetails[1] !== boostBudgetParams[1] || boostAmountDetails[2] !== boostBudgetParams[2]) {
+            return util.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
+        }
+        boostBudget = parseInt(boostBudgetParams[0], 10);
+    }
 
     // start now if nothing provided
     const boostStartTime = params.startTimeMillis ? moment(params.startTimeMillis) : moment();
@@ -219,6 +230,7 @@ module.exports.createBoost = async (event) => {
         boostAmount: parseInt(boostAmountDetails[0], 10),
         boostUnit: boostAmountDetails[1],
         boostCurrency: boostAmountDetails[2],
+        boostBudget,
         fromBonusPoolId: params.boostSource.bonusPoolId,
         fromFloatId: params.boostSource.floatId,
         forClientId: params.boostSource.clientId,
@@ -242,7 +254,7 @@ module.exports.createBoost = async (event) => {
     logger('Result of RDS call: ', persistedBoost);
 
     if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
-        const boostParams = { 
+        const boostParams = {
             boostId: persistedBoost.boostId,
             creatingUserId: instructionToRds.creatingUserId, 
             audienceType: params.boostAudience, 
@@ -259,10 +271,9 @@ module.exports.createBoost = async (event) => {
         const messageInstructionResults = await Promise.all(messageInvocations);
         logger('Result of message instruct invocation: ', messageInstructionResults);
                 
-        const messageInstructionIds = { instructions: messageInstructionResults };
-        const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
+        const updatedBoost = await persistence.setBoostMessages(persistedBoost.boostId, messageInstructionResults, true);
         logger('And result of update: ', updatedBoost);
-        persistedBoost.messageInstructions = messageInstructionIds.instructions;
+        persistedBoost.messageInstructions = messageInstructionResults;
     };
 
     return persistedBoost;
@@ -288,10 +299,7 @@ module.exports.createBoostWrapper = async (event) => {
         }
 
         const resultOfCall = await exports.createBoost(params);
-        return {
-            statusCode: status('Ok'),
-            body: JSON.stringify(resultOfCall)
-        };    
+        return util.wrapHttpResponse(resultOfCall);    
     } catch (err) {
         return handleError(err);
     }
