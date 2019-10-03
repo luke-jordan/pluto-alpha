@@ -16,7 +16,7 @@ const boostTable = config.get('tables.boostTable');
 const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
 const boostLogTable = config.get('tables.boostLogTable');
 
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
@@ -39,7 +39,7 @@ const transformBoostFromRds = (boost) => {
     Reflect.deleteProperty(transformedBoost, 'initialStatus');
 
     return transformedBoost;
-}
+};
 
 /**
  * Method that finds boost that may be relevant to a given account, filtering by whether the account is in a certain state related to the boost.
@@ -61,8 +61,8 @@ module.exports.findBoost = async (attributes) => {
         statusPortion.indices.push(numberAccount + index + 1);
     });
     
-    const accountIndices = accountPortion.indices.map(index => `$${index}`).join(', ');
-    const statusIndices = statusPortion.indices.map(index => `$${index}`).join(', ');
+    const accountIndices = accountPortion.indices.map((index) => `$${index}`).join(', ');
+    const statusIndices = statusPortion.indices.map((index) => `$${index}`).join(', ');
     
     const queryValues = accountPortion.values.concat(statusPortion.values);
     
@@ -92,7 +92,7 @@ module.exports.findBoost = async (attributes) => {
         querySuffix = `${querySuffix} and boost_redeemed < boost_budget`;
     }
     
-    let retrieveBoostQuery = `select * from ${boostTable} where boost_id in (${extractArrayIndices(boostIdArray)})${querySuffix}`;
+    const retrieveBoostQuery = `select * from ${boostTable} where boost_id in (${extractArrayIndices(boostIdArray)})${querySuffix}`;
     
     const boostsRetrieved = await rdsConnection.selectQuery(retrieveBoostQuery, boostIdArray);
     logger('Result of retrieving boosts: ', boostsRetrieved);
@@ -121,13 +121,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     if (accountIds) {
         querySuffix = `${querySuffix} and ${accountsTable}.account_id in (${extractArrayIndices(accountIds, runningIndex)})`;
         runningValues = runningValues.concat(accountIds);
-        runningIndex = runningIndex + accountIds.length;
+        runningIndex += accountIds.length;
     }
 
     if (status) {
         querySuffix = `${querySuffix} and boost_status in (${extractArrayIndices(status, runningIndex)})`;
         runningValues = runningValues.concat(status);
-        runningIndex = runningIndex + status.length;
+        runningIndex += status.length;
     }
 
     const assembledQuery = `${queryBase} ${querySuffix} order by boost_id, account_id`;
@@ -144,8 +144,8 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
                 userId: currentRow['owner_user_id'],
                 status: currentRow['boost_status']
             };
-            rowIndex++;
-        };
+            rowIndex += 1;
+        }
         return ({ boostId, accountUserMap });
     });
     logger('Assembled: ', resultObject);
@@ -216,7 +216,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, s
     logger('And times of operations: ', resultOfOperations);
 
     // this sorts in descending, so latest is in first position
-    let sortedArray = timesOfOperations.sort((a, b) => b.valueOf() - a.valueOf());
+    const sortedArray = timesOfOperations.sort((timeA, timeB) => timeB.valueOf() - timeA.valueOf());
     logger('Sorted properly? : ', sortedArray);
     return { boostId, updatedTime: sortedArray[0] };
 };
@@ -232,10 +232,11 @@ module.exports.updateBoostAccountStatus = async (instructions) => {
 module.exports.updateBoostAmountRedeemed = async (boostIds) => {
     // get the sum; note the casting and use of a regex is necessary given the risk that otherwise
     // this could start erroring (and the slight decrease in speed is currently worth that robustness)
+    const boostIdStartIdx = 2;
     const sumQuery = `select boost_id, sum(cast(log_context->>'boostAmount' as bigint)) from ` +
         `boost_data.boost_log where log_context ->> 'newStatus' = $1 and ` + 
         `log_context ->> 'boostAmount' ~ E'^\\\\d+$' and ` + 
-        `boost_id in (${extractArrayIndices(boostIds, 2)}) group by boost_id`;
+        `boost_id in (${extractArrayIndices(boostIds, boostIdStartIdx)}) group by boost_id`;
 
     logger('Processing sum query: ', sumQuery);
     
@@ -300,7 +301,7 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
-}
+};
 
 // const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
 
@@ -326,7 +327,7 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         const selectionQuery = `select account_id from ${accountsTable} where ${whereClause}`;
         return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'random_sample') {
-        logger('We are selecting some random sample of a universe')
+        logger('We are selecting some random sample of a universe');
     } else if (selectionMethod === 'match_other') {
         logger('We are selecting so as to match another entity');
     }
@@ -437,7 +438,7 @@ module.exports.insertBoost = async (boostDetails) => {
  * Used to persist the message instructions, and to then set the boost to offered for those accounts
  */
 module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setAccountsToOffered) => {
-    const updateValue = { messageInstructionIds : { instructions: messageInstructionIdDefs }}; 
+    const updateValue = { messageInstructionIds: { instructions: messageInstructionIdDefs }}; 
     const boostUpdateDef = {
         table: boostTable,
         key: { boostId },
@@ -457,8 +458,8 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
 
     if (setAccountsToOffered) {
         const updateQuery = `update ${boostAccountJoinTable} set boost_status = $1 where boost_id = $2`;
-        const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
-        logger('Result of raw update: ', resultOfUpdate);
+        const resultOfStatusUpdate = await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
+        logger('Result of raw update: ', resultOfStatusUpdate);
         // strictly speaking we should also insert the boost logs, but this is only called during creation, so somewhat redundant (and could be expensive)
     }
 
@@ -473,11 +474,11 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
     // find the most recent matching the flag (just in case);
     const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
         `flags && ARRAY[$1] order by creation_time desc limit 1`;
-    const result  = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
+    const result = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
     logger('Got an instruction? : ', result);
     if (Array.isArray(result) && result.length > 0) {
         return result[0]['instruction_id'];
     }
 
-    return undefined;
+    return null;
 };

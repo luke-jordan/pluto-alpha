@@ -82,7 +82,7 @@ module.exports = {
         'id-length': [
             'error',
             {
-                'exceptions': ['e', 'i', 'o']
+                'exceptions': ['e', 'i', 'o', '_']
             }
         ],
         'id-match': 'error',
@@ -167,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 400, 500, 365]
+                'ignore': [0, 1, 2, 100, 200, 400, 500, 1000, 365]
             }
         ],
         'no-mixed-operators': 'error',
@@ -242,7 +242,7 @@ module.exports = {
         'prefer-arrow-callback': 'error',
         'prefer-const': 'error',
         'prefer-destructuring': 'off',
-        'prefer-named-capture-group': 'error',
+        'prefer-named-capture-group': 'off',
         'prefer-numeric-literals': 'error',
         'prefer-object-spread': 'error',
         'prefer-promise-reject-errors': 'error',
@@ -261,7 +261,7 @@ module.exports = {
         'radix': 'error',
         'require-await': 'off',
         'require-jsdoc': 'error',
-        'require-unicode-regexp': 'error',
+        'require-unicode-regexp': 'warn',
         'rest-spread-spacing': 'error',
         'semi': [ 
             'error',

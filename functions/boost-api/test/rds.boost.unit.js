@@ -38,7 +38,7 @@ const rds = proxyquire('../persistence/rds.boost', {
 });
 
 const resetStubs = () => testHelper.resetStubs(queryStub, insertStub, multiTableStub, multiOpStub);
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 const accountTable = config.get('tables.accountLedger');
@@ -174,7 +174,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
 
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
     const testAudienceSelection = `whole_universe from #{'{"specific_users": ["${uuid()}","${uuid()}"]}'}`;
-    const testRedemptionMsgs = [{ accountId: uuid(), msgInstructionId: uuid() }, { accountId: uuid(), msgInstructionId: uuid() }];
+    // const testRedemptionMsgs = [{ accountId: uuid(), msgInstructionId: uuid() }, { accountId: uuid(), msgInstructionId: uuid() }];
 
     const updateAccountStatusDef = (boostId, accountId, newStatus) => ({
         table: boostUserTable,
@@ -254,8 +254,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         return newBoost;
     };
 
-    const accountUserIdRow = (accountId, userId, status = 'PENDING', boostId = testBoostId) => 
-        ({ 'boost_id': boostId, 'account_id': accountId, 'owner_user_id': userId, 'boost_status': status });
+    const accountUserIdRow = (accountId, userId, status = 'PENDING', boostId = testBoostId) => (
+        { 'boost_id': boostId, 'account_id': accountId, 'owner_user_id': userId, 'boost_status': status }
+    );
 
     beforeEach(() => resetStubs());
 

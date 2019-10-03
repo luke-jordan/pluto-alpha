@@ -12,8 +12,6 @@ const persistence = require('./persistence/rds.boost');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-
 const ALLOWABLE_ORDINARY_USER = ['REFERRAL::USER_CODE_USED'];
 const STANDARD_GAME_ACTIONS = {
     'OFFERED': { action: 'ADD_CASH' },
@@ -27,13 +25,14 @@ const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
 };
-const obtainStdAction = (msgKey) => Reflect.has(STANDARD_GAME_ACTIONS, msgKey) ? STANDARD_GAME_ACTIONS[msgKey].action : 'ADD_CASH'; 
+
+const obtainStdAction = (msgKey) => (Reflect.has(STANDARD_GAME_ACTIONS, msgKey) ? STANDARD_GAME_ACTIONS[msgKey].action : 'ADD_CASH'); 
 
 const convertParamsToRedemptionCondition = (gameParams) => {
     const conditions = [];
     switch (gameParams.gameType) {
         case 'CHASE_ARROW':
-        case 'TAP_SCREEN':
+        case 'TAP_SCREEN': {
             conditions.push('taps_submitted');
             const timeLimitMillis = gameParams.timeLimitSeconds * 1000;
             if (gameParams.winningThreshold) {
@@ -43,6 +42,7 @@ const convertParamsToRedemptionCondition = (gameParams) => {
                 conditions.push(`number_taps_in_first_N #{${gameParams.numberWinners}::${timeLimitMillis}}`);
             }
             break;
+        }
         default:
             logger('ERROR! Unimplemented game');
             break;
@@ -59,26 +59,35 @@ const extractStatusConditions = (gameParams) => {
     return statusConditions;
 };
 
-// finds and uses existing message templates based on provided flags
+// finds and uses existing message templates based on provided flags, in escalating series, given need to parallel process
+// todo :: there will be a bunch of unnecessary queries in here, so particularly zip up the findMsgInstructionByFlag to take multiple flags
+// and hence consolidate into a single operation / query, but can do later
+const obtainMsgIdMatchedToAccount = async (flagDefinition, boostStatus) => {
+    const msgInstructionId = await persistence.findMsgInstructionByFlag(flagDefinition.msgInstructionFlag);
+    logger('Result of flag hunt: ', msgInstructionId);
+    if (typeof msgInstructionId === 'string') {
+        return ({ accountId: flagDefinition.accountId, boostStatus, msgInstructionId });
+    }
+    return null; 
+};
+
+const obtainMessagePromise = async (boostStatus, messageInstructionFlags) => {
+    const flagsForThisStatus = messageInstructionFlags[boostStatus];
+    logger('Message flags for this boost status: ', flagsForThisStatus);
+    const retrievedMsgs = await Promise.all(flagsForThisStatus.map((flagDefinition) => obtainMsgIdMatchedToAccount(flagDefinition, boostStatus)));
+    const foundMsg = retrievedMsgs.find((msg) => msg !== null);
+    return foundMsg || null;
+};
+
 const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
     logger('Alright, got some message flags, we can go find the instructions, from: ', messageInstructionFlags);
     
-    const messageInstructions = [];
-    // cycle through the keys, which will represent the statuses (um, clean this up a lot, and especially parallelize it)
+    // cycle through the keys, which will represent the boost statuses, and find a message for each
     const statuses = Object.keys(messageInstructionFlags);
     logger('Have statuses: ', statuses);
-    for (let status of statuses) {
-        const messageFlags = messageInstructionFlags[status];
-        logger('Message flags: ', messageFlags);
-        for (const flagDef of messageFlags) {
-            const { accountId, msgInstructionFlag } = flagDef;
-            const msgInstructionId = await persistence.findMsgInstructionByFlag(msgInstructionFlag);
-            logger('Result of flag hunt: ', msgInstructionId);
-            if (typeof msgInstructionId === 'string') {
-                messageInstructions.push({ accountId, status, msgInstructionId });
-            }
-        }
-    }
+    
+    const messageInstructionsRaw = await Promise.all(statuses.map((boostStatus) => obtainMessagePromise(boostStatus, messageInstructionFlags)));
+    const messageInstructions = messageInstructionsRaw.map((result) => result !== null);
     
     logger('Finished hunting by flag, have result: ', messageInstructions);
     return messageInstructions;
@@ -290,7 +299,7 @@ module.exports.createBoostWrapper = async (event) => {
             return { statusCode: status('Forbidden') };
         }
 
-        const params = extractEventBody(event);
+        const params = util.extractEventBody(event);
         params.creatingUserId = userDetails.systemWideUserId;
 
         const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';

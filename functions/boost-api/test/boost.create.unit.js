@@ -64,7 +64,7 @@ describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () =
     });
 
     it('Rejects all categories except referrals if user is ordinary role', async () => {
-        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER' ));
+        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER'));
         expect(resultOfCall).to.exist;
         expect(resultOfCall).to.deep.equal({ statusCode: 403, body: 'Ordinary users cannot create boosts'});
     });
@@ -80,7 +80,6 @@ describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () =
 describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
     const referralWindowEnd = moment().add(3, 'months');
-    const timeSaveCompleted = moment();
     
     const testReferringUser = uuid();
     const testReferredUser = uuid();
@@ -109,7 +108,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             { accountId: testReferringUser, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
             { accountId: testReferredUser, msgInstructionId: testReferredMsgId, status: 'REDEEMED' }
         ],
-        flags: [ 'REDEEM_ALL_AT_ONCE' ]
+        flags: ['REDEEM_ALL_AT_ONCE']
     };
 
     it('Happy path inserting a referral-based individual boost', async () => {
@@ -151,8 +150,8 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             }
         };
 
-        const resultOfInstruction = await handler.createBoostWrapper(testHelper.wrapEvent(testBodyOfEvent, 
-            mockBoostToFromPersistence.creatingUserId, 'ORDINARY_USER'));
+        const wrappedEvent = testHelper.wrapEvent(testBodyOfEvent, mockBoostToFromPersistence.creatingUserId, 'ORDINARY_USER');
+        const resultOfInstruction = await handler.createBoostWrapper(wrappedEvent);
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
         expect(bodyOfResult).to.deep.equal(expectedFromRds);
@@ -180,7 +179,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         forClientId: 'some_client_co',
         boostStartTime: testStartTime,
         boostEndTime: testEndTime,
-        statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}' ] },
+        statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
         boostAudience: 'GENERAL',
         boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
         defaultStatus: 'CREATED',
@@ -212,7 +211,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 floatId: 'primary_cash'
             },
             endTimeMillis: testEndTime.valueOf(),
-            statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}' ] },
+            statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
             boostAudience: 'GENERAL',
             boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
             redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
@@ -296,7 +295,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         timeLimitSeconds: 20,
         winningThreshold: 20,
         instructionBand: 'Tap the screen as many times as you can in 20 seconds',
-        entryCondition: "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+        entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
     };
 
     const testStatusConditions = {
@@ -362,14 +361,14 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
             const msgTemplate = messageDefinitions[key];
             msgTemplate.actionToTake = standardMsgActions[key].action;
             msgTemplate.actionContext = { ...standardMsgActions[key].context, gameParams: gameParams };
-            return { 'DEFAULT': msgTemplate, identifier: key }
+            return { 'DEFAULT': msgTemplate, identifier: key };
         });
 
         messagePayload.templates = { sequence: messageTemplates };
         return messagePayload;
     };
 
-    const mockMsgInstructReturnBody = [{ instructionId: testMsgInstructId, creationTimeMillis: moment().valueOf() }]
+    const mockMsgInstructReturnBody = [{ instructionId: testMsgInstructId, creationTimeMillis: moment().valueOf() }];
     const mockMsgIdDict = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
 
     // logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));

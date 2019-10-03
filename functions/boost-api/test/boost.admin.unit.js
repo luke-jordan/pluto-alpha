@@ -107,7 +107,7 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
     });
 
     it('Sets default type categories for exclusion', async () => {
-        listBoostsStub.withArgs([ 'REFERRAL::USER_CODE_USED' ], true, true).resolves([persistedBoost]);
+        listBoostsStub.withArgs(['REFERRAL::USER_CODE_USED'], true, true).resolves([persistedBoost]);
 
         const expectedBody = { includeUserCounts: true, includeExpired: true, includeStatusCounts: true };
         const expectedEvent = wrapQueryParamEvent(expectedBody, testUserId, 'SYSTEM_ADMIN');
@@ -119,7 +119,7 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
         expect(resultOfListing).to.exist;
         expect(resultOfListing.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfListing.body).to.deep.equal(JSON.stringify([persistedBoost]));
-        expect(listBoostsStub).to.have.been.calledOnceWithExactly([ 'REFERRAL::USER_CODE_USED' ], true, true);
+        expect(listBoostsStub).to.have.been.calledOnceWithExactly(['REFERRAL::USER_CODE_USED'], true, true);
     });
 
     it('Fails on missing authorization', async () => {
@@ -148,9 +148,9 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
         expect(listBoostsStub).to.have.been.calledOnce;
     });
 
-    /////////////////////////////////////////////////////////////////////////////////////////
-    ////////////////////////////// UPDATE INSTRUCTION TESTS /////////////////////////////////
-    /////////////////////////////////////////////////////////////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////////////////////
+    // //////////////////////////// UPDATE INSTRUCTION TESTS /////////////////////////////////
+    // ///////////////////////////////////////////////////////////////////////////////////////
 
     it('Updates boost instruction', async () => {
         const expectedEventBody = { boostId: testBoostId, boostStatus: 'OFFERED' };

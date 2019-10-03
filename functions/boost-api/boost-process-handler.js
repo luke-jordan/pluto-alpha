@@ -303,7 +303,7 @@ module.exports.processEvent = async (event) => {
 
     // then: construct & send redemption messages
     const messageInstructionsNested = boostsToRedeem.map((boost) => assembleMessageInstructions(boost, affectedAccountsDict[boost.boostId]));
-    const messageInstructionsFlat = [].concat.apply([], messageInstructionsNested);
+    const messageInstructionsFlat = messageInstructionsNested.flat(Infinity);
     logger('Passing message instructions: ', messageInstructionsFlat);
     
     const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();

@@ -4,7 +4,6 @@ const logger = require('debug')('jupiter:boosts:rds-admin-test');
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
-const decamelize = require('decamelize');
 
 const testHelper = require('./boost.test.helper');
 
@@ -34,8 +33,8 @@ const rds = proxyquire('../persistence/rds.admin.boost', {
 });
 
 const resetStubs = () => testHelper.resetStubs(queryStub, updateRecordObjectStub);
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
-const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
+// const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+// const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 const boostMainTable = config.get('tables.boostTable');
 const boostAccountTable = config.get('tables.boostAccountJoinTable');
@@ -93,7 +92,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         audienceSelection: testAudienceSelection,
         redemptionMessages: { instructions: testRedemptionMsgs },
         initialStatus: 'PENDING',
-        flags: [ 'REDEEM_ALL_AT_ONCE' ],
+        flags: ['REDEEM_ALL_AT_ONCE'],
         count: { CREATED: 10, OFFERED: 0, PENDING: 0, REDEEMED: 0, REVOKED: 0, EXPIRED: 0 }
     };
 
@@ -181,7 +180,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         logger('udpdate args:', updateRecordObjectStub.getCall(0).args);
 
         expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal([ { updatedTime: testUpdatedTime } ]);
+        expect(resultOfUpdate).to.deep.equal([{ updatedTime: testUpdatedTime }]);
         expect(updateRecordObjectStub).to.have.been.calledOnceWithExactly(testUpdateArgs);
     });
 

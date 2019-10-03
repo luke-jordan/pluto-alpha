@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_user_process" {
   role                           = "${aws_iam_role.boost_user_process_role.arn}"
   handler                        = "boost-process-handler.processUserBoostResponse"
   memory_size                    = 512
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

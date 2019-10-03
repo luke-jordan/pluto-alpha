@@ -85,7 +85,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
             { accountId: testReferringUser, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
             { accountId: testReferredUser, msgInstructionId: testReferredMsgId, status: 'REDEEMED' }
         ],
-        flags: [ 'REDEEM_ALL_AT_ONCE' ]
+        flags: ['REDEEM_ALL_AT_ONCE']
     };
 
     it('Happy path closing out a referral after referred user adds cash', async () => {
@@ -149,7 +149,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
 
         const expectedAllocationResult = {
             [testBoostId]: {
-                result: 'SUCCESS' ,
+                result: 'SUCCESS',
                 floatTxIds: [uuid(), uuid(), uuid()],
                 accountTxIds: [uuid(), uuid()]
             }
@@ -231,7 +231,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         forClientId: 'some_client_co',
         boostStartTime: testStartTime,
         boostEndTime: testEndTime,
-        statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}' ] },
+        statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
         boostAudience: 'GENERAL',
         boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
         defaultStatus: 'CREATED',
@@ -287,7 +287,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         const expectedAllocationResult = {
             [testBoostId]: {
-                result: 'SUCCESS' ,
+                result: 'SUCCESS',
                 floatTxIds: [uuid(), uuid()],
                 accountTxIds: [uuid()]
             }
@@ -342,8 +342,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 });
 
 describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
-    const testUserId = uuid()
-
+    const testUserId = uuid();
 
     it('Pretends to process user boost response', async () => {
         const testEvent = { testParam: 'TEST_VAL' };
