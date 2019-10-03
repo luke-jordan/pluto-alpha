@@ -551,7 +551,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
             table: config.get('tables.pushTokenTable'),
             key: { userId: mockUserId,
             provider: mockProvider },
-            value: undefined,
+            value: null,
             returnClause: 'insertion_time'
         }];
 

@@ -11,7 +11,7 @@ const dynamo = require('dynamo-common');
 const userProfileTable = config.get('tables.dynamoProfileTable');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const paramRegex = /#{([^}]*)}/g;
 const STANDARD_PARAMS = [
@@ -30,7 +30,7 @@ const UNIT_DIVISORS = {
 
 const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
 
-const getSubParamOrDefault = (paramSplit, defaultValue) => paramSplit.length > 1 ? paramSplit[1] : defaultValue;
+const getSubParamOrDefault = (paramSplit, defaultValue) => (paramSplit.length > 1 ? paramSplit[1] : defaultValue);
 
 const formatAmountResult = (amountResult) => {
     logger('Formatting amount result: ', amountResult);
@@ -175,7 +175,7 @@ module.exports.assembleMessage = async (msgDetails) => {
     return messageBase;
 };
 
-const fetchMsgSequenceIds = (anchorMessage, retrievedMessages) => {
+const fetchMsgSequenceIds = (anchorMessage) => {
     // logger('Fetching sequence IDs from anchor: ', anchorMessage);
     if (!anchorMessage) {
         return [];
@@ -210,7 +210,7 @@ const determineAnchorMsg = (openingMessages) => {
     }
 
     // then, find the highest priority, using neat trick: https://stackoverflow.com/questions/4020796/finding-the-max-value-of-an-attribute-in-an-array-of-objects
-    const highestPriorityAmongOpening = Math.max.apply(Math, openingMessages.map((msg) => msg.messagePriority));
+    const highestPriorityAmongOpening = Reflect.apply(Math.max, Math, openingMessages.map((msg) => msg.messagePriority));
     logger('Highest priority among current messages: ', highestPriorityAmongOpening);
 
     const messagesWithHighestPriority = openingMessages.filter((msg) => msg.messagePriority === highestPriorityAmongOpening);
@@ -243,7 +243,7 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     // third, either just continue with the prior one, or find whatever should be the anchor
     let anchorMessage = null;
     if (withinFlowFromMsgId) {
-        const flowMessage = openingMessages.find((msg) => msg.messageId = withinFlowFromMsgId);
+        const flowMessage = openingMessages.find((msg) => msg.messageId === withinFlowFromMsgId);
         anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage; 
     } else {
         anchorMessage = determineAnchorMsg(openingMessages);
@@ -270,8 +270,7 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext) => {
     logger('Invoking Lambda to update message status');
     const invocationResult = await lambda.invoke(updateMsgLambdaParams).promise();
     logger('Completed invocation: ', invocationResult);
-
-}
+};
 
 // For now, for mobile test
 const dryRunGameResponseOpening = require('./dry-run-messages');
@@ -291,10 +290,10 @@ module.exports.getNextMessageForUser = async (event) => {
         if (queryParams && queryParams.gameDryRun) {
             const relevantGame = queryParams.gameType || 'TAP_SCREEN';
             const messagesToReturn = relevantGame === 'CHASE_ARROW' ? dryRunGameChaseArrows : dryRunGameResponseOpening;
-            return { statusCode: 200, body: JSON.stringify(messagesToReturn)}
+            return { statusCode: 200, body: JSON.stringify(messagesToReturn)};
         }
 
-        const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : undefined;
+        const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : null;
         const userMessages = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId, withinFlowFromMsgId);
         logger('Retrieved user messages: ', userMessages);
         const resultBody = {
@@ -328,24 +327,26 @@ module.exports.updateUserMessage = async (event) => {
         logger('Processing message ID update, based on user action: ', userAction);
 
         if (!messageId || messageId.length === 0) {
-            return { statusCode: 400 }
-        };
+            return { statusCode: 400 };
+        }
 
         let response = { };
-        let updateResult = undefined;
+        let updateResult = null;
         switch (userAction) {
-            case 'FETCHED':
+            case 'FETCHED': {
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'FETCHED' });
                 logger('Result of updating message: ', updateResult);
                 return { statusCode: 200 };
-            case 'DISMISSED':
+            }
+            case 'DISMISSED': {
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
                 const bodyOfResponse = { result: 'SUCCESS', processedTimeMillis: updateResult.updatedTime.valueOf() };
                 response = { statusCode: 200, body: JSON.stringify(bodyOfResponse) };
                 break;
+            }
             default:
-                response = { statusCode: 400, body: 'UNKNOWN_ACTION' }
-        };
+                response = { statusCode: 400, body: 'UNKNOWN_ACTION' };
+        }
 
         return response;
     } catch (err) {

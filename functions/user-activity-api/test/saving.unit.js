@@ -301,13 +301,10 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
     const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: 'xyz123' };
 
     const testTxId = uuid();
-    const testAccountId = uuid();
     const testSaveAmount = 1000;
-    const testFloatId = uuid();
-    const testClientId = uuid();
-
+    
     const testTransaction = {
-        account_transaction_id: testTxId,
+        accountTransactionId: testTxId,
         accountId: testAccountId,
         currency: 'ZAR',
         unit: 'HUNDREDTH_CENT',

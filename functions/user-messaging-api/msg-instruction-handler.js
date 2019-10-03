@@ -10,8 +10,7 @@ const rdsUtil = require('./persistence/rds.notifications');
 const msgUtil = require('./msg.util');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
-
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 /**
  * Enforces instruction rules and ensures the message instruction is valid before it is persisted.
@@ -34,7 +33,7 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
  */
 module.exports.validateMessageInstruction = (instruction) => {
     const requiredProperties = config.get('instruction.requiredProperties');
-    for (let i = 0; i < requiredProperties.length; i++) {
+    for (let i = 0; i < requiredProperties.length; i += 1) {
         if (!instruction[requiredProperties[i]]) {
             throw new Error(`Missing required property value: ${requiredProperties[i]}`);
         }
@@ -51,8 +50,8 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error('Templates must define either a sequence or a single template.');
         case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory:
             throw new Error('Instructions for event driven must specify the event type');
-        default: 
-           return;
+        default:
+            logger('Validation passed for message instruction'); 
     }
 };
 
@@ -76,9 +75,9 @@ const createPersistableObject = (instruction, creatingUserId) => {
     const messagePriority = instruction.messagePriority || 0;
 
     const presentationType = instruction.presentationType;
-    let processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_GENERATING' : 'CREATED';
+    const processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_GENERATING' : 'CREATED';
 
-    const flags = presentationType === 'EVENT_DRIVEN' ? [instruction.eventTypeCategory] : undefined;
+    const flags = presentationType === 'EVENT_DRIVEN' ? [instruction.eventTypeCategory] : [];
     logger('Object created with flags: ', flags);
 
     return {
@@ -108,7 +107,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
         const testRes = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, instructionPayload)).promise();
         logger('Fired off test result: ', testRes);
         return { result: 'FIRED_TEST' };
-    };
+    }
 
     // second, if there was no test instruction, then unless we have an explicit 'hold', we create the messages for 
     // once off messages right away (on assumption they should go out)
@@ -119,7 +118,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
         const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, lambdaPaylod)).promise();
         logger('Fired off process instruction: ', fireResult);
         return { result: 'FIRED_INSTRUCT' };
-    };
+    }
 
     return { result: 'INSTRUCT_STORED' };
 
@@ -205,7 +204,7 @@ module.exports.updateInstruction = async (event) => {
         const instructionId = params.instructionId;
         const updateValues = params.updateValues;
         const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, updateValues);
-        if (Reflect.has(updateValues, 'active') && !Boolean(updateValues.active)) {
+        if (typeof updateValues.active === 'boolean' && !updateValues.active) {
             await rdsUtil.alterInstructionMessageStates(instructionId, ['CREATED', 'READY_FOR_SENDING'], 'DEACTIVATED');
         }
         logger('Result of instruction deactivation:', databaseResponse);

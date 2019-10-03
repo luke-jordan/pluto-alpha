@@ -110,11 +110,19 @@ const assembleSaveEmail = async (eventBody) => {
     templateVariables.savedAmount = formatAmountText(saveContext.savedAmount);
     let countText = '';
     switch (saveContext.saveCount) {
-        case 1:     countText = 'first'; break;
-        case 2:     countText = 'second'; break;
-        case 3:     countText = 'third'; break;
-        default:    countText = `${saveContext.count}th`; 
+        case 1: 
+            countText = 'first'; 
+            break;
+        case 2: 
+            countText = 'second';
+            break;
+        case 3: 
+            countText = 'third'; 
+            break;
+        default: 
+            countText = `${saveContext.count}th`; 
     }
+
     templateVariables.saveCountText = countText;
     templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${eventBody.userId}`;
     
@@ -168,7 +176,7 @@ const handleWithdrawalEvent = async (eventBody) => {
     const cachedDetails = await redis.get(key);
     const bankAccountDetails = JSON.parse(cachedDetails);
 
-    const templateVariables = Object.assign({}, bankAccountDetails);
+    const templateVariables = { ...bankAccountDetails };
     templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount);
     templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
 
@@ -190,7 +198,7 @@ const handleWithdrawalEvent = async (eventBody) => {
 };
 
 const handleAccountOpenedEvent = async (eventBody) => {
-    logger('Account open handled!: ', accountOpened);
+    logger('Account open handled!: ', eventBody);
 };
 
 module.exports.handleUserEvent = async (snsEvent) => {

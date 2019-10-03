@@ -9,9 +9,8 @@ const corsHeaders = {
     'Access-Control-Allow-Origin': allowedCors
 };
 
-module.exports.extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-
-module.exports.extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
+module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
+module.exports.extractUserDetails = (event) => (event.requestContext ? event.requestContext.authorizer : null);
 
 // todo : transition to using permissions
 module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN') => {
@@ -19,7 +18,7 @@ module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN') =
         return false;
     }
 
-    const mockingRole = config.has('security.roleRequired') && !Boolean(config.get('security.roleRequired'));
+    const mockingRole = config.has('security.roleRequired') && !config.get('security.roleRequired');
     logger('Security required ? : ', mockingRole);
     if (mockingRole) {
         return true;
@@ -28,13 +27,11 @@ module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN') =
     return userDetails.role === requiredRole;
 };
 
-module.exports.wrapHttpResponse = (body, statusCode = 200) => {
-    return {
-        statusCode,
-        headers: corsHeaders,
-        body: JSON.stringify(body)
-    };
-};
+module.exports.wrapHttpResponse = (body, statusCode = 200) => ({
+    statusCode,
+    headers: corsHeaders,
+    body: JSON.stringify(body)
+});
 
 module.exports.unauthorizedResponse = {
     statusCode: 403,

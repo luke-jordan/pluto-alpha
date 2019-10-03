@@ -85,21 +85,21 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         mockInstruction.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
     };
 
-    const mockPersistableObject = (mockInstruction) => ({
+    const mockPersistableObject = (instruction = mockInstruction) => ({
         instructionId: mockInstructionId,
         creatingUserId: mockUserId,
-        startTime: mockInstruction.startTime ? mockInstruction.startTime : moment().format(),
-        endTime: mockInstruction.endTime ? mockInstruction.endTime : moment().add(500, 'years').format(),
-        presentationType: mockInstruction.presentationType,
-        processedStatus: mockInstruction.presentationType === 'ONCE_OFF' ? 'READY_FOR_SENDING' : 'CREATED',
+        startTime: instruction.startTime ? instruction.startTime : moment().format(),
+        endTime: instruction.endTime ? instruction.endTime : moment().add(500, 'years').format(),
+        presentationType: instruction.presentationType,
+        processedStatus: instruction.presentationType === 'ONCE_OFF' ? 'READY_FOR_SENDING' : 'CREATED',
         active: true,
-        audienceType: mockInstruction.audienceType,
-        templates: mockInstruction.templates,
-        selectionInstruction: mockInstruction.selectionInstruction ? mockInstruction.selectionInstruction : null,
-        recurrenceParameters: mockInstruction.recurrenceParameters,
+        audienceType: instruction.audienceType,
+        templates: instruction.templates,
+        selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
+        recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: testTime.format(),
-        messagePriority: mockInstruction.messagePriority,
-        flags: mockInstruction.presentationType === 'EVENT_DRIVEN' ? [mockInstruction.eventTypeCategory] : undefined
+        messagePriority: instruction.messagePriority,
+        flags: instruction.presentationType === 'EVENT_DRIVEN' ? [instruction.eventTypeCategory] : null
     });
 
     const commonAssertions = (result, statusCode, expectedResult) => {

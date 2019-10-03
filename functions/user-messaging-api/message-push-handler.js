@@ -104,20 +104,20 @@ const chunkAndSendMessages = async (messages) => {
     // Promise.all call, because the Expo docs suggest doing that so as to spread the load
     // see: https://github.com/expo/expo-server-sdk-node
 
-    for (let chunk of chunks) {
+    for (const chunk of chunks) {
         try {
             const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
             logger('Received chunk: ', ticketChunk);
             tickets.push(...ticketChunk);
         } catch (err) {
-            logger('Push error: ', err)
+            logger('Push error: ', err);
         }
     }
 
     return {
         result: 'SUCCESS',
         numberSent: tickets.length
-    }
+    };
 };
 
 const sendPendingPushMsgs = async () => {
@@ -181,7 +181,7 @@ const generateFromSpecificMsgs = async (params) => {
     }));
 
     return chunkAndSendMessages(messages);
-}
+};
 
 module.exports.sendPushNotifications = async (params) => {
     try {
@@ -201,6 +201,6 @@ module.exports.sendPushNotifications = async (params) => {
         
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return { result: 'ERR', message: err.message }
+        return { result: 'ERR', message: err.message };
     }
 };

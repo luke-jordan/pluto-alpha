@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:account:test');
+// const logger = require('debug')('jupiter:account:test');
 const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
@@ -104,7 +104,7 @@ describe('Marshalls account insertion properly', () => {
     it('Gets user account id properly', async () => {
         const testUserId = uuid();
         const testAccountId = uuid();
-        const accQuery = `select account_id from ${config.get('tables.accountData')} where owner_user_id = $1 order by creation_time desc limit 1`
+        const accQuery = `select account_id from ${config.get('tables.accountData')} where owner_user_id = $1 order by creation_time desc limit 1`;
         queryStub.withArgs(accQuery, [testUserId]).resolves([{ 'account_id': testAccountId }]);
 
         const retrievedAccId = await rds.getAccountIdForUser(testUserId);
@@ -116,8 +116,7 @@ describe('Marshalls account insertion properly', () => {
 
     it('Returns undefined where account id is not found', async () => {
         const testUserId = uuid();
-        const testAccountId = uuid();
-        const accQuery = `select account_id from ${config.get('tables.accountData')} where owner_user_id = $1 order by creation_time desc limit 1`
+        const accQuery = `select account_id from ${config.get('tables.accountData')} where owner_user_id = $1 order by creation_time desc limit 1`;
         queryStub.withArgs(accQuery, [testUserId]).resolves([]);
 
         const retrievedAccId = await rds.getAccountIdForUser(testUserId);

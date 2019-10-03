@@ -259,10 +259,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             columnTemplate: accountColKeysSettled,
             rows: expectedAccountRow
         };
-
-        const expectedFloatQueryDef = createFloatQueryDef([testAcTxId, testFlTxAddId, testFlTxAllocId]);
         
-        const expectedArgs = sinon.match([expectedAccountQueryDef, expectedFloatQueryDef]);
         const txDetailsFromRds = [
             [{ 'transaction_id': uuid(), 'creation_time': moment().format() }],
             [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }]
@@ -487,13 +484,11 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
 });
 
 describe('*** UNIT TEST ADD TRANSACTION TO ACCOUNT ***', async () => {
+    
+    const testTxId = uuid();
     const testFlTxAdjustId = uuid();
     const testFlTxAllocId = uuid();
-    const testAccountId = uuid();
-    const testClientId = uuid();
-    const testFloatId = uuid();
-    const testTxId = uuid();
-
+    
     const testCreationTime = moment().format();
     const testInitiationTime = moment();
     const testSettlementTime = moment(); 
@@ -558,10 +553,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
     const testCreationTime = moment().format();
 
     const testTxId = uuid();
-    const testAccountId = uuid();
     const testSaveAmount = 1000;
-    const testFloatId = uuid();
-    const testClientId = uuid();
     const testFlTxAdjustId = uuid();
     const testFlTxAllocId = uuid();
 
@@ -627,11 +619,8 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
 describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
     const testTxId = uuid();
-    const testAccountId = uuid();
     const testSaveAmount = 1000;
-    const testFloatId = uuid();
-    const testClientId = uuid();
-
+    
     const expectedRowItem = {
         'account_transaction_id': testTxId,
         'account_id': testAccountId,
@@ -661,7 +650,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
     });
 
     it('Finds most common currency', async () => {
-        const currencyQuery = `select currency, count(currency) as currency_count from ${config.get('tables.accountTransactions')} where account_id = $1 group by currency order by currency_count desc limit 1`
+        const currencyQuery = `select currency, count(currency) as currency_count from ${config.get('tables.accountTransactions')} where account_id = $1 group by currency order by currency_count desc limit 1`;
         queryStub.withArgs(currencyQuery, [testAccountId]).resolves([{ 'currency': 'USD', 'currency_count': 10 }]);
         const result = await rds.findMostCommonCurrency(testAccountId);
         expect(result).to.exist;

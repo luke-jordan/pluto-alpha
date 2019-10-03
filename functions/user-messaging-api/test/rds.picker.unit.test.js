@@ -14,7 +14,7 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
 const userMessageTable = config.get('tables.userMessagesTable');
-const userAccountTable = config.get('tables.accountLedger');
+// const userAccountTable = config.get('tables.accountLedger');
 
 const testMsgId = uuid();
 const testFollowingMsgId = uuid();
@@ -118,7 +118,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     it('Retrieves user balance correctly', async () => {
         const expectedBalanceQuery = `select sum(amount), unit from ${config.get('tables.accountLedger')} inner join ${config.get('tables.transactionLedger')} ` +
             `on ${config.get('tables.accountLedger')}.account_id = ${config.get('tables.transactionLedger')}.account_id where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
-        const expectedBalanceTypes = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`];
+        // const expectedBalanceTypes = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`];
         const expectedBalanceValues = [testUserId, 'USD', 'SETTLED'];
         
         selectQueryStub.resolves([{ sum: 100, unit: 'WHOLE_CURRENCY' }, { sum: 10000, unit: 'WHOLE_CENT' }, { sum: 1000000, unit: 'HUNDREDTH_CENT' }]);
@@ -188,8 +188,6 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal([]);
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(...expectedQuery);
-
-
     });
 
 });

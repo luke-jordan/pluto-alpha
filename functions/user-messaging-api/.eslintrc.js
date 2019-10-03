@@ -129,7 +129,7 @@ module.exports = {
         'newline-per-chained-call': 'off',
         'no-alert': 'error',
         'no-array-constructor': 'error',
-        'no-await-in-loop': 'error',
+        'no-await-in-loop': 'warn',
         'no-bitwise': 'error',
         'no-buffer-constructor': 'error',
         'no-caller': 'error',
@@ -167,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 400, 500, 365]
+                'ignore': [0, 1, 2, 3, 100, 200, 400, 500, 365]
             }
         ],
         'no-mixed-operators': 'error',
@@ -261,7 +261,7 @@ module.exports = {
         'radix': 'error',
         'require-await': 'off',
         'require-jsdoc': 'error',
-        'require-unicode-regexp': 'error',
+        'require-unicode-regexp': 'off',
         'rest-spread-spacing': 'error',
         'semi': [ 
             'error',

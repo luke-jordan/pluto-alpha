@@ -116,8 +116,7 @@ describe('validateEvent', () => {
 });
 
 describe('createAccountMethod', () => {
-    const testUserId = uuid();
-    const testAccountId = uuid();
+    
     const testCreationRequest = {
         ownerUserId: testUserId,
         clientId: 'some_country_client',
@@ -132,7 +131,7 @@ describe('createAccountMethod', () => {
         }
     };
 
-    const insertArgs =  {
+    const insertArgs = {
         accountId: sinon.match.string,
         clientId: 'some_country_client',
         defaultFloatId: 'usd_primary_mmkt',
@@ -159,7 +158,7 @@ describe('createAccountMethod', () => {
     });
 
     it('Fails where referring user has no account id', async () => {
-        getAccountIdForUserStub.withArgs(testUserId).resolves(undefined);
+        getAccountIdForUserStub.withArgs(testUserId).resolves(null);
         insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
         lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         const response = await accountHandler.createAccount(testCreationRequest);

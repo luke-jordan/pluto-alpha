@@ -51,15 +51,16 @@ const placeParamsInTemplate = (template, passedParameters) => {
     let match = paramRegex.exec(template);
 
     // todo : make less ugly, possibly
+    let returnTemplate = template;
     while (match !== null) {
         const param = match[1];
         if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) < 0) {
-            template = template.replace(`#{${param}}`, passedParameters[param]);
+            returnTemplate = returnTemplate.replace(`#{${param}}`, passedParameters[param]);
         }
-        match = paramRegex.exec(template);
+        match = paramRegex.exec(returnTemplate);
     }
 
-    return template;
+    return returnTemplate;
 };
 
 const generateMessageFromTemplate = ({ destinationUserId, template, instruction, parameters }) => {
