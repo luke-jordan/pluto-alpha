@@ -340,3 +340,48 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(publishStub).to.be.calledWithExactly(testUserId, 'SIMPLE_REDEEMED', publishOptions);
     });
 });
+
+describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
+    const testUserId = uuid()
+
+
+    it('Pretends to process user boost response', async () => {
+        const testEvent = { testParam: 'TEST_VAL' };
+        const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, uuid(), 'ORDINARY_USER'));
+        logger('Result of user boost response processing:', result);
+        expect(result).to.exist;
+        expect(result.statusCode).to.deep.equal(200);
+        expect(result.body).to.deep.equal(JSON.stringify(testEvent));
+    });
+
+    it('Handles test run', async () => {
+        const result = await handler.processUserBoostResponse();
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ statusCode: 400 });
+    });
+
+    it('Fails on missing authorization', async () => {
+        const testEvent = { testParam: 'TEST_VAL' };
+        const result = await handler.processUserBoostResponse(testEvent);
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ statusCode: 403 });
+    });
+
+    it('Catches thrown errors', async () => {
+        const testEvent = {
+            body: ['BAD_BODY'],
+            requestContext: {
+                authorizer: {
+                    systemWideUserId: testUserId,
+                    userRole: 'ORDINARY_USER'
+                }
+            }
+        };
+        
+        const result = await handler.processUserBoostResponse(testEvent);
+        logger('Result of user boost response processing:', result);
+
+        expect(result).to.exist;
+        expect(result.statusCode).to.equal(500);
+    });
+});

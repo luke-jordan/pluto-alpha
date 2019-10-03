@@ -181,7 +181,7 @@ const handlePaymentFailure = (failureType) => {
 };
 
 // note: we can definitely optimize this guy when combined with the others (e.g., stick the relevant details in return clause on update)
-const publishSaveSucceeded = async (systemWideUserId, transactionId) =>{
+const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
   const txDetails = await persistence.fetchTransaction(transactionId);
   const count = await persistence.countSettledSaves(txDetails.accountId);
   logger(`For account ${txDetails.accountId}, how many prior saves? : ${count}`);

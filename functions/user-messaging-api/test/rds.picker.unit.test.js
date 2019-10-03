@@ -116,29 +116,31 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     });
 
     it('Retrieves user balance correctly', async () => {
-        const expectedBalanceQuery = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
-            `currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
+        const expectedBalanceQuery = `select sum(amount), unit from ${config.get('tables.accountLedger')} inner join ${config.get('tables.transactionLedger')} ` +
+            `on ${config.get('tables.accountLedger')}.account_id = ${config.get('tables.transactionLedger')}.account_id where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
         const expectedBalanceTypes = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`];
-        const expectedBalanceValues = [testUserId, 'USD', 'SETTLED', expectedBalanceTypes.join(',')];
-
-        selectQueryStub.resolves([{ amount: 100, unit: 'WHOLE_CURRENCY' }, { amount: 10000, unit: 'WHOLE_CENT' }, { amount: 1000000, unit: 'HUNDREDTH_CENT' }]);
+        const expectedBalanceValues = [testUserId, 'USD', 'SETTLED'];
+        
+        selectQueryStub.resolves([{ sum: 100, unit: 'WHOLE_CURRENCY' }, { sum: 10000, unit: 'WHOLE_CENT' }, { sum: 1000000, unit: 'HUNDREDTH_CENT' }]);
         
         const resultOfSum = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' });
         logger('Result of sum: ', resultOfSum);
-
+        
         expect(resultOfSum).to.deep.equal({ amount: 30000, unit: 'WHOLE_CENT', currency: 'USD' });
         expect(selectQueryStub).to.have.been.calledWith(expectedBalanceQuery, expectedBalanceValues);
     });
 
     it('Retrieves and sums user interest correctly', async () => {
-        const expectedInterestQuery = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
+        const expectedInterestQuery = `select sum(amount), unit from ${config.get('tables.transactionLedger')} where owner_user_id = $1 and ` +
             `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
         const expectedTxTypes = [`'ACCRUAL'`, `'CAPITALIZATION'`];
         const expectedValues = [testUserId, 'USD', 'SETTLED', expectedTxTypes.join(','), moment(0).format()];
 
-        selectQueryStub.resolves([{ amount: 10, unit: 'WHOLE_CURRENCY' }, { amount: 100000, unit: 'HUNDREDTH_CENT' }]);
+        selectQueryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfInterest = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CURRENCY::USD::0'});
         logger('Result of interest calc: ', resultOfInterest);
+        logger('args    :', selectQueryStub.getCall(0).args);
+        logger('expected:', [expectedInterestQuery, expectedValues]);
 
         expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
         expect(selectQueryStub).to.have.been.calledWith(expectedInterestQuery, expectedValues);
