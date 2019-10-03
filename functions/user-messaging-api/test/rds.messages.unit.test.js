@@ -551,11 +551,11 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
             table: config.get('tables.pushTokenTable'),
             key: { userId: mockUserId,
             provider: mockProvider },
-            value: null,
+            value: { active: false },
             returnClause: 'insertion_time'
         }];
 
-        updateRecordStub.withArgs(...mockUpdateArgs).resolves([{ insertion_id: 2 }]);
+        updateRecordStub.resolves([{ insertion_id: 2 }]);
 
         const result = await rdsUtil.deactivatePushToken(mockProvider, mockUserId);
         logger('Result of push token deactivation:', result);

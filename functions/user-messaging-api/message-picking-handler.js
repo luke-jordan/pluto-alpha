@@ -99,7 +99,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramSplit = param.split('::');
     const paramName = paramSplit[0];
     logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
-    if (STANDARD_PARAMS.indexOf(paramName) >= 0) {
+    if (STANDARD_PARAMS.indexOf(paramName) < 0) {
         return paramName; // redundant and unreachable but useful for robustness
     } else if (paramName === 'user_first_name') {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId);
@@ -129,6 +129,8 @@ const fillInTemplate = async (template, destinationUserId) => {
     }
 
     const replacedString = template.replace(paramRegex, '%s');
+    logger('String template looks like: ', replacedString);
+    
     logger('Fetching user profile for ID: ', destinationUserId);
     const userProfile = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId: destinationUserId }, PROFILE_COLS);
     logger('Obtained user profile: ', userProfile);

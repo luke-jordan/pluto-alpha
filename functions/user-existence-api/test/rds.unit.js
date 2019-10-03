@@ -114,14 +114,14 @@ describe('Marshalls account insertion properly', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(accQuery, [testUserId]);
     });
 
-    it('Returns undefined where account id is not found', async () => {
+    it('Returns null where account id is not found', async () => {
         const testUserId = uuid();
         const accQuery = `select account_id from ${config.get('tables.accountData')} where owner_user_id = $1 order by creation_time desc limit 1`;
         queryStub.withArgs(accQuery, [testUserId]).resolves([]);
 
         const retrievedAccId = await rds.getAccountIdForUser(testUserId);
 
-        expect(retrievedAccId).to.be.undefined;
+        expect(retrievedAccId).to.be.null;
         expect(queryStub).to.have.been.calledOnceWithExactly(accQuery, [testUserId]);
     });
 

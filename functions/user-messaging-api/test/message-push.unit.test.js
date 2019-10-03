@@ -23,12 +23,12 @@ const insertPushTokenStub = sinon.stub();
 const deletePushTokenStub = sinon.stub();
 const assembleMessageStub = sinon.stub();
 
-// class MockExpo {
-//     constructor () {
-//         this.chunkPushNotifications = expo.chunkPushNotifications;
-//         this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub
-//     }
-// }
+class MockExpo {
+    constructor () {
+        this.chunkPushNotifications = chunkPushNotificationsStub;
+        this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub;
+    }
+}
 
 const handler = proxyquire('../message-push-handler', {
     './persistence/rds.notifications': {
@@ -42,7 +42,8 @@ const handler = proxyquire('../message-push-handler', {
     },
     './message-picking-handler': {
         'assembleMessage': assembleMessageStub
-    }
+    },
+    'expo-server-sdk': { Expo: MockExpo }
 });
 
 const resetStubs = () => testHelper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingPushMessagesStub,
@@ -220,8 +221,11 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         resetStubs();
     });
 
+    // todo : expectations on chunk and other expo stubs
     it('Sends push notifications', async () => {
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
+        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
         const mockParams = {
             systemWideUserIds: [mockUserId, mockUserId],
@@ -241,6 +245,9 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
         bulkUpdateStatusStub.resolves([]);
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
+
+        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
         const result = await handler.sendPushNotifications();
         logger('Result of push notification sending:', result);  

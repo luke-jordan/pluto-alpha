@@ -51,7 +51,8 @@ module.exports.validateMessageInstruction = (instruction) => {
         case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory:
             throw new Error('Instructions for event driven must specify the event type');
         default:
-            logger('Validation passed for message instruction'); 
+            logger('Validation passed for message instruction');
+            return true;
     }
 };
 

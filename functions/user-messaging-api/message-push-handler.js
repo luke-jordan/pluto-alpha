@@ -98,6 +98,7 @@ const pickMessageBody = async (msg) => {
 
 const chunkAndSendMessages = async (messages) => {
     const chunks = expo.chunkPushNotifications(messages);
+    logger('Received chunks: ', chunks);
     const tickets = [];
 
     // note : we are doing awaits within a for loop instead of consolidating into a single
@@ -172,6 +173,7 @@ const sendPendingPushMsgs = async () => {
 const generateFromSpecificMsgs = async (params) => {
     const destinationUserIds = params.systemWideUserIds;
     const userTokenDict = await rdsMainUtil.getPushTokens(destinationUserIds, params.provider);
+    logger('Sending message per token dict: ', userTokenDict);
 
     const messages = destinationUserIds.filter((userId) => Reflect.has(userTokenDict, userId)).
         map((userId) => ({
@@ -185,7 +187,8 @@ const generateFromSpecificMsgs = async (params) => {
 
 module.exports.sendPushNotifications = async (params) => {
     try {
-        logger('Sending a notification to user IDs : ', typeof params === 'object' && Reflect.has(params, 'systemWideUserIds') ? params.systemWideUserId : null);
+        const haveSpecificIds = typeof params === 'object' && Reflect.has(params, 'systemWideUserIds');
+        logger('Sending a notification to user IDs : ', haveSpecificIds ? params.systemWideUserIds : null);
    
         let result = {};
         if (typeof params === 'object' && Reflect.has(params, 'systemWideUserIds')) {

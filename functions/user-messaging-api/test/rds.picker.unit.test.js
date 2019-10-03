@@ -90,14 +90,14 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
     it('Finds messages for user correctly and transforms them', async () => {
         const expectedQuery = `select * from ${userMessageTable} where destination_user_id = $1 and ` + 
-            `processed_status = $2 and end_time > current_timestamp and deliveries_done < deliveries_max`;
+            `processed_status = $2 and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' != $3`;
         selectQueryStub.resolves([msgRawFromRds]);
 
-        const resultOfFetch = await persistence.getNextMessage(testUserId);
+        const resultOfFetch = await persistence.getNextMessage(testUserId, true);
         logger('Result of fetch: ', resultOfFetch);
 
         expect(resultOfFetch).to.deep.equal([expectedTransformedMsg]);
-        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING']);
+        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING', 'PUSH']);
     });
 
     it('Finds pending push messages', async () => {
@@ -149,7 +149,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     it('Gracefully handles unknown parameter', async () => {
         const resultOfBadQuery = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
         logger('Result of bad query: ', resultOfBadQuery);
-        expect(resultOfBadQuery).to.be.undefined;
+        expect(resultOfBadQuery).to.be.null;
     });
 
 

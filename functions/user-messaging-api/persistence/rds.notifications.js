@@ -402,11 +402,11 @@ module.exports.getPushTokens = async (userIds, provider) => {
     return result.reduce((obj, row) => ({ ...obj, [row['user_id']]: row['push_token']}), {});
 };
 
-module.exports.deactivatePushToken = async (provider, userId, valuesToUpdate) => {
+module.exports.deactivatePushToken = async (provider, userId) => {
     logger('About to update push token.');
     const table = config.get('tables.pushTokenTable');
     const key = { userId, provider };
-    const value = valuesToUpdate;
+    const value = { active: false };
     const returnClause = 'insertion_time';
 
     const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });
