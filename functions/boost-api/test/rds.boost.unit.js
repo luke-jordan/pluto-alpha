@@ -54,8 +54,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
     const audienceQueryBase = `select account_id from ${accountTable}`;
     const standardBoostKeys = ['boostId', 'creatingUserId', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
-        'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 'boostAudience', 'audienceSelection', 
-        'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
+        'boostBudget', 'boostRedeemed', 'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 
+        'boostAudience', 'audienceSelection', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
     const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
@@ -92,6 +92,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostType: 'REFERRAL',
             boostCategory: 'USER_CODE_USED',
             boostAmount: 100000,
+            boostBudget: 200000, // i.e., twice the amount
+            boostRedeemed: 0,
             boostUnit: 'HUNDREDTH_CENT',
             boostCurrency: 'USD',
             fromBonusPoolId: 'primary_bonus_pool',
@@ -127,6 +129,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostType: 'REFERRAL',
             boostCategory: 'USER_CODE_USED',
             boostAmount: 100000,
+            boostBudget: 200000,
             boostUnit: 'HUNDREDTH_CENT',
             boostCurrency: 'USD',
             fromBonusPoolId: 'primary_bonus_pool',
@@ -375,10 +378,14 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         // also log the boost being deactivated
         const logRowStatus = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId, logContext: testLogContext };
         const logRowStatus2 = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId2, logContext: testLogContext };
-        const logRowBoost = { boostId: testBoostId, logType: 'BOOST_DEACTIVATED', logContext: testLogContext };
+        const logRowBoost = { boostId: testBoostId, logType: 'BOOST_DEACTIVATED' };
 
         const logStatusDef = assembleLogInsertDef([logRowStatus, logRowStatus2], true);
-        const logBoostDef = assembleLogInsertDef([logRowBoost], false);
+        const logBoostDef = { 
+            query: `insert into ${boostLogTable} (boost_id, log_type) values %L returning log_id, creation_time`,
+            columnTemplate: '${boostId}, ${logType}',
+            rows: [logRowBoost]
+        };
 
         const testInput = {
             boostId: testBoostId,
@@ -440,9 +447,10 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         const testMsgInstructId = uuid();
         const mockUpdatedTime = moment();
 
+        const messageDefs = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
         const alterBoostValue = { 
             messageInstructionIds: {
-                instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }]
+                instructions: messageDefs
             }
         };
 
@@ -452,7 +460,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             value: alterBoostValue,
             returnClause: 'updated_time'
         };
-        const expectedLogDef = assembleLogInsertDef([{ boostId: testBoostId, logType: 'BOOST_ALTERED', logContext: alterBoostValue }]);
+        const expectedLogDef = assembleLogInsertDef([{ boostId: testBoostId, logType: 'BOOST_ALTERED', logContext: { value: alterBoostValue }}]);
 
         const mockResponseFromPersistence = [
             [{ 'updated_time': mockUpdatedTime.format()}], [{ 'creation_time': moment().format() }]
@@ -460,9 +468,15 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
 
         multiOpStub.resolves(mockResponseFromPersistence);
 
-        const alterBoostResult = await rds.alterBoost(testBoostId, alterBoostValue);
+        const alterBoostResult = await rds.setBoostMessages(testBoostId, messageDefs);
         expect(alterBoostResult).to.exist;
         expect(alterBoostResult).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
+
+        const passedUpdateDef = multiOpStub.getCall(0).args[0][0];
+        expect(passedUpdateDef).to.deep.equal(expectedUpdateDef);
+        
+        const passedLogDeg = multiOpStub.getCall(0).args[1][0];
+        expect(passedLogDeg).to.deep.equal(expectedLogDef); 
 
         expect(multiOpStub).to.have.been.calledOnceWithExactly([expectedUpdateDef], [expectedLogDef]);
     });
@@ -479,14 +493,14 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['TEST_FLAG']);
     });
 
-    it('Returns undefined where no instruction matches flag', async () => {
+    it('Returns null where no instruction matches flag', async () => {
         const expectedQuery = `select instruction_id from ${config.get('tables.msgInstructionTable')} where flags && ARRAY[$1] order by creation_time desc limit 1`;
         queryStub.withArgs(expectedQuery, ['TEST_FLAG']).resolves([]);
 
         const result = await rds.findMsgInstructionByFlag('TEST_FLAG');
         logger('Result of instruction extraction by flag:', result);
 
-        expect(result).to.be.undefined;
+        expect(result).to.be.null;
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['TEST_FLAG']);
     });
 

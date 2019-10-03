@@ -85,16 +85,16 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
     });
 
     it('Lists boosts', async () => {
-        listBoostsStub.withArgs([], true, true).resolves([persistedBoost]);
+        listBoostsStub.resolves([persistedBoost]);
 
-        const expectedBody = {
+        const passedParameters = {
             includeReferrals: true,
             includeUserCounts: true,
             includeExpired: true,
             includeStatusCounts: true
         };
 
-        const expectedEvent = wrapQueryParamEvent(expectedBody, testUserId, 'SYSTEM_ADMIN');
+        const expectedEvent = wrapQueryParamEvent(passedParameters, testUserId, 'SYSTEM_ADMIN');
         logger('Created event:', expectedEvent);
 
         const resultOfListing = await handler.listBoosts(expectedEvent);
@@ -107,7 +107,7 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
     });
 
     it('Sets default type categories for exclusion', async () => {
-        listBoostsStub.withArgs(['REFERRAL::USER_CODE_USED'], true, true).resolves([persistedBoost]);
+        listBoostsStub.resolves([persistedBoost]);
 
         const expectedBody = { includeUserCounts: true, includeExpired: true, includeStatusCounts: true };
         const expectedEvent = wrapQueryParamEvent(expectedBody, testUserId, 'SYSTEM_ADMIN');
@@ -119,7 +119,7 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
         expect(resultOfListing).to.exist;
         expect(resultOfListing.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfListing.body).to.deep.equal(JSON.stringify([persistedBoost]));
-        expect(listBoostsStub).to.have.been.calledOnceWithExactly(['REFERRAL::USER_CODE_USED'], true, true);
+        expect(listBoostsStub).to.have.been.calledOnceWithExactly(['REFERRAL::USER_CODE_USED', 'REFERRAL::BETA_CODE_USED'], true, true);
     });
 
     it('Fails on missing authorization', async () => {

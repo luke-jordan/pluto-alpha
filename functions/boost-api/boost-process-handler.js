@@ -232,14 +232,14 @@ const generateMessageSendInvocation = (messageInstructions) => ({
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event }) => {
     const eventType = `${boost.boostType}_REDEEMED`;
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
-        const initiator = affectedAccountsUserDict[event.accountId];
+        const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
             boostId: boost.boostId,
             boostUpdateTimeMillis: boostUpdateTime.valueOf(),
             transferResults,
             eventContext: event.eventContext
         };
-        return publisher.publishUserEvent(affectedAccountsUserDict[accountId], eventType, { initiator, context });
+        return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, { initiator, context });
     });
 
     logger('Publish result: ', publishPromises);
@@ -257,7 +257,7 @@ module.exports.processEvent = async (event) => {
     }
 
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
-    // logger('Found these open boosts: ', offeredOrPendingBoosts);
+    logger('Found these open boosts: ', offeredOrPendingBoosts);
 
     if (!offeredOrPendingBoosts || offeredOrPendingBoosts.length === 0) {
         logger('Well, nothing found');
@@ -303,10 +303,12 @@ module.exports.processEvent = async (event) => {
 
     // then: construct & send redemption messages
     const messageInstructionsNested = boostsToRedeem.map((boost) => assembleMessageInstructions(boost, affectedAccountsDict[boost.boostId]));
-    const messageInstructionsFlat = messageInstructionsNested.flat(Infinity);
+    const messageInstructionsFlat = Reflect.apply([].concat, [], messageInstructionsNested);
     logger('Passing message instructions: ', messageInstructionsFlat);
     
-    const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();
+    const messageInvocation = generateMessageSendInvocation(messageInstructionsFlat);
+    logger('Message invocation: ', messageInvocation);
+    const messagePromise = lambda.invoke(messageInvocation).promise();
     logger('Obtained message promise');
 
     const boostsRedeemedIds = boostsToRedeem.map((boost) => boost.boostId);

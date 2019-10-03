@@ -12,7 +12,7 @@ const persistence = require('./persistence/rds.boost');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const ALLOWABLE_ORDINARY_USER = ['REFERRAL::USER_CODE_USED'];
+// const ALLOWABLE_ORDINARY_USER = ['REFERRAL::USER_CODE_USED'];
 const STANDARD_GAME_ACTIONS = {
     'OFFERED': { action: 'ADD_CASH' },
     'UNLOCKED': { action: 'PLAY_GAME' },
@@ -66,7 +66,8 @@ const obtainMsgIdMatchedToAccount = async (flagDefinition, boostStatus) => {
     const msgInstructionId = await persistence.findMsgInstructionByFlag(flagDefinition.msgInstructionFlag);
     logger('Result of flag hunt: ', msgInstructionId);
     if (typeof msgInstructionId === 'string') {
-        return ({ accountId: flagDefinition.accountId, boostStatus, msgInstructionId });
+        logger('Found a flag, returning it');
+        return ({ accountId: flagDefinition.accountId, status: boostStatus, msgInstructionId });
     }
     return null; 
 };
@@ -75,8 +76,8 @@ const obtainMessagePromise = async (boostStatus, messageInstructionFlags) => {
     const flagsForThisStatus = messageInstructionFlags[boostStatus];
     logger('Message flags for this boost status: ', flagsForThisStatus);
     const retrievedMsgs = await Promise.all(flagsForThisStatus.map((flagDefinition) => obtainMsgIdMatchedToAccount(flagDefinition, boostStatus)));
-    const foundMsg = retrievedMsgs.find((msg) => msg !== null);
-    return foundMsg || null;
+    const foundMsgs = retrievedMsgs.filter((msg) => msg !== null);
+    return foundMsgs;
 };
 
 const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
@@ -87,7 +88,7 @@ const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
     logger('Have statuses: ', statuses);
     
     const messageInstructionsRaw = await Promise.all(statuses.map((boostStatus) => obtainMessagePromise(boostStatus, messageInstructionFlags)));
-    const messageInstructions = messageInstructionsRaw.map((result) => result !== null);
+    const messageInstructions = Reflect.apply([].concat, [], messageInstructionsRaw.filter((result) => result.length > 0));
     
     logger('Finished hunting by flag, have result: ', messageInstructions);
     return messageInstructions;
@@ -149,6 +150,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
 };
 
 const assembleMsgLamdbaInvocation = async (msgPayload) => {
+    logger('Sending payload to messsage instruction create: ', msgPayload);
     const messageInstructInvocation = {
         FunctionName: config.get('lambdas.messageInstruct'),
         InvocationType: 'RequestResponse',
@@ -189,6 +191,10 @@ module.exports.createBoost = async (event) => {
     // logger('Received boost instruction event: ', params);
 
     // todo : extensive validation
+    if (typeof params.creatingUserId !== 'string') {
+        throw new Error('Boost requires creating user ID');
+    }
+
     const boostType = params.boostTypeCategory.split('::')[0];
     const boostCategory = params.boostTypeCategory.split('::')[1];
 
@@ -206,6 +212,8 @@ module.exports.createBoost = async (event) => {
             return util.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
         }
         boostBudget = parseInt(boostBudgetParams[0], 10);
+    } else {
+        throw new Error('Boost must have a budget');
     }
 
     // start now if nothing provided
@@ -262,6 +270,7 @@ module.exports.createBoost = async (event) => {
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
 
+    // logger('Do we have messages ? :', params.messagesToCreate);
     if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
         const boostParams = {
             boostId: persistedBoost.boostId,
@@ -294,18 +303,14 @@ module.exports.createBoostWrapper = async (event) => {
     try {
         const userDetails = util.extractUserDetails(event);
 
-        // logger('Boost create event: ', event);
+        logger('Boost create event: ', event);
+        logger('User details: ', userDetails);
         if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
             return { statusCode: status('Forbidden') };
         }
 
         const params = util.extractEventBody(event);
         params.creatingUserId = userDetails.systemWideUserId;
-
-        const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
-        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) < 0) {
-            return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
-        }
 
         const resultOfCall = await exports.createBoost(params);
         return util.wrapHttpResponse(resultOfCall);    

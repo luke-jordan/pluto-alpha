@@ -13,7 +13,8 @@ module.exports.extractUserDetails = (event) => (event.requestContext ? event.req
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
 
 module.exports.extractQueryParams = (event) => {
-    if (event.queryStringParameters === 'object' && event.queryStringParameters !== null) {
+    // logger('Event query string params: ', event.queryStringParameters);
+    if (typeof event.queryStringParameters === 'object' && event.queryStringParameters !== null) {
         return event.queryStringParameters;
     } 
     return event;

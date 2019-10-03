@@ -121,7 +121,6 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
     }
 
     return { result: 'INSTRUCT_STORED' };
-
 };
 
 /**

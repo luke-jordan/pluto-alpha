@@ -33,8 +33,6 @@ const rds = proxyquire('../persistence/rds.admin.boost', {
 });
 
 const resetStubs = () => testHelper.resetStubs(queryStub, updateRecordObjectStub);
-// const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
-// const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 const boostMainTable = config.get('tables.boostTable');
 const boostAccountTable = config.get('tables.boostAccountJoinTable');
@@ -51,11 +49,13 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     const boostFromPersistence = {
         'boost_id': testBoostId,
-        'boost_type': 'SIMPLE::TIME_LIMITED',
-        'boost_category': 'USER_CODE_USED',
+        'boost_type': 'SIMPLE',
+        'boost_category': 'TIME_LIMITED',
         'boost_amount': 100000,
         'boost_unit': 'HUNDREDTH_CENT',
         'boost_currency': 'USD',
+        'boost_budget': 10000000,
+        'boost_redeemed': 600000,
         'from_bonus_pool_id': 'primary_bonus_pool',
         'from_float_id': 'primary_cash',
         'for_client_id': 'some_client_co',
@@ -77,11 +77,13 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     const expectedBoostResult = {
         boostId: testBoostId,
-        boostType: 'REFERRAL',
-        boostCategory: 'USER_CODE_USED',
+        boostType: 'SIMPLE',
+        boostCategory: 'TIME_LIMITED',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
+        boostBudget: 10000000,
+        boostRedeemed: 600000,
         fromBonusPoolId: 'primary_bonus_pool',
         fromFloatId: 'primary_cash',
         forClientId: 'some_client_co',
