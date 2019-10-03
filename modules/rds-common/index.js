@@ -173,7 +173,7 @@ class RdsConnection {
         
         const nestedArray = RdsConnection.compileInsertQueryString(columnTemplate, objectArray);
         
-        // logger('SINGLE: Nested array: ', nestedArray);
+        logger('SINGLE: Nested array: ', nestedArray);
         const formattedQuery = format(queryTemplate, nestedArray);
         logger('SINGLE: Formatted query: ', formattedQuery);
 
@@ -228,7 +228,7 @@ class RdsConnection {
         return results;
     }
 
-    // todo : update to look like handling of update query defs below
+    // more flexible form where we needed it, use the below for more generic ones
     async updateRecord (query = 'UPDATE TABLE SET VALUE = $1 WHERE ID = $2 RETURNING ID', values) {
         if (!Array.isArray(values) || values.length === 0) {
             throw new NoValuesError(query);
@@ -250,6 +250,30 @@ class RdsConnection {
         }
 
         return results;
+    }
+
+    // see below for definition of update query def
+    async updateRecordObject (updateQueryDef) {
+        const { query, values } = RdsConnection.compileUpdateQueryAndArray(updateQueryDef);
+        
+        let result = null;
+        const client = await this._getConnection();
+        
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            const rawResult = await client.query(query, values);
+            result = RdsConnection._extractRowsIfExist(rawResult);
+            await client.query('COMMIT');
+        } catch (err) {
+            logger('Error running update: ', err);
+            await client.query('ROLLBACK');
+            throw new CommitError();
+        } finally {
+            await client.release();
+        }
+
+        return result;
     }
 
     /**
@@ -360,13 +384,31 @@ class RdsConnection {
         return [];
     }
 
-    // todo : _lots_ of error testing
+    // todo : fix this array handling, somehow (probably needs a deep rewrite eventually)
+    static _convertArrayToPgString (array) {
+        const withinArray = array.map((item) => {
+            if (Array.isArray(item)) {
+                return RdsConnection._convertArrayToPgString(item);
+            } else if (typeof item === 'number') {
+                return String(item);
+            } else if (typeof item === 'string') {
+                return item;
+            } 
+            // all else failed so do the most basic fallback
+            return JSON.stringify(item);
+        }).join(', ');
+        return `{${withinArray}}`;
+    }
+
+    // todo : _lots_ of error testing    
     static compileInsertQueryString (columnTemplate, objectArray) {
         const paramAndConstantNames = RdsConnection._extractKeysAndConstants(columnTemplate);
         // todo : also security test names for remote code execution
         const nestedArray = objectArray.map((object) => paramAndConstantNames.map((paramOrConstant) => {
             if (paramOrConstant.type === 'PARAM') {
-                return object[paramOrConstant['value']];
+                const value = object[paramOrConstant['value']];
+                // nested array handling means without this, the array will be turned into a simple string
+                return Array.isArray(value) ? RdsConnection._convertArrayToPgString(value) : value;
             }
             return paramOrConstant['value'];
         }));

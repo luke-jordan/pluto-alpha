@@ -52,6 +52,17 @@ module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
     });
 };
 
+module.exports.requestContext = (systemWideUserId) => ({
+    authorizer: {
+        systemWideUserId
+    }
+});
+
+module.exports.expectedHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+};
+
 // module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
 //     FunctionName: functionName,
 //     InvocationType: async ? 'Event' : 'RequestResponse',

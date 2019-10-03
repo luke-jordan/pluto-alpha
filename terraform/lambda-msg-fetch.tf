@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_user_fetch" {
   role                           = "${aws_iam_role.message_user_fetch_role.arn}"
   handler                        = "message-picking-handler.getNextMessageForUser"
   memory_size                    = 512
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -87,6 +87,16 @@ resource "aws_iam_role_policy_attachment" "message_user_fetch_basic_execution_po
 resource "aws_iam_role_policy_attachment" "message_user_fetch_vpc_execution_policy" {
   role = "${aws_iam_role.message_user_fetch_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "message_user_fetch_msg_process_policy" {
+  role = "${aws_iam_role.message_user_fetch_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_message_process_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "message_user_fetch_profile_table_policy" {
+  role = "${aws_iam_role.message_user_fetch_role.name}"
+  policy_arn = "${var.user_profile_table_read_policy_arn[terraform.workspace]}"
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_fetch_transaction_secret_get" {

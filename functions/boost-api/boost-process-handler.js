@@ -8,25 +8,25 @@ const status = require('statuses');
 
 const persistence = require('./persistence/rds.boost');
 const publisher = require('publish-common');
+const util = require('./boost.util');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
-
-const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
-}
+};
 
-////////////////////////////// HELPER METHODS ///////////////////////////////////////////
+// //////////////////////////// HELPER METHODS ///////////////////////////////////////////
 
-// this takes the event and creates the arguments to pass to persistence to get applicable boosts
+// this takes the event and creates the arguments to pass to persistence to get applicable boosts, i.e.,
+// those that still have budget remaining and are in offered or pending state for this user
 const extractFindBoostKey = (event) => {
     const persistenceKey = event.accountId ? { accountId: [event.accountId] } : { userId: [event.userId] };
     persistenceKey.boostStatus = ['OFFERED', 'PENDING'];
     persistenceKey.active = true;
+    persistenceKey.underBudgetOnly = true;
     return persistenceKey;
 };
 
@@ -56,6 +56,7 @@ const testCondition = (event, statusCondition) => {
             logger('And amount from event: ', equalizeAmounts(event.eventContext.savedAmount));
             return equalizeAmounts(event.eventContext.savedAmount) >= equalizeAmounts(parameterValue);
         case 'save_completed_by':
+            logger(`Checking if save completed by ${event.accountId} === ${parameterValue}, result: ${event.accountId === parameterValue}`);
             return event.accountId === parameterValue;
         case 'first_save_by':
             return event.accountId === parameterValue && eventHasContext && event.eventContext.firstSave;
@@ -78,9 +79,9 @@ const extractStatusChangesMet = (event, boost) => {
 
 const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
     const selectPromises = boosts.map((boost) => {
-        const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
+        const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
         const restrictToInitiator = boost.boostAudience === 'GENERAL' || !redeemsAll;
-        const findAccountsParams = { boostIds: [boost.boostId], status: ['PENDING'] };
+        const findAccountsParams = { boostIds: [boost.boostId], status: ['OFFERED', 'PENDING'] };
         if (restrictToInitiator) {
             findAccountsParams.accountIds = [initiatingAccountId];
         }
@@ -92,13 +93,13 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
     logger('Affected accounts: ', affectedAccountArray);
     return affectedAccountArray.map((result) => result[0]).
         reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
-}
+};
 
 // note: this is only called for redeemed boosts, by definition
 const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
-    let recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
+    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
-    let recipients = recipientAccounts.map(recipientId => ({ 
+    const recipients = recipientAccounts.map((recipientId) => ({ 
         recipientId, amount: boost.boostAmount, recipientType: 'END_USER_ACCOUNT'
     }));
     return {
@@ -135,12 +136,14 @@ const triggerFloatTransfers = async (transferInstructions) => {
 };
 
 const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
+    logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
     return alteredBoosts.map((boost) => {
         const boostId = boost.boostId;
         const highestStatus = boostStatusChangeDict[boostId][0]; // but needs a sort
         const isChangeRedemption = highestStatus === 'REDEEMED';
-        const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
-        const logContext = { newStatus: highestStatus, transactionId };
+        const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
+        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount, transactionId };
+
         return {
             boostId,
             accountIds: Object.keys(affectedAccountsUsersDict[boostId]),
@@ -164,7 +167,7 @@ const generateMsgInstruction = (instructionId, destinationUserId, boost) => {
         'HUNDREDTH_CENT': 100 * 100,
         'WHOLE_CENT': 100,
         'WHOLE_CURRENCY': 1 
-    }
+    };
 
     const wholeCurrencyAmount = boost.boostAmount / unitDivisors[boost.boostUnit];
     const formattedBoostAmount = numberFormat.format(wholeCurrencyAmount);
@@ -176,29 +179,47 @@ const generateMsgInstruction = (instructionId, destinationUserId, boost) => {
         destinationUserId,
         parameters: { boostAmount: formattedBoostAmount },
         triggerBalanceFetch: true
-    }
+    };
+};
+
+const assembleMessageForInstruction = (boost, boostInstruction, affectedAccountUserDict) => {
+    const target = boostInstruction.accountId;
+    const instructionId = boostInstruction.msgInstructionId;
+
+    logger(`Generating message for target ${target} and instruction ID ${instructionId}`);
+
+    if (target === 'ALL') {
+        // generate messages for all the users
+        return Object.values(affectedAccountUserDict).
+            map((userObject) => generateMsgInstruction(instructionId, userObject.userId, boost));
+    } else if (Reflect.has(affectedAccountUserDict, target)) {
+        // generate messages for just this user
+        const userObjectForTarget = affectedAccountUserDict[target];
+        logger('user object for target: ', userObjectForTarget);
+        const userMsgInstruction = generateMsgInstruction(instructionId, userObjectForTarget.userId, boost);
+        logger('Generated instruction: ', userMsgInstruction);
+        return [userMsgInstruction];
+    } 
+    
+    logger('Target not present in user dict, investigate');
+    return [];
 };
 
 const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
-    const boostMessageInstructions = boost.messageInstructionIds;
+    const boostMessageInstructions = boost.messageInstructions;
     logger('Boost msg instructions: ', boostMessageInstructions);
-    let assembledMessages = [];
+    logger('Affected account dict: ', affectedAccountUserDict);
+    const assembledMessages = [];
     // todo : make work for other statuses
     boostMessageInstructions.
         filter((entry) => entry.status === 'REDEEMED').
         forEach((entry) => {
-            const target = entry.accountId;
-            const instructionId = entry.msgInstructionId;
-            if (target === 'ALL') {
-                const messages = Object.values(affectedAccountUserDict).map((userId) => generateMsgInstruction(instructionId, userId, boost));
-                assembledMessages.push(...messages);
-            } else if (Reflect.has(affectedAccountUserDict, target)) {
-                const userIdForTarget = affectedAccountUserDict[target];
-                assembledMessages.push(generateMsgInstruction(instructionId, userIdForTarget, boost));
-            }
-    });
+            const thisEntryInstructions = assembleMessageForInstruction(boost, entry, affectedAccountUserDict);
+            logger('Got this back: ', thisEntryInstructions);
+            assembledMessages.push(...thisEntryInstructions);
+        });
+    
     logger('Assembled messages: ', assembledMessages);
-
     return assembledMessages;
 };
 
@@ -211,14 +232,14 @@ const generateMessageSendInvocation = (messageInstructions) => ({
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event }) => {
     const eventType = `${boost.boostType}_REDEEMED`;
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
-        const initiator = affectedAccountsUserDict[event.accountId];
+        const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
             boostId: boost.boostId,
             boostUpdateTimeMillis: boostUpdateTime.valueOf(),
             transferResults,
             eventContext: event.eventContext
-        }
-        return publisher.publishUserEvent(affectedAccountsUserDict[accountId], eventType, { initiator, context });
+        };
+        return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, { initiator, context });
     });
 
     logger('Publish result: ', publishPromises);
@@ -236,7 +257,7 @@ module.exports.processEvent = async (event) => {
     }
 
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
-    // logger('Found these open boosts: ', offeredOrPendingBoosts);
+    logger('Found these open boosts: ', offeredOrPendingBoosts);
 
     if (!offeredOrPendingBoosts || offeredOrPendingBoosts.length === 0) {
         logger('Well, nothing found');
@@ -260,12 +281,13 @@ module.exports.processEvent = async (event) => {
     }
 
     logger('At least one boost was triggered. First step is to extract affected accounts, then tell the float to transfer from bonus pool');
+    // note : this is in the form, top level keys: boostID, which gives a dict, whose own key is the account ID, and an object with userId and status
     const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange);
     logger('Retrieved affected accounts and user IDs: ', affectedAccountsDict);
 
     // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
     // todo : definitely need a DLQ for this guy
-    const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') != -1);
+    const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
     logger('Boosts to redeem: ', boostsToRedeem);
     const transferInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
     logger('***** Transfer instructions: ', JSON.stringify(transferInstructions));
@@ -281,14 +303,19 @@ module.exports.processEvent = async (event) => {
 
     // then: construct & send redemption messages
     const messageInstructionsNested = boostsToRedeem.map((boost) => assembleMessageInstructions(boost, affectedAccountsDict[boost.boostId]));
-    const messageInstructionsFlat = [].concat.apply([], messageInstructionsNested);
+    const messageInstructionsFlat = Reflect.apply([].concat, [], messageInstructionsNested);
     logger('Passing message instructions: ', messageInstructionsFlat);
     
-    const messagePromise = lambda.invoke(generateMessageSendInvocation(messageInstructionsFlat)).promise();
+    const messageInvocation = generateMessageSendInvocation(messageInstructionsFlat);
+    logger('Message invocation: ', messageInvocation);
+    const messagePromise = lambda.invoke(messageInvocation).promise();
     logger('Obtained message promise');
+
+    const boostsRedeemedIds = boostsToRedeem.map((boost) => boost.boostId);
+    const updateRedeemedAmount = persistence.updateBoostAmountRedeemed(boostsRedeemedIds);
     
     // then: assemble the event publishing
-    let finalPromises = [messagePromise];
+    let finalPromises = [messagePromise, updateRedeemedAmount];
 
     boostsToRedeem.forEach((boost) => {
         const boostId = boost.boostId;
@@ -311,7 +338,7 @@ module.exports.processEvent = async (event) => {
         result: 'SUCCESS',
         resultOfTransfers,
         resultOfUpdates
-    }
+    };
 
     return {
         statusCode: 200,
@@ -326,12 +353,12 @@ module.exports.processUserBoostResponse = async (event) => {
             return { statusCode: 400 };
         }
         
-        const userDetails = extractUserDetails(event);
+        const userDetails = util.extractUserDetails(event);
         if (!userDetails) {
             return { statusCode: status('Forbidden') };
         }
 
-        const params = extractEventBody(event);
+        const params = util.extractEventBody(event);
         logger('Event params: ', params);
 
         return {

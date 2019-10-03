@@ -167,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 400, 500, 365]
+                'ignore': [0, 1, 2, 3, 100, 200, 400, 500, 365]
             }
         ],
         'no-mixed-operators': 'error',
@@ -249,7 +249,7 @@ module.exports = {
         'prefer-reflect': 'error',
         'prefer-rest-params': 'error',
         'prefer-spread': 'error',
-        'prefer-template': 'error',
+        'prefer-template': 'off',
         'quote-props': 'off',
         'quotes': [
             'error',

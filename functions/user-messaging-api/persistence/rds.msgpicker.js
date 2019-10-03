@@ -11,6 +11,7 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 const userMessageTable = config.get('tables.userMessagesTable');
 const userAccountTable = config.get('tables.accountLedger');
+const userTransactionTable = config.get('tables.transactionLedger');
 
 // format: from key into values, e.g., UNIT_MULTIPLIERS[WHOLE_CURRENCY][WHOLE_CENT] = 100;
 const UNIT_MULTIPLIERS = {
@@ -38,29 +39,50 @@ const transformMsg = (msgRawFromRds) => {
     msgObject.startTime = moment(msgObject.startTime);
     msgObject.endTime = moment(msgObject.endTime);
     // remove some unnecessary objects
-    const keysToRemove = ['deliveriesDone', 'deliveriesMax', 'destinationUserId', 'flags', 'instructionId', 
-            'processedStatus', 'updatedTime'];
-    return Object.keys(msgObject).filter((key) => keysToRemove.indexOf(key) === -1).
+    const keysToRemove = ['deliveriesDone', 'deliveriesMax', 'flags', 'instructionId', 'processedStatus', 'updatedTime'];
+    return Object.keys(msgObject).filter((key) => keysToRemove.indexOf(key) < 0).
         reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
 };
 
-module.exports.getNextMessage = async (destinationUserId) => {
-    const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status = $2 ` + 
-        `and end_time > current_timestamp and deliveries_done < deliveries_max`;
+module.exports.getNextMessage = async (destinationUserId, excludePushNotifications = true) => {
     const values = [destinationUserId, 'READY_FOR_SENDING'];
+    
+    let pushSuffix = '';
+    if (excludePushNotifications) {
+        pushSuffix = `and display ->> 'type' != $3`;
+        values.push('PUSH');
+    }
+
+    const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status = $2 ` + 
+        `and end_time > current_timestamp and deliveries_done < deliveries_max ${pushSuffix}`;
+    
     const result = await rdsConnection.selectQuery(query, values);
     logger('Retrieved next message from RDS: ', result);
     return result.map((msg) => transformMsg(msg));
 };
 
-const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT') => 
-    rows.reduce((sum, row) => sum + row['amount'] * UNIT_MULTIPLIERS[row['unit']][targetUnit], 0);
+module.exports.getPendingPushMessages = async () => {
+    const query = `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
+        `deliveries_done < deliveries_max and display ->> 'type' = $2`;
+    const values = ['READY_FOR_SENDING', 'PUSH'];
+    const resultOfQuery = await rdsConnection.selectQuery(query, values);
+    return resultOfQuery.map((msg) => transformMsg(msg));
+};
 
+// Possibly over-concise, but allows us to sum these on a single query
+const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => rows.
+    reduce((sum, row) => {
+        const rowAmount = parseInt(row[amountKey], 10) * UNIT_MULTIPLIERS[row['unit']][targetUnit]; 
+        return sum + rowAmount; 
+    }, 0);
+
+// to reinclude later, possibly: and transaction_type in ($4) 
 const accountSumQuery = async (params, systemWideUserId) => {
-    const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
-    const query = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
-        `currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
-    const fetchRows = await rdsConnection.selectQuery(query, [systemWideUserId, params.currency, 'SETTLED', transTypesToInclude]);
+    // const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
+    const query = `select sum(amount), unit from ${userAccountTable} inner join ${userTransactionTable} ` +
+        `on ${userAccountTable}.account_id = ${userTransactionTable}.account_id ` +
+        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
+    const fetchRows = await rdsConnection.selectQuery(query, [systemWideUserId, params.currency, 'SETTLED']);
     logger('Result from select: ', fetchRows);
     return { ...params, amount: sumOverUnits(fetchRows, params.unit) };
 };
@@ -68,7 +90,7 @@ const accountSumQuery = async (params, systemWideUserId) => {
 const interestHistoryQuery = async (params, systemWideUserId) => {
     const transTypesToInclude = [`'ACCRUAL'`, `'CAPITALIZATION'`].join(',');
     const cutOffMoment = moment(params.startTimeMillis, 'x');
-    const query = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
+    const query = `select sum(amount), unit from ${userTransactionTable} where owner_user_id = $1 and ` +
         `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
     const values = [systemWideUserId, params.currency, 'SETTLED', transTypesToInclude, cutOffMoment.format()];
     const fetchRows = await rdsConnection.selectQuery(query, values);
@@ -78,14 +100,16 @@ const interestHistoryQuery = async (params, systemWideUserId) => {
 const executeAggregateOperation = (operationParams, systemWideUserId) => {
     const operation = operationParams[0];
     switch (operation) {
-        case 'balance':
+        case 'balance': {
             logger('Calculation a balance of account');
-            operationParams = { unit: operationParams[1], currency: operationParams[2] }; 
-            return accountSumQuery(operationParams, systemWideUserId);
-        case 'interest':
+            const paramsForPersistence = { unit: operationParams[1], currency: operationParams[2] }; 
+            return accountSumQuery(paramsForPersistence, systemWideUserId);
+        }
+        case 'interest': {
             logger('Calculating interest earned');
-            operationParams = { unit: operationParams[1], currency: operationParams[2], startTimeMillis: operationParams[3] };
-            return interestHistoryQuery(operationParams, systemWideUserId);
+            const paramsForPersistence = { unit: operationParams[1], currency: operationParams[2], startTimeMillis: operationParams[3] };
+            return interestHistoryQuery(paramsForPersistence, systemWideUserId);
+        }
         default:
             return null;
     }
@@ -108,9 +132,12 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     if (resultOfOperation) {
         return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
     }
-    return undefined;
+    return null;
 };
 
+// ////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////// MESSAGE STATUS HANDLING //////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Updates a message
@@ -131,4 +158,13 @@ module.exports.updateUserMessage = async (messageId, updateValues) => {
     resultToReturn.updatedTime = moment(resultToReturn.updatedTime);
 
     return resultToReturn;
+};
+
+/* Batch updates status */
+module.exports.bulkUpdateStatus = async (messageIds, newStatus) => {
+    const idIndices = messageIds.map((_, idx) => `$${idx + 2}`).join(', ');
+    const updateQuery = `update ${userMessageTable} set processed_status = $1 where message_id in (${idIndices})`;
+    const values = [newStatus, ...messageIds];
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, values);
+    return resultOfUpdate;
 };

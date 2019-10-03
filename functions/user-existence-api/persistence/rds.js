@@ -31,3 +31,12 @@ module.exports.insertAccountRecord = async (accountDetails = {
     
     return responseEntity;
 };
+
+// get the account, for now if multiple accounts take most recent
+// once actually have instances of multi-account users, put in proper logic
+module.exports.getAccountIdForUser = async (systemWideUserId) => {
+    const tableName = config.get('tables.accountData');
+    const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
+    const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
+};

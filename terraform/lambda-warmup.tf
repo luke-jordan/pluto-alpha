@@ -81,6 +81,21 @@ resource "aws_iam_role_policy_attachment" "ops_warmup_vpc_execution_policy" {
 
 resource "aws_iam_role_policy_attachment" "warmup_lambda_invoke_policy" {
   role = "${aws_iam_role.ops_warmup_role.name}"
-  policy_arn = "${aws_iam_policy.lambda_invoke_warmup_access.arn}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_ops_warmup_access.arn}"
 }
 
+/////////////////// CLOUD WATCH FOR EVENT SOURCE ///////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_ops_warmup_every_five_minutes" {
+    rule = "${aws_cloudwatch_event_rule.ops_every_five_minutes.name}"
+    target_id = "${aws_lambda_function.ops_warmup.id}"
+    arn = "${aws_lambda_function.ops_warmup.arn}"
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_ops_warmup" {
+    statement_id = "AllowOpsWarmupExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = "${aws_lambda_function.ops_warmup.function_name}"
+    principal = "events.amazonaws.com"
+    source_arn = "${aws_cloudwatch_event_rule.ops_every_five_minutes.arn}"
+}

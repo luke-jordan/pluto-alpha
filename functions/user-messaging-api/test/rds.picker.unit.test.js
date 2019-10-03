@@ -14,7 +14,7 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
 const userMessageTable = config.get('tables.userMessagesTable');
-const userAccountTable = config.get('tables.accountLedger');
+// const userAccountTable = config.get('tables.accountLedger');
 
 const testMsgId = uuid();
 const testFollowingMsgId = uuid();
@@ -24,11 +24,13 @@ const testUserId = uuid();
 // todo : alter update record in RDS module to use same pattern as multi
 const updateRecordStub = sinon.stub();
 const selectQueryStub = sinon.stub();
+const multiUpdateInsertStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
         this.selectQuery = selectQueryStub;
-        this.multiTableUpdateAndInsert = updateRecordStub;
+        this.updateRecord = updateRecordStub;
+        this.multiTableUpdateAndInsert = multiUpdateInsertStub;
     }
 }
 
@@ -37,7 +39,7 @@ const persistence = proxyquire('../persistence/rds.msgpicker', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(updateRecordStub, selectQueryStub);
+const resetStubs = () => testHelper.resetStubs(updateRecordStub, selectQueryStub, multiUpdateInsertStub);
 
 describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
@@ -71,6 +73,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
     const expectedTransformedMsg = {
         messageId: testMsgId,
+        destinationUserId: testUserId,
         messageTitle: 'Boost available!',
         messageBody: 'Hello! Jupiter is now live. To celebrate, if you add $10, you get $10 boost',
         creationTime: moment(testStartTime.format()),
@@ -87,40 +90,57 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
     it('Finds messages for user correctly and transforms them', async () => {
         const expectedQuery = `select * from ${userMessageTable} where destination_user_id = $1 and ` + 
-            `processed_status = $2 and end_time > current_timestamp and deliveries_done < deliveries_max`;
+            `processed_status = $2 and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' != $3`;
         selectQueryStub.resolves([msgRawFromRds]);
 
-        const resultOfFetch = await persistence.getNextMessage(testUserId);
+        const resultOfFetch = await persistence.getNextMessage(testUserId, true);
         logger('Result of fetch: ', resultOfFetch);
 
         expect(resultOfFetch).to.deep.equal([expectedTransformedMsg]);
-        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING']);
+        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING', 'PUSH']);
+    });
+
+    it('Finds pending push messages', async () => {
+        const expectedQuery = [
+            `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2`,
+            ['READY_FOR_SENDING', 'PUSH']
+        ];
+        selectQueryStub.withArgs(...expectedQuery).resolves([msgRawFromRds, msgRawFromRds]);
+
+        const result = await persistence.getPendingPushMessages();
+        logger('Result of pending messages extraction:', result);
+    
+        expect(result).to.exist;
+        expect(result).to.deep.equal([expectedTransformedMsg, expectedTransformedMsg]);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...expectedQuery);
     });
 
     it('Retrieves user balance correctly', async () => {
-        const expectedBalanceQuery = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
-            `currency = $2 and settlement_status = $3 and transaction_type in ($4) group by unit`;
-        const expectedBalanceTypes = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`];
-        const expectedBalanceValues = [testUserId, 'USD', 'SETTLED', expectedBalanceTypes.join(',')];
-
-        selectQueryStub.resolves([{ amount: 100, unit: 'WHOLE_CURRENCY' }, { amount: 10000, unit: 'WHOLE_CENT' }, { amount: 1000000, unit: 'HUNDREDTH_CENT' }]);
+        const expectedBalanceQuery = `select sum(amount), unit from ${config.get('tables.accountLedger')} inner join ${config.get('tables.transactionLedger')} ` +
+            `on ${config.get('tables.accountLedger')}.account_id = ${config.get('tables.transactionLedger')}.account_id where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
+        // const expectedBalanceTypes = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`];
+        const expectedBalanceValues = [testUserId, 'USD', 'SETTLED'];
+        
+        selectQueryStub.resolves([{ sum: 100, unit: 'WHOLE_CURRENCY' }, { sum: 10000, unit: 'WHOLE_CENT' }, { sum: 1000000, unit: 'HUNDREDTH_CENT' }]);
         
         const resultOfSum = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' });
         logger('Result of sum: ', resultOfSum);
-
+        
         expect(resultOfSum).to.deep.equal({ amount: 30000, unit: 'WHOLE_CENT', currency: 'USD' });
         expect(selectQueryStub).to.have.been.calledWith(expectedBalanceQuery, expectedBalanceValues);
     });
 
     it('Retrieves and sums user interest correctly', async () => {
-        const expectedInterestQuery = `select sum(amount), unit from ${userAccountTable} where owner_user_id = $1 and ` +
+        const expectedInterestQuery = `select sum(amount), unit from ${config.get('tables.transactionLedger')} where owner_user_id = $1 and ` +
             `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
         const expectedTxTypes = [`'ACCRUAL'`, `'CAPITALIZATION'`];
         const expectedValues = [testUserId, 'USD', 'SETTLED', expectedTxTypes.join(','), moment(0).format()];
 
-        selectQueryStub.resolves([{ amount: 10, unit: 'WHOLE_CURRENCY' }, { amount: 100000, unit: 'HUNDREDTH_CENT' }]);
+        selectQueryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfInterest = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CURRENCY::USD::0'});
         logger('Result of interest calc: ', resultOfInterest);
+        logger('args    :', selectQueryStub.getCall(0).args);
+        logger('expected:', [expectedInterestQuery, expectedValues]);
 
         expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
         expect(selectQueryStub).to.have.been.calledWith(expectedInterestQuery, expectedValues);
@@ -129,7 +149,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     it('Gracefully handles unknown parameter', async () => {
         const resultOfBadQuery = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
         logger('Result of bad query: ', resultOfBadQuery);
-        expect(resultOfBadQuery).to.be.undefined;
+        expect(resultOfBadQuery).to.be.null;
     });
 
 
@@ -141,15 +161,33 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
             value: { processedStatus: 'DISMISSED' }, 
             returnClause: 'message_id, updated_time' 
         };
-        updateRecordStub.resolves([{ 'message_id': testMsgId, 'updated_time': updatedTime.format() }]);
+        multiUpdateInsertStub.resolves([{ 'message_id': testMsgId, 'updated_time': updatedTime.format() }]);
         
         const resultOfUpdateQ = await persistence.updateUserMessage(testMsgId, { processedStatus: 'DISMISSED' });
         logger('Result of query: ', resultOfUpdateQ);
         
         expect(resultOfUpdateQ).to.exist;
         expect(resultOfUpdateQ).to.deep.equal({ messageId: testMsgId, updatedTime: moment(updatedTime.format()) });
-        expect(updateRecordStub).to.have.been.calledOnceWith([expectedUpdateDef], []);
+        expect(multiUpdateInsertStub).to.have.been.calledOnceWith([expectedUpdateDef], []);
     });
 
+    it('Handles batch status updates', async () => {
+        const mockMessageId = uuid();
+        const mockMessageIds = [mockMessageId, mockMessageId];
+
+        const expectedQuery = [
+            `update ${userMessageTable} set processed_status = $1 where message_id in ($2, $3)`,
+            ['DISMISSED', mockMessageId, mockMessageId]
+        ];
+
+        updateRecordStub.withArgs(...expectedQuery).resolves([]);
+
+        const resultOfUpdate = await persistence.bulkUpdateStatus(mockMessageIds, 'DISMISSED');
+        logger('Result of batch update:', resultOfUpdate);
+    
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([]);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(...expectedQuery);
+    });
 
 });

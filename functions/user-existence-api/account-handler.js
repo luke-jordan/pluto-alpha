@@ -1,12 +1,16 @@
 'use strict';
 
 const logger = require('debug')('jupiter:account:handler');
+const config = require('config');
 
 const uuid = require('uuid/v4');
 const moment = require('moment');
 const validator = require('validator');
 
 const persistence = require('./persistence/rds');
+
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 // point of this is to choose whether to use API calls or Lambda invocations
 module.exports.transformEvent = (event) => {
@@ -35,6 +39,68 @@ module.exports.validateRequest = (creationRequest) => {
   return true;
 };
 
+// this handles redeeming a referral code, if it is present and includes an amount
+// the method will create a boost in 'PENDING', triggered when the referred user saves
+const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) => {
+  if (typeof referralCodeDetails !== 'object' || Object.keys(referralCodeDetails).length === 0) {
+    logger('No referral code details provided, exiting');
+    return;
+  }
+
+  const referralContext = referralCodeDetails.context;
+
+  const referralType = referralCodeDetails.codeType;
+  const boostCategory = `${referralType}_CODE_USED`;
+  
+  const boostAccounts = [newAccountId];
+  const redemptionMsgInstructions = [{ accountId: newAccountId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
+
+  if (referralType === 'USER') {
+    const referringUserId = referralCodeDetails.creatingUserId;
+    const referringAccountId = await persistence.getAccountIdForUser(referringUserId);
+    if (!referringAccountId) {
+      logger('INCONSISTENCY_ERROR: referring user has no account ID');
+      return; 
+    }
+
+    redemptionMsgInstructions.push({ accountId: referringAccountId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
+    boostAccounts.push(referringAccountId);
+  }
+
+  const accountsToSelect = boostAccounts.map((accountId) => `"${accountId}"`).join(', ');
+  const boostAudienceSelection = `whole_universe from #{{"specific_accounts": [${accountsToSelect}]}}`;
+  const bonusExpiryTime = moment().add(config.get('referral.expiryTimeDays'), 'days');
+
+  // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
+  // now this will allow sufficient tracking, and a simple migration will fix it in the future
+  const boostPayload = {
+    creatingUserId: ownerUserId,
+    boostTypeCategory: `REFERRAL::${boostCategory}`,
+    boostAmountOffered: referralContext.boostAmountOffered,
+    boostSource: referralContext.boostSource,
+    endTimeMillis: bonusExpiryTime.valueOf(),
+    boostAudience: 'INDIVIDUAL',
+    boostAudienceSelection,
+    initialStatus: 'PENDING',
+    statusConditions: {
+      'REDEEMED': [`save_completed_by #{${newAccountId}}`, `first_save_by #{${newAccountId}}`]
+    },
+    messageInstructionFlags: {
+      'REDEEMED': redemptionMsgInstructions
+    }
+  };
+
+  const lambdaInvocation = {
+    FunctionName: config.get('lambda.createBoost'),
+    InvocationType: 'Event',
+    Payload: JSON.stringify(boostPayload)
+  };
+
+  logger('Invoking lambda with payload: ', boostPayload);
+  const resultOfTrigger = await lambda.invoke(lambdaInvocation).promise();
+  logger('Result of firing off lambda invoke: ', resultOfTrigger);
+};
+
 /**
  * Creates an account within the core ledgers for a user. Returns the persistence result of the transaction.
  * @param {string} clientId The id of the client company responsible for this user and account
@@ -59,6 +125,8 @@ module.exports.createAccount = async (creationRequest = {
   logger('Received from persistence: ', persistenceResult);
 
   const persistenceMoment = moment(persistenceResult.persistedTime);
+  
+  await handleReferral(persistenceResult.accountId, creationRequest.ownerUserId, creationRequest.referralCodeDetails);
 
   return { accountId: persistenceResult.accountId, persistedTimeMillis: persistenceMoment.valueOf() };
 };

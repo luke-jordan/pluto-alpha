@@ -8,7 +8,12 @@
         "userMessagesTable": "message_data.user_message",
         "pushTokenTable": "message_data.user_push_token",
         "boostAccountTable": "boost_data.boost_account_status",
+        "transactionLedger": "transaction_data.core_transaction_ledger",
         "dynamoProfileTable": "UserProfileTable"
+    },
+    "lambdas": {
+        "generateUserMessages": "message_user_create_once",
+        "updateMessageStatus": "message_user_process"
     },
     "db": {
         "host": "localhost",
@@ -34,6 +39,12 @@
     "picker": {
         "defaults": {
             "dateFormat": "MMMM YYYY"
+        },
+        "push": {
+            "running": true
         }
+    },
+    "security": {
+        "roleRequired": false
     }
 }
