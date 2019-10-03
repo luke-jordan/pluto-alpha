@@ -103,7 +103,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     it('Finds pending push messages', async () => {
         const expectedQuery = [
             `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2`,
-            [ 'READY_FOR_SENDING', 'PUSH' ]
+            ['READY_FOR_SENDING', 'PUSH']
         ];
         selectQueryStub.withArgs(...expectedQuery).resolves([msgRawFromRds, msgRawFromRds]);
 
@@ -111,7 +111,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         logger('Result of pending messages extraction:', result);
     
         expect(result).to.exist;
-        expect(result).to.deep.equal([expectedTransformedMsg, expectedTransformedMsg])
+        expect(result).to.deep.equal([expectedTransformedMsg, expectedTransformedMsg]);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...expectedQuery);
     });
 
@@ -175,7 +175,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
         const expectedQuery = [
             `update ${userMessageTable} set processed_status = $1 where message_id in ($2, $3)`,
-            [ 'DISMISSED', mockMessageId, mockMessageId ]
+            ['DISMISSED', mockMessageId, mockMessageId]
         ];
 
         updateRecordStub.withArgs(...expectedQuery).resolves([]);

@@ -40,9 +40,9 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
 };
 
 module.exports.getFloatBalanceAndFlows = async (floatId) => {
-    
+    logger('Fetching balance for float: ', floatId);  
 };
 
 module.exports.getFloatBonusBalanceAndFlows = async (floatId) => {
-
+    logger('Fetching bonus for float: ', floatId);
 };

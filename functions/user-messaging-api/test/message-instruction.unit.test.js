@@ -134,7 +134,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             }),
             requestContext: testHelper.requestContext(mockUserId)
         };
-        insertMessageInstructionStub.resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
         logger('Result of message instruction creation:', resultOfInsertion);
@@ -162,7 +162,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId }]})
         };
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
+        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of message instruction creation:', resultOfInsertion);
@@ -189,7 +189,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
         };
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
+        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
         mockInstruction.fireTestMessage = true;
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
@@ -224,7 +224,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         };
 
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([ { instructionId: mockInstructionId, creationTime: mockCreationTime } ]);
+        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of message instruction creation:', resultOfInsertion);
@@ -318,7 +318,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
-        expect(body).to.have.property('message', 'Templates must define either a sequence or a single template.')
+        expect(body).to.have.property('message', 'Templates must define either a sequence or a single template.');
         expect(insertMessageInstructionStub).to.have.not.been.called;
     });
 
@@ -335,7 +335,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
-        expect(body).to.have.property('message', 'Instructions for event driven must specify the event type')
+        expect(body).to.have.property('message', 'Instructions for event driven must specify the event type');
         expect(insertMessageInstructionStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;     
     });
@@ -353,7 +353,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
     });
 
     it('Updates message instruction', async () => {
-        updateMessageInstructionStub.withArgs(mockInstructionId, { }).returns([ { insertionId: mockInsertionId, updateTime: mockUpdateTime } ]);
+        updateMessageInstructionStub.withArgs(mockInstructionId, { }).returns([{ insertionId: mockInsertionId, updateTime: mockUpdateTime }]);
         alterInstructionStatesStub.resolves({ result: 'SUCCESS' });
         const mockEvent = {
             instructionId: mockInstructionId,
@@ -377,7 +377,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
     });
 
     it('Updates message instruction and alters instruction message state', async () => {
-        updateMessageInstructionStub.withArgs(mockInstructionId, { active: false }).returns([ { insertionId: mockInsertionId, updateTime: mockUpdateTime } ]);
+        updateMessageInstructionStub.withArgs(mockInstructionId, { active: false }).returns([{ insertionId: mockInsertionId, updateTime: mockUpdateTime }]);
         alterInstructionStatesStub.resolves({ result: 'SUCCESS' });
         const mockEvent = {
             instructionId: mockInstructionId,
@@ -417,7 +417,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
     });
 
     it('Catches thrown errors', async () => {
-        updateMessageInstructionStub.withArgs(mockInstructionId, { active: true }).throws( new Error('A persistence derived error.'));
+        updateMessageInstructionStub.withArgs(mockInstructionId, { active: true }).throws(new Error('A persistence derived error.'));
         const mockEvent = {
             instructionId: mockInstructionId,
             updateValues: { active: true },
@@ -490,7 +490,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
     });
 
     it('should throw an error on persistence error (or general error)', async () => {
-        getMessageInstructionStub.withArgs(mockInstructionIdOnError).throws( new Error('A persistence derived error.' ));
+        getMessageInstructionStub.withArgs(mockInstructionIdOnError).throws(new Error('A persistence derived error.'));
         const expectedResult = { message: 'A persistence derived error.' };
         const mockEvent = {
             instructionId: mockInstructionIdOnError

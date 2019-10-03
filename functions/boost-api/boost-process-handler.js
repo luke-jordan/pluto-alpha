@@ -8,19 +8,17 @@ const status = require('statuses');
 
 const persistence = require('./persistence/rds.boost');
 const publisher = require('publish-common');
+const util = require('./boost.util');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
-
-const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-const extractUserDetails = (event) => event.requestContext ? event.requestContext.authorizer : null;
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
-}
+};
 
-////////////////////////////// HELPER METHODS ///////////////////////////////////////////
+// //////////////////////////// HELPER METHODS ///////////////////////////////////////////
 
 // this takes the event and creates the arguments to pass to persistence to get applicable boosts, i.e.,
 // those that still have budget remaining and are in offered or pending state for this user
@@ -81,7 +79,7 @@ const extractStatusChangesMet = (event, boost) => {
 
 const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
     const selectPromises = boosts.map((boost) => {
-        const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
+        const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
         const restrictToInitiator = boost.boostAudience === 'GENERAL' || !redeemsAll;
         const findAccountsParams = { boostIds: [boost.boostId], status: ['OFFERED', 'PENDING'] };
         if (restrictToInitiator) {
@@ -95,13 +93,13 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
     logger('Affected accounts: ', affectedAccountArray);
     return affectedAccountArray.map((result) => result[0]).
         reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
-}
+};
 
 // note: this is only called for redeemed boosts, by definition
 const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
-    let recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
+    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
-    let recipients = recipientAccounts.map(recipientId => ({ 
+    const recipients = recipientAccounts.map((recipientId) => ({ 
         recipientId, amount: boost.boostAmount, recipientType: 'END_USER_ACCOUNT'
     }));
     return {
@@ -143,7 +141,7 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
         const boostId = boost.boostId;
         const highestStatus = boostStatusChangeDict[boostId][0]; // but needs a sort
         const isChangeRedemption = highestStatus === 'REDEEMED';
-        const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') != -1;
+        const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
         const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount, transactionId };
 
         return {
@@ -169,7 +167,7 @@ const generateMsgInstruction = (instructionId, destinationUserId, boost) => {
         'HUNDREDTH_CENT': 100 * 100,
         'WHOLE_CENT': 100,
         'WHOLE_CURRENCY': 1 
-    }
+    };
 
     const wholeCurrencyAmount = boost.boostAmount / unitDivisors[boost.boostUnit];
     const formattedBoostAmount = numberFormat.format(wholeCurrencyAmount);
@@ -181,7 +179,7 @@ const generateMsgInstruction = (instructionId, destinationUserId, boost) => {
         destinationUserId,
         parameters: { boostAmount: formattedBoostAmount },
         triggerBalanceFetch: true
-    }
+    };
 };
 
 const assembleMessageForInstruction = (boost, boostInstruction, affectedAccountUserDict) => {
@@ -201,17 +199,17 @@ const assembleMessageForInstruction = (boost, boostInstruction, affectedAccountU
         const userMsgInstruction = generateMsgInstruction(instructionId, userObjectForTarget.userId, boost);
         logger('Generated instruction: ', userMsgInstruction);
         return [userMsgInstruction];
-    } else {
-        logger('Target not present in user dict, investigate');
-        return [];
-    }
-}
+    } 
+    
+    logger('Target not present in user dict, investigate');
+    return [];
+};
 
 const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
     const boostMessageInstructions = boost.messageInstructions;
     logger('Boost msg instructions: ', boostMessageInstructions);
     logger('Affected account dict: ', affectedAccountUserDict);
-    let assembledMessages = [];
+    const assembledMessages = [];
     // todo : make work for other statuses
     boostMessageInstructions.
         filter((entry) => entry.status === 'REDEEMED').
@@ -240,7 +238,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
             boostUpdateTimeMillis: boostUpdateTime.valueOf(),
             transferResults,
             eventContext: event.eventContext
-        }
+        };
         return publisher.publishUserEvent(affectedAccountsUserDict[accountId], eventType, { initiator, context });
     });
 
@@ -289,7 +287,7 @@ module.exports.processEvent = async (event) => {
 
     // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
     // todo : definitely need a DLQ for this guy
-    const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') != -1);
+    const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
     logger('Boosts to redeem: ', boostsToRedeem);
     const transferInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
     logger('***** Transfer instructions: ', JSON.stringify(transferInstructions));
@@ -338,7 +336,7 @@ module.exports.processEvent = async (event) => {
         result: 'SUCCESS',
         resultOfTransfers,
         resultOfUpdates
-    }
+    };
 
     return {
         statusCode: 200,
@@ -353,12 +351,12 @@ module.exports.processUserBoostResponse = async (event) => {
             return { statusCode: 400 };
         }
         
-        const userDetails = extractUserDetails(event);
+        const userDetails = util.extractUserDetails(event);
         if (!userDetails) {
             return { statusCode: status('Forbidden') };
         }
 
-        const params = extractEventBody(event);
+        const params = util.extractEventBody(event);
         logger('Event params: ', params);
 
         return {

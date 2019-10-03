@@ -24,13 +24,11 @@ module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN') =
     return userDetails.role === requiredRole;
 };
 
-module.exports.wrapHttpResponse = (body, statusCode = 200) => {
-    return {
-        statusCode,
-        headers: corsHeaders,
-        body: JSON.stringify(body)
-    };
-};
+module.exports.wrapHttpResponse = (body, statusCode = 200) => ({
+    statusCode,
+    headers: corsHeaders,
+    body: JSON.stringify(body)
+});
 
 module.exports.unauthorizedResponse = {
     statusCode: 403,

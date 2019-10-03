@@ -266,7 +266,7 @@ class RdsConnection {
             result = RdsConnection._extractRowsIfExist(rawResult);
             await client.query('COMMIT');
         } catch (err) {
-            logger('Error running update: ', e);
+            logger('Error running update: ', err);
             await client.query('ROLLBACK');
             throw new CommitError();
         } finally {
@@ -390,12 +390,12 @@ class RdsConnection {
             if (Array.isArray(item)) {
                 return RdsConnection._convertArrayToPgString(item);
             } else if (typeof item === 'number') {
-                return '' + item;
+                return String(item);
             } else if (typeof item === 'string') {
                 return item;
-            } else {
-                return JSON.stringify(item);
-            }
+            } 
+            // all else failed so do the most basic fallback
+            return JSON.stringify(item);
         }).join(', ');
         return `{${withinArray}}`;
     }

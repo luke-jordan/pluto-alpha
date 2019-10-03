@@ -148,14 +148,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Dry run triggers without touching RDS etc', async () => {
-        const authContext= { authorizer: { systemWideUserId: testUserId }};
+        const authContext = { authorizer: { systemWideUserId: testUserId }};
         const testEvent = { queryStringParameters: { gameDryRun: true }, requestContext: authContext };
         const dryRunMessages = await handler.getNextMessageForUser(testEvent);
         expect(dryRunMessages).to.exist;
     });
 
     it('Arrow chase dry run triggers without touching RDS and returns properly', async () => {
-        const authContext= { authorizer: { systemWideUserId: testUserId }};
+        const authContext = { authorizer: { systemWideUserId: testUserId }};
         const testEvent = { queryStringParameters: { gameDryRun: true, gameType: 'CHASE_ARROW' }, requestContext: authContext };
         const dryRunMessages = await handler.getNextMessageForUser(testEvent);
         expect(dryRunMessages).to.exist;

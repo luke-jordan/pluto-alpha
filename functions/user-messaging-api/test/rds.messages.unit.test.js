@@ -6,7 +6,6 @@ const config = require('config');
 const moment = require('moment');
 
 const decamelize = require('decamelize');
-const camelcase = require('camelcase');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -15,7 +14,7 @@ chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
-const multiTableUpdateInsertStub= sinon.stub();
+const multiTableUpdateInsertStub = sinon.stub();
 const insertRecordsStub = sinon.stub();
 const updateRecordStub = sinon.stub();
 const selectQueryStub = sinon.stub();
@@ -53,10 +52,8 @@ const resetStubs = () => {
     uuidStub.reset();
 };
 
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
-const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [camelcase(key)]: object[key] }), {});
-
 
 describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     const mockBoostId = uuid();
@@ -102,8 +99,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         ];
         logger('Created select args:', mockInsertRecordsArgs);
 
-        insertRecordsStub.withArgs(...mockInsertRecordsArgs).returns({ rows: [ { insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' } ] });
-        const expectedResult = [ { insertionId: 111, creationTime: '2049-06-22T07:38:30.016Z' } ];
+        insertRecordsStub.withArgs(...mockInsertRecordsArgs).returns({ rows: [{ insertion_id: 111, creation_time: '2049-06-22T07:38:30.016Z' }] });
+        const expectedResult = [{ insertionId: 111, creationTime: '2049-06-22T07:38:30.016Z' }];
 
         const result = await rdsUtil.insertMessageInstruction(instructionObject);
         logger('Result of message instruction insertion:', result);
@@ -173,8 +170,8 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             returnClause: 'updated_time'
         };
     
-        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([ { update_time: '2049-06-22T07:38:30.016Z' } ]);
-        const expectedResult = [ { updateTime: '2049-06-22T07:38:30.016Z' } ];
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ update_time: '2049-06-22T07:38:30.016Z' }]);
+        const expectedResult = [{ updateTime: '2049-06-22T07:38:30.016Z' }];
 
         // sync with new imlementation
         const result = await rdsUtil.updateMessageInstruction(mockInstructionId, { active: false });
@@ -196,15 +193,14 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         };
     
         momentStub.returns({ format: () => mockCurrentTime });
-        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([ { 'update_time': '2049-06-22T07:38:30.016Z' } ]);
-        const expectedResult = [ { updateTime: '2049-06-22T07:38:30.016Z' } ];
-
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
+        
         // sync with new imlementation
         const resultOfUpdate = await rdsUtil.updateInstructionState(mockInstructionId, 'READY_TO_SEND');
         logger('Result of message instruction update:', resultOfUpdate);
        
         expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal([ { updateTime: '2049-06-22T07:38:30.016Z' } ]);
+        expect(resultOfUpdate).to.deep.equal([{ updateTime: '2049-06-22T07:38:30.016Z' }]);
         expect(momentStub).to.have.been.calledOnce;
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });
@@ -216,7 +212,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
         const mockSelectArgs = [
             `select message_id from ${config.get('tables.userMessagesTable')} where instruction_id = $1 and processed_status in ($2)`,
-            [ mockInstructionId, 'CREATED' ]
+            [mockInstructionId, 'CREATED']
         ];
 
         const multiInsertUpdateArgs = [[{
@@ -242,7 +238,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const mockInstructionId = uuid();
         const mockSelectArgs = [
             `select message_id from ${config.get('tables.userMessagesTable')} where instruction_id = $1 and processed_status in ($2)`,
-            [ mockInstructionId, 'CREATED' ]
+            [mockInstructionId, 'CREATED']
         ];
 
         selectQueryStub.withArgs(...mockSelectArgs).resolves([]);
@@ -260,7 +256,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const mockInstructionId = uuid();
         const firstSelectArgs = [
             `select instruction.instruction_id, count(message_id) as unfetched_message_count from ${instructionTable} as instruction inner join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id where messages.processed_status not in ($1, $2, $3, $4, $5) group by instruction.instruction_id`,
-            [ 'FETCHED', 'SENT', 'DELIVERED', 'DISMISSED', 'UNDELIVERABLE' ]
+            ['FETCHED', 'SENT', 'DELIVERED', 'DISMISSED', 'UNDELIVERABLE']
         ];
         const secondSelectArgs = [
             `select instruction.*, count(message_id) as total_message_count from ${instructionTable} as instruction left join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id where (instruction.active = true and instruction.end_time > current_timestamp) group by instruction.instruction_id`,
@@ -283,9 +279,9 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(selectQueryStub).to.have.been.calledWith(...secondSelectArgs);
     });
 
-    ////////////////////////////////////////////////////////////////////////////////////
-    /////////////////////////// TO BE SEPERATED ////////////////////////////////////////
-    ////////////////////////////////////////////////////////////////////////////////////
+    // //////////////////////////////////////////////////////////////////////////////////
+    // ///////////////////////// TO BE SEPERATED ////////////////////////////////////////
+    // //////////////////////////////////////////////////////////////////////////////////
 
     it('should get user ids', async () => {
         const mockClientId = uuid();
@@ -294,7 +290,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1`;
         selectQueryStub.withArgs(expectedQuery, [mockClientId]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
 
-        const expectedResult = [ mockAccountId ];
+        const expectedResult = [mockAccountId];
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
@@ -311,7 +307,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const expectedQuery = `select account_id, owner_user_id from ${accountTable} where float_id = $1`;
         selectQueryStub.withArgs(expectedQuery, [mockFloatId]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
 
-        const expectedResult = [ mockAccountId ];
+        const expectedResult = [mockAccountId];
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
@@ -327,7 +323,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         const expectedQuery = `select account_id, owner_user_id from ${accountTable} where owner_user_id in ($1, $2)`;
         selectQueryStub.withArgs(expectedQuery, [mockAccountId, mockAccountId]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
 
-        const expectedResult = [ mockAccountId ];
+        const expectedResult = [mockAccountId];
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
@@ -352,7 +348,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         ];
         selectQueryStub.withArgs(...mockSelectArgs).resolves(mockSelectResult);
 
-        const expectedResult = [ mockAccountId, mockAccountId, mockAccountId ];
+        const expectedResult = [mockAccountId, mockAccountId, mockAccountId];
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
@@ -378,7 +374,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
         const mockSelectArgs = [
             `select distinct(owner_user_id) from ${accountTable} inner join ${boostAccountTable} on ${accountTable}.account_id = ${boostAccountTable}.account_id where boost_id = $1`,
-            [ mockEntityId ]
+            [mockEntityId]
         ];
 
         const mockSelectResult = [
@@ -428,7 +424,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             message: 'Welcome to Jupiter Savings.',
             presentationInstruction: null
         };
-        const mockRows = [ row, row, row ];
+        const mockRows = [row, row, row];
         const rowObjectKeys = Object.keys(row);
         const mockInsertionArgs = {
             query: `insert into ${config.get('tables.userMessagesTable')} (${extractQueryClause(rowObjectKeys)}) values %L returning message_id, creation_time`,
@@ -471,22 +467,21 @@ describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {
     });
 
     it('Finds user ids that are not disqualified by recurrence parameters', async () => {
-        const mockUnfilteredId  = uuid();
+        const mockUnfilteredId = uuid();
         const minIntervalSelectArgs = [
             `select distinct(destination_user_id) from ${config.get('tables.userMessagesTable')} where instruction_id = $1 and creation_time > $2`,
-            [ mockInstructionId,
-            mockDurationClause.format() ]
+            [mockInstructionId, mockDurationClause.format()]
         ];
 
         const queueSizeSelectArgs = [
             `select destination_user_id from ${config.get('tables.userMessagesTable')} where processed_status = $1 group by destination_user_id having count(*) > $2`,
-            [ 'READY_FOR_SENDING', mockMaxInQueue ]
+            ['READY_FOR_SENDING', mockMaxInQueue]
         ];
 
         selectQueryStub.withArgs(...minIntervalSelectArgs).resolves([{ 'destination_user_id': mockUserId }, { 'destination_user_id': mockUserId }]);
         selectQueryStub.withArgs(...queueSizeSelectArgs).resolves([{ 'destination_user_id': mockUserId }, { 'destination_user_id': mockUserId }]);
 
-        const mockEvent = [ [mockUserId, mockUnfilteredId], { instructionId: mockInstructionId, recurrenceParameters: { minIntervalDays: mockMinIntervalDays, maxInQueue: mockMaxInQueue } } ];
+        const mockEvent = [[mockUserId, mockUnfilteredId], { instructionId: mockInstructionId, recurrenceParameters: { minIntervalDays: mockMinIntervalDays, maxInQueue: mockMaxInQueue } }];
 
         const resultOfFilter = await rdsUtil.filterUserIdsForRecurrence(...mockEvent);
         logger('Result of filter:', resultOfFilter);
@@ -504,8 +499,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
     const mockPushToken = uuid();
     const mockProvider = uuid();
     const mockCreationTime = '2030-01-01T00:00:01.016Z';
-    const mockUpdateTime = '2030-01-01T00:00:02.016Z';
-
+    
     beforeEach(() => {
         resetStubs();
     });
@@ -520,7 +514,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
         const mockInsertionArgs = [ 
             `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(Object.keys(mockPersistableToken))}) values %L returning insertion_id, creation_time`,
             extractColumnTemplate(Object.keys(mockPersistableToken)),
-            [ mockPersistableToken ]
+            [mockPersistableToken]
         ];
 
         insertRecordsStub.withArgs(...mockInsertionArgs).resolves({ rows: [{ 'insertion_id': 1, 'creation_time': mockCreationTime }] });
@@ -537,7 +531,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
     it('should get push token', async () => {
         const mockSelectArgs = [
             `select user_id, push_token from ${config.get('tables.pushTokenTable')} where active = true and push_provider = $1 and  user_id in ($2) order by creation_time asc`,
-            [ mockProvider, mockUserId ]
+            [mockProvider, mockUserId]
         ];
 
         selectQueryStub.withArgs(...mockSelectArgs).resolves([{ 'user_id': mockUserId, 'push_token': mockPushToken }]);
@@ -561,13 +555,13 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
             returnClause: 'insertion_time'
         }];
 
-        updateRecordStub.withArgs(...mockUpdateArgs).resolves([ { insertion_id: 2 } ]);
+        updateRecordStub.withArgs(...mockUpdateArgs).resolves([{ insertion_id: 2 }]);
 
         const result = await rdsUtil.deactivatePushToken(mockProvider, mockUserId);
         logger('Result of push token deactivation:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal([ { insertionId: 2 } ]);
+        expect(result).to.deep.equal([{ insertionId: 2 }]);
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(...mockUpdateArgs);
     });
 
@@ -576,8 +570,8 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
         // observe during integration tests
         const mockDeleteRowArgs = [
             config.get('tables.pushTokenTable'),
-            [ 'push_provider', 'user_id' ],
-            [ mockProvider, mockUserId ]
+            ['push_provider', 'user_id'],
+            [mockProvider, mockUserId]
         ];
 
         deleteRowStub.resolves({

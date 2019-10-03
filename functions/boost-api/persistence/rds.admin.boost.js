@@ -28,15 +28,15 @@ const knitBoostsAndCounts = (boostList, statusCounts) => {
         boost.count = count;
         return boost;
     });
-}
+};
 
 module.exports.listBoosts = async (excludedTypeCategories, includeStatusCounts = false, includeInactive = false) => {
     const boostMainTable = config.get('tables.boostTable');
     const boostAccountTable = config.get('tables.boostAccountJoinTable');
 
-    const hasTypeExclusions =  Array.isArray(excludedTypeCategories) && excludedTypeCategories.length > 0;
-    const typeExclusionClause = hasTypeExclusions ? 
-        `(boost_type || '::' || boost_category) not in (${extractArrayIndices(excludedTypeCategories)})` : '';
+    const hasTypeExclusions = Array.isArray(excludedTypeCategories) && excludedTypeCategories.length > 0;
+    const typeExclusionClause = hasTypeExclusions 
+        ? `(boost_type || '::' || boost_category) not in (${extractArrayIndices(excludedTypeCategories)})` : '';
     const activeClause = includeInactive ? '' : 'active = true and end_time > current_timestamp';
     
     let whereClause = '';
@@ -58,7 +58,7 @@ module.exports.listBoosts = async (excludedTypeCategories, includeStatusCounts =
     let boostList = boostsResult.map((boost) => camelizeKeys(boost));
 
     if (includeStatusCounts) {
-        const selectStatusCounts = `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`
+        const selectStatusCounts = `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`;
         const selectStatusCountResults = await rdsConnection.selectQuery(selectStatusCounts, []);
         boostList = knitBoostsAndCounts(boostList, selectStatusCountResults);
     }

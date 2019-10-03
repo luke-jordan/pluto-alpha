@@ -53,7 +53,7 @@ const placeParamsInTemplate = (template, passedParameters) => {
     // todo : make less ugly, possibly
     while (match !== null) {
         const param = match[1];
-        if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) === -1) {
+        if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) < 0) {
             template = template.replace(`#{${param}}`, passedParameters[param]);
         }
         match = paramRegex.exec(template);
@@ -77,7 +77,7 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
         processedStatus = parameters.defaultStatus;
     } else if (typeof instruction.defaultStatus === 'string' && instruction.defaultStatus.length > 0) {
         processedStatus = instruction.defaultStatus;
-    } else  {
+    } else {
         processedStatus = config.get('creating.defaultStatus');
     }
     
@@ -121,7 +121,9 @@ const generateAndAppendMessageSequence = (rows, { destinationUserId, templateSeq
         msgsForUser.push(userMessage);
     });
     // logger('Identifier dict: ', identifierDict);
-    msgsForUser.forEach((msg) => msg.messageSequence = identifierDict);
+    msgsForUser.forEach((msg) => { 
+        msg.messageSequence = identifierDict; 
+    });
     rows.push(...msgsForUser);
 };
 
@@ -146,8 +148,8 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
             generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
     } else if (topLevelKey === 'sequence') {
         const templateSequence = templates.sequence;
-        userIds.forEach((userId) => 
-            generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
+        userIds.
+            forEach((userId) => generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
     }
     
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
@@ -174,7 +176,7 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     const instruction = await rdsUtil.getMessageInstruction(instructionId);
     
     const selectionInstruction = instruction.selectionInstruction || null;
-    const userIds = destinationUserId ? [ destinationUserId ] : await rdsUtil.getUserIds(selectionInstruction);
+    const userIds = destinationUserId ? [destinationUserId] : await rdsUtil.getUserIds(selectionInstruction);
     logger(`Retrieved ${userIds.length} user id(s) for instruction`);
     
     const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
@@ -216,9 +218,9 @@ module.exports.createUserMessages = async (event) => {
     }
 };
 
-/////////////////////////////////////////////////////////////////////////////
-/////////////////////// RECURRING MESSAGE HANDLING //////////////////////////
-/////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////
+// ///////////////////// RECURRING MESSAGE HANDLING //////////////////////////
+// ///////////////////////////////////////////////////////////////////////////
 
 
 const generateRecurringMessages = async (recurringInstruction) => {

@@ -10,7 +10,7 @@ const util = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
 
@@ -37,7 +37,7 @@ const convertParamsToRedemptionCondition = (gameParams) => {
             conditions.push('taps_submitted');
             const timeLimitMillis = gameParams.timeLimitSeconds * 1000;
             if (gameParams.winningThreshold) {
-                conditions.push(`number_taps_greater_than #{${gameParams.winningThreshold}::${timeLimitMillis}}`)
+                conditions.push(`number_taps_greater_than #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
             }
             if (gameParams.numberWinners) {
                 conditions.push(`number_taps_in_first_N #{${gameParams.numberWinners}::${timeLimitMillis}}`);
@@ -48,7 +48,7 @@ const convertParamsToRedemptionCondition = (gameParams) => {
             break;
     }
     return conditions;
-} 
+};
 
 const extractStatusConditions = (gameParams) => {
     // all games start with this
@@ -70,7 +70,7 @@ const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
     for (let status of statuses) {
         const messageFlags = messageInstructionFlags[status];
         logger('Message flags: ', messageFlags);
-        for (let flagDef of messageFlags) {
+        for (const flagDef of messageFlags) {
             const { accountId, msgInstructionFlag } = flagDef;
             const msgInstructionId = await persistence.findMsgInstructionByFlag(msgInstructionFlag);
             logger('Result of flag hunt: ', msgInstructionId);
@@ -121,7 +121,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
             const msgTemplate = msgTemplates[boostStatus];
             msgTemplate.actionToTake = msgTemplate.actionToTake || obtainStdAction(boostStatus);
             msgTemplate.actionContext = actionContext;
-            return { 'DEFAULT': msgTemplate, identifier: boostStatus }
+            return { 'DEFAULT': msgTemplate, identifier: boostStatus };
         });
 
         msgPayload.templates = { 
@@ -153,7 +153,7 @@ const assembleMsgLamdbaInvocation = async (msgPayload) => {
     const resultBody = JSON.parse(resultPayload.body);
     logger('Result body on invocation: ', resultBody);
 
-    return { accountId: 'ALL', status: msgPayload.boostStatus, msgInstructionId: resultBody.message.instructionId }
+    return { accountId: 'ALL', status: msgPayload.boostStatus, msgInstructionId: resultBody.message.instructionId };
 };
 
 /**
@@ -242,7 +242,7 @@ module.exports.createBoost = async (event) => {
     };
 
     if (boostType === 'REFERRAL') {
-        instructionToRds.flags = [ 'REDEEM_ALL_AT_ONCE' ]
+        instructionToRds.flags = ['REDEEM_ALL_AT_ONCE'];
     }
 
     if (boostType === 'GAME') {
@@ -261,7 +261,7 @@ module.exports.createBoost = async (event) => {
             boostEndTime
         };
 
-        const messagePayloads = params.messagesToCreate.map((msg) =>  createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
+        const messagePayloads = params.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
         logger('Assembled message payloads: ', messagePayloads);
 
         const messageInvocations = messagePayloads.map((payload) => assembleMsgLamdbaInvocation(payload));
@@ -274,7 +274,7 @@ module.exports.createBoost = async (event) => {
         const updatedBoost = await persistence.setBoostMessages(persistedBoost.boostId, messageInstructionResults, true);
         logger('And result of update: ', updatedBoost);
         persistedBoost.messageInstructions = messageInstructionResults;
-    };
+    }
 
     return persistedBoost;
 
@@ -294,7 +294,7 @@ module.exports.createBoostWrapper = async (event) => {
         params.creatingUserId = userDetails.systemWideUserId;
 
         const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
-        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) === -1) {
+        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) < 0) {
             return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
         }
 

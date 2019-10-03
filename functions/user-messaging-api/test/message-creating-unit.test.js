@@ -2,7 +2,6 @@
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler-test');
 const uuid = require('uuid/v4');
-const config = require('config');
 const moment = require('moment');
 
 const sinon = require('sinon');
@@ -51,7 +50,7 @@ const createMockUserIds = (quantity) => Array(quantity).fill().map(() => uuid())
 const simpleCardMsgTemplate = require('./templates/simpleTemplate');
 const simpleMsgVariant = require('./templates/variantTemplate');
 const referralMsgVariant = require('./templates/referralTemplate');
-const recurringMsgTemplate = require('./templates/recurringTemplate')
+const recurringMsgTemplate = require('./templates/recurringTemplate');
 
 describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
@@ -110,8 +109,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         mockInstruction.templates = mockTemplate;
     };
     
-    const expectedInsertionRows = (quantity, start = 1) => 
-        Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
+    const expectedInsertionRows = (quantity, start = 1) => Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
 
     const commonAssertions = (result, presentationType, numberOfMessages) => {
         expect(result).to.exist;
@@ -199,8 +197,8 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         logger('And other tests? : ', variantTester(insertUserMsgArgs[0]));
         
         expect(insertUserMsgArgs).to.be.an('array').of.length(testNumberUsers);
-        const defaultCount = insertUserMsgArgs.map((msg) => defaultTester(msg) ? 1 : 0).reduce((sum, cum) => sum + cum, 0);
-        const variantCount = insertUserMsgArgs.map((msg) => variantTester(msg) ? 1 : 0).reduce((sum, cum) => sum + cum, 0);
+        const defaultCount = insertUserMsgArgs.map((msg) => (defaultTester(msg) ? 1 : 0)).reduce((sum, cum) => sum + cum, 0);
+        const variantCount = insertUserMsgArgs.map((msg) => (variantTester(msg) ? 1 : 0)).reduce((sum, cum) => sum + cum, 0);
         logger('Default count: ', defaultCount, ' and variant count: ', variantCount);
         
         // we might want to range these in future, but for now, make sure not all default
@@ -242,7 +240,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(insertUserMsgArgs).to.be.an('array').of.length(expectedNumberMessages);
         const expectedOpeningMsg = mockUserMessage(testUserIds[0]);
         expectedOpeningMsg.hasFollowingMessage = true;
-        const expectedSecondMsg = mockUserMessage(testUserIds[0], mockInstruction.templates.sequence[1].DEFAULT);  // still 'DEFAULT' in its position
+        const expectedSecondMsg = mockUserMessage(testUserIds[0], mockInstruction.templates.sequence[1].DEFAULT); // still 'DEFAULT' in its position
         expectedSecondMsg.followsPriorMessage = true;
 
         const firstMsgToPers = insertUserMsgArgs[0];
@@ -262,7 +260,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(secondMsgToPers.messageSequence).to.deep.equal(expectedMsgSequence);
 
         expectedOpeningMsg.messageId = firstMsgToPers.messageId;
-        expectedOpeningMsg.messageSequence=  firstMsgToPers.messageSequence;
+        expectedOpeningMsg.messageSequence = firstMsgToPers.messageSequence;
         expectedSecondMsg.messageId = secondMsgToPers.messageId;
         expectedSecondMsg.messageSequence = secondMsgToPers.messageSequence;
 
@@ -488,8 +486,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
     const mockUpdatedTime = '2049-06-22T08:00:21.016Z';
 
-    const expectedInsertionRows = (quantity, start = 1) => 
-        Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
+    const expectedInsertionRows = (quantity, start = 1) => Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
 
     const mockInstruction = {
         instructionId: mockInstructionId,
@@ -527,7 +524,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         expect(result).to.exist;
         expect(result).to.have.property('messagesProcessed', 4);
         expect(result).to.have.property('processResults');
-        result.processResults.forEach(processResult => {
+        result.processResults.forEach((processResult) => {
             const standardizedResult = Array.isArray(processResult) ? processResult[0] : processResult;
             expect(standardizedResult).to.have.property('instructionId', mockInstructionId);
             expect(standardizedResult).to.have.property('instructionType', 'RECURRING');
@@ -554,14 +551,14 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
     });
 
     it('Fails on invalid template', async () => {
-        const mockInstruction = {
+        const mockBadInstruction = {
             instructionId: mockInstructionId,
             selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
             templates: '{ template: { DEFAULT: recurringMsgTemplate }}'
         };
 
-        getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
-        getMessageInstructionStub.resolves(mockInstruction);
+        getInstructionsByTypeStub.resolves([mockInstruction, mockBadInstruction]);
+        getMessageInstructionStub.resolves(mockBadInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
         getUserIdsStub.resolves(createMockUserIds(10));
 

@@ -91,14 +91,14 @@ const extractParamsFromTemplate = (template) => {
         match = paramRegex.exec(template);
     }
     // do not include any that are non-standard
-    return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) !== -1);
+    return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) >= 0);
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramSplit = param.split('::');
     const paramName = paramSplit[0];
     logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
-    if (STANDARD_PARAMS.indexOf(paramName) === -1) {
+    if (STANDARD_PARAMS.indexOf(paramName) >= 0) {
         return paramName; // redundant and unreachable but useful for robustness
     } else if (paramName === 'user_first_name') {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId);
@@ -181,7 +181,7 @@ const fetchMsgSequenceIds = (anchorMessage, retrievedMessages) => {
         return [];
     }
 
-    let thisAndFollowingIds = [anchorMessage.messageId];
+    const thisAndFollowingIds = [anchorMessage.messageId];
     
     if (!anchorMessage.hasFollowingMessage || typeof anchorMessage.messageSequence !== 'object') {
         return thisAndFollowingIds;
@@ -199,11 +199,11 @@ const assembleSequence = async (anchorMessage, retrievedMessages) => {
     // in almost all cases, never more than a few messages (active/non-expired filter means only a handful at a time)
     // monitor and if that becomes untrue, then ajust, e.g., go to persistence or cache to extract IDs
     const sequenceMsgDetails = sequenceIds.map((msgId) => retrievedMessages.find((msg) => msg.messageId === msgId));
-    return await Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails)));
+    return Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails)));
 };
 
 const determineAnchorMsg = (openingMessages) => {
-    logger('Determining anchor message')
+    logger('Determining anchor message');
     // if there is only one, then it is trivial
     if (openingMessages.length === 1) {
         return openingMessages[0];

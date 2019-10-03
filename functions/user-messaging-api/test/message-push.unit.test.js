@@ -2,7 +2,6 @@
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler-test');
 const uuid = require('uuid/v4');
-const config = require('config');
 const moment = require('moment');
 
 const sinon = require('sinon');
@@ -24,12 +23,12 @@ const insertPushTokenStub = sinon.stub();
 const deletePushTokenStub = sinon.stub();
 const assembleMessageStub = sinon.stub();
 
-class MockExpo {
-    constructor () {
-        this.chunkPushNotifications = expo.chunkPushNotifications;
-        this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub
-    }
-}
+// class MockExpo {
+//     constructor () {
+//         this.chunkPushNotifications = expo.chunkPushNotifications;
+//         this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub
+//     }
+// }
 
 const handler = proxyquire('../message-push-handler', {
     './persistence/rds.notifications': {
@@ -64,7 +63,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
 
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
         deletePushTokenStub.resolves([]);
-        insertPushTokenStub.resolves([{ 'insertionId': 1, 'creationTime': mockCreationTime }])
+        insertPushTokenStub.resolves([{ 'insertionId': 1, 'creationTime': mockCreationTime }]);
 
         const mockEvent = {
             provider: expectedProvider,
@@ -219,13 +218,13 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
     beforeEach(() => {
         resetStubs();
-    })
+    });
 
     it('Sends push notifications', async () => {
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
 
         const mockParams = {
-            systemWideUserIds: [ mockUserId, mockUserId ],
+            systemWideUserIds: [mockUserId, mockUserId],
             title: 'TEST_TITLE',
             body: 'TEST_BODY'
         };
