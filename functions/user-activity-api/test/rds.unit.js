@@ -229,7 +229,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
     it('Insert a settled save with float id, payment ref, etc., performing matching sides', async () => {
         const testAcTxId = sinon.match.string;
         const testFlTxAddId = sinon.match.string;
-        const testFlTxAllocId = sinon.match.any;
+        const testFlTxAllocId = sinon.match.string;
 
         const testInitiationTime = moment().subtract(5, 'minutes');
         const testSettlementTime = moment();
@@ -312,7 +312,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(resultOfSaveInsertion).to.have.property('newBalance');
         expect(resultOfSaveInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
 
-        // expect(multiTableStub).to.have.been.calledOnceWithExactly(expectedArgs);
+        expect(multiTableStub).to.have.been.calledOnce; // todo: add args
         expect(queryStub).to.have.been.calledThrice; // because also fetches timestamp
         expectNoCalls([insertStub]);
     });

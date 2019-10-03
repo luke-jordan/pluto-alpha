@@ -52,7 +52,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     const boostFromPersistence = {
         'boost_id': testBoostId,
-        'boost_type': 'REFERRAL',
+        'boost_type': 'SIMPLE::TIME_LIMITED',
         'boost_category': 'USER_CODE_USED',
         'boost_amount': 100000,
         'boost_unit': 'HUNDREDTH_CENT',

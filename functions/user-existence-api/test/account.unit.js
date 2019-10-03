@@ -144,7 +144,7 @@ describe('createAccountMethod', () => {
         getAccountIdForUserStub.reset();
         lamdbaInvokeStub.reset();
     });
-    
+
     it('Basic defaults work', async () => {
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
         insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
@@ -170,6 +170,22 @@ describe('createAccountMethod', () => {
         expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
         expect(lamdbaInvokeStub).to.have.not.been.called;
     });
+
+    it('Handles non-USER referral type', async () => {
+        getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
+        insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
+        lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        testCreationRequest.referralCodeDetails.codeType = 'OTHER';
+        const response = await accountHandler.createAccount(testCreationRequest);
+        logger('RESULT:', response);
+        expect(response).to.exist;
+        expect(response.accountId).to.be.a.uuid('v4');
+        expect(response.persistedTimeMillis).to.equal(expectedMillis);
+        expect(getAccountIdForUserStub).to.have.not.been.called;
+        expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnce;
+    });
+
 });
 
 describe('handlerFunctionCreateAccount', () => {

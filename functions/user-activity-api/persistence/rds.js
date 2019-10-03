@@ -260,16 +260,16 @@ module.exports.addSavingToTransactions = async (saveDetails) => {
     
     const accountTxId = uuid();
     const floatAdditionTxId = uuid();
-    const floatAdjustmentTxId = uuid();
+    const floatAllocationTxId = uuid();
 
     const isSaveSettled = saveDetails.settlementStatus === 'SETTLED';
 
-    const accountQueryDef = assembleAccountTxInsertion(accountTxId, saveDetails, { floatAdditionTxId, floatAdjustmentTxId });
+    const accountQueryDef = assembleAccountTxInsertion(accountTxId, saveDetails, { floatAdditionTxId, floatAllocationTxId });
     logger('Account query defined: ', accountQueryDef);
     
     const queryDefs = [accountQueryDef];
     if (isSaveSettled) {
-        const floatQueryDef = assembleFloatTxInsertions(accountTxId, saveDetails, { floatAdditionTxId, floatAdjustmentTxId });
+        const floatQueryDef = assembleFloatTxInsertions(accountTxId, saveDetails, { floatAdditionTxId, floatAllocationTxId });
         logger('And with float def: ', floatQueryDef);
         queryDefs.push(floatQueryDef);
     }
