@@ -15,9 +15,22 @@ chai.use(require('chai-uuid'));
 const proxyquire = require('proxyquire').noCallThru();
 
 const insertRecordStub = sinon.stub();
+const getAccountIdForUserStub = sinon.stub();
+const lamdbaInvokeStub = sinon.stub();
+
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
+    }
+}
+
 const accountHandler = proxyquire('../account-handler', { 
     './persistence/rds': {
-        'insertAccountRecord': insertRecordStub
+        'insertAccountRecord': insertRecordStub,
+        'getAccountIdForUser': getAccountIdForUserStub
+    },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient  
     }
 });
 
@@ -103,18 +116,76 @@ describe('validateEvent', () => {
 });
 
 describe('createAccountMethod', () => {
+    const testUserId = uuid();
+    const testAccountId = uuid();
+    const testCreationRequest = {
+        ownerUserId: testUserId,
+        clientId: 'some_country_client',
+        defaultFloatId: 'usd_primary_mmkt',
+        referralCodeDetails: {
+            creatingUserId: testUserId,
+            codeType: 'USER',
+            context: {
+                boostAmountOffered: 20,
+                boostSource: 'TEST_VAL'
+            }
+        }
+    };
+
+    const insertArgs =  {
+        accountId: sinon.match.string,
+        clientId: 'some_country_client',
+        defaultFloatId: 'usd_primary_mmkt',
+        ownerUserId: testCreationRequest.ownerUserId
+    };
 
     beforeEach(() => {
         insertRecordStub.reset();
+        getAccountIdForUserStub.reset();
+        lamdbaInvokeStub.reset();
     });
-    
+
     it('Basic defaults work', async () => {
-        insertRecordStub.withArgs(sinon.match(wellFormedPersistenceReq)).resolves(testAccountOpeningResult);
-        const response = await accountHandler.createAccount(testAccountOpeningRequest);
+        getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
+        insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
+        lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        const response = await accountHandler.createAccount(testCreationRequest);
         expect(response).to.exist;
         expect(response.accountId).to.be.a.uuid('v4');
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnce;
     });
+
+    it('Fails where referring user has no account id', async () => {
+        getAccountIdForUserStub.withArgs(testUserId).resolves(undefined);
+        insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
+        lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        const response = await accountHandler.createAccount(testCreationRequest);
+        expect(response).to.exist;
+        expect(response.accountId).to.be.a.uuid('v4');
+        expect(response.persistedTimeMillis).to.equal(expectedMillis);
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Handles non-USER referral type', async () => {
+        getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
+        insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
+        lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        testCreationRequest.referralCodeDetails.codeType = 'OTHER';
+        const response = await accountHandler.createAccount(testCreationRequest);
+        logger('RESULT:', response);
+        expect(response).to.exist;
+        expect(response.accountId).to.be.a.uuid('v4');
+        expect(response.persistedTimeMillis).to.equal(expectedMillis);
+        expect(getAccountIdForUserStub).to.have.not.been.called;
+        expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnce;
+    });
+
 });
 
 describe('handlerFunctionCreateAccount', () => {
@@ -154,3 +225,4 @@ describe('handlerFunctionCreateAccount', () => {
         expect(response.body).to.equal(`Error inserting row into persistence layer, check request`);
     });
 });
+

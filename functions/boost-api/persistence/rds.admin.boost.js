@@ -16,7 +16,7 @@ const knitBoostsAndCounts = (boostList, statusCounts) => {
     // might want to use a map for this eventually
 
     const statusCountDict = statusCounts.reduce((obj, row) => { 
-        const rowKey = `${row['boost_id']}::${row['']}`;
+        const rowKey = `${row['boost_id']}::${row['boost_status']}`;
         return {...obj, [rowKey]: row['count'] }}, {});
     
     return boostList.map((boost) => {
@@ -69,7 +69,7 @@ module.exports.listBoosts = async (excludedTypeCategories, includeStatusCounts =
 module.exports.updateBoost = async (updateParameters) => {
     const table = config.get('tables.boostTable');
     const key = { boostId: updateParameters.boostId };
-    const value = Object.assign({}, params);
+    const value = Object.assign({}, updateParameters);
     Reflect.deleteProperty(value, 'boostId');
     const returnClause = 'updated_time';
 
