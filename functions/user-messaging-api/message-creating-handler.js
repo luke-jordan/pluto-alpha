@@ -9,7 +9,7 @@ const rdsUtil = require('./persistence/rds.notifications');
 const msgUtil = require('./msg.util');
 
 // todo : stick in a common file
-const paramRegex = /#{([^}]*)}/g;
+const paramRegex = /#{(?<param>[^}]*)}/g;
 const STANDARD_PARAMS = [
     'user_first_name',
     'user_full_name',
@@ -53,7 +53,7 @@ const placeParamsInTemplate = (template, passedParameters) => {
     // todo : make less ugly, possibly
     let returnTemplate = template;
     while (match !== null) {
-        const param = match[1];
+        const param = match.groups.param;
         if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) < 0) {
             returnTemplate = returnTemplate.replace(`#{${param}}`, passedParameters[param]);
         }
@@ -68,7 +68,6 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
     const thisVariant = msgVariants[Math.floor(Math.random() * msgVariants.length)];
     const msgTemplate = template[thisVariant];
     const messageBody = placeParamsInTemplate(msgTemplate.body, parameters); // to become a generic way of formatting variables into template.
-    const actionContext = msgTemplate.actionToTake ? { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext } : undefined;
     
     let processedStatus = null;
     const overrideStatusPassed = typeof parameters === 'object' && typeof parameters.processedStatus === 'string' && 
@@ -82,14 +81,13 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
         processedStatus = config.get('creating.defaultStatus');
     }
     
-    return {
+    const generatedMessage = {
         messageId: uuid(),
         destinationUserId,
         instructionId: instruction.instructionId,
         processedStatus,
         messageTitle: msgTemplate.title,
         messageBody,
-        actionContext,
         messageVariant: thisVariant,
         display: msgTemplate.display,
         startTime: instruction.startTime,
@@ -99,6 +97,12 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
         followsPriorMessage: false,
         hasFollowingMessage: false
     };
+
+    if (msgTemplate.actionToTake) {
+        generatedMessage.actionContext = { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext };
+    }
+
+    return generatedMessage;
 };
 
 const generateAndAppendMessageSequence = (rows, { destinationUserId, templateSequence, instruction, parameters }) => {

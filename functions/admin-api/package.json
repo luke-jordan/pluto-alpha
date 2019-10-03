@@ -4,7 +4,9 @@
   "description": "A few functions for the admin panel",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* mocha"
+    "test": "DEBUG=jupiter:* nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",

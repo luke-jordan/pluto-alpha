@@ -13,7 +13,8 @@ const userProfileTable = config.get('tables.dynamoProfileTable');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const paramRegex = /#{([^}]*)}/g;
+const paramRegex = /#{(?<paramName>[^}]*)}/g;
+
 const STANDARD_PARAMS = [
     'user_first_name',
     'user_full_name',
@@ -87,7 +88,7 @@ const extractParamsFromTemplate = (template) => {
     const extractedParams = [];
     let match = paramRegex.exec(template);
     while (match !== null) {
-        extractedParams.push(match[1]);
+        extractedParams.push(match.groups.paramName);
         match = paramRegex.exec(template);
     }
     // do not include any that are non-standard

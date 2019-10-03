@@ -134,9 +134,11 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
 
     const queryBase = `select instruction.*, count(message_id) as total_message_count from ${instructTable} as instruction ` + 
         `left join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id`;
-    const whereClause = !includePendingUserView ? `where (${activeSubClause})` :
-        `where (instruction.presentation_type in ('RECURRING', 'EVENT_DRIVEN') and ${activeSubClause}) ` +
-        `or (instruction.presentation_type in ('ONCE_OFF') and instruction.instruction_id in (${nonZeroIdSet}))`;
+
+    const includePendingUserClause = `where (instruction.presentation_type in ('RECURRING', 'EVENT_DRIVEN') and ${activeSubClause}) ` +
+    `or (instruction.presentation_type in ('ONCE_OFF') and instruction.instruction_id in (${nonZeroIdSet}))`;
+    const whereClause = includePendingUserView ? includePendingUserClause : `where (${activeSubClause})`;
+    
     const queryEnd = 'group by instruction.instruction_id';
 
     const assembledQuery = `${queryBase} ${whereClause} ${queryEnd}`;
@@ -202,14 +204,14 @@ module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses
 
 const validateAndExtractUniverse = (universeComponent) => {
     logger('Universe component: ', universeComponent);
-    const universeMatch = universeComponent.match(/#{(.*)}/);
+    const universeMatch = universeComponent.match(/#{(?<universeDef>.*)}/);
     logger('Universe match: ', universeMatch);
     if (!universeMatch || universeMatch.length === 0) {
         throw new Error('Error! Universe definition passed incorrectly: ', universeComponent);
     }
 
     logger('Parsing: ', universeMatch[1]);
-    const universeDefinition = JSON.parse(universeMatch[1]);
+    const universeDefinition = JSON.parse(universeMatch.groups.universeDef);
     logger('Resulting definition: ', universeDefinition);
     if (typeof universeDefinition !== 'object' || Object.keys(universeDefinition) === 0) {
         throw new Error('Error! Universe definition not a valid object');

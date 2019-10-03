@@ -53,6 +53,7 @@ jobs:
             cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
             cp -r modules/* $HOME/app/functions/boost-api/node_modules
             cp -r modules/* $HOME/app/functions/user-messaging-api/node_modules
+            cp -r modules/* $HOME/app/functions/admin-api/node_modules
 
       - run:
           name: install aws cli
@@ -82,21 +83,29 @@ jobs:
             cd $HOME/app/functions/user-activity-api && npm run-script lint
             cd ../user-existence-api && npm run-script lint
             cd ../float-api && npm run-script lint
+            cd ../boost-api && npm run-script lint
+            cd ../user-messaging-api && npm run-script lint
+            cd ../admin-api && npm run-script lint
             cd ../db-migration && npm run-script lint
             
-      # todo: restore this once lodash thing is out of deep deps & node has reliably updated etc
-      # - run:
-      #     name: run security check
-      #     command: |
-      #       cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit
-      #       # we do this to avoid the package lock inadvertantly overriding later and wiping modules
-      #       rm ./package-lock.json
-      #       cd ../user-existence-api && npm i --package-lock-only && npm audit fix --only=prod
-      #       rm ./package-lock.json
-      #       cd ../float-api && npm i --package-lock-only && npm audit fix --only=prod
-      #       rm ./package-lock.json
-      #       cd ../db-migration && npm i --package-lock-only && npm audit fix --only=prod
-      #       rm ./package-lock.json
+      - run:
+          name: run security check
+          command: |
+            cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit fix --production
+            # we remove the package lock so it does not inadvertantly override later and wiping modules
+            rm ./package-lock.json
+            cd ../user-existence-api && npm i --package-lock-only && npm audit fix --production
+            rm ./package-lock.json
+            cd ../user-messaging-api && npm i --package-lock-only && npm audit fix --production
+            rm ./package-lock.json
+            cd ../float-api && npm i --package-lock-only && npm audit fix --production
+            rm ./package-lock.json
+            cd ../boost-api && npm i --package-lock-only && npm audit fix --production
+            rm ./package-lock.json
+            cd ../admin-api && npm i --package-lock-only && npm audit fix --production
+            rm ./package-lock.json
+            cd ../db-migration && npm i --package-lock-only && npm audit fix --production
+            rm ./package-lock.json
 
       - run:
           name: run tests
@@ -110,6 +119,7 @@ jobs:
             cd ../float-api; npm test; npm run-script generate-coverage
             cd ../boost-api; npm test; npm run-script generate-coverage
             cd ../user-messaging-api; npm test; npm run-script generate-coverage
+            cd ../admin-api; npm test; npm run-script generate-coverage
             
             echo "Runing module tests and outputting coverage reports"
             cd $HOME/app/modules/dynamo-common; npm test; npm run-script generate-coverage
@@ -154,6 +164,10 @@ jobs:
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_messaging_api_$CIRCLE_SHA1.zip .
 
+                cd $HOME/app/functions/admin-api
+                echo $CIRCLE_SHA1 > last_commit.txt
+                zip -rq $HOME/deploy_admin_api_$CIRCLE_SHA1.zip .
+
                 cd $HOME/app/functions/warmup
                 echo $CIRCLE_SHA1 > last_commit.text
                 zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip .
@@ -174,6 +188,7 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_existence_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_boost_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/boost_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_messaging_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_messaging_api/$CIRCLE_SHA1.zip
+                /home/circleci/bin/aws s3 cp deploy_admin_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/admin_api/$CIRCLE_SHA1.zip
 
                 /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip
              fi
@@ -217,6 +232,3 @@ jobs:
           key: terraform_bin-{{ checksum "./terraform/terraform_version" }}
           paths:
             - /tmp/terraform
-
-
-

@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_user_fetch" {
   role                           = "${aws_iam_role.message_user_fetch_role.arn}"
   handler                        = "message-picking-handler.getNextMessageForUser"
   memory_size                    = 512
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

@@ -162,7 +162,7 @@ module.exports.insertMessageInstruction = async (event) => {
         logger(`Is HTTP request? : ${isHttpRequest} and user details: ${userDetails}`);
         // todo : add in validation of role, but also allow for system call (e.g., boosts, but those can pass along)
         if (isHttpRequest && !msgUtil.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
-            return msgUtil.wrapHttpResponse({}, 403);
+            return msgUtil.unauthorizedResponse;
         }
 
         const params = msgUtil.extractEventBody(event);
