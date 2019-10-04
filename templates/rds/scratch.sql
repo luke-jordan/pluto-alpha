@@ -1,5 +1,5 @@
 insert into boost_data.boost 
-    (boost_id, 
+    (boost_id,
     creating_user_id,
     start_time,
     end_time,
@@ -14,7 +14,7 @@ insert into boost_data.boost
     boost_audience, 
     audience_selection, 
     status_conditions, 
-    redemption_messages) 
+    redemption_messages)
 values (
     '68097d84-b3e1-4fe8-807e-9dff24d4fb6b', 
     '5ef8310d-4c06-49e4-b7bc-df8a880895f0', 
