@@ -55,7 +55,7 @@ const aggregateFloatTotals = (resultRows) => {
         const existingSum = floatResultMap.get(thisFloatId);
         const floatSumDict = typeof existingSum === 'undefined' ? {} : { ...existingSum };
         
-        const currencySum = Reflect.has(floatSumDict, thisCurrency) ? floatSumDict[thisCurrency]  : { 'amount': 0, 'unit': defaultUnit};
+        const currencySum = Reflect.has(floatSumDict, thisCurrency) ? floatSumDict[thisCurrency] : { 'amount': 0, 'unit': defaultUnit};
 
         const sumForThisUnit = parseInt(row['sum'], 10);
         const thisUnit = row['unit'];
@@ -109,7 +109,7 @@ const aggregateAllocatedAmounts = (resultRows) => {
 
     logger('Returning allocation results: ', floatResultMap);
     return floatResultMap;
-}
+};
 
 module.exports.getFloatBalanceAndFlows = async (floatIds) => {
     logger('Fetching balance for floats: ', floatIds);
@@ -117,8 +117,8 @@ module.exports.getFloatBalanceAndFlows = async (floatIds) => {
     const floatTxTable = config.get('tables.floatTxTable');
     const floatIndices = extractArrayIndices(floatIds);
     
-    const sumQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) `
-        + `and allocated_to_type = \$${floatIds.length + 1} group by float_id, currency, unit`;
+    const sumQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) ` +
+        `and allocated_to_type = $${floatIds.length + 1} group by float_id, currency, unit`;
     const queryValues = [...floatIds, 'FLOAT_ITSELF'];
     logger('Executing query: ', sumQuery, ', with values: ', queryValues);
     const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
@@ -132,8 +132,8 @@ module.exports.getFloatBonusBalanceAndFlows = async (floatIds) => {
     const floatTxTable = config.get('tables.floatTxTable');
     const floatIndices = extractArrayIndices(floatIds);
 
-    const sumQuery = `select float_id, currency, unit, allocated_to_id, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) `
-        + `and allocated_to_type = \$${floatIds.length + 1} group by float_id, currency, unit, allocated_to_id`;
+    const sumQuery = `select float_id, currency, unit, allocated_to_id, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) ` +
+        `and allocated_to_type = $${floatIds.length + 1} group by float_id, currency, unit, allocated_to_id`;
     const queryValues = [...floatIds, 'BONUS_POOL'];
     const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
 

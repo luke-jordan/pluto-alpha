@@ -82,7 +82,7 @@ module.exports = {
         'id-length': [
             'error',
             {
-                'exceptions': ['e', 'i', 'o']
+                'exceptions': ['_', 'e', 'i', 'o']
             }
         ],
         'id-match': 'error',
