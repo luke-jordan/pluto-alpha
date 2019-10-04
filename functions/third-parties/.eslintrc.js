@@ -116,7 +116,7 @@ module.exports = {
         'max-params': [
             'error',
             {
-                'max': 5
+                'max': 4
             }
         ],
         'max-statements': 'off',
@@ -167,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 2, 3, 100, 200, 400, 500, 365]
+                'ignore': [0, 1, 100, 200, 400, 500, 365]
             }
         ],
         'no-mixed-operators': 'error',
@@ -249,7 +249,7 @@ module.exports = {
         'prefer-reflect': 'error',
         'prefer-rest-params': 'error',
         'prefer-spread': 'error',
-        'prefer-template': 'off',
+        'prefer-template': 'error',
         'quote-props': 'off',
         'quotes': [
             'error',

@@ -92,7 +92,10 @@ resource "aws_iam_policy" "admin_client_float_access" {
         "Action": [
           "dynamodb:Scan"
         ],
-        "Resource": "${aws_dynamodb_table.client-float-table.arn}"
+        "Resource": [
+          "${aws_dynamodb_table.client-float-table.arn}",
+          "${var.country_client_table_arn[terraform.workspace]}"
+        ]
       }
     ]
 }

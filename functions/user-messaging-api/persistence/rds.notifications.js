@@ -10,7 +10,7 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 const accountsTable = config.get('tables.accountLedger');
 
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 const extractParamIndices = (values, startIndex = 1) => values.map((_, idx) => `$${idx + startIndex}`).join(', ');
 
@@ -87,13 +87,13 @@ module.exports.getInstructionsByType = async (presentationType, audienceTypes, p
     if (Array.isArray(audienceTypes) && audienceTypes.length > 0) {
         query = `${query} and audience_type in (${extractParamIndices(audienceTypes, paramStartIndex)})`;
         values = values.concat(audienceTypes);
-        paramStartIndex = paramStartIndex + audienceTypes.length;
+        paramStartIndex += audienceTypes.length;
     }
 
     if (Array.isArray(processedStatuses) && processedStatuses.length > 0) {
         query = `${query} and processed_status in (${extractParamIndices(processedStatuses, paramStartIndex)})`;
         values = values.concat(processedStatuses);
-        paramStartIndex = paramStartIndex + processedStatuses.length;
+        paramStartIndex += processedStatuses.length;
     }
 
     logger(`Finding message instructions using query: ${query}, and values: ${JSON.stringify(values)}`);
@@ -117,7 +117,7 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
 
     // so first we get a list of instructions that are either recurring, event based, or once off but have some number unfetched
     const handledStatuses = ['FETCHED', 'SENT', 'DELIVERED', 'DISMISSED', 'UNDELIVERABLE'];
-    const statusParamIdx = extractParamIndices(handledStatuses)
+    const statusParamIdx = extractParamIndices(handledStatuses);
     const selectNonZeroIds = `select instruction.instruction_id, count(message_id) as unfetched_message_count from ` +
         `${instructTable} as instruction inner join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id ` +
         `where messages.processed_status not in (${statusParamIdx}) group by instruction.instruction_id`;
@@ -134,9 +134,11 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
 
     const queryBase = `select instruction.*, count(message_id) as total_message_count from ${instructTable} as instruction ` + 
         `left join ${messageTable} as messages on instruction.instruction_id = messages.instruction_id`;
-    const whereClause = !includePendingUserView ? `where (${activeSubClause})` :
-        `where (instruction.presentation_type in ('RECURRING', 'EVENT_DRIVEN') and ${activeSubClause}) ` +
-        `or (instruction.presentation_type in ('ONCE_OFF') and instruction.instruction_id in (${nonZeroIdSet}))`;
+
+    const includePendingUserClause = `where (instruction.presentation_type in ('RECURRING', 'EVENT_DRIVEN') and ${activeSubClause}) ` +
+    `or (instruction.presentation_type in ('ONCE_OFF') and instruction.instruction_id in (${nonZeroIdSet}))`;
+    const whereClause = includePendingUserView ? includePendingUserClause : `where (${activeSubClause})`;
+    
     const queryEnd = 'group by instruction.instruction_id';
 
     const assembledQuery = `${queryBase} ${whereClause} ${queryEnd}`;
@@ -145,9 +147,9 @@ module.exports.getCurrentInstructions = async (includePendingUserView = false) =
     logger('Result of second query, IDs: ', secondQueryResult.map((row) => row['instruction_id']));
 
 
-    const extractUnfetchedCount = (instructionId) => nonZeroIdSet.indexOf(instructionId) === -1 ? 0 : idKeyedCounts[instructionId];
-    const transformedInstructions = secondQueryResult.map((row) => 
-        ({...camelCaseKeys(row), unfetchedMessageCount: extractUnfetchedCount(row['instruction_id']) }));
+    const extractUnfetchedCount = (instructionId) => (nonZeroIdSet.indexOf(instructionId) < 0 ? 0 : idKeyedCounts[instructionId]);
+    const transformedInstructions = secondQueryResult.
+        map((row) => ({...camelCaseKeys(row), unfetchedMessageCount: extractUnfetchedCount(row['instruction_id']) }));
     logger('Transformed: ', transformedInstructions);
 
     return transformedInstructions;
@@ -194,22 +196,22 @@ module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses
     const updateResponse = await rdsConnection.multiTableUpdateAndInsert(messageUpdateDefs, []);
     logger('Result of update on batch of messages: ', updateResponse);
     return updateResponse; // camelize?
-}
+};
 
-/////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////// User ID extraction begins here ////////////////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////// User ID extraction begins here ////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////
 
 const validateAndExtractUniverse = (universeComponent) => {
     logger('Universe component: ', universeComponent);
-    const universeMatch = universeComponent.match(/#{(.*)}/);
+    const universeMatch = universeComponent.match(/#{(?<universeDef>.*)}/);
     logger('Universe match: ', universeMatch);
     if (!universeMatch || universeMatch.length === 0) {
         throw new Error('Error! Universe definition passed incorrectly: ', universeComponent);
     }
 
     logger('Parsing: ', universeMatch[1]);
-    const universeDefinition = JSON.parse(universeMatch[1]);
+    const universeDefinition = JSON.parse(universeMatch.groups.universeDef);
     logger('Resulting definition: ', universeDefinition);
     if (typeof universeDefinition !== 'object' || Object.keys(universeDefinition) === 0) {
         throw new Error('Error! Universe definition not a valid object');
@@ -348,7 +350,7 @@ module.exports.filterUserIdsForRecurrence = async (userIds, { instructionId, rec
     const minIntervalQuery = `select distinct(destination_user_id) from ${messageTable} where instruction_id = $1 and ` +
         `creation_time > $2`;
     const durationClause = moment().subtract(recurrenceParameters.minIntervalDays, 'days').format();
-    const intervalPromise = executeQueryAndGetIds(minIntervalQuery, [instructionId, durationClause])
+    const intervalPromise = executeQueryAndGetIds(minIntervalQuery, [instructionId, durationClause]);
 
     // here consciously allowing this to be everything -- could do an 'in' clause with user IDs but very complex and probably 
     // has little gain, esp as might create enourmous query when have 100k + users and evaluating a generic recurrence
@@ -364,9 +366,9 @@ module.exports.filterUserIdsForRecurrence = async (userIds, { instructionId, rec
     return userIds.filter((id) => !idsToFilter.includes(id));
 };
 
-/////////////////////////////////////////////////////////////////////////////////////////
-///////////////////////// Final: push token extraction begins here //////////////////////
-/////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////// Final: push token extraction begins here //////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////
 
 module.exports.insertPushToken = async (pushTokenObject) => {
     const insertionQueryArray = [
@@ -400,11 +402,11 @@ module.exports.getPushTokens = async (userIds, provider) => {
     return result.reduce((obj, row) => ({ ...obj, [row['user_id']]: row['push_token']}), {});
 };
 
-module.exports.deactivatePushToken = async (provider, userId, valuesToUpdate) => {
+module.exports.deactivatePushToken = async (provider, userId) => {
     logger('About to update push token.');
     const table = config.get('tables.pushTokenTable');
     const key = { userId, provider };
-    const value = valuesToUpdate;
+    const value = { active: false };
     const returnClause = 'insertion_time';
 
     const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });

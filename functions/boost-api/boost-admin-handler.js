@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:create');
-const config = require('config');
+// const config = require('config');
 
 const persistence = require('./persistence/rds.admin.boost');
 const util = require('./boost.util');
@@ -19,7 +19,7 @@ module.exports.listBoosts = async (event) => {
         const params = util.extractQueryParams(event);
         logger('Boost list params: ', params);
 
-        const excludedTypeCategories = params.includeReferrals ? [] : ['REFERRAL::USER_CODE_USED'];
+        const excludedTypeCategories = params.includeReferrals ? [] : ['REFERRAL::USER_CODE_USED', 'REFERRAL::BETA_CODE_USED'];
         const includeStatusCounts = typeof params.includeUserCounts === 'boolean' && params.includeStatusCounts;
         const includeExpired = typeof params.includeExpired === 'boolean' && params.includeExpired;
         
@@ -30,7 +30,7 @@ module.exports.listBoosts = async (event) => {
         logger('FATAL_ERROR: ', err);
         return util.errorResponse(err); 
     }
-}
+};
 
 /**
  * Flexible method/endpoint to update a boost, more or less any parameter
@@ -53,4 +53,4 @@ module.exports.updateInstruction = async (event) => {
         logger('FATAL_ERROR: ', err);
         return util.errorResponse(err);
     }
-}
+};

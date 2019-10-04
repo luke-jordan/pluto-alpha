@@ -11,9 +11,10 @@ const dynamo = require('dynamo-common');
 const userProfileTable = config.get('tables.dynamoProfileTable');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const paramRegex = /#{([^}]*)}/g;
+const paramRegex = /#{(?<paramName>[^}]*)}/g;
+
 const STANDARD_PARAMS = [
     'user_first_name',
     'user_full_name',
@@ -30,7 +31,7 @@ const UNIT_DIVISORS = {
 
 const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
 
-const getSubParamOrDefault = (paramSplit, defaultValue) => paramSplit.length > 1 ? paramSplit[1] : defaultValue;
+const getSubParamOrDefault = (paramSplit, defaultValue) => (paramSplit.length > 1 ? paramSplit[1] : defaultValue);
 
 const formatAmountResult = (amountResult) => {
     logger('Formatting amount result: ', amountResult);
@@ -87,18 +88,18 @@ const extractParamsFromTemplate = (template) => {
     const extractedParams = [];
     let match = paramRegex.exec(template);
     while (match !== null) {
-        extractedParams.push(match[1]);
+        extractedParams.push(match.groups.paramName);
         match = paramRegex.exec(template);
     }
     // do not include any that are non-standard
-    return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) !== -1);
+    return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) >= 0);
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramSplit = param.split('::');
     const paramName = paramSplit[0];
     logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
-    if (STANDARD_PARAMS.indexOf(paramName) === -1) {
+    if (STANDARD_PARAMS.indexOf(paramName) < 0) {
         return paramName; // redundant and unreachable but useful for robustness
     } else if (paramName === 'user_first_name') {
         const userId = getSubParamOrDefault(paramSplit, destinationUserId);
@@ -128,6 +129,8 @@ const fillInTemplate = async (template, destinationUserId) => {
     }
 
     const replacedString = template.replace(paramRegex, '%s');
+    logger('String template looks like: ', replacedString);
+    
     logger('Fetching user profile for ID: ', destinationUserId);
     const userProfile = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId: destinationUserId }, PROFILE_COLS);
     logger('Obtained user profile: ', userProfile);
@@ -175,13 +178,13 @@ module.exports.assembleMessage = async (msgDetails) => {
     return messageBase;
 };
 
-const fetchMsgSequenceIds = (anchorMessage, retrievedMessages) => {
+const fetchMsgSequenceIds = (anchorMessage) => {
     // logger('Fetching sequence IDs from anchor: ', anchorMessage);
     if (!anchorMessage) {
         return [];
     }
 
-    let thisAndFollowingIds = [anchorMessage.messageId];
+    const thisAndFollowingIds = [anchorMessage.messageId];
     
     if (!anchorMessage.hasFollowingMessage || typeof anchorMessage.messageSequence !== 'object') {
         return thisAndFollowingIds;
@@ -199,18 +202,18 @@ const assembleSequence = async (anchorMessage, retrievedMessages) => {
     // in almost all cases, never more than a few messages (active/non-expired filter means only a handful at a time)
     // monitor and if that becomes untrue, then ajust, e.g., go to persistence or cache to extract IDs
     const sequenceMsgDetails = sequenceIds.map((msgId) => retrievedMessages.find((msg) => msg.messageId === msgId));
-    return await Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails)));
+    return Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails)));
 };
 
 const determineAnchorMsg = (openingMessages) => {
-    logger('Determining anchor message')
+    logger('Determining anchor message');
     // if there is only one, then it is trivial
     if (openingMessages.length === 1) {
         return openingMessages[0];
     }
 
     // then, find the highest priority, using neat trick: https://stackoverflow.com/questions/4020796/finding-the-max-value-of-an-attribute-in-an-array-of-objects
-    const highestPriorityAmongOpening = Math.max.apply(Math, openingMessages.map((msg) => msg.messagePriority));
+    const highestPriorityAmongOpening = Reflect.apply(Math.max, Math, openingMessages.map((msg) => msg.messagePriority));
     logger('Highest priority among current messages: ', highestPriorityAmongOpening);
 
     const messagesWithHighestPriority = openingMessages.filter((msg) => msg.messagePriority === highestPriorityAmongOpening);
@@ -243,7 +246,7 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     // third, either just continue with the prior one, or find whatever should be the anchor
     let anchorMessage = null;
     if (withinFlowFromMsgId) {
-        const flowMessage = openingMessages.find((msg) => msg.messageId = withinFlowFromMsgId);
+        const flowMessage = openingMessages.find((msg) => msg.messageId === withinFlowFromMsgId);
         anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage; 
     } else {
         anchorMessage = determineAnchorMsg(openingMessages);
@@ -270,8 +273,7 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext) => {
     logger('Invoking Lambda to update message status');
     const invocationResult = await lambda.invoke(updateMsgLambdaParams).promise();
     logger('Completed invocation: ', invocationResult);
-
-}
+};
 
 // For now, for mobile test
 const dryRunGameResponseOpening = require('./dry-run-messages');
@@ -291,10 +293,10 @@ module.exports.getNextMessageForUser = async (event) => {
         if (queryParams && queryParams.gameDryRun) {
             const relevantGame = queryParams.gameType || 'TAP_SCREEN';
             const messagesToReturn = relevantGame === 'CHASE_ARROW' ? dryRunGameChaseArrows : dryRunGameResponseOpening;
-            return { statusCode: 200, body: JSON.stringify(messagesToReturn)}
+            return { statusCode: 200, body: JSON.stringify(messagesToReturn)};
         }
 
-        const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : undefined;
+        const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : null;
         const userMessages = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId, withinFlowFromMsgId);
         logger('Retrieved user messages: ', userMessages);
         const resultBody = {
@@ -328,24 +330,26 @@ module.exports.updateUserMessage = async (event) => {
         logger('Processing message ID update, based on user action: ', userAction);
 
         if (!messageId || messageId.length === 0) {
-            return { statusCode: 400 }
-        };
+            return { statusCode: 400 };
+        }
 
         let response = { };
-        let updateResult = undefined;
+        let updateResult = null;
         switch (userAction) {
-            case 'FETCHED':
+            case 'FETCHED': {
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'FETCHED' });
                 logger('Result of updating message: ', updateResult);
                 return { statusCode: 200 };
-            case 'DISMISSED':
+            }
+            case 'DISMISSED': {
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
                 const bodyOfResponse = { result: 'SUCCESS', processedTimeMillis: updateResult.updatedTime.valueOf() };
                 response = { statusCode: 200, body: JSON.stringify(bodyOfResponse) };
                 break;
+            }
             default:
-                response = { statusCode: 400, body: 'UNKNOWN_ACTION' }
-        };
+                response = { statusCode: 400, body: 'UNKNOWN_ACTION' };
+        }
 
         return response;
     } catch (err) {

@@ -36,7 +36,7 @@ const handler = proxyquire('../boost-create-handler', {
         'findBoost': findBoostStub,
         'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
-        'alterBoost': alterBoostStub,
+        'setBoostMessages': alterBoostStub,
         'findMsgInstructionByFlag': findMsgInstructStub
     },
     'aws-sdk': {
@@ -49,7 +49,7 @@ const handler = proxyquire('../boost-create-handler', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub);
+const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub);
 
 const testStartTime = moment();
 const testEndTime = moment().add(7, 'days');
@@ -64,13 +64,13 @@ describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () =
     });
 
     it('Rejects all categories except referrals if user is ordinary role', async () => {
-        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER' ));
+        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER'));
         expect(resultOfCall).to.exist;
-        expect(resultOfCall).to.deep.equal({ statusCode: 403, body: 'Ordinary users cannot create boosts'});
+        expect(resultOfCall).to.deep.equal({ statusCode: 403 });
     });
 
     it('Swallows an error and return its message', async () => {
-        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ badObject: 'This is bad' }));
+        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ badObject: 'This is bad' }, uuid(), 'SYSTEM_ADMIN'));
         expect(resultOfCall).to.exist;
         expect(resultOfCall).to.have.property('statusCode', 500);
     });
@@ -80,7 +80,6 @@ describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () =
 describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
     const referralWindowEnd = moment().add(3, 'months');
-    const timeSaveCompleted = moment();
     
     const testReferringUser = uuid();
     const testReferredUser = uuid();
@@ -89,13 +88,16 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
     const testReferringMsgId = uuid();
     const testReferredMsgId = uuid();
 
+    const testCreatingUserId = uuid();
+
     const mockBoostToFromPersistence = {
-        creatingUserId: uuid(),
+        creatingUserId: testCreatingUserId,
         boostType: 'REFERRAL',
         boostCategory: 'USER_CODE_USED',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
+        boostBudget: 10000000,
         fromBonusPoolId: 'primary_bonus_pool',
         fromFloatId: 'primary_cash',
         forClientId: 'some_client_co',
@@ -109,7 +111,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             { accountId: testReferringUser, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
             { accountId: testReferredUser, msgInstructionId: testReferredMsgId, status: 'REDEEMED' }
         ],
-        flags: [ 'REDEEM_ALL_AT_ONCE' ]
+        flags: ['REDEEM_ALL_AT_ONCE']
     };
 
     it('Happy path inserting a referral-based individual boost', async () => {
@@ -131,8 +133,10 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         insertBoostStub.resolves(expectedFromRds);
 
         const testBodyOfEvent = {
+            creatingUserId: testCreatingUserId,
             boostTypeCategory: 'REFERRAL::USER_CODE_USED',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+            boostBudget: '10000000::HUNDREDTH_CENT::USD',
             boostSource: {
                 bonusPoolId: 'primary_bonus_pool',
                 clientId: 'some_client_co',
@@ -151,12 +155,12 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             }
         };
 
-        const resultOfInstruction = await handler.createBoostWrapper(testHelper.wrapEvent(testBodyOfEvent, 
-            mockBoostToFromPersistence.creatingUserId, 'ORDINARY_USER'));
+        const resultOfInstruction = await handler.createBoost(testBodyOfEvent);
+        expect(resultOfInstruction).to.deep.equal(expectedFromRds);
 
-        const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
-        expect(bodyOfResult).to.deep.equal(expectedFromRds);
-
+        const objectToRds = insertBoostStub.getCall(0).args[0];
+        logger('Sent to RDS: ', objectToRds);
+        
         expect(insertBoostStub).to.have.been.calledWithExactly(mockBoostToFromPersistence);
     });
 
@@ -175,12 +179,13 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
+        boostBudget: 10000000,
         fromBonusPoolId: 'primary_bonus_pool',
         fromFloatId: 'primary_cash',
         forClientId: 'some_client_co',
         boostStartTime: testStartTime,
         boostEndTime: testEndTime,
-        statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}' ] },
+        statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
         boostAudience: 'GENERAL',
         boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
         defaultStatus: 'CREATED',
@@ -206,13 +211,14 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const testBodyOfEvent = {
             boostTypeCategory: 'SIMPLE::TIME_LIMITED',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+            boostBudget: 10000000,
             boostSource: {
                 bonusPoolId: 'primary_bonus_pool',
                 clientId: 'some_client_co',
                 floatId: 'primary_cash'
             },
             endTimeMillis: testEndTime.valueOf(),
-            statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}' ] },
+            statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
             boostAudience: 'GENERAL',
             boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
             redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
@@ -241,7 +247,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
     const testExpiryTime = moment().add(1, 'day');
     const testPersistedTime = moment().add(1, 'second');
 
-    const messageDefinitions = {
+    const messageTemplates = {
         OFFERED: {
             title: 'Can you beat this challenge?',
             body: `Congratulations! You have saved so much you've unlocked a special challenge. Save R100 now to unlock it!`,
@@ -291,12 +297,19 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         }
     };
 
+    const messageReqBody = {
+        isMessageSequence: true,
+        boostStatus: 'ALL',
+        presentationType: 'ONCE_OFF',
+        templates: messageTemplates
+    };
+
     const gameParams = {
         gameType: 'CHASE_ARROW',
         timeLimitSeconds: 20,
         winningThreshold: 20,
         instructionBand: 'Tap the screen as many times as you can in 20 seconds',
-        entryCondition: "save_event_greater_than #{100000:HUNDREDTH_CENT:USD}"
+        entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
     };
 
     const testStatusConditions = {
@@ -310,6 +323,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         creatingUserId: testCreatingUserId,
         boostTypeCategory: 'GAME::TAP_SCREEN',
         boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+        boostBudget: '10000000::HUNDREDTH_CENT::USD',
         boostSource: {
             bonusPoolId: 'primary_bonus_pool',
             clientId: 'some_client_co',
@@ -318,7 +332,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         endTimeMillis: testEndTime.valueOf(),
         boostAudience: 'GENERAL',
         boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
-        messagesToCreate: messageDefinitions,
+        messagesToCreate: [messageReqBody],
         gameParams
     };
 
@@ -329,6 +343,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
+        boostBudget: 10000000,
         fromBonusPoolId: 'primary_bonus_pool',
         fromFloatId: 'primary_cash',
         forClientId: 'some_client_co',
@@ -354,25 +369,31 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
     const assembleMessageInstruction = () => {
         const messagePayload = {};
+        messagePayload.creatingUserId = testCreatingUserId;
+        messagePayload.boostStatus = 'ALL';
         messagePayload.audienceType = 'GENERAL';
-        messagePayload.presentationType = 'EVENT_DRIVEN';
-        messagePayload.selectionInstruction = `match_other from #{entityType: 'boost', entityId: ${testBoostId}}`;
+        messagePayload.presentationType = 'ONCE_OFF';
+        messagePayload.selectionInstruction = `match_other from #{{\"entityType\": \"boost\", \"entityId\": \"${testBoostId}\"}}`;
+        messagePayload.endTime = testEndTime.format();
         
-        const messageTemplates = Object.keys(messageDefinitions).map((key) => {
-            const msgTemplate = messageDefinitions[key];
+        const assembledMessageTemplates = Object.keys(messageTemplates).map((key) => {
+            const msgTemplate = messageTemplates[key];
             msgTemplate.actionToTake = standardMsgActions[key].action;
             msgTemplate.actionContext = { ...standardMsgActions[key].context, gameParams: gameParams };
-            return { 'DEFAULT': msgTemplate, identifier: key }
+            return { 'DEFAULT': msgTemplate, identifier: key };
         });
 
-        messagePayload.templates = { sequence: messageTemplates };
+        messagePayload.templates = { sequence: assembledMessageTemplates };
         return messagePayload;
     };
 
-    const mockMsgInstructReturnBody = [{ instructionId: testMsgInstructId, creationTimeMillis: moment().valueOf() }]
+    const mockMsgInstructReturnBody = {
+        processResult: 'FIRED_INSTRUCT',
+        message: { instructionId: testMsgInstructId, creationTimeMillis: moment().valueOf() }
+    };
     const mockMsgIdDict = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
 
-    logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
+    // logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
 
     it('Happy path creates a game boost, including setting up the messages', async () => {
     
@@ -390,24 +411,31 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
         alterBoostStub.resolves({ updatedTime: moment() });
 
-        const expectedResult = JSON.parse(JSON.stringify(mockResultFromRds));
-        expectedResult.messageInstructions = mockMsgIdDict;
-
+        const expectedResult = { ...mockResultFromRds, messageInstructions: mockMsgIdDict };
         const expectedMsgInstruct = assembleMessageInstruction();
 
+        // now we do the call
         const resultOfCreate = await handler.createBoost(testBodyOfEvent);
         expect(resultOfCreate).to.exist;
         expect(resultOfCreate).to.deep.equal(expectedResult);
 
         // then set up invocation checks
         Reflect.deleteProperty(mockBoostToFromPersistence, 'boostId');
-        const expectMsgLambdaInvoke = testHelper.wrapLambdaInvoc('message_instruct_create', false, expectedMsgInstruct);
-        // logger('*** EXPECTED MSG INSTRUCTION: ***', JSON.stringify(expectedMsgInstruct));
         
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(mockBoostToFromPersistence);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectMsgLambdaInvoke);
-        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, { messageInstructionIds: { instructions: mockMsgIdDict }});        
+        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
         
+        expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+    });
+
+    it('Handles test call', async () => {
+        const resultOfCreate = await handler.createBoost();
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal({ statusCode: 400 });
+        expect(insertBoostStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(alterBoostStub).to.have.not.been.called;
     });
 
 });

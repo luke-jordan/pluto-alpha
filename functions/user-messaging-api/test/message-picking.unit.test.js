@@ -148,14 +148,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Dry run triggers without touching RDS etc', async () => {
-        const authContext= { authorizer: { systemWideUserId: testUserId }};
+        const authContext = { authorizer: { systemWideUserId: testUserId }};
         const testEvent = { queryStringParameters: { gameDryRun: true }, requestContext: authContext };
         const dryRunMessages = await handler.getNextMessageForUser(testEvent);
         expect(dryRunMessages).to.exist;
     });
 
     it('Arrow chase dry run triggers without touching RDS and returns properly', async () => {
-        const authContext= { authorizer: { systemWideUserId: testUserId }};
+        const authContext = { authorizer: { systemWideUserId: testUserId }};
         const testEvent = { queryStringParameters: { gameDryRun: true, gameType: 'CHASE_ARROW' }, requestContext: authContext };
         const dryRunMessages = await handler.getNextMessageForUser(testEvent);
         expect(dryRunMessages).to.exist;
@@ -321,7 +321,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(bodyOfFetch.messagesToDisplay).to.be.an('array');
         expect(bodyOfFetch.messagesToDisplay[0]).to.deep.equal(expectedFirstMessage);
         expect(bodyOfFetch.messagesToDisplay[1]).to.deep.equal(expectedSecondMsg);
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
@@ -347,7 +347,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
@@ -370,7 +370,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 

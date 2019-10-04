@@ -5,7 +5,8 @@
   "main": "boost-handler.js",
   "scripts": {
     "test": "DEBUG=jupiter:* nyc mocha",
-    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov"
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",
@@ -24,6 +25,7 @@
   "devDependencies": {
     "chai": "^4.2.0",
     "eslint": "^6.1.0",
+    "eslint-plugin-chai-friendly": "^0.4.1",
     "mocha": "^6.2.0",
     "nyc": "^14.1.1",
     "sinon": "^7.4.1",

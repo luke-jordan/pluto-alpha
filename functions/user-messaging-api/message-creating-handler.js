@@ -9,7 +9,7 @@ const rdsUtil = require('./persistence/rds.notifications');
 const msgUtil = require('./msg.util');
 
 // todo : stick in a common file
-const paramRegex = /#{([^}]*)}/g;
+const paramRegex = /#{(?<param>[^}]*)}/g;
 const STANDARD_PARAMS = [
     'user_first_name',
     'user_full_name',
@@ -51,15 +51,16 @@ const placeParamsInTemplate = (template, passedParameters) => {
     let match = paramRegex.exec(template);
 
     // todo : make less ugly, possibly
+    let returnTemplate = template;
     while (match !== null) {
-        const param = match[1];
-        if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) === -1) {
-            template = template.replace(`#{${param}}`, passedParameters[param]);
+        const param = match.groups.param;
+        if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) < 0) {
+            returnTemplate = returnTemplate.replace(`#{${param}}`, passedParameters[param]);
         }
-        match = paramRegex.exec(template);
+        match = paramRegex.exec(returnTemplate);
     }
 
-    return template;
+    return returnTemplate;
 };
 
 const generateMessageFromTemplate = ({ destinationUserId, template, instruction, parameters }) => {
@@ -67,7 +68,6 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
     const thisVariant = msgVariants[Math.floor(Math.random() * msgVariants.length)];
     const msgTemplate = template[thisVariant];
     const messageBody = placeParamsInTemplate(msgTemplate.body, parameters); // to become a generic way of formatting variables into template.
-    const actionContext = msgTemplate.actionToTake ? { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext } : undefined;
     
     let processedStatus = null;
     const overrideStatusPassed = typeof parameters === 'object' && typeof parameters.processedStatus === 'string' && 
@@ -77,18 +77,17 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
         processedStatus = parameters.defaultStatus;
     } else if (typeof instruction.defaultStatus === 'string' && instruction.defaultStatus.length > 0) {
         processedStatus = instruction.defaultStatus;
-    } else  {
+    } else {
         processedStatus = config.get('creating.defaultStatus');
     }
     
-    return {
+    const generatedMessage = {
         messageId: uuid(),
         destinationUserId,
         instructionId: instruction.instructionId,
         processedStatus,
         messageTitle: msgTemplate.title,
         messageBody,
-        actionContext,
         messageVariant: thisVariant,
         display: msgTemplate.display,
         startTime: instruction.startTime,
@@ -98,6 +97,12 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
         followsPriorMessage: false,
         hasFollowingMessage: false
     };
+
+    if (msgTemplate.actionToTake) {
+        generatedMessage.actionContext = { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext };
+    }
+
+    return generatedMessage;
 };
 
 const generateAndAppendMessageSequence = (rows, { destinationUserId, templateSequence, instruction, parameters }) => {
@@ -121,7 +126,9 @@ const generateAndAppendMessageSequence = (rows, { destinationUserId, templateSeq
         msgsForUser.push(userMessage);
     });
     // logger('Identifier dict: ', identifierDict);
-    msgsForUser.forEach((msg) => msg.messageSequence = identifierDict);
+    msgsForUser.forEach((msg) => { 
+        msg.messageSequence = identifierDict; 
+    });
     rows.push(...msgsForUser);
 };
 
@@ -146,8 +153,8 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
             generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
     } else if (topLevelKey === 'sequence') {
         const templateSequence = templates.sequence;
-        userIds.forEach((userId) => 
-            generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
+        userIds.
+            forEach((userId) => generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
     }
     
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
@@ -174,7 +181,7 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     const instruction = await rdsUtil.getMessageInstruction(instructionId);
     
     const selectionInstruction = instruction.selectionInstruction || null;
-    const userIds = destinationUserId ? [ destinationUserId ] : await rdsUtil.getUserIds(selectionInstruction);
+    const userIds = destinationUserId ? [destinationUserId] : await rdsUtil.getUserIds(selectionInstruction);
     logger(`Retrieved ${userIds.length} user id(s) for instruction`);
     
     const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
@@ -216,9 +223,9 @@ module.exports.createUserMessages = async (event) => {
     }
 };
 
-/////////////////////////////////////////////////////////////////////////////
-/////////////////////// RECURRING MESSAGE HANDLING //////////////////////////
-/////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////
+// ///////////////////// RECURRING MESSAGE HANDLING //////////////////////////
+// ///////////////////////////////////////////////////////////////////////////
 
 
 const generateRecurringMessages = async (recurringInstruction) => {

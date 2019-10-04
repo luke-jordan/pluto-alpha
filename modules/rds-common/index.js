@@ -228,7 +228,7 @@ class RdsConnection {
         return results;
     }
 
-    // todo : update to look like handling of update query defs below
+    // more flexible form where we needed it, use the below for more generic ones
     async updateRecord (query = 'UPDATE TABLE SET VALUE = $1 WHERE ID = $2 RETURNING ID', values) {
         if (!Array.isArray(values) || values.length === 0) {
             throw new NoValuesError(query);
@@ -266,7 +266,7 @@ class RdsConnection {
             result = RdsConnection._extractRowsIfExist(rawResult);
             await client.query('COMMIT');
         } catch (err) {
-            logger('Error running update: ', e);
+            logger('Error running update: ', err);
             await client.query('ROLLBACK');
             throw new CommitError();
         } finally {
@@ -390,12 +390,12 @@ class RdsConnection {
             if (Array.isArray(item)) {
                 return RdsConnection._convertArrayToPgString(item);
             } else if (typeof item === 'number') {
-                return '' + item;
+                return String(item);
             } else if (typeof item === 'string') {
                 return item;
-            } else {
-                return JSON.stringify(item);
-            }
+            } 
+            // all else failed so do the most basic fallback
+            return JSON.stringify(item);
         }).join(', ');
         return `{${withinArray}}`;
     }

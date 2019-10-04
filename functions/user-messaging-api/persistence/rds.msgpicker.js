@@ -40,7 +40,7 @@ const transformMsg = (msgRawFromRds) => {
     msgObject.endTime = moment(msgObject.endTime);
     // remove some unnecessary objects
     const keysToRemove = ['deliveriesDone', 'deliveriesMax', 'flags', 'instructionId', 'processedStatus', 'updatedTime'];
-    return Object.keys(msgObject).filter((key) => keysToRemove.indexOf(key) === -1).
+    return Object.keys(msgObject).filter((key) => keysToRemove.indexOf(key) < 0).
         reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
 };
 
@@ -70,12 +70,15 @@ module.exports.getPendingPushMessages = async () => {
 };
 
 // Possibly over-concise, but allows us to sum these on a single query
-const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => 
-    rows.reduce((sum, row) => sum + parseInt(row[amountKey], 10) * UNIT_MULTIPLIERS[row['unit']][targetUnit], 0);
+const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => rows.
+    reduce((sum, row) => {
+        const rowAmount = parseInt(row[amountKey], 10) * UNIT_MULTIPLIERS[row['unit']][targetUnit]; 
+        return sum + rowAmount; 
+    }, 0);
 
-    //and transaction_type in ($4) 
+// to reinclude later, possibly: and transaction_type in ($4) 
 const accountSumQuery = async (params, systemWideUserId) => {
-    const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
+    // const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
     const query = `select sum(amount), unit from ${userAccountTable} inner join ${userTransactionTable} ` +
         `on ${userAccountTable}.account_id = ${userTransactionTable}.account_id ` +
         `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
@@ -97,14 +100,16 @@ const interestHistoryQuery = async (params, systemWideUserId) => {
 const executeAggregateOperation = (operationParams, systemWideUserId) => {
     const operation = operationParams[0];
     switch (operation) {
-        case 'balance':
+        case 'balance': {
             logger('Calculation a balance of account');
-            operationParams = { unit: operationParams[1], currency: operationParams[2] }; 
-            return accountSumQuery(operationParams, systemWideUserId);
-        case 'interest':
+            const paramsForPersistence = { unit: operationParams[1], currency: operationParams[2] }; 
+            return accountSumQuery(paramsForPersistence, systemWideUserId);
+        }
+        case 'interest': {
             logger('Calculating interest earned');
-            operationParams = { unit: operationParams[1], currency: operationParams[2], startTimeMillis: operationParams[3] };
-            return interestHistoryQuery(operationParams, systemWideUserId);
+            const paramsForPersistence = { unit: operationParams[1], currency: operationParams[2], startTimeMillis: operationParams[3] };
+            return interestHistoryQuery(paramsForPersistence, systemWideUserId);
+        }
         default:
             return null;
     }
@@ -127,12 +132,12 @@ module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) =>
     if (resultOfOperation) {
         return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
     }
-    return undefined;
+    return null;
 };
 
-//////////////////////////////////////////////////////////////////////////////////
-/////////////////////////// MESSAGE STATUS HANDLING //////////////////////////////
-//////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////// MESSAGE STATUS HANDLING //////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Updates a message

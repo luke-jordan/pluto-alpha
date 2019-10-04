@@ -4,7 +4,9 @@
   "description": "A few functions for the admin panel",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* mocha"
+    "test": "DEBUG=jupiter:* nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
   },
   "author": "Luke Jordan",
   "license": "ISC",
@@ -14,5 +16,10 @@
     "config": "^3.2.2",
     "debug": "^4.1.1",
     "moment": "^2.24.0"
+  },
+  "devDependencies": {
+    "eslint": "^6.5.1",
+    "eslint-plugin-chai-friendly": "^0.4.1",
+    "nyc": "^14.1.1"
   }
 }

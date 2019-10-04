@@ -39,8 +39,9 @@ const UNIT_MULTIPLIERS = {
 
 // note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
 const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails) => {
+    const accountTimeOut = config.get('cache.detailsTTL');
     const key = `${systemWideUserId}::BANK_DETAILS`;
-    await redis.set(key, JSON.stringify(bankAccountDetails), 'EX', 900); // i.e., for fifteen minutes
+    await redis.set(key, JSON.stringify(bankAccountDetails), 'EX', accountTimeOut);
     logger('Done! Can move along');
 };
 
@@ -82,7 +83,7 @@ module.exports.setWithdrawalBankAccount = async (event) => {
             availableBalance,
             cardTitle: 'Did you know?',
             cardBody: 'Over the next two years you could accumulate xx% interest. Why not delay your withdraw to keep these savings and earn more for your future!'
-        }
+        };
 
         return { statusCode: 200, body: JSON.stringify(responseObject) };
     } catch (err) {
@@ -94,13 +95,13 @@ module.exports.setWithdrawalBankAccount = async (event) => {
 const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
     const multiplier = UNIT_MULTIPLIERS[balanceInformation.unit][withdrawalInformation.unit];
     const absValueWithdrawal = Math.abs(withdrawalInformation.amount); 
-    return absValueWithdrawal <= (balanceInformation.amount * multiplier);
+    return absValueWithdrawal <= balanceInformation.amount * multiplier;
 };
 
 /**
  * Proceeds to next item, the withdrawal amount, where we create the pending transaction, and decide whether to make an offer
  */
-module.exports.setWithdrawalAmount = async (event) =>{
+module.exports.setWithdrawalAmount = async (event) => {
     try {
         const authParams = event.requestContext ? event.requestContext.authorizer : null;
         if (!authParams || !authParams.systemWideUserId) {
@@ -139,7 +140,7 @@ module.exports.setWithdrawalAmount = async (event) =>{
         const transactionId = transactionDetails[0]['accountTransactionId'];
 
         // for now, we are just stubbing this
-        const delayTime = moment().add(7, 'days');
+        const delayTime = moment().add(1, 'week');
         const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
         
         // then, assemble and send back
@@ -161,7 +162,7 @@ module.exports.confirmWithdrawal = async (event) => {
         const withdrawalInformation = JSON.parse(event.body);
         if (!withdrawalInformation.transactionId) {
             return invalidRequestResponse('Requires a transaction Id');
-        } else if (!withdrawalInformation.userDecision || ['CANCEL', 'WITHDRAW'].indexOf(withdrawalInformation.userDecision) === -1) {
+        } else if (!withdrawalInformation.userDecision || ['CANCEL', 'WITHDRAW'].indexOf(withdrawalInformation.userDecision) < 0) {
             return invalidRequestResponse('Requires a valid user decision');
         }
 
@@ -184,7 +185,7 @@ module.exports.confirmWithdrawal = async (event) => {
             transactionId,
             accountId: txProperties.accountId,
             timeInMillis: txProperties.settlementTime,
-            withdrawalAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`
+            withdrawalAmount: `${txProperties.amount}::${txProperties.unit}::${txProperties.currency}`
         };
         await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
 

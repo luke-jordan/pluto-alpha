@@ -2,7 +2,6 @@
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler-test');
 const uuid = require('uuid/v4');
-const config = require('config');
 const moment = require('moment');
 
 const sinon = require('sinon');
@@ -26,8 +25,8 @@ const assembleMessageStub = sinon.stub();
 
 class MockExpo {
     constructor () {
-        this.chunkPushNotifications = expo.chunkPushNotifications;
-        this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub
+        this.chunkPushNotifications = chunkPushNotificationsStub;
+        this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub;
     }
 }
 
@@ -43,7 +42,8 @@ const handler = proxyquire('../message-push-handler', {
     },
     './message-picking-handler': {
         'assembleMessage': assembleMessageStub
-    }
+    },
+    'expo-server-sdk': { Expo: MockExpo }
 });
 
 const resetStubs = () => testHelper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingPushMessagesStub,
@@ -64,7 +64,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
 
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
         deletePushTokenStub.resolves([]);
-        insertPushTokenStub.resolves([{ 'insertionId': 1, 'creationTime': mockCreationTime }])
+        insertPushTokenStub.resolves([{ 'insertionId': 1, 'creationTime': mockCreationTime }]);
 
         const mockEvent = {
             provider: expectedProvider,
@@ -219,13 +219,16 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
     beforeEach(() => {
         resetStubs();
-    })
+    });
 
+    // todo : expectations on chunk and other expo stubs
     it('Sends push notifications', async () => {
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
+        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
         const mockParams = {
-            systemWideUserIds: [ mockUserId, mockUserId ],
+            systemWideUserIds: [mockUserId, mockUserId],
             title: 'TEST_TITLE',
             body: 'TEST_BODY'
         };
@@ -242,6 +245,9 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
         bulkUpdateStatusStub.resolves([]);
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
+
+        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
         const result = await handler.sendPushNotifications();
         logger('Result of push notification sending:', result);  

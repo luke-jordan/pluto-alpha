@@ -10,7 +10,7 @@ const validator = require('validator');
 const persistence = require('./persistence/rds');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region:  config.get('aws.region') });
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 // point of this is to choose whether to use API calls or Lambda invocations
 module.exports.transformEvent = (event) => {
@@ -68,7 +68,7 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
   }
 
   const accountsToSelect = boostAccounts.map((accountId) => `"${accountId}"`).join(', ');
-  const boostAudienceSelection = `whole_universe from #{{"specific_accounts": [${accountsToSelect}]}}`
+  const boostAudienceSelection = `whole_universe from #{{"specific_accounts": [${accountsToSelect}]}}`;
   const bonusExpiryTime = moment().add(config.get('referral.expiryTimeDays'), 'days');
 
   // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
@@ -126,9 +126,7 @@ module.exports.createAccount = async (creationRequest = {
 
   const persistenceMoment = moment(persistenceResult.persistedTime);
   
-  if (typeof creationRequest.referralCodeDetails === 'object' && Object.keys(creationRequest.referralCodeDetails).length > 0) {
-    await handleReferral(persistenceResult.accountId, creationRequest.ownerUserId, creationRequest.referralCodeDetails);
-  }
+  await handleReferral(persistenceResult.accountId, creationRequest.ownerUserId, creationRequest.referralCodeDetails);
 
   return { accountId: persistenceResult.accountId, persistedTimeMillis: persistenceMoment.valueOf() };
 };

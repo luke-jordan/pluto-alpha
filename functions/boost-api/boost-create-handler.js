@@ -10,11 +10,9 @@ const util = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region' )});
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const extractEventBody = (event) => event.body ? JSON.parse(event.body) : event;
-
-const ALLOWABLE_ORDINARY_USER = ['REFERRAL::USER_CODE_USED'];
+// const ALLOWABLE_ORDINARY_USER = ['REFERRAL::USER_CODE_USED'];
 const STANDARD_GAME_ACTIONS = {
     'OFFERED': { action: 'ADD_CASH' },
     'UNLOCKED': { action: 'PLAY_GAME' },
@@ -27,28 +25,30 @@ const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
 };
-const obtainStdAction = (msgKey) => Reflect.has(STANDARD_GAME_ACTIONS, msgKey) ? STANDARD_GAME_ACTIONS[msgKey].action : 'ADD_CASH'; 
+
+const obtainStdAction = (msgKey) => (Reflect.has(STANDARD_GAME_ACTIONS, msgKey) ? STANDARD_GAME_ACTIONS[msgKey].action : 'ADD_CASH'); 
 
 const convertParamsToRedemptionCondition = (gameParams) => {
     const conditions = [];
     switch (gameParams.gameType) {
         case 'CHASE_ARROW':
-        case 'TAP_SCREEN':
+        case 'TAP_SCREEN': {
             conditions.push('taps_submitted');
             const timeLimitMillis = gameParams.timeLimitSeconds * 1000;
             if (gameParams.winningThreshold) {
-                conditions.push(`number_taps_greater_than #{${gameParams.winningThreshold}::${timeLimitMillis}}`)
+                conditions.push(`number_taps_greater_than #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
             }
             if (gameParams.numberWinners) {
                 conditions.push(`number_taps_in_first_N #{${gameParams.numberWinners}::${timeLimitMillis}}`);
             }
             break;
+        }
         default:
             logger('ERROR! Unimplemented game');
             break;
     }
     return conditions;
-} 
+};
 
 const extractStatusConditions = (gameParams) => {
     // all games start with this
@@ -59,26 +59,36 @@ const extractStatusConditions = (gameParams) => {
     return statusConditions;
 };
 
-// finds and uses existing message templates based on provided flags
+// finds and uses existing message templates based on provided flags, in escalating series, given need to parallel process
+// todo :: there will be a bunch of unnecessary queries in here, so particularly zip up the findMsgInstructionByFlag to take multiple flags
+// and hence consolidate into a single operation / query, but can do later
+const obtainMsgIdMatchedToAccount = async (flagDefinition, boostStatus) => {
+    const msgInstructionId = await persistence.findMsgInstructionByFlag(flagDefinition.msgInstructionFlag);
+    logger('Result of flag hunt: ', msgInstructionId);
+    if (typeof msgInstructionId === 'string') {
+        logger('Found a flag, returning it');
+        return ({ accountId: flagDefinition.accountId, status: boostStatus, msgInstructionId });
+    }
+    return null; 
+};
+
+const obtainMessagePromise = async (boostStatus, messageInstructionFlags) => {
+    const flagsForThisStatus = messageInstructionFlags[boostStatus];
+    logger('Message flags for this boost status: ', flagsForThisStatus);
+    const retrievedMsgs = await Promise.all(flagsForThisStatus.map((flagDefinition) => obtainMsgIdMatchedToAccount(flagDefinition, boostStatus)));
+    const foundMsgs = retrievedMsgs.filter((msg) => msg !== null);
+    return foundMsgs;
+};
+
 const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
     logger('Alright, got some message flags, we can go find the instructions, from: ', messageInstructionFlags);
     
-    const messageInstructions = [];
-    // cycle through the keys, which will represent the statuses (um, clean this up a lot, and especially parallelize it)
+    // cycle through the keys, which will represent the boost statuses, and find a message for each
     const statuses = Object.keys(messageInstructionFlags);
     logger('Have statuses: ', statuses);
-    for (let status of statuses) {
-        const messageFlags = messageInstructionFlags[status];
-        logger('Message flags: ', messageFlags);
-        for (let flagDef of messageFlags) {
-            const { accountId, msgInstructionFlag } = flagDef;
-            const msgInstructionId = await persistence.findMsgInstructionByFlag(msgInstructionFlag);
-            logger('Result of flag hunt: ', msgInstructionId);
-            if (typeof msgInstructionId === 'string') {
-                messageInstructions.push({ accountId, status, msgInstructionId });
-            }
-        }
-    }
+    
+    const messageInstructionsRaw = await Promise.all(statuses.map((boostStatus) => obtainMessagePromise(boostStatus, messageInstructionFlags)));
+    const messageInstructions = Reflect.apply([].concat, [], messageInstructionsRaw.filter((result) => result.length > 0));
     
     logger('Finished hunting by flag, have result: ', messageInstructions);
     return messageInstructions;
@@ -121,7 +131,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
             const msgTemplate = msgTemplates[boostStatus];
             msgTemplate.actionToTake = msgTemplate.actionToTake || obtainStdAction(boostStatus);
             msgTemplate.actionContext = actionContext;
-            return { 'DEFAULT': msgTemplate, identifier: boostStatus }
+            return { 'DEFAULT': msgTemplate, identifier: boostStatus };
         });
 
         msgPayload.templates = { 
@@ -140,6 +150,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
 };
 
 const assembleMsgLamdbaInvocation = async (msgPayload) => {
+    logger('Sending payload to messsage instruction create: ', msgPayload);
     const messageInstructInvocation = {
         FunctionName: config.get('lambdas.messageInstruct'),
         InvocationType: 'RequestResponse',
@@ -153,7 +164,7 @@ const assembleMsgLamdbaInvocation = async (msgPayload) => {
     const resultBody = JSON.parse(resultPayload.body);
     logger('Result body on invocation: ', resultBody);
 
-    return { accountId: 'ALL', status: msgPayload.boostStatus, msgInstructionId: resultBody.message.instructionId }
+    return { accountId: 'ALL', status: msgPayload.boostStatus, msgInstructionId: resultBody.message.instructionId };
 };
 
 /**
@@ -180,6 +191,10 @@ module.exports.createBoost = async (event) => {
     // logger('Received boost instruction event: ', params);
 
     // todo : extensive validation
+    if (typeof params.creatingUserId !== 'string') {
+        throw new Error('Boost requires creating user ID');
+    }
+
     const boostType = params.boostTypeCategory.split('::')[0];
     const boostCategory = params.boostTypeCategory.split('::')[1];
 
@@ -187,6 +202,19 @@ module.exports.createBoost = async (event) => {
 
     const boostAmountDetails = params.boostAmountOffered.split('::');
     logger('Boost amount details: ', boostAmountDetails);
+    
+    let boostBudget = 0;
+    if (typeof params.boostBudget === 'number') {
+        boostBudget = params.boostBudget;
+    } else if (typeof params.boostBudget === 'string') {
+        const boostBudgetParams = params.boostBudget.split('::');
+        if (boostAmountDetails[1] !== boostBudgetParams[1] || boostAmountDetails[2] !== boostBudgetParams[2]) {
+            return util.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
+        }
+        boostBudget = parseInt(boostBudgetParams[0], 10);
+    } else {
+        throw new Error('Boost must have a budget');
+    }
 
     // start now if nothing provided
     const boostStartTime = params.startTimeMillis ? moment(params.startTimeMillis) : moment();
@@ -219,6 +247,7 @@ module.exports.createBoost = async (event) => {
         boostAmount: parseInt(boostAmountDetails[0], 10),
         boostUnit: boostAmountDetails[1],
         boostCurrency: boostAmountDetails[2],
+        boostBudget,
         fromBonusPoolId: params.boostSource.bonusPoolId,
         fromFloatId: params.boostSource.floatId,
         forClientId: params.boostSource.clientId,
@@ -230,7 +259,7 @@ module.exports.createBoost = async (event) => {
     };
 
     if (boostType === 'REFERRAL') {
-        instructionToRds.flags = [ 'REDEEM_ALL_AT_ONCE' ]
+        instructionToRds.flags = ['REDEEM_ALL_AT_ONCE'];
     }
 
     if (boostType === 'GAME') {
@@ -241,15 +270,16 @@ module.exports.createBoost = async (event) => {
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
 
+    // logger('Do we have messages ? :', params.messagesToCreate);
     if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
-        const boostParams = { 
+        const boostParams = {
             boostId: persistedBoost.boostId,
             creatingUserId: instructionToRds.creatingUserId, 
             audienceType: params.boostAudience, 
             boostEndTime
         };
 
-        const messagePayloads = params.messagesToCreate.map((msg) =>  createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
+        const messagePayloads = params.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
         logger('Assembled message payloads: ', messagePayloads);
 
         const messageInvocations = messagePayloads.map((payload) => assembleMsgLamdbaInvocation(payload));
@@ -259,11 +289,10 @@ module.exports.createBoost = async (event) => {
         const messageInstructionResults = await Promise.all(messageInvocations);
         logger('Result of message instruct invocation: ', messageInstructionResults);
                 
-        const messageInstructionIds = { instructions: messageInstructionResults };
-        const updatedBoost = await persistence.alterBoost(persistedBoost.boostId, { messageInstructionIds });
+        const updatedBoost = await persistence.setBoostMessages(persistedBoost.boostId, messageInstructionResults, true);
         logger('And result of update: ', updatedBoost);
-        persistedBoost.messageInstructions = messageInstructionIds.instructions;
-    };
+        persistedBoost.messageInstructions = messageInstructionResults;
+    }
 
     return persistedBoost;
 
@@ -274,24 +303,17 @@ module.exports.createBoostWrapper = async (event) => {
     try {
         const userDetails = util.extractUserDetails(event);
 
-        // logger('Boost create event: ', event);
+        logger('Boost create event: ', event);
+        logger('User details: ', userDetails);
         if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
             return { statusCode: status('Forbidden') };
         }
 
-        const params = extractEventBody(event);
+        const params = util.extractEventBody(event);
         params.creatingUserId = userDetails.systemWideUserId;
 
-        const isOrdinaryUser = userDetails.userRole === 'ORDINARY_USER';
-        if (isOrdinaryUser && ALLOWABLE_ORDINARY_USER.indexOf(params.boostTypeCategory) === -1) {
-            return { statusCode: status('Forbidden'), body: 'Ordinary users cannot create boosts' };
-        }
-
         const resultOfCall = await exports.createBoost(params);
-        return {
-            statusCode: status('Ok'),
-            body: JSON.stringify(resultOfCall)
-        };    
+        return util.wrapHttpResponse(resultOfCall);    
     } catch (err) {
         return handleError(err);
     }

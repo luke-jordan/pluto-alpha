@@ -41,7 +41,7 @@ module.exports.findMatchingTransaction = async (txDetails = {
 module.exports.fetchTransaction = async (transactionId) => {
     const query = `select * from ${config.get('tables.accountTransactions')} where transaction_id = $1`;
     const row = await rdsConnection.selectQuery(query, [transactionId]);
-    return row.length > 0 ? camelizeKeys(row[0]) : undefined;
+    return row.length > 0 ? camelizeKeys(row[0]) : null;
 };
 
 module.exports.countSettledSaves = async (accountId) => {
@@ -71,8 +71,8 @@ module.exports.findMostCommonCurrency = async (accountId) => {
     const query = `select currency, count(currency) as currency_count from ${config.get('tables.accountTransactions')} where account_id = $1 ` + 
         `group by currency order by currency_count desc limit 1`;
     const resultOfQuery = await rdsConnection.selectQuery(query, [accountId]);
-    return resultOfQuery.length > 0 ? resultOfQuery[0]['currency'] : undefined; 
-}
+    return resultOfQuery.length > 0 ? resultOfQuery[0]['currency'] : null; 
+};
 
 module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
     const findQuery = `select account_id from ${config.get('tables.accountLedger')} where owner_user_id = $1 order by creation_time desc`;
@@ -260,16 +260,16 @@ module.exports.addSavingToTransactions = async (saveDetails) => {
     
     const accountTxId = uuid();
     const floatAdditionTxId = uuid();
-    const floatAdjustmentTxId = uuid();
+    const floatAllocationTxId = uuid();
 
     const isSaveSettled = saveDetails.settlementStatus === 'SETTLED';
 
-    const accountQueryDef = assembleAccountTxInsertion(accountTxId, saveDetails, { floatAdditionTxId, floatAdjustmentTxId });
+    const accountQueryDef = assembleAccountTxInsertion(accountTxId, saveDetails, { floatAdditionTxId, floatAllocationTxId });
     logger('Account query defined: ', accountQueryDef);
     
     const queryDefs = [accountQueryDef];
     if (isSaveSettled) {
-        const floatQueryDef = assembleFloatTxInsertions(accountTxId, saveDetails, { floatAdditionTxId, floatAdjustmentTxId });
+        const floatQueryDef = assembleFloatTxInsertions(accountTxId, saveDetails, { floatAdditionTxId, floatAllocationTxId });
         logger('And with float def: ', floatQueryDef);
         queryDefs.push(floatQueryDef);
     }
@@ -289,7 +289,7 @@ module.exports.addSavingToTransactions = async (saveDetails) => {
     responseEntity['transactionDetails'] = transactionDetails;
 
     if (isSaveSettled) {
-        const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['savedCurrency'], moment());
+        const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['currency'], moment());
         logger('New balance count: ', balanceCount);
         responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit };
     }
@@ -315,9 +315,6 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     logger('Retrieved pending save: ', pendingTxResult);
 
     const saveDetails = camelizeKeys(pendingTxResult[0]);
-    saveDetails.savedAmount = saveDetails.amount;
-    saveDetails.savedCurrency = saveDetails.currency;
-    saveDetails.savedUnit = saveDetails.unit;
     logger('Resulting save details: ', saveDetails);
 
     const updateQueryDef = {
@@ -348,14 +345,14 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     transactionDetails.push(extractTxDetails('floatAllocationTransactionId', updateAndInsertResult[1][0]));
     responseEntity['transactionDetails'] = transactionDetails;
 
-    const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['savedCurrency'], moment());
+    const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['currency'], moment());
     responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit };
 
     return responseEntity;
 };
 
 
-/////////////////// TEMP: COPY FOR MORE GENERAL METHOD /////////////////////////////////////////////////////
+// ///////////////// TEMP: COPY FOR MORE GENERAL METHOD /////////////////////////////////////////////////////
 
 module.exports.addTransactionToAccount = async (transactionDetails) => {
 
@@ -429,12 +426,12 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
         settlementStatus: 'SETTLED',
         settlementTime: settlementTime.format(),
         floatAdjustTxId: floatAdjustmentTxId,
-        floatAllocTxId: floatAllocationTxId,            
-    }
+        floatAllocTxId: floatAllocationTxId          
+    };
 
     if (paymentDetails) {
         updateValue.paymentReference = paymentDetails.paymentRef;
-        updateValue.paymentProvider = paymentDetails.paymentProvider
+        updateValue.paymentProvider = paymentDetails.paymentProvider;
     }
     
     const updateQueryDef = {
