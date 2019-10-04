@@ -1,0 +1,46 @@
+{
+    "ozow": {
+        "endpoints": {
+            "payment": "https://api.ozow.com/PostPaymentRequest",
+            "transactionStatus": "https://api.ozow.com/GetTransactionByReference",
+            "warmup": "https://api.ozow.com/",
+            "successUrl": "",
+            "cancelUrl": "",
+            "errorUrl": "",
+            "dryRun": "https://dry.run.com/p/2AATFG45"
+        },
+        "siteCode": "",
+        "privateKey": "",
+        "apiKey": "",
+        "requiredProperties": [
+            "countryCode",
+            "currencyCode",
+            "amount",
+            "transactionId",
+            "bankReference",
+            "isTest"
+        ],
+        "postKeyOrder": [
+            "SiteCode",
+            "CountryCode",
+            "CurrencyCode",
+            "Amount",
+            "TransactionReference",
+            "BankReference",
+            "CancelUrl",
+            "ErrorUrl",
+            "SuccessUrl",
+            "IsTest"
+        ],
+        "responseKeyOrder": [
+            "SiteCode",
+            "TransactionId",
+            "TransactionReference",
+            "Amount",
+            "Status",
+            "CurrencyCode",
+            "IsTest",
+            "StatusMessage"
+        ]
+    }
+}
