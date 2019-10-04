@@ -1,50 +1,76 @@
 # POLICIES AND LOCAL DEVELOPMENT
 
-The master branch is protected and will not accept pull requests from any branch aside from staging. The staging 
-branch is protected against pushes but will accept pull requests from development branches. Every PR to staging requires code review 
+The master branch is protected and will not accept pull requests from any branch aside from staging. 
+
+The staging branch is not protected against pushes but will accept pull requests from development branches. Every PR to staging requires code review 
 security and linting to all pass, as well as at least one code review. New branches should fork from the current staging branch. 
 Pull requests should aim for 400-500 lines of code at a time to facilitate reviews. Larger PRs will require more reviews before acceptance.
 
-For local development, you need to install:
+## STEP 1: Quickstart => Install packages, link modules and run tests
+Please install Nodejs if you don't have it installed: <https://nodejs.org/en/>.
 
-1.   Docker (along with docker-compose)
-2.   Localstack
-3.   Postgres
-4.   The core languages, Python and Nodejs
-5.   Set up a virtual env
-6.   The core testing frameworks
+By the end of this step, you'll be able to run tests for a function or module.
+The generic steps involve installing node packages, linking dependent modules and running the tests.
+In this example, we'll be using the `functions/float-api` folder as it covers a good use case.
+Follow the steps below:
 
-These have been grouped together below.
 
-## STEP 1: Docker and LocalStack
+1. Navigate to the root directory of the `pluto-alpha` project. 
 
+2. Install the node packages in the common modules (in this instance: modules `float-api` depends on) by running the command:
+ `cd ./modules/rds-common && npm install && sudo npm link && cd ../dynamo-common && npm install && sudo npm link`.
+The `npm link` command establishes a linking references for the common modules in step 1, in `./modules/rds-common` and then `./modules/dynamo-common`, run the command (you will probably need to sudo):
+
+3. Navigate to the working directory of the dependent function (in this case: `functions/float-api`). Run the command:
+`cd ../../functions/float-api`
+
+4. Run `npm install` to install the node modules.
+ 
+5. Link the common modules by running the following command from the terminal:
+ `npm link rds-common && npm link dynamo-common`. 
+ 
+6. From the working directory of `functions/float-api`. Run tests with the following command:
+`npm run test`
+
+All the tests should be running successfully.
+
+
+## STEP 2: Getting started with local development
+### Step 2a: Docker and Docker Compose 
+To install docker and docker-Compose, run the following commands:
 `sudo apt-get install docker`
-`sudo apt-get instlal docker-compose`
+`sudo apt-get install docker-compose`
 
 (Copy in the bits about adding user to group docker)
-
+### Step 2b: Download docker images for Localstack, Postgres and Nodejs Lambda
+Run the following commands in the terminal (You can run them concurrently in 3 separate terminals)
 `docker pull localstack/localstack:latest`
 `docker pull postgres`
 `docker pull lambci/lambda:nodejs8.10`
 
-Test that these are all installed correctly by running `docker-compose up` in the root folder.
+Test that these are all installed correctly by running `docker-compose up` in the root directory of the `pluto-alpha` project..
 
-**Note** If you do not already have the AWS CLI installed, then install it as here: <https://aws.amazon.com/cli/>. If you
-do not have Python yet, install it as below. It is also suggested that you install the AWS Local wrapper, here: 
-<https://github.com/localstack/awscli-local>. The shortcut is just run `pip install awslocal`.
+> Note: You might have to share the folder `/var/folders` in docker's Preferences=>File Sharing to enable `docker-compose up` work effectively.
 
-## STEP 2: Core languages (depending on part of stack)
 
-### NodeJS
+### Step 2c: Install AWS CLI and AWS-CLI Local:
+Ensure you have Python3 installed. If you don't have it installed, visit: <https://www.python.org/downloads/>
 
-1.  Install the latest Node and NPM from your favourite package repository
-2.  Install the serverless framework:
+Install AWS CLI: <https://aws.amazon.com/cli/>.
+Install the AWS-CLI Local wrapper (awslocal): <https://github.com/localstack/awscli-local>.
 
-`sudo npm install -g serverless`
+> Note: If you're having problems installing awslocal, try the command: `pip3 install awslocal`
+
+
+### Step 2d: Boot your local setup
+In the root directory of the `pluto-alpha` project, run `./initiate --noclean`. 
+This will launch localstack and the local postgres containers, and it will 
+execute the various SQL and CloudFormation templates to set up the persistence layer.
+
 
 ### Python (for integration testing notebooks etc)
 
-1.  Downloand and install Anaconda
+1.  Download and install Anaconda
 2.  Create a new virtual env, using Python 3.6:
 
 `conda create --name pluto-local-dev python=3.6`
@@ -56,39 +82,40 @@ do not have Python yet, install it as below. It is also suggested that you insta
 Note: prior to the above you may need to install libpq-dev locally
 Note: make sure to install ipython in your virtual env or you will get module import errors all the time
 
-**NOTE**: If you are running the integration testing notebooks, make sure to add in a pre-commit filter that strips them
+> Note:: If you are running the integration testing notebooks, make sure to add in a pre-commit filter that strips them
 of output. See here: https://github.com/toobaz/ipynb_output_filter
 
-## STEP 3: Install testing frameworks and dependencies
+
+# With the above, you can start development on the application. The steps below are optional and provide more information.
+
+## Core languages (depending on part of stack)
+
+### NodeJS
+
+1.  Install the latest Node and NPM from your favourite package repository
+2.  Install the serverless framework:
+
+`sudo npm install -g serverless`
+
+
+## Install testing frameworks and dependencies
 
 1.  For NodeJS: Mocha and Chai. Suggestion is to install at least Mocha globally, but it can be used locally
 
 `npm install --global mocha`
 
-2.  For the specific functions use the `create-node-function.sh` script, which will automatically install the necessary
+
+## Creating Lambdas
+For the specific functions use the `create-node-function.sh` script, which will automatically install the necessary
 test suite as dev dependencies (Chai, Sinon, Proxyquire). The first argument to the script is the name of the "API", i.e., the 
 group of lambdas that relate to a common sub-domain, and the second is the primary function you want to create. 
 
-## STEP 4: Install packages and link modules
 
-1.  Install the node packages in the common modules by going to `./modules/rds-common` and `./modules/dynamo-common` and running
-`npm install` (all at once or as they are deployed).
-
-2.  Establish linking references for those two modules by, in each folder, running the command (you will probably need to sudo):
-
-``npm link``
-
-3.  In the dependent functions, link the modules by entering `npm link rds-common` and `npm link dynamo-common`. Do this all at
-once or only for those that are working with / deploying locally.
-
-## STEP 5: Check it's working
-
-In the root folder run `./initiate --no-clean`. That will launch localstack and the local postgres containers, and it will 
-execute the various SQL and CloudFormation templates to set up the persistence layer.
-
+## Deploying lambdas
 The lambdas can then be deployed all at once by running the `deploylambdas` script, or by running `sls deploy --stage local` 
 in the lambda folder (for further variants, such as deploying just a single function if the folder contains multiple such 
 functions, see the serverless documentation).
+
 
 ## TERRAFORM
 After applying terraform:
