@@ -33,3 +33,6 @@ grant insert on float_data.float_transaction_ledger to float_api_worker;
 grant usage on schema float_data to save_tx_api_worker;
 grant select on float_data.float_transaction_ledger to save_tx_api_worker;
 grant insert on float_data.float_transaction_ledger to save_tx_api_worker;
+
+grant usage on schema float_data to admin_api_worker;
+grant select (client_id, float_id, currency, unit, amount, t_type, allocated_to_type, allocated_to_id) on float_data.float_transaction_ledger to admin_api_worker;
