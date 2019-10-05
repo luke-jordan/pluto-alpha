@@ -230,6 +230,14 @@ const extractTxDetails = (keyForTransactionId, row) => {
     return obj;
 };
 
+const legacyKeyFix = (passedSaveDetails) => {
+    const saveDetails = { ...passedSaveDetails };
+    saveDetails.amount = saveDetails.amount || saveDetails.savedAmount;
+    saveDetails.unit = saveDetails.unit || saveDetails.savedUnit;
+    saveDetails.currency = saveDetails.currency || saveDetails.savedCurrency;
+    return saveDetails;
+};
+
 /**
  * Core method. Records a user's saving event, with three inserts: one, in the accounts table, records the saving event on the user's account;
  * the second adds the amount of the save to the float; the third allocates a correspdonding amount of the float to the user. Note that the 
@@ -249,7 +257,7 @@ const extractTxDetails = (keyForTransactionId, row) => {
  * @param {list(string)} tags (Optional) Any tags to include in the event
  * @param {list(string)} flags (Optional) Any flags to add to the event (e.g., if the saving is restricted in withdrawals)
  */
-module.exports.addSavingToTransactions = async (saveDetails) => {
+module.exports.addSavingToTransactions = async (passedSaveDetails) => {
 
     /*
      * todo : add in validation, lots of it
@@ -262,8 +270,9 @@ module.exports.addSavingToTransactions = async (saveDetails) => {
     const floatAdditionTxId = uuid();
     const floatAllocationTxId = uuid();
 
+    const saveDetails = legacyKeyFix(passedSaveDetails);
     const isSaveSettled = saveDetails.settlementStatus === 'SETTLED';
-
+    
     const accountQueryDef = assembleAccountTxInsertion(accountTxId, saveDetails, { floatAdditionTxId, floatAllocationTxId });
     logger('Account query defined: ', accountQueryDef);
     
