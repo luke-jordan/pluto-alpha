@@ -1,4 +1,32 @@
-'use strict';
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>JSDoc: Source: message-creating-handler.js</title>
+
+    <script src="scripts/prettify/prettify.js"> </script>
+    <script src="scripts/prettify/lang-css.js"> </script>
+    <!--[if lt IE 9]>
+      <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
+    <![endif]-->
+    <link type="text/css" rel="stylesheet" href="styles/prettify-tomorrow.css">
+    <link type="text/css" rel="stylesheet" href="styles/jsdoc-default.css">
+</head>
+
+<body>
+
+<div id="main">
+
+    <h1 class="page-title">Source: message-creating-handler.js</h1>
+
+    
+
+
+
+    
+    <section>
+        <article>
+            <pre class="prettyprint source linenums"><code>'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler');
 const config = require('config');
@@ -40,7 +68,7 @@ const STANDARD_PARAMS = [
  * This function assembles the selected template and inserts relevent data where required.
  * todo : make sure this handles subparams on standard params (e.g., total_interest::since etc)
  * @param {*} template The selected template.
- * @param {*} passedParameters Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated actions are executed.
+ * @param {*} passedParameters Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated are executed.
  * With regards to boost amount it is extracted from request parameters and inserted into the boost template.
  */
 const placeParamsInTemplate = (template, passedParameters) => {
@@ -53,7 +81,7 @@ const placeParamsInTemplate = (template, passedParameters) => {
     // todo : make less ugly, possibly
     while (match !== null) {
         const param = match[1];
-        if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) === -1) {
+        if (Reflect.has(passedParameters, param) &amp;&amp; STANDARD_PARAMS.indexOf(param) === -1) {
             template = template.replace(`#{${param}}`, passedParameters[param]);
         }
         match = paramRegex.exec(template);
@@ -70,12 +98,12 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
     const actionContext = msgTemplate.actionToTake ? { actionToTake: msgTemplate.actionToTake, ...msgTemplate.actionContext } : undefined;
     
     let processedStatus = null;
-    const overrideStatusPassed = typeof parameters === 'object' && typeof parameters.processedStatus === 'string' && 
+    const overrideStatusPassed = typeof parameters === 'object' &amp;&amp; typeof parameters.processedStatus === 'string' &amp;&amp; 
         parameters.processedStatus.length > 0;
 
     if (overrideStatusPassed) {
         processedStatus = parameters.defaultStatus;
-    } else if (typeof instruction.defaultStatus === 'string' && instruction.defaultStatus.length > 0) {
+    } else if (typeof instruction.defaultStatus === 'string' &amp;&amp; instruction.defaultStatus.length > 0) {
         processedStatus = instruction.defaultStatus;
     } else  {
         processedStatus = config.get('creating.defaultStatus');
@@ -300,7 +328,7 @@ module.exports.createFromPendingInstructions = async () => {
 //         const instructions = await rdsUtil.getInstructionsByType('RECURRING', ['ALL_USERS']);
 //         logger('Got instructions:', instructions);
 //         let rows = [];
-//         for (let i = 0; i < instructions.length; i++) {
+//         for (let i = 0; i &lt; instructions.length; i++) {
 //             instructions[i].requestDetails = params;
 //             const result = await assembleUserMessages(instructions[i], systemWideUserId);
 //             rows = [...rows, ...result];
@@ -324,3 +352,26 @@ module.exports.createFromPendingInstructions = async () => {
 //         };
 //     }
 // };
+</code></pre>
+        </article>
+    </section>
+
+
+
+
+</div>
+
+<nav>
+    <h2><a href="index.html">Home</a></h2><h3>Global</h3><ul><li><a href="global.html#assembleMessage">assembleMessage</a></li><li><a href="global.html#createFromPendingInstructions">createFromPendingInstructions</a></li><li><a href="global.html#createPersistableObject">createPersistableObject</a></li><li><a href="global.html#createUserMessages">createUserMessages</a></li><li><a href="global.html#deletePushToken">deletePushToken</a></li><li><a href="global.html#fetchAndFillInNextMessage">fetchAndFillInNextMessage</a></li><li><a href="global.html#getMessageInstruction">getMessageInstruction</a></li><li><a href="global.html#getNextMessageForUser">getNextMessageForUser</a></li><li><a href="global.html#insertMessageInstruction">insertMessageInstruction</a></li><li><a href="global.html#insertPushToken">insertPushToken</a></li><li><a href="global.html#listActiveMessages">listActiveMessages</a></li><li><a href="global.html#placeParamsInTemplate">placeParamsInTemplate</a></li><li><a href="global.html#processNonRecurringInstruction">processNonRecurringInstruction</a></li><li><a href="global.html#updateInstruction">updateInstruction</a></li><li><a href="global.html#updateUserMessage">updateUserMessage</a></li><li><a href="global.html#validateMessageInstruction">validateMessageInstruction</a></li></ul>
+</nav>
+
+<br class="clear">
+
+<footer>
+    Documentation generated by <a href="https://github.com/jsdoc/jsdoc">JSDoc 3.6.3</a> on Sat Oct 05 2019 15:19:32 GMT+0200 (South Africa Standard Time)
+</footer>
+
+<script> prettyPrint(); </script>
+<script src="scripts/linenumber.js"> </script>
+</body>
+</html>
