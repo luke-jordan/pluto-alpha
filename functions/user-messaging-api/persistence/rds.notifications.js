@@ -234,6 +234,11 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
         const newIndex = currentIndex + 1;
         const assembledClause = `responsible_client_id = $${newIndex}`;
         return [assembledClause, [universeDefinition[currentKey]], newIndex];
+    } else if (currentKey === 'interval') {
+        const startIntervalIndex = currentIndex + 1;
+        const stopIntervalIndex = currentIndex + 2;
+        const assembledClause = `creation_time between $${startIntervalIndex} and $${stopIntervalIndex}`;
+        return [assembledClause, [universeDefinition[currentKey]['start'], universeDefinition[currentKey]['stop']], stopIntervalIndex];
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
@@ -270,6 +275,12 @@ const assembleMatchEntityClauseValues = (universeDefinition) => {
 const assembleQueryClause = (selectionMethod, universeDefinition) => {
     if (selectionMethod === 'whole_universe') {
         logger('We are selecting all parts of the universe');
+        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
+        const whereClause = conditionClauses.join(' and ');
+        const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
+        return [selectionQuery, conditionValues];
+    } else if (selectionMethod === 'sign_up_cohort') {
+        logger(`We are selecting users based on sign up interval`);
         const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
         const whereClause = conditionClauses.join(' and ');
         const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
