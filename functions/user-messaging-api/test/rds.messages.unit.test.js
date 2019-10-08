@@ -303,11 +303,22 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     it('should get user ids based on sign_up intervals', async () => {
        const mockClientId = uuid();
        const mockAccountId = uuid();
-       const mockStartTime = moment().format();
-       const mockStopTime = moment().format();
-       const mockSelectionInstruction = `sign_up_cohort from #{{"client_id":"${mockClientId}", "interval":{"start":"${mockStartTime}","stop":"${mockStopTime}"} }}`;
+
+       const mockStartTime = moment();
+       const mockEndTime = moment();
+
+       const mockStartTimeAsEpochMilli = mockStartTime.valueOf();
+       const mockEndTimeAsEpochMilli = mockEndTime.valueOf();
+
+       const mockStartTimeAsDateString = mockStartTime.format();
+       const mockEndTimeAsDateString = mockEndTime.format();
+
+       momentStub.withArgs(mockStartTimeAsEpochMilli).returns({ format: () => mockStartTimeAsDateString });
+       momentStub.withArgs(mockEndTimeAsEpochMilli).returns({ format: () => mockEndTimeAsDateString });
+
+       const mockSelectionInstruction = `sign_up_cohort from #{{"client_id":"${mockClientId}", "interval":{"start": ${mockStartTimeAsEpochMilli},"end": ${mockEndTimeAsEpochMilli}} }}`;
        const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1 and creation_time between $2 and $3`;
-       selectQueryStub.withArgs(expectedQuery, [mockClientId, mockStartTime, mockStopTime]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
+       selectQueryStub.withArgs(expectedQuery, [mockClientId, mockStartTimeAsDateString, mockEndTimeAsDateString]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
 
        const expectedResult = [mockAccountId];
 
@@ -316,7 +327,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
        expect(result).to.exist;
        expect(result).to.deep.equal(expectedResult);
-       expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId, mockStartTime, mockStopTime]);
+       expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId, mockStartTimeAsDateString, mockEndTimeAsDateString]);
     });
 
     it('should get user ids (on float_id universe selection)', async () => {
