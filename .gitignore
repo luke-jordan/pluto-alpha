@@ -36,3 +36,11 @@ jwt-public.key
 
 # temporary deployment bundles
 *.zip
+
+package-lock.json
+
+# phpstorm & mac specific files
+atlassian-ide-plugin.xml
+/.idea
+cache.properties
+.DS_Store

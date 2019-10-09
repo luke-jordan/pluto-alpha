@@ -224,7 +224,7 @@ const validateAndExtractUniverse = (universeComponent) => {
 // note : this _could_ be simplified by relying on ordering of Object.keys, but that would be dangerous/fragile
 const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey) => {
     if (currentKey === 'specific_accounts') {
-        logger('Sepcific account IDs selected');
+        logger('Specific account IDs selected');
         const accountIds = universeDefinition[currentKey];
         const placeHolders = accountIds.map((_, index) => `$${currentIndex + index + 1}`).join(', ');
         logger('Created place holder: ', placeHolders);
@@ -234,6 +234,14 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
         const newIndex = currentIndex + 1;
         const assembledClause = `responsible_client_id = $${newIndex}`;
         return [assembledClause, [universeDefinition[currentKey]], newIndex];
+    } else if (currentKey === 'interval') {
+        const startIntervalIndex = currentIndex + 1;
+        const endIntervalIndex = currentIndex + 2;
+        const assembledClause = `creation_time between $${startIntervalIndex} and $${endIntervalIndex}`;
+
+        const startTimeAsDateString = moment(universeDefinition[currentKey]['start']).format();
+        const endTimeAsDateString = moment(universeDefinition[currentKey]['end']).format();
+        return [assembledClause, [startTimeAsDateString, endTimeAsDateString], endIntervalIndex];
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
@@ -270,6 +278,12 @@ const assembleMatchEntityClauseValues = (universeDefinition) => {
 const assembleQueryClause = (selectionMethod, universeDefinition) => {
     if (selectionMethod === 'whole_universe') {
         logger('We are selecting all parts of the universe');
+        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
+        const whereClause = conditionClauses.join(' and ');
+        const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
+        return [selectionQuery, conditionValues];
+    } else if (selectionMethod === 'sign_up_cohort') {
+        logger(`We are selecting users based on sign up interval`);
         const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
         const whereClause = conditionClauses.join(' and ');
         const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
@@ -313,6 +327,7 @@ const extractUserIds = async (selectionClause) => {
 
     const queryResult = await rdsConnection.selectQuery(selectionQuery, selectionValues);
     logger('Number of records from query: ', queryResult.length);
+
 
     return queryResult.map((row) => row['owner_user_id']);
 };
