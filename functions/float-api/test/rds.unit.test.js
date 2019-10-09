@@ -373,6 +373,7 @@ describe('User account allocation', () => {
 describe('Test account summation and float balances', () => {
 
     const floatTable = config.get('tables.floatTransactions');
+    const accountTable = config.get('tables.openAccounts');
 
     before(() => resetStubs());
     afterEach(() => resetStubs());
@@ -386,10 +387,10 @@ describe('Test account summation and float balances', () => {
 
         // using reduce and spread here, nicely explained in answer: https://stackoverflow.com/questions/42974735/create-object-from-array
         const wholeCentObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100) }), {});
-        const wholeCentRowResponse = accountIds.map((id) => ({ 'allocated_to_id': id, 'unit': constants.floatUnits.WHOLE_CENT, 'sum': wholeCentObject[id] }));
+        const wholeCentRowResponse = accountIds.map((id) => ({ 'account_id': id, 'unit': constants.floatUnits.WHOLE_CENT, 'sum': wholeCentObject[id] }));
         
         const hundredthsObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100 * 100) }), {});
-        const hundredthsRowResponse = accountIds.map((id) => ({ 'allocated_to_id': id, 'unit': constants.floatUnits.HUNDREDTH_CENT, 'sum': hundredthsObject[id] }));
+        const hundredthsRowResponse = accountIds.map((id) => ({ 'account_id': id, 'unit': constants.floatUnits.HUNDREDTH_CENT, 'sum': hundredthsObject[id] }));
 
         const expectedSumObject = new Map();
         accountIds.forEach((accountId) => {
@@ -399,8 +400,9 @@ describe('Test account summation and float balances', () => {
 
         const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
         // NB : todo : filter on transaction_type (i.e., accruals vs others)
-        const sumQuery = `select allocated_to_id, unit, sum(amount) from ${floatTable} where float_id = $1 and ` + 
-            `currency = $2 and unit = $3 and allocated_to_type = $4 group by allocated_to_id, unit`;
+        const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
+            `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
+            `where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 group by account_id, unit`;
 
         const matchUnitQArray = sinon.match([common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT]);
         queryStub.withArgs(unitQuery, matchUnitQArray).resolves([{ unit: constants.floatUnits.HUNDREDTH_CENT}, { unit: constants.floatUnits.WHOLE_CENT }]);

@@ -36,6 +36,27 @@ module.exports.fetchUserCounts = async (event) => {
     return util.wrapHttpResponse({ userCount: userIdCount });
 };
 
+const sumBonusPools = (bonusPoolInfo, currency) => {
+    let bonusPoolSum = 0;
+    if (!bonusPoolInfo || typeof bonusPoolInfo !== 'object') {
+        return bonusPoolSum;
+    }
+
+    // by definition, these are all in the same default unit as the float
+    // note : this is pretty much a hack, but will do until we go multi-currency
+    Object.keys(bonusPoolInfo).forEach((key) => {
+        const thisPool = bonusPoolInfo[key];
+        logger('Adding bonus pool: ', thisPool);
+        const relevantAmount = thisPool[currency];
+        bonusPoolSum += relevantAmount.amount;
+    });
+    return bonusPoolSum;
+};
+
+const wrapAmount = (amount, unit, currency) => ({
+    amount, currency, unit
+});
+
 /**
  * Knits together a variety of data to assemble the float totals, names, etc., for the current clients & floats
  * @param {array} countriesAndClients List of countries and the clients that operate in them
@@ -47,10 +68,25 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
 
     // first, get a map of all the floats and their sums in defaults
     const floatIds = clientFloatItems.map((item) => item.floatId);
-    const [floatBalances, bonusPools] = await Promise.all([persistence.getFloatBalanceAndFlows(floatIds), 
-        persistence.getFloatBonusBalanceAndFlows(floatIds)]);
+
+    const monthStart = moment().startOf('month');
+    const weekStart = moment().startOf('week');
+    const present = moment();
+
+    const NEG_FLOW_FLAG = -1;
+    const POS_FLOW_FLAG = 1;
+
+    const [floatBalances, bonusPools, floatInflows, bonusOutFlow, bonusInflow] = await Promise.all([
+        persistence.getFloatBalanceAndFlows(floatIds), 
+        persistence.getFloatBonusBalanceAndFlows(floatIds),
+        persistence.getFloatBalanceAndFlows(floatIds, monthStart),
+        persistence.getFloatBonusBalanceAndFlows(floatIds, weekStart, present, NEG_FLOW_FLAG),
+        persistence.getFloatBonusBalanceAndFlows(floatIds, weekStart, present, POS_FLOW_FLAG)
+    ]);
 
     logger('Fetched bonus pools: ', bonusPools);
+    logger('Bonus pool outflow: ', bonusOutFlow);
+    logger('Bonus pool inflow: ', bonusInflow);
     
     // then, key the country entries by client id
     const clientCountries = countriesAndClients.reduce((obj, item) => ({ ...obj, [item.clientId]: item }), {});
@@ -75,35 +111,26 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
 
         const floatId = clientFloatItem.floatId;
         const currency = clientFloatItem.currency;
+
         const floatBalanceInfo = floatBalances.get(floatId)[currency];
         logger(`For ${floatId}, in ${currency}, have ${JSON.stringify(floatBalanceInfo)}`);
+        const floatInflowInfo = floatInflows.get(floatId)[currency];
 
         const bonusPoolInfo = bonusPools.get(floatId);
-        
-        let bonusPoolSum = 0;
-        // by definition, these are all in the same default unit as the float
-        // note : this is pretty much a hack, but will do until we go multi-currency
-        Object.keys(bonusPoolInfo).forEach((key) => {
-            const thisPool = bonusPoolInfo[key];
-            logger('Adding bonus pool: ', thisPool);
-            const relevantAmount = thisPool[currency];
-            bonusPoolSum += relevantAmount.amount;
-        });
+        const bonusPoolSum = sumBonusPools(bonusPoolInfo, currency);
+
+        const bonusOutflowSum = sumBonusPools(bonusOutFlow.get(floatId), currency);
+        const bonusInflowSum = sumBonusPools(bonusInflow.get(floatId), currency);
         
         const floatItem = {
             floatId,
             floatName: clientFloatItem.floatName,
             floatTimeZone: clientFloatItem.defaultTimezone,
-            floatBalance: {
-                currency,
-                amount: floatBalanceInfo.amount,
-                unit: floatBalanceInfo.unit
-            },
-            bonusPoolBalance: {
-                currency,
-                amount: bonusPoolSum,
-                unit: floatBalanceInfo.unit
-            }
+            floatBalance: wrapAmount(floatBalanceInfo.amount, floatBalanceInfo.unit, currency),
+            floatMonthGrowth: wrapAmount(floatInflowInfo.amount, floatInflowInfo.unit, currency),
+            bonusPoolBalance: wrapAmount(bonusPoolSum, floatBalanceInfo.unit, currency),
+            bonusOutflow: wrapAmount(bonusOutflowSum, floatBalanceInfo.unit, currency),
+            bonusInflowSum: wrapAmount(bonusInflowSum, floatBalanceInfo.unit, currency)
         };
 
         const clientFloats = clientResults[clientId].floats;

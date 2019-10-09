@@ -136,8 +136,8 @@ module.exports.allocate = async (event) => {
   const amountToAllocate = params.totalAmount; // || fetch unallocated amount
   const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
 
-  const shareMap = await exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
-  // logger('Allocated shares, map = ', shareMap);
+  const shareMap = exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
+  logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult = { };
   if (shareMap.has(constants.EXCESSS_KEY)) {
@@ -158,7 +158,7 @@ module.exports.allocate = async (event) => {
   // todo : add in the backing entity for audits
   for (const accountId of shareMap.keys()) {
     allocRequests.push({
-      accountId: accountId,
+      accountId,
       amount: shareMap.get(accountId),
       currency: params.currency,
       unit: unitsToAllocate
