@@ -29,11 +29,6 @@ resource "aws_lambda_function" "float_accrue" {
                     "dynamodb"= null
                 }
             },
-            "tables"= {
-                "clientFloatVars"= "ClientFloatTable",
-                "floatTransactions"= "float_data.float_transaction_ledger",
-                "accountTransactions"= "account_data.core_account_ledger"
-            },
             "variableKeys"= {
                 "bonusPoolShare"= "bonus_pool_accrual_share",
                 "companyShare"= "company_accrual_share"

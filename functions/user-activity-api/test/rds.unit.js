@@ -279,7 +279,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
         // note: this is test elsewhere and is quite complex so no point repeating here
         queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.any]).resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onSecondCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
         
         const testSettledArgs = { 
             accountId: testAccountId,
@@ -357,7 +357,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
         // as above: this is tested elsewhere and is quite complex so no point repeating here
         queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.any]).resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);        
+        queryStub.onThirdCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);        
 
         const expectedTxDetails = [{ 
             'accountTransactionId': testAcTxId,
@@ -378,6 +378,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         // testHelper.logNestedMatches(expectedFloatQueryDef, multiOpStub.getCall(0).args[1][0]);
 
         expect(resultOfSaveUpdate).to.exist;
+        expect(resultOfSaveUpdate).to.have.property('result', 'SUCCESS');
         expect(resultOfSaveUpdate).to.have.property('transactionDetails');
         expect(resultOfSaveUpdate.transactionDetails).to.be.an('array').that.has.length(3);
 
@@ -389,6 +390,28 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
         expect(resultOfSaveUpdate).to.have.property('newBalance');
         expect(resultOfSaveUpdate.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
+    });
+
+    it('If a transaction is already settled, just return already settled', async () => {
+        const testAcTxId = uuid();
+        const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: testPaymentRef };
+        const testSettlementTime = moment();
+
+        const expectedTable = config.get('tables.accountTransactions');
+        const expectedRetrieveTxQuery = `select * from ${expectedTable} where transaction_id = $1`;
+
+        const txDetailsFromRdsOnFetch = [{ 
+            'transaction_id': testAcTxId, 'account_id': testAccountId, 'currency': 'ZAR', 'unit': 'HUNDREDTH_CENT', 'amount': 1050000,
+            'float_id': testFloatId, 'client_id': testClientId, 'settlement_status': 'SETTLED'
+        }];
+
+        queryStub.withArgs(expectedRetrieveTxQuery, [testAcTxId]).resolves(txDetailsFromRdsOnFetch);
+        
+        const resultOfSaveUpdate = await rds.updateSaveTxToSettled(testAcTxId, testPaymentDetails, testSettlementTime);
+
+        expect(resultOfSaveUpdate).to.exist;
+        expect(resultOfSaveUpdate).to.deep.equal({ result: 'ALREADY_SETTLED' });
+
     });
 
     // todo: restore
@@ -409,11 +432,12 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     const testBalanceCents = Math.round(testBalance);
 
     const txTable = config.get('tables.accountTransactions');
-        const transTypes = `('USER_SAVING_EVENT','ACCRUAL','CAPITALIZATION','WITHDRAWAL')`;
+        const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+        const txIndices = '$5, $6, $7, $8, $9';
         const unitQuery = `select distinct(unit) from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
             `and creation_time < to_timestamp($3)`;
         const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` +
-            `and creation_time < to_timestamp($4) and transaction_type in ${transTypes} group by unit`;
+            `and creation_time < to_timestamp($4) and transaction_type in (${txIndices}) group by unit`;
         const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
             `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
 
@@ -427,9 +451,9 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         logger('Test time value of: ', testTime.valueOf());
         
         queryStub.withArgs(unitQuery, unitQueryArgs).resolves([{ 'unit': 'HUNDREDTH_CENT' }, { 'unit': 'WHOLE_CENT' }]);
-        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'HUNDREDTH_CENT', testTime.unix()]).
+        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'HUNDREDTH_CENT', testTime.unix(), ...transTypes]).
             returns(Promise.resolve([{ 'sum': testBalance, 'unit': 'HUNDREDTH_CENT' }]));
-        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'WHOLE_CENT', testTime.unix()]).
+        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'WHOLE_CENT', testTime.unix(), ...transTypes]).
             returns(Promise.resolve([{ 'sum': testBalanceCents, 'unit': 'WHOLE_CENT' }]));
         queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).
             returns(Promise.resolve([{ 'creation_time': testLastTxTime._d }]));
@@ -514,16 +538,17 @@ describe('*** UNIT TEST ADD TRANSACTION TO ACCOUNT ***', async () => {
     });
 
     it('Adds transaction to account', async () => {
-        const findUnitsQuery = `select distinct(unit) from ${config.get('tables.accountTransactions')} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' and creation_time < to_timestamp($3)`;
-        const sumQueryForUnit = `select sum(amount), unit from ${config.get('tables.accountTransactions')} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' and ` + 
-            `creation_time < to_timestamp($4) and transaction_type in ('USER_SAVING_EVENT','ACCRUAL','CAPITALIZATION','WITHDRAWAL') group by unit`;
+        // note : as above, balance testing is covered elsewhere, so just use first and second call
         const findMomentOfLastSettlementQuery = `select creation_time from transaction_data.core_transaction_ledger where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
+        
         uuidStub.onFirstCall().returns(testAccountId);
         uuidStub.onSecondCall().returns(testFlTxAdjustId);
         uuidStub.onThirdCall().returns(testFlTxAllocId);
-        queryStub.withArgs(findUnitsQuery, [testAccountId, 'ZAR', sinon.match.number]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.withArgs(sumQueryForUnit, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.number]).resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testSaveAmount }]);
+        
+        queryStub.onFirstCall().resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onSecondCall().resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testSaveAmount }]);
         queryStub.withArgs(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]).resolves([{ 'creation_time': testCreationTime }]);
+        
         multiTableStub.resolves([
             [{ 'transaction_id': testTxId, 'creation_time': testCreationTime }],
             [{ 'transaction_id': testTxId, 'creation_time': testCreationTime }]
@@ -540,8 +565,6 @@ describe('*** UNIT TEST ADD TRANSACTION TO ACCOUNT ***', async () => {
         expect(resultOfInsertion).to.have.property('newBalance');
         expect(resultOfInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
         expect(uuidStub).to.have.been.calledThrice;
-        expect(queryStub).to.have.been.calledWith(findUnitsQuery, [testAccountId, 'ZAR', sinon.match.number]);
-        expect(queryStub).to.have.been.calledWith(sumQueryForUnit, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.number]);
         expect(queryStub).to.have.been.calledWith(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]);
         expect(multiTableStub).to.have.been.calledOnce;
     });
@@ -576,16 +599,16 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
 
     it('Updates transaction to settled', async () => {
         const pendingTxQuery = `select * from ${config.get('tables.accountTransactions')} where transaction_id = $1`;
-        const findUnitsQuery = `select distinct(unit) from ${config.get('tables.accountTransactions')} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' and creation_time < to_timestamp($3)`;
-        const sumQueryForUnit = `select sum(amount), unit from ${config.get('tables.accountTransactions')} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' and ` + 
-            `creation_time < to_timestamp($4) and transaction_type in ('USER_SAVING_EVENT','ACCRUAL','CAPITALIZATION','WITHDRAWAL') group by unit`;
         const findMomentOfLastSettlementQuery = `select creation_time from transaction_data.core_transaction_ledger where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
+        
         uuidStub.onFirstCall().returns(testFlTxAdjustId);
         uuidStub.onSecondCall().returns(testFlTxAllocId);
+        
         queryStub.withArgs(pendingTxQuery, [testTxId]).resolves([expectedRowItem]);
-        queryStub.withArgs(findUnitsQuery, [testAccountId, 'ZAR', sinon.match.number]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.withArgs(sumQueryForUnit, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.number]).resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': 1000 }]);
+        queryStub.onSecondCall().resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onThirdCall().resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': 1000 }]);
         queryStub.withArgs(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]).resolves([{ 'creation_time': testCreationTime }]);
+        
         multiOpStub.resolves([
             [{ 'transaction_id': testTxId, 'account_id': testAccountId, 'updated_time': testUpdatedTime }],
             [{ 'transaction_id': testTxId, 'creation_time': testCreationTime }]
@@ -609,8 +632,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(resultOfUpdate.newBalance).to.deep.equal({ amount: 1000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
         expect(uuidStub).to.have.been.calledTwice;
         expect(queryStub).to.have.been.calledWith(pendingTxQuery, [testTxId]);
-        expect(queryStub).to.have.been.calledWith(findUnitsQuery, [testAccountId, 'ZAR', sinon.match.number]);
-        expect(queryStub).to.have.been.calledWith(sumQueryForUnit, [testAccountId, 'ZAR', 'HUNDREDTH_CENT', sinon.match.number]);
         expect(queryStub).to.have.been.calledWith(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]);
         expect(multiOpStub).to.have.been.calledOnce;
     });

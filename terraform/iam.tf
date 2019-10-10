@@ -234,6 +234,17 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             ]
         },
         {
+            "Sid": "AllowInvokeStatusUpdate",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${var.user_status_lambda_arn[terraform.workspace]}"
+            ]
+        },
+        {
             "Sid": "AllowPublishDLQ",
             "Effect": "Allow",
             "Action": [

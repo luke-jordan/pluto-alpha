@@ -2,6 +2,7 @@
 
 const logger = require('debug')('pluto:admin:rds');
 const config = require('config');
+const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
 
@@ -111,30 +112,58 @@ const aggregateAllocatedAmounts = (resultRows) => {
     return floatResultMap;
 };
 
-module.exports.getFloatBalanceAndFlows = async (floatIds) => {
+module.exports.getFloatBalanceAndFlows = async (floatIds, startTime, endTime) => {
     logger('Fetching balance for floats: ', floatIds);
 
     const floatTxTable = config.get('tables.floatTxTable');
     const floatIndices = extractArrayIndices(floatIds);
+
+    const start = startTime ? startTime.format() : moment(0).format();
+    const end = endTime ? endTime.format() : moment().format();
+
+    const floatIdxNo = floatIds.length;
+    const typeOffset = 1;
+    const startTimeOffset = 2;
+    const endTimeOffset = 3;
     
     const sumQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) ` +
-        `and allocated_to_type = $${floatIds.length + 1} group by float_id, currency, unit`;
-    const queryValues = [...floatIds, 'FLOAT_ITSELF'];
+        `and allocated_to_type = $${floatIdxNo + typeOffset} and creation_time between $${floatIdxNo + startTimeOffset} and ` + 
+        `$${floatIdxNo + endTimeOffset} group by float_id, currency, unit`;
+    
+    const queryValues = [...floatIds, 'FLOAT_ITSELF', start, end];
     logger('Executing query: ', sumQuery, ', with values: ', queryValues);
     const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
     
     return aggregateFloatTotals(queryResult);
 };
 
-module.exports.getFloatBonusBalanceAndFlows = async (floatIds) => {
+/**
+ * NOTE: amountPosNeg controls whether outflows and inflows only or both, i.e., whether sum is on amount > 0, < 0 or both
+ * Set it to 0 for both (i.e., for sums), to -1 for negative amounts only (i.e., outflows), and to +1 for positive amounts
+ */
+module.exports.getFloatBonusBalanceAndFlows = async (floatIds, startTime, endTime, amountPosNeg = 0) => {
     logger('Fetching bonus for float: ', floatIds);
 
     const floatTxTable = config.get('tables.floatTxTable');
     const floatIndices = extractArrayIndices(floatIds);
 
+    const start = startTime ? startTime.format() : moment(0).format();
+    const end = endTime ? endTime.format() : moment().format();
+
+    const startTimeIdx = 2;
+    const endTimeIdx = 3;
+
+    let whereClauseEnd = `and creation_time between $${floatIds.length + startTimeIdx} and $${floatIds.length + endTimeIdx}`;
+    if (amountPosNeg < 0) {
+        whereClauseEnd = `${whereClauseEnd} and amount < 0`;
+    } else if (amountPosNeg > 0) {
+        whereClauseEnd = `${whereClauseEnd} and amount > 0`;
+    }
+    
     const sumQuery = `select float_id, currency, unit, allocated_to_id, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) ` +
-        `and allocated_to_type = $${floatIds.length + 1} group by float_id, currency, unit, allocated_to_id`;
-    const queryValues = [...floatIds, 'BONUS_POOL'];
+        `and allocated_to_type = $${floatIds.length + 1} ${whereClauseEnd} group by float_id, currency, unit, allocated_to_id`;
+    
+    const queryValues = [...floatIds, 'BONUS_POOL', start, end];
     const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
 
     logger('Result of bonus pool sum query: ', queryResult);

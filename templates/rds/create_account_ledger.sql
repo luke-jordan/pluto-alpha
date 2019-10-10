@@ -36,8 +36,14 @@ grant select on account_data.core_account_ledger to save_tx_api_worker;
 grant usage on schema account_data to boost_worker;
 grant select (account_id, owner_user_id, responsible_client_id, default_float_id, frozen) on account_data.core_account_ledger to boost_worker;
 
+-- So message worker can extract accounts for audiences
 grant usage on schema account_data to message_api_worker;
 grant select (account_id, owner_user_id, responsible_client_id, frozen) on account_data.core_account_ledger to message_api_worker;
 
+-- So the admin worker can count users
 grant usage on schema account_data to admin_api_worker;
 grant select (account_id, owner_user_id, creation_time) on account_data.core_account_ledger to admin_api_worker;
+
+-- So the float worker can pick the correct accounts
+grant usage on schema account_data to float_api_worker;
+grant select (account_id) on account_data.core_account_ledger to float_api_worker;
