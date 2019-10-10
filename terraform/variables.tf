@@ -26,6 +26,15 @@ variable user_event_topic_arn {
     type = "map"
 }
 
+variable "user_status_lambda_arn" {
+  default = {
+      "staging" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
+      "master" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
+  }
+  type = "map"
+}
+
+
 variable user_profile_table_read_policy_arn {
     default = {
         "staging" = "arn:aws:iam::455943420663:policy/UserProfileTableRead_access_staging"

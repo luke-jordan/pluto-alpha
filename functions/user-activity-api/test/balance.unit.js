@@ -203,7 +203,7 @@ describe('Fetches user balance and makes projections', () => {
     after(() => resetStubs(false));
 
     it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
-        const authEvent = JSON.parse(fs.readFileSync('./test/auth-event-balance.json'));
+        const authEvent = JSON.parse(fs.readFileSync('./test/events/auth-event-balance.json'));
         // accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment);
         const balanceAndProjections = await handler.balanceWrapper(authEvent);
         

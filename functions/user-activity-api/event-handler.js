@@ -70,6 +70,7 @@ const formatAmountText = (amountText) => {
 
     const [amount, unit, currency] = amountText.split('::');
     const amountResult = { amount, unit, currency };
+    logger('Split amount: ', amountResult);
 
     const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS_TO_WHOLE[amountResult.unit];
 
@@ -156,6 +157,22 @@ const assembleBoostProcessInvocation = (eventBody) => {
     return invokeParams;
 };
 
+const assembleStatusUpdateInvocation = (systemWideUserId, statusInstruction) => {
+    const statusRequest = {
+        systemWideUserId: systemWideUserId,
+        ...statusInstruction
+    };
+
+    const invokeParams = {
+        FunctionName: config.get('publishing.processingLambdas.status'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify(statusRequest)
+    };
+    
+    return invokeParams;
+};
+
+// todo : parallelize, obviously
 const handleSavingEvent = async (eventBody) => {
     logger('Saving event triggered!: ', eventBody);
         
@@ -168,6 +185,11 @@ const handleSavingEvent = async (eventBody) => {
     const emailResult = await ses.sendEmail(emailToSend).promise();
     logger('Well where did that get us: ', emailResult);
 
+    // todo : in time, make sure that this doesn't go backwards
+    const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};
+    const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
+    const statusResult = await lambda.invoke(statusInvocation).promise();
+    logger('Result of lambda invoke: ', statusResult);
 };
 
 const handleWithdrawalEvent = async (eventBody) => {
@@ -181,7 +203,7 @@ const handleWithdrawalEvent = async (eventBody) => {
     templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
 
     const subject = 'Withdrawal requested';
-    const htmlTemplate = await obtainTemplate('emails/withdrawalEmail.html');
+    const htmlTemplate = await obtainTemplate(config.get('templates.withdrawalEmail'));
     const htmlBody = format(htmlTemplate, templateVariables);
 
     const textBody = 'Unnecessary';
@@ -194,7 +216,8 @@ const handleWithdrawalEvent = async (eventBody) => {
     const emailResult = await ses.sendEmail(emailParams).promise();
     logger('Result of sending email: ', emailResult);
 
-    // then do anything else the seems important
+    // todo : as above, make sure doesn't alter status backwards
+    // const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
 };
 
 const handleAccountOpenedEvent = async (eventBody) => {
