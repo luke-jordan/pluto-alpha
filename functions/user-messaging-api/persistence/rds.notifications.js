@@ -246,7 +246,8 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
     } else if (currentKey === 'activityCountRange') {
         const startIntervalIndex = currentIndex + 1;
         const endIntervalIndex = currentIndex + 2;
-        const assembledClause = `transaction_type='USER_SAVING_EVENT' AND settlement_status = 'SETTLED'  GROUP BY account_id HAVING COUNT(*) BETWEEN $${startIntervalIndex} AND $${endIntervalIndex}`;
+        const assembledClause = `transaction_type='USER_SAVING_EVENT' AND settlement_status = 'SETTLED'` +
+            ` GROUP BY account_id HAVING COUNT(*) BETWEEN $${startIntervalIndex} AND $${endIntervalIndex}`;
 
         const startActivityCount = universeDefinition[currentKey]['start'];
         const endActivityCount = universeDefinition[currentKey]['end'];
@@ -301,7 +302,8 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         logger(`We are selecting users based on activity count`);
         const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
         const whereClause = conditionClauses.join(' AND ');
-        const selectionQuery = `SELECT account_id, owner_user_id, count(*) FROM ${transactionsTable} WHERE ${whereClause}`;
+        const selectionQuery = `SELECT account_id, owner_user_id, count(*) FROM ${transactionsTable}` +
+            ` WHERE ${whereClause}`;
         return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'random_sample') {
         logger('We are selecting some random sample of a universe');
