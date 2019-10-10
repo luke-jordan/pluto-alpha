@@ -9,6 +9,7 @@ const camelcase = require('camelcase');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 const accountsTable = config.get('tables.accountLedger');
+const transactionsTable = config.get('tables.transactionLedger');
 
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
@@ -242,6 +243,14 @@ const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey)
         const startTimeAsDateString = moment(universeDefinition[currentKey]['start']).format();
         const endTimeAsDateString = moment(universeDefinition[currentKey]['end']).format();
         return [assembledClause, [startTimeAsDateString, endTimeAsDateString], endIntervalIndex];
+    } else if (currentKey === 'activityCountRange') {
+        const startIntervalIndex = currentIndex + 1;
+        const endIntervalIndex = currentIndex + 2;
+        const assembledClause = `transaction_type='USER_SAVING_EVENT' AND settlement_status = 'SETTLED'  GROUP BY account_id HAVING COUNT(*) BETWEEN $${startIntervalIndex} AND $${endIntervalIndex}`;
+
+        const startActivityCount = universeDefinition[currentKey]['start'];
+        const endActivityCount = universeDefinition[currentKey]['end'];
+        return [assembledClause, [startActivityCount, endActivityCount], endIntervalIndex];
     }
     const newIndex = currentIndex + 1;
     return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
@@ -287,6 +296,12 @@ const assembleQueryClause = (selectionMethod, universeDefinition) => {
         const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
         const whereClause = conditionClauses.join(' and ');
         const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
+        return [selectionQuery, conditionValues];
+    } else if (selectionMethod === 'activity_count') {
+        logger(`We are selecting users based on activity count`);
+        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
+        const whereClause = conditionClauses.join(' AND ');
+        const selectionQuery = `SELECT account_id, owner_user_id, count(*) FROM ${transactionsTable} WHERE ${whereClause}`;
         return [selectionQuery, conditionValues];
     } else if (selectionMethod === 'random_sample') {
         logger('We are selecting some random sample of a universe');
