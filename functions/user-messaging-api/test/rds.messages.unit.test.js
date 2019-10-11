@@ -338,9 +338,9 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
        const endCount = Math.floor(Math.random() * 10);
 
        const mockSelectionInstruction = `activity_count from #{{"activityCountRange": {"start": ${startCount}, "end": ${endCount} } }}`;
-       const expectedQuery = `SELECT account_id, owner_user_id, count(*) FROM ${transactionsTable}` +
-           ` WHERE transaction_type='USER_SAVING_EVENT' AND settlement_status = 'SETTLED'` +
-           ` GROUP BY account_id HAVING COUNT(*) BETWEEN $1 AND $2`;
+       const expectedQuery = `select account_id, owner_user_id, count(*) from ${transactionsTable}` +
+           ` where transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED'` +
+           ` group by account_id having count(*) between $1 and $2`;
        selectQueryStub.withArgs(expectedQuery, [startCount, endCount]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
 
        const expectedResult = [mockAccountId];
