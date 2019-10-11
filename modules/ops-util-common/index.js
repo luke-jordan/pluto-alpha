@@ -1,5 +1,6 @@
 'use strict';
 
+const logger = require('debug')('jupiter:ops:common');
 const config = require('config');
 
 // format: from key into values, e.g., UNIT_MULTIPLIERS[WHOLE_CURRENCY][WHOLE_CENT] = 100;
@@ -48,3 +49,29 @@ module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
 
     return amount * UNIT_MULTIPLIERS[fromUnit][toUnit];
 };
+
+module.exports.extractQueryParams = (event) => {
+    const isEventEmpty = typeof event !== 'object' || Object.keys(event).length === 0;
+    logger('Is event empty ? : ', isEventEmpty);
+    if (isEventEmpty) {
+        return {};
+    }
+
+    const isEventHttpGet = Reflect.has(event, 'httpMethod') && event.httpMethod === 'GET';
+    if (!isEventHttpGet) {
+        logger('Event has content, but is not a get method, return empty');
+        return event; 
+    }
+
+    logger('Event parameters type: ', typeof event.queryStringParameters);
+    const nonEmptyQueryParams = typeof event.queryStringParameters && event.queryStringParameters !== null && 
+        Object.keys(event.queryStringParameters).length > 0;
+    logger('Are parameters empty ? : ', nonEmptyQueryParams);
+
+    if (nonEmptyQueryParams) {
+        return event.queryStringParameters;
+    }
+
+    // must be blank, returning
+    return { };
+}

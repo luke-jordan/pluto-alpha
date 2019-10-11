@@ -13,9 +13,21 @@
         "clientFloatTable": "ClientFloatTable",
         "countryClientTable": "CountryClientTable"
     },
+    "lambdas": {
+        "processAccrual": "float_accrue"
+    },
+    "email": {
+        "systemStats": {
+            "toList": ["luke@jupitersave.com", "avish@jupitersave.com"],
+            "templateKey": "emails/systemStatsEmail.html"
+        }
+    },
     "defaults": {
         "userCounts": {
             "daysBack": 180
+        },
+        "txExpiry": {
+            "daysBack": 7
         }
     }
 }

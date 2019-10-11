@@ -55,6 +55,7 @@ grant insert on transaction_data.core_transaction_ledger to float_api_worker;
 grant usage on schema transaction_data to message_api_worker;
 grant select on transaction_data.core_transaction_ledger to message_api_worker;
 
--- And so that analytics can work
+-- And so that analytics can work, as well as cleaning up old transactions
 grant usage on schema transaction_data to admin_api_worker;
-grant select (account_id, creation_time, transaction_type, settlement_status) on transaction_data.core_transaction_ledger to admin_api_worker;
+grant select (transaction_id, account_id, creation_time, transaction_type, settlement_status) on transaction_data.core_transaction_ledger to admin_api_worker;
+grant update (settlement_status) on transaction_data.core_transaction_ledger to admin_api_worker;

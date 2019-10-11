@@ -280,3 +280,48 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
 }
 EOF
 }
+
+resource "aws_iam_policy" "daily_job_lambda_policy" {
+    name = "lambda_scheduled_system_job_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "FloatAccrualLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.float_accrue.arn}"
+            ]
+        },
+        {
+            "Sid": "EmailSend",
+            "Effect": "Allow",
+            "Action": [
+                "ses:SendEmail"
+            ],
+            "Resource": "arn:aws:ses:us-east-1:455943420663:identity/jupitersave.com",
+            "Condition": {
+                "StringLike": {
+                    "ses:FromAddress": "noreply@jupitersave.com"
+                }
+            }
+        },
+        {
+            "Sid": "EmailTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}

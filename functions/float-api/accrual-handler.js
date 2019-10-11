@@ -32,6 +32,7 @@ module.exports.balanceCheck = async (event) => {
  * @param {number} accrualAmount The amount of the accrual, in the currency and units passed in the other parameters
  * @param {string} currency The currency of the accrual. If not provided, defaults to the currency of the float.
  * @param {string} unit The units in which the amount is expressed. If not provided, defaults to float default.
+ * @param {number} referenceTimeMillis For recording the accrual log. If not provided, defaults to when the 
  * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
  */
 module.exports.accrue = async (event) => {
@@ -68,8 +69,18 @@ module.exports.accrue = async (event) => {
 
     logger('Company allocation: ', clientAllocation);
 
-    const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
-      transactionType: constants.floatTransTypes.ACCRUAL, unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
+    const newFloatBalance = await rds.addOrSubtractFloat({ 
+      clientId, 
+      floatId, 
+      amount: accrualAmount, 
+      currency: accrualCurrency,
+      transactionType: constants.floatTransTypes.ACCRUAL, 
+      unit: accrualUnit, 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
+      logType: 'WHOLE_FLOAT_ACCRUAL',
+      referenceTimeMillis: accrualParameters.referenceTimeMillis 
+    });
+    
     logger('New float balance: ', newFloatBalance);
       
     const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
