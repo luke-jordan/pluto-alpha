@@ -62,6 +62,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     const boostAccountTable = config.get('tables.boostAccountTable');
     const messageTable = config.get('tables.userMessagesTable');
     const accountTable = config.get('tables.accountLedger');
+    const transactionsTable = config.get('tables.transactionLedger');
 
     const createPersistableInstruction = (instructionId) => ({
         instructionId: instructionId,
@@ -328,6 +329,28 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
        expect(result).to.exist;
        expect(result).to.deep.equal(expectedResult);
        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId, mockStartTimeAsDateString, mockEndTimeAsDateString]);
+    });
+
+    it('should get user ids based on activity counts', async () => {
+       const mockAccountId = uuid();
+
+       const startCount = Math.floor(Math.random() * 10);
+       const endCount = Math.floor(Math.random() * 10);
+
+       const mockSelectionInstruction = `activity_count from #{{"activityCountRange": {"start": ${startCount}, "end": ${endCount} } }}`;
+       const expectedQuery = `select account_id, owner_user_id, count(*) from ${transactionsTable}` +
+           ` where transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED'` +
+           ` group by account_id having count(*) between $1 and $2`;
+       selectQueryStub.withArgs(expectedQuery, [startCount, endCount]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
+
+       const expectedResult = [mockAccountId];
+
+       const result = await rdsUtil.getUserIds(mockSelectionInstruction);
+       logger('got this back from user id extraction based on activity count. Result: ', result);
+
+       expect(result).to.exist;
+       expect(result).to.deep.equal(expectedResult);
+       expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [startCount, endCount]);
     });
 
     it('should get user ids (on float_id universe selection)', async () => {
