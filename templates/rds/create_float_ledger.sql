@@ -16,14 +16,14 @@ create table if not exists float_data.float_transaction_ledger (
 );
 
 -- Used for, e.g., recording the date & time of the last float calculation (as well as audit trail). Use log context to store information
-create table if not exists float_data.float_log {
+create table if not exists float_data.float_log (
     log_id uuid not null primary key,
     creation_time timestamp with time zone not null default current_timestamp,
     reference_time timestamp with time zone not null default current_timestamp,
     float_id varchar(255) not null,
     log_type varchar(50) not null,
     log_context jsonb
-};
+);
 
 -- todo : definitely do not do this once into production
 alter table float_data.float_transaction_ledger drop constraint if exists float_transaction_type_check;
@@ -37,6 +37,8 @@ revoke all on float_data.float_transaction_ledger from public;
 grant usage on schema float_data to float_api_worker;
 grant select on float_data.float_transaction_ledger to float_api_worker;
 grant insert on float_data.float_transaction_ledger to float_api_worker;
+grant select on float_data.float_log to float_api_worker;
+grant insert on float_data.float_log to float_api_worker;
 
 -- also need to give insert to account api worker because savings require corresponding entry, and must be in a single tx
 grant usage on schema float_data to save_tx_api_worker;

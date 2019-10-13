@@ -2,12 +2,13 @@
 
 const config = require('config');
 
-const constants = require('../constants');
 const logger = require('debug')('jupiter:float:rds');
 const uuid = require('uuid/v4');
+const moment = require('moment');
+
+const constants = require('../constants'); // todo : replace with config, or similar
 
 const RdsConnection = require('rds-common');
-
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` +
@@ -45,14 +46,10 @@ module.exports.addOrSubtractFloat = async (request = {
         unit: constants.floatUnits.DEFAULT,
         backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
         backingEntityIdentifer: 'uid-on-wholesale', 
-        logType = 'ACCRUAL_EVENT',
+        logType: 'ACCRUAL_EVENT',
         referenceTimeMillis}) => {
     
-    // todo : validation on transaction types, units, log type & reference time, etc.
-
-    const query = insertionQuery;
-    const columns = insertionColumns;
-    
+    // todo : validation on transaction types, units, log type & reference time, etc.    
     const rowToInsert = {
         'transaction_id': request.transactionId || uuid(),
         'client_id': request.clientId,
@@ -69,11 +66,11 @@ module.exports.addOrSubtractFloat = async (request = {
 
     const txInsertDef = {
         query: insertionQuery,
-        columns: insertionColumns,
+        columnTemplate: insertionColumns,
         rows: [rowToInsert]
     };
 
-    const logRefTime = referenceTimeMillis ? moment(referenceTimeMillis).format() : moment().format();
+    const logRefTime = request.referenceTimeMillis ? moment(request.referenceTimeMillis).format() : moment().format();
     const logToInsert = {
         logId: uuid(),
         floatId: request.floatId,
@@ -85,11 +82,14 @@ module.exports.addOrSubtractFloat = async (request = {
         `values %L returning log_id, creation_time`;
     const logInsertDef = {
         query: logInsertQuery,
-        columns: '${logId}, ${referenceTime}, ${floatId}, ${logType}',
+        columnTemplate: '${logId}, ${referenceTime}, ${floatId}, ${logType}',
         rows: [logToInsert] 
     };
     
     // this is not really large but that is the right method for bundled inserts
+    logger('Insert query def: ', logInsertDef);
+    logger('And tx def: ', txInsertDef);
+
     const queryResult = await rdsConnection.largeMultiTableInsert([txInsertDef, logInsertDef]);
     logger('Addition result: ', queryResult);
 

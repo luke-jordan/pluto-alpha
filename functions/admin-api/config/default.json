@@ -9,6 +9,7 @@
     "tables": {
         "accountTable": "account_data.core_account_ledger",
         "floatTxTable": "float_data.float_transaction_ledger",
+        "floatLogTable": "float_data.float_log",
         "transactionTable": "transaction_data.core_transaction_ledger",
         "clientFloatTable": "ClientFloatTable",
         "countryClientTable": "CountryClientTable"

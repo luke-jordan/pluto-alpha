@@ -17,6 +17,7 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
+const MILLIS_IN_DAY = 86400000;
 
 const expireHangingTransactions = async () => {
     const resultOfExpiration = await rdsAdmin.expireHangingTransactions();
@@ -33,8 +34,8 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     logger('Extracted float balance info: ', floatBalanceInfo);
     const floatAmountHunCent = opsUtil.convertToUnit(floatBalanceInfo.amount, floatBalanceInfo.unit, 'HUNDREDTH_CENT');
     
-    const lastFloatAccrualTime = await rdsAnalytics.getLastFloatAccrualTime();
-
+    const lastFloatAccrualTime = await rdsAnalytics.getLastFloatAccrualTime(clientFloatInfo.floatId);
+    
     // see the balance handler for a more detailed & commented version
     const accrualRateAnnualBps = clientFloatInfo.accrualRateAnnualBps;
     const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
@@ -43,9 +44,18 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     const dailyAccrualRateNominalNet = annualAccrualRateNominalGross.dividedBy(365);
     
     const calculationTimeMillis = moment().valueOf();
-    const todayAccrualAmount = new BigNumber(floatAmountHunCent).times(dailyAccrualRateNominalNet);
-    logger(`Alright, with annual bps of ${accrualRateAnnualBps}, and a float balance of ${floatAmountHunCent}, we have an accrual of ${todayAccrualAmount.toNumber()}`);
+    const millisSinceLastCalc = calculationTimeMillis - lastFloatAccrualTime.valueOf();
+    logger(`Last calculation was at ${lastFloatAccrualTime.format()}, which is ${millisSinceLastCalc} msecs ago, and there are ${MILLIS_IN_DAY} msecs in a day`);
+    const portionOfDay = new BigNumber(millisSinceLastCalc).dividedBy(new BigNumber(MILLIS_IN_DAY));
+    logger(`That works out to ${portionOfDay.toNumber()} as a proportion of a day, since the last calc`);
+    const accrualRateToApply = dailyAccrualRateNominalNet.times(portionOfDay);
+    logger(`And hence, from an annual ${annualAccrualRateNominalGross.toNumber()}, an amount to apply of ${accrualRateToApply.toNumber()}`);
 
+    const todayAccrualAmount = new BigNumber(floatAmountHunCent).times(accrualRateToApply);
+    logger(`Another check: ${todayAccrualAmount.toNumber()}, rate to apply: ${accrualRateToApply.toNumber()}`);
+    logger(`Altogether, with annual bps of ${accrualRateAnnualBps}, and a float balance of ${floatAmountHunCent}, we have an accrual of ${todayAccrualAmount.toNumber()}`);
+
+    const identifierToUse = `SYSTEM_CALC_DAILY_${calculationTimeMillis}`;
 
     return {
         clientId: clientFloatInfo.clientId,
@@ -54,7 +64,7 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
         currency: clientFloatInfo.currency,
         unit: 'HUNDREDTH_CENT',
         referenceTimeMillis: calculationTimeMillis,
-        backingEntityIdentifier: 'daily-tx-calc-log'
+        backingEntityIdentifier: identifierToUse
     };
 }
 

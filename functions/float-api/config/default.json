@@ -9,6 +9,7 @@
     "tables": {
         "clientFloatVars": "ClientFloatTable",
         "floatTransactions": "float_data.float_transaction_ledger",
+        "floatLogs": "float_data.float_log",
         "accountTransactions": "transaction_data.core_transaction_ledger",
         "openAccounts": "account_data.core_account_ledger"
     },
