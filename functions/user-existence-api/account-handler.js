@@ -103,9 +103,10 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
 
 /**
  * Creates an account within the core ledgers for a user. Returns the persistence result of the transaction.
- * @param {string} clientId The id of the client company responsible for this user and account
- * @param {string} defaultFloatId The id for the _default_ float that the user will save to (can be overriden on specific transactions)
- * @param {string} ownerUserId The system wide ID of the user opening the account
+ * @param {object} creationRequest An object containing the properties described below.
+ * @property {string} clientId The id of the client company responsible for this user and account
+ * @property {string} defaultFloatId The id for the _default_ float that the user will save to (can be overriden on specific transactions)
+ * @property {string} ownerUserId The system wide ID of the user opening the account
  */
 module.exports.createAccount = async (creationRequest = {
   'clientId': 'zar_savings_co', 
@@ -131,7 +132,13 @@ module.exports.createAccount = async (creationRequest = {
   return { accountId: persistenceResult.accountId, persistedTimeMillis: persistenceMoment.valueOf() };
 };
 
-
+/**
+ * This function serves as a wrapper around the createAccount handler, processing events from API Gateway.
+ * @param {object} event An event object containing the request context and request body. The request body properties are decribed below.
+ * @property {string} clientId The id of the client company responsible for this user and account.
+ * @property {string} defaultFloatId The id for the _default_ float that the user will save to (can be overriden on specific transactions).
+ * @property {string} ownerUserId The system wide ID of the user opening the account.
+ */
 module.exports.create = async (event) => {
   try {
     const request = exports.transformEvent(event);

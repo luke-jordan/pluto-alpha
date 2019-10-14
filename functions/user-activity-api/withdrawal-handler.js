@@ -47,6 +47,11 @@ const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails) => 
 
 /**
  * Initiates a withdrawal by setting the bank account for it, which gets verified, and then we go from there
+ * @param {object} event An evemt object containing the request context and request body. The request context contains
+ * details such as the callers system wide user id along with the callers roles and permissions. The request body contains the transaction
+ * information to be processed. Details on the request body's properties are provided below.
+ * @property {string} accountId The account from which to withdraw.
+ * @property {object} bankDetails An object containing bank details to be cached.
  */
 module.exports.setWithdrawalBankAccount = async (event) => {
     try {
@@ -100,6 +105,10 @@ const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
 
 /**
  * Proceeds to next item, the withdrawal amount, where we create the pending transaction, and decide whether to make an offer
+ * @param {object} event An event object containing the request context and request body.
+ * @property {string} unit The unit in which to carry out calculations.
+ * @property {string} currency The transactions currency.
+ * @property {string} accountId The accounts unique identifier.
  */
 module.exports.setWithdrawalAmount = async (event) => {
     try {
@@ -152,6 +161,12 @@ module.exports.setWithdrawalAmount = async (event) => {
     }
 };
 
+/**
+ * This function confirms a withdrawal.
+ * @param {object} event An event object containing the request context and request body. Body properties are described below.
+ * @property {string} transactionId The transactions unique identifier.
+ * @property {string} userDecision The users decision. Valid values are CANCEL AND WITHDRAW.
+ */
 module.exports.confirmWithdrawal = async (event) => {
     try {
         const authParams = event.requestContext ? event.requestContext.authorizer : null;

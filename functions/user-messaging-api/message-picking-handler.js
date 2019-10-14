@@ -246,7 +246,7 @@ const determineAnchorMsg = (openingMessages) => {
 
 
 /**
- * The function fetches and fills in the next message in a sequence of messages.
+ * This function fetches and fills in the next message in a sequence of messages.
  * @param {string} destinationUserId The messages destination user id.
  * @param {string} withinFlowFromMsgId The messageId of the last message in the sequence to be processed prior to the current one.
  */
@@ -300,10 +300,11 @@ const dryRunGameChaseArrows = require('./dry-run-arrow');
 
 /**
  * Wrapper for the above, based on token, i.e., direct fetch
- * @param {Object} requestContext An object caontaining the callers id, roles, and permissions. The event will not be processed without a valid request context.
- * @param {Object} queryStringParameters This functions accepts an lambda event passed via query string parameters. The queryStringParameters object may have the following properties:
- * @property {Boolean} gameDryRun Set to true to run a dry run operation, else omit or set to false to run full function operations.
- * @property {String} anchorMessageId If message is part of a sequence, this property contains the messageId of the last processed message in the sequence before the current one.
+ * @param {object} event An object containing the request context, with request body being passed as query string parameters.
+ * @property {object} requestContext An object containing the callers id, roles, and permissions. The event will not be processed without a valid request context.
+ * @property {object} queryStringParameters This functions accepts an lambda event passed via query string parameters. The queryStringParameters object may have the following properties:
+ * @property {boolean} queryStringParameters.gameDryRun Set to true to run a dry run operation, else omit or set to false to run full function operations.
+ * @property {string} queryStringParameters.anchorMessageId If message is part of a sequence, this property contains the messageId of the last processed message in the sequence before the current one.
  */
 module.exports.getNextMessageForUser = async (event) => {
     try {
@@ -340,9 +341,10 @@ module.exports.getNextMessageForUser = async (event) => {
 
 /**
  * Simple (ish) method for updating a message once it has been delivered, etc.
- * @param {Object} requestContext An object caontaining the callers system wide user id, role, and permissions. The event will not be processed without a valid request context. 
- * @param {String} messageId The messageId of the message to me updated.
- * @param {String} userAction The value to update the message option with. Valid values in this context are FETCHED and DISMISSED.
+ * @param {object} event An object containing the request context and request body. The body has message id and user action properties, detailed below.
+ * @property {object} requestContext An object containing the callers system wide user id, role, and permissions. The event will not be processed without a valid request context. 
+ * @property {string} body.messageId The messageId of the message to me updated.
+ * @property {string} body.userAction The value to update the message option with. Valid values in this context are FETCHED and DISMISSED.
  */
 module.exports.updateUserMessage = async (event) => {
     try {

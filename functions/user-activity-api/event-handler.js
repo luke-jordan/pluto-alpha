@@ -224,6 +224,11 @@ const handleAccountOpenedEvent = async (eventBody) => {
     logger('Account open handled!: ', eventBody);
 };
 
+/**
+ * This function handles successful account opening, saving, and withdrawal events. It is typically called by SNS. The following properties are expected in the SNS message:
+ * @param {object} snsEvent An SNS event object containing our parameter(s) of interest in its Message property.
+ * @property {string} eventType The type of event to be processed. Valid values are SAVING_PAYMENT_SUCCESSFUL, WITHDRAWAL_EVENT_CONFIRMED, and PASSWORD_SET (for opened accounts).
+ */
 module.exports.handleUserEvent = async (snsEvent) => {
     try {
         const eventBody = await extractSnsMessage(snsEvent);

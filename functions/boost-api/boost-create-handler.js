@@ -180,6 +180,18 @@ const assembleMsgLamdbaInvocation = async (msgPayload) => {
  * 
  * Note (2): If multiple of the types above are passed, (3) will override the others (as it is called last)
  * Also note that if none are provided the boost will have no message and just hang in the ether
+ * @param {object} event An event object containing the request context and request body.
+ * @property {string} creatingUserId The system wide user id of the user who is creating the boost.
+ * @property {string} boostTypeCategory A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'.
+ * @property {string/number} boostBudget This may either be a number or a composite key containing the amount, the unit, and the currency, seperated by '::', e.g '10000000::HUNDREDTH_CENT::USD'.
+ * @property {string} startTimeMillis A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller.
+ * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
+ * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
+ * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
+ * @property {sting} boostAudience A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} boostAudienceSelection A DSL string containing instructions as to which users to send the boost to. 
+ * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
 module.exports.createBoost = async (event) => {
     if (!event) {
@@ -298,7 +310,23 @@ module.exports.createBoost = async (event) => {
 
 };
 
-// Wrapper method for API gateway, handling authorization via the header, extracting body, etc. 
+
+/**
+ * Wrapper method for API gateway, handling authorization via the header, extracting body, etc. 
+ * @param {object} event An event object containing the request context and request body.
+ * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
+ * @property {string} creatingUserId The system wide user id of the user who is creating the boost.
+ * @property {string} boostTypeCategory A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'.
+ * @property {string/number} boostBudget This may either be a number or a composite key containing the amount, the unit, and the currency, seperated by '::', e.g '10000000::HUNDREDTH_CENT::USD'.
+ * @property {string} startTimeMillis A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller.
+ * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
+ * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
+ * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
+ * @property {sting} boostAudience A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} boostAudienceSelection A DSL string containing instructions as to which users to send the boost to. 
+ * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
+ */
 module.exports.createBoostWrapper = async (event) => {
     try {
         const userDetails = util.extractUserDetails(event);

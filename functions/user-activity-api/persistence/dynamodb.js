@@ -5,6 +5,11 @@ const logger = require('debug')('pluto:activity:dynamo');
 
 const dynamoCommon = require('dynamo-common');
 
+/**
+ * This function fetches float variables for balance calculation.
+ * @param {string} clientId The persisted client id.
+ * @param {string} floatId The persisted fload id.
+ */
 module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     if (!clientId || !floatId) {
         throw new Error('Error! One of client ID or float ID missing');
