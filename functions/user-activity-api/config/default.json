@@ -15,7 +15,8 @@
     },
     "cache": {
         "port": 6739,
-        "detailsTTL": 900
+        "detailsTTL": 900,
+        "host": "localhost"
     },
     "aws": {
         "endpoints": {
@@ -49,7 +50,8 @@
             "processingDlq": "<<insert_here>>"
         },
         "processingLambdas": {
-            "boosts": "boost_event_process"
+            "boosts": "boost_event_process",
+            "status": "profile_status_update"
         },
         "withdrawalEmailDestination": ["luke@jupitersave.com"],
         "saveEmailDestination": ["luke@jupitersave.com"],
@@ -58,6 +60,7 @@
     },
     "templates": {
         "bucket": "staging.jupiter.templates",
-        "saveEmail": "emails/savingEventEmail.html"
+        "saveEmail": "emails/savingEventEmail.html",
+        "withdrawalEmail": "emails/withdrawalEmail.html"
     }
 }

@@ -62,6 +62,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     const boostAccountTable = config.get('tables.boostAccountTable');
     const messageTable = config.get('tables.userMessagesTable');
     const accountTable = config.get('tables.accountLedger');
+    const transactionsTable = config.get('tables.transactionLedger');
 
     const createPersistableInstruction = (instructionId) => ({
         instructionId: instructionId,
@@ -88,7 +89,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
     it('should insert message instruction', async () => {
         const mockInstructionId = uuid();
-   
+
         const instructionObject = createPersistableInstruction(mockInstructionId);
         const instructionKeys = Object.keys(instructionObject);
 
@@ -169,7 +170,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             value: { active: false },
             returnClause: 'updated_time'
         };
-    
+
         updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ update_time: '2049-06-22T07:38:30.016Z' }]);
         const expectedResult = [{ updateTime: '2049-06-22T07:38:30.016Z' }];
 
@@ -191,14 +192,14 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             value: { processedStatus: 'READY_TO_SEND', lastProcessedTime: mockCurrentTime },
             returnClause: 'updated_time'
         };
-    
+
         momentStub.returns({ format: () => mockCurrentTime });
         updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
-        
+
         // sync with new imlementation
         const resultOfUpdate = await rdsUtil.updateInstructionState(mockInstructionId, 'READY_TO_SEND');
         logger('Result of message instruction update:', resultOfUpdate);
-       
+
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal([{ updateTime: '2049-06-22T07:38:30.016Z' }]);
         expect(momentStub).to.have.been.calledOnce;
@@ -227,7 +228,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
         const resultOfUpdate = await rdsUtil.alterInstructionMessageStates(mockInstructionId, ['CREATED'], 'READY_TO_SEND');
         logger('Result of message state update:', resultOfUpdate);
-    
+
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal([{ 'updated_time': mockUpdateTime }]);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
@@ -245,7 +246,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
         const resultOfUpdate = await rdsUtil.alterInstructionMessageStates(mockInstructionId, ['CREATED'], 'READY_TO_SEND');
         logger('Result of message state update:', resultOfUpdate);
-    
+
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.equal('NO_MESSAGES_TO_UPDATE');
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
@@ -300,6 +301,58 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId]);
     });
 
+    it('should get user ids based on sign_up intervals', async () => {
+       const mockClientId = uuid();
+       const mockAccountId = uuid();
+
+       const mockStartTime = moment();
+       const mockEndTime = moment();
+
+       const mockStartTimeAsEpochMilli = mockStartTime.valueOf();
+       const mockEndTimeAsEpochMilli = mockEndTime.valueOf();
+
+       const mockStartTimeAsDateString = mockStartTime.format();
+       const mockEndTimeAsDateString = mockEndTime.format();
+
+       momentStub.withArgs(mockStartTimeAsEpochMilli).returns({ format: () => mockStartTimeAsDateString });
+       momentStub.withArgs(mockEndTimeAsEpochMilli).returns({ format: () => mockEndTimeAsDateString });
+
+       const mockSelectionInstruction = `sign_up_cohort from #{{"client_id":"${mockClientId}", "interval":{"start": ${mockStartTimeAsEpochMilli},"end": ${mockEndTimeAsEpochMilli}} }}`;
+       const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1 and creation_time between $2 and $3`;
+       selectQueryStub.withArgs(expectedQuery, [mockClientId, mockStartTimeAsDateString, mockEndTimeAsDateString]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
+
+       const expectedResult = [mockAccountId];
+
+       const result = await rdsUtil.getUserIds(mockSelectionInstruction);
+       logger('got this back from user id extraction based on sign_up times:', result);
+
+       expect(result).to.exist;
+       expect(result).to.deep.equal(expectedResult);
+       expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId, mockStartTimeAsDateString, mockEndTimeAsDateString]);
+    });
+
+    it('should get user ids based on activity counts', async () => {
+       const mockAccountId = uuid();
+
+       const startCount = Math.floor(Math.random() * 10);
+       const endCount = Math.floor(Math.random() * 10);
+
+       const mockSelectionInstruction = `activity_count from #{{"activityCountRange": {"start": ${startCount}, "end": ${endCount} } }}`;
+       const expectedQuery = `select account_id, owner_user_id, count(*) from ${transactionsTable}` +
+           ` where transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED'` +
+           ` group by account_id having count(*) between $1 and $2`;
+       selectQueryStub.withArgs(expectedQuery, [startCount, endCount]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
+
+       const expectedResult = [mockAccountId];
+
+       const result = await rdsUtil.getUserIds(mockSelectionInstruction);
+       logger('got this back from user id extraction based on activity count. Result: ', result);
+
+       expect(result).to.exist;
+       expect(result).to.deep.equal(expectedResult);
+       expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [startCount, endCount]);
+    });
+
     it('should get user ids (on float_id universe selection)', async () => {
         const mockFloatId = uuid();
         const mockAccountId = uuid();
@@ -311,7 +364,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
-        
+
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockFloatId]);
@@ -327,7 +380,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 
         const result = await rdsUtil.getUserIds(mockSelectionInstruction);
         logger('got this back from user id extraction:', result);
-        
+
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockAccountId, mockAccountId]);
@@ -453,7 +506,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
 });
 
 describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {
-    
+
     const mockUserId = uuid();
     const mockInstructionId = uuid();
     const mockMinIntervalDays = 5;
@@ -499,7 +552,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
     const mockPushToken = uuid();
     const mockProvider = uuid();
     const mockCreationTime = '2030-01-01T00:00:01.016Z';
-    
+
     beforeEach(() => {
         resetStubs();
     });
@@ -511,7 +564,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
             pushToken: mockPushToken
         };
 
-        const mockInsertionArgs = [ 
+        const mockInsertionArgs = [
             `insert into ${config.get('tables.pushTokenTable')} (${extractQueryClause(Object.keys(mockPersistableToken))}) values %L returning insertion_id, creation_time`,
             extractColumnTemplate(Object.keys(mockPersistableToken)),
             [mockPersistableToken]
@@ -540,7 +593,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
 
         const result = await rdsUtil.getPushTokens([mockUserId], mockProvider);
         logger('Result of push token extraction:', result);
-        
+
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
@@ -566,7 +619,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
     });
 
     it('should delete push token', async () => {
-        
+
         // observe during integration tests
         const mockDeleteRowArgs = [
             config.get('tables.pushTokenTable'),

@@ -83,26 +83,31 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
 
 module.exports.sumAccountBalance = async (accountId, currency, time = moment()) => {
     const tableToQuery = config.get('tables.accountTransactions');
-    const transTypesToInclude = ["'USER_SAVING_EVENT'", "'ACCRUAL'", "'CAPITALIZATION'", "'WITHDRAWAL'"].join(',');
     
     const findUnitsQuery = `select distinct(unit) from ${tableToQuery} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
         `and creation_time < to_timestamp($3)`;
-    const sumQueryForUnit = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` + 
-        `and creation_time < to_timestamp($4) and transaction_type in (${transTypesToInclude}) group by unit`;
+
+    const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
+    const preTransParamCount = 5;
+    const transTypeIdxs = transTypesToInclude.map((_, idx) => `$${idx + preTransParamCount}`).join(', ');
+
+    const sumQueryForUnit = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and unit = $3 and ` +
+        `settlement_status = 'SETTLED' and creation_time < to_timestamp($4) and transaction_type in (${transTypeIdxs}) group by unit`;
 
     // logger('Finding units prior to : ', time.format(), ' which is unix timestamp: ', time.unix());
     const params = [accountId, currency, time.unix()];
-    logger('Seeking balance with params: ', params);
+    logger('Seeking balance with query: ', sumQueryForUnit, ' and params: ', params);
 
     const unitQueryResult = await rdsConnection.selectQuery(findUnitsQuery, params);
-    // logger('Result of unit query: ', unitQueryResult);
+    logger('Result of unit query: ', unitQueryResult);
     const usedUnits = unitQueryResult.map((row) => row.unit);
 
     const unitQueries = [];
     
     for (let i = 0; i < usedUnits.length; i += 1) {
         const unit = usedUnits[i];
-        const thisQuery = rdsConnection.selectQuery(sumQueryForUnit, [accountId, currency, unit, time.unix()]);
+        const sumParams = [accountId, currency, unit, time.unix(), ...transTypesToInclude]; 
+        const thisQuery = rdsConnection.selectQuery(sumQueryForUnit, sumParams);
         // logger('Retrieved query: ', thisQuery);
         unitQueries.push(thisQuery);
     }
@@ -326,6 +331,11 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     const saveDetails = camelizeKeys(pendingTxResult[0]);
     logger('Resulting save details: ', saveDetails);
 
+    if (saveDetails.settlementStatus === 'SETTLED') {
+        logger('Asked to update already settled save, just returning that it is settled');
+        return { result: 'ALREADY_SETTLED' };
+    }
+
     const updateQueryDef = {
         table: accountTxTable,
         key: { transactionId },
@@ -352,10 +362,12 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     });
     transactionDetails.push(extractTxDetails('floatAdditionTransactionId', updateAndInsertResult[1][0]));
     transactionDetails.push(extractTxDetails('floatAllocationTransactionId', updateAndInsertResult[1][0]));
-    responseEntity['transactionDetails'] = transactionDetails;
+    responseEntity.transactionDetails = transactionDetails;
 
     const balanceCount = await exports.sumAccountBalance(saveDetails['accountId'], saveDetails['currency'], moment());
-    responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit };
+    responseEntity.newBalance = { amount: balanceCount.amount, unit: balanceCount.unit };
+
+    responseEntity.result = 'SUCCESS';
 
     return responseEntity;
 };
