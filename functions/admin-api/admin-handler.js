@@ -29,7 +29,7 @@ module.exports.fetchUserCounts = async (event) => {
 
     logger(`Do we have a start time millis ? : ${Reflect.has(params, 'startTimeMillis')}, and it is : ${params.startTimeMillis}`);
 
-    const startTime = Reflect.has(params, 'startTimeMillis') ? moment(parseInt(params.startTimeMillis,10)) : moment().subtract(defaultDaysBack, 'days');
+    const startTime = Reflect.has(params, 'startTimeMillis') ? moment(parseInt(params.startTimeMillis, 10)) : moment().subtract(defaultDaysBack, 'days');
     const endTime = Reflect.has(params, 'endTimeMillis') ? moment(parseInt(params.endTimeMillis, 10)) : moment();
     const includeNoTxAccountsCreatedInWindow = typeof params.includeNewButNoSave === 'boolean' && params.includeNewButNoSave;
 

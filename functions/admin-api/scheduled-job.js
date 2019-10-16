@@ -66,7 +66,7 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
         referenceTimeMillis: calculationTimeMillis,
         backingEntityIdentifier: identifierToUse
     };
-}
+};
 
 const assembleAccrualInvocation = async (clientFloatInfo) => {
     const accrualPayload = await assembleAccrualPayload(clientFloatInfo);
@@ -80,7 +80,7 @@ const assembleAccrualInvocation = async (clientFloatInfo) => {
     logger('Accrual invocation: ', accrualInvocation);
 
     return lambda.invoke(accrualInvocation).promise();
-}
+};
 
 const initiateFloatAccruals = async () => {
     const clientsAndFloats = await dynamoFloat.listClientFloats();
@@ -115,8 +115,6 @@ const sendSystemStats = async () => {
     const templateVariables = { userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek };
 
     logger('Sending : ', templateVariables);
-
-    return { result: 'SUCCESS' };
 
     return publisher.sendSystemEmail({ 
         subject: 'Daily system stats',
@@ -154,4 +152,4 @@ module.exports.runRegularJobs = async (event) => {
         statusCode: 200,
         body: { responseStats }
     };
-}
+};
