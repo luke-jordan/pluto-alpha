@@ -12,7 +12,7 @@ const util = require('./boost.util');
  * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
  * @property {boolean} includeReferrals Includes referrals when set to true.
  * @property {boolean} includeUserCounts Includes a includeUserCounts property with each returned object.
- * @property {boolran} includeExpired When set to true the resulting listing includes boosts that have expired.
+ * @property {boolean} includeExpired When set to true the resulting listing includes boosts that have expired.
  */
 module.exports.listBoosts = async (event) => {
     try {

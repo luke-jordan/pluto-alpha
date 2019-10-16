@@ -20,7 +20,7 @@ Lists boosts, with optional param to restrict to currently running ones.
 | requestContext | <code>object</code> | An object containing the callers id, role, and permissions. The event will not be processed without a valid request context. |
 | includeReferrals | <code>boolean</code> | Includes referrals when set to true. |
 | includeUserCounts | <code>boolean</code> | Includes a includeUserCounts property with each returned object. |
-| includeExpired | <code>boolran</code> | When set to true the resulting listing includes boosts that have expired. |
+| includeExpired | <code>boolean</code> | When set to true the resulting listing includes boosts that have expired. |
 
 <a name="updateInstruction"></a>
 

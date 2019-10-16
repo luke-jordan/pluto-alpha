@@ -123,3 +123,16 @@ Note: make sure to install ipython in your virtual env or you will get module im
 
 > Note:: If you are running the integration testing notebooks, make sure to add in a pre-commit filter that strips them
 of output. See here: https://github.com/toobaz/ipynb_output_filter
+
+### Generating Documentation From Docstrings
+
+Each function directory includes a README file created from the docstrings within the code. To regenenate the README after making changes to the code and related docstrings, install jsdoc2md using the command
+
+```
+$ npm install --save-dev jsdoc-to-markdown
+```
+ then run
+ ```
+$ jsdoc2md *.js > README.md
+```
+to generate a README from all the docstrings in the directory. For more information see https://github.com/jsdoc2md/jsdoc-to-markdown
