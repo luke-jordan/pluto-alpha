@@ -19,28 +19,11 @@ const STANDARD_PARAMS = [
 ];
 
 /**
- * This sequences of functions take a message instruction and returns an array of user message rows. Instruction properties are as follows:
- * @param {string} presentationType How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
- * @param {boolean} active Indicates whether the message is active or not.
- * @param {string} audienceType Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {object} templates Message instruction must include at least one template, ie, the notification message to be displayed
- * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceInstruction Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
- * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
- * @param {object} responseContext An object that includes details such as the boost ID.
- * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
- * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
- * @param {string} lastProcessedTime This property is updated eah time the message instruction is processed.
- * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
- * @param {object} requestDetails An object containing parameters past by the caller. These may include template format values as well as notification display instruction.
- */
-
-/**
  * NOTE: This is only for custom params supplied with the message-creation event. System defined params should be left alone.
  * This function assembles the selected template and inserts relevent data where required.
  * todo : make sure this handles subparams on standard params (e.g., total_interest::since etc)
  * @param {*} template The selected template.
- * @param {*} passedParameters Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated are executed.
+ * @param {*} passedParameters Extra parameters sent with the callers request. If parameters contain known proporties such as parameters.boostAmount then the associated actions are executed.
  * With regards to boost amount it is extracted from request parameters and inserted into the boost template.
  */
 const placeParamsInTemplate = (template, passedParameters) => {
@@ -168,13 +151,12 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
 };
 
 /**
- * This function accepts an instruction id, retrieves the associated instruction from persistence, assembles the user message, and finally
- * persists the assembled user message to RDS. The minimum required parameter that must be passed to this function is the instruction. Without
- * it the sun does not shine. Other properties may be included in the parameters, such as destinationId
- * @param {string} instructionId The instruction id assigned during instruction creation.
- * @param {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's selectionInstruction property.
- * @param {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.
- * @param {boolean} triggerBalanceFetch Required on boost message assembly. Indicates whether to include the users new balance in the boost message.
+ * This function accepts an instruction detail object containing an instruction id, the destination user id, and extra parameters.
+ * It uses these details to retrieve the associated instruction from persistence, assemble the user message(s), and finally persists the assembled user message(s) to RDS.
+ * @param {object} instructionDetail An object containing the following properties: instructionId, destinationUserId, and parameters. These are elaborated below.
+ * @property {string} instructionId The instruction id assigned during instruction creation.
+ * @property {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's selectionInstruction property.
+ * @property {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.
  */
 const processNonRecurringInstruction = async ({ instructionId, destinationUserId, parameters }) => {
     logger('Processing instruction with ID: ', instructionId);
@@ -204,8 +186,16 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     return handlerResponse;
 };
 
-// a wrapper for simple instruction processing, although can handle multiple at once
-// note: this is only called for once off or event driven messages )i.e., invokes the above)
+/**
+ * A wrapper for simple instruction processing, although can handle multiple at once
+ * note: this is only called for once off or event driven messages )i.e., invokes the above)
+ * @param {object} event An object containing an array of instruction detail objects. Each instruction detail object contains an instruction id, the instructions
+ * destination user id, and an object of extra parameters.
+ * @property {array} instructions An array of instruction identifier objects. Each instruction in the array may have the following properties:
+ * @property {string} instructionId The instruction id assigned during instruction creation.
+ * @property {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's selectionInstruction property.
+ * @property {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.tr 
+ */
 module.exports.createUserMessages = async (event) => {
     try {
         const createDetails = msgUtil.extractEventBody(event);
@@ -256,7 +246,7 @@ const generateRecurringMessages = async (recurringInstruction) => {
 };
 
 /**
- * This runs on a scheduled job. It processes any once off instructions that have not been processed yet. Otherwise, it 
+ * This runs on a scheduled job. It processes any once off and recurring instructions that have not been processed yet.
  */
 module.exports.createFromPendingInstructions = async () => {
     try {
@@ -293,7 +283,8 @@ module.exports.createFromPendingInstructions = async () => {
  * This function accepts a system wide user id. It then retrieves all recurring messages targeted at all users and includes the recieved
  * user id in the table of reciepients. This function essentially includes a new user into the loop, or the system wide 'mailing list'.
  * After running this function, the user should be able to recieve system wide recurring messages like everyone else.
- * @param {string} systemWideUserId The users system wide id.
+ * @param {object} event An object containing the users system wide id.
+ * @property {string} systemWideUserId The users system wide id.
  */
 // module.exports.syncUserMessages = async (event) => {
 //     try {

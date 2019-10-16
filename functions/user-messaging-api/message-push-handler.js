@@ -16,9 +16,10 @@ const expo = new Expo();
  * This function inserts a push token object into RDS. It requires that the user calling this function also owns the token.
  * An evaluation of the requestContext is run prior to token manipulation. If request context evaluation fails access is forbidden.
  * Non standared propertied are ignored during the assembly of the persistable token object.
- * @param {string} userId The push tokens owner.
- * @param {string} provider The push tokens provider.
- * @param {string} token The push token.
+ * @param {object} event An object containing the users id, push token provider, and the push token. Details below.
+ * @property {string} userId The push tokens owner.
+ * @property {string} provider The push tokens provider.
+ * @property {string} token The push token.
  */
 module.exports.insertPushToken = async (event) => {
     try {
@@ -57,8 +58,9 @@ module.exports.insertPushToken = async (event) => {
  * This function accepts a token provider and its owners user id. It then searches for the associated persisted token object and deletes it from the 
  * database. As during insertion, only the tokens owner can execute this action. This is implemented through request context evaluation, where the userId
  * found within the requestContext object must much the value of the tokens owner user id.
- * @param {string} userId The tokens owner user id.
- * @param {string} provider The tokens provider.
+ * @param {object} event An object containing the request context object and a body object. The body contains the users system wide id and the push tokens provider.
+ * @property {string} userId The tokens owner user id.
+ * @property {string} provider The tokens provider.
  */
 module.exports.deletePushToken = async (event) => {
     try {
@@ -185,6 +187,12 @@ const generateFromSpecificMsgs = async (params) => {
     return chunkAndSendMessages(messages);
 };
 
+
+/**
+ * This function is responsible for sending push notifications.
+ * @param {object} params An optional object containing an array of system wide user ids.
+ * @property {Array} systemWideUserIds An optional array of system wide user ids who will serve as reciepients of the push notifications.
+ */
 module.exports.sendPushNotifications = async (params) => {
     try {
         const haveSpecificIds = typeof params === 'object' && Reflect.has(params, 'systemWideUserIds');

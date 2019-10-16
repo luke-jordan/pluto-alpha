@@ -92,6 +92,16 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
     return resultObject;
 };
 
+/**
+ * This function fetches account balances and projections.
+ * @param {object} event An event object containing the request context and request body. Body properties are described below.
+ * @property {string} accountId The account id to obtain balance from.
+ * @property {string} clientId The client id.
+ * @property {string} floatId The float id.
+ * @property {string} currency A three digit currency code.
+ * @property {string} atEpochMillis The time the call to this function was made.
+ * @property {string} timezone The callers timezone.
+ */
 module.exports.balance = async (event) => {
   try {
     if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
@@ -167,7 +177,12 @@ module.exports.balance = async (event) => {
   }
 };
 
-// this is a convenience method exposed to allow for simple JWT based get balance based on defaults
+/**
+ * This is a convenience method exposed to allow for simple JWT based get balance based on defaults
+ * Here only the account holders system wide id is required as a parameter (which is passed in the events requestContext.authorizer object).
+ * @param {object} event An event object containing the request context.
+ * @property {object} requestContext An object containing the callers system wide id, role, and permissions. The event will not be processed without a valid request context.
+ */
 module.exports.balanceWrapper = async (event) => {
   try {
     if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
