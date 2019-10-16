@@ -4,6 +4,7 @@ create table if not exists boost_data.boost (
     boost_id uuid not null primary key,
     creation_time timestamp with time zone not null default current_timestamp,
     creating_user_id uuid not null,
+    label text not null,
     start_time timestamp with time zone not null default current_timestamp,
     end_time timestamp with time zone not null,
     active boolean not null default true,

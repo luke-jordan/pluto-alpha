@@ -104,4 +104,4 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     //     logger('FATAL_ERROR: ', err);
     //     return { result: 'FAILED' }; 
     // }
-}
+};

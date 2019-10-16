@@ -129,6 +129,11 @@ module.exports.initiatePendingSave = async (event) => {
     // todo : verify user account ownership
     const initiationResult = await save(saveInformation);
     
+    // go and get a payment link
+    if (saveInformation.testProperLink) {
+      // do the needful
+    }
+
     initiationResult.paymentRedirectDetails = {
       urlToCompletePayment: 'https://pay.here/1234'
     };

@@ -79,7 +79,7 @@ jobs:
             cd ../rds-common && npm run-script lint
             cd ../publish-common && npm run-script lint
 
-            # We skip warmup for the moment
+            # We skip warmup & admin for the moment
             echo "Linting functions"
             cd $HOME/app/functions/user-activity-api && npm run-script lint
             cd ../user-existence-api && npm run-script lint
@@ -192,6 +192,8 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_admin_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/admin_api/$CIRCLE_SHA1.zip
 
                 /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip
+
+                /home/circleci/bin/aws s3 sync $HOME/app/templates/emails/ s3://$CIRCLE_BRANCH.jupiter.templates/emails/
              fi
 
       - run:

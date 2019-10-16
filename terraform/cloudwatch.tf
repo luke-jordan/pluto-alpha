@@ -13,5 +13,5 @@ resource "aws_cloudwatch_event_rule" "ops_every_five_minutes" {
 resource "aws_cloudwatch_event_rule" "ops_every_day" {
     name = "ops_daily_call"
     description = "Fires once a day for admin ops tasks"
-    schedule_expression = "cron(0 10 * * ? *)"
+    schedule_expression = "cron(0 22 * * ? *)"
 }

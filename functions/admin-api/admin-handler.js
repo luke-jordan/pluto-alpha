@@ -134,7 +134,8 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
             floatMonthGrowth: wrapAmount(floatInflowInfo.amount, floatInflowInfo.unit, currency),
             bonusPoolBalance: wrapAmount(bonusPoolSum, floatBalanceInfo.unit, currency),
             bonusOutflow: wrapAmount(bonusOutflowSum, floatBalanceInfo.unit, currency),
-            bonusInflowSum: wrapAmount(bonusInflowSum, floatBalanceInfo.unit, currency)
+            bonusInflowSum: wrapAmount(bonusInflowSum, floatBalanceInfo.unit, currency),
+            bonusPoolIds: Object.keys(bonusPools.get(floatId))
         };
 
         const clientFloats = clientResults[clientId].floats;

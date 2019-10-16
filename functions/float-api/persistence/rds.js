@@ -47,7 +47,7 @@ module.exports.addOrSubtractFloat = async (request = {
         backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
         backingEntityIdentifer: 'uid-on-wholesale', 
         logType: 'ACCRUAL_EVENT',
-        referenceTimeMillis}) => {
+        referenceTimeMillis: 0 }) => {
     
     // todo : validation on transaction types, units, log type & reference time, etc.    
     const rowToInsert = {

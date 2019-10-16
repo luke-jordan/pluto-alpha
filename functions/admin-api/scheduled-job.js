@@ -118,12 +118,12 @@ const sendSystemStats = async () => {
 
     return { result: 'SUCCESS' };
 
-    // return publisher.sendSystemEmail({ 
-    //     subject: 'Daily system stats',
-    //     toList: config.get('email.systemStats.toList'),
-    //     bodyTemplateKey: config.get('email.systemStats.templateKey'),
-    //     templateVariables
-    // });
+    return publisher.sendSystemEmail({ 
+        subject: 'Daily system stats',
+        toList: config.get('email.systemStats.toList'),
+        bodyTemplateKey: config.get('email.systemStats.templateKey'),
+        templateVariables
+    });
 };
 
 /**

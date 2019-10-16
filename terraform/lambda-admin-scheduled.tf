@@ -107,16 +107,16 @@ resource "aws_iam_role_policy_attachment" "admin_scheduled_job_permissions" {
 
 /////////////////// CLOUD WATCH FOR EVENT SOURCE ///////////////////////
 
-# resource "aws_cloudwatch_event_target" "trigger_ops_admin_scheduled_every_five_minutes" {
-#     rule = "${aws_cloudwatch_event_rule.ops_every_five_minutes.name}"
-#     target_id = "${aws_lambda_function.ops_admin_scheduled.id}"
-#     arn = "${aws_lambda_function.ops_admin_scheduled.arn}"
-# }
+resource "aws_cloudwatch_event_target" "trigger_ops_admin_scheduled_every_day" {
+    rule = "${aws_cloudwatch_event_rule.ops_every_day.name}"
+    target_id = "${aws_lambda_function.ops_admin_scheduled.id}"
+    arn = "${aws_lambda_function.ops_admin_scheduled.arn}"
+}
 
-# resource "aws_lambda_permission" "allow_cloudwatch_to_call_ops_admin_scheduled" {
-#     statement_id = "AllowOpsWarmupExecutionFromCloudWatch"
-#     action = "lambda:InvokeFunction"
-#     function_name = "${aws_lambda_function.ops_admin_scheduled.function_name}"
-#     principal = "events.amazonaws.com"
-#     source_arn = "${aws_cloudwatch_event_rule.ops_every_five_minutes.arn}"
-# }
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_ops_admin_scheduled" {
+    statement_id = "AllowDailyAdminExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = "${aws_lambda_function.ops_admin_scheduled.function_name}"
+    principal = "events.amazonaws.com"
+    source_arn = "${aws_cloudwatch_event_rule.ops_every_day.arn}"
+}
