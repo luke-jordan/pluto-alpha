@@ -33,6 +33,7 @@ const wrapEvent = (requestBody, systemWideUserId, role) => ({
         }
     }
 });
+
 const wrapQueryParamEvent = (requestBody, systemWideUserId, role) => ({
     queryStringParameters: requestBody,
     requestContext: {

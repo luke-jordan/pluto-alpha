@@ -12,10 +12,10 @@ const opsCommonUtil = require('ops-util-common');
 
 /**
  * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default
- * If startTimeMillis is left out, default is set by config but will generally be six months ago
- * If endTimeMillis is left out, default is set to now
- * The parameters 'includeNewButNoSave' determines whether to include in the count accounts that were created in the time window
- * but have not yet had a settled save transaction. This can be useful for diagnosing drop outs
+ * @param {object} event An event containing the request context and the request body. The body's properties a decribed below.
+ * @property {string} startTimeMillis If left out, default is set by config but will generally be six months ago
+ * @property {string} endTimeMillis If left out, default is set to now
+ * @property {boolean} includeNewButNoSave determines whether to include in the count accounts that were created in the time window but have not yet had a settled save transaction. This can be useful for diagnosing drop outs
  */
 module.exports.fetchUserCounts = async (event) => {
     if (!adminUtil.isUserAuthorized(event)) {
@@ -146,6 +146,12 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
     return clientResults;
 };
 
+
+/**
+ * The function fetches client float variables.
+ * @param {object} event An event object containing the request context, which has information about the caller.
+ * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
+ */
 module.exports.fetchClientFloatVars = async (event) => {
     if (!adminUtil.isUserAuthorized(event)) {
         return adminUtil.unauthorizedResponse;

@@ -83,6 +83,10 @@ const handleInstruction = async (instruction) => {
     };
 };
 
+/**
+ * This function handles float transfer instructions. Event properties are described below.
+ * @param {array} instructions An array containing transfer instruction objects.
+ */
 module.exports.floatTransfer = async (event) => {
     logger('Received transfer event: ', event);
 

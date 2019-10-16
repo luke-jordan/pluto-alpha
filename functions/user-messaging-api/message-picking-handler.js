@@ -141,6 +141,19 @@ const fillInTemplate = async (template, destinationUserId) => {
     return completedTemplate;
 };
 
+/**
+ * This function assembles user messages into a persistable object. It accepts a messageDetails object as its only argument.
+ * @param {Object} messageDetails An object containing the message details. This object contains the following properties:
+ * @property {String} messageId The message's id.
+ * @property {String} messageTitle The message's title.
+ * @property {Number} messagePriority The message's priority (ranging from 0 to 10, with 0 being the lowest and q0 being the highest priority)
+ * @property {Object} display An object conataining additional icons to display within the message, e.g. { type: 'MODAL', iconType: 'SMILEY_FACE' }
+ * @property {String} creationTime The message's creation time.
+ * @property {Boolean} hasFollowingMessage a boolean value indicating whether the current message other message following it.
+ * @property {Boolean} followsPriorMessage A boolean value indicating whether the current message follows other messages.
+ * @property {Object} actionContext An object containing optional actions to be run during message assembly. For example { triggerBalanceFetch: true, boostId: '61af5b66-ad7a...' }
+ * @property {Object} messageSequence An object containing details such as messages to display on the success of the current message. An example object: { msgOnSuccess: '61af5b66-ad7a...' }
+ */
 module.exports.assembleMessage = async (msgDetails) => {
     const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
     const messageBase = {
@@ -231,6 +244,12 @@ const determineAnchorMsg = (openingMessages) => {
     return messagesWithHighestPriority[0];
 };
 
+
+/**
+ * This function fetches and fills in the next message in a sequence of messages.
+ * @param {string} destinationUserId The messages destination user id.
+ * @param {string} withinFlowFromMsgId The messageId of the last message in the sequence to be processed prior to the current one.
+ */
 module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowFromMsgId = null) => {
     logger('Initiating message retrieval, excluding push notifications');
     const retrievedMessages = await persistence.getNextMessage(destinationUserId, true);
@@ -281,6 +300,11 @@ const dryRunGameChaseArrows = require('./dry-run-arrow');
 
 /**
  * Wrapper for the above, based on token, i.e., direct fetch
+ * @param {object} event An object containing the request context, with request body being passed as query string parameters.
+ * @property {object} requestContext An object containing the callers id, roles, and permissions. The event will not be processed without a valid request context.
+ * @property {object} queryStringParameters This functions accepts an lambda event passed via query string parameters. The queryStringParameters object may have the following properties:
+ * @property {boolean} queryStringParameters.gameDryRun Set to true to run a dry run operation, else omit or set to false to run full function operations.
+ * @property {string} queryStringParameters.anchorMessageId If message is part of a sequence, this property contains the messageId of the last processed message in the sequence before the current one.
  */
 module.exports.getNextMessageForUser = async (event) => {
     try {
@@ -317,6 +341,10 @@ module.exports.getNextMessageForUser = async (event) => {
 
 /**
  * Simple (ish) method for updating a message once it has been delivered, etc.
+ * @param {object} event An object containing the request context and request body. The body has message id and user action properties, detailed below.
+ * @property {object} requestContext An object containing the callers system wide user id, role, and permissions. The event will not be processed without a valid request context. 
+ * @property {string} body.messageId The messageId of the message to me updated.
+ * @property {string} body.userAction The value to update the message option with. Valid values in this context are FETCHED and DISMISSED.
  */
 module.exports.updateUserMessage = async (event) => {
     try {
