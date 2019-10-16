@@ -30,7 +30,7 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
 
     if (includeNoSave) {
         joinType = 'left join';
-        whereClause = `((${txTimeClause}) or (${accountTable}.creation_time between $3 and $4)`;
+        whereClause = `((${txTimeClause}) or (${accountTable}.creation_time between $3 and $4))`;
     } else {
         joinType = 'inner join';
         whereClause = txTimeClause;
@@ -168,4 +168,33 @@ module.exports.getFloatBonusBalanceAndFlows = async (floatIds, startTime, endTim
 
     logger('Result of bonus pool sum query: ', queryResult);
     return aggregateAllocatedAmounts(queryResult);
+};
+
+module.exports.getLastFloatAccrualTime = async (floatId) => {
+    logger('Getting last float accrual, for float: ', floatId);
+
+    const floatLogTable = config.get('tables.floatLogTable');
+    const floatTxTable = config.get('tables.floatTxTable');
+
+    const selectionQuery = `select reference_time from ${floatLogTable} where float_id = $1 and log_type = $2 ` + 
+        `order by creation_time desc limit 1`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectionQuery, [floatId, 'WHOLE_FLOAT_ACCRUAL']);
+    logger('Retrieved result of float log selection: ', resultOfQuery);
+
+    if (Array.isArray(resultOfQuery) && resultOfQuery.length > 0) {
+        return moment(resultOfQuery[0]['reference_time']);
+    }
+
+    // if there has been no accrual, so above is not triggered, instead get the first time money was added        
+    const findFirstTxQuery = `select creation_time from ${floatTxTable} where float_id = $1 and allocated_to_type = $2 ` +
+        `order by creation_time asc limit 1`;
+
+    logger('Searching for first accrual tx with query: ', findFirstTxQuery);
+    const resultOfSearch = await rdsConnection.selectQuery(findFirstTxQuery, [floatId, 'FLOAT_ITSELF']);
+    logger('Result of getting first transaction time: ', resultOfSearch);
+    if (Array.isArray(resultOfSearch) && resultOfSearch.length > 0) {
+        return moment(resultOfSearch[0]['creation_time']);
+    }
+
+    return null;
 };

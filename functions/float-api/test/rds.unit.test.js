@@ -3,6 +3,7 @@
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('jupiter:float:test');
+const moment = require('moment');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -60,6 +61,8 @@ describe('Float balance add or subtract', () => {
     });
 
     it('Adds appropriately to float', async () => {
+        const refTime = moment();
+
         const floatBalanceAdjustment = {
             transactionId: uuid(),
             clientId: common.testValidClientId,
@@ -69,10 +72,11 @@ describe('Float balance add or subtract', () => {
             currency: 'ZAR',
             unit: constants.floatUnits.HUNDREDTH_CENT,
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-            backingEntityIdentifier: uuid()
+            backingEntityIdentifier: uuid(),
+            logType: 'WHOLE_FLOAT_ACCRUAL',
+            referenceTimeMillis: refTime.valueOf()
         };
 
-        // logger('Huh? : ', config.get('tables.floatTransaction'))
         const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, currency, unit, ` +
             `amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id`;
         const columns = common.allocationExpectedColumns;
@@ -90,7 +94,29 @@ describe('Float balance add or subtract', () => {
             'related_entity_id': floatBalanceAdjustment.backingEntityIdentifier
         };
 
-        insertStub.withArgs(query, columns, sinon.match([expectedRow])).resolves({rows: [{ 'transaction_id': floatBalanceAdjustment.transactionId }] });
+        const expectedTxDef = {
+            query,
+            columnTemplate: columns,
+            rows: [expectedRow]
+        };
+
+        const logQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, float_id, log_type) ` +
+            `values %L returning log_id, creation_time`;
+        const logToInsert = {
+            logId: sinon.match.any,
+            floatId: common.testValidFloatId,
+            referenceTime: refTime.format(),
+            logType: 'WHOLE_FLOAT_ACCRUAL'
+        };
+        const logInsertDef = {
+            query: logQuery,
+            columnTemplate: '${logId}, ${referenceTime}, ${floatId}, ${logType}',
+            rows: [logToInsert] 
+        };
+
+        multiTableStub.resolves([[{ 'transaction_id': floatBalanceAdjustment.transactionId }], []]);
+        
+        // tested extensively elsewhere
         balanceStub.withArgs(common.testValidFloatId, 'ZAR').resolves({ balance: floatBalanceAdjustment.amount + testOpeningBalance, 
             unit: constants.floatUnits.DEFAULT }); // leaving off earliest and latest TX as tested below, and not relevant (yet)
 
@@ -103,6 +129,12 @@ describe('Float balance add or subtract', () => {
             transactionId: floatBalanceAdjustment.transactionId
         });
 
+        // following is painful but necessary else need a lot of convolution stubbing uuid etc
+        const tableArgs = multiTableStub.getCall(0).args;
+        expect(tableArgs.length).to.equal(1);
+        expect(tableArgs[0]).to.be.an('array').of.length(2);
+        expect(tableArgs[0][0]).to.deep.equal(expectedTxDef);        
+        expect(sinon.match(logInsertDef).test(tableArgs[0][1])).to.be.true;
     });
 
 });

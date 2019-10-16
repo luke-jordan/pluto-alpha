@@ -2,12 +2,13 @@
 
 const config = require('config');
 
-const constants = require('../constants');
 const logger = require('debug')('jupiter:float:rds');
 const uuid = require('uuid/v4');
+const moment = require('moment');
+
+const constants = require('../constants'); // todo : replace with config, or similar
 
 const RdsConnection = require('rds-common');
-
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` +
@@ -33,6 +34,8 @@ module.exports.debugConnection = async () => {
  * @param {string} unit The unit of the amount
  * @param {string} backingEntityType If there is a related backing entity, e.g., an accrual event/transaction, what type is it
  * @param {string} backingEntityIdentifer What is the identifier of the backing endity
+ * @param {string} logType The type of float log to record for this
+ * @param {number} referenceTimeMillis Optional parameter recording the time the accrual fetch/calc was made, for the log
  */
 module.exports.addOrSubtractFloat = async (request = {
         clientId: 'some_saving_co', 
@@ -42,13 +45,11 @@ module.exports.addOrSubtractFloat = async (request = {
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
         backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-        backingEntityIdentifer: 'uid-on-wholesale'}) => {
+        backingEntityIdentifer: 'uid-on-wholesale', 
+        logType: 'ACCRUAL_EVENT',
+        referenceTimeMillis: 0 }) => {
     
-    // todo : validation on transaction types, units
-
-    const query = insertionQuery;
-    const columns = insertionColumns;
-    
+    // todo : validation on transaction types, units, log type & reference time, etc.    
     const rowToInsert = {
         'transaction_id': request.transactionId || uuid(),
         'client_id': request.clientId,
@@ -62,12 +63,39 @@ module.exports.addOrSubtractFloat = async (request = {
         'related_entity_type': request.backingEntityType,
         'related_entity_id': request.backingEntityIdentifier
     };
-    
-    // todo : we want the timestamp here so we can get precise on the auditing, when calling new balance below
-    const queryResult = await rdsConnection.insertRecords(query, columns, [rowToInsert]);
-    const queryTxId = queryResult.rows[0]['transaction_id'];
-    logger('Query result: ', queryResult);
 
+    const txInsertDef = {
+        query: insertionQuery,
+        columnTemplate: insertionColumns,
+        rows: [rowToInsert]
+    };
+
+    const logRefTime = request.referenceTimeMillis ? moment(request.referenceTimeMillis).format() : moment().format();
+    const logToInsert = {
+        logId: uuid(),
+        floatId: request.floatId,
+        referenceTime: logRefTime,
+        logType: request.logType
+    };
+
+    const logInsertQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, float_id, log_type) ` +
+        `values %L returning log_id, creation_time`;
+    const logInsertDef = {
+        query: logInsertQuery,
+        columnTemplate: '${logId}, ${referenceTime}, ${floatId}, ${logType}',
+        rows: [logToInsert] 
+    };
+    
+    // this is not really large but that is the right method for bundled inserts
+    logger('Insert query def: ', logInsertDef);
+    logger('And tx def: ', txInsertDef);
+
+    const queryResult = await rdsConnection.largeMultiTableInsert([txInsertDef, logInsertDef]);
+    logger('Addition result: ', queryResult);
+
+    // first row of first operation
+    const queryTxId = queryResult[0][0]['transaction_id'];
+    
     const newBalance = await exports.calculateFloatBalance(request.floatId, request.currency);
     logger('New float balance: ', newBalance);
 

@@ -6,7 +6,9 @@ const moment = require('moment');
 
 const persistence = require('./persistence/rds.analytics');
 const dynamo = require('./persistence/dynamo.float');
-const util = require('./admin.util');
+
+const adminUtil = require('./admin.util');
+const opsCommonUtil = require('ops-util-common');
 
 /**
  * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default
@@ -16,24 +18,26 @@ const util = require('./admin.util');
  * @property {boolean} includeNewButNoSave determines whether to include in the count accounts that were created in the time window but have not yet had a settled save transaction. This can be useful for diagnosing drop outs
  */
 module.exports.fetchUserCounts = async (event) => {
-    if (!util.isUserAuthorized(event)) {
-        return util.unauthorizedResponse;
+    if (!adminUtil.isUserAuthorized(event)) {
+        return adminUtil.unauthorizedResponse;
     }
 
-    const params = util.extractEventBody(event);
+    const params = opsCommonUtil.extractQueryParams(event);
     logger('Finding user Ids with params: ', params);
 
     const defaultDaysBack = config.get('defaults.userCounts.daysBack');
 
-    const startTime = Reflect.has(params, 'startTimeMillis') ? moment(params.startTimeMillis) : moment().subtract(defaultDaysBack, 'days');
-    const endTime = Reflect.has(params, 'endTimeMillis') ? moment(params.endTimeMillis) : moment();
+    logger(`Do we have a start time millis ? : ${Reflect.has(params, 'startTimeMillis')}, and it is : ${params.startTimeMillis}`);
+
+    const startTime = Reflect.has(params, 'startTimeMillis') ? moment(parseInt(params.startTimeMillis, 10)) : moment().subtract(defaultDaysBack, 'days');
+    const endTime = Reflect.has(params, 'endTimeMillis') ? moment(parseInt(params.endTimeMillis, 10)) : moment();
     const includeNoTxAccountsCreatedInWindow = typeof params.includeNewButNoSave === 'boolean' && params.includeNewButNoSave;
-    
+
     const userIdCount = await persistence.countUserIdsWithAccounts(startTime, endTime, includeNoTxAccountsCreatedInWindow);
 
     logger('Obtained user count: ', userIdCount);
 
-    return util.wrapHttpResponse({ userCount: userIdCount });
+    return adminUtil.wrapHttpResponse({ userCount: userIdCount });
 };
 
 const sumBonusPools = (bonusPoolInfo, currency) => {
@@ -130,7 +134,8 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
             floatMonthGrowth: wrapAmount(floatInflowInfo.amount, floatInflowInfo.unit, currency),
             bonusPoolBalance: wrapAmount(bonusPoolSum, floatBalanceInfo.unit, currency),
             bonusOutflow: wrapAmount(bonusOutflowSum, floatBalanceInfo.unit, currency),
-            bonusInflowSum: wrapAmount(bonusInflowSum, floatBalanceInfo.unit, currency)
+            bonusInflowSum: wrapAmount(bonusInflowSum, floatBalanceInfo.unit, currency),
+            bonusPoolIds: Object.keys(bonusPools.get(floatId))
         };
 
         const clientFloats = clientResults[clientId].floats;
@@ -148,8 +153,8 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
  * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
  */
 module.exports.fetchClientFloatVars = async (event) => {
-    if (!util.isUserAuthorized(event)) {
-        return util.unauthorizedResponse;
+    if (!adminUtil.isUserAuthorized(event)) {
+        return adminUtil.unauthorizedResponse;
     }
 
     // in time, will have to extract administered floats from user somehow (or denormalize into appropriate table)
@@ -158,5 +163,5 @@ module.exports.fetchClientFloatVars = async (event) => {
     const assembledResults = await assembleClientFloatData(countriesAndClients, clientsAndFloats);
     logger('Assembled client float data: ', assembledResults); 
 
-    return util.wrapHttpResponse(assembledResults);
+    return adminUtil.wrapHttpResponse(assembledResults);
 };

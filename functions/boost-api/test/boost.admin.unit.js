@@ -63,6 +63,7 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
     const persistedBoost = {
         boostId: testBoostId,
         creatingUserId: testCreatingUserId,
+        label: 'Referral::Luke::Avish',
         startTime: testBoostStartTime.format(),
         endTime: testBoostEndTime.format(),
         boostType: 'REFERRAL',

@@ -6,6 +6,7 @@ const logger = require('debug')('jupiter:float:test');
 
 const _ = require('lodash');
 const uuid = require('uuid/v4');
+const moment = require('moment');
 
 const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
@@ -209,6 +210,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         // thousands of rand, in hundredths of a cent
         const amountAccrued = Math.floor(Math.random() * 1000 * 10000);  
         const testTxIds = Array(10).fill().map(() => uuid());
+        const referenceTimeMillis = moment().valueOf();
 
         const accrualEvent = {
             clientId: common.testValidClientId,
@@ -216,24 +218,23 @@ describe('Primary allocation of inbound accrual lambda', () => {
             accrualAmount: amountAccrued,
             currency: 'ZAR',
             unit: constants.floatUnits.HUNDREDTH_CENT,
-            backingEntityIdentifier: uuid()
+            backingEntityIdentifier: uuid(),
+            referenceTimeMillis
         };
 
-        const expectedFloatAdjustment = JSON.parse(JSON.stringify(accrualEvent));
+        const expectedFloatAdjustment = { ...accrualEvent };
         Reflect.deleteProperty(expectedFloatAdjustment, 'accrualAmount');
         expectedFloatAdjustment.amount = amountAccrued;
         expectedFloatAdjustment.transactionType = 'ACCRUAL';
+        expectedFloatAdjustment.logType = 'WHOLE_FLOAT_ACCRUAL';
+
         adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ currentBalance: 100 + amountAccrued });
 
         const expectedBonusAllocationAmount = Math.round(amountAccrued * common.testValueBonusPoolShare);
         const expectedClientCoAmount = Math.round(amountAccrued * common.testValueClientShare);
         const expectedUserAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount;
 
-        const expectedBonusAllocation = JSON.parse(JSON.stringify(expectedFloatAdjustment));
-        Reflect.deleteProperty(expectedBonusAllocation, 'clientId');
-        Reflect.deleteProperty(expectedBonusAllocation, 'floatId');
-        Reflect.deleteProperty(expectedBonusAllocation, 'backingEntityIdentifier');
-        Reflect.deleteProperty(expectedBonusAllocation, 'transactionType');
+        const expectedBonusAllocation = { currency: accrualEvent.currency, unit: accrualEvent.unit };
         
         expectedBonusAllocation.label = 'BONUS';
         expectedBonusAllocation.amount = expectedBonusAllocationAmount;
@@ -249,8 +250,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expectedClientCoAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
 
         const expectedCall = sinon.match([expectedBonusAllocation, expectedClientCoAllocation]);
-        allocateFloatBalanceStub.withArgs(common.testValidClientId, common.testValidFloatId, expectedCall).resolves(
-            [{ 'BONUS': uuid() }, { 'CLIENT': uuid() }]);
+        allocateFloatBalanceStub.resolves([{ 'BONUS': uuid() }, { 'CLIENT': uuid() }]);
 
         const userAllocEvent = {
             clientId: common.testValidClientId, floatId: common.testValidFloatId, 

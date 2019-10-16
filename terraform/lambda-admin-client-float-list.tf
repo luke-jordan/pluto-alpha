@@ -7,7 +7,7 @@ resource "aws_lambda_function" "admin_client_float_list" {
 
   function_name                  = "${var.admin_client_float_list_lambda_function_name}"
   role                           = "${aws_iam_role.admin_client_float_list_role.arn}"
-  handler                        = "index.fetchClientFloatVars"
+  handler                        = "admin-handler.fetchClientFloatVars"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15

@@ -75,6 +75,7 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
   // now this will allow sufficient tracking, and a simple migration will fix it in the future
   const boostPayload = {
     creatingUserId: ownerUserId,
+    label: `User referral code`,
     boostTypeCategory: `REFERRAL::${boostCategory}`,
     boostAmountOffered: referralContext.boostAmountOffered,
     boostSource: referralContext.boostSource,

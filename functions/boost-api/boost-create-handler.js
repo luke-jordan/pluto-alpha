@@ -207,6 +207,7 @@ module.exports.createBoost = async (event) => {
         throw new Error('Boost requires creating user ID');
     }
 
+    const label = params.label || params.boostTypeCategory; // i.e., using default
     const boostType = params.boostTypeCategory.split('::')[0];
     const boostCategory = params.boostTypeCategory.split('::')[1];
 
@@ -252,6 +253,7 @@ module.exports.createBoost = async (event) => {
     
     const instructionToRds = {
         creatingUserId: params.creatingUserId,
+        label,
         boostType,
         boostCategory,
         boostStartTime,
