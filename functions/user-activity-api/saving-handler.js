@@ -1,7 +1,6 @@
 'use strict';
 
 const logger = require('debug')('jupiter:save:main');
-const config = require('config');
 const moment = require('moment-timezone');
 const status = require('statuses');
 
@@ -164,7 +163,7 @@ module.exports.settleInitiatedSave = async (event) => {
     // todo : get default payment provider from client
     const settleInfo = JSON.parse(event.body);
     if (!settleInfo.paymentProvider) {
-      settleInfo.paymentProvider = config.get('payment.default.name');
+      settleInfo.paymentProvider = 'OZOW';
     }
 
     logger('Settling, with info: ', settleInfo);

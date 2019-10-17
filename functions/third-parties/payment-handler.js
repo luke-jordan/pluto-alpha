@@ -80,7 +80,7 @@ const assembleRequest = (method, endpoint, body) => ({
  * 
  * @returns {object} The payment url and request id.
  */
-module.exports.payment = async (event) => {
+module.exports.paymentUrlRequest = async (event) => {
     try {
         if (warmupCheck(event)) {
             const options = assembleRequest('POST', config.get('ozow.endpoints.warmup'), {});
@@ -126,7 +126,7 @@ module.exports.payment = async (event) => {
  * This method gets the tranaction status of a specified payment.
  * @param {object} event An event object containing the request body. Accepted body properties are defined below.
  * @property {string} transactionId The merchant's reference for the transaction.
- * @property {boolean} IsTest Defaults to true. All calls in production must include this property set to false.
+ * @property {boolean} isTest Defaults to true. All calls in production must include this property set to false.
  * 
  * @returns {object} A subset of the returned status object containing the transaction status (result), createdDate, and paymentDate.
  * All properties (including those not returned to the caller) are listed below.
@@ -143,7 +143,7 @@ module.exports.payment = async (event) => {
  * @see {@link https://ozow.com/integrations/} for further information.
  */
 
-module.exports.status = async (event) => {
+module.exports.statusCheck = async (event) => {
     try {
         const params = {
             SiteCode: config.get('ozow.siteCode'),
