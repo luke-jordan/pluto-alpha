@@ -298,7 +298,7 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
 
     const testPendingTxId = uuid();
     const testSettlementTime = moment();
-    const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: 'xyz123' };
+    const testPaymentDetails = { paymentProvider: 'OZOW', paymentRef: 'xyz123' };
 
     const testTxId = uuid();
     const testSaveAmount = 1000;
@@ -399,7 +399,7 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
         updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
         momentStub.returns(testSettlementTime);
 
-        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
+        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'OZOW' });
         expect(updateTxResult).to.exist;
         expect(updateTxResult).to.have.property('statusCode', 200);
         expect(updateTxResult).to.have.property('body');
@@ -457,7 +457,7 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
         updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).rejects(new Error('Commit error!'));
         momentStub.returns(testSettlementTime);
         
-        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
+        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'OZOW' });
         expect(updateTxResult).to.exist;
         expect(updateTxResult).to.have.property('statusCode', 500);
         expect(updateTxResult).to.have.property('body');

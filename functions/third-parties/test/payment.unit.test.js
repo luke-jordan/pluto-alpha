@@ -61,7 +61,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.resolves(mockPaymentResponse);
         const mockEvent = { ...mockMinimalEvent };
 
-        const resultOfRequest = await handler.payment(mockEvent);
+        const resultOfRequest = await handler.paymentUrlRequest(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         commonExpectations(resultOfRequest);
@@ -72,7 +72,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         mockEvent.successUrl = 'https://mock.success.url.com/';
         mockEvent.errorUrl = 'https://mock.error.url.com/';
 
-        const resultOfFullRequest = await handler.payment(mockEvent);
+        const resultOfFullRequest = await handler.paymentUrlRequest(mockEvent);
         logger('Result of payment url extraction:', resultOfFullRequest);
 
         commonExpectations(resultOfFullRequest);
@@ -82,7 +82,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.resolves(); // intentionally resolves undefined
         const mockEvent = { };
 
-        const resultOfWarmup = await handler.payment(mockEvent);
+        const resultOfWarmup = await handler.paymentUrlRequest(mockEvent);
         logger('Result of warmup call:', resultOfWarmup);
 
         expect(resultOfWarmup).to.exist;
@@ -94,7 +94,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         uuidStub.returns(mockRequestId);
         const mockEvent = { dryRunFakeSuccess: true };
 
-        const resultOfDryrun = await handler.payment(mockEvent);
+        const resultOfDryrun = await handler.paymentUrlRequest(mockEvent);
         logger('Result of dry run:', resultOfDryrun);
 
         expect(resultOfDryrun).to.exist;
@@ -108,7 +108,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         const mockEvent = { ...mockMinimalEvent };
         Reflect.deleteProperty(mockEvent, 'countryCode');
 
-        const resultOfRequest = await handler.payment(mockEvent);
+        const resultOfRequest = await handler.paymentUrlRequest(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
@@ -127,7 +127,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.resolves(mockPaymentResponse);
         const mockEvent = { ...mockMinimalEvent };
 
-        const resultOfRequest = await handler.payment(mockEvent);
+        const resultOfRequest = await handler.paymentUrlRequest(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
@@ -140,7 +140,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         requestStub.resolves('ERROR');
         const mockEvent = { ...mockMinimalEvent };
 
-        const resultOfRequest = await handler.payment(mockEvent);
+        const resultOfRequest = await handler.paymentUrlRequest(mockEvent);
         logger('Result of payment url extraction:', resultOfRequest);
 
         expect(resultOfRequest).to.exist;
@@ -177,7 +177,7 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         requestStub.resolves([mockTransactionStatus, mockTransactionStatus, mockTransactionStatus]);
         const mockEvent = { transactionId: mockTransactionReference, isTest: true };
 
-        const transactionStatus = await handler.status(mockEvent);
+        const transactionStatus = await handler.statusCheck(mockEvent);
         logger('Transaction status result:', transactionStatus);
 
         expect(transactionStatus).to.exist;
@@ -191,7 +191,7 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         requestStub.throws(new Error('RequestError'));
         const mockEvent = { transactionId: mockTransactionReference };
 
-        const transactionStatus = await handler.status(mockEvent);
+        const transactionStatus = await handler.statusCheck(mockEvent);
         logger('Transaction status result on error:', transactionStatus);
 
         expect(transactionStatus).to.exist;
