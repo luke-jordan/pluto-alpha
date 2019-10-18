@@ -119,7 +119,7 @@ describe('createAccountMethod and wrapper', () => {
     
     const testCreationRequest = {
         ownerUserId: testUserId,
-        firstName: 'Luke',
+        personalName: 'Luke',
         familyName: 'Jordan',
         clientId: 'some_country_client',
         defaultFloatId: 'usd_primary_mmkt',
