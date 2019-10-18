@@ -15,8 +15,10 @@ chai.use(require('chai-uuid'));
 const proxyquire = require('proxyquire').noCallThru();
 
 const insertRecordStub = sinon.stub();
+const countRefStemStub = sinon.stub();
 const getAccountIdForUserStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const uuidStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -27,11 +29,13 @@ class MockLambdaClient {
 const accountHandler = proxyquire('../account-handler', { 
     './persistence/rds': {
         'insertAccountRecord': insertRecordStub,
-        'getAccountIdForUser': getAccountIdForUserStub
+        'getAccountIdForUser': getAccountIdForUserStub,
+        'countHumanRef': countRefStemStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
-    }
+    },
+    'uuid/v4': uuidStub 
 });
 
 const testValidApiEvent = require('./api-event-valid.json');
@@ -44,19 +48,12 @@ const testAccountOpeningRequest = {
     defaultFloatId: 'usd_primary_mmkt'
 };
 
-const wellFormedPersistenceReq = {
-    accountId: sinon.match.string, 
-    clientId: 'some_country_client',
-    defaultFloatId: 'usd_primary_mmkt',
-    ownerUserId: testUserId
-};
-
 const testPersistedTime = moment();
 const expectedMillis = testPersistedTime.startOf('second').valueOf();
 
 const testAccountOpeningResult = {
-    'accountId': testAccountId,
-    'persistedTime': testPersistedTime.format()
+    accountId: testAccountId,
+    persistedTime: testPersistedTime.format()
 };
 
 describe('transformEvent', () => {
@@ -115,10 +112,15 @@ describe('validateEvent', () => {
     });
 });
 
-describe('createAccountMethod', () => {
+describe('createAccountMethod and wrapper', () => {
+
+    const testHumanRefTime = moment();
+    const testRefTimeDigit = String(testHumanRefTime.valueOf()).substr(-1);
     
     const testCreationRequest = {
         ownerUserId: testUserId,
+        firstName: 'Luke',
+        familyName: 'Jordan',
         clientId: 'some_country_client',
         defaultFloatId: 'usd_primary_mmkt',
         referralCodeDetails: {
@@ -132,69 +134,111 @@ describe('createAccountMethod', () => {
     };
 
     const insertArgs = {
-        accountId: sinon.match.string,
+        accountId: testAccountId,
         clientId: 'some_country_client',
         defaultFloatId: 'usd_primary_mmkt',
-        ownerUserId: testCreationRequest.ownerUserId
+        ownerUserId: testCreationRequest.ownerUserId,
+        humanRef: `LJORDAN2${testRefTimeDigit}`
+    };
+
+    // slightly messy but alternative is a lot of moment stubbing, which would also not have a point
+    const testInsertArgs = (testHumanRef) => {
+        // basic expecations
+        expect(insertRecordStub).to.have.been.calledOnce;
+        const insertArgsPassed = insertRecordStub.getCall(0).args;
+        expect(insertArgsPassed).to.be.an('array').of.length(1);
+        const insertPassed = insertArgsPassed[0];
+        
+        // check the reference is done right
+        const refToTest = testHumanRef || insertArgs.humanRef;
+        expect(insertPassed).to.have.property('humanRef');
+        const passedHumanRef = insertPassed.humanRef;
+        expect(passedHumanRef).to.be.a.string;
+        logger(`Testing ${passedHumanRef} against ${refToTest}`);
+        expect(passedHumanRef.length).to.equal(refToTest.length);
+        expect(passedHumanRef.slice(0, -1)).to.equal(refToTest.slice(0, -1));
+        
+        // then check the rest
+        const nonRefPassed = { ...insertPassed };
+        Reflect.deleteProperty(nonRefPassed, 'humanRef');
+        const nonRefArg = { ...insertArgs };
+        Reflect.deleteProperty(nonRefArg, 'humanRef');
+        expect(nonRefPassed).to.deep.equal(nonRefArg);
     };
 
     beforeEach(() => {
         insertRecordStub.reset();
         getAccountIdForUserStub.reset();
+        countRefStemStub.reset();
         lamdbaInvokeStub.reset();
+        uuidStub.reset();
+
+        uuidStub.returns(testAccountId);
     });
 
     it('Basic defaults work', async () => {
+        countRefStemStub.resolves(1);
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
-        insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
+        insertRecordStub.resolves(testAccountOpeningResult);
         lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        
         const response = await accountHandler.createAccount(testCreationRequest);
+        
         expect(response).to.exist;
         expect(response.accountId).to.be.a.uuid('v4');
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
+        
+        expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
         expect(lamdbaInvokeStub).to.have.been.calledOnce;
+        
+        testInsertArgs();
     });
 
     it('Fails where referring user has no account id', async () => {
+        countRefStemStub.resolves(1);
         getAccountIdForUserStub.withArgs(testUserId).resolves(null);
-        insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
+        insertRecordStub.resolves(testAccountOpeningResult);
         lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        
         const response = await accountHandler.createAccount(testCreationRequest);
+        
         expect(response).to.exist;
         expect(response.accountId).to.be.a.uuid('v4');
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
+
+        expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
         expect(lamdbaInvokeStub).to.have.not.been.called;
+        
+        testInsertArgs();
     });
 
     it('Handles non-USER referral type', async () => {
+        countRefStemStub.resolves(1);
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
-        insertRecordStub.withArgs(insertArgs).resolves(testAccountOpeningResult);
+        insertRecordStub.resolves(testAccountOpeningResult);
         lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         testCreationRequest.referralCodeDetails.codeType = 'OTHER';
+        
         const response = await accountHandler.createAccount(testCreationRequest);
+        
         logger('RESULT:', response);
         expect(response).to.exist;
-        expect(response.accountId).to.be.a.uuid('v4');
+        expect(response.accountId).to.be.a.uuid('v4');        
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
+
+        expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.not.been.called;
-        expect(insertRecordStub).to.have.been.calledOnceWithExactly(insertArgs);
         expect(lamdbaInvokeStub).to.have.been.calledOnce;
-    });
-
-});
-
-describe('handlerFunctionCreateAccount', () => {
-    beforeEach(() => {
-        insertRecordStub.reset();
+        
+        testInsertArgs();
     });
     
-    it('End to end, same owner and user', async () => {
-        // withArgs(sinon.match(wellFormedPersistenceReq)).
+    it('End to end, same owner and user, wrapper test, without a first & family name', async () => {
+        countRefStemStub.resolves(10);
         insertRecordStub.resolves(testAccountOpeningResult);
+        
         const response = await accountHandler.create(testValidApiEvent, null);
         
         expect(response.statusCode).to.equal(200);
@@ -206,7 +250,7 @@ describe('handlerFunctionCreateAccount', () => {
         expect(bodyParsed.accountId).to.be.a.uuid('v4');
         expect(bodyParsed.persistedTimeMillis).to.equal(expectedMillis);
 
-        expect(insertRecordStub).to.have.been.calledWith(wellFormedPersistenceReq);
+        testInsertArgs('JUPSAVE11X');
     });
 
     it('Handles errors in accordance with standards', async () => {

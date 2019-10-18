@@ -57,6 +57,17 @@ module.exports.countSettledSaves = async (accountId) => {
     return parseInt(resultOfQuery[0]['count'], 10);
 };
 
+module.exports.fetchInfoForBankRef = async (accountId) => {
+    const accountTable = config.get('tables.accountLedger');
+    const txTable = config.get('tables.accountTransactions');
+    // note: left join in case this is first save ...
+    const query = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
+        `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 group by human_ref`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId]);
+    logger('Result of bank info query: ', resultOfQuery);
+    return camelizeKeys(resultOfQuery[0]);
+};
+
 module.exports.findClientAndFloatForAccount = async (accountId = 'some-account-uid') => {
     const searchQuery = `select default_float_id, responsible_client_id from ${config.get('tables.accountLedger')} where account_id = $1`;
     logger('Search query: ', searchQuery);
@@ -235,14 +246,6 @@ const extractTxDetails = (keyForTransactionId, row) => {
     return obj;
 };
 
-const legacyKeyFix = (passedSaveDetails) => {
-    const saveDetails = { ...passedSaveDetails };
-    saveDetails.amount = saveDetails.amount || saveDetails.savedAmount;
-    saveDetails.unit = saveDetails.unit || saveDetails.savedUnit;
-    saveDetails.currency = saveDetails.currency || saveDetails.savedCurrency;
-    return saveDetails;
-};
-
 /**
  * Core method. Records a user's saving event, with three inserts: one, in the accounts table, records the saving event on the user's account;
  * the second adds the amount of the save to the float; the third allocates a correspdonding amount of the float to the user. Note that the 
@@ -262,7 +265,7 @@ const legacyKeyFix = (passedSaveDetails) => {
  * @param {list(string)} tags (Optional) Any tags to include in the event
  * @param {list(string)} flags (Optional) Any flags to add to the event (e.g., if the saving is restricted in withdrawals)
  */
-module.exports.addSavingToTransactions = async (passedSaveDetails) => {
+module.exports.addSavingToTransactions = async (saveDetails) => {
 
     /*
      * todo : add in validation, lots of it
@@ -275,7 +278,7 @@ module.exports.addSavingToTransactions = async (passedSaveDetails) => {
     const floatAdditionTxId = uuid();
     const floatAllocationTxId = uuid();
 
-    const saveDetails = legacyKeyFix(passedSaveDetails);
+    // const saveDetails = legacyKeyFix(passedSaveDetails);
     const isSaveSettled = saveDetails.settlementStatus === 'SETTLED';
     
     const accountQueryDef = assembleAccountTxInsertion(accountTxId, saveDetails, { floatAdditionTxId, floatAllocationTxId });

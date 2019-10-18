@@ -102,12 +102,37 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
   logger('Result of firing off lambda invoke: ', resultOfTrigger);
 };
 
+// helper, just given elevated problems if failures in here
+const isNonEmptyString = (param) => typeof param === 'string' && param.length > 0;
+
+// note : possible race conditions means that the ref is composed of three parts:
+// a stem : upper case initial & surname, or JSAVE if none provided
+// a count : how many others have that stem, plus one
+// a switch : the unit of the current milliseconds, so we only get a conflict if we have two at
+// the same millisecond or somehow within a multiple of 10 of each other, which will be vanishingly small and can retry
+const generateHumanRef = async (creationRequest) => {
+  let humanRefStem = '';
+  if (creationRequest && isNonEmptyString(creationRequest.firstName) && isNonEmptyString(creationRequest.familyName)) {
+    humanRefStem = `${creationRequest.firstName.substring(0, 1)}${creationRequest.familyName}`.toUpperCase();
+  } else {
+    humanRefStem = 'JUPSAVE';
+  }
+  const priorCount = await persistence.countHumanRef(humanRefStem);
+  logger('Result of prior count: ', priorCount);
+  const timeString = String(moment().valueOf());
+  const assembledRef = `${humanRefStem}${priorCount + 1}${timeString.substr(-1)}`;
+  logger('And assembled: ', assembledRef);
+  return assembledRef;
+};
+
 /**
  * Creates an account within the core ledgers for a user. Returns the persistence result of the transaction.
  * @param {object} creationRequest An object containing the properties described below.
  * @property {string} clientId The id of the client company responsible for this user and account
  * @property {string} defaultFloatId The id for the _default_ float that the user will save to (can be overriden on specific transactions)
  * @property {string} ownerUserId The system wide ID of the user opening the account
+ * @property {string} firstName The user's first name, used for generating the human-readable account reference (for bank deposits etc)
+ * @property {string} familyName As above. Note if either is not provided the default is JSAVEX.
  */
 module.exports.createAccount = async (creationRequest = {
   'clientId': 'zar_savings_co', 
@@ -116,12 +141,15 @@ module.exports.createAccount = async (creationRequest = {
   
   const accountId = uuid();
   logger('Creating an account with ID: ', accountId);
+
+  const humanRef = await generateHumanRef(creationRequest);
   
   const persistenceResult = await persistence.insertAccountRecord({ 
-    'accountId': accountId, 
-    'clientId': creationRequest.clientId,
-    'defaultFloatId': creationRequest.defaultFloatId,
-    'ownerUserId': creationRequest.ownerUserId
+    accountId,
+    humanRef,
+    clientId: creationRequest.clientId,
+    defaultFloatId: creationRequest.defaultFloatId,
+    ownerUserId: creationRequest.ownerUserId
   });
   
   logger('Received from persistence: ', persistenceResult);

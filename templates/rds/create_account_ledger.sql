@@ -2,7 +2,7 @@ create schema if not exists account_data;
 
 -- Flags are for things like withdrawal restrictions (eg if a gifted account), tags are for analytics
 -- Likely to convert tags and flags into integers in time, but premature optimization for now
-
+-- Note : human_ref = human readable reference, used for bank accounts and similar  
 create table if not exists account_data.core_account_ledger (
     account_id uuid not null primary key,
     owner_user_id uuid not null,
@@ -11,6 +11,7 @@ create table if not exists account_data.core_account_ledger (
     default_float_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
     update_time timestamp with time zone not null default current_timestamp,
+    human_ref varchar (100) not null unique,
     frozen boolean not null default false,
     tags text[] default '{}',
     flags text[] default '{}'

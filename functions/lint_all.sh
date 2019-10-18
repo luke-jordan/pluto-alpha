@@ -9,6 +9,7 @@ cd ../boost-api; npm run-script lint
 cd ../user-messaging-api; npm run-script lint
 cd ../user-messaging-api; npm run-script lint
 cd ../admin-api; npm run-script lint
+cd ../third-parties; npm run-script lint
 cd ..
 
 echo "Running module tests"

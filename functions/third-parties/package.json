@@ -5,7 +5,8 @@
   "main": "payment-handler.js",
   "scripts": {
     "test": "DEBUG=jupiter:* nyc mocha",
-    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov"
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
   },
   "author": "Busani Ndlovu",
   "license": "ISC",
