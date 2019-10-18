@@ -112,8 +112,8 @@ const isNonEmptyString = (param) => typeof param === 'string' && param.length > 
 // the same millisecond or somehow within a multiple of 10 of each other, which will be vanishingly small and can retry
 const generateHumanRef = async (creationRequest) => {
   let humanRefStem = '';
-  if (creationRequest && isNonEmptyString(creationRequest.firstName) && isNonEmptyString(creationRequest.familyName)) {
-    humanRefStem = `${creationRequest.firstName.substring(0, 1)}${creationRequest.familyName}`.toUpperCase();
+  if (creationRequest && isNonEmptyString(creationRequest.personalName) && isNonEmptyString(creationRequest.familyName)) {
+    humanRefStem = `${creationRequest.personalName.substring(0, 1)}${creationRequest.familyName}`.toUpperCase();
   } else {
     humanRefStem = 'JUPSAVE';
   }
