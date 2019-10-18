@@ -7,14 +7,14 @@ const request = require('request-promise');
 const crypto = require('crypto');
 
 const POST_KEY_ORDER = config.get('ozow.postKeyOrder');
-const RESPONSE_KEY_ORDER = config.get('ozow.responseKeyOrder');
+// const RESPONSE_KEY_ORDER = config.get('ozow.responseKeyOrder');
 const pvtkey = config.get('ozow.privateKey');
 
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 
 const generateHashCheck = (params) => {
-    const hashFeed = (POST_KEY_ORDER.map((key) => '' + params[key]).join('') + pvtkey).toLowerCase();
+    const hashFeed = (POST_KEY_ORDER.map((key) => String(params[key])).join('') + pvtkey).toLowerCase();
     logger('Created hash feed:', hashFeed);
     return crypto.createHash('sha512').update(hashFeed).digest('hex');
 };
@@ -105,7 +105,7 @@ module.exports.paymentUrlRequest = async (event) => {
 
         if (paymentResponse.errorMessage) {
             throw new Error(paymentResponse.errorMessage);
-        };
+        }
 
         return {
             result: 'PAYMENT_INITIATED',

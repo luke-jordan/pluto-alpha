@@ -54,7 +54,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     it('Gets payment url from third party', async () => {
         const mockPaymentResponse = {
             paymentRequestId: mockRequestId,
-            url:`${mockPaymentUrl}${mockPaymentEndpoint}`,
+            url: `${mockPaymentUrl}${mockPaymentEndpoint}`,
             errorMessage: null
         };
 
@@ -156,7 +156,6 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
 
     const mockTransactionReference = 'TEST_REFERENCE';
     const mockTransactionStatus = {
-        transactionId: uuid(),
         merchantCode: 'TestMerch',
         siteCode: config.get('ozow.siteCode'),
         transactionId: mockTransactionReference,

@@ -84,9 +84,9 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         initiationTimeEpochMillis: testTimeInitiated.valueOf(),
         settlementTimeEpochMillis: testTimeSettled.valueOf(),
         settlementStatus: 'SETTLED',
-        savedAmount: amount,
-        savedCurrency: 'USD',
-        savedUnit: 'HUNDREDTH_CENT',
+        amount: amount,
+        currency: 'USD',
+        unit: 'HUNDREDTH_CENT',
         floatId: testFloatId,
         clientId: testClientId,
         paymentRef: testPaymentRef,
@@ -97,9 +97,9 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         accountId: testAccountId,
         initiationTimeEpochMillis: testTimeInitiated.valueOf(),
         settlementStatus: 'INITIATED',
-        savedAmount: amount,
-        savedCurrency: 'USD',
-        savedUnit: 'HUNDREDTH_CENT'
+        amount: amount,
+        currency: 'USD',
+        unit: 'HUNDREDTH_CENT'
     });
 
     const wrapTestEvent = (eventBody) => ({ body: JSON.stringify(eventBody), requestContext: testAuthContext });
@@ -109,9 +109,9 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         initiationTime: testHelper.momentMatcher(testTimeInitiated),
         settlementTime: testHelper.momentMatcher(testTimeSettled),
         settlementStatus: 'SETTLED',
-        savedAmount: sinon.match.number,
-        savedCurrency: 'USD',
-        savedUnit: 'HUNDREDTH_CENT',
+        amount: sinon.match.number,
+        currency: 'USD',
+        unit: 'HUNDREDTH_CENT',
         floatId: testFloatId,
         clientId: testClientId,
         paymentRef: testPaymentRef,
@@ -122,9 +122,9 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         accountId: testAccountId,
         initiationTime: testHelper.momentMatcher(testTimeInitiated),
         settlementStatus: 'INITIATED',
-        savedAmount: sinon.match.number,
-        savedCurrency: 'USD',
-        savedUnit: 'HUNDREDTH_CENT',
+        amount: sinon.match.number,
+        currency: 'USD',
+        unit: 'HUNDREDTH_CENT',
         clientId: testClientId,
         floatId: testFloatId
     };
@@ -149,14 +149,14 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     beforeEach(() => resetStubHistory());
 
     it('Fails gracefully, RDS failure', async () => {
-        const badEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
+        const badEvent = { ...testSavePendingBase() };
         badEvent.accountId = 'hello-blah-wrong';
         badEvent.clientId = testClientId;
         badEvent.floatId = testFloatId;
 
-        const badRdsRequest = JSON.parse(JSON.stringify(wellFormedMinimalPendingRequestToRds));
+        const badRdsRequest = { ...wellFormedMinimalPendingRequestToRds };
         badRdsRequest.accountId = 'hello-blah-wrong';
-        badRdsRequest.savedAmount = badEvent.savedAmount;
+        badRdsRequest.amount = badEvent.amount;
         badRdsRequest.initiationTime = testHelper.momentMatcher(testTimeInitiated);
         
         addSavingsRdsStub.withArgs(badRdsRequest).rejects(new Error('Error! Bad account ID'));
@@ -194,34 +194,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         const resultOfCallWithNoContext = await handler.initiatePendingSave(noAuthEvent);
         expect(resultOfCallWithNoContext).to.exist;
         expect(resultOfCallWithNoContext).to.have.property('statusCode', 403);
-    });
-
-    it('Saves, with payment at same time, and client and float explicit', async () => {
-        const saveEventWellFormed = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        
-        const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEventWellFormed));
-        
-        expect(saveResult).to.exist;
-        expect(saveResult).to.have.property('statusCode', 200);
-        expect(saveResult.body).to.exist;
-        const saveBody = JSON.parse(saveResult.body);
-        expect(saveBody).to.deep.equal(responseToTxSettled);
-    });
-
-    it('Saves, with payment at same time, but no float explicit', async () => {
-        const saveEvent = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        Reflect.deleteProperty(saveEvent, 'floatId');
-        Reflect.deleteProperty(saveEvent, 'clientId');
-        
-        const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
-        
-        expect(saveResult).to.have.property('statusCode', 200);
-        expect(saveResult.body).to.exist;
-        const saveBody = JSON.parse(saveResult.body);
-        expect(saveBody).to.deep.equal(responseToTxSettled);
-        expect(findFloatStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalSettledRequestToRds);
-        expect(findMatchingTxStub).to.have.not.been.called;
     });
         
     it('Stores pending, if no payment information', async () => {
@@ -264,11 +236,11 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         const saveEventNoAccountId = JSON.parse(JSON.stringify(testSaveSettlementBase()));
         Reflect.deleteProperty(saveEventNoAccountId, 'accountId');
         const saveEventNoAmount = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        Reflect.deleteProperty(saveEventNoAmount, 'savedAmount');
+        Reflect.deleteProperty(saveEventNoAmount, 'amount');
         const saveEventNoCurrency = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        Reflect.deleteProperty(saveEventNoCurrency, 'savedCurrency');
+        Reflect.deleteProperty(saveEventNoCurrency, 'currency');
         const saveEventNoUnit = JSON.parse(JSON.stringify(testSaveSettlementBase()));
-        Reflect.deleteProperty(saveEventNoUnit, 'savedUnit');
+        Reflect.deleteProperty(saveEventNoUnit, 'unit');
 
         const expectedNoAccountError = await handler.initiatePendingSave(wrapTestEvent(saveEventNoAccountId));
         testHelper.checkErrorResultForMsg(expectedNoAccountError, 'Error! No account ID provided for the save');
