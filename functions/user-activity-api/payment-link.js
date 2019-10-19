@@ -64,6 +64,8 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
 
     const wholeCurrencyAmount = opsUtil.convertToUnit(amountDict.amount, amountDict.unit, 'WHOLE_CURRENCY');
     
+    logger('Should send country code: ', CURRENCY_COUNTRY_LOOKUP[amountDict.currency]);
+    
     const payload = {
         transactionId,
         bankReference,
@@ -73,6 +75,7 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
         isTest: true
     };
 
+    logger('Sending payload to payment url generation: ', payload);
     const urlInvocation = {
         FunctionName: config.get('lambdas.paymentUrlGet'),
         InvocationType: 'RequestResponse',

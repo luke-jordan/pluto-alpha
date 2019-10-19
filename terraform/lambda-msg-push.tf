@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_push" {
   role                           = "${aws_iam_role.message_push_role.arn}"
   handler                        = "message-push-handler.sendPushNotifications"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

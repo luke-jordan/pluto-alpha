@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_instruct_list" {
   role                           = "${aws_iam_role.message_instruct_list_role.arn}"
   handler                        = "msg-instruction-handler.listActiveMessages"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

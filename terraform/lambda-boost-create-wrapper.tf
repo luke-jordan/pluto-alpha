@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_create_wrapper" {
   role                           = "${aws_iam_role.boost_create_wrapper_role.arn}"
   handler                        = "boost-create-handler.createBoostWrapper"
   memory_size                    = 512
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

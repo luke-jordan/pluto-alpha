@@ -9,7 +9,7 @@ resource "aws_lambda_function" "user_event_process" {
   role                           = "${aws_iam_role.user_event_process_role.arn}"
   handler                        = "event-handler.handleUserEvent"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

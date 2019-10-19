@@ -46,7 +46,7 @@ To install docker and docker-compose, run the following commands:
 Run the following commands in the terminal (You can run them concurrently in 3 separate terminals)
 `docker pull localstack/localstack:latest`
 `docker pull postgres`
-`docker pull lambci/lambda:nodejs8.10`
+`docker pull lambci/lambda:nodejs10.x`
 
 Test that these are all installed correctly by running `docker-compose up` in the root directory of the `pluto-alpha` project..
 

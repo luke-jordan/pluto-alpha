@@ -14,7 +14,9 @@ const pvtkey = config.get('ozow.privateKey');
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 
 const generateHashCheck = (params) => {
-    const hashFeed = (POST_KEY_ORDER.map((key) => String(params[key])).join('') + pvtkey).toLowerCase();
+    const hashFeed = (POST_KEY_ORDER.
+            filter((key) => Reflect.has(params, key)).
+            map((key) => String(params[key])).join('') + pvtkey).toLowerCase();
     logger('Created hash feed:', hashFeed);
     return crypto.createHash('sha512').update(hashFeed).digest('hex');
 };
@@ -37,9 +39,9 @@ const assembleBody = (params) => {
     const body = {
         TransactionReference: params.transactionId,
         BankReference: params.bankReference,
-        CancelUrl: params.cancelUrl ? params.cancelUrl : config.get('ozow.endpoints.cancelUrl'),
-        ErrorUrl: params.errorUrl ? params.errorUrl : config.get('ozow.endpoints.errorUrl'),
-        SuccessUrl: params.successUrl ? params.successUrl : config.get('ozow.endpoints.successUrl'),
+        // CancelUrl: params.cancelUrl ? params.cancelUrl : config.get('ozow.endpoints.cancelUrl'),
+        // ErrorUrl: params.errorUrl ? params.errorUrl : config.get('ozow.endpoints.errorUrl'),
+        // SuccessUrl: params.successUrl ? params.successUrl : config.get('ozow.endpoints.successUrl'),
         IsTest: params.isTest,
         SiteCode: config.get('ozow.siteCode'),
         CountryCode: params.countryCode,

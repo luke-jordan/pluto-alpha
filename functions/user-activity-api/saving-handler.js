@@ -101,7 +101,7 @@ const assemblePaymentInfo = async (saveInformation, transactionId) => {
   const amountDict = {
     amount: saveInformation.amount,
     unit: saveInformation.unit,
-    currency: saveInformation.unit
+    currency: saveInformation.currency
   };
 
   return { transactionId, accountInfo, amountDict };
@@ -156,7 +156,9 @@ module.exports.initiatePendingSave = async (event) => {
     // go and get a payment link
     let urlToCompletePayment = 'https://pay.here/1234';
     if (saveInformation.testProperLink) {
-      const paymentInfo = await assemblePaymentInfo(saveInformation, initiationResult.transactionId);
+      const transactionId = initiationResult.transactionDetails[0].accountTransactionId;
+      logger('Extracted transaction ID: ', transactionId);
+      const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId);
       const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
       logger('Got payment link result: ', paymentLinkResult); // todo : stash the bank ref & payment provider ref
       urlToCompletePayment = paymentLinkResult.paymentUrl;

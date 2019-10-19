@@ -214,6 +214,32 @@ resource "aws_iam_policy" "lambda_invoke_msg_instruct_access" {
 EOF
 }
 
+resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
+    name = "lambda_invoke_payment_url_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PaymentUrlLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.payment_url_request.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+/////////////// COMPOSITE POLICIES FOR PROCESSING LAMBDAS THAT DO A LOT ///////////////////
+
 resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
     name = "lambda_user_event_process_access_${terraform.workspace}"
     path = "/"

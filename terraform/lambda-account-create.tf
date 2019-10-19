@@ -10,7 +10,7 @@ resource "aws_lambda_function" "account_create" {
   handler                        = "account-handler.create"
   memory_size                    = 256
   reserved_concurrent_executions = 20
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

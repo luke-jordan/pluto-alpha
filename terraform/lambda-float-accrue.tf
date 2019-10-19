@@ -9,7 +9,7 @@ resource "aws_lambda_function" "float_accrue" {
   role                           = "${aws_iam_role.float_accrue_role.arn}"
   handler                        = "accrual-handler.accrue"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
