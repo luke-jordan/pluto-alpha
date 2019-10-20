@@ -238,7 +238,7 @@ resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
 EOF
 }
 
-/////////////// COMPOSITE POLICIES FOR PROCESSING LAMBDAS THAT DO A LOT ///////////////////
+/////////////// COMPOSITE POLICIES FOR PROCESSING/ADMIN LAMBDAS THAT DO A LOT ///////////////////
 
 resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
     name = "lambda_user_event_process_access_${terraform.workspace}"
@@ -346,6 +346,30 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
                 "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "admin_user_lambda_policy" {
+    name = "lambda_ops_admin_user_acces_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "BalanceLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.balance_fetch.arn}"
+            ]
         }
     ]
 }

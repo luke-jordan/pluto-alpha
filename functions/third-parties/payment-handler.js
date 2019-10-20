@@ -15,8 +15,8 @@ const warmupCheck = (event) => !event || typeof event !== 'object' || Object.key
 
 const generateHashCheck = (params) => {
     const hashFeed = (POST_KEY_ORDER.
-            filter((key) => Reflect.has(params, key)).
-            map((key) => String(params[key])).join('') + pvtkey).toLowerCase();
+        filter((key) => params[key]).
+        map((key) => String(params[key])).join('') + pvtkey).toLowerCase();
     logger('Created hash feed:', hashFeed);
     return crypto.createHash('sha512').update(hashFeed).digest('hex');
 };
@@ -39,9 +39,9 @@ const assembleBody = (params) => {
     const body = {
         TransactionReference: params.transactionId,
         BankReference: params.bankReference,
-        // CancelUrl: params.cancelUrl ? params.cancelUrl : config.get('ozow.endpoints.cancelUrl'),
-        // ErrorUrl: params.errorUrl ? params.errorUrl : config.get('ozow.endpoints.errorUrl'),
-        // SuccessUrl: params.successUrl ? params.successUrl : config.get('ozow.endpoints.successUrl'),
+        CancelUrl: params.cancelUrl ? params.cancelUrl : config.get('ozow.endpoints.cancelUrl'),
+        ErrorUrl: params.errorUrl ? params.errorUrl : config.get('ozow.endpoints.errorUrl'),
+        SuccessUrl: params.successUrl ? params.successUrl : config.get('ozow.endpoints.successUrl'),
         IsTest: params.isTest,
         SiteCode: config.get('ozow.siteCode'),
         CountryCode: params.countryCode,
@@ -49,9 +49,13 @@ const assembleBody = (params) => {
         Amount: params.amount
     };
 
+    // then clean up empty properties
+    Object.keys(body).forEach((key) => (!body[key]) && Reflect.deleteProperty(body, key));
+
     const hashCheck = generateHashCheck(body);
     logger('Generated hashCheck:', hashCheck);
     body.HashCheck = hashCheck;
+    body.GenerateShortUrl = true;
     return body;
 };
 

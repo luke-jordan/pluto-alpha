@@ -31,3 +31,9 @@ module.exports.unauthorizedResponse = {
     statusCode: 403,
     headers: corsHeaders
 };
+
+module.exports.invokeLambda = (functionName, payload, sync = true) => ({
+    FunctionName: functionName,
+    InvocationType: sync ? 'RequestResponse' : 'Event',
+    Payload: JSON.stringify(payload)
+});

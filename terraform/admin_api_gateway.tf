@@ -10,6 +10,7 @@ resource "aws_api_gateway_deployment" "admin_api_deployment" {
 
     depends_on = [
         aws_api_gateway_integration.admin_user_count,
+        aws_api_gateway_integration.admin_user_find,
         aws_api_gateway_integration.message_instruct_create,
         aws_api_gateway_integration.message_instruct_list,
         aws_api_gateway_integration.message_instruct_update,
@@ -86,10 +87,16 @@ resource "aws_api_gateway_base_path_mapping" "admin_api_resource_mapping" {
 
 /////////////////////// USER COUNTS ///////////////////////////////////////////////////////////////////
 
-resource "aws_api_gateway_resource" "admin_user_count" {
+resource "aws_api_gateway_resource" "admin_user_path_root" {
   rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
   parent_id   = "${aws_api_gateway_rest_api.admin_api_gateway.root_resource_id}"
   path_part   = "user"
+}
+
+resource "aws_api_gateway_resource" "admin_user_count" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.admin_user_path_root.id}"
+  path_part   = "count"
 }
 
 resource "aws_api_gateway_method" "admin_user_count" {
@@ -121,6 +128,45 @@ module "admin_user_count_cors" {
   source = "./modules/cors"
   api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
   api_resource_id = "${aws_api_gateway_resource.admin_user_count.id}"
+}
+
+/////////////////////// USER FETCH ///////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "admin_user_find" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.admin_user_path_root.id}"
+  path_part   = "find"
+}
+
+resource "aws_api_gateway_method" "admin_user_find" {
+  rest_api_id   = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.admin_user_find.id}"
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.admin_jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "admin_user_find" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.admin_user_find.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.admin_api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "admin_user_find" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.admin_user_find.resource_id}"
+  http_method = "${aws_api_gateway_method.admin_user_find.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.admin_user_find.invoke_arn}"
+}
+
+module "admin_user_find_cors" {
+  source = "./modules/cors"
+  api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  api_resource_id = "${aws_api_gateway_resource.admin_user_find.id}"
 }
 
 //////////////////////// CLIENT & FLOAT MANAGEMENT /////////////////////////////////////////////////////

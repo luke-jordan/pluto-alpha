@@ -41,12 +41,12 @@ describe('Marshalls account insertion properly', () => {
 
     it('Counts human reference stems correctly', async () => {
         const testRef = 'LJORDAN';
-        const expectedQuery = `select count(human_ref) from ${config.get('tables.accountData')} where human_ref like '$1%'`;
+        const expectedQuery = `select count(human_ref) from ${config.get('tables.accountData')} where human_ref like $1`;
         queryStub.resolves([{ 'count': 10 }]);
 
         const resultOfRefCount = await rds.countHumanRef(testRef);
         expect(resultOfRefCount).to.equal(10);
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testRef]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [`${testRef}%`]);
     });
 
     it('Marshalls happy path account insertion properly', async () => {

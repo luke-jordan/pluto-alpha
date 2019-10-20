@@ -1,44 +1,14 @@
 'use strict';
 
 const logger = require('debug')('pluto:admin:rds');
-const config = require('config');
+// const config = require('config');
 const moment = require('moment');
 
 const persistence = require('./persistence/rds.analytics');
 const dynamo = require('./persistence/dynamo.float');
 
 const adminUtil = require('./admin.util');
-const opsCommonUtil = require('ops-util-common');
-
-/**
- * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default
- * @param {object} event An event containing the request context and the request body. The body's properties a decribed below.
- * @property {string} startTimeMillis If left out, default is set by config but will generally be six months ago
- * @property {string} endTimeMillis If left out, default is set to now
- * @property {boolean} includeNewButNoSave determines whether to include in the count accounts that were created in the time window but have not yet had a settled save transaction. This can be useful for diagnosing drop outs
- */
-module.exports.fetchUserCounts = async (event) => {
-    if (!adminUtil.isUserAuthorized(event)) {
-        return adminUtil.unauthorizedResponse;
-    }
-
-    const params = opsCommonUtil.extractQueryParams(event);
-    logger('Finding user Ids with params: ', params);
-
-    const defaultDaysBack = config.get('defaults.userCounts.daysBack');
-
-    logger(`Do we have a start time millis ? : ${Reflect.has(params, 'startTimeMillis')}, and it is : ${params.startTimeMillis}`);
-
-    const startTime = Reflect.has(params, 'startTimeMillis') ? moment(parseInt(params.startTimeMillis, 10)) : moment().subtract(defaultDaysBack, 'days');
-    const endTime = Reflect.has(params, 'endTimeMillis') ? moment(parseInt(params.endTimeMillis, 10)) : moment();
-    const includeNoTxAccountsCreatedInWindow = typeof params.includeNewButNoSave === 'boolean' && params.includeNewButNoSave;
-
-    const userIdCount = await persistence.countUserIdsWithAccounts(startTime, endTime, includeNoTxAccountsCreatedInWindow);
-
-    logger('Obtained user count: ', userIdCount);
-
-    return adminUtil.wrapHttpResponse({ userCount: userIdCount });
-};
+// const opsCommonUtil = require('ops-util-common');
 
 const sumBonusPools = (bonusPoolInfo, currency) => {
     let bonusPoolSum = 0;

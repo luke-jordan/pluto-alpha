@@ -152,18 +152,16 @@ module.exports.initiatePendingSave = async (event) => {
 
     // todo : verify user account ownership
     const initiationResult = await save(saveInformation);
-    
-    // go and get a payment link
-    let urlToCompletePayment = 'https://pay.here/1234';
-    if (saveInformation.testProperLink) {
-      const transactionId = initiationResult.transactionDetails[0].accountTransactionId;
-      logger('Extracted transaction ID: ', transactionId);
-      const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId);
-      const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
-      logger('Got payment link result: ', paymentLinkResult); // todo : stash the bank ref & payment provider ref
-      urlToCompletePayment = paymentLinkResult.paymentUrl;
-    }
 
+    // todo : print a 'contact support?' in the URL if there is an error?
+    const transactionId = initiationResult.transactionDetails[0].accountTransactionId;
+    logger('Extracted transaction ID: ', transactionId);
+    const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId);
+    const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
+    logger('Got payment link result: ', paymentLinkResult); // todo : stash the bank ref & payment provider ref
+    const urlToCompletePayment = paymentLinkResult.paymentUrl;
+
+    logger('Returning with url to complete payment: ', urlToCompletePayment);
     initiationResult.paymentRedirectDetails = { urlToCompletePayment };
 
     return { statusCode: 200, body: JSON.stringify(initiationResult) };

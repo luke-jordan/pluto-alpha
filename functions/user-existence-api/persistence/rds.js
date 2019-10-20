@@ -10,8 +10,8 @@ const rdsConnection = new RdsConnection(config.get('db'));
 module.exports.countHumanRef = async (accountRefStem) => {
     const tableName = config.get('tables.accountData');
     // will need to see how node-psql escaping hadnles this 
-    const query = `select count(human_ref) from ${tableName} where human_ref like '$1%'`;
-    const countResult = await rdsConnection.selectQuery(query, [accountRefStem]);
+    const query = `select count(human_ref) from ${tableName} where human_ref like $1`;
+    const countResult = await rdsConnection.selectQuery(query, [`${accountRefStem}%`]);
     logger('Received from count query: ', countResult);
     return parseInt(countResult[0]['count'], 10);
 };

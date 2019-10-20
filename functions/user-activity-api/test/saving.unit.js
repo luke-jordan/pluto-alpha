@@ -46,6 +46,9 @@ const updateSaveRdsStub = sinon.stub();
 const fetchTransactionStub = sinon.stub();
 const countSettledSavesStub = sinon.stub();
 
+const fetchBankRefStub = sinon.stub();
+const getPaymentUrlStub = sinon.stub();
+
 const publishStub = sinon.stub();
 
 const momentStub = sinon.stub();
@@ -57,7 +60,11 @@ const handler = proxyquire('../saving-handler', {
         'addSavingToTransactions': addSavingsRdsStub,
         'updateSaveTxToSettled': updateSaveRdsStub,
         'fetchTransaction': fetchTransactionStub,
-        'countSettledSaves': countSettledSavesStub
+        'countSettledSaves': countSettledSavesStub,
+        'fetchInfoForBankRef': fetchBankRefStub
+    },
+    './payment-link': {
+        'getPaymentLink': getPaymentUrlStub
     },
     'publish-common': {
         'publishUserEvent': publishStub
@@ -78,6 +85,8 @@ const resetStubHistory = () => {
 };
 
 describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward, sync or async', () => {
+
+    const testTransactionId = uuid();
 
     const testSaveSettlementBase = (amount = testAmounts[0]) => ({
         accountId: testAccountId,
@@ -130,14 +139,21 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     };
     
     const responseToTxSettled = {
-        transactionDetails: [{ accountTransactionId: uuid(), creationTime: moment().format() }, 
+        transactionDetails: [{ accountTransactionId: testTransactionId, creationTime: moment().format() }, 
             { floatAdditionTransactionId: uuid(), creationTime: moment().format() },
             { floatAllocationTransactionId: uuid(), creationTime: moment().format() }],
         newBalance: { amount: sumOfTestAmounts, unit: 'HUNDREDTH_CENT' }
     };
 
     const responseToTxPending = {
-        transactionDetails: [{ accountTransactionId: uuid(), persistedTimeEpochMillis: moment().format() }]
+        transactionDetails: [{ accountTransactionId: testTransactionId, persistedTimeEpochMillis: moment().format() }]
+    };
+
+    const testBankRefInfo = { humanRef: 'JUPSAVER', count: 10 };
+    const expectedPaymentInfo = {
+        transactionId: testTransactionId,
+        accountInfo: { bankRefStem: 'JUPSAVER', priorSaveCount: 10 },
+        amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
     };
 
     before(() => {
@@ -181,12 +197,18 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
         Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
         momentStub.returns(testTimeInitiated);
-        logger('Seeking: ', testTimeInitiated.valueOf());
+
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves({ paymentUrl: 'https://pay.me/1234 '});
+        
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
         logger('Received: ', resultOfWrapperCall);
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         expect(saveBody).to.deep.equal(responseToTxPending);
+
+        expect(fetchBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
     });
 
     it('Wrapper fails if no auth context', async () => {

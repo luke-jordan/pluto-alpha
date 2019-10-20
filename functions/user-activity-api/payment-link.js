@@ -85,7 +85,8 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
     const paymentUrlResponse = await lambda.invoke(urlInvocation).promise();
     logger('Result of payment url: ', paymentUrlResponse);
 
-    return paymentUrlResponse['Payload'];
+    const rawPayload = paymentUrlResponse['Payload'];
+    return typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
 };
 
 module.exports.checkPayment = async ({ transactionId }) => {
