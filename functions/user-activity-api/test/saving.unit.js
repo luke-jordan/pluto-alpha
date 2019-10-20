@@ -64,7 +64,8 @@ const handler = proxyquire('../saving-handler', {
         'fetchInfoForBankRef': fetchBankRefStub
     },
     './payment-link': {
-        'getPaymentLink': getPaymentUrlStub
+        'getPaymentLink': getPaymentUrlStub,
+        'warmUpPayment': sinon.stub() // storing/inspecting would add clutter for no robustness
     },
     'publish-common': {
         'publishUserEvent': publishStub

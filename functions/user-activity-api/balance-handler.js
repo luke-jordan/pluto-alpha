@@ -105,7 +105,8 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
 module.exports.balance = async (event) => {
   try {
     if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
-      logger('No event! Must be warmup lambda');
+      logger('No event! Must be warmup lambda, open Dynamo gateway and exit');
+      await dynamodb.warmupCall();
       return { statusCode: 400, body: 'Empty invocation' };
     }
 
@@ -186,7 +187,8 @@ module.exports.balance = async (event) => {
 module.exports.balanceWrapper = async (event) => {
   try {
     if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
-      logger('No event! Must be warmup lambda');
+      logger('No event! Must be warmup lambda, open Dynamo gateway and exit');
+      dynamodb.warmupCall();
       return { statusCode: 400, body: 'Empty invocation' };
     }
 

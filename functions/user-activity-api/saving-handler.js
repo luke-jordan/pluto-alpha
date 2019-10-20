@@ -119,6 +119,9 @@ const assemblePaymentInfo = async (saveInformation, transactionId) => {
 module.exports.initiatePendingSave = async (event) => {
   try {
     if (warmupCheck(event)) {
+      logger('Warming up; tell payment link to stay warm, else fine');
+      await payment.warmUpPayment();
+      logger('Warmed payment, return');
       return warmupResponse;
     }
 

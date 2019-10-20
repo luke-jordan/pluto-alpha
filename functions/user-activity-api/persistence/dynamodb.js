@@ -29,3 +29,9 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     
     return rowFromDynamo;
 };
+
+module.exports.warmupCall = async () => {
+    const emptyRow = await dynamoCommon.fetchSingleRow(config.get('tables.clientFloatVars'), { clientId: 'non', floatId: 'existent' });
+    logger('Warmup result: ', emptyRow);
+    return emptyRow;
+};

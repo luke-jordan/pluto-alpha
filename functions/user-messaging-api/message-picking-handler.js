@@ -308,6 +308,10 @@ const dryRunGameChaseArrows = require('./dry-run-arrow');
  */
 module.exports.getNextMessageForUser = async (event) => {
     try {
+        if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
+            logger('Warmup trigger, just keep live and exit');
+        }
+
         const userDetails = event.requestContext ? event.requestContext.authorizer : null;
         if (!userDetails) {
             return { statusCode: 403 };

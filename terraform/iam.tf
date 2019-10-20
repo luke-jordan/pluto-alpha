@@ -57,10 +57,11 @@ resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch_wrapper",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_initiate",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_payment_check"
+                "${aws_lambda_function.balance_fetch.arn}",
+                "${aws_lambda_function.balance_fetch_wrapper.arn}",
+                "${aws_lambda_function.save_initiate.arn}",
+                "${aws_lambda_function.save_payment_check.arn}",
+                "${aws_lambda_function.message_user_fetch.arn}"
             ],
             "Condition": {
                 "StringEquals": {

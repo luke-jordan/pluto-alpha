@@ -170,6 +170,13 @@ module.exports.createAccount = async (creationRequest = {
  */
 module.exports.create = async (event) => {
   try {
+    if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
+      logger('Warmup, just keep alive for now, with a lambda gateway open');
+      await lambda.invoke({ FunctionName: config.get('lambda.createBoost'), InvocationType: 'Event', Payload: JSON.stringify({}) }).promise();
+      logger('Done keeping gateway open, exiting');
+      return { statusCode: 400, body: 'Empty invocation' };
+    }
+
     const request = exports.transformEvent(event);
     logger('Transform inbound event completed, request: ', JSON.stringify(request));
 
