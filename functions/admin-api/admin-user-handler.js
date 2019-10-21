@@ -46,6 +46,61 @@ module.exports.fetchUserCounts = async (event) => {
     return adminUtil.wrapHttpResponse({ userCount: userIdCount });
 };
 
+const fetchUserProfile = async (systemWideUserId) => {
+    const profileFetchLambdaInvoke = adminUtil.invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId });
+    const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
+    logger('Result of profile fetch: ', profileFetchResult);
+
+    return extractLambdaBody(profileFetchResult);
+};
+
+// fetches user events for the last 6 (?) months (... can extend when we have users long than that & have thought through data etc)
+const obtainUserHistory = async (systemWideUserId) => {
+    const startDate = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days').valueOf();
+    const eventTypes = config.get('defaults.userHistory.eventTypes');
+
+    const userHistoryEvent = {
+        userId: systemWideUserId,
+        eventTypes,
+        startDate,
+        endDate: moment().valueOf()
+    };
+
+    const historyInvocation = adminUtil.invokeLambda(config.get('lambdas.userHistory'), userHistoryEvent);
+    const historyFetchResult = await lambda.invoke(historyInvocation).promise();
+    logger('Result of history fetch: ', historyFetchResult);
+
+    // this one is not wrapped because it is only ever used on direct invocation
+    if (historyFetchResult['StatusCode'] !== 200 || JSON.parse(historyFetchResult['Payload']).result !== 'success') {
+        logger('ERROR! Something went wrong fetching history');
+    }
+
+    return JSON.parse(historyFetchResult['Payload']).userEvents;
+};
+
+const obtainUserPendingTx = async (systemWideUserId) => {
+    // todo : make sure includes withdrawals
+    logger('Also fetching pending transactions for user ...');
+    const startMoment = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days');
+    return persistence.fetchUserPendingTransactions(systemWideUserId, startMoment);
+};
+
+const obtainUserBalance = async (userProfile) => {
+    const balancePayload = {
+        userId: userProfile.systemWideUserId,
+        currency: userProfile.defaultCurrency,
+        atEpochMillis: moment().valueOf(),
+        timezone: userProfile.defaultTimezone, 
+        clientId: userProfile.clientId,
+        daysToProject: 0
+    };
+
+    const balanceLambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.fetchUserBalance'), balancePayload);
+
+    const userBalanceResult = await lambda.invoke(balanceLambdaInvocation).promise();
+    return extractLambdaBody(userBalanceResult);
+};
+
 /**
  * Function for looking up a user and returning basic data about them
  * @param {object} event An event object containing the request context and query paramaters specifying the search to make
@@ -72,27 +127,20 @@ module.exports.lookUpUser = async (event) => {
         const { systemWideUserId } = JSON.parse(systemIdPayload.body);
         logger(`From query params: ${JSON.stringify(lookUpPayload)}, got system ID: ${systemWideUserId}`);
 
-        const profileFetchLambdaInvoke = adminUtil.invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId });
-        const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
-        logger('Result of profile fetch: ', profileFetchResult);
+        const [userProfile, pendingTransactions, userHistory] = await Promise.all([
+            fetchUserProfile(systemWideUserId), obtainUserPendingTx(systemWideUserId), obtainUserHistory(systemWideUserId)
+        ]);
 
-        const userProfile = extractLambdaBody(profileFetchResult);
+        // need profile currency etc for this one, so can't parallel process with above
+        const userBalance = await obtainUserBalance(userProfile);
 
-        const balancePayload = {
-            userId: systemWideUserId,
-            currency: userProfile.defaultCurrency,
-            atEpochMillis: moment().valueOf(),
-            timezone: userProfile.defaultTimezone, 
-            clientId: userProfile.clientId,
-            daysToProject: 0
+        const resultObject = { 
+            ...userProfile, 
+            userBalance,
+            pendingTransactions,
+            userHistory 
         };
-
-        const balanceLambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.fetchUserBalance'), balancePayload);
-
-        const userBalanceResult = await lambda.invoke(balanceLambdaInvocation).promise();
-        const userBalance = extractLambdaBody(userBalanceResult);
-
-        const resultObject = { ...userProfile, userBalance };
+        
         logger('Returning: ', resultObject);
 
         return opsCommonUtil.wrapResponse(resultObject);

@@ -8,7 +8,7 @@ const persistence = require('./persistence/rds.analytics');
 const dynamo = require('./persistence/dynamo.float');
 
 const adminUtil = require('./admin.util');
-// const opsCommonUtil = require('ops-util-common');
+const opsCommonUtil = require('ops-util-common');
 
 const sumBonusPools = (bonusPoolInfo, currency) => {
     let bonusPoolSum = 0;
@@ -134,4 +134,20 @@ module.exports.fetchClientFloatVars = async (event) => {
     logger('Assembled client float data: ', assembledResults); 
 
     return adminUtil.wrapHttpResponse(assembledResults);
+};
+
+/**
+ * Fetches the details on a client float, including, e.g., accrual rates, referral codes, also soon competitor rates
+ */
+module.exports.fetchClientFloatDetails = async (event) => {
+    if (!adminUtil.isUserAuthorized(event)) {
+        return adminUtil.unauthorizedResponse;
+    }
+
+    const params = opsCommonUtil.extractQueryParams(event);
+
+    const clientFloatVars = await dynamo.fetchClientFloatVars(params.clientId, params.floatId);
+    logger('Assembled client float vars: ', clientFloatVars);
+
+    return adminUtil.wrapHttpResponse(clientFloatVars);
 };

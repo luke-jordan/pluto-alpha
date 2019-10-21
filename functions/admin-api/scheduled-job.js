@@ -56,7 +56,16 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     logger(`Altogether, with annual bps of ${accrualRateAnnualBps}, and a float balance of ${floatAmountHunCent}, we have an accrual of ${todayAccrualAmount.toNumber()}`);
 
     const identifierToUse = `SYSTEM_CALC_DAILY_${calculationTimeMillis}`;
+    
+    // add calculation basis for logging, notification email, etc. 
+    const calculationBasis = {
+        floatAmountHunCent,
+        accrualRateAnnualBps,
+        millisSinceLastCalc,
+        accrualRateApplied: accrualRateToApply.toNumber()
+    };
 
+    // todo : store the calculation basis in the float log
     return {
         clientId: clientFloatInfo.clientId,
         floatId: clientFloatInfo.floatId,
@@ -64,7 +73,8 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
         currency: clientFloatInfo.currency,
         unit: 'HUNDREDTH_CENT',
         referenceTimeMillis: calculationTimeMillis,
-        backingEntityIdentifier: identifierToUse
+        backingEntityIdentifier: identifierToUse,
+        calculationBasis
     };
 };
 
@@ -79,18 +89,62 @@ const assembleAccrualInvocation = async (clientFloatInfo) => {
 
     logger('Accrual invocation: ', accrualInvocation);
 
-    return lambda.invoke(accrualInvocation).promise();
+    return accrualInvocation;
+};
+
+const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
+    const resultPayload = JSON.parse(accrualInvocationResult['Payload']);
+    const resultBody = JSON.parse(resultPayload.body);
+
+    const accrualInstruction = JSON.parse(accrualInvocation['Payload']);
+    const unit = accrualInstruction.unit;
+    const currency = accrualInstruction.currency;
+    
+    const bonusAmountRaw = resultBody.entityAllocations.bonusShare;
+    const companyShareRaw = resultBody.entityAllocations.clientShare;
+
+    const simpleFormat = (amount) => `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
+
+    const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.length;
+    const bonusAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation') 
+        ? 'None' : '(yes : insert excess)';
+
+    return {
+        floatAmount: simpleFormat(accrualInstruction.calculationBasis.floatAmountHunCent),
+        baseAccrualRate: `${accrualInstruction.calculationBasis.accrualRateAnnualBps} bps`,
+        dailyRate: `${accrualInstruction.calculationBasis.accrualRateApplied} %`,
+        accrualAmount: simpleFormat(accrualInstruction.accrualAmount),
+        bonusAmount: simpleFormat(bonusAmountRaw),
+        companyAmount: simpleFormat(companyShareRaw),
+        numberUserAllocations,
+        bonusAllocation: JSON.stringify(bonusAllocation)
+    };
 };
 
 const initiateFloatAccruals = async () => {
     const clientsAndFloats = await dynamoFloat.listClientFloats();
     logger('Have client and float info: ', clientsAndFloats);
     
-    const accrualInvocationPromises = clientsAndFloats.map((clientAndFloat) => assembleAccrualInvocation(clientAndFloat));
-    const accrualInvocationResults = await Promise.all(accrualInvocationPromises);
+    // we do these in two distinct stages so that we can retain the calculation basis etc in the invocations
+    // we do rely somewhat on Promise.all preserving order, which is part of spec, but keep an eye out once many floats
+    const accrualInvocations = await Promise.all(clientsAndFloats.map((clientAndFloat) => assembleAccrualInvocation(clientAndFloat)));
+    const accrualInvocationResults = await Promise.all(accrualInvocations.map((invocation) => lambda.invoke(invocation).promise()));
 
     logger('Results of accruals: ', accrualInvocationResults);
-    return accrualInvocationPromises.length;
+
+    // todo: use more robust templatting so can handle indefinite length arrays, for now just do this one
+    const accrualEmailDetails = extractParamsForEmail(accrualInvocations[0], accrualInvocationResults[0]);
+
+    const emailResult = await publisher.sendSystemEmail({
+        subject: 'Daily float accrual results',
+        toList: config.get('email.accrualResult.toList'),
+        bodyTemplateKey: config.get('email.accrualResult.templateKey'),
+        templateVariables: accrualEmailDetails
+    });
+
+    logger('Result of email send: ', emailResult);
+
+    return accrualInvocations.length;
 };
 
 const sendSystemStats = async () => {

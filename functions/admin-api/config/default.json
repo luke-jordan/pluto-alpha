@@ -15,12 +15,20 @@
         "countryClientTable": "CountryClientTable"
     },
     "lambdas": {
-        "processAccrual": "float_accrue"
+        "processAccrual": "float_accrue",
+        "systemWideIdLookup": "profile_find_by_details",
+        "fetchProfile": "profile_fetch",
+        "fetchUserBalance": "balance_fetch",
+        "userHistory": "user_log_reader"
     },
     "email": {
         "systemStats": {
             "toList": ["luke@jupitersave.com", "avish@jupitersave.com"],
             "templateKey": "emails/systemStatsEmail.html"
+        },
+        "accrualResult": {
+            "toList": ["luke@jupitersave.com"],
+            "templateKey": "emails/floatAccrualEmail.html"
         }
     },
     "defaults": {
@@ -28,7 +36,11 @@
             "daysBack": 180
         },
         "txExpiry": {
-            "daysBack": 7
+            "daysBack": 30
+        },
+        "userHistory": {
+            "eventTypes": ["USER_LOGIN", "SAVING_PAYMENT_SUCCESSFUL", "WITHDRAWAL_EVENT_CONFIRMED", "WITHDRAWAL_COMPLETED", "PASSWORD_SET", "USER_REGISTERED", "STATUS_CHANGED"],
+            "daysInHistory": 180
         }
     }
 }

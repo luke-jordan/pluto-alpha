@@ -164,6 +164,7 @@ module.exports.allocate = async (event) => {
       bonusAlloc.relatedEntityId = params.backingEntityIdentifier;
     }
     bonusAllocationResult = await rds.allocateFloat(params.clientId, params.floatId, [bonusAlloc]);
+    bonusAllocationResult.amount = excessAmount;
     shareMap.delete(constants.EXCESSS_KEY);
   }
 
@@ -182,11 +183,8 @@ module.exports.allocate = async (event) => {
   // logger('Result of allocations: ', resultOfAllocations);
   
   return {
-    statusCode: 200,
-    body: JSON.stringify({
       allocationRecords: resultOfAllocations,
       bonusAllocation: bonusAllocationResult || { }
-    })
   };
 };
 

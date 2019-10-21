@@ -5,6 +5,7 @@ const config = require('config');
 const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
+const camelcaseKeys = require('camelcase-keys');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
@@ -44,6 +45,31 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
     const resultOfCount = await rdsConnection.selectQuery(countQuery, values);
     logger('Result of count: ', resultOfCount);
     return resultOfCount[0]['count'];
+};
+
+module.exports.fetchUserPendingTransactions = async (systemWideUserId, startMoment) => {
+    logger('Fetching pending transactions for user with ID: ', systemWideUserId);
+
+    const accountTable = config.get('tables.accountTable');
+    const txTable = config.get('tables.transactionTable');
+
+    const columns = `transaction_id, ${accountTable}.account_id, ${txTable}.creation_time, transaction_type, settlement_status, ` + 
+        `amount, currency, unit, human_reference`;
+
+    const fetchQuery = `select ${columns} from ${accountTable} inner join ${txTable} on ` +
+        `${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.owner_user_id = $1 and ` +
+        `${txTable}.creation_time > $2 and settlement_status = $3`;
+    
+    const values = [systemWideUserId, startMoment.format(), 'PENDING'];
+
+    logger('Sending query to RDS: ', fetchQuery);
+    logger('With values: ', values);
+
+    const resultOfQuery = await rdsConnection.selectQuery(fetchQuery, values);
+
+    logger('Result of pending TX query: ', resultOfQuery);
+
+    return camelcaseKeys(resultOfQuery);
 };
 
 const aggregateFloatTotals = (resultRows) => {

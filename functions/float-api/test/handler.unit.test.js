@@ -408,7 +408,7 @@ describe('Primary allocation of unallocated float lamdba', () => {
             resolves(mockResultFromRds);
         
         
-        const expectedBody = JSON.stringify({ allocationRecords: mockResultFromRds, bonusAllocation: { 'BONUS': bonusTxId } });
+        const expectedBody = { allocationRecords: mockResultFromRds, bonusAllocation: { 'BONUS': bonusTxId, amount: -75 } };
         
         const allocationResult = await handler.allocate(userAllocEvent, { });
         expect(allocationResult).to.exist;
@@ -416,7 +416,7 @@ describe('Primary allocation of unallocated float lamdba', () => {
         // logger('Actual: ', allocateFloatStub.getCall(0).args);
         // logger('Expected: ', [common.testValidClientId, common.testValidFloatId, bonuxTxAlloc]);
         
-        expect(allocationResult).to.deep.equal({ statusCode: 200, body: expectedBody });
+        expect(allocationResult).to.deep.equal(expectedBody);
         expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false);
         expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, rdsMatcher);
     });
