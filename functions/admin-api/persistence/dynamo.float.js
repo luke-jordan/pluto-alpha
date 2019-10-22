@@ -47,3 +47,7 @@ module.exports.fetchClientFloatVars = async (clientId, floatId) => {
 
     return nonEmptyReturnItem(ddbResult) ? camelCaseKeys(ddbResult['Item']) : {};
 };
+
+module.exports.updateClientFloatVars = async (params) => {
+    
+};

@@ -6,8 +6,8 @@ const moment = require('moment');
 
 const BigNumber = require('bignumber.js');
 
-const rdsAdmin = require('./persistence/rds.admin');
-const rdsAnalytics = require('./persistence/rds.analytics');
+const rdsAccount = require('./persistence/rds.admin');
+const rdsFloat = require('./persistence/rds.analytics');
 const dynamoFloat = require('./persistence/dynamo.float');
 
 const opsUtil = require('ops-util-common');
@@ -20,21 +20,21 @@ const lambda = new AWS.Lambda();
 const MILLIS_IN_DAY = 86400000;
 
 const expireHangingTransactions = async () => {
-    const resultOfExpiration = await rdsAdmin.expireHangingTransactions();
+    const resultOfExpiration = await rdsAccount.expireHangingTransactions();
     return resultOfExpiration.length;
 };
 
 const assembleAccrualPayload = async (clientFloatInfo) => {
     logger('Assembling from: ', clientFloatInfo);
 
-    const floatBalanceMap = await rdsAnalytics.getFloatBalanceAndFlows([clientFloatInfo.floatId]);
+    const floatBalanceMap = await rdsFloat.getFloatBalanceAndFlows([clientFloatInfo.floatId]);
     const floatBalanceCurr = floatBalanceMap.get(clientFloatInfo.floatId);
     logger('And whole thing: ', floatBalanceCurr, ' which should be: ', clientFloatInfo.currency);
     const floatBalanceInfo = floatBalanceCurr[clientFloatInfo.currency];
     logger('Extracted float balance info: ', floatBalanceInfo);
     const floatAmountHunCent = opsUtil.convertToUnit(floatBalanceInfo.amount, floatBalanceInfo.unit, 'HUNDREDTH_CENT');
     
-    const lastFloatAccrualTime = await rdsAnalytics.getLastFloatAccrualTime(clientFloatInfo.floatId);
+    const lastFloatAccrualTime = await rdsFloat.getLastFloatAccrualTime(clientFloatInfo.floatId, clientFloatInfo.clientId);
     
     // see the balance handler for a more detailed & commented version
     const accrualRateAnnualBps = clientFloatInfo.accrualRateAnnualBps;
@@ -158,12 +158,12 @@ const sendSystemStats = async () => {
     // todo : obviously, want to add a lot into here
     const [userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek] = 
         await Promise.all([
-            rdsAnalytics.countUserIdsWithAccounts(startOfTime, endTime, false),
-            rdsAnalytics.countUserIdsWithAccounts(startOfWeek, endTime, false),
-            rdsAnalytics.countUserIdsWithAccounts(startOfDay, endTime, false),
-            rdsAnalytics.countUserIdsWithAccounts(startOfTime, endTime, true),
-            rdsAnalytics.countUserIdsWithAccounts(startOfWeek, endTime, true),
-            rdsAnalytics.countUserIdsWithAccounts(startOfDay, endTime, true)
+            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, false),
+            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, false),
+            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, false),
+            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, true),
+            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, true),
+            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, true)
         ]);
 
     const templateVariables = { userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek };
