@@ -74,4 +74,4 @@ module.exports.extractQueryParams = (event) => {
 
     // must be blank, returning
     return { };
-}
+};

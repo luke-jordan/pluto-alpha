@@ -14,64 +14,6 @@ const defaultUnit = 'HUNDREDTH_CENT';
 
 const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
 
-/** 
- * Does what it says on the tin -- counts the users with accounts open, where there has been
- * a transaction within the last X days, up until the current
- */
-module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, includeNoSave = false) => {
-    logger(`Fetching users with accounts open and transactions between ${sinceMoment} and ${untilMoment}`);
-    const accountTable = config.get('tables.accountTable');
-    const transactionTable = config.get('tables.transactionTable');
-
-    let joinType = '';
-    let whereClause = '';
-    
-    const txTimeClause = `${transactionTable}.creation_time between $3 and $4`; // see below for 1 and 2
-    const values = ['USER_SAVING_EVENT', 'SETTLED', sinceMoment.format(), untilMoment.format()];
-
-    if (includeNoSave) {
-        joinType = 'left join';
-        whereClause = `((${txTimeClause}) or (${accountTable}.creation_time between $3 and $4))`;
-    } else {
-        joinType = 'inner join';
-        whereClause = txTimeClause;
-    }
-
-    const countQuery = `select count(distinct(owner_user_id)) from ${accountTable} ${joinType} ${transactionTable} on ` + 
-            `${accountTable}.account_id = ${transactionTable}.account_id where transaction_type = $1 and settlement_status = $2 and ` +
-            `${whereClause}`;
-
-    logger('Assembled count query: ', countQuery);
-    const resultOfCount = await rdsConnection.selectQuery(countQuery, values);
-    logger('Result of count: ', resultOfCount);
-    return resultOfCount[0]['count'];
-};
-
-module.exports.fetchUserPendingTransactions = async (systemWideUserId, startMoment) => {
-    logger('Fetching pending transactions for user with ID: ', systemWideUserId);
-
-    const accountTable = config.get('tables.accountTable');
-    const txTable = config.get('tables.transactionTable');
-
-    const columns = `transaction_id, ${accountTable}.account_id, ${txTable}.creation_time, transaction_type, settlement_status, ` + 
-        `amount, currency, unit, human_reference`;
-
-    const fetchQuery = `select ${columns} from ${accountTable} inner join ${txTable} on ` +
-        `${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.owner_user_id = $1 and ` +
-        `${txTable}.creation_time > $2 and settlement_status = $3`;
-    
-    const values = [systemWideUserId, startMoment.format(), 'PENDING'];
-
-    logger('Sending query to RDS: ', fetchQuery);
-    logger('With values: ', values);
-
-    const resultOfQuery = await rdsConnection.selectQuery(fetchQuery, values);
-
-    logger('Result of pending TX query: ', resultOfQuery);
-
-    return camelcaseKeys(resultOfQuery);
-};
-
 const aggregateFloatTotals = (resultRows) => {
     const floatResultMap = new Map();
     
@@ -196,15 +138,15 @@ module.exports.getFloatBonusBalanceAndFlows = async (floatIds, startTime, endTim
     return aggregateAllocatedAmounts(queryResult);
 };
 
-module.exports.getLastFloatAccrualTime = async (floatId) => {
+module.exports.getLastFloatAccrualTime = async (floatId, clientId) => {
     logger('Getting last float accrual, for float: ', floatId);
 
     const floatLogTable = config.get('tables.floatLogTable');
     const floatTxTable = config.get('tables.floatTxTable');
 
-    const selectionQuery = `select reference_time from ${floatLogTable} where float_id = $1 and log_type = $2 ` + 
+    const selectionQuery = `select reference_time from ${floatLogTable} where float_id = $1 and client_id = $2 and log_type = $3 ` + 
         `order by creation_time desc limit 1`;
-    const resultOfQuery = await rdsConnection.selectQuery(selectionQuery, [floatId, 'WHOLE_FLOAT_ACCRUAL']);
+    const resultOfQuery = await rdsConnection.selectQuery(selectionQuery, [floatId, clientId, 'WHOLE_FLOAT_ACCRUAL']);
     logger('Retrieved result of float log selection: ', resultOfQuery);
 
     if (Array.isArray(resultOfQuery) && resultOfQuery.length > 0) {
@@ -212,11 +154,11 @@ module.exports.getLastFloatAccrualTime = async (floatId) => {
     }
 
     // if there has been no accrual, so above is not triggered, instead get the first time money was added        
-    const findFirstTxQuery = `select creation_time from ${floatTxTable} where float_id = $1 and allocated_to_type = $2 ` +
+    const findFirstTxQuery = `select creation_time from ${floatTxTable} where float_id = $1 and client_id = $2 and allocated_to_type = $3 ` +
         `order by creation_time asc limit 1`;
 
     logger('Searching for first accrual tx with query: ', findFirstTxQuery);
-    const resultOfSearch = await rdsConnection.selectQuery(findFirstTxQuery, [floatId, 'FLOAT_ITSELF']);
+    const resultOfSearch = await rdsConnection.selectQuery(findFirstTxQuery, [floatId, clientId, 'FLOAT_ITSELF']);
     logger('Result of getting first transaction time: ', resultOfSearch);
     if (Array.isArray(resultOfSearch) && resultOfSearch.length > 0) {
         return moment(resultOfSearch[0]['creation_time']);
@@ -224,3 +166,32 @@ module.exports.getLastFloatAccrualTime = async (floatId) => {
 
     return null;
 };
+
+module.exports.getFloatAlerts = async (clientId, floatId) => {
+    const floatLogTable = config.get('tables.floatLogTable');
+    const logTypes = config.get('defaults.floatAlerts.logTypes');
+
+    const selectQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 ` + 
+        `and log_type in (${extractArrayIndices(logTypes)}) order by updated_time desc`;
+    const values = [clientId, floatId, ...logTypes];
+
+    logger('Running query: ', selectQuery);
+    const resultOfSearch = await rdsConnection.selectQuery(selectQuery, values);
+    return camelcaseKeys(resultOfSearch);
+};
+
+module.exports.insertFloatLog = async (logObject = { clientId, floatId, logType, logContext }) => {
+    const floatLogTable = config.get('tables.floatLogTable');
+    
+    const insertQuery = `insert into ${floatLogTable} (client_id, float_id, log_type, log_context) values %L returning log_id`;
+    const columnTemplate = '${clientId}, ${floatId}, ${logType}, ${logContext}';
+    
+    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [logObject]);
+    logger('Result of inserting log: ', this.insertFloatLog);
+
+    return resultOfInsert['rows'][0]['log_id'];
+};
+
+module.exports.updateFloatLog = async ({ logId, contextToUpdate }) => {
+
+}

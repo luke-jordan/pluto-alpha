@@ -5,7 +5,7 @@ const config = require('config');
 const moment = require('moment');
 const status = require('statuses');
 
-const persistence = require('./persistence/rds.analytics');
+const persistence = require('./persistence/rds.account');
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
 

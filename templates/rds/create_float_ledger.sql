@@ -15,21 +15,28 @@ create table if not exists float_data.float_transaction_ledger (
     related_entity_id varchar(50)
 );
 
--- Used for, e.g., recording the date & time of the last float calculation (as well as audit trail). Use log context to store information
-create table if not exists float_data.float_log (
-    log_id uuid not null primary key,
-    creation_time timestamp with time zone not null default current_timestamp,
-    reference_time timestamp with time zone not null default current_timestamp,
-    float_id varchar(255) not null,
-    log_type varchar(50) not null,
-    log_context jsonb
-);
-
 -- todo : definitely do not do this once into production
 alter table float_data.float_transaction_ledger drop constraint if exists float_transaction_type_check;
 alter table float_data.float_transaction_ledger add constraint float_transaction_type_check check (
     t_type in ('ACCRUAL', 'ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION')
 );
+
+-- Used for, e.g., recording the date & time of the last float calculation (as well as audit trail). Use log context to store information
+create table if not exists float_data.float_log (
+    log_id uuid not null primary key,
+    client_id varchar(255) not null,
+    float_id varchar(255) not null,
+    creation_time timestamp with time zone not null default current_timestamp,
+    updated_time timestamp with time zone not null default current_timestamp,
+    reference_time timestamp with time zone not null default current_timestamp,
+    log_type varchar(50) not null,
+    log_context jsonb,
+    unique(client_id, float_id)
+);
+
+-- Since we will, for example, set a log to processed, and by whom
+drop trigger if exists update_float_log_modtime on float_data.float_log;
+create trigger update_float_log_modtime before update on float_data.float_log for each row execute procedure trigger_set_updated_timestamp();
 
 -- todo: indices
 revoke all on float_data.float_transaction_ledger from public;
