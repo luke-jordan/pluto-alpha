@@ -492,7 +492,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         instructionId: mockInstructionId,
         presentationType: 'RECURRING',
         active: true,
-        audienceType: 'INDIVIDUAL',
+        audienceType: 'ALL_USERS',
         templates: { template: { DEFAULT: recurringMsgTemplate }},
         selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceInstruction: null,
