@@ -249,6 +249,39 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
+    it('Inserts instruction for scheduled once off message', async () => {
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { template: { 'DEFAULT': testRecurringTemplate }},
+                selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                startTime: moment().add(2, 'days').format(),
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 200);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('processResult', 'INSTRUCT_STORED');
+        expect(body).to.have.property('message');
+        expect(body.message).to.have.property('instructionId', mockInstructionId);
+        expect(body.message).to.have.property('creationTime', mockCreationTime);
+        expect(insertMessageInstructionStub).to.have.been.calledOnce;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
     it('Fails on unauthorized instruction insertion', async () => {
         const mockApiInstruction = { ...mockInstruction };
         Reflect.deleteProperty(mockApiInstruction, 'requestContext');
