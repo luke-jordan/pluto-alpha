@@ -42,7 +42,78 @@ const aggregateFloatTotals = (resultRows) => {
     return floatResultMap;
 };
 
-const aggregateAllocatedAmounts = (resultRows) => {
+module.exports.getFloatBalanceAndFlows = async (floatIds, startTime, endTime) => {
+    logger('Fetching balance for floats: ', floatIds);
+
+    const floatTxTable = config.get('tables.floatTxTable');
+    const floatIndices = extractArrayIndices(floatIds);
+
+    const start = startTime ? startTime.format() : moment(0).format();
+    const end = endTime ? endTime.format() : moment().format();
+
+    const floatIdxNo = floatIds.length;
+    const typeOffset = 1;
+    const startTimeOffset = 2;
+    const endTimeOffset = 3;
+    
+    const sumQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) ` +
+        `and allocated_to_type = $${floatIdxNo + typeOffset} and creation_time between $${floatIdxNo + startTimeOffset} and ` + 
+        `$${floatIdxNo + endTimeOffset} group by float_id, currency, unit`;
+    
+    const queryValues = [...floatIds, 'FLOAT_ITSELF', start, end];
+    logger('Executing query: ', sumQuery, ', with values: ', queryValues);
+    const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
+    
+    return aggregateFloatTotals(queryResult);
+};
+
+module.exports.getFloatAllocatedTotal = async (clientId, floatId, startTime, endTime) => {
+    logger('Obtaining allocated totals for floats: ', floatId);
+
+    const floatTxTable = config.get('tables.floatTxTable');
+    
+    const start = startTime ? startTime.format() : moment(0).format();
+    const end = endTime ? endTime.format() : moment().format();
+
+    const sumQuery = `select currency, unit, sum(amount) from ${floatTxTable} where ` +
+        `allocated_to_type != $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 ` +
+        `group by float_id, currency, unit`;
+    
+    const queryValues = ['FLOAT_ITSELF', start, end, clientId, floatId];
+
+    logger('Float allocation total, executing query: ', sumQuery);
+    const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
+    
+    return aggregateFloatTotals(queryResult);
+};
+
+// this is more occasional, so not bunching/grouping float IDs, at least until get working with confidence
+module.exports.getUserAllocationsAndAccountTxs = async (clientId, floatId, startTime, endTime) => {
+    logger('Looking for float-user discrepancies on floatId: ', floatId);
+    const floatTxTable = config.get('tables.floatTxTable');
+    const accountTxTable = config.get('tables.accountTxTable');
+
+    const start = startTime ? startTime.format() : moment(0).format();
+    const end = endTime ? endTime.format() : moment().format();
+
+    const sumFloatQuery = `select currency, unit, sum(amount) from ${floatTxTable} where ` +
+        `allocated_to_type = $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 ` +
+        `group by currency, unit`;
+    const sumFloatValues = ['END_USER_ACCOUNT', start, end, clientId, floatId];
+
+    const floatQueryResult = await rdsConnection.selectQuery(sumFloatQuery, sumFloatValues);
+
+    const sumAccountQuery = `select currency, unit, sum(amount) from ${accountTxTable} where ` +
+        `settlement_status = $1 and settlement_time between $2 and $3 and client_id = $4 and float_id = $5 ` +
+        `group by currency, unit`;
+    const sumAccountValues = ['SETTLED', start, end, clientId, floatId];
+
+    const accountQueryResult = await rdsConnection.selectQuery(sumAccountQuery, sumAccountValues);
+
+    // then sum them up and return a map ...
+};
+
+const aggregateAmountsAllocatedToType = (resultRows) => {
     const floatResultMap = new Map();
 
     resultRows.forEach((row) => {
@@ -80,31 +151,6 @@ const aggregateAllocatedAmounts = (resultRows) => {
     return floatResultMap;
 };
 
-module.exports.getFloatBalanceAndFlows = async (floatIds, startTime, endTime) => {
-    logger('Fetching balance for floats: ', floatIds);
-
-    const floatTxTable = config.get('tables.floatTxTable');
-    const floatIndices = extractArrayIndices(floatIds);
-
-    const start = startTime ? startTime.format() : moment(0).format();
-    const end = endTime ? endTime.format() : moment().format();
-
-    const floatIdxNo = floatIds.length;
-    const typeOffset = 1;
-    const startTimeOffset = 2;
-    const endTimeOffset = 3;
-    
-    const sumQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where float_id in (${floatIndices}) ` +
-        `and allocated_to_type = $${floatIdxNo + typeOffset} and creation_time between $${floatIdxNo + startTimeOffset} and ` + 
-        `$${floatIdxNo + endTimeOffset} group by float_id, currency, unit`;
-    
-    const queryValues = [...floatIds, 'FLOAT_ITSELF', start, end];
-    logger('Executing query: ', sumQuery, ', with values: ', queryValues);
-    const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
-    
-    return aggregateFloatTotals(queryResult);
-};
-
 /**
  * NOTE: amountPosNeg controls whether outflows and inflows only or both, i.e., whether sum is on amount > 0, < 0 or both
  * Set it to 0 for both (i.e., for sums), to -1 for negative amounts only (i.e., outflows), and to +1 for positive amounts
@@ -135,7 +181,7 @@ module.exports.getFloatBonusBalanceAndFlows = async (floatIds, startTime, endTim
     const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
 
     logger('Result of bonus pool sum query: ', queryResult);
-    return aggregateAllocatedAmounts(queryResult);
+    return aggregateAmountsAllocatedToType(queryResult);
 };
 
 module.exports.getLastFloatAccrualTime = async (floatId, clientId) => {
@@ -172,7 +218,7 @@ module.exports.getFloatAlerts = async (clientId, floatId) => {
     const logTypes = config.get('defaults.floatAlerts.logTypes');
 
     const selectQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 ` + 
-        `and log_type in (${extractArrayIndices(logTypes)}) order by updated_time desc`;
+        `and log_type in (${extractArrayIndices(logTypes, 3)}) order by updated_time desc`;
     const values = [clientId, floatId, ...logTypes];
 
     logger('Running query: ', selectQuery);
@@ -193,5 +239,12 @@ module.exports.insertFloatLog = async (logObject = { clientId, floatId, logType,
 };
 
 module.exports.updateFloatLog = async ({ logId, contextToUpdate }) => {
+    const floatLogTable = config.get('tables.floatLogTable');
 
-}
+    const updateQuery = `update ${floatLogTable} set log_context = log_context || $1 where log_id = $2`;
+    logger('Updating log with query: ', updateQuery, ' and log context: ', contextToUpdate);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [contextToUpdate, logId]);
+    logger('Result of updating log: ', resultOfUpdate);
+
+    return resultOfUpdate;
+};

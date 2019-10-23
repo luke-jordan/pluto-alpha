@@ -30,7 +30,7 @@ create table if not exists float_data.float_log (
     updated_time timestamp with time zone not null default current_timestamp,
     reference_time timestamp with time zone not null default current_timestamp,
     log_type varchar(50) not null,
-    log_context jsonb,
+    log_context jsonb default '{}',
     unique(client_id, float_id)
 );
 
@@ -56,3 +56,4 @@ grant usage on schema float_data to admin_api_worker;
 grant select (creation_time, client_id, float_id, currency, unit, amount, t_type, allocated_to_type, allocated_to_id) on float_data.float_transaction_ledger to admin_api_worker;
 grant select on float_data.float_log to admin_api_worker;
 grant insert on float_data.float_log to admin_api_worker;
+grant update (log_context, updated_time) on float_data.float_log to admin_api_worker;

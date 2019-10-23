@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('debug')('pluto:admin:rds');
-// const config = require('config');
+const config = require('config');
 const moment = require('moment');
 
 const persistence = require('./persistence/rds.float');
@@ -180,7 +180,7 @@ module.exports.fetchClientFloatDetails = async (event) => {
     const clientFloatVars = await dynamo.fetchClientFloatVars(params.clientId, params.floatId);
     logger('Assembled client float vars: ', clientFloatVars);
 
-    const floatAlerts = fetchFloatAlertsIssues(params.floatId);
+    const floatAlerts = await fetchFloatAlertsIssues(params.floatId);
     logger('Assembled float alerts: ', floatAlerts);
 
     const clientFloatDetails = { ...clientFloatVars, floatAlerts };
@@ -208,7 +208,7 @@ const allocateFloatFunds = async ({ clientId, floatId, amountDef, allocatedToDef
 
     logger('Starting off an allocation ...');
     const logContext = { adminUserId, amountAllocated: amountDef, logReason };
-    const logId = await rdsFloat.insertFloatLog({ clientId, floatId, logType: 'ADMIN_ALLOCATE_FUNDS', logContext });
+    const logId = await persistence.insertFloatLog({ clientId, floatId, logType: 'ADMIN_ALLOCATE_FUNDS', logContext });
     logger('Log inserted, carry on');
 
     const recipients = [{
@@ -243,7 +243,7 @@ const addOrSubtractFunds = async ({ clientId, floatId, amountDef, adminUserId, l
 
     logger('Adding or subtracting to system balance for float');
     const logContext = { adminUserId, amountAdjusted: amountDef, logReason };
-    const logId = await rdsFloat.insertFloatLog({ clientId, floatId, logType: 'BALANCE_UPDATED_MANUALLY', logContext });
+    const logId = await persistence.insertFloatLog({ clientId, floatId, logType: 'BALANCE_UPDATED_MANUALLY', logContext });
 
     const payload = {
         floatId,
@@ -275,7 +275,7 @@ const addOrSubtractFunds = async ({ clientId, floatId, amountDef, adminUserId, l
 const accrueDifferenceToUsers = async ({ clientId, floatId, amountDef, adminUserId, logReason }) => {
 
     const logContext = { adminUserId, amountDistributed: amountDef, logReason };
-    const logId = await rdsFloat.insertFloatLog({ clientId, floatId, logType: 'ADMIN_DISTRIBUTE_USERS', logContext });
+    const logId = await persistence.insertFloatLog({ clientId, floatId, logType: 'ADMIN_DISTRIBUTE_USERS', logContext });
 
     const payload = {
         floatId,
@@ -299,9 +299,15 @@ const accrueDifferenceToUsers = async ({ clientId, floatId, amountDef, adminUser
     return resultBody;
 };
 
-const updateLogToResolved = async (logId, adminUserId) => {
-    const contextToUpdate = { resolved: true, resolvedByUserId: adminUserId }
-    return rdsFloat.updateFloatLog({ logId, contextToUpdate });
+const markLogUnresolved = async (logId, adminUserId, reasonToReopen) => {
+    const contextToUpdate = { resolved: false, reasonReopened: reasonToReopen, reopenedBy: adminUserId };
+    return persistence.updateFloatLog({ logId, contextToUpdate });
+};
+
+const updateLogToResolved = async (logId, adminUserId, resolutionNote) => {
+    const contextToUpdate = { resolved: true, resolvedByUserId: adminUserId, resolutionNote };
+    logger('Updating log, with context: ', contextToUpdate);
+    return persistence.updateFloatLog({ logId, contextToUpdate });
 };
 
 /**
@@ -321,20 +327,33 @@ module.exports.adjustClientFloat = async (event) =>{
         
         const { operation, clientId, floatId } = params;
         
-        const priorLogId = params.priorLogId;
+        const priorLogId = params.logId;
         const logReason = params.reasonToLog;
         const amountDef = params.amountToProcess; 
 
         let response = {};
         switch (operation) {
+            case 'RESOLVE_ALERT':
+                // record that it was viewed, and by whom (in log context)
+                if (!logReason) {
+                    throw new Error('Resolving alert without any other action requires user to provide a reason');
+                }
+                const resultOfLog = await updateLogToResolved(priorLogId, adminUserId, logReason);
+                logger('Result of log resolution: ', resultOfLog);
+                break;
+            case 'REOPEN_ALERT': 
+                // record that it is reopened
+                if (!logReason) {
+                    throw new Error('Reopening an alert requires user to provide a reason');
+                }
+                const resultOfUpdate = await markLogUnresolved(priorLogId, adminUserId, logReason);
+                logger('Completed alert reopening: ', resultOfUpdate);
+                break;
             case 'ADJUST_ACCRUAL_VARS':
                 const oldNewState = await adjustFloatAccrualVars({ clientId, floatId, newAccrualVars: params.newAccrualVars });
                 const logContext = { logReason, priorState: oldNewState.oldAccrualVars, newState: oldNewState.newAccrualVars };
-                const logInsertion = await rdsFloat.insertFloatLog({ clientId, floatId, logType: '', logContext });
+                const logInsertion = await persistence.insertFloatLog({ clientId, floatId, logType: '', logContext });
                 logger('Completed, result of insertion: ', logInsertion);
-                break;
-            case 'DISMISS_ALERT':
-                // record that it was viewed, and by whom (in log context)
                 break;
             case 'ALLOCATE_FUNDS':
                 // if it's to / from bonus pool or client share, just use transfer lambda
