@@ -10,7 +10,7 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
   handler                        = "scheduled-job.runRegularJobs"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
-  timeout                        = 15
+  timeout                        = 90
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"

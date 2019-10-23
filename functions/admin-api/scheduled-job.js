@@ -24,16 +24,22 @@ const expireHangingTransactions = async () => {
     return resultOfExpiration.length;
 };
 
+const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
+    const floatBalanceMap = await rdsFloat.getFloatBalanceAndFlows([floatId]);
+    const floatBalanceCurr = floatBalanceMap.get(floatId);
+    let currencyToUse = currency;
+    if (!currencyToUse) {
+        currencyToUse = Object.keys(floatBalanceCurr)[0]; // todo : make not suck
+    }
+    const floatBalanceInfo = floatBalanceCurr[currencyToUse];
+    logger('Extracted float balance info: ', floatBalanceInfo);
+    return opsUtil.convertToUnit(floatBalanceInfo.amount, floatBalanceInfo.unit, 'HUNDREDTH_CENT');
+};
+
 const assembleAccrualPayload = async (clientFloatInfo) => {
     logger('Assembling from: ', clientFloatInfo);
 
-    const floatBalanceMap = await rdsFloat.getFloatBalanceAndFlows([clientFloatInfo.floatId]);
-    const floatBalanceCurr = floatBalanceMap.get(clientFloatInfo.floatId);
-    logger('And whole thing: ', floatBalanceCurr, ' which should be: ', clientFloatInfo.currency);
-    const floatBalanceInfo = floatBalanceCurr[clientFloatInfo.currency];
-    logger('Extracted float balance info: ', floatBalanceInfo);
-    const floatAmountHunCent = opsUtil.convertToUnit(floatBalanceInfo.amount, floatBalanceInfo.unit, 'HUNDREDTH_CENT');
-    
+    const floatAmountHunCent = obtainFloatBalance(clientFloatInfo);
     const lastFloatAccrualTime = await rdsFloat.getLastFloatAccrualTime(clientFloatInfo.floatId, clientFloatInfo.clientId);
     
     // see the balance handler for a more detailed & commented version
@@ -147,6 +153,43 @@ const initiateFloatAccruals = async () => {
     return accrualInvocations.length;
 };
 
+const checkForFloatAnomalies = async (clientFloatInfo) => {
+    const { clientId, floatId } = clientFloatInfo;
+    const anomalies = {};
+
+    // first check for allocated to float (i.e., float total) and allocated to others not being the same
+    const [floatBalance, allocationSum] = await Promise.all([
+        obtainFloatBalance(clientFloatInfo), rdsFloat.getFloatAllocatedTotal(clientId, floatId)]);
+    logger('Allocation sum: ', allocationSum);
+    
+    allocatedTotal = opsUtil.convertToUnit(allocationSum.amount, allocationSum.unit, 'HUNDREDTH_CENT');
+    logger(`Comparing float balance of ${floatBalance} and sum of allocations ${allocationSum}`);
+    if (floatBalance !== allocatedTotal) {
+        anomalies['BALANCE_MISMATCH'] = { floatBalance, allocatedTotal };
+    }
+
+    // then check for allocated to users from float and settled transactions for users not being the same
+    const accountTotals = await rdsFloat.getUserAllocationsAndAccountTxs(clientId, floatId);
+    logger('Result of summing account totals and allocated totals: ', accountTotals);
+    if (accountTotals.floatAccountTotal !== accountTotals.accountTxTotal) {
+        anomalies['ALLOCATION_TOTAL_MISMATCH'] = accountTotals;
+    }
+
+    // once live, check for FinWorks balance and our balance being different, use BALANCE_UNOBTAINABLE
+
+    // take whatever differences exist, and insert logs (for the alerts), plus assemble a system email about them
+    if (Object.keys(anomalies).length > 0) {
+        const floatLogInserts = Object.keys(anomalies).
+            map((anomaly) => ({ clientId, floatId, logType: anomaly, logContext: anomalies[anomaly] })).
+            map((logDef) => rdsFloat.insertFloatLog(logDef));
+        const resultOfLogInserts = await Promise.all(floatLogInserts);
+        logger('Result of anomaly log insertion: ', resultOfLogInserts);
+        return { result: 'ANOMALIES_FOUND', anomalies };
+    }
+
+    return { result: 'NO_ANOMALIES' };
+};
+
 const sendSystemStats = async () => {
     const endTime = moment();
     const startOfTime = moment(0);
@@ -178,6 +221,13 @@ const sendSystemStats = async () => {
     });
 };
 
+const operationMap = {
+    'SYSTEM_STATS': sendSystemStats,
+    'ACRRUE_FLOAT': initiateFloatAccruals,
+    'EXPIRE_HANGING': expireHangingTransactions,
+    'CHECK_FLOATS': checkForFloatAnomalies
+};
+
 /**
  * Runs daily. Does several things:
  * (1) checks for accruals on each float & then triggers the relevant job
@@ -187,23 +237,34 @@ const sendSystemStats = async () => {
 module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
 
-    const [statResult, accrualResult, numberExpired] = await Promise.all([
-        sendSystemStats(),
-        initiateFloatAccruals(),
-        expireHangingTransactions()
-    ]);
-
-    logger('Result of stat send: ', statResult);
-    logger('Accrual result: ', accrualResult);
-    logger('Expire handler: ', numberExpired);
-
-    const responseStats = {
-        numberExpired,
-        numberAccruals: accrualResult
-    };
-
-    return { 
-        statusCode: 200,
-        body: { responseStats }
-    };
+    if (Reflect.has(event, 'specificOperations')) {
+        const tasksToExecute = event.specificOperations.map((operation) => operationMap[operation]());
+        const results = await Promise.all(tasksToExecute);
+        return {
+            statusCode: 200,
+            body: results
+        };
+    } else {
+        const [statResult, accrualResult, floatCheckResult, numberExpired] = await Promise.all([
+            sendSystemStats(),
+            initiateFloatAccruals(),
+            checkForFloatAnomalies(),
+            expireHangingTransactions()
+        ]);
+    
+        logger('Result of stat send: ', statResult);
+        logger('Accrual result: ', accrualResult);
+        logger('Anomaly detection: ', floatCheckResult);
+        logger('Expire handler: ', numberExpired);
+    
+        const responseStats = {
+            numberExpired,
+            numberAccruals: accrualResult
+        };
+    
+        return {
+            statusCode: 200,
+            body: { responseStats }
+        };   
+    }
 };
