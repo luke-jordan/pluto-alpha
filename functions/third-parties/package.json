@@ -2,7 +2,6 @@
   "name": "third-parties",
   "version": "1.0.0",
   "description": "",
-  "main": "payment-handler.js",
   "scripts": {
     "test": "DEBUG=jupiter:* nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",

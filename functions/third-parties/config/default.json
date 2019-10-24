@@ -42,5 +42,23 @@
             "IsTest",
             "StatusMessage"
         ]
+    },
+    "pbVerify": {
+        "endpoint": "",
+        "memberKey": "",
+        "password": "",
+        "supportedBanks": [
+            "ABSA",
+            "FNB",
+            "STANDARD",
+            "NEDBANK",
+            "CAPITEC"
+        ],
+        "accountTypes": [
+            "CURRENTCHEQUEACCOUNT",
+            "SAVINGSACCOUNT",
+            "TRANSMISSION",
+            "BOND"
+        ]
     }
 }
