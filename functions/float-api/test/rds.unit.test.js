@@ -100,17 +100,18 @@ describe('Float balance add or subtract', () => {
             rows: [expectedRow]
         };
 
-        const logQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, float_id, log_type) ` +
+        const logQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, client_id, float_id, log_type) ` +
             `values %L returning log_id, creation_time`;
         const logToInsert = {
             logId: sinon.match.any,
+            clientId: common.testValidClientId,
             floatId: common.testValidFloatId,
             referenceTime: refTime.format(),
             logType: 'WHOLE_FLOAT_ACCRUAL'
         };
         const logInsertDef = {
             query: logQuery,
-            columnTemplate: '${logId}, ${referenceTime}, ${floatId}, ${logType}',
+            columnTemplate: '${logId}, ${referenceTime}, ${clientId}, ${floatId}, ${logType}',
             rows: [logToInsert] 
         };
 
