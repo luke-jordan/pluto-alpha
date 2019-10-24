@@ -3,6 +3,7 @@
 const logger = require('debug')('pluto:admin:rds');
 const config = require('config');
 const moment = require('moment');
+const uuid = require('uuid/v4');
 
 const opsUtil = require('ops-util-common');
 const camelcaseKeys = require('camelcase-keys');
@@ -75,7 +76,7 @@ module.exports.getFloatAllocatedTotal = async (clientId, floatId, startTime, end
     const start = startTime ? startTime.format() : moment(0).format();
     const end = endTime ? endTime.format() : moment().format();
 
-    const sumQuery = `select currency, unit, sum(amount) from ${floatTxTable} where ` +
+    const sumQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where ` +
         `allocated_to_type != $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 ` +
         `group by float_id, currency, unit`;
     
@@ -84,14 +85,15 @@ module.exports.getFloatAllocatedTotal = async (clientId, floatId, startTime, end
     logger('Float allocation total, executing query: ', sumQuery);
     const queryResult = await rdsConnection.selectQuery(sumQuery, queryValues);
     
-    return aggregateFloatTotals(queryResult);
+    const floatTotal = aggregateFloatTotals(queryResult);
+    return floatTotal.get(floatId);
 };
 
 // this is more occasional, so not bunching/grouping float IDs, at least until get working with confidence
 module.exports.getUserAllocationsAndAccountTxs = async (clientId, floatId, startTime, endTime) => {
     logger('Looking for float-user discrepancies on floatId: ', floatId);
     const floatTxTable = config.get('tables.floatTxTable');
-    const accountTxTable = config.get('tables.accountTxTable');
+    const accountTxTable = config.get('tables.transactionTable');
 
     const start = startTime ? startTime.format() : moment(0).format();
     const end = endTime ? endTime.format() : moment().format();
@@ -101,7 +103,11 @@ module.exports.getUserAllocationsAndAccountTxs = async (clientId, floatId, start
         `group by currency, unit`;
     const sumFloatValues = ['END_USER_ACCOUNT', start, end, clientId, floatId];
 
+    logger('Sum float query detailed: ', sumFloatQuery);
     const floatQueryResult = await rdsConnection.selectQuery(sumFloatQuery, sumFloatValues);
+    logger('Float query result: ', floatQueryResult);
+    const floatAccountTotal = opsUtil.assembleCurrencyTotals(floatQueryResult);
+
 
     const sumAccountQuery = `select currency, unit, sum(amount) from ${accountTxTable} where ` +
         `settlement_status = $1 and settlement_time between $2 and $3 and client_id = $4 and float_id = $5 ` +
@@ -109,8 +115,11 @@ module.exports.getUserAllocationsAndAccountTxs = async (clientId, floatId, start
     const sumAccountValues = ['SETTLED', start, end, clientId, floatId];
 
     const accountQueryResult = await rdsConnection.selectQuery(sumAccountQuery, sumAccountValues);
+    logger('Account query result: ', accountQueryResult);
+    const accountTxTotal = opsUtil.assembleCurrencyTotals(accountQueryResult);
+    logger('Summed and mapped to currencies: ', accountTxTotal);
 
-    // then sum them up and return a map ...
+    return { floatAccountTotal, accountTxTotal };
 };
 
 const aggregateAmountsAllocatedToType = (resultRows) => {
@@ -213,27 +222,39 @@ module.exports.getLastFloatAccrualTime = async (floatId, clientId) => {
     return null;
 };
 
-module.exports.getFloatAlerts = async (clientId, floatId) => {
+module.exports.getFloatAlerts = async (clientId, floatId, restrictToLogTypes) => {
     const floatLogTable = config.get('tables.floatLogTable');
-    const logTypes = config.get('defaults.floatAlerts.logTypes');
+    const logTypes = restrictToLogTypes || config.get('defaults.floatAlerts.logTypes');
 
     const selectQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 ` + 
         `and log_type in (${extractArrayIndices(logTypes, 3)}) order by updated_time desc`;
     const values = [clientId, floatId, ...logTypes];
 
-    logger('Running query: ', selectQuery);
+    logger('Running float log alert query: ', selectQuery);
+    logger('With values: ', values);
     const resultOfSearch = await rdsConnection.selectQuery(selectQuery, values);
     return camelcaseKeys(resultOfSearch);
 };
 
-module.exports.insertFloatLog = async (logObject = { clientId, floatId, logType, logContext }) => {
+/**
+ * 
+ * @param {object} logObject The log to insert, has the following _required_ properties:
+ * @property {string} clientId The client ID of the float in question
+ * @property {string} floatId The float Id
+ * @property {string} logType The type of the log
+ * @property {object} logContext The log context, can be any object, if nothing, pass empty
+ */
+module.exports.insertFloatLog = async (logObject) => {
     const floatLogTable = config.get('tables.floatLogTable');
     
-    const insertQuery = `insert into ${floatLogTable} (client_id, float_id, log_type, log_context) values %L returning log_id`;
-    const columnTemplate = '${clientId}, ${floatId}, ${logType}, ${logContext}';
+    const logId = uuid();
+    const logRow = { logId, ...logObject };
+
+    const insertQuery = `insert into ${floatLogTable} (log_id, client_id, float_id, log_type, log_context) values %L returning log_id`;
+    const columnTemplate = '${logId}, ${clientId}, ${floatId}, ${logType}, ${logContext}';
     
-    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [logObject]);
-    logger('Result of inserting log: ', this.insertFloatLog);
+    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [logRow]);
+    logger('Result of inserting log: ', resultOfInsert);
 
     return resultOfInsert['rows'][0]['log_id'];
 };

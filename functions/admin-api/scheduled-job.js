@@ -6,9 +6,11 @@ const moment = require('moment');
 
 const BigNumber = require('bignumber.js');
 
-const rdsAccount = require('./persistence/rds.admin');
-const rdsFloat = require('./persistence/rds.analytics');
+const rdsAccount = require('./persistence/rds.account');
+const rdsFloat = require('./persistence/rds.float');
 const dynamoFloat = require('./persistence/dynamo.float');
+
+const floatConsistency = require('./admin-float-consistency');
 
 const opsUtil = require('ops-util-common');
 const publisher = require('publish-common');
@@ -27,12 +29,8 @@ const expireHangingTransactions = async () => {
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
     const floatBalanceMap = await rdsFloat.getFloatBalanceAndFlows([floatId]);
     const floatBalanceCurr = floatBalanceMap.get(floatId);
-    let currencyToUse = currency;
-    if (!currencyToUse) {
-        currencyToUse = Object.keys(floatBalanceCurr)[0]; // todo : make not suck
-    }
-    const floatBalanceInfo = floatBalanceCurr[currencyToUse];
-    logger('Extracted float balance info: ', floatBalanceInfo);
+    const floatBalanceInfo = floatBalanceCurr[currency];
+    logger('For client-float: ', `${clientId}::${floatId}`, ', extracted float balance info: ', floatBalanceInfo);
     return opsUtil.convertToUnit(floatBalanceInfo.amount, floatBalanceInfo.unit, 'HUNDREDTH_CENT');
 };
 
@@ -153,43 +151,6 @@ const initiateFloatAccruals = async () => {
     return accrualInvocations.length;
 };
 
-const checkForFloatAnomalies = async (clientFloatInfo) => {
-    const { clientId, floatId } = clientFloatInfo;
-    const anomalies = {};
-
-    // first check for allocated to float (i.e., float total) and allocated to others not being the same
-    const [floatBalance, allocationSum] = await Promise.all([
-        obtainFloatBalance(clientFloatInfo), rdsFloat.getFloatAllocatedTotal(clientId, floatId)]);
-    logger('Allocation sum: ', allocationSum);
-    
-    allocatedTotal = opsUtil.convertToUnit(allocationSum.amount, allocationSum.unit, 'HUNDREDTH_CENT');
-    logger(`Comparing float balance of ${floatBalance} and sum of allocations ${allocationSum}`);
-    if (floatBalance !== allocatedTotal) {
-        anomalies['BALANCE_MISMATCH'] = { floatBalance, allocatedTotal };
-    }
-
-    // then check for allocated to users from float and settled transactions for users not being the same
-    const accountTotals = await rdsFloat.getUserAllocationsAndAccountTxs(clientId, floatId);
-    logger('Result of summing account totals and allocated totals: ', accountTotals);
-    if (accountTotals.floatAccountTotal !== accountTotals.accountTxTotal) {
-        anomalies['ALLOCATION_TOTAL_MISMATCH'] = accountTotals;
-    }
-
-    // once live, check for FinWorks balance and our balance being different, use BALANCE_UNOBTAINABLE
-
-    // take whatever differences exist, and insert logs (for the alerts), plus assemble a system email about them
-    if (Object.keys(anomalies).length > 0) {
-        const floatLogInserts = Object.keys(anomalies).
-            map((anomaly) => ({ clientId, floatId, logType: anomaly, logContext: anomalies[anomaly] })).
-            map((logDef) => rdsFloat.insertFloatLog(logDef));
-        const resultOfLogInserts = await Promise.all(floatLogInserts);
-        logger('Result of anomaly log insertion: ', resultOfLogInserts);
-        return { result: 'ANOMALIES_FOUND', anomalies };
-    }
-
-    return { result: 'NO_ANOMALIES' };
-};
-
 const sendSystemStats = async () => {
     const endTime = moment();
     const startOfTime = moment(0);
@@ -221,11 +182,12 @@ const sendSystemStats = async () => {
     });
 };
 
+// used to control what should execute
 const operationMap = {
     'SYSTEM_STATS': sendSystemStats,
     'ACRRUE_FLOAT': initiateFloatAccruals,
     'EXPIRE_HANGING': expireHangingTransactions,
-    'CHECK_FLOATS': checkForFloatAnomalies
+    'CHECK_FLOATS': floatConsistency.checkAllFloats
 };
 
 /**
@@ -237,34 +199,14 @@ const operationMap = {
 module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
 
-    if (Reflect.has(event, 'specificOperations')) {
-        const tasksToExecute = event.specificOperations.map((operation) => operationMap[operation]());
-        const results = await Promise.all(tasksToExecute);
-        return {
-            statusCode: 200,
-            body: results
-        };
-    } else {
-        const [statResult, accrualResult, floatCheckResult, numberExpired] = await Promise.all([
-            sendSystemStats(),
-            initiateFloatAccruals(),
-            checkForFloatAnomalies(),
-            expireHangingTransactions()
-        ]);
-    
-        logger('Result of stat send: ', statResult);
-        logger('Accrual result: ', accrualResult);
-        logger('Anomaly detection: ', floatCheckResult);
-        logger('Expire handler: ', numberExpired);
-    
-        const responseStats = {
-            numberExpired,
-            numberAccruals: accrualResult
-        };
-    
-        return {
-            statusCode: 200,
-            body: { responseStats }
-        };   
-    }
+    const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : config.get('defaults.scheduledJobs');
+    const promises = tasksToRun.map((operation) => operationMap[operation]());
+    const results = await Promise.all(promises);
+
+    logger('Results of tasks: ', results);
+
+    return {
+        statusCode: 200,
+        body: results
+    };
 };

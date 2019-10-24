@@ -1,3 +1,3 @@
-# Fargate with Terraform
+# Jupiter Terraform setup
 
-Example .
+To insert docs

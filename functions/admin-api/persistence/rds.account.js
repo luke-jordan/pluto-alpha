@@ -65,7 +65,7 @@ module.exports.fetchUserPendingTransactions = async (systemWideUserId, startMome
 
     logger('Result of pending TX query: ', resultOfQuery);
 
-    return camelcaseKeys(resultOfQuery);
+    return camelCaseKeys(resultOfQuery);
 };
 
 module.exports.expireHangingTransactions = async () => {

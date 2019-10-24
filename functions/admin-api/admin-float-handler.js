@@ -34,9 +34,7 @@ const sumBonusPools = (bonusPoolInfo, currency) => {
     return bonusPoolSum;
 };
 
-const wrapAmount = (amount, unit, currency) => ({
-    amount, currency, unit
-});
+const wrapAmount = (amount, unit, currency) => ({ amount, currency, unit });
 
 /**
  * Knits together a variety of data to assemble the float totals, names, etc., for the current clients & floats
@@ -137,8 +135,8 @@ const transformLog = (rawLog) => {
         logType: rawLog.logType,
         updatedTimeMillis,
         logDescription,
-        isRedFlag,
-    }
+        isRedFlag
+    };
 };
 
 const fetchFloatAlertsIssues = async (clientId, floatId) => {
@@ -152,7 +150,7 @@ const fetchFloatAlertsIssues = async (clientId, floatId) => {
  * @param {object} event An event object containing the request context, which has information about the caller.
  * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
  */
-module.exports.fetchClientFloatVars = async (event) => {
+module.exports.listClientsAndFloats = async (event) => {
     if (!adminUtil.isUserAuthorized(event)) {
         return adminUtil.unauthorizedResponse;
     }
@@ -180,7 +178,7 @@ module.exports.fetchClientFloatDetails = async (event) => {
     const clientFloatVars = await dynamo.fetchClientFloatVars(params.clientId, params.floatId);
     logger('Assembled client float vars: ', clientFloatVars);
 
-    const floatAlerts = await fetchFloatAlertsIssues(params.floatId);
+    const floatAlerts = await fetchFloatAlertsIssues(params.clientId, params.floatId);
     logger('Assembled float alerts: ', floatAlerts);
 
     const clientFloatDetails = { ...clientFloatVars, floatAlerts };
@@ -188,8 +186,8 @@ module.exports.fetchClientFloatDetails = async (event) => {
     return adminUtil.wrapHttpResponse(clientFloatDetails);
 };
 
-const stripParamsForFloat = (newParams, existingParams) => 
-    ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor'].
+const paramsToInclude = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor'];
+const stripParamsForFloat = (newParams, existingParams) => paramsToInclude.
     reduce((obj, param) => ({ ...obj, [param]: newParams[param] || existingParams[param]}), {});
 
 const adjustFloatAccrualVars = async ({ clientId, floatId, newParams }) => {
@@ -204,6 +202,8 @@ const adjustFloatAccrualVars = async ({ clientId, floatId, newParams }) => {
     return { newAccrualVars, oldAccrualVars };
 };
 
+// if it's to / from bonus pool or client share, just use transfer lambda
+// it it's to the users, issue an appropriate instruction (bleeds into capitalization)
 const allocateFloatFunds = async ({ clientId, floatId, amountDef, allocatedToDef, adminUserId, logReason }) => {
 
     logger('Starting off an allocation ...');
@@ -300,21 +300,35 @@ const accrueDifferenceToUsers = async ({ clientId, floatId, amountDef, adminUser
 };
 
 const markLogUnresolved = async (logId, adminUserId, reasonToReopen) => {
+    if (!reasonToReopen) {
+        throw new Error('Reopening an alert requires user to provide a reason');
+    }
     const contextToUpdate = { resolved: false, reasonReopened: reasonToReopen, reopenedBy: adminUserId };
     return persistence.updateFloatLog({ logId, contextToUpdate });
 };
 
 const updateLogToResolved = async (logId, adminUserId, resolutionNote) => {
+    // record that it was viewed, and by whom (in log context)
+    if (!resolutionNote) {
+        throw new Error('Resolving alert without any other action requires user to provide a reason');
+    }
     const contextToUpdate = { resolved: true, resolvedByUserId: adminUserId, resolutionNote };
     logger('Updating log, with context: ', contextToUpdate);
     return persistence.updateFloatLog({ logId, contextToUpdate });
+};
+
+const adjustFloatVariables = async ({ clientId, floatId, logReason, newAccrualVars }) => {
+    const oldNewState = await adjustFloatAccrualVars({ clientId, floatId, newAccrualVars });
+    const logContext = { logReason, priorState: oldNewState.oldAccrualVars, newState: oldNewState.newAccrualVars };
+    const logInsertion = await persistence.insertFloatLog({ clientId, floatId, logType: '', logContext });
+    return logInsertion;
 };
 
 /**
  * Handles a variety of client-float edits, such as: (a) editing accrual rates and the like, (b) dealing with logs
  * Note: will be called from different endpoints but consolidating as single lambda
  */
-module.exports.adjustClientFloat = async (event) =>{
+module.exports.adjustClientFloat = async (event) => {
     if (!adminUtil.isUserAuthorized(event)) {
         return adminUtil.unauthorizedResponse;
     }
@@ -331,61 +345,50 @@ module.exports.adjustClientFloat = async (event) =>{
         const logReason = params.reasonToLog;
         const amountDef = params.amountToProcess; 
 
-        let response = {};
+        let resultOfOperation = null;
+        let tellPersistenceLogIsResolved = false;
+
         switch (operation) {
             case 'RESOLVE_ALERT':
-                // record that it was viewed, and by whom (in log context)
-                if (!logReason) {
-                    throw new Error('Resolving alert without any other action requires user to provide a reason');
-                }
-                const resultOfLog = await updateLogToResolved(priorLogId, adminUserId, logReason);
-                logger('Result of log resolution: ', resultOfLog);
-                break;
+                resultOfOperation = await updateLogToResolved(priorLogId, adminUserId, logReason);
+                break; // do no set boolean to true as that would cause double update
             case 'REOPEN_ALERT': 
-                // record that it is reopened
-                if (!logReason) {
-                    throw new Error('Reopening an alert requires user to provide a reason');
-                }
-                const resultOfUpdate = await markLogUnresolved(priorLogId, adminUserId, logReason);
-                logger('Completed alert reopening: ', resultOfUpdate);
-                break;
+                resultOfOperation = await markLogUnresolved(priorLogId, adminUserId, logReason);
+                break; // as above
             case 'ADJUST_ACCRUAL_VARS':
-                const oldNewState = await adjustFloatAccrualVars({ clientId, floatId, newAccrualVars: params.newAccrualVars });
-                const logContext = { logReason, priorState: oldNewState.oldAccrualVars, newState: oldNewState.newAccrualVars };
-                const logInsertion = await persistence.insertFloatLog({ clientId, floatId, logType: '', logContext });
-                logger('Completed, result of insertion: ', logInsertion);
+                resultOfOperation = await adjustFloatVariables({ clientId, floatId, logReason, newAccrualVars: params.newAccrualVars });
+                tellPersistenceLogIsResolved = true;
                 break;
             case 'ALLOCATE_FUNDS':
-                // if it's to / from bonus pool or client share, just use transfer lambda
-                // it it's to the users, issue an appropriate instruction (bleeds into capitalization)
-                const allocatedToDef = {}; // extract from params
-                const allocationResult = await allocateFloatFunds({ clientId, floatId, amountDef, allocatedToDef, adminUserId, adminUserId });
-                logger('Allocated? :', allocationResult);
-                response = { result: 'SUCCESS' };
+                resultOfOperation = await allocateFloatFunds({ clientId, floatId, amountDef, allocatedToDef: params.allocateTo, adminUserId, logReason });
+                tellPersistenceLogIsResolved = true;
                 break;
             case 'ADD_SUBTRACT_FUNDS':
                 // just adjusts the float balance to meet the amount in the bank account, do directly
-                const adjustmentResult = await addOrSubtractFunds({ clientId, floatId, amountDef, adminUserId, logReason });
-                logger('Well: ', adjustmentResult);
-                response = { result: 'SUCCESS' };
+                resultOfOperation = await addOrSubtractFunds({ clientId, floatId, amountDef, adminUserId, logReason });
+                tellPersistenceLogIsResolved = true;
                 break;
             case 'DISTRIBUTE_TO_USERS':
-                const distributionResult = await accrueDifferenceToUsers({ clientId, floatId, adminUserId, logReason });
-                logger('Distributed: ', distributionResult);
-                response = { result: 'SUCCESS' };
+                resultOfOperation = await accrueDifferenceToUsers({ clientId, floatId, adminUserId, logReason });
+                tellPersistenceLogIsResolved = true;
                 break;
             default:
                 logger('Error, some unknown operation, event : ', event);
                 throw new Error('Missing or unknown operation: ', operation);
         }
 
-        if (response.result === 'SUCCESS') {
+        logger('Result of operation: ', operation, ' is: ', resultOfOperation);
+
+        if (tellPersistenceLogIsResolved) {
             await updateLogToResolved(priorLogId, adminUserId);
         }
+
+        // possibly also send back the updated / new client-float var package?
+        const response = { result: 'SUCCESS' };
 
         return adminUtil.wrapHttpResponse(response);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return adminUtil.wrapHttpResponse(err.message, 500);
     }
-}
+};

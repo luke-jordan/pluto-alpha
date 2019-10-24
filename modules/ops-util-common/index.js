@@ -50,6 +50,36 @@ module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
     return amount * UNIT_MULTIPLIERS[fromUnit][toUnit];
 };
 
+// handy utility for summing over a set of rows that have different units
+module.exports.sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => 
+    rows.reduce((sum, row) => {
+        const rowAmount = parseInt(row[amountKey], 10) * UNIT_MULTIPLIERS[row['unit']][targetUnit]; 
+        return sum + rowAmount; 
+    }, 0);
+
+// note : there is probably a cleaner way to do this eventually
+module.exports.assembleCurrencyTotals = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => {
+    // first group the rows by currency
+    const groupedRows = { };
+    rows.forEach((row) => {
+        const currency = row['currency'];
+        if (!Reflect.has(groupedRows, currency)) {
+            groupedRows[currency] = [];
+        }
+        groupedRows[currency].push(row);
+    });
+    const presentCurrencies = Object.keys(groupedRows);
+    
+    const assembledResult = { };
+    presentCurrencies.forEach((currency) => {
+        assembledResult[currency] = {
+            amount: this.sumOverUnits(groupedRows[currency], targetUnit, amountKey),
+            unit: targetUnit
+        };
+    });
+    return assembledResult;
+};
+
 module.exports.extractQueryParams = (event) => {
     const isEventEmpty = typeof event !== 'object' || Object.keys(event).length === 0;
     logger('Is event empty ? : ', isEventEmpty);
