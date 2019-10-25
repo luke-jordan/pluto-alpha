@@ -598,7 +598,6 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
     const mockInstructionId = uuid();
     const mockClientId = uuid();
     
-    const testTime = moment();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
     const mockUpdatedTime = '2049-06-22T08:00:21.016Z';
 
@@ -606,7 +605,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
 
     // Isolated tests create a space where moment is not stubbed. Useful in cases where the same moment functions need to
     // return unique values.
-    const handler = proxyquire('../message-creating-handler', {
+    const msgHandler = proxyquire('../message-creating-handler', {
         './persistence/rds.notifications': {
             'getMessageInstruction': getMessageInstructionStub,
             'getUserIds': getUserIdsStub,
@@ -617,7 +616,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
             'updateInstructionState': updateInstructionStateStub,
             'updateMessageInstruction': updateMessageInstructionStub,
             '@noCallThru': true
-        },
+        }
     });
 
     beforeEach(() => {
@@ -649,7 +648,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });
         updateMessageInstructionStub.withArgs(mockInstructionId, 'last_processed_time', sinon.match.string).resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await handler.createFromPendingInstructions();
+        const result = await msgHandler.createFromPendingInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(result).to.exist;
@@ -696,7 +695,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });        
         updateMessageInstructionStub.withArgs(mockInstructionId, 'last_processed_time', sinon.match.string).resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await handler.createFromPendingInstructions();
+        const result = await msgHandler.createFromPendingInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(result).to.exist;
@@ -709,7 +708,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
                 expect(standardizedResult).to.have.property('instructionType', 'ONCE_OFF');
                 expect(standardizedResult).to.have.property('numberMessagesCreated', 10);
                 expect(standardizedResult).to.have.property('creationTimeMillis', mockCreationTime);
-                expect(standardizedResult).to.have.property('instructionUpdateTime', mockUpdatedTime)
+                expect(standardizedResult).to.have.property('instructionUpdateTime', mockUpdatedTime);
             } else {
                 expect(standardizedResult).to.have.property('processResult', 'INSTRUCTION_SCHEDULED');
             }
@@ -721,7 +720,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         expect(insertUserMessagesStub).to.have.been.called;
         expect(updateInstructionStateStub).to.have.been.called;
     });
-})
+});
 
 describe.skip('*** UNIT TESTING NEW USER MESSAGE SYNC ***', () => {
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
