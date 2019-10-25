@@ -90,7 +90,9 @@ resource "aws_iam_policy" "admin_client_float_access" {
         "Sid": "ClientFloatAdminAccess",
         "Effect": "Allow",
         "Action": [
-          "dynamodb:Scan"
+          "dynamodb:Scan",
+          "dynamodb:Query",
+          "dynamodb:GetItem"
         ],
         "Resource": [
           "${aws_dynamodb_table.client-float-table.arn}",

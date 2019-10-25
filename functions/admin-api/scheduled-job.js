@@ -6,9 +6,11 @@ const moment = require('moment');
 
 const BigNumber = require('bignumber.js');
 
-const rdsAdmin = require('./persistence/rds.admin');
-const rdsAnalytics = require('./persistence/rds.analytics');
+const rdsAccount = require('./persistence/rds.account');
+const rdsFloat = require('./persistence/rds.float');
 const dynamoFloat = require('./persistence/dynamo.float');
+
+const floatConsistency = require('./admin-float-consistency');
 
 const opsUtil = require('ops-util-common');
 const publisher = require('publish-common');
@@ -20,21 +22,23 @@ const lambda = new AWS.Lambda();
 const MILLIS_IN_DAY = 86400000;
 
 const expireHangingTransactions = async () => {
-    const resultOfExpiration = await rdsAdmin.expireHangingTransactions();
+    const resultOfExpiration = await rdsAccount.expireHangingTransactions();
     return resultOfExpiration.length;
+};
+
+const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
+    const floatBalanceMap = await rdsFloat.getFloatBalanceAndFlows([floatId]);
+    const floatBalanceCurr = floatBalanceMap.get(floatId);
+    const floatBalanceInfo = floatBalanceCurr[currency];
+    logger('For client-float: ', `${clientId}::${floatId}`, ', extracted float balance info: ', floatBalanceInfo);
+    return opsUtil.convertToUnit(floatBalanceInfo.amount, floatBalanceInfo.unit, 'HUNDREDTH_CENT');
 };
 
 const assembleAccrualPayload = async (clientFloatInfo) => {
     logger('Assembling from: ', clientFloatInfo);
 
-    const floatBalanceMap = await rdsAnalytics.getFloatBalanceAndFlows([clientFloatInfo.floatId]);
-    const floatBalanceCurr = floatBalanceMap.get(clientFloatInfo.floatId);
-    logger('And whole thing: ', floatBalanceCurr, ' which should be: ', clientFloatInfo.currency);
-    const floatBalanceInfo = floatBalanceCurr[clientFloatInfo.currency];
-    logger('Extracted float balance info: ', floatBalanceInfo);
-    const floatAmountHunCent = opsUtil.convertToUnit(floatBalanceInfo.amount, floatBalanceInfo.unit, 'HUNDREDTH_CENT');
-    
-    const lastFloatAccrualTime = await rdsAnalytics.getLastFloatAccrualTime(clientFloatInfo.floatId);
+    const floatAmountHunCent = obtainFloatBalance(clientFloatInfo);
+    const lastFloatAccrualTime = await rdsFloat.getLastFloatAccrualTime(clientFloatInfo.floatId, clientFloatInfo.clientId);
     
     // see the balance handler for a more detailed & commented version
     const accrualRateAnnualBps = clientFloatInfo.accrualRateAnnualBps;
@@ -158,12 +162,12 @@ const sendSystemStats = async () => {
     // todo : obviously, want to add a lot into here
     const [userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek] = 
         await Promise.all([
-            rdsAnalytics.countUserIdsWithAccounts(startOfTime, endTime, false),
-            rdsAnalytics.countUserIdsWithAccounts(startOfWeek, endTime, false),
-            rdsAnalytics.countUserIdsWithAccounts(startOfDay, endTime, false),
-            rdsAnalytics.countUserIdsWithAccounts(startOfTime, endTime, true),
-            rdsAnalytics.countUserIdsWithAccounts(startOfWeek, endTime, true),
-            rdsAnalytics.countUserIdsWithAccounts(startOfDay, endTime, true)
+            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, false),
+            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, false),
+            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, false),
+            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, true),
+            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, true),
+            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, true)
         ]);
 
     const templateVariables = { userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek };
@@ -178,6 +182,14 @@ const sendSystemStats = async () => {
     });
 };
 
+// used to control what should execute
+const operationMap = {
+    'SYSTEM_STATS': sendSystemStats,
+    'ACRRUE_FLOAT': initiateFloatAccruals,
+    'EXPIRE_HANGING': expireHangingTransactions,
+    'CHECK_FLOATS': floatConsistency.checkAllFloats
+};
+
 /**
  * Runs daily. Does several things:
  * (1) checks for accruals on each float & then triggers the relevant job
@@ -187,23 +199,14 @@ const sendSystemStats = async () => {
 module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
 
-    const [statResult, accrualResult, numberExpired] = await Promise.all([
-        sendSystemStats(),
-        initiateFloatAccruals(),
-        expireHangingTransactions()
-    ]);
+    const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : config.get('defaults.scheduledJobs');
+    const promises = tasksToRun.map((operation) => operationMap[operation]());
+    const results = await Promise.all(promises);
 
-    logger('Result of stat send: ', statResult);
-    logger('Accrual result: ', accrualResult);
-    logger('Expire handler: ', numberExpired);
+    logger('Results of tasks: ', results);
 
-    const responseStats = {
-        numberExpired,
-        numberAccruals: accrualResult
-    };
-
-    return { 
+    return {
         statusCode: 200,
-        body: { responseStats }
+        body: results
     };
 };

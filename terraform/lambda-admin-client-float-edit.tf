@@ -1,13 +1,13 @@
-variable "admin_client_float_fetch_lambda_function_name" {
-  default = "admin_client_float_fetch"
+variable "admin_client_float_edit_lambda_function_name" {
+  default = "admin_client_float_edit"
   type = "string"
 }
 
-resource "aws_lambda_function" "admin_client_float_fetch" {
+resource "aws_lambda_function" "admin_client_float_edit" {
 
-  function_name                  = "${var.admin_client_float_fetch_lambda_function_name}"
-  role                           = "${aws_iam_role.admin_client_float_fetch_role.arn}"
-  handler                        = "admin-float-handler.fetchClientFloatDetails"
+  function_name                  = "${var.admin_client_float_edit_lambda_function_name}"
+  role                           = "${aws_iam_role.admin_client_float_edit_role.arn}"
+  handler                        = "admin-float-handler.adjustClientFloat"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
@@ -46,11 +46,11 @@ resource "aws_lambda_function" "admin_client_float_fetch" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.admin_client_float_fetch]
+  depends_on = [aws_cloudwatch_log_group.admin_client_float_edit]
 }
 
-resource "aws_iam_role" "admin_client_float_fetch_role" {
-  name = "${var.admin_client_float_fetch_lambda_function_name}_role_${terraform.workspace}"
+resource "aws_iam_role" "admin_client_float_edit_role" {
+  name = "${var.admin_client_float_edit_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -69,30 +69,30 @@ resource "aws_iam_role" "admin_client_float_fetch_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "admin_client_float_fetch" {
-  name = "/aws/lambda/${var.admin_client_float_fetch_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "admin_client_float_edit" {
+  name = "/aws/lambda/${var.admin_client_float_edit_lambda_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
   }
 }
 
-resource "aws_iam_role_policy_attachment" "admin_client_float_fetch_basic_execution_policy" {
-  role = "${aws_iam_role.admin_client_float_fetch_role.name}"
+resource "aws_iam_role_policy_attachment" "admin_client_float_edit_basic_execution_policy" {
+  role = "${aws_iam_role.admin_client_float_edit_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "admin_client_float_fetch_vpc_execution_policy" {
-  role = "${aws_iam_role.admin_client_float_fetch_role.name}"
+resource "aws_iam_role_policy_attachment" "admin_client_float_edit_vpc_execution_policy" {
+  role = "${aws_iam_role.admin_client_float_edit_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "admin_client_float_fetch_secret_get" {
-  role = "${aws_iam_role.admin_client_float_fetch_role.name}"
+resource "aws_iam_role_policy_attachment" "admin_client_float_edit_secret_get" {
+  role = "${aws_iam_role.admin_client_float_edit_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_admin_worker"
 }
 
-resource "aws_iam_role_policy_attachment" "admin_client_float_fetch_table_access" {
-  role = "${aws_iam_role.admin_client_float_fetch_role.name}"
+resource "aws_iam_role_policy_attachment" "admin_client_float_edit_table_access" {
+  role = "${aws_iam_role.admin_client_float_edit_role.name}"
   policy_arn = "${aws_iam_policy.admin_client_float_access.arn}"
 }

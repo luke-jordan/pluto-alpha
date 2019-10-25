@@ -15,7 +15,10 @@ resource "aws_api_gateway_deployment" "admin_api_deployment" {
         aws_api_gateway_integration.message_instruct_list,
         aws_api_gateway_integration.message_instruct_update,
         aws_api_gateway_integration.boost_admin_create,
-        aws_api_gateway_integration.boost_admin_list
+        aws_api_gateway_integration.boost_admin_list,
+        aws_api_gateway_integration.admin_client_float_list,
+        aws_api_gateway_integration.admin_client_float_fetch,
+        aws_api_gateway_integration.admin_client_float_edit
     ]
 
     variables = {
@@ -255,6 +258,44 @@ module "client_float_fetch_cors" {
   api_resource_id = "${aws_api_gateway_resource.admin_client_float_fetch.id}"
 }
 
+// "EDIT" A FLOAT, I.E., PERFORM A RANGE OF OPERATIONS ON ACCRUAL VARS, AND SO FORTH
+
+resource "aws_api_gateway_resource" "admin_client_float_edit" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.admin_client_path_root.id}"
+  path_part   = "edit"
+}
+
+resource "aws_api_gateway_method" "admin_client_float_edit" {
+  rest_api_id   = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.admin_client_float_edit.id}"
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.admin_jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "admin_client_float_edit" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.admin_client_float_edit.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.admin_api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "admin_client_float_edit" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.admin_client_float_edit.resource_id}"
+  http_method = "${aws_api_gateway_method.admin_client_float_edit.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.admin_client_float_edit.invoke_arn}"
+}
+
+module "client_float_edit_cors" {
+  source = "./modules/cors"
+  api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  api_resource_id = "${aws_api_gateway_resource.admin_client_float_edit.id}"
+}
 
 /////////////////////// MESSAGING /////////////////////////////////////////////////////////////////////
 
