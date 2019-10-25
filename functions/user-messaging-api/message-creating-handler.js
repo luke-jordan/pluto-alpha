@@ -161,6 +161,10 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
 const processNonRecurringInstruction = async ({ instructionId, destinationUserId, parameters }) => {
     logger('Processing instruction with ID: ', instructionId);
     const instruction = await rdsUtil.getMessageInstruction(instructionId);
+
+    if (moment(instruction.startTime).valueOf() > moment().valueOf()) {
+        return { instructionId, processResult: 'INSTRUCTION_SCHEDULED' };
+    }
     
     const selectionInstruction = instruction.selectionInstruction || null;
     const userIds = destinationUserId ? [destinationUserId] : await rdsUtil.getUserIds(selectionInstruction);

@@ -117,7 +117,9 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
     // once off messages right away (on assumption they should go out)
     const holdOffInstructed = typeof params.holdFire === 'boolean' && params.holdFire;
     logger(`Fire off now? Presentation type: ${params.presentationType} and hold off instructed ? : ${holdOffInstructed}`);
-    if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed) {
+    const isScheduled = moment(params.startTime).valueOf() > moment().valueOf();
+    logger(`Is message scheduled for future delivery?: ${isScheduled}`);
+    if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed && !isScheduled) {
         const lambdaPaylod = { instructions: [{ instructionId }]};
         const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, lambdaPaylod)).promise();
         logger('Fired off process instruction: ', fireResult);
