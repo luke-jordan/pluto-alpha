@@ -41,6 +41,11 @@
         "userHistory": {
             "eventTypes": ["USER_LOGIN", "SAVING_PAYMENT_SUCCESSFUL", "WITHDRAWAL_EVENT_CONFIRMED", "WITHDRAWAL_COMPLETED", "PASSWORD_SET", "USER_REGISTERED", "STATUS_CHANGED"],
             "daysInHistory": 180
-        }
+        },
+        "floatAlerts": {
+            "logTypes": ["PARAMETERS_UPDATED", "BALANCE_MISMATCH", "ALLOCATION_TOTAL_MISMATCH", "BALANCE_UNOBTAINABLE", "BALANCE_UPDATED_MANUALLY", "ADMIN_TRANSFER"],
+            "redFlagTypes": ["BALANCE_MISMATCH", "ALLOCATION_TOTAL_MISMATCH", "BALANCE_UNOBTAINABLE"]
+        },
+        "scheduledJobs": ["SYSTEM_STATS", "ACRRUE_FLOAT", "EXPIRE_HANGING"]
     }
 }

@@ -73,16 +73,17 @@ module.exports.addOrSubtractFloat = async (request = {
     const logRefTime = request.referenceTimeMillis ? moment(request.referenceTimeMillis).format() : moment().format();
     const logToInsert = {
         logId: uuid(),
+        clientId: request.clientId,
         floatId: request.floatId,
         referenceTime: logRefTime,
         logType: request.logType
     };
 
-    const logInsertQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, float_id, log_type) ` +
+    const logInsertQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, client_id, float_id, log_type) ` +
         `values %L returning log_id, creation_time`;
     const logInsertDef = {
         query: logInsertQuery,
-        columnTemplate: '${logId}, ${referenceTime}, ${floatId}, ${logType}',
+        columnTemplate: '${logId}, ${referenceTime}, ${clientId}, ${floatId}, ${logType}',
         rows: [logToInsert] 
     };
     
