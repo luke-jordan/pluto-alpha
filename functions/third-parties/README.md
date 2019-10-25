@@ -1,3 +1,5 @@
+# Third Party Integrations
+
 # Bank Account Verification
 
 ## Functions
@@ -17,19 +19,16 @@ This function returns a job status and job id in its response.
 
 | Param | Type | Description |
 | --- | --- | --- |
-| event | <code>object</code> | An event object containing the request context and request body. The event body's properties are described below. |
+| event | <code>object</code> | An event object containing the request body. The event body's properties are described below. |
 
 **Properties**
 
 | Name | Type | Description |
 | --- | --- | --- |
-| verificationType | <code>string</code> | Type of Verification, can be either Company or Individual. |
 | bankName | <code>string</code> | Name of bank can be any of the following - (ABSA, FNB, STANDARDBANK, NEDBANK, CAPITEC). |
 | accountNumber | <code>string</code> | Bank account number of account holder. |
-| accountType | <code>string</code> | Bank account type of account holder (CURRENTCHEQUEACCOUNT, SAVINGSACCOUNT, TRANSMISSION, BOND). |
+| accountType | <code>string</code> | Bank account type of account holder (CURRENTCHEQUEACCOUNT,SAVINGSACCOUNT,TRANSMISSION,BOND). |
 | reference | <code>string</code> | Your Search Reference - Internal use. |
-| companyRegNumber | <code>string</code> | if Verification Type is Company this is the Company registration number in the following format xxxx/xxxxxx/xx |
-| companyName | <code>string</code> | if Verification Type is Company, this will be the Company Name. |
 | initials | <code>string</code> | if Verification Type is Individual, this will be the initials of person. |
 | surname | <code>string</code> | if Verification Type is Individual, this will be the persons Surname. |
 | nationalId | <code>string</code> | if Verification Type is Individual, this will be the persons ID Number. |
@@ -52,9 +51,7 @@ the verification which will be used to check on the status of the bank account v
 | --- | --- | --- |
 | jobId | <code>string</code> | JobId returned from the bank account verification API |
 
-# Payment Integrations
-
-## Functions
+# Payment Url And Transaction Status Check
 
 <a name="paymentUrlRequest"></a>
 

@@ -11,10 +11,6 @@ const validateParams = (params) => {
     const supportedBanks = config.get('pbVerify.supportedBanks');
     const accountTypes = config.get('pbVerify.accountTypes');
     switch (true) {
-        case !params.verificationType:
-            throw new Error('Missing verification type');
-        case params.verificationType !== 'Individual':
-            throw new Error('Invalid verification type');
         case !params.bankName:
             throw new Error('Missing bank name');
         case !supportedBanks.includes(params.bankName.toUpperCase()):
@@ -46,7 +42,7 @@ const assembleRequest = (params, action) => {
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
-                'bvs_details[verificationType]': params.verificationType,
+                'bvs_details[verificationType]': 'Individual',
                 'bvs_details[bank_name]': params.bankName,
                 'bvs_details[acc_number]': params.accountNumber,
                 'bvs_details[acc_type]': params.accountType,
@@ -82,13 +78,10 @@ const assembleRequest = (params, action) => {
  * could take up to 3+ hours to receive responses from participating banks.
  * This function returns a job status and job id in its response.
  * @param {object} event An event object containing the request body. The event body's properties are described below.
- * @property {string} verificationType Type of Verification, can be either Company or Individual.
  * @property {string} bankName Name of bank can be any of the following - (ABSA, FNB, STANDARDBANK, NEDBANK, CAPITEC).
  * @property {string} accountNumber Bank account number of account holder.
  * @property {string} accountType Bank account type of account holder (CURRENTCHEQUEACCOUNT,SAVINGSACCOUNT,TRANSMISSION,BOND).
  * @property {string} reference Your Search Reference - Internal use.
- * @property {string} companyRegNumber if Verification Type is Company this is the Company registration number in the following format xxxx/xxxxxx/xx
- * @property {string} companyName if Verification Type is Company, this will be the Company Name.
  * @property {string} initials if Verification Type is Individual, this will be the initials of person.
  * @property {string} surname if Verification Type is Individual, this will be the persons Surname.
  * @property {string} nationalId if Verification Type is Individual, this will be the persons ID Number.

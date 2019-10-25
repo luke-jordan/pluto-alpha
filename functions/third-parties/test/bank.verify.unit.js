@@ -66,7 +66,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         requestStub.withArgs(expectedRequestArgs).resolves(expectedResponse);
 
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'NEDBANK',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
@@ -106,7 +105,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         requestStub.withArgs(expectedRequestArgs).resolves('Balderdash');
 
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
@@ -124,48 +122,8 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
     });
 
-    it('Fails on missing verification type', async () => {
-        const testEvent = {
-            bankName: 'STANDARD',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
-        };
-
-        const result = await handler.initialize(testEvent);
-        logger('Account verification resulted in:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing verification type' });
-        expect(requestStub).to.have.not.been.called;
-    });
-
-    it('Fails on invalid verification type', async () => {
-        const testEvent = {
-            verificationType: 'Vulcan',
-            bankName: 'STANDARD',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
-        };
-
-        const result = await handler.initialize(testEvent);
-        logger('Account verification resulted in:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Invalid verification type' });
-        expect(requestStub).to.have.not.been.called;
-    });
-
     it('Fails on missing bank name', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
             reference: testReference,
@@ -184,7 +142,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on unsupported bank', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'JP MORGAN',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
@@ -204,7 +161,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on missing account number', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountType: testAccountType,
             reference: testReference,
@@ -223,7 +179,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on missing account type', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
             reference: testReference,
@@ -242,7 +197,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on invalid account type', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
             accountType: 'HEDGEFUND',
@@ -262,7 +216,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on missing reference', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
@@ -281,7 +234,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on missing national id number on verification of an individuals bank account', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
@@ -300,7 +252,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on missing initials on verification of and individuals bank account', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
@@ -319,7 +270,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
     it('Fails on missing surname on verification of an individuals bank account', async () => {
         const testEvent = {
-            verificationType: 'Individual',
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
             accountType: testAccountType,
