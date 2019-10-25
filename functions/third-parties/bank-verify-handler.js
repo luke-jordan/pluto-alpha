@@ -7,22 +7,13 @@ const request = require('request-promise');
 const extractUserDetails = (event) => (event.requestContext ? event.requestContext.authorizer : null);
 const extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
 
-const wrapHttpResponse = (body, statusCode = 200) => ({
-    statusCode,
-    headers: {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-    },
-    body: JSON.stringify(body)
-});
-
 const validateParams = (params) => {
     const supportedBanks = config.get('pbVerify.supportedBanks');
     const accountTypes = config.get('pbVerify.accountTypes');
     switch (true) {
         case !params.verificationType:
             throw new Error('Missing verification type');
-        case params.verificationType !== 'Company' && params.verificationType !== 'Individual':
+        case params.verificationType !== 'Individual':
             throw new Error('Invalid verification type');
         case !params.bankName:
             throw new Error('Missing bank name');
@@ -36,51 +27,49 @@ const validateParams = (params) => {
             throw new Error('Invalid account type');
         case !params.reference:
             throw new Error('Missing reference');
-        case params.verificationType === 'Company' && !params.companyRegNumber:
-            throw new Error('Company registration number is required for company account verification');
-        case params.verificationType === 'Company' && !params.companyName:
-            throw new Error('Company name is required for company account verification');
-        case params.verificationType === 'Individual' && !params.nationalId:
+        case !params.nationalId:
             throw new Error('The individuals national id is required for individual account verification');
-        case params.verificationType === 'Individual' && !params.initials:
+        case !params.initials:
             throw new Error('The individuals initials are required for individual account verification');
-        case  params.verificationType === 'Individual' && !params.surname:
+        case  !params.surname:
             throw new Error('The individuals surname is required for individual account verification');
         default:
             return params;
     }
 };
 
-const assembleRequest = (params) => {
-    const verificationType = params.verificationType
-
-    let entityDetails = {
-        'memberkey': config.get('pbVerify.memberKey'),
-        'password': config.get('pbVerify.password'),
-        'bvs_details[verificationType]': verificationType,
-        'bvs_details[bank_name]': params.bankName,
-        'bvs_details[acc_number]': params.accountNumber,
-        'bvs_details[acc_type]': params.accountType,
-        'bvs_details[yourReference]': params.reference
-    };
-
-    if (verificationType === 'Company') {
-        entityDetails['bvs_details[company_reg_no]'] = params.companyRegNumber;
-        entityDetails['bvs_details[company_name]'] = params.companyName;
+const assembleRequest = (params, action) => {
+    if (action === 'INITIALISE') {
+        return {
+            method: 'POST',
+            url: config.get('pbVerify.endpoint'),
+            formData: {
+                'memberkey': config.get('pbVerify.memberKey'),
+                'password': config.get('pbVerify.password'),
+                'bvs_details[verificationType]': params.verificationType,
+                'bvs_details[bank_name]': params.bankName,
+                'bvs_details[acc_number]': params.accountNumber,
+                'bvs_details[acc_type]': params.accountType,
+                'bvs_details[yourReference]': params.reference,
+                'bvs_details[id_number]': params.nationalId,
+                'bvs_details[initials]': params.initials,
+                'bvs_details[surname]': params.surname,
+            },
+            json: true
+        };
     }
-
-    if (verificationType === 'Individual') {
-        entityDetails['bvs_details[id_number]'] = params.nationalId;
-        entityDetails['bvs_details[initials]'] = params.initials;
-        entityDetails['bvs_details[surname]'] = params.surname;
+    if (action === 'CHECKSTATUS') {
+        return {
+            method: 'POST',
+            url: config.get('pbVerify.endpoint'),
+            formData: {
+                'memberkey': config.get('pbVerify.memberKey'),
+                'password': config.get('pbVerify.password'),
+                'jobId': params.jobId
+            },
+            json: true
+        }
     }
-
-    return {
-        method: 'POST',
-        url: config.get('pbVerify.endpoint'),
-        formData: entityDetails,
-        json: true
-    };
 };
 
 
@@ -92,7 +81,7 @@ const assembleRequest = (params) => {
  * verification after 03:00 AM on normal weekdays. Responses may be available within 30 minutes, but it 
  * could take up to 3+ hours to receive responses from participating banks.
  * This function returns a job status and job id in its response.
- * @param {object} event An event object containing the request context and request body. The event body's properties are described below.
+ * @param {object} event An event object containing the request body. The event body's properties are described below.
  * @property {string} verificationType Type of Verification, can be either Company or Individual.
  * @property {string} bankName Name of bank can be any of the following - (ABSA, FNB, STANDARDBANK, NEDBANK, CAPITEC).
  * @property {string} accountNumber Bank account number of account holder.
@@ -106,29 +95,24 @@ const assembleRequest = (params) => {
  */
 module.exports.initialize = async (event) => {
     try {
-        const userDetails = extractUserDetails(event);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-
         const params = extractEventBody(event);
         const validParams = validateParams(params)
         logger('Validated params:', validParams);
 
-        const options = assembleRequest(validParams);
+        const options = assembleRequest(validParams, 'INITIALISE');
         logger('Created options:', options);
 
         const response = await request(options);
         logger('Verification request result in:', response);
         if (!response || typeof response !== 'object' || response.Status !== 'Success') {
-            return wrapHttpResponse(response, 500);
+            return { Status: 'Error', details: response };
         }
 
-        return wrapHttpResponse(response, 200);
+        return response;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return wrapHttpResponse(err.message, 500);
+        return { Status: 'Error', details: err.message };
     }
 };
 
@@ -140,37 +124,24 @@ module.exports.initialize = async (event) => {
  */
 module.exports.checkStatus = async (event) => {
     try {
-        const userDetails = extractUserDetails(event);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-
         const params = extractEventBody(event);
         if (!params.jobId) {
             throw new Error('Missing job id');
         }
 
-        const options = {
-            method: 'POST',
-            url: config.get('pbVerify.endpoint'),
-            formData: {
-                'memberkey': config.get('pbVerify.memberKey'),
-                'password': config.get('pbVerify.password'),
-                'jobId': params.jobId
-            },
-            json: true
-        };
+        const options = assembleRequest(params, 'CHECKSTATUS');
         logger('Created options:', options);
+
         const response = await request(options);
         logger('Verification request result in:', response);
         if (!response || typeof response !== 'object' || response.Status !== 'Success') {
-            return wrapHttpResponse(response, 500);
+            return { Status: 'Error', details: response };
         }
 
-        return wrapHttpResponse(response, 200);
+        return response;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return wrapHttpResponse(err.message, 500);
+        return { Status: 'Error', details: err.message };
     }
 };
