@@ -134,7 +134,12 @@ module.exports = {
         'no-buffer-constructor': 'error',
         'no-caller': 'error',
         'no-catch-shadow': 'error',
-        'no-confusing-arrow': 'error',
+        'no-confusing-arrow': [
+            'error',
+            {
+                'allowParens': true
+            }
+        ],
         'no-console': 'error',
         'no-continue': 'error',
         'no-div-regex': 'error',

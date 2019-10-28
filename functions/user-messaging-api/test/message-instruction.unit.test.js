@@ -73,7 +73,6 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         templates: { template: { 'DEFAULT': testRecurringTemplate }},
         selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
         recurrenceParameters: null,
-        startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
         messagePriority: 0,
         eventTypeCategory: null
@@ -89,8 +88,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     const mockPersistableObject = (instruction = mockInstruction) => ({
         instructionId: mockInstructionId,
         creatingUserId: mockUserId,
-        startTime: instruction.startTime ? instruction.startTime : moment().format(),
-        endTime: instruction.endTime ? instruction.endTime : moment().add(500, 'years').format(),
+        startTime: sinon.match.string,
+        endTime: sinon.match.string,
         presentationType: instruction.presentationType,
         processedStatus: instruction.presentationType === 'ONCE_OFF' ? 'READY_FOR_GENERATING' : 'CREATED',
         active: true,
@@ -193,7 +192,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
         };
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
         mockInstruction.fireTestMessage = true;
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
@@ -219,6 +218,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         mockInstruction.presentationType = 'EVENT_DRIVEN';
         mockInstruction.eventTypeCategory = 'REFERRAL';
         mockInstruction.fireTestMessage = true;
+        
+        const testInstruction = mockPersistableObject(mockInstruction);
 
         const mockInvocation = {
             FunctionName: 'message_user_create_once',
@@ -228,7 +229,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         };
 
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
-        insertMessageInstructionStub.withArgs(mockPersistableObject(mockInstruction)).resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
         logger('Result of message instruction creation:', resultOfInsertion);
@@ -245,8 +246,41 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(body).to.have.property('message');
         expect(body.message).to.have.property('instructionId', mockInstructionId);
         expect(body.message).to.have.property('creationTime', mockCreationTime);
-        expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(mockPersistableObject(mockInstruction));
+        expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(sinon.match(testInstruction));
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+    });
+
+    it('Inserts instruction for scheduled once off message', async () => {
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { template: { 'DEFAULT': testRecurringTemplate }},
+                selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                startTime: moment().add(2, 'days').format(),
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 200);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('processResult', 'INSTRUCT_STORED');
+        expect(body).to.have.property('message');
+        expect(body.message).to.have.property('instructionId', mockInstructionId);
+        expect(body.message).to.have.property('creationTime', mockCreationTime);
+        expect(insertMessageInstructionStub).to.have.been.calledOnce;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
     });
 
     it('Fails on unauthorized instruction insertion', async () => {
@@ -343,6 +377,58 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(body).to.have.property('message', 'Instructions for event driven must specify the event type');
         expect(insertMessageInstructionStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;     
+    });
+});
+
+describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
+    const mockUserId = uuid();
+    const mockInstructionId = uuid();
+    const mockCreationTime = '2049-06-22T07:38:30.016Z';
+    const mockClientId = uuid();
+
+    const instructionHandler = proxyquire('../msg-instruction-handler', {
+        './persistence/rds.notifications': {
+            'insertMessageInstruction': insertMessageInstructionStub
+        },
+        '@noCallThru': true
+    });
+
+    beforeEach(() => {
+        resetStubs();
+        uuidStub.returns(mockInstructionId);
+    });
+
+    it('Inserts instruction for scheduled once off message', async () => {
+        const testStartTime = moment().add(2, 'minutes');
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { template: { 'DEFAULT': testRecurringTemplate }},
+                selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                startTime: testStartTime.format()
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await instructionHandler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 200);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('processResult', 'INSTRUCT_STORED');
+        expect(body).to.have.property('message');
+        expect(body.message).to.have.property('instructionId', mockInstructionId);
+        expect(body.message).to.have.property('creationTime', mockCreationTime);
+        expect(insertMessageInstructionStub).to.have.been.calledOnce;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
     });
 });
 
