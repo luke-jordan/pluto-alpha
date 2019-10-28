@@ -353,7 +353,7 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
     const mockClientId = uuid();
 
-    const handler = proxyquire('../msg-instruction-handler', {
+    const instructionHandler = proxyquire('../msg-instruction-handler', {
         './persistence/rds.notifications': {
             'insertMessageInstruction': insertMessageInstructionStub
         },
@@ -381,7 +381,7 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
         };
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
-        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        const resultOfInsertion = await instructionHandler.insertMessageInstruction(mockEvent);
         logger('Result of message instruction creation:', resultOfInsertion);
 
         expect(resultOfInsertion).to.exist;
