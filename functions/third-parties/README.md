@@ -1,17 +1,61 @@
+# Third Party Integrations
+
+# Bank Account Verification
+
 ## Functions
 
-<dl>
-<dt><a href="#payment">payment(event)</a> ⇒ <code>object</code></dt>
-<dd><p>This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below. Further information may be found here <a href="https://ozow.com/integrations/">https://ozow.com/integrations/</a> .</p>
-</dd>
-<dt><a href="#status">status(event)</a> ⇒ <code>object</code></dt>
-<dd><p>This method gets the tranaction status of a specified payment.</p>
-</dd>
-</dl>
+<a name="initialize"></a>
 
-<a name="payment"></a>
+## initialize(event)
+This function enables verifications on consumer bank account details to determine the state and 
+validity of a South African bank account. The Following banks are supported ABSA; FNB; STANDARD, NEDBANK, CAPITEC. 
+Processing Times – Although the service is available 24 x 7 x 365, records received after 17:00 on 
+weekdays, will only be submitted on the next available working day. Records are only submitted for 
+verification after 03:00 AM on normal weekdays. Responses may be available within 30 minutes, but it 
+could take up to 3+ hours to receive responses from participating banks.
+This function returns a job status and job id in its response.
 
-## payment(event) ⇒ <code>object</code>
+**Kind**: global function  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| event | <code>object</code> | An event object containing the request body. The event body's properties are described below. |
+
+**Properties**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| bankName | <code>string</code> | Name of bank can be any of the following - (ABSA, FNB, STANDARDBANK, NEDBANK, CAPITEC). |
+| accountNumber | <code>string</code> | Bank account number of account holder. |
+| accountType | <code>string</code> | Bank account type of account holder (CURRENTCHEQUEACCOUNT,SAVINGSACCOUNT,TRANSMISSION,BOND). |
+| reference | <code>string</code> | Your Search Reference - Internal use. |
+| initials | <code>string</code> | if Verification Type is Individual, this will be the initials of person. |
+| surname | <code>string</code> | if Verification Type is Individual, this will be the persons Surname. |
+| nationalId | <code>string</code> | if Verification Type is Individual, this will be the persons ID Number. |
+
+<a name="checkStatus"></a>
+
+## checkStatus(event)
+This function is used with the response from initialize(), you will receive a JobID in the result of
+the verification which will be used to check on the status of the bank account verification.
+
+**Kind**: global function  
+
+| Param | Type | Description |
+| --- | --- | --- |
+| event | <code>object</code> | An event object containing the request context and request body. The event body's properties are described below. |
+
+**Properties**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| jobId | <code>string</code> | JobId returned from the bank account verification API |
+
+# Payment Url And Transaction Status Check
+
+<a name="paymentUrlRequest"></a>
+
+## paymentUrlRequest(event) ⇒ <code>object</code>
 This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below. Further information may be found here https://ozow.com/integrations/ .
 
 **Kind**: global function  
@@ -35,9 +79,9 @@ This function gets a payment url from a third-party. Property descriptions for t
 | successUrl | <code>string</code> | Optional. The Url that the third party should post the redirect result to if the payment was successful, this will also be the page the customer gets redirect back to. |
 | isTest | <code>boolean</code> | Required. Send true to test your request posting and response handling. If set to true you will be redirected to a page where you can select whether you would like a successful or unsuccessful redirect response sent back. |
 
-<a name="status"></a>
+<a name="statusCheck"></a>
 
-## status(event) ⇒ <code>object</code>
+## statusCheck(event) ⇒ <code>object</code>
 This method gets the tranaction status of a specified payment.
 
 **Kind**: global function  
@@ -54,7 +98,7 @@ All properties (including those not returned to the caller) are listed below.
 | Name | Type | Description |
 | --- | --- | --- |
 | transactionId | <code>string</code> | The merchant's reference for the transaction. |
-| IsTest | <code>boolean</code> | Defaults to true. All calls in production must include this property set to false. |
+| isTest | <code>boolean</code> | Defaults to true. All calls in production must include this property set to false. |
 | transactionId | <code>string</code> | The third parties unique reference for the transaction. |
 | merchantCode | <code>string</code> | Unique code assigned to each merchant. |
 | siteCode | <code>string</code> | Unique code assigned to each merchant site. |
