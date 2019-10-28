@@ -2,7 +2,6 @@
 
 const logger = require('debug')('jupiter:third-parties:bank-verify-test');
 const config = require('config');
-const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -16,17 +15,12 @@ const handler = proxyquire('../bank-verify-handler', {
     'request-promise': requestStub
 });
 
-const expectedHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': '*'
-};
-
 const resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
 describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
-    const testUserId = uuid();
+    
     const testAccountNumber = '3243463245';
     const testAccountType = 'SAVINGSACCOUNT';
     const testIdNumber = '8307065125487';
@@ -290,8 +284,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
 describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
     const testJobId = '73773590';
-    const testUserId = uuid();
-
+    
     const testResponse = {
         'Status': 'Success',
         'Results': {
@@ -337,7 +330,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
                 'jobId': testJobId
             },
             json: true
-          }
+        };
 
         requestStub.withArgs(expectedRequestArgs).resolves(testResponse);
         const testEvent = { jobId: testJobId };
@@ -383,6 +376,6 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal({ Status: 'Error', details: 'Missing job id' });
         expect(requestStub).to.have.not.been.called;
-    })
+    });
 
 });

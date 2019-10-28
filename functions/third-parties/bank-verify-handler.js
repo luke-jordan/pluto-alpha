@@ -4,7 +4,6 @@ const logger = require('debug')('jupiter:third-parties:bank-verify');
 const config = require('config');
 const request = require('request-promise');
 
-const extractUserDetails = (event) => (event.requestContext ? event.requestContext.authorizer : null);
 const extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
 
 const validateParams = (params) => {
@@ -14,7 +13,7 @@ const validateParams = (params) => {
         case !params.bankName:
             throw new Error('Missing bank name');
         case !supportedBanks.includes(params.bankName.toUpperCase()):
-            throw new Error('The bank you have entered is currently not supported')
+            throw new Error('The bank you have entered is currently not supported');
         case !params.accountNumber:
             throw new Error('Missing account number');
         case !params.accountType:
@@ -27,7 +26,7 @@ const validateParams = (params) => {
             throw new Error('The individuals national id is required for individual account verification');
         case !params.initials:
             throw new Error('The individuals initials are required for individual account verification');
-        case  !params.surname:
+        case !params.surname:
             throw new Error('The individuals surname is required for individual account verification');
         default:
             return params;
@@ -49,7 +48,7 @@ const assembleRequest = (params, action) => {
                 'bvs_details[yourReference]': params.reference,
                 'bvs_details[id_number]': params.nationalId,
                 'bvs_details[initials]': params.initials,
-                'bvs_details[surname]': params.surname,
+                'bvs_details[surname]': params.surname
             },
             json: true
         };
@@ -64,7 +63,7 @@ const assembleRequest = (params, action) => {
                 'jobId': params.jobId
             },
             json: true
-        }
+        };
     }
 };
 
@@ -89,7 +88,7 @@ const assembleRequest = (params, action) => {
 module.exports.initialize = async (event) => {
     try {
         const params = extractEventBody(event);
-        const validParams = validateParams(params)
+        const validParams = validateParams(params);
         logger('Validated params:', validParams);
 
         const options = assembleRequest(validParams, 'INITIALISE');

@@ -10,7 +10,6 @@ const POST_KEY_ORDER = config.get('ozow.postKeyOrder');
 // const RESPONSE_KEY_ORDER = config.get('ozow.responseKeyOrder');
 const pvtkey = config.get('ozow.privateKey');
 
-
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 
 const generateHashCheck = (params) => {
