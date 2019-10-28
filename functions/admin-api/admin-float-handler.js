@@ -11,7 +11,7 @@ const AWS = require('aws-sdk');
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
 
-const ALERT_DESCS = require('./descriptions');
+const DESC_MAP = require('./descriptions');
 const FLAG_ALERTS = config.get('defaults.floatAlerts.redFlagTypes');
 
 AWS.config.update({ region: config.get('aws.region') });
@@ -122,19 +122,25 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
 };
 
 const transformLog = (rawLog) => {
+    logger('Transforming log: ', rawLog);
     const logContext = rawLog.logContext;
 
     const isResolved = typeof logContext === 'object' && typeof logContext.resolved === 'boolean' && logContext.resolved;
-    const isRedFlag = FLAG_ALERTS.indexOf(rawLog.logType) > 0 && !isResolved;
+    const isRedFlag = FLAG_ALERTS.indexOf(rawLog.logType) >= 0 && !isResolved;
 
     // note : we almost certainly want to convert type to description on the client (e.g., for i18n), but for now, using this
-    const logDescription = ALERT_DESCS[rawLog.logType] || rawLog.logType;
+    // logger('Description ? :', DESC_MAP[rawLog.logType]);
+    // logger('And the whole lot: ', DESC_MAP);
+    const logDescription = DESC_MAP['floatLogs'][rawLog.logType] || rawLog.logType;
     const updatedTimeMillis = moment(rawLog.updatedTime).valueOf();
 
     return {
+        logId: rawLog.logId,
         logType: rawLog.logType,
         updatedTimeMillis,
         logDescription,
+        logContext,
+        isResolved,
         isRedFlag
     };
 };
