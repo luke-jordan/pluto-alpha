@@ -113,14 +113,14 @@ jobs:
             npm install --save-dev codecov
             node_modules/codecov/bin/codecov
 
-    # And here the deployment stuff starts
-    - restore_cache:
-        keys:
-        - terraform_bin-{{ checksum "./terraform/terraform_version" }}
+      # And here the deployment stuff starts
+      - restore_cache:
+          keys:
+          - terraform_bin-{{ checksum "./terraform/terraform_version" }}
 
-    - restore_cache:
-        keys:
-        - aws_zip
+      - restore_cache:
+          keys:
+          - aws_zip
 
       - run:
           name: install aws cli
@@ -192,6 +192,7 @@ jobs:
                 zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip .
 
              fi
+             
       - run:
           name: deploy artifacts
           command: |
