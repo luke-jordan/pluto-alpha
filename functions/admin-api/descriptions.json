@@ -1,0 +1,10 @@
+{
+    "floatLogs": {
+        "PARAMETERS_UPDATED": "The float variables have been changed",
+        "BALANCE_MISMATCH": "Float bank balance and system balance do not match",
+        "ALLOCATION_TOTAL_MISMATCH": "Part of the float (R{unallocatedAmount}) is not allocated",
+        "BALANCE_UNOBTAINABLE": "System error: something is wrong, the current balance cannot be retrieved",
+        "BALANCE_UPDATED_MANUALLY": "Float balance has been adjusted by admin",
+        "ADMIN_TRANSFER": "Float excess/deficiency allocated by admin"
+    }
+}

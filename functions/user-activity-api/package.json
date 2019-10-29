@@ -11,13 +11,16 @@
   "author": "Luke Jordan",
   "license": "ISC",
   "dependencies": {
+    "aws-sdk": "^2.536.0",
     "bignumber.js": "^9.0.0",
     "camelcase": "^5.3.1",
     "config": "^3.1.0",
     "debug": "^4.1.1",
+    "ioredis": "^4.14.1",
     "moment": "^2.24.0",
     "moment-timezone": "^0.5.25",
     "statuses": "^1.5.0",
+    "string-format": "^2.0.0",
     "uuid": "^3.3.2"
   },
   "devDependencies": {

@@ -2,12 +2,13 @@
 
 const config = require('config');
 
-const constants = require('../constants');
 const logger = require('debug')('jupiter:float:rds');
 const uuid = require('uuid/v4');
+const moment = require('moment');
+
+const constants = require('../constants'); // todo : replace with config, or similar
 
 const RdsConnection = require('rds-common');
-
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` +
@@ -33,6 +34,8 @@ module.exports.debugConnection = async () => {
  * @param {string} unit The unit of the amount
  * @param {string} backingEntityType If there is a related backing entity, e.g., an accrual event/transaction, what type is it
  * @param {string} backingEntityIdentifer What is the identifier of the backing endity
+ * @param {string} logType The type of float log to record for this
+ * @param {number} referenceTimeMillis Optional parameter recording the time the accrual fetch/calc was made, for the log
  */
 module.exports.addOrSubtractFloat = async (request = {
         clientId: 'some_saving_co', 
@@ -42,13 +45,11 @@ module.exports.addOrSubtractFloat = async (request = {
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
         backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-        backingEntityIdentifer: 'uid-on-wholesale'}) => {
+        backingEntityIdentifer: 'uid-on-wholesale', 
+        logType: 'ACCRUAL_EVENT',
+        referenceTimeMillis: 0 }) => {
     
-    // todo : validation on transaction types, units
-
-    const query = insertionQuery;
-    const columns = insertionColumns;
-    
+    // todo : validation on transaction types, units, log type & reference time, etc.    
     const rowToInsert = {
         'transaction_id': request.transactionId || uuid(),
         'client_id': request.clientId,
@@ -62,12 +63,40 @@ module.exports.addOrSubtractFloat = async (request = {
         'related_entity_type': request.backingEntityType,
         'related_entity_id': request.backingEntityIdentifier
     };
-    
-    // todo : we want the timestamp here so we can get precise on the auditing, when calling new balance below
-    const queryResult = await rdsConnection.insertRecords(query, columns, [rowToInsert]);
-    const queryTxId = queryResult.rows[0]['transaction_id'];
-    logger('Query result: ', queryResult);
 
+    const txInsertDef = {
+        query: insertionQuery,
+        columnTemplate: insertionColumns,
+        rows: [rowToInsert]
+    };
+
+    const logRefTime = request.referenceTimeMillis ? moment(request.referenceTimeMillis).format() : moment().format();
+    const logToInsert = {
+        logId: uuid(),
+        clientId: request.clientId,
+        floatId: request.floatId,
+        referenceTime: logRefTime,
+        logType: request.logType
+    };
+
+    const logInsertQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, client_id, float_id, log_type) ` +
+        `values %L returning log_id, creation_time`;
+    const logInsertDef = {
+        query: logInsertQuery,
+        columnTemplate: '${logId}, ${referenceTime}, ${clientId}, ${floatId}, ${logType}',
+        rows: [logToInsert] 
+    };
+    
+    // this is not really large but that is the right method for bundled inserts
+    logger('Insert query def: ', logInsertDef);
+    logger('And tx def: ', txInsertDef);
+
+    const queryResult = await rdsConnection.largeMultiTableInsert([txInsertDef, logInsertDef]);
+    logger('Addition result: ', queryResult);
+
+    // first row of first operation
+    const queryTxId = queryResult[0][0]['transaction_id'];
+    
     const newBalance = await exports.calculateFloatBalance(request.floatId, request.currency);
     logger('New float balance: ', newBalance);
 
@@ -150,6 +179,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     // will definitely need to make sure all the account Ids are valid (do as extra test)
 
     logger(`Running allocation on clientId: ${clientId}, floatId: ${floatId}`);
+
     const allocationRows = allocationRequests.map((request) => ({
         'transaction_id': request.floatTxId || uuid(),
         'client_id': clientId,
@@ -176,6 +206,8 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
 
     const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ' + 
         '${float_id}, ${client_id}, ${tags}';
+
+    logger('Allocation request, account IDs: ', allocationRequests.map((request) => request.accountId));
 
     const accountRows = allocationRequests.map((request) => {
         const tags = request.relatedEntityId ? `ARRAY ['${request.relatedEntityType}::${request.relatedEntityId}']` : '{}';
@@ -214,10 +246,17 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
  */
 module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency, entityType = constants.entityTypes.END_USER_ACCOUNT, logResult = false) => {
     const floatTable = config.get('tables.floatTransactions');
-    
+    const accountTable = config.get('tables.openAccounts');
+
     const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
-    const sumQuery = `select allocated_to_id, unit, sum(amount) from ${floatTable} where float_id = $1 and ` + 
-        `currency = $2 and unit = $3 and allocated_to_type = $4 group by allocated_to_id, unit`;
+    
+    // note : the inner join is necessary just in case something gets into the allocated to IDs that is not an account ID,
+    // to prevent later issues with foreign key constraints
+    const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
+        `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
+        `where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 group by account_id, unit`;
+    
+    logger('Assembled sum query: ', sumQuery);
 
     const unitResults = await rdsConnection.selectQuery(unitQuery, [floatId, currency, entityType]);
     logger('Result of unit selection query: ', unitResults);
@@ -241,7 +280,7 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     const accountTotalResults = await Promise.all(accountTotalQueries);
     accountTotalResults.filter((result) => result && result.length > 0).forEach((accountTotalResult) => {
         const unit = accountTotalResult[0]['unit'];
-        const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['allocated_to_id']]: row['sum']}), {});
+        const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['sum']}), {});
         const unitTransformationMultiplier = constants.floatUnitTransforms[unit];
         Object.keys(accountObj).forEach((accountId) => {
             const priorSum = selectResults.get(accountId) || 0;

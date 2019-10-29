@@ -9,7 +9,7 @@ resource "aws_lambda_function" "float_accrue" {
   role                           = "${aws_iam_role.float_accrue_role.arn}"
   handler                        = "accrual-handler.accrue"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -28,11 +28,6 @@ resource "aws_lambda_function" "float_accrue" {
                 "endpoints"= {
                     "dynamodb"= null
                 }
-            },
-            "tables"= {
-                "clientFloatVars"= "ClientFloatTable",
-                "floatTransactions"= "float_data.float_transaction_ledger",
-                "accountTransactions"= "account_data.core_account_ledger"
             },
             "variableKeys"= {
                 "bonusPoolShare"= "bonus_pool_accrual_share",

@@ -1,0 +1,8 @@
+{
+    "title": "Watch your savings grow",
+    "body": "Since July 2019 you have earned R40.57 in #{total_interest}! Keep adding cash to your Pluto account to earn more each month for nothing. ",
+    "display": {
+        "type": "CARD"
+    },
+    "actionToTake": "VIEW_HISTORY"
+}

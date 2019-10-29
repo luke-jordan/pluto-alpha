@@ -19,6 +19,7 @@ create table if not exists transaction_data.core_transaction_ledger (
     float_alloc_tx_id varchar(50),
     payment_reference varchar(255),
     payment_provider varchar(255),
+    human_reference varchar(50),
     updated_time timestamp with time zone not null default current_timestamp,
     tags text[] default '{}',
     flags text[] default '{}'
@@ -50,3 +51,12 @@ grant update on transaction_data.core_transaction_ledger to save_tx_api_worker;
 grant usage on schema transaction_data to float_api_worker;
 grant select (transaction_id, creation_time, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, tags) on transaction_data.core_transaction_ledger to float_api_worker;
 grant insert on transaction_data.core_transaction_ledger to float_api_worker;
+
+-- So that messaging can do sums (todo : restrict to aggregates)
+grant usage on schema transaction_data to message_api_worker;
+grant select on transaction_data.core_transaction_ledger to message_api_worker;
+
+-- And so that analytics can work, as well as cleaning up old transactions
+grant usage on schema transaction_data to admin_api_worker;
+grant select (transaction_id, account_id, creation_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference) on transaction_data.core_transaction_ledger to admin_api_worker;
+grant update (settlement_status) on transaction_data.core_transaction_ledger to admin_api_worker;

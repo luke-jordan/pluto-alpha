@@ -1,0 +1,31 @@
+{
+  "name": "admin-api",
+  "version": "0.0.1",
+  "description": "A few functions for the admin panel",
+  "main": "index.js",
+  "scripts": {
+    "test": "DEBUG=jupiter:* nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
+  },
+  "author": "Luke Jordan",
+  "license": "ISC",
+  "dependencies": {
+    "aws-sdk": "^2.534.0",
+    "bignumber.js": "^9.0.0",
+    "camelcase-keys": "^6.0.1",
+    "config": "^3.2.2",
+    "debug": "^4.1.1",
+    "moment": "^2.24.0",
+    "statuses": "^1.5.0",
+    "uuid": "^3.3.3"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "eslint": "^6.5.1",
+    "eslint-plugin-chai-friendly": "^0.4.1",
+    "mocha": "^6.2.1",
+    "nyc": "^14.1.1",
+    "sinon": "^7.5.0"
+  }
+}

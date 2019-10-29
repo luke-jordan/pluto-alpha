@@ -3,6 +3,7 @@
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('jupiter:float:test');
+const moment = require('moment');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -60,6 +61,8 @@ describe('Float balance add or subtract', () => {
     });
 
     it('Adds appropriately to float', async () => {
+        const refTime = moment();
+
         const floatBalanceAdjustment = {
             transactionId: uuid(),
             clientId: common.testValidClientId,
@@ -69,10 +72,11 @@ describe('Float balance add or subtract', () => {
             currency: 'ZAR',
             unit: constants.floatUnits.HUNDREDTH_CENT,
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-            backingEntityIdentifier: uuid()
+            backingEntityIdentifier: uuid(),
+            logType: 'WHOLE_FLOAT_ACCRUAL',
+            referenceTimeMillis: refTime.valueOf()
         };
 
-        // logger('Huh? : ', config.get('tables.floatTransaction'))
         const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, currency, unit, ` +
             `amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id`;
         const columns = common.allocationExpectedColumns;
@@ -90,7 +94,30 @@ describe('Float balance add or subtract', () => {
             'related_entity_id': floatBalanceAdjustment.backingEntityIdentifier
         };
 
-        insertStub.withArgs(query, columns, sinon.match([expectedRow])).resolves({rows: [{ 'transaction_id': floatBalanceAdjustment.transactionId }] });
+        const expectedTxDef = {
+            query,
+            columnTemplate: columns,
+            rows: [expectedRow]
+        };
+
+        const logQuery = `insert into ${config.get('tables.floatLogs')} (log_id, reference_time, client_id, float_id, log_type) ` +
+            `values %L returning log_id, creation_time`;
+        const logToInsert = {
+            logId: sinon.match.any,
+            clientId: common.testValidClientId,
+            floatId: common.testValidFloatId,
+            referenceTime: refTime.format(),
+            logType: 'WHOLE_FLOAT_ACCRUAL'
+        };
+        const logInsertDef = {
+            query: logQuery,
+            columnTemplate: '${logId}, ${referenceTime}, ${clientId}, ${floatId}, ${logType}',
+            rows: [logToInsert] 
+        };
+
+        multiTableStub.resolves([[{ 'transaction_id': floatBalanceAdjustment.transactionId }], []]);
+        
+        // tested extensively elsewhere
         balanceStub.withArgs(common.testValidFloatId, 'ZAR').resolves({ balance: floatBalanceAdjustment.amount + testOpeningBalance, 
             unit: constants.floatUnits.DEFAULT }); // leaving off earliest and latest TX as tested below, and not relevant (yet)
 
@@ -103,6 +130,12 @@ describe('Float balance add or subtract', () => {
             transactionId: floatBalanceAdjustment.transactionId
         });
 
+        // following is painful but necessary else need a lot of convolution stubbing uuid etc
+        const tableArgs = multiTableStub.getCall(0).args;
+        expect(tableArgs.length).to.equal(1);
+        expect(tableArgs[0]).to.be.an('array').of.length(2);
+        expect(tableArgs[0][0]).to.deep.equal(expectedTxDef);        
+        expect(sinon.match(logInsertDef).test(tableArgs[0][1])).to.be.true;
     });
 
 });
@@ -373,6 +406,7 @@ describe('User account allocation', () => {
 describe('Test account summation and float balances', () => {
 
     const floatTable = config.get('tables.floatTransactions');
+    const accountTable = config.get('tables.openAccounts');
 
     before(() => resetStubs());
     afterEach(() => resetStubs());
@@ -386,10 +420,10 @@ describe('Test account summation and float balances', () => {
 
         // using reduce and spread here, nicely explained in answer: https://stackoverflow.com/questions/42974735/create-object-from-array
         const wholeCentObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100) }), {});
-        const wholeCentRowResponse = accountIds.map((id) => ({ 'allocated_to_id': id, 'unit': constants.floatUnits.WHOLE_CENT, 'sum': wholeCentObject[id] }));
+        const wholeCentRowResponse = accountIds.map((id) => ({ 'account_id': id, 'unit': constants.floatUnits.WHOLE_CENT, 'sum': wholeCentObject[id] }));
         
         const hundredthsObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100 * 100) }), {});
-        const hundredthsRowResponse = accountIds.map((id) => ({ 'allocated_to_id': id, 'unit': constants.floatUnits.HUNDREDTH_CENT, 'sum': hundredthsObject[id] }));
+        const hundredthsRowResponse = accountIds.map((id) => ({ 'account_id': id, 'unit': constants.floatUnits.HUNDREDTH_CENT, 'sum': hundredthsObject[id] }));
 
         const expectedSumObject = new Map();
         accountIds.forEach((accountId) => {
@@ -399,8 +433,9 @@ describe('Test account summation and float balances', () => {
 
         const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
         // NB : todo : filter on transaction_type (i.e., accruals vs others)
-        const sumQuery = `select allocated_to_id, unit, sum(amount) from ${floatTable} where float_id = $1 and ` + 
-            `currency = $2 and unit = $3 and allocated_to_type = $4 group by allocated_to_id, unit`;
+        const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
+            `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
+            `where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 group by account_id, unit`;
 
         const matchUnitQArray = sinon.match([common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT]);
         queryStub.withArgs(unitQuery, matchUnitQArray).resolves([{ unit: constants.floatUnits.HUNDREDTH_CENT}, { unit: constants.floatUnits.WHOLE_CENT }]);

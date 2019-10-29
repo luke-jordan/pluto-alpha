@@ -26,6 +26,30 @@ variable user_event_topic_arn {
     type = "map"
 }
 
+variable "user_status_lambda_arn" {
+  default = {
+      "staging" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
+      "master" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
+  }
+  type = "map"
+}
+
+variable user_profile_table_read_policy_arn {
+    default = {
+        "staging" = "arn:aws:iam::455943420663:policy/UserProfileTableRead_access_staging"
+        "master" = "arn:aws:iam::455943420663:policy/UserProfileTableRead_access_master"
+    }
+    type = "map"
+}
+
+variable user_profile_admin_policy_arn {
+    default = {
+        "staging" = "arn:aws:iam::455943420663:policy/lambda_admin_user_mgmt_staging"
+        "master" = "arn:aws:iam::455943420663:policy/lambda_admin_user_mgmt_master"
+    }
+    type = "map"
+}
+
 variable "dynamo_tables_read_capacity" {
     default = {
         "staging"  = {

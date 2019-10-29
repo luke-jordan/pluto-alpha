@@ -39,5 +39,3 @@ Game related conditions:
 * `number_taps_greater_than`: The user made a number of taps greater than the parameter, within a certain time. The paramater is to be specified in the format, `NUMBER_TAPS::TIME_ALLOWED`. Time allowed must be in milliseconds.
 * `number_taps_in_first_N`: The user made a number of taps in the first N of a certain number. The paramater is to be specified in the format, `POSITION_CUTOFF::TIME_ALLOWED`. The second part is as above.
 
-
-

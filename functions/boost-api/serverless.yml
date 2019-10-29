@@ -24,13 +24,13 @@ custom:
 
 provider:
   name: aws
-  runtime: nodejs8.10
+  runtime: nodejs10.x
   region: eu-west-1
   stage: dev
 
 functions:
   create:
-    handler: boost-handler.createBoost
+    handler: boost-create-handler.createBoost
     name: boost_create
     events:
       - http:

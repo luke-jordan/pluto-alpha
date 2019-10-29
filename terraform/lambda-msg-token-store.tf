@@ -7,10 +7,10 @@ resource "aws_lambda_function" "message_token_store" {
 
   function_name                  = "${var.message_token_store_lambda_function_name}"
   role                           = "${aws_iam_role.message_token_store_role.arn}"
-  handler                        = "user-message-handler.insertPushToken"
+  handler                        = "message-push-handler.insertPushToken"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
-  timeout                        = 900
+  runtime                        = "nodejs10.x"
+  timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"

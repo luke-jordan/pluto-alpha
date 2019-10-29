@@ -38,7 +38,7 @@ const rds = proxyquire('../persistence/rds.boost', {
 });
 
 const resetStubs = () => testHelper.resetStubs(queryStub, insertStub, multiTableStub, multiOpStub);
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}\}`).join(', ');
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 const accountTable = config.get('tables.accountLedger');
@@ -54,8 +54,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
     const audienceQueryBase = `select account_id from ${accountTable}`;
     const standardBoostKeys = ['boostId', 'creatingUserId', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
-        'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 'boostAudience', 'audienceSelection', 
-        'statusConditions', 'redemptionMessages'];
+        'boostBudget', 'boostRedeemed', 'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 
+        'boostAudience', 'audienceSelection', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
     const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
@@ -66,10 +66,12 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const testBoostStartTime = moment();
         const testBoostEndTime = moment();
 
+        const testInstructionId = uuid();
         const testCreatingUserId = uuid();
         const testReferringAccountId = uuid();
         const testReferredUserAccountId = uuid();
         const relevantUsers = [testReferringAccountId, testReferredUserAccountId];
+
 
         // first, obtain the audience & generate a UID
         const expectedSelectQuery = `${audienceQueryBase} where account_id in ($1, $2)`;
@@ -90,6 +92,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostType: 'REFERRAL',
             boostCategory: 'USER_CODE_USED',
             boostAmount: 100000,
+            boostBudget: 200000, // i.e., twice the amount
+            boostRedeemed: 0,
             boostUnit: 'HUNDREDTH_CENT',
             boostCurrency: 'USD',
             fromBonusPoolId: 'primary_bonus_pool',
@@ -98,7 +102,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostAudience: 'INDIVIDUAL',
             audienceSelection: `whole_universe from #{ {"specific_accounts": ["${testReferringAccountId}","${testReferredUserAccountId}"]} }`,
             statusConditions: testStatusCondition,
-            redemptionMessages: { instructions: testRedemptionMsgs }
+            messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
+            conditionValues: ['TEST_VALUE'],
+            flags: ['TEST_FLAG']
         };
         const insertFirstDef = { query: expectedFirstQuery, columnTemplate: extractColumnTemplate(standardBoostKeys), rows: [expectedFirstRow]};
 
@@ -123,6 +129,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostType: 'REFERRAL',
             boostCategory: 'USER_CODE_USED',
             boostAmount: 100000,
+            boostBudget: 200000,
             boostUnit: 'HUNDREDTH_CENT',
             boostCurrency: 'USD',
             fromBonusPoolId: 'primary_bonus_pool',
@@ -134,7 +141,11 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostAudience: 'INDIVIDUAL',
             boostAudienceSelection: `whole_universe from #{ {"specific_accounts": ["${testReferringAccountId}","${testReferredUserAccountId}"]} }`,
             redemptionMsgInstructions: testRedemptionMsgs,
-            defaultStatus: 'PENDING'
+            messageInstructionIds: [testInstructionId, testInstructionId],
+            defaultStatus: 'PENDING',
+            conditionValues: true,
+            conditionClause: ['TEST_VALUE'],
+            flags: ['TEST_FLAG']
         };
 
         const resultOfInsertion = await rds.insertBoost(testInstruction);
@@ -158,13 +169,15 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
 
     const testAccountId = uuid();
     const testBoostId = uuid();
+    const testInstructionId = uuid();
+
 
     const testStartTime = moment();
     const testEndTime = moment().add(1, 'week');
 
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
     const testAudienceSelection = `whole_universe from #{'{"specific_users": ["${uuid()}","${uuid()}"]}'}`;
-    const testRedemptionMsgs = [{ accountId: uuid(), msgInstructionId: uuid() }, { accountId: uuid(), msgInstructionId: uuid() }];
+    // const testRedemptionMsgs = [{ accountId: uuid(), msgInstructionId: uuid() }, { accountId: uuid(), msgInstructionId: uuid() }];
 
     const updateAccountStatusDef = (boostId, accountId, newStatus) => ({
         table: boostUserTable,
@@ -199,7 +212,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         'status_conditions': testStatusCondition,
         'boost_audience': 'INDIVIDUAL',
         'audience_selection': testAudienceSelection,
-        'redemption_messages': { instructions: testRedemptionMsgs },
+        'message_instruction_ids': { instructions: [testInstructionId, testInstructionId] },
         'initial_status': 'PENDING',
         'flags': ['REDEEM_ALL_AT_ONCE']
     };
@@ -220,7 +233,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         boostAudience: 'INDIVIDUAL',
         boostAudienceSelection: testAudienceSelection,
         defaultStatus: 'PENDING',
-        redemptionMsgInstructions: testRedemptionMsgs,
+        messageInstructions: [testInstructionId, testInstructionId],
         flags: ['REDEEM_ALL_AT_ONCE']
     };
 
@@ -244,8 +257,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         return newBoost;
     };
 
-    const accountUserIdRow = (accountId, userId, status = 'PENDING', boostId = testBoostId) => 
-        ({ 'boost_id': boostId, 'account_id': accountId, 'owner_user_id': userId, 'boost_status': status });
+    const accountUserIdRow = (accountId, userId, status = 'PENDING', boostId = testBoostId) => (
+        { 'boost_id': boostId, 'account_id': accountId, 'owner_user_id': userId, 'boost_status': status }
+    );
 
     beforeEach(() => resetStubs());
 
@@ -261,6 +275,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         queryStub.withArgs(retrieveBoostDetailsQuery, [testBoostId]).resolves([boostFromPersistence]);
 
         const findBoostResponse = await rds.findBoost(testInput);
+        logger('Result of active boost extraction:', findBoostResponse);
         
         expect(findBoostResponse).to.exist;
         expect(findBoostResponse).to.deep.equal([expectedBoostResult]);
@@ -363,10 +378,14 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         // also log the boost being deactivated
         const logRowStatus = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId, logContext: testLogContext };
         const logRowStatus2 = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId2, logContext: testLogContext };
-        const logRowBoost = { boostId: testBoostId, logType: 'BOOST_DEACTIVATED', logContext: testLogContext };
+        const logRowBoost = { boostId: testBoostId, logType: 'BOOST_DEACTIVATED' };
 
         const logStatusDef = assembleLogInsertDef([logRowStatus, logRowStatus2], true);
-        const logBoostDef = assembleLogInsertDef([logRowBoost], false);
+        const logBoostDef = { 
+            query: `insert into ${boostLogTable} (boost_id, log_type) values %L returning log_id, creation_time`,
+            columnTemplate: '${boostId}, ${logType}',
+            rows: [logRowBoost]
+        };
 
         const testInput = {
             boostId: testBoostId,
@@ -428,9 +447,10 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         const testMsgInstructId = uuid();
         const mockUpdatedTime = moment();
 
+        const messageDefs = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
         const alterBoostValue = { 
             messageInstructionIds: {
-                instructions: [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }]
+                instructions: messageDefs
             }
         };
 
@@ -440,7 +460,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
             value: alterBoostValue,
             returnClause: 'updated_time'
         };
-        const expectedLogDef = assembleLogInsertDef([{ boostId: testBoostId, logType: 'BOOST_ALTERED', logContext: alterBoostValue }]);
+        const expectedLogDef = assembleLogInsertDef([{ boostId: testBoostId, logType: 'BOOST_ALTERED', logContext: { value: alterBoostValue }}]);
 
         const mockResponseFromPersistence = [
             [{ 'updated_time': mockUpdatedTime.format()}], [{ 'creation_time': moment().format() }]
@@ -448,11 +468,40 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
 
         multiOpStub.resolves(mockResponseFromPersistence);
 
-        const alterBoostResult = await rds.alterBoost(testBoostId, alterBoostValue);
+        const alterBoostResult = await rds.setBoostMessages(testBoostId, messageDefs);
         expect(alterBoostResult).to.exist;
         expect(alterBoostResult).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
+        const passedUpdateDef = multiOpStub.getCall(0).args[0][0];
+        expect(passedUpdateDef).to.deep.equal(expectedUpdateDef);
+        
+        const passedLogDeg = multiOpStub.getCall(0).args[1][0];
+        expect(passedLogDeg).to.deep.equal(expectedLogDef); 
+
         expect(multiOpStub).to.have.been.calledOnceWithExactly([expectedUpdateDef], [expectedLogDef]);
+    });
+
+    it('Finds message instructions by flag', async () => {
+        const expectedQuery = `select instruction_id from ${config.get('tables.msgInstructionTable')} where flags && ARRAY[$1] order by creation_time desc limit 1`;
+        queryStub.withArgs(expectedQuery, ['TEST_FLAG']).resolves([{ 'instruction_id': testInstructionId }]);
+
+        const result = await rds.findMsgInstructionByFlag('TEST_FLAG');
+        logger('Result of instruction extraction by flag:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(testInstructionId);
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['TEST_FLAG']);
+    });
+
+    it('Returns null where no instruction matches flag', async () => {
+        const expectedQuery = `select instruction_id from ${config.get('tables.msgInstructionTable')} where flags && ARRAY[$1] order by creation_time desc limit 1`;
+        queryStub.withArgs(expectedQuery, ['TEST_FLAG']).resolves([]);
+
+        const result = await rds.findMsgInstructionByFlag('TEST_FLAG');
+        logger('Result of instruction extraction by flag:', result);
+
+        expect(result).to.be.null;
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['TEST_FLAG']);
     });
 
 });

@@ -4,6 +4,7 @@ create table if not exists boost_data.boost (
     boost_id uuid not null primary key,
     creation_time timestamp with time zone not null default current_timestamp,
     creating_user_id uuid not null,
+    label text not null,
     start_time timestamp with time zone not null default current_timestamp,
     end_time timestamp with time zone not null,
     active boolean not null default true,
@@ -12,14 +13,17 @@ create table if not exists boost_data.boost (
     boost_amount bigint not null default 0,
     boost_unit base_unit not null,
     boost_currency varchar(10) not null,
+    boost_budget bigint not null default 0,
+    boost_redeemed bigint not null default 0,
     from_bonus_pool_id varchar(255) not null,
     from_float_id varchar (255) not null,
     for_client_id varchar (255) not null,
     status_conditions jsonb not null,
     boost_audience varchar (255) not null,
     audience_selection text not null,
-    redemption_messages jsonb not null,
+    message_instruction_ids jsonb,
     initial_status varchar (100) check (initial_status in ('CREATED', 'OFFERED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED')),
+    label varchar(255),
     flags text[] default '{}',
     updated_time timestamp with time zone not null default current_timestamp
 );
@@ -64,3 +68,7 @@ grant select, insert on boost_data.boost_log to boost_worker;
 
 grant usage, select on boost_data.boost_account_status_insertion_id_seq to boost_worker;
 grant usage, select on boost_data.boost_log_log_id_seq to boost_worker;
+
+-- for message picking & sending
+grant usage on schema boost_data to message_api_worker;
+grant select on boost_data.boost_account_status to message_api_worker;

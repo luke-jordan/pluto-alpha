@@ -10,8 +10,8 @@ function docker_up {
 }
 
 function basic_setup {
-    bash ./setuprds.sh
-    bash ./setupdynamodb.sh
+    bash ./notebooks/setuprds.sh
+    bash ./notebooks/setupdynamo.sh
 }
 
 function deploy_serverless {

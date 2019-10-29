@@ -38,3 +38,26 @@ module.exports.standardOkayChecks = (result) => {
     expect(result).to.have.property('body');
     return JSON.parse(result.body);
 };
+
+module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
+    FunctionName: functionName,
+    InvocationType: async ? 'Event' : 'RequestResponse',
+    Payload: JSON.stringify(payload)
+});
+
+module.exports.mockLambdaResponse = (payload) => ({
+    StatusCode: 200,
+    Payload: payload
+});
+
+module.exports.testLambdaInvoke = (lambdaStub, requiredInvocation) => {
+    expect(lambdaStub).to.have.been.calledOnce;
+    const lambdaArgs = lambdaStub.getCall(0).args;
+    expect(lambdaArgs.length).to.equal(1);
+    const lambdaInvocation = lambdaArgs[0];
+    expect(lambdaInvocation).to.have.property('FunctionName', requiredInvocation['FunctionName']);
+    expect(lambdaInvocation).to.have.property('InvocationType', requiredInvocation['InvocationType']);
+    const expectedPayload = JSON.parse(requiredInvocation['Payload']);
+    const argumentPayload = JSON.parse(lambdaInvocation['Payload']);
+    expect(argumentPayload).to.deep.equal(expectedPayload);
+};

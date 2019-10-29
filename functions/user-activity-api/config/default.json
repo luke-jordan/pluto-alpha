@@ -1,4 +1,10 @@
 {
+    "aws": {
+        "endpoints": {
+            "dynamodb": "http://localhost:4569"
+        },
+        "region": "eu-west-1"
+    },
     "tables": {
         "accountTransactions": "transaction_data.core_transaction_ledger",
         "rewardTransactions": "transaction_data.core_transaction_ledger",
@@ -13,35 +19,39 @@
         "password": "pwd_for_transaction_api",
         "port" :"5430"
     },
-    "aws": {
-        "endpoints": {
-            "dynamodb": "http://localhost:4569"
-        },
-        "region": "eu-west-1"
+    "cache": {
+        "port": 6739,
+        "detailsTTL": 900,
+        "host": "localhost"
     },
     "projection": {
         "defaultDays": 3,
         "maxDays": 5
     },
-    "payment": {
-        "default": {
-            "name": "STRIPE"
-        },
-        "credentials": {
-            "ozow": {
-                "request_link": "https://pay.ozow.com",
-                "site_code": "TSTSTE0001",
-                "private_key": "215114531AFF7134A94C88CEEA48E",
-                "api_key": "EB5758F2C3B4DF3FF4F2669D5FF5B"
-            }
-        }
+    "lambdas": {
+        "paymentUrlGet": "payment_url_request",
+        "paymentStatusCheck": "payment_status_check"
     },
     "logging": {
         "enabled": "false"
     },
     "publishing": {
         "userEvents": {
-            "topicArn": "<<override here>>"
-        }
+            "topicArn": "<<override here>>",
+            "processingDlq": "<<insert_here>>"
+        },
+        "processingLambdas": {
+            "boosts": "boost_event_process",
+            "status": "profile_status_update"
+        },
+        "withdrawalEmailDestination": ["luke@jupitersave.com"],
+        "saveEmailDestination": ["luke@jupitersave.com"],
+        "eventsEmailAddress": "noreply@jupitersave.com",
+        "adminSiteUrl": "https://localhost:3000"
+    },
+    "templates": {
+        "bucket": "staging.jupiter.templates",
+        "saveEmail": "emails/savingEventEmail.html",
+        "withdrawalEmail": "emails/withdrawalEmail.html"
     }
 }

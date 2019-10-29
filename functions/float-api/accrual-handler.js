@@ -27,12 +27,14 @@ module.exports.balanceCheck = async (event) => {
  * The core function. Receives an instruction that interest (or other return) has been accrued, increases the balance recorded,
  * and then allocates the amounts to the client's bonus and company shares, and thereafter allocates to all accounts with 
  * contributions to the float in the past. Expects the following parameters in the lambda invocation or body of the post
- * @param {string} clientId The system wide ID of the client that handles the float that is receiving the accrual
- * @param {string} floatId The system wide ID of the float that has received an accrual
- * @param {number} accrualAmount The amount of the accrual, in the currency and units passed in the other parameters
- * @param {string} currency The currency of the accrual. If not provided, defaults to the currency of the float.
- * @param {string} unit The units in which the amount is expressed. If not provided, defaults to float default.
- * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
+ * @param {object} event An event object containing request body. The request body's properties are described below.
+ * @property {string} clientId The system wide ID of the client that handles the float that is receiving the accrual
+ * @property {string} floatId The system wide ID of the float that has received an accrual
+ * @property {number} accrualAmount The amount of the accrual, in the currency and units passed in the other parameters
+ * @property {string} currency The currency of the accrual. If not provided, defaults to the currency of the float.
+ * @property {string} unit The units in which the amount is expressed. If not provided, defaults to float default.
+ * @property {number} referenceTimeMillis For recording the accrual log. If not provided, defaults to when the calculation is performed 
+ * @property {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
  */
 module.exports.accrue = async (event) => {
   try { 
@@ -68,8 +70,18 @@ module.exports.accrue = async (event) => {
 
     logger('Company allocation: ', clientAllocation);
 
-    const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
-      transactionType: constants.floatTransTypes.ACCRUAL, unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
+    const newFloatBalance = await rds.addOrSubtractFloat({ 
+      clientId, 
+      floatId, 
+      amount: accrualAmount, 
+      currency: accrualCurrency,
+      transactionType: constants.floatTransTypes.ACCRUAL, 
+      unit: accrualUnit, 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
+      logType: 'WHOLE_FLOAT_ACCRUAL',
+      referenceTimeMillis: accrualParameters.referenceTimeMillis 
+    });
+    
     logger('New float balance: ', newFloatBalance);
       
     const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
@@ -118,13 +130,14 @@ module.exports.accrue = async (event) => {
  * If one allocation does not succeed, all need to be redone, otherwise the calculations will go (way) off
  * Note: this is generally the heart of the engine, and will require constant and continuous optimization, it will be 
  * triggered whenever another job detects unallocated amounts in the float.
- * @param {string} clientId The client co that this allocation event relates to
- * @param {string} floatId The float that is being allocated
- * @param {string} currency The currency of the allocation
- * @param {string} unit The units of the amount
- * @param {number} totalAmount The total amount being allocated
- * @param {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
- * @param {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
+ * @param {object} event An event object containing request body. The request body's properties are listed below.
+ * @property {string} clientId The client co that this allocation event relates to
+ * @property {string} floatId The float that is being allocated
+ * @property {string} currency The currency of the allocation
+ * @property {string} unit The units of the amount
+ * @property {number} totalAmount The total amount being allocated
+ * @property {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
+ * @property {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
  */
 module.exports.allocate = async (event) => {
   
@@ -136,8 +149,8 @@ module.exports.allocate = async (event) => {
   const amountToAllocate = params.totalAmount; // || fetch unallocated amount
   const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
 
-  const shareMap = await exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
-  // logger('Allocated shares, map = ', shareMap);
+  const shareMap = exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
+  logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult = { };
   if (shareMap.has(constants.EXCESSS_KEY)) {
@@ -151,6 +164,7 @@ module.exports.allocate = async (event) => {
       bonusAlloc.relatedEntityId = params.backingEntityIdentifier;
     }
     bonusAllocationResult = await rds.allocateFloat(params.clientId, params.floatId, [bonusAlloc]);
+    bonusAllocationResult.amount = excessAmount;
     shareMap.delete(constants.EXCESSS_KEY);
   }
 
@@ -158,7 +172,7 @@ module.exports.allocate = async (event) => {
   // todo : add in the backing entity for audits
   for (const accountId of shareMap.keys()) {
     allocRequests.push({
-      accountId: accountId,
+      accountId,
       amount: shareMap.get(accountId),
       currency: params.currency,
       unit: unitsToAllocate
@@ -169,11 +183,8 @@ module.exports.allocate = async (event) => {
   // logger('Result of allocations: ', resultOfAllocations);
   
   return {
-    statusCode: 200,
-    body: JSON.stringify({
       allocationRecords: resultOfAllocations,
       bonusAllocation: bonusAllocationResult || { }
-    })
   };
 };
 

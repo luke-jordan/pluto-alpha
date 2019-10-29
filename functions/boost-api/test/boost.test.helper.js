@@ -16,10 +16,25 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     requestContext: {
         authorizer: {
             systemWideUserId,
+            role: userRole
+        }
+    }
+});
+
+module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole) => ({
+    queryStringParameters: requestBody,
+    requestContext: {
+        authorizer: {
+            systemWideUserId,
             userRole
         }
     }
 });
+
+module.exports.expectedHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+};
 
 module.exports.standardOkayChecks = (result) => {
     expect(result).to.exist;

@@ -1,0 +1,13 @@
+{
+    "title": "Congratulations!",
+    "body": "Busani Ndlovu has signed up to Jupiter using your referral code, earning you a #{boostAmount} boost to your savings. He also earned #{boostAmountOther}",
+    "display": {
+        "type": "CARD",
+        "titleType": "EMPHASIS",
+        "iconType": "BOOST_ROCKET"
+    },
+    "actionToTake": "ADD_CASH",
+    "actionContext": {
+        "boostId": "ab439794-fade-4c9e-aa3a-c32c5b85287b"
+    }
+}

@@ -94,7 +94,8 @@ const handler = proxyquire('../balance-handler', {
         'findAccountsForUser': findAccountsForUserStub
     },
     './persistence/dynamodb': {
-        'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub
+        'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub,
+        'warmupCall': sinon.stub() // no need to create another stub for this
     },
     '@noCallThru': true
 });
@@ -203,7 +204,7 @@ describe('Fetches user balance and makes projections', () => {
     after(() => resetStubs(false));
 
     it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
-        const authEvent = JSON.parse(fs.readFileSync('./test/auth-event-balance.json'));
+        const authEvent = JSON.parse(fs.readFileSync('./test/events/auth-event-balance.json'));
         // accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment);
         const balanceAndProjections = await handler.balanceWrapper(authEvent);
         
@@ -212,6 +213,8 @@ describe('Fetches user balance and makes projections', () => {
         
         // usual sinon annoying stubornness on matching means passing to helper isn't working, so unspooling
         expect(balanceAndProjections).to.exist.and.have.property('statusCode', 200);
+        expect(balanceAndProjections).to.have.property('headers');
+        expect(balanceAndProjections.headers).to.have.property('Access-Control-Allow-Origin');
         const bodyReturned = JSON.parse(balanceAndProjections.body);
         expect(bodyReturned).to.exist;
         expect(bodyReturned.currentBalance.datetime).to.be.a.string;

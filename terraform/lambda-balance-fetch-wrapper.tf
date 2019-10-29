@@ -10,7 +10,7 @@ resource "aws_lambda_function" "balance_fetch_wrapper" {
   handler                        = "balance-handler.balanceWrapper"
   memory_size                    = 512
   reserved_concurrent_executions = 20
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

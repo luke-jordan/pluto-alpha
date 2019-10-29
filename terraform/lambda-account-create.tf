@@ -10,7 +10,7 @@ resource "aws_lambda_function" "account_create" {
   handler                        = "account-handler.create"
   memory_size                    = 256
   reserved_concurrent_executions = 20
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -93,6 +93,11 @@ resource "aws_iam_role_policy_attachment" "account_create_basic_execution_policy
 resource "aws_iam_role_policy_attachment" "account_create_vpc_execution_policy" {
   role = "${aws_iam_role.account_create_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "account_create_boost_create_policy" {
+  role = "${aws_iam_role.account_create_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_boost_create_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "account_create_secret_get" {

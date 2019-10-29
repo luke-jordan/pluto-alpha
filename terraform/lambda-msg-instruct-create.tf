@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_instruct_create" {
   role                           = "${aws_iam_role.message_instruct_create_role.arn}"
   handler                        = "msg-instruction-handler.insertMessageInstruction"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -84,6 +84,11 @@ resource "aws_iam_role_policy_attachment" "message_instruct_create_basic_executi
 resource "aws_iam_role_policy_attachment" "message_instruct_create_vpc_execution_policy" {
   role = "${aws_iam_role.message_instruct_create_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "message_instruct_message_create_policy" {
+  role = "${aws_iam_role.message_instruct_create_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "message_instruct_create_secret_get" {

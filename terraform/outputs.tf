@@ -6,6 +6,10 @@ output "workspace" {
   value = "${terraform.workspace}"
 }
 
+output "cache" {
+  value = "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}"
+}
+
 output "api_gw_url" {
   value = "${aws_api_gateway_deployment.api_deployment.invoke_url}"
 }

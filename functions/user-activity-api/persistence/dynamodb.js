@@ -5,6 +5,11 @@ const logger = require('debug')('pluto:activity:dynamo');
 
 const dynamoCommon = require('dynamo-common');
 
+/**
+ * This function fetches float variables for balance calculation.
+ * @param {string} clientId The persisted client id.
+ * @param {string} floatId The persisted fload id.
+ */
 module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     if (!clientId || !floatId) {
         throw new Error('Error! One of client ID or float ID missing');
@@ -23,4 +28,10 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     } 
     
     return rowFromDynamo;
+};
+
+module.exports.warmupCall = async () => {
+    const emptyRow = await dynamoCommon.fetchSingleRow(config.get('tables.clientFloatVars'), { clientId: 'non', floatId: 'existent' });
+    logger('Warmup result: ', emptyRow);
+    return emptyRow;
 };

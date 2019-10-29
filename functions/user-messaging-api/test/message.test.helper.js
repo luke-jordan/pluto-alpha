@@ -21,12 +21,26 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     }
 });
 
-module.exports.standardOkayChecks = (result) => {
+module.exports.standardOkayChecks = (result, expectedResult) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
     expect(result).to.have.property('body');
-    return JSON.parse(result.body);
+    const parsedResult = JSON.parse(result.body);
+    if (expectedResult) {
+        expect(parsedResult).to.deep.equal(expectedResult);
+    }
+    return parsedResult;
 };
+
+/*
+    const commonAssertions = (statusCode, result, expectedResult) => {
+        expect(result).to.exist;
+        expect(result.statusCode).to.deep.equal(statusCode);
+        expect(result).to.have.property('body');
+        const parsedResult = JSON.parse(result.body);
+        expect(parsedResult).to.deep.equal(expectedResult);
+    };
+*/
 
 module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
     Object.keys(expectedObj).forEach((key) => {
@@ -36,6 +50,17 @@ module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
             logger('Not matched, expected: ', expectedObj[key], ' and passed: ', passedToArgs[key]);
         }
     });
+};
+
+module.exports.requestContext = (systemWideUserId) => ({
+    authorizer: {
+        systemWideUserId
+    }
+});
+
+module.exports.expectedHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
 };
 
 // module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({

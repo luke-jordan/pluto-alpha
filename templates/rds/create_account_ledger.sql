@@ -2,7 +2,7 @@ create schema if not exists account_data;
 
 -- Flags are for things like withdrawal restrictions (eg if a gifted account), tags are for analytics
 -- Likely to convert tags and flags into integers in time, but premature optimization for now
-
+-- Note : human_ref = human readable reference, used for bank accounts and similar  
 create table if not exists account_data.core_account_ledger (
     account_id uuid not null primary key,
     owner_user_id uuid not null,
@@ -11,6 +11,7 @@ create table if not exists account_data.core_account_ledger (
     default_float_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
     update_time timestamp with time zone not null default current_timestamp,
+    human_ref varchar (100) not null unique,
     frozen boolean not null default false,
     tags text[] default '{}',
     flags text[] default '{}'
@@ -36,5 +37,14 @@ grant select on account_data.core_account_ledger to save_tx_api_worker;
 grant usage on schema account_data to boost_worker;
 grant select (account_id, owner_user_id, responsible_client_id, default_float_id, frozen) on account_data.core_account_ledger to boost_worker;
 
+-- So message worker can extract accounts for audiences
 grant usage on schema account_data to message_api_worker;
 grant select (account_id, owner_user_id, responsible_client_id, frozen) on account_data.core_account_ledger to message_api_worker;
+
+-- So the admin worker can count users
+grant usage on schema account_data to admin_api_worker;
+grant select (account_id, owner_user_id, creation_time) on account_data.core_account_ledger to admin_api_worker;
+
+-- So the float worker can pick the correct accounts
+grant usage on schema account_data to float_api_worker;
+grant select (account_id) on account_data.core_account_ledger to float_api_worker;

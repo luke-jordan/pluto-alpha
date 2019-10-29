@@ -33,3 +33,14 @@ jwt-public.key
 
 # git attributes so not everyone needs to run the notebook cleaning
 .gitattributes
+
+# temporary deployment bundles
+*.zip
+
+package-lock.json
+
+# phpstorm & mac specific files
+atlassian-ide-plugin.xml
+/.idea
+cache.properties
+.DS_Store
