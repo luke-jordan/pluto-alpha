@@ -31,6 +31,7 @@ const sumBonusPools = (bonusPoolInfo, currency) => {
         const relevantAmount = thisPool[currency];
         bonusPoolSum += relevantAmount.amount;
     });
+
     return bonusPoolSum;
 };
 
@@ -224,14 +225,16 @@ const allocateFloatFunds = async ({ clientId, floatId, amountDef, allocatedToDef
     }];
 
     const payload = {
-        floatId,
-        clientId,
-        currency: amountDef.currency,
-        unit: amountDef.unit,
-        amount: amountDef.amount,
-        identifier: logId,
-        relatedEntityType: 'ADMIN_INSTRUCTION',
-        recipients
+        instructions: [{
+            floatId,
+            clientId,
+            currency: amountDef.currency,
+            unit: amountDef.unit,
+            amount: amountDef.amount,
+            identifier: logId,
+            relatedEntityType: 'ADMIN_INSTRUCTION',
+            recipients
+        }]
     };
 
     logger('Sending payload to float transfer: ', payload);
@@ -252,17 +255,21 @@ const addOrSubtractFunds = async ({ clientId, floatId, amountDef, adminUserId, l
     const logId = await persistence.insertFloatLog({ clientId, floatId, logType: 'BALANCE_UPDATED_MANUALLY', logContext });
 
     const payload = {
-        floatId,
-        clientId,
-        currency: amountDef.currency,
-        unit: amountDef.amount,
-        amount: amountDef.amount,
-        identifier: logId,
-        relatedEntityType: 'ADMIN_INSTRUCTION',
-        recipients: [{
-            recipientId: floatId,
+        instructions: [{
+            identifier: logId,
+            floatId,
+            clientId,
+            currency: amountDef.currency,
+            unit: amountDef.unit,
             amount: amountDef.amount,
-            recipientType: 'FLOAT_ITSELF'
+            transactionType: 'ADMIN_BALANCE_RECON',
+            logType: 'ADMIN_BALANCE_RECON',
+            relatedEntityType: 'ADMIN_INSTRUCTION',
+            recipients: [{
+                recipientId: floatId,
+                amount: amountDef.amount,
+                recipientType: 'FLOAT_ITSELF'
+            }]
         }]
     };
 
@@ -274,8 +281,9 @@ const addOrSubtractFunds = async ({ clientId, floatId, amountDef, adminUserId, l
     const adjustmentBody = JSON.parse(adjustmentResultP.body);
 
     logger('Body of adjustment result: ', adjustmentBody);
+    const adjustmentTxId = adjustmentBody[logId]['floatTxIds'][0];
 
-    return adjustmentBody;
+    return { logId, adjustmentTxId };
 };
 
 const accrueDifferenceToUsers = async ({ clientId, floatId, amountDef, adminUserId, logReason }) => {
@@ -284,13 +292,16 @@ const accrueDifferenceToUsers = async ({ clientId, floatId, amountDef, adminUser
     const logId = await persistence.insertFloatLog({ clientId, floatId, logType: 'ADMIN_DISTRIBUTE_USERS', logContext });
 
     const payload = {
-        floatId,
-        clientId,
-        ...amountDef,
-        identified: logId,
-        relatedEntityType: 'ADMIN_INSTRUCTION',
-        recipients: [{
-            recipientId: 'ALL_USERS'
+        instructions: [{
+            floatId,
+            clientId,
+            ...amountDef,
+            identifier: logId,
+            relatedEntityType: 'ADMIN_INSTRUCTION',
+            recipients: [{
+                recipientType: 'ALL_USERS',
+                amount: amountDef.amount
+            }]
         }]
     };
 
@@ -302,7 +313,7 @@ const accrueDifferenceToUsers = async ({ clientId, floatId, amountDef, adminUser
     const resultBody = JSON.parse(resultPayload.body);
     logger('Received distribute to users result: ', resultBody);
 
-    return resultBody;
+    return { numberOfAllocations: resultBody[logId]['floatTxIds'].length };
 };
 
 const markLogUnresolved = async (logId, adminUserId, reasonToReopen) => {
@@ -351,31 +362,31 @@ module.exports.adjustClientFloat = async (event) => {
         const logReason = params.reasonToLog;
         const amountDef = params.amountToProcess; 
 
-        let resultOfOperation = null;
+        let operationResultForLog = null;
         let tellPersistenceLogIsResolved = false;
 
         switch (operation) {
             case 'RESOLVE_ALERT':
-                resultOfOperation = await updateLogToResolved(priorLogId, adminUserId, logReason);
+                operationResultForLog = await updateLogToResolved(priorLogId, adminUserId, logReason);
                 break; // do no set boolean to true as that would cause double update
             case 'REOPEN_ALERT': 
-                resultOfOperation = await markLogUnresolved(priorLogId, adminUserId, logReason);
+                operationResultForLog = await markLogUnresolved(priorLogId, adminUserId, logReason);
                 break; // as above
             case 'ADJUST_ACCRUAL_VARS':
-                resultOfOperation = await adjustFloatVariables({ clientId, floatId, logReason, newAccrualVars: params.newAccrualVars });
+                operationResultForLog = await adjustFloatVariables({ clientId, floatId, logReason, newAccrualVars: params.newAccrualVars });
                 tellPersistenceLogIsResolved = true;
                 break;
             case 'ALLOCATE_FUNDS':
-                resultOfOperation = await allocateFloatFunds({ clientId, floatId, amountDef, allocatedToDef: params.allocateTo, adminUserId, logReason });
+                operationResultForLog = await allocateFloatFunds({ clientId, floatId, amountDef, allocatedToDef: params.allocateTo, adminUserId, logReason });
                 tellPersistenceLogIsResolved = true;
                 break;
             case 'ADD_SUBTRACT_FUNDS':
                 // just adjusts the float balance to meet the amount in the bank account, do directly
-                resultOfOperation = await addOrSubtractFunds({ clientId, floatId, amountDef, adminUserId, logReason });
+                operationResultForLog = await addOrSubtractFunds({ clientId, floatId, amountDef, adminUserId, logReason });
                 tellPersistenceLogIsResolved = true;
                 break;
             case 'DISTRIBUTE_TO_USERS':
-                resultOfOperation = await accrueDifferenceToUsers({ clientId, floatId, adminUserId, logReason });
+                operationResultForLog = await accrueDifferenceToUsers({ clientId, floatId, amountDef, adminUserId, logReason });
                 tellPersistenceLogIsResolved = true;
                 break;
             default:
@@ -383,10 +394,10 @@ module.exports.adjustClientFloat = async (event) => {
                 throw new Error('Missing or unknown operation: ', operation);
         }
 
-        logger('Result of operation: ', operation, ' is: ', resultOfOperation);
+        logger('Result of operation: ', operation, ' is: ', operationResultForLog);
 
         if (tellPersistenceLogIsResolved) {
-            await updateLogToResolved(priorLogId, adminUserId);
+            await updateLogToResolved(priorLogId, adminUserId, operationResultForLog);
         }
 
         // possibly also send back the updated / new client-float var package?

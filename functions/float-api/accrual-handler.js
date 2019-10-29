@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:float:handler');
+const opsUtil = require('ops-util-common');
 
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
@@ -99,7 +100,8 @@ module.exports.accrue = async (event) => {
       totalAmount: remainingAmount, 
       currency: accrualCurrency, 
       backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
-      backingEntityIdentifier: accrualParameters.backingEntityIdentifier 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
+      bonusPoolIdForExcess: floatConfig.bonusPoolTracker 
     };
     
     const userAllocations = await exports.allocate(userAllocEvent);
@@ -138,6 +140,7 @@ module.exports.accrue = async (event) => {
  * @property {number} totalAmount The total amount being allocated
  * @property {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
  * @property {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
+ * @property {string} bonusPoolIdForExcess (Optional) Where to put any fractional leftovers (or from where to take deficits)
  */
 module.exports.allocate = async (event) => {
   
@@ -146,27 +149,44 @@ module.exports.allocate = async (event) => {
     params.floatId, params.currency, constants.entityTypes.END_USER_ACCOUNT, false
   );
 
-  const amountToAllocate = params.totalAmount; // || fetch unallocated amount
-  const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
+  const unitsToAllocate = constants.floatUnits.DEFAULT;
 
+  let amountToAllocate = 0;
+  if (constants.isKnownUnit(params.unit)) {
+    amountToAllocate = opsUtil.convertToUnit(params.totalAmount, params.unit, constants.floatUnits.DEFAULT)
+  } else {
+    amountToAllocate = params.totalAmount; // should possibly throw an error instead
+  }
+
+  logger(`Unit: ${params.unit}, is it known? : ${constants.isKnownUnit(params.unit)}, and converted amount: ${amountToAllocate}`);
   const shareMap = exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
   logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult = { };
-  if (shareMap.has(constants.EXCESSS_KEY)) {
+  const allocateRemainsToBonus = shareMap.has(constants.EXCESSS_KEY) && event.bonusPoolIdForExcess;
+
+  if (allocateRemainsToBonus) {
     const excessAmount = shareMap.get(constants.EXCESSS_KEY);
     // store the allocation, store in bonus allocation Tx id
-    const bonusPool = await dynamo.fetchConfigVarsForFloat(params.clientId, params.floatId);
-    const bonusAlloc = { label: 'BONUS', amount: excessAmount, currency: params.currency, unit: unitsToAllocate, 
-      allocatedToType: constants.entityTypes.BONUS_POOL, allocatedToId: bonusPool.bonusPoolTracker };
+    const bonusAlloc = { 
+      label: 'BONUS', 
+      amount: excessAmount, 
+      currency: params.currency, 
+      unit: unitsToAllocate, 
+      allocatedToType: constants.entityTypes.BONUS_POOL, 
+      allocatedToId: event.bonusPoolIdForExcess 
+    };
+
     if (params.backingEntityIdentifier && params.backingEntityType) {
       bonusAlloc.relatedEntityType = params.backingEntityType;
       bonusAlloc.relatedEntityId = params.backingEntityIdentifier;
     }
+
     bonusAllocationResult = await rds.allocateFloat(params.clientId, params.floatId, [bonusAlloc]);
     bonusAllocationResult.amount = excessAmount;
-    shareMap.delete(constants.EXCESSS_KEY);
   }
+
+  shareMap.delete(constants.EXCESSS_KEY);
 
   const allocRequests = [];
   // todo : add in the backing entity for audits
@@ -229,7 +249,7 @@ const calculatePercent = (total, account) => (new BigNumber(account)).dividedBy(
 const checkBalancesIntegers = (accountBalances = new Map()) => {
   for (const balance of accountBalances.values()) {
     if (!Number.isInteger(balance)) {
-      throw new TypeError('Error! One of the balances is not an integer');
+      throw new TypeError('Error! One of the balances is not an integer: ', balance);
     }
   }
 };

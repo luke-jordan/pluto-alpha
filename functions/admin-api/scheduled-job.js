@@ -109,7 +109,7 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
 
     const simpleFormat = (amount) => `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
 
-    const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.length;
+    const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.accountTxIds.length;
     const bonusAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation') 
         ? 'None' : '(yes : insert excess)';
 
