@@ -77,33 +77,6 @@ resource "aws_cloudwatch_log_group" "admin_client_float_list" {
   }
 }
 
-// putting this in here in case we move it out in future
-resource "aws_iam_policy" "admin_client_float_access" {
-  name = "lambda_admin_client_float_list_${terraform.workspace}"
-  path = "/"
-
-  policy = <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Sid": "ClientFloatAdminAccess",
-        "Effect": "Allow",
-        "Action": [
-          "dynamodb:Scan",
-          "dynamodb:Query",
-          "dynamodb:GetItem"
-        ],
-        "Resource": [
-          "${aws_dynamodb_table.client-float-table.arn}",
-          "${var.country_client_table_arn[terraform.workspace]}"
-        ]
-      }
-    ]
-}
-EOF
-}
-
 resource "aws_iam_role_policy_attachment" "admin_client_float_list_basic_execution_policy" {
   role = "${aws_iam_role.admin_client_float_list_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
