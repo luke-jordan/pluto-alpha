@@ -10,7 +10,7 @@ resource "aws_lambda_function" "save_initiate" {
   handler                        = "saving-handler.initiatePendingSave"
   memory_size                    = 256
   reserved_concurrent_executions = 20
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -32,14 +32,14 @@ resource "aws_lambda_function" "save_initiate" {
                   "floatTransactions": "float_data.float_transaction_ledger"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
-            "secrets": {
+              "secrets": {
                 "enabled": true,
                 "names": {
-                    "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
+                  "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
               },
               "publishing": {
@@ -105,6 +105,11 @@ resource "aws_iam_role_policy_attachment" "save_initiate_vpc_execution_policy" {
 resource "aws_iam_role_policy_attachment" "save_initiate_user_event_publish_policy" {
   role = "${aws_iam_role.save_initiate_role.name}"
   policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "save_initiate_payment_url_get" {
+  role = "${aws_iam_role.save_initiate_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_payment_url_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_secret_get" {

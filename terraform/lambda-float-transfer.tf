@@ -9,7 +9,7 @@ resource "aws_lambda_function" "float_transfer" {
   role                           = "${aws_iam_role.float_transfer_role.arn}"
   handler                        = "transfer-handler.floatTransfer"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -36,10 +36,10 @@ resource "aws_lambda_function" "float_transfer" {
                 }
             },
             "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
-            }
+              "host": "${local.database_config.host}",
+              "database": "${local.database_config.database}",
+              "port" :"${local.database_config.port}"
+            },
         }
       )}"
     }

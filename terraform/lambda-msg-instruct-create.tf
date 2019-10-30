@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_instruct_create" {
   role                           = "${aws_iam_role.message_instruct_create_role.arn}"
   handler                        = "msg-instruction-handler.insertMessageInstruction"
   memory_size                    = 256
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -26,9 +26,9 @@ resource "aws_lambda_function" "message_instruct_create" {
                 "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "secrets": {
                 "enabled": true,

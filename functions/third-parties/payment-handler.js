@@ -7,14 +7,15 @@ const request = require('request-promise');
 const crypto = require('crypto');
 
 const POST_KEY_ORDER = config.get('ozow.postKeyOrder');
-const RESPONSE_KEY_ORDER = config.get('ozow.responseKeyOrder');
+// const RESPONSE_KEY_ORDER = config.get('ozow.responseKeyOrder');
 const pvtkey = config.get('ozow.privateKey');
-
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 
 const generateHashCheck = (params) => {
-    const hashFeed = (POST_KEY_ORDER.map((key) => '' + params[key]).join('') + pvtkey).toLowerCase();
+    const hashFeed = (POST_KEY_ORDER.
+        filter((key) => params[key]).
+        map((key) => String(params[key])).join('') + pvtkey).toLowerCase();
     logger('Created hash feed:', hashFeed);
     return crypto.createHash('sha512').update(hashFeed).digest('hex');
 };
@@ -47,9 +48,13 @@ const assembleBody = (params) => {
         Amount: params.amount
     };
 
+    // then clean up empty properties
+    Object.keys(body).forEach((key) => (!body[key]) && Reflect.deleteProperty(body, key));
+
     const hashCheck = generateHashCheck(body);
     logger('Generated hashCheck:', hashCheck);
     body.HashCheck = hashCheck;
+    body.GenerateShortUrl = true;
     return body;
 };
 
@@ -67,19 +72,20 @@ const assembleRequest = (method, endpoint, body) => ({
 
 /**
  * This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below. Further information may be found here https://ozow.com/integrations/ .
- * @param {string} countryCode  Required. The ISO 3166-1 alpha-2 code for the user's country. The country code will determine which banks will be displayed to the customer.
- * @param {string} currencyCode Required. The ISO 4217 3 letter code for the transaction currency.
- * @param {number} amount Required. The transaction amount. The amount is in the currency specified by the currency code posted.
- * @param {string} transactionId Required. The merchant's reference for the transaction.
- * @param {string} bankReference Required. The reference that will be prepopulated in the "their reference" field in the customers online banking site.
- * @param {string} cancelUrl Optional. The Url that the third party should post the redirect result to if the customer cancels the payment, this will also be the page the customer gets redirected back to.
- * @param {string} errorUrl Optional. The Url that the third party should post the redirect result to if an error occurred while trying to process the payment, this will also be the page the customer gets redirect back to.
- * @param {string} successUrl Optional. The Url that the third party should post the redirect result to if the payment was successful, this will also be the page the customer gets redirect back to.
- * @param {boolean} isTest Required. Send true to test your request posting and response handling. If set to true you will be redirected to a page where you can select whether you would like a successful or unsuccessful redirect response sent back. 
+ * @param {object} event An event object containing the request body. The body's properties are described below.
+ * @property {string} countryCode  Required. The ISO 3166-1 alpha-2 code for the user's country. The country code will determine which banks will be displayed to the customer.
+ * @property {string} currencyCode Required. The ISO 4217 3 letter code for the transaction currency.
+ * @property {number} amount Required. The transaction amount. The amount is in the currency specified by the currency code posted.
+ * @property {string} transactionId Required. The merchant's reference for the transaction.
+ * @property {string} bankReference Required. The reference that will be prepopulated in the "their reference" field in the customers online banking site.
+ * @property {string} cancelUrl Optional. The Url that the third party should post the redirect result to if the customer cancels the payment, this will also be the page the customer gets redirected back to.
+ * @property {string} errorUrl Optional. The Url that the third party should post the redirect result to if an error occurred while trying to process the payment, this will also be the page the customer gets redirect back to.
+ * @property {string} successUrl Optional. The Url that the third party should post the redirect result to if the payment was successful, this will also be the page the customer gets redirect back to.
+ * @property {boolean} isTest Required. Send true to test your request posting and response handling. If set to true you will be redirected to a page where you can select whether you would like a successful or unsuccessful redirect response sent back. 
  * 
  * @returns {object} The payment url and request id.
  */
-module.exports.payment = async (event) => {
+module.exports.paymentUrlRequest = async (event) => {
     try {
         if (warmupCheck(event)) {
             const options = assembleRequest('POST', config.get('ozow.endpoints.warmup'), {});
@@ -95,7 +101,7 @@ module.exports.payment = async (event) => {
         const body = assembleBody(event);
         const options = assembleRequest('POST', config.get('ozow.endpoints.payment'), body);
         logger('Created request options:', options);
-        const paymentResponse = await request(options); // throws a redirection error on success
+        const paymentResponse = await request(options);
         logger('Payment url ?', paymentResponse);
 
         if (!paymentResponse || typeof paymentResponse !== 'object') {
@@ -104,7 +110,7 @@ module.exports.payment = async (event) => {
 
         if (paymentResponse.errorMessage) {
             throw new Error(paymentResponse.errorMessage);
-        };
+        }
 
         return {
             result: 'PAYMENT_INITIATED',
@@ -122,9 +128,10 @@ module.exports.payment = async (event) => {
 
 
 /**
- * This method gets the tranaction status of a specified payment. Accepted event properties are defined below.
- * @param {string} transactionId The merchant's reference for the transaction.
- * @param {boolean} IsTest Defaults to true. All calls in production must include this property set to false.
+ * This method gets the tranaction status of a specified payment.
+ * @param {object} event An event object containing the request body. Accepted body properties are defined below.
+ * @property {string} transactionId The merchant's reference for the transaction.
+ * @property {boolean} isTest Defaults to true. All calls in production must include this property set to false.
  * 
  * @returns {object} A subset of the returned status object containing the transaction status (result), createdDate, and paymentDate.
  * All properties (including those not returned to the caller) are listed below.
@@ -141,7 +148,7 @@ module.exports.payment = async (event) => {
  * @see {@link https://ozow.com/integrations/} for further information.
  */
 
-module.exports.status = async (event) => {
+module.exports.statusCheck = async (event) => {
     try {
         const params = {
             SiteCode: config.get('ozow.siteCode'),

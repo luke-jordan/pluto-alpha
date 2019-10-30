@@ -20,6 +20,33 @@ resource "aws_iam_policy" "dynamo_table_client_float_table_access" {
 EOF
 }
 
+resource "aws_iam_policy" "admin_client_float_access" {
+  name = "lambda_admin_client_float_list_${terraform.workspace}"
+  path = "/"
+
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "ClientFloatAdminAccess",
+        "Effect": "Allow",
+        "Action": [
+          "dynamodb:Scan",
+          "dynamodb:Query",
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem"
+        ],
+        "Resource": [
+          "${aws_dynamodb_table.client-float-table.arn}",
+          "${var.country_client_table_arn[terraform.workspace]}"
+        ]
+      }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "migration_script_s3_access" {
   name        = "migration_script_s3_access_${terraform.workspace}"
   path        = "/"
@@ -57,10 +84,11 @@ resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:balance_fetch_wrapper",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_initiate",
-                "arn:aws:lambda:${var.aws_default_region["${terraform.workspace}"]}:${var.aws_account}:function:save_payment_check"
+                "${aws_lambda_function.balance_fetch.arn}",
+                "${aws_lambda_function.balance_fetch_wrapper.arn}",
+                "${aws_lambda_function.save_initiate.arn}",
+                "${aws_lambda_function.save_payment_check.arn}",
+                "${aws_lambda_function.message_user_fetch.arn}"
             ],
             "Condition": {
                 "StringEquals": {
@@ -214,6 +242,32 @@ resource "aws_iam_policy" "lambda_invoke_msg_instruct_access" {
 EOF
 }
 
+resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
+    name = "lambda_invoke_payment_url_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PaymentUrlLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.payment_url_request.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+/////////////// COMPOSITE POLICIES FOR PROCESSING/ADMIN LAMBDAS THAT DO A LOT ///////////////////
+
 resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
     name = "lambda_user_event_process_access_${terraform.workspace}"
     path = "/"
@@ -275,6 +329,75 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
                 "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "daily_job_lambda_policy" {
+    name = "lambda_scheduled_system_job_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "FloatAccrualLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.float_accrue.arn}"
+            ]
+        },
+        {
+            "Sid": "EmailSend",
+            "Effect": "Allow",
+            "Action": [
+                "ses:SendEmail"
+            ],
+            "Resource": "arn:aws:ses:us-east-1:455943420663:identity/jupitersave.com",
+            "Condition": {
+                "StringLike": {
+                    "ses:FromAddress": "noreply@jupitersave.com"
+                }
+            }
+        },
+        {
+            "Sid": "EmailTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "admin_user_lambda_policy" {
+    name = "lambda_ops_admin_user_acces_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "BalanceLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.balance_fetch.arn}"
+            ]
         }
     ]
 }

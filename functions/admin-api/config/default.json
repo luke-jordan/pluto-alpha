@@ -9,13 +9,44 @@
     "tables": {
         "accountTable": "account_data.core_account_ledger",
         "floatTxTable": "float_data.float_transaction_ledger",
+        "floatLogTable": "float_data.float_log",
         "transactionTable": "transaction_data.core_transaction_ledger",
         "clientFloatTable": "ClientFloatTable",
         "countryClientTable": "CountryClientTable"
     },
+    "lambdas": {
+        "processAccrual": "float_accrue",
+        "systemWideIdLookup": "profile_find_by_details",
+        "fetchProfile": "profile_fetch",
+        "fetchUserBalance": "balance_fetch",
+        "userHistory": "user_log_reader",
+        "floatTransfer": "float_transfer"
+    },
+    "email": {
+        "systemStats": {
+            "toList": ["luke@jupitersave.com", "avish@jupitersave.com"],
+            "templateKey": "emails/systemStatsEmail.html"
+        },
+        "accrualResult": {
+            "toList": ["luke@jupitersave.com"],
+            "templateKey": "emails/floatAccrualEmail.html"
+        }
+    },
     "defaults": {
         "userCounts": {
             "daysBack": 180
-        }
+        },
+        "txExpiry": {
+            "daysBack": 30
+        },
+        "userHistory": {
+            "eventTypes": ["USER_LOGIN", "SAVING_PAYMENT_SUCCESSFUL", "WITHDRAWAL_EVENT_CONFIRMED", "WITHDRAWAL_COMPLETED", "PASSWORD_SET", "USER_REGISTERED", "STATUS_CHANGED"],
+            "daysInHistory": 180
+        },
+        "floatAlerts": {
+            "logTypes": ["PARAMETERS_UPDATED", "BALANCE_MISMATCH", "ALLOCATION_TOTAL_MISMATCH", "BALANCE_UNOBTAINABLE", "BALANCE_UPDATED_MANUALLY", "ADMIN_TRANSFER"],
+            "redFlagTypes": ["BALANCE_MISMATCH", "ALLOCATION_TOTAL_MISMATCH", "BALANCE_UNOBTAINABLE"]
+        },
+        "scheduledJobs": ["SYSTEM_STATS", "ACRRUE_FLOAT", "EXPIRE_HANGING"]
     }
 }

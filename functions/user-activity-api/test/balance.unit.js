@@ -94,7 +94,8 @@ const handler = proxyquire('../balance-handler', {
         'findAccountsForUser': findAccountsForUserStub
     },
     './persistence/dynamodb': {
-        'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub
+        'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub,
+        'warmupCall': sinon.stub() // no need to create another stub for this
     },
     '@noCallThru': true
 });

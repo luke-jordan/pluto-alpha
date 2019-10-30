@@ -1,13 +1,13 @@
 'use strict';
 
 const logger = require('debug')('jupiter:save:main');
-const config = require('config');
 const moment = require('moment-timezone');
 const status = require('statuses');
 
 const publisher = require('publish-common');
 
 const persistence = require('./persistence/rds');
+const payment = require('./payment-link');
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 const warmupResponse = { statusCode: 400, body: 'Empty invocation' };
@@ -17,6 +17,16 @@ const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: mes
 const handleError = (err) => { 
   logger('FATAL_ERROR: ', err);
   return { statusCode: 500, body: JSON.stringify(err.message) };
+};
+
+// todo : remove need for this in app soon
+const legacyKeyFix = (passedSaveDetails) => {
+  const saveDetails = { ...passedSaveDetails };
+  saveDetails.amount = saveDetails.amount || saveDetails.savedAmount;
+  saveDetails.unit = saveDetails.unit || saveDetails.savedUnit;
+  saveDetails.currency = saveDetails.currency || saveDetails.savedCurrency;
+  ['savedAmount', 'savedUnit', 'savedCurrency'].forEach((key) => Reflect.deleteProperty(saveDetails, key));
+  return saveDetails;
 };
 
 const save = async (eventBody) => {
@@ -78,6 +88,24 @@ module.exports.settle = async (event) => {
     return handleError(err);
   }
 };
+
+// can _definitely_parallelize this, also:
+// todo : will need to stash the bank ref
+const assemblePaymentInfo = async (saveInformation, transactionId) => {
+  const accountStemAndCount = await persistence.fetchInfoForBankRef(saveInformation.accountId);
+  const accountInfo = {
+    bankRefStem: accountStemAndCount.humanRef,
+    priorSaveCount: accountStemAndCount.count
+  };
+
+  const amountDict = {
+    amount: saveInformation.amount,
+    unit: saveInformation.unit,
+    currency: saveInformation.currency
+  };
+
+  return { transactionId, accountInfo, amountDict };
+};
   
 /** Wrapper method, calls the above, after verifying the user owns the account, event params are:
  * @param {string} accountId The account where the save is happening
@@ -91,6 +119,9 @@ module.exports.settle = async (event) => {
 module.exports.initiatePendingSave = async (event) => {
   try {
     if (warmupCheck(event)) {
+      logger('Warming up; tell payment link to stay warm, else fine');
+      await payment.warmUpPayment();
+      logger('Warmed payment, return');
       return warmupResponse;
     }
 
@@ -103,23 +134,19 @@ module.exports.initiatePendingSave = async (event) => {
     await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_INITIATED');
     logger('Finished publishing event');
 
-    const saveInformation = JSON.parse(event.body);
+    const saveInformation = legacyKeyFix(JSON.parse(event.body));
+
     if (!saveInformation.accountId) {
       return invalidRequestResponse('Error! No account ID provided for the save');
-    } else if (!saveInformation.savedAmount) {
+    } else if (!saveInformation.amount) {
       return invalidRequestResponse('Error! No amount provided for the save');
-    } else if (!saveInformation.savedCurrency) {
+    } else if (!saveInformation.currency) {
       return invalidRequestResponse('Error! No currency specified for the saving event');
-    } else if (!saveInformation.savedUnit) {
+    } else if (!saveInformation.unit) {
       return invalidRequestResponse('Error! No unit specified for the saving event');
     }
     
-    // todo : make this check more robust 
-    if (saveInformation.settlementTimeEpochMillis) { 
-      saveInformation.settlementStatus = 'SETTLED';
-    } else {
-      saveInformation.settlementStatus = 'INITIATED';
-    }
+    saveInformation.settlementStatus = 'INITIATED';
 
     if (!saveInformation.initiationTimeEpochMillis) {
       saveInformation.initiationTimeEpochMillis = moment().valueOf();
@@ -128,10 +155,17 @@ module.exports.initiatePendingSave = async (event) => {
 
     // todo : verify user account ownership
     const initiationResult = await save(saveInformation);
-    
-    initiationResult.paymentRedirectDetails = {
-      urlToCompletePayment: 'https://pay.here/1234'
-    };
+
+    // todo : print a 'contact support?' in the URL if there is an error?
+    const transactionId = initiationResult.transactionDetails[0].accountTransactionId;
+    logger('Extracted transaction ID: ', transactionId);
+    const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId);
+    const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
+    logger('Got payment link result: ', paymentLinkResult); // todo : stash the bank ref & payment provider ref
+    const urlToCompletePayment = paymentLinkResult.paymentUrl;
+
+    logger('Returning with url to complete payment: ', urlToCompletePayment);
+    initiationResult.paymentRedirectDetails = { urlToCompletePayment };
 
     return { statusCode: 200, body: JSON.stringify(initiationResult) };
 
@@ -159,7 +193,7 @@ module.exports.settleInitiatedSave = async (event) => {
     // todo : get default payment provider from client
     const settleInfo = JSON.parse(event.body);
     if (!settleInfo.paymentProvider) {
-      settleInfo.paymentProvider = config.get('payment.default.name');
+      settleInfo.paymentProvider = 'OZOW';
     }
 
     logger('Settling, with info: ', settleInfo);

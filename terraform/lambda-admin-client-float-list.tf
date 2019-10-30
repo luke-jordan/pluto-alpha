@@ -7,7 +7,7 @@ resource "aws_lambda_function" "admin_client_float_list" {
 
   function_name                  = "${var.admin_client_float_list_lambda_function_name}"
   role                           = "${aws_iam_role.admin_client_float_list_role.arn}"
-  handler                        = "index.fetchClientFloatVars"
+  handler                        = "admin-float-handler.listClientsAndFloats"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
@@ -26,9 +26,9 @@ resource "aws_lambda_function" "admin_client_float_list" {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "secrets": {
                   "enabled": true,
@@ -75,31 +75,6 @@ resource "aws_cloudwatch_log_group" "admin_client_float_list" {
   tags = {
     environment = "${terraform.workspace}"
   }
-}
-
-// putting this in here in case we move it out in future
-resource "aws_iam_policy" "admin_client_float_access" {
-  name = "lambda_admin_client_float_list_${terraform.workspace}"
-  path = "/"
-
-  policy = <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-      {
-        "Sid": "ClientFloatAdminAccess",
-        "Effect": "Allow",
-        "Action": [
-          "dynamodb:Scan"
-        ],
-        "Resource": [
-          "${aws_dynamodb_table.client-float-table.arn}",
-          "${var.country_client_table_arn[terraform.workspace]}"
-        ]
-      }
-    ]
-}
-EOF
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_list_basic_execution_policy" {

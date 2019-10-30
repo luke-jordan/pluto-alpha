@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_create_wrapper" {
   role                           = "${aws_iam_role.boost_create_wrapper_role.arn}"
   handler                        = "boost-create-handler.createBoostWrapper"
   memory_size                    = 512
-  runtime                        = "nodejs8.10"
+  runtime                        = "nodejs10.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -26,9 +26,9 @@ resource "aws_lambda_function" "boost_create_wrapper" {
                 "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "secrets": {
                 "enabled": true,

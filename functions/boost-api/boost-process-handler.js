@@ -246,8 +246,13 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
     return publishPromises;
 };
 
-// note: possibly in time we can put this on an SQS queue, for now using a somewhat
-// generic handler for any boost relevant response (add cash, solve game, etc)
+/**
+ * note: possibly in time we can put this on an SQS queue, for now using a somewhat
+ * generic handler for any boost relevant response (add cash, solve game, etc)
+ * @param {object} event An event object containing the request context and request body.
+ * @property {string} userId The users id.
+ * @property {string} accountId The account id. Either the user id or the account id must be provided.
+ */
 module.exports.processEvent = async (event) => {
     logger('Processing boost event: ', event);
 
@@ -346,6 +351,12 @@ module.exports.processEvent = async (event) => {
     };
 };
 
+/**
+ * Note: Not fully implemented yet.
+ * This function will process user boost resoponses.
+ * @param {object} event An event object containing the request context and request body.
+ * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
+ */
 module.exports.processUserBoostResponse = async (event) => {
     try {
         if (!event) {

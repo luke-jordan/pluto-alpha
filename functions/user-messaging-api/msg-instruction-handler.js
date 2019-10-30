@@ -18,18 +18,19 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region') });
  * condtional required properties are asserted. These are properties that are only required under certain condtions.
  * For example, if the message instruction has a recurring presentation then a recurrance instruction is required to
  * describe how frequently the notification should recur. The object properties recieved by this function are described below:
- * @param {string} instructionId The instruction unique id, useful in persistence operations.
- * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
- * @param {boolean} active Indicates whether the message is active or not.
- * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
- * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
- * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
- * @param {object} responseContext An object that includes details such as the boost ID.
- * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
- * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
- * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
+ * @param {object} instruction An instruction object. This objects properties are described below.
+ * @property {string} instructionId The instruction unique id, useful in persistence operations.
+ * @property {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
+ * @property {boolean} active Indicates whether the message is active or not.
+ * @property {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
+ * @property {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
+ * @property {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @property {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @property {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
+ * @property {object} responseContext An object that includes details such as the boost ID.
+ * @property {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
+ * @property {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
+ * @property {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
  */
 module.exports.validateMessageInstruction = (instruction) => {
     const requiredProperties = config.get('instruction.requiredProperties');
@@ -58,14 +59,16 @@ module.exports.validateMessageInstruction = (instruction) => {
 
 /** todo : validate templates
  * This function takes the instruction passed by the caller, assigns it an instruction id, activates it,
- * and assigns default values where none are provided by the input object. Minimum required instruction properties are described below: 
- * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
- * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {string} defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
- * @param {string} otherTemplates Required when defaultTemplate is null.
- * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
- * @param {string} eventTypeCategory The event type and category for this instruction, controlled by caller's logic (e.g., REFERRAL::REDEEMED::REFERRER);
+ * and assigns default values where none are provided by the input object.
+ * @param {object} instruction An instruction object. Its properties are detailed below.
+ * @param {string} creatingUserId The system wide id of the user creating the instruction. 
+ * @property {string} instruction.presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
+ * @property {string} instruction.audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
+ * @property {string} instruction.defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
+ * @property {string} instruction.otherTemplates Required when defaultTemplate is null.
+ * @property {object} instruction.selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @property {object} instruction.recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @property {string} instruction.eventTypeCategory The event type and category for this instruction, controlled by caller's logic (e.g., REFERRAL::REDEEMED::REFERRER);
  */
 const createPersistableObject = (instruction, creatingUserId) => {
     
@@ -114,7 +117,9 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
     // once off messages right away (on assumption they should go out)
     const holdOffInstructed = typeof params.holdFire === 'boolean' && params.holdFire;
     logger(`Fire off now? Presentation type: ${params.presentationType} and hold off instructed ? : ${holdOffInstructed}`);
-    if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed) {
+    const isScheduled = moment(params.startTime).valueOf() > moment().valueOf();
+    logger(`Is message scheduled for future delivery?: ${isScheduled}`);
+    if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed && !isScheduled) {
         const lambdaPaylod = { instructions: [{ instructionId }]};
         const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, lambdaPaylod)).promise();
         logger('Fired off process instruction: ', fireResult);
@@ -141,19 +146,22 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
  * to keep the two identifiers distinct here: one, embedded within the template, is an identifier within the sequence of messages, the other,
  * at top level, identifies across variants.
  * 
- * @param {string} instructionId The instructions unique id, useful in persistence operations.
- * @param {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
- * @param {boolean} active Indicates whether the message is active or not.
- * @param {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
- * @param {string} template Provides message templates, as described above
- * @param {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
- * @param {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
- * @param {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
- * @param {object} responseContext An object that includes details such as the boost ID.
- * @param {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
- * @param {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
- * @param {string} lastProcessedTime This property is updated eah time the message instruction is processed.
- * @param {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
+ * @param {object} event An object containing the request context and a body containing the instruction to be persisted.
+ * @property {object} requestContext  An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
+ * The properties listed below belong to the events body.
+ * @property {string} instructionId The instructions unique id, useful in persistence operations.
+ * @property {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
+ * @property {boolean} active Indicates whether the message is active or not.
+ * @property {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
+ * @property {string} template Provides message templates, as described above
+ * @property {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @property {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
+ * @property {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
+ * @property {object} responseContext An object that includes details such as the boost ID.
+ * @property {string} startTime A Postgresql compatible date string. This describes when this notification message should start being displayed. Default is right now.
+ * @property {string} endTime A Postgresql compatible date string. This describes when this notification message should stop being displayed. Default is the end of time.
+ * @property {string} lastProcessedTime This property is updated eah time the message instruction is processed.
+ * @property {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
  */
 module.exports.insertMessageInstruction = async (event) => {
     try {
@@ -189,8 +197,9 @@ module.exports.insertMessageInstruction = async (event) => {
  * This function can be used to update various aspects of a message. Note that if it 
  * deactivates the message instruction, that will stop all future notifications from message instruction,
  * and removes existing ones from the fetch queue.
- * @param {string} instructionId The message instruction ID assigned during instruction creation.
- * @param {object} updateValues Key-values of properties to update (e.g., { active: false })
+ * @param {object} event An object containing the request context, and an instruction id and update object in the body. Properties of the event body are described below. 
+ * @property {string} instructionId The message instruction ID assigned during instruction creation.
+ * @property {object} updateValues Key-values of properties to update (e.g., { active: false })
  */
 module.exports.updateInstruction = async (event) => {
     try {
@@ -217,7 +226,8 @@ module.exports.updateInstruction = async (event) => {
 
 /**
  * This function accepts an instruction id and returns the associated message instruction from the database.
- * @param {string} instructionId The message instruction ID assigned during instruction creation.
+ * @param {object} event An object containing the id of the instruction to be retrieved.
+ * @property {string} instructionId The message instruction ID assigned during instruction creation.
  */
 module.exports.getMessageInstruction = async (event) => {
     try {
@@ -244,6 +254,9 @@ module.exports.getMessageInstruction = async (event) => {
 /** 
  * This function (which will only be available to users with the right roles/permissions) will list currently active messages,
  * i.e., those that are marked as active, and, optionally, those that still have messages unread by users
+ * @param {string} event An object containing the request context and a body object containing a boolean property which indicates whether to include pending instructions in the resulting listing. 
+ * @property {Object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
+ * @property {boolean} includeStillDelivering A boolean value indicating whether to include messages that are still deliverig in the list of active messages.
  */
 module.exports.listActiveMessages = async (event) => {
     try {

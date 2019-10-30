@@ -92,6 +92,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
     const mockBoostToFromPersistence = {
         creatingUserId: testCreatingUserId,
+        label: 'Referral::Luke::Avish',
         boostType: 'REFERRAL',
         boostCategory: 'USER_CODE_USED',
         boostAmount: 100000,
@@ -134,6 +135,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
         const testBodyOfEvent = {
             creatingUserId: testCreatingUserId,
+            label: 'Referral::Luke::Avish',
             boostTypeCategory: 'REFERRAL::USER_CODE_USED',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
             boostBudget: '10000000::HUNDREDTH_CENT::USD',
@@ -174,6 +176,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
     const mockBoostToFromPersistence = {
         creatingUserId: testMktingAdmin,
+        label: 'Monday Limited Time Boost',
         boostType: 'SIMPLE',
         boostCategory: 'TIME_LIMITED',
         boostAmount: 100000,
@@ -209,6 +212,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         insertBoostStub.resolves(persistenceResult);
 
         const testBodyOfEvent = {
+            label: 'Monday Limited Time Boost',
             boostTypeCategory: 'SIMPLE::TIME_LIMITED',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
             boostBudget: 10000000,
@@ -320,6 +324,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
     // todo: validation that type/category matches game params
     const testBodyOfEvent = {
+        label: 'Midweek Catch Arrow',
         creatingUserId: testCreatingUserId,
         boostTypeCategory: 'GAME::TAP_SCREEN',
         boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
@@ -338,6 +343,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
     const mockBoostToFromPersistence = {
         creatingUserId: testCreatingUserId,
+        label: 'Midweek Catch Arrow',
         boostType: 'GAME',
         boostCategory: 'TAP_SCREEN',
         boostAmount: 100000,

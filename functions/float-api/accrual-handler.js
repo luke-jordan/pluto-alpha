@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:float:handler');
+const opsUtil = require('ops-util-common');
 
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
@@ -27,12 +28,14 @@ module.exports.balanceCheck = async (event) => {
  * The core function. Receives an instruction that interest (or other return) has been accrued, increases the balance recorded,
  * and then allocates the amounts to the client's bonus and company shares, and thereafter allocates to all accounts with 
  * contributions to the float in the past. Expects the following parameters in the lambda invocation or body of the post
- * @param {string} clientId The system wide ID of the client that handles the float that is receiving the accrual
- * @param {string} floatId The system wide ID of the float that has received an accrual
- * @param {number} accrualAmount The amount of the accrual, in the currency and units passed in the other parameters
- * @param {string} currency The currency of the accrual. If not provided, defaults to the currency of the float.
- * @param {string} unit The units in which the amount is expressed. If not provided, defaults to float default.
- * @param {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
+ * @param {object} event An event object containing request body. The request body's properties are described below.
+ * @property {string} clientId The system wide ID of the client that handles the float that is receiving the accrual
+ * @property {string} floatId The system wide ID of the float that has received an accrual
+ * @property {number} accrualAmount The amount of the accrual, in the currency and units passed in the other parameters
+ * @property {string} currency The currency of the accrual. If not provided, defaults to the currency of the float.
+ * @property {string} unit The units in which the amount is expressed. If not provided, defaults to float default.
+ * @property {number} referenceTimeMillis For recording the accrual log. If not provided, defaults to when the calculation is performed 
+ * @property {string} backingEntityIdentifier An identifier for the backing transaction (e.g., the accrual tx ID in the wholesale institution)
  */
 module.exports.accrue = async (event) => {
   try { 
@@ -68,8 +71,18 @@ module.exports.accrue = async (event) => {
 
     logger('Company allocation: ', clientAllocation);
 
-    const newFloatBalance = await rds.addOrSubtractFloat({ clientId, floatId, amount: accrualAmount, currency: accrualCurrency,
-      transactionType: constants.floatTransTypes.ACCRUAL, unit: accrualUnit, backingEntityIdentifier: accrualParameters.backingEntityIdentifier });
+    const newFloatBalance = await rds.addOrSubtractFloat({ 
+      clientId, 
+      floatId, 
+      amount: accrualAmount, 
+      currency: accrualCurrency,
+      transactionType: constants.floatTransTypes.ACCRUAL, 
+      unit: accrualUnit, 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
+      logType: 'WHOLE_FLOAT_ACCRUAL',
+      referenceTimeMillis: accrualParameters.referenceTimeMillis 
+    });
+    
     logger('New float balance: ', newFloatBalance);
       
     const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
@@ -87,7 +100,8 @@ module.exports.accrue = async (event) => {
       totalAmount: remainingAmount, 
       currency: accrualCurrency, 
       backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
-      backingEntityIdentifier: accrualParameters.backingEntityIdentifier 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
+      bonusPoolIdForExcess: floatConfig.bonusPoolTracker 
     };
     
     const userAllocations = await exports.allocate(userAllocEvent);
@@ -118,13 +132,15 @@ module.exports.accrue = async (event) => {
  * If one allocation does not succeed, all need to be redone, otherwise the calculations will go (way) off
  * Note: this is generally the heart of the engine, and will require constant and continuous optimization, it will be 
  * triggered whenever another job detects unallocated amounts in the float.
- * @param {string} clientId The client co that this allocation event relates to
- * @param {string} floatId The float that is being allocated
- * @param {string} currency The currency of the allocation
- * @param {string} unit The units of the amount
- * @param {number} totalAmount The total amount being allocated
- * @param {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
- * @param {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
+ * @param {object} event An event object containing request body. The request body's properties are listed below.
+ * @property {string} clientId The client co that this allocation event relates to
+ * @property {string} floatId The float that is being allocated
+ * @property {string} currency The currency of the allocation
+ * @property {string} unit The units of the amount
+ * @property {number} totalAmount The total amount being allocated
+ * @property {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
+ * @property {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
+ * @property {string} bonusPoolIdForExcess (Optional) Where to put any fractional leftovers (or from where to take deficits)
  */
 module.exports.allocate = async (event) => {
   
@@ -133,26 +149,44 @@ module.exports.allocate = async (event) => {
     params.floatId, params.currency, constants.entityTypes.END_USER_ACCOUNT, false
   );
 
-  const amountToAllocate = params.totalAmount; // || fetch unallocated amount
-  const unitsToAllocate = params.unit || constants.floatUnits.DEFAULT;
+  const unitsToAllocate = constants.floatUnits.DEFAULT;
 
+  let amountToAllocate = 0;
+  if (constants.isKnownUnit(params.unit)) {
+    amountToAllocate = opsUtil.convertToUnit(params.totalAmount, params.unit, constants.floatUnits.DEFAULT);
+  } else {
+    amountToAllocate = params.totalAmount; // should possibly throw an error instead
+  }
+
+  logger(`Unit: ${params.unit}, is it known? : ${constants.isKnownUnit(params.unit)}, and converted amount: ${amountToAllocate}`);
   const shareMap = exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
   logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult = { };
-  if (shareMap.has(constants.EXCESSS_KEY)) {
+  const allocateRemainsToBonus = shareMap.has(constants.EXCESSS_KEY) && event.bonusPoolIdForExcess;
+
+  if (allocateRemainsToBonus) {
     const excessAmount = shareMap.get(constants.EXCESSS_KEY);
     // store the allocation, store in bonus allocation Tx id
-    const bonusPool = await dynamo.fetchConfigVarsForFloat(params.clientId, params.floatId);
-    const bonusAlloc = { label: 'BONUS', amount: excessAmount, currency: params.currency, unit: unitsToAllocate, 
-      allocatedToType: constants.entityTypes.BONUS_POOL, allocatedToId: bonusPool.bonusPoolTracker };
+    const bonusAlloc = { 
+      label: 'BONUS', 
+      amount: excessAmount, 
+      currency: params.currency, 
+      unit: unitsToAllocate, 
+      allocatedToType: constants.entityTypes.BONUS_POOL, 
+      allocatedToId: event.bonusPoolIdForExcess 
+    };
+
     if (params.backingEntityIdentifier && params.backingEntityType) {
       bonusAlloc.relatedEntityType = params.backingEntityType;
       bonusAlloc.relatedEntityId = params.backingEntityIdentifier;
     }
+
     bonusAllocationResult = await rds.allocateFloat(params.clientId, params.floatId, [bonusAlloc]);
-    shareMap.delete(constants.EXCESSS_KEY);
+    bonusAllocationResult.amount = excessAmount;
   }
+
+  shareMap.delete(constants.EXCESSS_KEY);
 
   const allocRequests = [];
   // todo : add in the backing entity for audits
@@ -169,11 +203,8 @@ module.exports.allocate = async (event) => {
   // logger('Result of allocations: ', resultOfAllocations);
   
   return {
-    statusCode: 200,
-    body: JSON.stringify({
       allocationRecords: resultOfAllocations,
       bonusAllocation: bonusAllocationResult || { }
-    })
   };
 };
 
@@ -218,7 +249,7 @@ const calculatePercent = (total, account) => (new BigNumber(account)).dividedBy(
 const checkBalancesIntegers = (accountBalances = new Map()) => {
   for (const balance of accountBalances.values()) {
     if (!Number.isInteger(balance)) {
-      throw new TypeError('Error! One of the balances is not an integer');
+      throw new TypeError('Error! One of the balances is not an integer: ', balance);
     }
   }
 };
