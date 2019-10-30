@@ -7,6 +7,7 @@ const uuid = require('uuid/v4');
 const moment = require('moment');
 
 const constants = require('../constants'); // todo : replace with config, or similar
+const opsUtil = require('ops-util-common');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
@@ -207,7 +208,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ' + 
         '${float_id}, ${client_id}, ${tags}';
 
-    logger('Allocation request, account IDs: ', allocationRequests.map((request) => request.accountId));
+    // logger('Allocation request, account IDs: ', allocationRequests.map((request) => request.accountId));
 
     const accountRows = allocationRequests.map((request) => {
         const tags = request.relatedEntityId ? `ARRAY ['${request.relatedEntityType}::${request.relatedEntityId}']` : '{}';
@@ -234,7 +235,9 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     const resultOfDualInsertion = await rdsConnection.largeMultiTableInsert([allocationQueryDef, accountQueryDef]);
     logger('Result of allocation records insertion: ', resultOfDualInsertion);
 
-    return { result: 'SUCCESS', floatTxIds: resultOfDualInsertion[0], accountTxIds: resultOfDualInsertion[1] };
+    const floatTxIds = resultOfDualInsertion[0].map((row) => row['transaction_id']);
+    const accountTxIds = resultOfDualInsertion[1].map((row) => row['transaction_id']);
+    return { result: 'SUCCESS', floatTxIds, accountTxIds };
 };
 
 /**
@@ -247,54 +250,36 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
 module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency, entityType = constants.entityTypes.END_USER_ACCOUNT, logResult = false) => {
     const floatTable = config.get('tables.floatTransactions');
     const accountTable = config.get('tables.openAccounts');
-
-    const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
     
     // note : the inner join is necessary just in case something gets into the allocated to IDs that is not an account ID,
     // to prevent later issues with foreign key constraints
     const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
         `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
-        `where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 group by account_id, unit`;
+        `where float_id = $1 and currency = $2 and allocated_to_type = $3 group by account_id, unit`;
+    const queryParams = [floatId, currency, entityType];
     
     logger('Assembled sum query: ', sumQuery);
-
-    const unitResults = await rdsConnection.selectQuery(unitQuery, [floatId, currency, entityType]);
-    logger('Result of unit selection query: ', unitResults);
-    // if unit results is empty, then just return an empty object
-    if (!unitResults || unitResults.length === 0) {
-        logger('No accounts found for float, should probably put something in DLQ');
-        return new Map(); 
-    }
-
-    const usedUnits = unitResults.map((row) => row.unit);
-    logger('Units used in the float to date: ', usedUnits);
+    logger('And values: ', queryParams);
     
     // this could get _very_ big, so using Map for it instead of a simple variable
     const selectResults = new Map();
     
-    const accountTotalQueries = usedUnits.map((unit) => {
-        logger('Calculating account balances for unit: ', unit);
-        return rdsConnection.selectQuery(sumQuery, [floatId, currency, unit, entityType]);
+    // each row in this will have the sum in a particular unit for a particular account
+    const accountTotalResults = await rdsConnection.selectQuery(sumQuery, queryParams);
+    
+    accountTotalResults.forEach((row) => {
+        const thisAccountId = row['account_id'];
+        const thisAmountInDefault = opsUtil.convertToUnit(parseInt(row['sum'], 10), row['unit'], constants.floatUnits.DEFAULT);
+        const priorSum = selectResults.get(thisAccountId) || 0;
+        selectResults.set(thisAccountId, priorSum + thisAmountInDefault);
     });
-
-    const accountTotalResults = await Promise.all(accountTotalQueries);
-    accountTotalResults.filter((result) => result && result.length > 0).forEach((accountTotalResult) => {
-        const unit = accountTotalResult[0]['unit'];
-        const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['sum']}), {});
-        const unitTransformationMultiplier = constants.floatUnitTransforms[unit];
-        Object.keys(accountObj).forEach((accountId) => {
-            const priorSum = selectResults.get(accountId) || 0;
-            const accountSumInDefaultUnit = accountObj[accountId] * unitTransformationMultiplier; // todo: skip if not present
-            selectResults.set(accountId, priorSum + accountSumInDefaultUnit);
-        });
-        logger('Completed unit calculation');
-    });
-
+    
     // logger('Completed calculations of account sums, result: ', selectResults);
 
     if (logResult) {
         logger(selectResults);
     }
+
     return selectResults;
 };
 

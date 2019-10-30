@@ -32,14 +32,14 @@ resource "aws_lambda_function" "save_initiate" {
                   "floatTransactions": "float_data.float_transaction_ledger"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
-            "secrets": {
+              "secrets": {
                 "enabled": true,
                 "names": {
-                    "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
+                  "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
               },
               "publishing": {

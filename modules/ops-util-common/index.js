@@ -105,3 +105,7 @@ module.exports.extractQueryParams = (event) => {
     // must be blank, returning
     return { };
 };
+
+module.exports.isObjectEmpty = (object) => {
+    return !object || typeof object !== 'object' || Object.keys(object).length === 0;
+};

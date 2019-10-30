@@ -9,9 +9,8 @@ resource "aws_lambda_function" "saving_record" {
   role                           = "${aws_iam_role.saving_record_role.arn}"
   handler                        = "saving-handler.settleInitiatedSave"
   memory_size                    = 256
-  reserved_concurrent_executions = 20
   runtime                        = "nodejs10.x"
-  timeout                        = 900
+  timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
@@ -23,22 +22,18 @@ resource "aws_lambda_function" "saving_record" {
       NODE_CONFIG = "${
         jsonencode(
           {
-              "tables": {
-                  "accountTransactions": "transaction_data.core_transaction_ledger",
-                  "rewardTransactions": "transaction_data.core_transaction_ledger",
-                  "floatTransactions": "float_data.float_transaction_ledger"
-              },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "secrets": {
                 "enabled": true,
                 "names": {
                     "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
-              }
+              },
+              "testing": "${local.database_type}"
           }
       )}"
     }

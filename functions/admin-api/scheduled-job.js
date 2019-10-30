@@ -37,7 +37,7 @@ const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
 const assembleAccrualPayload = async (clientFloatInfo) => {
     logger('Assembling from: ', clientFloatInfo);
 
-    const floatAmountHunCent = obtainFloatBalance(clientFloatInfo);
+    const floatAmountHunCent = await obtainFloatBalance(clientFloatInfo);
     const lastFloatAccrualTime = await rdsFloat.getLastFloatAccrualTime(clientFloatInfo.floatId, clientFloatInfo.clientId);
     
     // see the balance handler for a more detailed & commented version
@@ -109,7 +109,7 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
 
     const simpleFormat = (amount) => `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
 
-    const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.length;
+    const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.accountTxIds.length;
     const bonusAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation') 
         ? 'None' : '(yes : insert excess)';
 

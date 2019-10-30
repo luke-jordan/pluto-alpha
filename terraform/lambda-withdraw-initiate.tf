@@ -31,9 +31,9 @@ resource "aws_lambda_function" "withdraw_initiate" {
                   "floatTransactions": "float_data.float_transaction_ledger"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "cache": {
                 "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",

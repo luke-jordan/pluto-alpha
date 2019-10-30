@@ -3,8 +3,11 @@
 module.exports.floatUnits = {
     HUNDREDTH_CENT: 'HUNDREDTH_CENT',
     WHOLE_CENT: 'WHOLE_CENT',
+    WHOLE_CURRENCY: 'WHOLE_CURRENCY',
     DEFAULT: 'HUNDREDTH_CENT'
 };
+
+module.exports.isKnownUnit = (unit) => typeof unit === 'string' && typeof exports.floatUnits[unit] === 'string';
 
 // NOTE: these are expressed in multiples of the DEFAULT unit
 module.exports.floatUnitTransforms = {
