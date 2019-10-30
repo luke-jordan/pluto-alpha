@@ -153,7 +153,7 @@ module.exports.allocate = async (event) => {
 
   let amountToAllocate = 0;
   if (constants.isKnownUnit(params.unit)) {
-    amountToAllocate = opsUtil.convertToUnit(params.totalAmount, params.unit, constants.floatUnits.DEFAULT)
+    amountToAllocate = opsUtil.convertToUnit(params.totalAmount, params.unit, constants.floatUnits.DEFAULT);
   } else {
     amountToAllocate = params.totalAmount; // should possibly throw an error instead
   }

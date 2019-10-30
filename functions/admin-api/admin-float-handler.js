@@ -373,7 +373,7 @@ module.exports.adjustClientFloat = async (event) => {
                 operationResultForLog = await markLogUnresolved(priorLogId, adminUserId, logReason);
                 break; // as above
             case 'ADJUST_ACCRUAL_VARS':
-                resultOfOperation = await adjustFloatVariables({ clientId, floatId, logReason, newParams: params.newAccrualVars });
+                operationResultForLog = await adjustFloatVariables({ clientId, floatId, logReason, newParams: params.newAccrualVars });
                 break;
             case 'ALLOCATE_FUNDS':
                 operationResultForLog = await allocateFloatFunds({ clientId, floatId, amountDef, allocatedToDef: params.allocateTo, adminUserId, logReason });
