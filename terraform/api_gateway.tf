@@ -242,6 +242,37 @@ resource "aws_api_gateway_integration" "save_payment_check" {
   uri                     = "${aws_lambda_function.save_payment_check.invoke_arn}"
 }
 
+//// EXPERIMENT STARTS HERE
+
+resource "aws_api_gateway_resource" "save_result_root" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = aws_api_gateway_resource.save_path_root.id
+  path_part   = "result"
+}
+
+resource "aws_api_gateway_resource" "save_payment_result" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = aws_api_gateway_resource.save_result_root.id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "save_payment_result" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.save_payment_result.id
+  http_method   = "GET"
+  authorization = "NONE" // since this will come in from a redirect
+}
+
+resource "aws_api_gateway_integration" "save_payment_result" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_method.save_payment_result.resource_id
+  http_method   = aws_api_gateway_method.save_payment_result.http_method
+  
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.saving_record.invoke_arn
+}
+
 /////////////// ACCOUNT BALANCE LAMBDA (WRAPPER ONLY, SIMPLE GET) -- MAIN LAMBDA ONLY FOR INVOKE /////////////////////////////////////////////////
 
 resource "aws_api_gateway_method" "balance_fetch_wrapper" {

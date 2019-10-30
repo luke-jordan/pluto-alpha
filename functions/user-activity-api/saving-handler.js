@@ -178,6 +178,8 @@ module.exports.initiatePendingSave = async (event) => {
 /* Method to change a pending save to complete. Wrapper. Once integration is done, will query payment provider first.
  */
 module.exports.settleInitiatedSave = async (event) => {
+  logger('Settling save, logging this: ', event);
+
   try {
 
     if (warmupCheck(event)) {

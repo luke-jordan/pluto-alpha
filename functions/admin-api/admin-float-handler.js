@@ -211,6 +211,10 @@ const stripParamsForFloat = (newParams, existingParams) => paramsToInclude.
     reduce((obj, param) => ({ ...obj, [param]: newParams[param] || existingParams[param]}), {});
 
 const adjustFloatVariables = async ({ clientId, floatId, logReason, newParams }) => {
+    if (!logReason) {
+        throw new Error('Must have a reason for changing parameters');
+    }
+
     const currentClientFloatInfo = await dynamo.fetchClientFloatVars(clientId, floatId);
 
     const newAccrualVars = stripParamsForFloat(newParams, currentClientFloatInfo);
@@ -220,7 +224,7 @@ const adjustFloatVariables = async ({ clientId, floatId, logReason, newParams })
     logger('Result of update: ', resultOfUpdate);
 
     const logContext = { logReason, priorState: oldAccrualVars, newState: newAccrualVars };
-    const logInsertion = await persistence.insertFloatLog({ clientId, floatId, logType: '', logContext });
+    const logInsertion = await persistence.insertFloatLog({ clientId, floatId, logType: 'PARAMETERS_UPDATED', logContext });
 
     return logInsertion;
 };
