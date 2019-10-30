@@ -20,6 +20,33 @@ resource "aws_iam_policy" "dynamo_table_client_float_table_access" {
 EOF
 }
 
+resource "aws_iam_policy" "admin_client_float_access" {
+  name = "lambda_admin_client_float_list_${terraform.workspace}"
+  path = "/"
+
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+      {
+        "Sid": "ClientFloatAdminAccess",
+        "Effect": "Allow",
+        "Action": [
+          "dynamodb:Scan",
+          "dynamodb:Query",
+          "dynamodb:GetItem",
+          "dynamodb:UpdateItem"
+        ],
+        "Resource": [
+          "${aws_dynamodb_table.client-float-table.arn}",
+          "${var.country_client_table_arn[terraform.workspace]}"
+        ]
+      }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "migration_script_s3_access" {
   name        = "migration_script_s3_access_${terraform.workspace}"
   path        = "/"

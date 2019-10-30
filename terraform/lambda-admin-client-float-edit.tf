@@ -96,3 +96,8 @@ resource "aws_iam_role_policy_attachment" "admin_client_float_edit_table_access"
   role = "${aws_iam_role.admin_client_float_edit_role.name}"
   policy_arn = "${aws_iam_policy.admin_client_float_access.arn}"
 }
+
+resource "aws_iam_role_policy_attachment" "admin_client_float_edit_transfer_access" {
+  role = "${aws_iam_role.admin_client_float_edit_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_float_transfer_access.arn}"
+}

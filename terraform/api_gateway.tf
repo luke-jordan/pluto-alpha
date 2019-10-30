@@ -39,7 +39,7 @@ resource "aws_api_gateway_authorizer" "jwt_authorizer" {
 }
 
 resource "aws_iam_role" "auth_invocation_role" {
-  name = "api_gateway_auth_invocation"
+  name = "${terraform.workspace}_api_gateway_auth_invocation"
   path = "/"
 
   assume_role_policy = <<EOF
