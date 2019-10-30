@@ -182,7 +182,7 @@ module.exports.fetchClientFloatDetails = async (event) => {
 
     const params = opsCommonUtil.extractQueryParams(event);
 
-    const [clientFloatVars, floatBalance, floatAlerts] = await Promise.all([
+    const [clientFloatVars, floatBalanceRaw, floatAlerts] = await Promise.all([
         dynamo.fetchClientFloatVars(params.clientId, params.floatId),
         persistence.getFloatBalanceAndFlows([params.floatId]),
         fetchFloatAlertsIssues(params.clientId, params.floatId)
@@ -190,11 +190,20 @@ module.exports.fetchClientFloatDetails = async (event) => {
 
     logger('Assembled client float vars: ', clientFloatVars);
     logger('Assembled float alerts: ', floatAlerts);
+    logger('And float balance: ', floatBalanceRaw);
+
+    const floatBalanceInfo = floatBalanceRaw.get(params.floatId)[clientFloatVars.currency];
+    const floatBalance = wrapAmount(floatBalanceInfo.amount, floatBalanceInfo.unit, clientFloatVars.currency);
+    logger('Extract float balance: ', floatBalance);
 
     const clientFloatDetails = { ...clientFloatVars, floatBalance, floatAlerts };
 
     return adminUtil.wrapHttpResponse(clientFloatDetails);
 };
+
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////// FLOAT EDITING STARTS HERE ///////////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const paramsToInclude = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor'];
 
