@@ -161,6 +161,7 @@ module.exports.updateRow = async (updateParams) => {
     };
 
     let resultDict = { };
+    
     try {
         logger('Updating item with params: ', awsParams);
         const updateResult = await docC.update(awsParams).promise();

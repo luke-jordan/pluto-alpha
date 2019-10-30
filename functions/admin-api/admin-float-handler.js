@@ -175,31 +175,38 @@ module.exports.fetchClientFloatDetails = async (event) => {
 
     const params = opsCommonUtil.extractQueryParams(event);
 
-    const clientFloatVars = await dynamo.fetchClientFloatVars(params.clientId, params.floatId);
-    logger('Assembled client float vars: ', clientFloatVars);
+    const [clientFloatVars, floatBalance, floatAlerts] = await Promise.all([
+        dynamo.fetchClientFloatVars(params.clientId, params.floatId),
+        persistence.getFloatBalanceAndFlows([params.floatId]),
+        fetchFloatAlertsIssues(params.clientId, params.floatId)
+    ]);
 
-    const floatAlerts = await fetchFloatAlertsIssues(params.clientId, params.floatId);
+    logger('Assembled client float vars: ', clientFloatVars);
     logger('Assembled float alerts: ', floatAlerts);
 
-    const clientFloatDetails = { ...clientFloatVars, floatAlerts };
+    const clientFloatDetails = { ...clientFloatVars, floatBalance, floatAlerts };
 
     return adminUtil.wrapHttpResponse(clientFloatDetails);
 };
 
 const paramsToInclude = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor'];
+
 const stripParamsForFloat = (newParams, existingParams) => paramsToInclude.
     reduce((obj, param) => ({ ...obj, [param]: newParams[param] || existingParams[param]}), {});
 
-const adjustFloatAccrualVars = async ({ clientId, floatId, newParams }) => {
+const adjustFloatVariables = async ({ clientId, floatId, logReason, newParams }) => {
     const currentClientFloatInfo = await dynamo.fetchClientFloatVars(clientId, floatId);
+
     const newAccrualVars = stripParamsForFloat(newParams, currentClientFloatInfo);
     const oldAccrualVars = stripParamsForFloat(currentClientFloatInfo, currentClientFloatInfo); // extracts key ones so we can log them
 
-    // then do an update in dynamo
-    const resultOfUpdate = await dynamo.updateClientFloatVars();
+    const resultOfUpdate = await dynamo.updateClientFloatVars({ clientId, floatId, newPrincipalVars: newParams });
     logger('Result of update: ', resultOfUpdate);
 
-    return { newAccrualVars, oldAccrualVars };
+    const logContext = { logReason, priorState: oldAccrualVars, newState: newAccrualVars };
+    const logInsertion = await persistence.insertFloatLog({ clientId, floatId, logType: '', logContext });
+
+    return logInsertion;
 };
 
 // if it's to / from bonus pool or client share, just use transfer lambda
@@ -317,13 +324,6 @@ const updateLogToResolved = async (logId, adminUserId, resolutionNote) => {
     return persistence.updateFloatLog({ logId, contextToUpdate });
 };
 
-const adjustFloatVariables = async ({ clientId, floatId, logReason, newAccrualVars }) => {
-    const oldNewState = await adjustFloatAccrualVars({ clientId, floatId, newAccrualVars });
-    const logContext = { logReason, priorState: oldNewState.oldAccrualVars, newState: oldNewState.newAccrualVars };
-    const logInsertion = await persistence.insertFloatLog({ clientId, floatId, logType: '', logContext });
-    return logInsertion;
-};
-
 /**
  * Handles a variety of client-float edits, such as: (a) editing accrual rates and the like, (b) dealing with logs
  * Note: will be called from different endpoints but consolidating as single lambda
@@ -356,8 +356,7 @@ module.exports.adjustClientFloat = async (event) => {
                 resultOfOperation = await markLogUnresolved(priorLogId, adminUserId, logReason);
                 break; // as above
             case 'ADJUST_ACCRUAL_VARS':
-                resultOfOperation = await adjustFloatVariables({ clientId, floatId, logReason, newAccrualVars: params.newAccrualVars });
-                tellPersistenceLogIsResolved = true;
+                resultOfOperation = await adjustFloatVariables({ clientId, floatId, logReason, newParams: params.newAccrualVars });
                 break;
             case 'ALLOCATE_FUNDS':
                 resultOfOperation = await allocateFloatFunds({ clientId, floatId, amountDef, allocatedToDef: params.allocateTo, adminUserId, logReason });
@@ -379,8 +378,8 @@ module.exports.adjustClientFloat = async (event) => {
 
         logger('Result of operation: ', operation, ' is: ', resultOfOperation);
 
-        if (tellPersistenceLogIsResolved) {
-            await updateLogToResolved(priorLogId, adminUserId);
+        if (tellPersistenceLogIsResolved && priorLogId) {
+            await updateLogToResolved(priorLogId, adminUserId, resultOfOperation);
         }
 
         // possibly also send back the updated / new client-float var package?
