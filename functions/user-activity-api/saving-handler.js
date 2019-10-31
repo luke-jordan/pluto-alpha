@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:save:main');
+const config = require('config');
 const moment = require('moment-timezone');
 const status = require('statuses');
 
@@ -181,27 +182,40 @@ module.exports.settleInitiatedSave = async (event) => {
   logger('Settling save, logging this: ', event);
 
   try {
-
     if (warmupCheck(event)) {
       return warmupResponse;
     }
 
-    const authParams = event.requestContext.authorizer;
-    if (!authParams || !authParams.systemWideUserId) {
-      return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
+    const pathParams = event.pathParameters ? event.pathParameters.proxy : '';
+    const splitParams = pathParams.split('/'); // not the best thing 
+    logger('Split path params: ', splitParams);
+
+    const paymentProvider = pathParams[0];
+    const transactionId = pathParams[1];
+    const resultType = pathParams[pathParams.length - 1];
+
+    logger(`Handling process, from ${paymentProvider}, with result ${resultType}, for ID: ${transactionId}`);
+
+    if (!resultType) {
+      throw new Error('Error!');
     }
 
-    // todo : check transaction ID, accountId and user Id match
-    // todo : get default payment provider from client
-    const settleInfo = JSON.parse(event.body);
-    if (!settleInfo.paymentProvider) {
-      settleInfo.paymentProvider = 'OZOW';
-    }
+    const htmlTemplateKey = config.get(`templates.payment.${resultType.toLowerCase()}`);
+    const htmlPage = await publisher.obtainTemplate(htmlTemplateKey);
 
-    logger('Settling, with info: ', settleInfo);
-    return exports.settle(settleInfo);
+    const response = {
+      statusCode: 200,
+      headers: {
+        'Content-Type': 'text/html'
+      },
+      body: htmlPage
+    };
+    
+    logger('Responding with: ', response);
+    return response;
   } catch (err) {
-    return handleError(err);
+    // return the error page
+
   }
 };
 

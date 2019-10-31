@@ -114,7 +114,7 @@ resource "aws_iam_role_policy_attachment" "save_initiate_payment_url_get" {
 
 resource "aws_iam_role_policy_attachment" "save_initiate_secret_get" {
   role = "${aws_iam_role.save_initiate_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

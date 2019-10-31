@@ -61,7 +61,7 @@ resource "aws_rds_cluster" "pg_rds" {
   preferred_backup_window = "07:00-09:00"
   
   skip_final_snapshot     = terraform.workspace == "staging" ? true : false
-  final_snapshot_identifier = "final_${var.deploy_code_commit_hash}"
+  final_snapshot_identifier = "final-${var.deploy_code_commit_hash}"
   
   db_subnet_group_name   = "${aws_db_subnet_group.rds_subnet_group.id}"
   vpc_security_group_ids = ["${aws_security_group.sg_db_5432_ingress.id}"]
@@ -69,19 +69,13 @@ resource "aws_rds_cluster" "pg_rds" {
 
   tags                    = {"environment"  = "${terraform.workspace}"}
 
+  # until we are going live, have it pause
   scaling_configuration {
-    auto_pause      = false
+    auto_pause      = true
+    seconds_until_auto_pause = 300
+    
     min_capacity    = 2
     max_capacity    = 32
     timeout_action  = "RollbackCapacityChange"
   }
 }
-
-# resource "aws_rds_cluster_instance" "cluster_instances" {
-#   count = "${terraform.workspace != "staging" ? 1 : 0}"
-#   identifier         = "aurora-pg-clusterinstance-${count.index}"
-#   cluster_identifier = "${aws_rds_cluster.pg_rds[0].id}"
-#   instance_class     = "db.t3.medium"
-#   engine             = "aurora-postgresql"
-#   engine_version     = "10.7"
-# }

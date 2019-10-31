@@ -85,7 +85,7 @@ resource "aws_api_gateway_account" "api_gateway" {
 }
 
 resource "aws_iam_role" "api_gateway_cloudwatch" {
-  name = "api_gateway_cloudwatch_${terraform.workspace}"
+  name = "api_gateway_ops_cloudwatch_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -263,6 +263,13 @@ resource "aws_api_gateway_method" "save_payment_result" {
   authorization = "NONE" // since this will come in from a redirect
 }
 
+resource "aws_lambda_permission" "save_payment_result" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.save_payment_complete.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
 resource "aws_api_gateway_integration" "save_payment_result" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   resource_id   = aws_api_gateway_method.save_payment_result.resource_id
@@ -270,7 +277,7 @@ resource "aws_api_gateway_integration" "save_payment_result" {
   
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = aws_lambda_function.saving_record.invoke_arn
+  uri                     = aws_lambda_function.save_payment_complete.invoke_arn
 }
 
 /////////////// ACCOUNT BALANCE LAMBDA (WRAPPER ONLY, SIMPLE GET) -- MAIN LAMBDA ONLY FOR INVOKE /////////////////////////////////////////////////

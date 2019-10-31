@@ -2,7 +2,7 @@
     "db": {
         "user": "admin_api_worker",
         "host": "localhost",
-        "database": "pluto",
+        "database": "jupiter",
         "password": "pwd_for_admin_api",
         "port" :"5430"
     },

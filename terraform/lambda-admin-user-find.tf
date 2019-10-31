@@ -93,7 +93,7 @@ resource "aws_iam_role_policy_attachment" "admin_user_ops_invocation_policy" {
 
 resource "aws_iam_role_policy_attachment" "admin_user_find_secret_get" {
   role = "${aws_iam_role.admin_user_find_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_admin_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

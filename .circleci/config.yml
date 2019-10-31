@@ -214,6 +214,7 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip
 
                 /home/circleci/bin/aws s3 sync $HOME/app/templates/emails/ s3://$CIRCLE_BRANCH.jupiter.templates/emails/
+                /home/circleci/bin/aws s3 sync $HOME/app/templates/payment/ s3://$CIRCLE_BRANCH.jupiter.templates/payment/
              fi
 
       - run:

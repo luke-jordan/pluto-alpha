@@ -103,7 +103,7 @@ resource "aws_iam_role_policy_attachment" "save_payment_check_user_event_publish
 
 resource "aws_iam_role_policy_attachment" "save_payment_check_secret_get" {
   role = "${aws_iam_role.save_payment_check_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
