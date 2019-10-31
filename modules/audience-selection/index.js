@@ -30,14 +30,25 @@ class AudienceSelection {
         return `select * from ${selectionJSON.table} where`;
     }
 
+    checkRandomSampleExpectation (queryWithConditions, selectionJSON) {
+        if (selectionJSON.sample && selectionJSON.sample.random) {
+            return `select * from (${queryWithConditions}) tablesample system(${selectionJSON.sample.random})`;
+        }
+
+        return queryWithConditions;
+    }
+
     fetchUsersGivenJSON (selectionJSON) {
         const queryBeginning = this.extractTable(selectionJSON);
         const whereFilters = this.extractWhereConditions(selectionJSON);
+        logger('raw whereFilters:', whereFilters);
 
-        logger('raw whereFilters', whereFilters);
+        const queryWithConditions = `${queryBeginning} ${whereFilters}`;
+        logger('query with conditions:', queryWithConditions);
 
-        const fullQuery = `${queryBeginning} ${whereFilters}`;
-        logger('full whereFilters', fullQuery);
+        const fullQuery = this.checkRandomSampleExpectation(queryWithConditions, selectionJSON);
+        logger('full query:', fullQuery);
+
         return fullQuery;
     }
 }
