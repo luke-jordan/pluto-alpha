@@ -247,15 +247,7 @@ module.exports = {
         'prefer-reflect': 'error',
         'prefer-rest-params': 'error',
         'prefer-spread': 'error',
-        'prefer-template': 'error',
         'quote-props': 'off',
-        'quotes': [
-            'error',
-            'single', {
-                avoidEscape: true,
-                allowTemplateLiterals: true
-            }
-        ],
         'radix': 'error',
         'require-await': 'off',
         'require-jsdoc': 'error',

@@ -7,8 +7,8 @@
     "test": "test"
   },
   "scripts": {
-    "test": "DEBUG=jupiter:rds-common:* nyc mocha './test/unit.test.js'",
-    "test-all": "DEBUG=jupiter:rds-common:* nyc mocha --exit",
+    "test": "DEBUG=jupiter:audience-selection:* nyc mocha './test/unit.test.js'",
+    "test-all": "DEBUG=jupiter:audience-selection:* nyc mocha --exit",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
@@ -20,5 +20,8 @@
     "mocha": "^6.1.4",
     "nyc": "^14.1.1",
     "sinon": "^7.3.2"
+  },
+  "dependencies": {
+    "debug": "^4.1.1"
   }
 }
