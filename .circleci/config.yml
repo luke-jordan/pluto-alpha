@@ -51,6 +51,7 @@ jobs:
             /bin/sh execute_test_lint.sh modules/rds-common
             /bin/sh execute_test_lint.sh modules/dynamo-common
             /bin/sh execute_test_lint.sh modules/publish-common
+            /bin/sh execute_test_lint.sh modules/audience-selection
 
       # Note: we do this _after_ the cache steps, so the cache includes all the modules needed for tests
       - run:
@@ -59,11 +60,12 @@ jobs:
             cd $HOME/app
             npm prune --production
             echo "Prune complete, remove old symlinks"
-            rm modules/rds-common/node_modules && rm modules/dynamo-common/node_modules && rm modules/publish-common/node_modules
+            rm modules/rds-common/node_modules && rm modules/dynamo-common/node_modules && rm modules/publish-common/node_modules && rm modules/audience-selection/node_modules
             echo "Now copy pruned dependencies into modules"
             cp -r node_modules modules/rds-common/; echo "."
             cp -r node_modules modules/dynamo-common/; echo "."
             cp -r node_modules modules/publish-common/; echo "."
+            cp -r node_modules modules/audience-selection/; echo "."
             cp -r node_modules modules/ops-util-common/; echo "."
 
       - run:
