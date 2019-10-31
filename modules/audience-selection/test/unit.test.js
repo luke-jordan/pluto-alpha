@@ -22,7 +22,7 @@ describe('Audience Selection', () => {
             }]
         });
 
-        const expectedQuery = `select * from transactions where transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED'`;
+        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -38,7 +38,7 @@ describe('Audience Selection', () => {
                 ]
             }]
         });
-        const expectedQuery = `select * from transactions where transaction_type='USER_SAVING_EVENT' or settlement_status = 'SETTLED'`;
+        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -49,21 +49,22 @@ describe('Audience Selection', () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             "conditions": [{
                 "op": "or", "children": [
-                    { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
-                    { "op": "or", "children": [
+                    { "op": "and", "children": [
                         { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                    ]}
+                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" },
+                    ]},
+                    { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
                 ]
             }]
         });
 
-        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED') or (creation_time >= '2019-01-27')`;
+        const expectedQuery = `select * from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
     });
+
 
     it('should be able to handle complex AND and OR statements', async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
@@ -71,17 +72,17 @@ describe('Audience Selection', () => {
                 "op": "or", "children": [
                     { "op": "and", "children": [
                         { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
+                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" },
                     ]},
                     { "op": "and", "children": [
                         { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
-                        { "op": "is", "prop": "responsible_client_id", "value": "1" }
-                    ]}
+                        { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" },
+                     ]}
                 ]
             }]
         });
 
-        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED') or (creation_time >= '2019-01-27' and responsible_client_id = 1)`;
+        const expectedQuery = `select * from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or (creation_time='2019-01-27' and responsible_client_id=1))`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -92,22 +93,21 @@ describe('Audience Selection', () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             "conditions": [{
                 "op": "and", "children": [
-                    { "op": "is", "prop": "responsible_client_id", "value": "1" },
                     { "op": "or", "children": [
-                        { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
                         { "op": "and", "children": [
                                 { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
                                 { "op": "is", "prop": "settlement_status", "value": "SETTLED" },
-                            ]}
-                    ]}
+                        ]},
+                        { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
+                    ]},
+                    { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
                 ]
             }]
         });
-        const expectedQuery = `select * from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED') or creation_time >= '2019-01-27') and responsible_client_id = 1`;
+        const expectedQuery = `select * from transactions where (((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') and responsible_client_id=1)`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
     });
-
 });
