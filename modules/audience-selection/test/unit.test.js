@@ -51,9 +51,9 @@ describe('Audience Selection', () => {
                 "op": "or", "children": [
                     { "op": "and", "children": [
                         { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" },
+                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
                     ]},
-                    { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
+                    { "op": "is", "prop": "creation_time", "value": "2019-01-27" }
                 ]
             }]
         });
@@ -72,11 +72,11 @@ describe('Audience Selection', () => {
                 "op": "or", "children": [
                     { "op": "and", "children": [
                         { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" },
+                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
                     ]},
                     { "op": "and", "children": [
                         { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
-                        { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" },
+                        { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
                      ]}
                 ]
             }]
@@ -96,9 +96,9 @@ describe('Audience Selection', () => {
                     { "op": "or", "children": [
                         { "op": "and", "children": [
                                 { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                                { "op": "is", "prop": "settlement_status", "value": "SETTLED" },
+                                { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
                         ]},
-                        { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
+                        { "op": "is", "prop": "creation_time", "value": "2019-01-27" }
                     ]},
                     { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
                 ]
