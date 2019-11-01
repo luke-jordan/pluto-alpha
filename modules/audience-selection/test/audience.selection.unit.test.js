@@ -146,4 +146,23 @@ describe('Audience Selection', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
     });
+
+    it('should handle groupBy filters', async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "columns": ["responsible_client_id", "creation_time"],
+            "conditions": [{
+                "op": "and", "children": [
+                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
+                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
+                ]
+            }],
+            "groupBy": ["responsible_client_id"]
+        });
+
+        const expectedQuery = `select responsible_client_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by responsible_client_id`;
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
 });

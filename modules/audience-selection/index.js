@@ -6,14 +6,13 @@ class AudienceSelection {
 
     constructor () {
         this.supportedTables = ['transactions'];
-        this.supportedProperties = ['transaction_type', 'settlement_status', 'creation_time', 'responsible_client_id'];
-        this.supportedColumns = ['account_id', 'creation_time'];
+        this.supportedColumns = ['transaction_type', 'settlement_status', 'responsible_client_id', 'account_id', 'creation_time'];
     }
 
     whereFilterBuilder (unit) {
         // base case
         if (unit.op === 'is') {
-            if (!this.supportedProperties.includes(unit.prop)) {
+            if (!this.supportedColumns.includes(unit.prop)) {
                 throw new Error('Property not supported at the moment');
             }
 
@@ -45,6 +44,7 @@ class AudienceSelection {
             return this.validateAndParseColumns(selectionJSON.columns);
         }
 
+        // columns filter not passed, therefore select all columns
         return `*`;
     }
 
@@ -54,6 +54,12 @@ class AudienceSelection {
         }
 
         return selectionJSON.table;
+    }
+    
+    extractGroupBy (selectionJSON) {
+        if (selectionJSON.groupBy) {
+            return `group by ${this.validateAndParseColumns(selectionJSON.groupBy)}`;
+        }
     }
 
     checkRandomSampleExpectation (selectionJSON) {
@@ -68,14 +74,21 @@ class AudienceSelection {
         const {
             columns,
             table,
-            whereFilters
+            whereFilters,
+            groupByFilters
         } = parsedValues;
 
-        if (this.checkRandomSampleExpectation(selectionJSON)) {
-            return `select ${columns} from ${table} where ${whereFilters} order by random() limit ${selectionJSON.sample.random}`;
+        let mainQuery = `select ${columns} from ${table} where ${whereFilters}`;
+
+        if (groupByFilters) {
+            mainQuery = `${mainQuery} ${groupByFilters}`;
         }
 
-        return `select ${columns} from ${table} where ${whereFilters}`;
+        if (this.checkRandomSampleExpectation(selectionJSON)) {
+            return `${mainQuery} order by random() limit ${selectionJSON.sample.random}`;
+        }
+
+        return mainQuery;
     }
 
     fetchUsersGivenJSON (selectionJSON) {
@@ -83,14 +96,17 @@ class AudienceSelection {
             const columns = this.extractColumns(selectionJSON);
             const table = this.extractTable(selectionJSON);
             const whereFilters = this.extractWhereConditions(selectionJSON);
+            const groupByFilters = this.extractGroupBy(selectionJSON);
             logger('parsed columns:', columns);
             logger('parsed table:', table);
             logger('where filters:', whereFilters);
+            logger('groupBy filters:', groupByFilters);
 
             const parsedValues = {
                 columns,
                 table,
-                whereFilters
+                whereFilters,
+                groupByFilters
             };
             const fullQuery = this.constructFullQuery(selectionJSON, parsedValues);
             logger('full query:', fullQuery);
