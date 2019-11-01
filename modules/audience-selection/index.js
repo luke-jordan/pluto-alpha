@@ -16,18 +16,41 @@ class AudienceSelection {
         ];
     }
 
-    whereFilterBuilder (unit) {
-        // base case
-        if (unit.op === 'is') {
-            if (!this.supportedColumns.includes(unit.prop)) {
-                throw new Error('Property not supported at the moment');
-            }
-
-            if (unit.type === 'int') {
-                return `${unit.prop}=${unit.value}`;
-            }
-            return `${unit.prop}='${unit.value}'`;
+    baseCaseQueryBuilder (unit, operatorTranslated) {
+        if (!this.supportedColumns.includes(unit.prop)) {
+            throw new Error('Property not supported at the moment');
         }
+
+        if (unit.type === 'int') {
+            return `${unit.prop}${operatorTranslated}${unit.value}`;
+        }
+
+        return `${unit.prop}${operatorTranslated}'${unit.value}'`;
+    }
+
+    whereFilterBuilder (unit) {
+        // base cases
+        if (unit.op === 'is') {
+            return this.baseCaseQueryBuilder(unit, '=');
+        }
+
+        if (unit.op === 'greater_than') {
+            return this.baseCaseQueryBuilder(unit, '>');
+        }
+
+        if (unit.op === 'greater_than_or_equal_to') {
+            return this.baseCaseQueryBuilder(unit, '>=');
+        }
+
+        if (unit.op === 'less_than') {
+            return this.baseCaseQueryBuilder(unit, '<');
+        }
+
+        if (unit.op === 'less_than_or_equal_to') {
+            return this.baseCaseQueryBuilder(unit, '<=');
+        }
+
+        // end of base cases
 
         if (unit.op === 'and' && unit.children) {
             return '(' + unit.children.map((innerUnit) => this.whereFilterBuilder(innerUnit)).join(' and ') + ')';
@@ -115,9 +138,9 @@ class AudienceSelection {
             const whereFilters = this.extractWhereConditions(selectionJSON);
             const groupByFilters = this.extractGroupBy(selectionJSON);
             logger('parsed columns:', columns);
-            logger('parsed columns to count:', columnsToCount);
             logger('parsed table:', table);
             logger('where filters:', whereFilters);
+            logger('parsed columns to count:', columnsToCount);
             logger('groupBy filters:', groupByFilters);
 
             const parsedValues = {

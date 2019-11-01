@@ -12,6 +12,76 @@ const rootJSON = {
 
 describe('Audience Selection', () => {
 
+    it(`should handle 'is' operator`, async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "conditions": [
+                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" }
+            ]
+        });
+
+        const expectedQuery = `select * from transactions where transaction_type='USER_SAVING_EVENT'`;
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+    it(`should handle 'greater_than' operator`, async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "conditions": [
+                    { "op": "greater_than", "prop": "creation_time", "value": "2019-08-07" }
+            ]
+        });
+
+        const expectedQuery = `select * from transactions where creation_time>'2019-08-07'`;
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+    it(`should handle 'greater_than_or_equal_to' operator`, async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "conditions": [
+                    { "op": "greater_than_or_equal_to", "prop": "creation_time", "value": "2019-08-07" }
+            ]
+        });
+
+        const expectedQuery = `select * from transactions where creation_time>='2019-08-07'`;
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+    it(`should handle 'less_than' operator`, async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "conditions": [
+                    { "op": "less_than", "prop": "creation_time", "value": "2019-08-07" }
+            ]
+        });
+
+        const expectedQuery = `select * from transactions where creation_time<'2019-08-07'`;
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+    it(`should handle 'less_than_or_equal_to' operator`, async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "conditions": [
+                    { "op": "less_than_or_equal_to", "prop": "creation_time", "value": "2019-08-07" }
+            ]
+        });
+
+        const expectedQuery = `select * from transactions where creation_time<='2019-08-07'`;
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
     it('should be able to handle simple AND statements', async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             "conditions": [{
