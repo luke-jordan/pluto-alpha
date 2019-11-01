@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:admin:dynamo');
+const logger = require('debug')('jupiter:admin:dynamo');
 const config = require('config');
 
 const camelCaseKeys = require('camelcase-keys');

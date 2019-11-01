@@ -1,4 +1,7 @@
 {
+    "aws": {
+        "region": ""
+    },
     "db": {
         "user": "admin_api_worker",
         "host": "localhost",

@@ -44,6 +44,12 @@ module.exports.fetchTransaction = async (transactionId) => {
     return row.length > 0 ? camelizeKeys(row[0]) : null;
 };
 
+module.exports.fetchPriorTransactions = async (accountId) => {
+    const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1`;
+    const rows = await rdsConnection.selectQuery(query, [accountId]);
+    return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : null;
+};
+
 module.exports.countSettledSaves = async (accountId) => {
     const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
         `transaction_type = $2 and settlement_status = $3`;
