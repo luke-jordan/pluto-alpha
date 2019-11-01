@@ -4,6 +4,12 @@ const logger = require('debug')('jupiter:audience-selection');
 
 class AudienceSelection {
 
+    constructor () {
+        this.supportedTables = ['transactions'];
+        this.supportedProperties = ['transaction_type', 'settlement_status', 'creation_time', 'responsible_client_id'];
+        this.supportedColumns = ['account_id', 'creation_time'];
+    }
+
     whereFilterBuilder (unit) {
         // base case
         if (unit.op === 'is') {

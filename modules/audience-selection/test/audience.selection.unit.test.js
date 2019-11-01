@@ -113,7 +113,7 @@ describe('Audience Selection', () => {
 
     it('should handle random samples with conditions', async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
-            sample: { random: 50 },
+            "sample": { random: 50 },
             "conditions": [{
                 "op": "and", "children": [
                     { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
@@ -123,6 +123,24 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') order by random() limit 50`;
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+    it('should handle column filters', async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "columns": ["account_id", "creation_time"],
+            "conditions": [{
+                "op": "and", "children": [
+                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
+                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
+                ]
+            }]
+        });
+
+        const expectedQuery = `select account_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
