@@ -27,8 +27,8 @@ resource "aws_lambda_function" "db_migration" {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                  "host": "${terraform.workspace != "staging" ? aws_rds_cluster.pg_rds[0].endpoint : aws_db_instance.rds[0].address}",
-                  "port": "${terraform.workspace != "staging" ? aws_rds_cluster.pg_rds[0].port : aws_db_instance.rds[0].port}",
+                  "host": "${local.database_config.host}",
+                  "port" :"${local.database_config.port}"
                   "database": "${var.db_name}",
                   "user": "${var.db_user}",
                   "password": "${var.db_password}"

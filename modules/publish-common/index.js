@@ -49,7 +49,7 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
     }
 };
 
-const obtainTemplate = async (templateName) => {
+module.exports.obtainTemplate = async (templateName) => {
     const templateBucket = config.has('templates.bucket') ? config.get('templates.bucket') : 'staging.jupiter.templates';
 
     logger(`Getting template from bucket ${templateBucket} and key, ${templateName}`);
@@ -83,7 +83,7 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
             sourceEmail = config.get('publishing.eventsEmailAddress');
         }
 
-        const template = await obtainTemplate(bodyTemplateKey);
+        const template = await exports.obtainTemplate(bodyTemplateKey);
         const htmlBody = format(template, templateVariables);
         const textBody = 'Error. Tell system admin text emails still live.'; // generic
 

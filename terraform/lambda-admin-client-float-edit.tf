@@ -26,9 +26,9 @@ resource "aws_lambda_function" "admin_client_float_edit" {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "secrets": {
                   "enabled": true,
@@ -89,10 +89,15 @@ resource "aws_iam_role_policy_attachment" "admin_client_float_edit_vpc_execution
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_edit_secret_get" {
   role = "${aws_iam_role.admin_client_float_edit_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_admin_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_edit_table_access" {
   role = "${aws_iam_role.admin_client_float_edit_role.name}"
   policy_arn = "${aws_iam_policy.admin_client_float_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "admin_client_float_edit_transfer_access" {
+  role = "${aws_iam_role.admin_client_float_edit_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_float_transfer_access.arn}"
 }

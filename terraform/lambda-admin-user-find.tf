@@ -26,10 +26,10 @@ resource "aws_lambda_function" "admin_user_find" {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
-              }
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
+              },
           }
       )}"
     }
@@ -93,7 +93,7 @@ resource "aws_iam_role_policy_attachment" "admin_user_ops_invocation_policy" {
 
 resource "aws_iam_role_policy_attachment" "admin_user_find_secret_get" {
   role = "${aws_iam_role.admin_user_find_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_admin_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

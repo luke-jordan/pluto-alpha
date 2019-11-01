@@ -35,9 +35,9 @@ resource "aws_lambda_function" "account_create" {
                 "accountData": "account_data.core_account_ledger"
             },
             "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+              "host": "${local.database_config.host}",
+              "database": "${local.database_config.database}",
+              "port" :"${local.database_config.port}"
             },
             "secrets": {
                 "enabled": true,
@@ -102,7 +102,7 @@ resource "aws_iam_role_policy_attachment" "account_create_boost_create_policy" {
 
 resource "aws_iam_role_policy_attachment" "account_create_secret_get" {
   role = "${aws_iam_role.balance_fetch_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_account_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_account_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

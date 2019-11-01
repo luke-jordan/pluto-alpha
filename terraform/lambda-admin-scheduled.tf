@@ -29,9 +29,9 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
                   }
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "secrets": {
                   "enabled": true,
@@ -92,7 +92,7 @@ resource "aws_iam_role_policy_attachment" "ops_admin_scheduled_vpc_execution_pol
 
 resource "aws_iam_role_policy_attachment" "admin_scheduled_job_secret_get" {
   role = "${aws_iam_role.ops_admin_scheduled_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_admin_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_scheduled_job_float_access" {

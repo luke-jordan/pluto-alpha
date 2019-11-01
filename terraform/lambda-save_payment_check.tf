@@ -31,9 +31,9 @@ resource "aws_lambda_function" "save_payment_check" {
                   "floatTransactions": "float_data.float_transaction_ledger"
               },
               "db": {
-                "host": "${aws_db_instance.rds[0].address}",
-                "database": "${var.db_name}",
-                "port" :"${aws_db_instance.rds[0].port}"
+                "host": "${local.database_config.host}",
+                "database": "${local.database_config.database}",
+                "port" :"${local.database_config.port}"
               },
               "secrets": {
                 "enabled": true,
@@ -103,7 +103,7 @@ resource "aws_iam_role_policy_attachment" "save_payment_check_user_event_publish
 
 resource "aws_iam_role_policy_attachment" "save_payment_check_secret_get" {
   role = "${aws_iam_role.save_payment_check_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

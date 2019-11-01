@@ -1,7 +1,3 @@
-# Python CircleCI 2.0 configuration file
-#
-# Check https://circleci.com/docs/2.0/language-python/ for more details
-#
 version: 2
 jobs:
   build:
@@ -21,41 +17,110 @@ jobs:
     steps:
       - checkout
 
+      - run:
+          name: Generate modules package.json to use for cache, install, etc
+          command: |
+            mv .circleci/package-merge.js ./
+            node package-merge.js modules
+            npm i --package-lock-only && npm audit fix --package-lock-only
+
+      # _Only_ use exact key matching here, else subsequent script will skip install spuriously
+      - restore_cache:
+          keys:
+          - module_dependencies-{{ checksum "./package-lock.json" }}
+
+      # Note: we get consolidated audit fix here; and audit fix will install all the modules necessary 
+      - run:
+          name: Install dependencies for our modules
+          command: |
+            mv .circleci/install_module_dependencies.sh ./
+            /bin/sh install_module_dependencies.sh
+
+      - save_cache:
+          key: module_dependencies-{{ checksum "./package-lock.json" }}
+          paths:
+            - node_modules
+
+      - run:
+          name: Lint and testing modules
+          command: |
+            # Util is trivial so we skip for now
+            echo "Linting and testing modules"
+            cd $HOME/app
+            mv .circleci/execute_test_lint.sh ./
+            /bin/sh execute_test_lint.sh modules/rds-common
+            /bin/sh execute_test_lint.sh modules/dynamo-common
+            /bin/sh execute_test_lint.sh modules/publish-common
+
+      # Note: we do this _after_ the cache steps, so the cache includes all the modules needed for tests
+      - run:
+          name: Prune module dependencies then copy into modules themselves
+          command: |
+            cd $HOME/app
+            npm prune --production
+            echo "Prune complete, remove old symlinks"
+            rm modules/rds-common/node_modules && rm modules/dynamo-common/node_modules && rm modules/publish-common/node_modules
+            echo "Now copy pruned dependencies into modules"
+            cp -r node_modules modules/rds-common/; echo "."
+            cp -r node_modules modules/dynamo-common/; echo "."
+            cp -r node_modules modules/publish-common/; echo "."
+            cp -r node_modules modules/ops-util-common/; echo "."
+
+      - run:
+          name: Shift module dependencies and generate functions' package-lock.json 
+          command: |
+            mv package-lock.json modules_package.json
+            mv node_modules module_dependencies
+
+            node package-merge.js functions
+
+            npm i --package-lock-only && npm audit fix --package-lock-only
+            
+      # As above, only use exact matching here, else subsequent will be incorrect
+      - restore_cache:
+          keys:
+          - function_dependencies-{{ checksum "./package-lock.json" }}-{{ checksum "./modules_package.json" }}
+
+      - run:
+          name: Install dependencies for our functions, if not stored
+          command: |
+            cd $HOME/app
+            mv .circleci/install_function_dependencies.sh ./
+            /bin/sh install_function_dependencies.sh
+
+      - save_cache:
+          key: function_dependencies-{{ checksum "./package-lock.json" }}-{{ checksum "./modules_package.json" }}
+          paths:
+            - node_modules
+          
+      - run:
+          name: Link, lint and test everything, then upload coverage reports
+          command: |
+
+            echo "Executing all lints, tests"
+            /bin/sh execute_test_lint.sh functions/float-api
+            /bin/sh execute_test_lint.sh functions/user-activity-api
+            /bin/sh execute_test_lint.sh functions/user-existence-api
+            /bin/sh execute_test_lint.sh functions/boost-api
+            /bin/sh execute_test_lint.sh functions/user-messaging-api
+            /bin/sh execute_test_lint.sh functions/third-parties
+            /bin/sh execute_test_lint.sh functions/db-migration no-test
+            /bin/sh execute_test_lint.sh functions/admin-api no-test
+            /bin/sh execute_test_lint.sh functions/warmup link-only
+            
+            echo "Uploading coverage reports"
+            cd $HOME/app
+            npm install --save-dev codecov
+            node_modules/codecov/bin/codecov
+
+      # And here the deployment stuff starts
       - restore_cache:
           keys:
           - terraform_bin-{{ checksum "./terraform/terraform_version" }}
+
       - restore_cache:
           keys:
           - aws_zip
-
-      - run:
-          name: install node modules
-          command: |
-
-            cd $HOME/app/functions/db-migration && npm install
-            cd $HOME/app/functions/warmup && npm install
-            cd $HOME/app/functions/float-api && npm install
-            cd $HOME/app/functions/user-activity-api && npm install
-            cd $HOME/app/functions/user-existence-api && npm install
-            cd $HOME/app/functions/boost-api && npm install
-            cd $HOME/app/functions/user-messaging-api && npm install
-            cd $HOME/app/functions/admin-api && npm install
-            cd $HOME/app/functions/third-parties && npm install
-
-            cd $HOME/app/modules/rds-common && npm install
-            cd $HOME/app/modules/dynamo-common && npm install
-            cd $HOME/app/modules/publish-common && npm install
-            cd $HOME/app/modules/ops-util-common && npm install
-            cd $HOME/app
-
-            # Warmup lambda does not need these, or third parties (as just uses request)
-            cp -r modules/* $HOME/app/functions/db-migration/node_modules
-            cp -r modules/* $HOME/app/functions/float-api/node_modules
-            cp -r modules/* $HOME/app/functions/user-activity-api/node_modules
-            cp -r modules/* $HOME/app/functions/user-existence-api/node_modules
-            cp -r modules/* $HOME/app/functions/boost-api/node_modules
-            cp -r modules/* $HOME/app/functions/user-messaging-api/node_modules
-            cp -r modules/* $HOME/app/functions/admin-api/node_modules
 
       - run:
           name: install aws cli
@@ -72,79 +137,23 @@ jobs:
             - awscli-bundle.zip
 
       - run:
-          name: run linter
-          command: |
-            # Util is trivial so we skip for now
-            echo "Linting modules"
-            cd $HOME/app/modules/dynamo-common && npm run-script lint
-            cd ../rds-common && npm run-script lint
-            cd ../publish-common && npm run-script lint
-
-            # We skip warmup & admin for the moment
-            echo "Linting functions"
-            cd $HOME/app/functions/user-activity-api && npm run-script lint
-            cd ../user-existence-api && npm run-script lint
-            cd ../float-api && npm run-script lint
-            cd ../boost-api && npm run-script lint
-            cd ../user-messaging-api && npm run-script lint
-            cd ../admin-api && npm run-script lint
-            cd ../third-parties && npm run-script lint
-            cd ../db-migration && npm run-script lint
-            
-      - run:
-          name: run security check
-          command: |
-            cd $HOME/app/functions/user-activity-api && npm i --package-lock-only && npm audit fix --production
-            # we remove the package lock so it does not inadvertantly override later and wiping modules
-            rm ./package-lock.json
-            cd ../user-existence-api && npm i --package-lock-only && npm audit fix --production
-            rm ./package-lock.json
-            cd ../user-messaging-api && npm i --package-lock-only && npm audit fix --production
-            rm ./package-lock.json
-            cd ../float-api && npm i --package-lock-only && npm audit fix --production
-            rm ./package-lock.json
-            cd ../boost-api && npm i --package-lock-only && npm audit fix --production
-            rm ./package-lock.json
-            cd ../admin-api && npm i --package-lock-only && npm audit fix --production
-            rm ./package-lock.json
-            cd ../third-parties && npm i --package-lock-only && npm audit fix --production
-            rm ./package-lock.json
-            cd ../db-migration && npm i --package-lock-only && npm audit fix --production
-            rm ./package-lock.json
-
-      - run:
-          name: run tests
-          command: |
-            cd $HOME/app
-            npm install codecov
-            
-            echo "Running function tests and outputing coverage reports"
-            cd $HOME/app/functions/user-existence-api; npm test; npm run-script generate-coverage
-            cd ../user-activity-api; npm test; npm run-script generate-coverage
-            cd ../float-api; npm test; npm run-script generate-coverage
-            cd ../boost-api; npm test; npm run-script generate-coverage
-            cd ../user-messaging-api; npm test; npm run-script generate-coverage
-            cd ../third-parties; npm test; npm run-script generate-coverage
-            # cd ../admin-api; npm test; npm run-script generate-coverage
-            
-            echo "Runing module tests and outputting coverage reports"
-            cd $HOME/app/modules/dynamo-common; npm test; npm run-script generate-coverage
-            cd ../rds-common; npm test; npm run-script generate-coverage
-            cd ../publish-common; npm test; npm run-script generate-coverage
-
-            echo "Uploading coverage reports"
-            cd $HOME/app
-            node_modules/codecov/bin/codecov
-
-      - run:
           name: build artifacts
           command: |
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ]; then
                 echo "On branch $CIRCLE_BRANCH, building artifacts."
 
-                echo "Removing AWS SDK as lambda runtimes have built-in and causes massive bloat"
+                echo "First, we do a prune production on the consolidated bundle"
                 cd $HOME/app
-                sudo find . -name "aws-sdk" -exec rm -r {} +
+                npm prune --production
+
+                echo "Then we delete aws-sdk, since provided in lambda runtime, and huge size duplicated"
+                find . -name "aws-sdk" -exec rm -r {} +
+
+                echo "Then we copy back in the modules, because they would have been deleted"
+                rm modules/README.md
+                cp -r modules/* node_modules
+
+                echo "Now ready to zip code bundles and upload them"
 
                 cd $HOME/app/functions/db-migration
                 echo $CIRCLE_SHA1 > last_commit.txt
@@ -183,6 +192,7 @@ jobs:
                 zip -rq $HOME/deploy_ops_warmup_$CIRCLE_SHA1.zip .
 
              fi
+             
       - run:
           name: deploy artifacts
           command: |
@@ -204,6 +214,7 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip
 
                 /home/circleci/bin/aws s3 sync $HOME/app/templates/emails/ s3://$CIRCLE_BRANCH.jupiter.templates/emails/
+                /home/circleci/bin/aws s3 sync $HOME/app/templates/payment/ s3://$CIRCLE_BRANCH.jupiter.templates/payment/
              fi
 
       - run:
