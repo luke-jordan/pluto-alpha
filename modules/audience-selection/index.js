@@ -13,6 +13,10 @@ class AudienceSelection {
     whereFilterBuilder (unit) {
         // base case
         if (unit.op === 'is') {
+            if (!this.supportedProperties.includes(unit.prop)) {
+                throw new Error('Property not supported at the moment');
+            }
+
             if (unit.type === 'int') {
                 return `${unit.prop}=${unit.value}`;
             }
@@ -32,30 +36,69 @@ class AudienceSelection {
         return selectionJSON.conditions.map((block) => this.whereFilterBuilder(block)).join('');
     }
 
-    extractTable (selectionJSON) {
-        return `select * from ${selectionJSON.table} where`;
+    validateAndParseColumns (columns) {
+        return columns.filter((column) => this.supportedColumns.includes(column)).join(', ');
     }
 
-    checkRandomSampleExpectation (queryWithConditions, selectionJSON) {
-        if (selectionJSON.sample && selectionJSON.sample.random) {
-            return `${queryWithConditions} order by random() limit ${selectionJSON.sample.random}`;
+    extractColumns (selectionJSON) {
+        if (selectionJSON.columns) {
+            return this.validateAndParseColumns(selectionJSON.columns);
         }
 
-        return queryWithConditions;
+        return `*`;
+    }
+
+    extractTable (selectionJSON) {
+        if (!this.supportedTables.includes(selectionJSON.table)) {
+            throw new Error('Table not supported at the moment');
+        }
+
+        return selectionJSON.table;
+    }
+
+    checkRandomSampleExpectation (selectionJSON) {
+        if (selectionJSON.sample && selectionJSON.sample.random) {
+            return true;
+        }
+
+        return false;
+    }
+
+    constructFullQuery (selectionJSON, parsedValues) {
+        const {
+            columns,
+            table,
+            whereFilters
+        } = parsedValues;
+
+        if (this.checkRandomSampleExpectation(selectionJSON)) {
+            return `select ${columns} from ${table} where ${whereFilters} order by random() limit ${selectionJSON.sample.random}`;
+        }
+
+        return `select ${columns} from ${table} where ${whereFilters}`;
     }
 
     fetchUsersGivenJSON (selectionJSON) {
-        const queryBeginning = this.extractTable(selectionJSON);
-        const whereFilters = this.extractWhereConditions(selectionJSON);
-        logger('raw whereFilters:', whereFilters);
+        try {
+            const columns = this.extractColumns(selectionJSON);
+            const table = this.extractTable(selectionJSON);
+            const whereFilters = this.extractWhereConditions(selectionJSON);
+            logger('parsed columns:', columns);
+            logger('parsed table:', table);
+            logger('where filters:', whereFilters);
 
-        const queryWithConditions = `${queryBeginning} ${whereFilters}`;
-        logger('query with conditions:', queryWithConditions);
+            const parsedValues = {
+                columns,
+                table,
+                whereFilters
+            };
+            const fullQuery = this.constructFullQuery(selectionJSON, parsedValues);
+            logger('full query:', fullQuery);
 
-        const fullQuery = this.checkRandomSampleExpectation(queryWithConditions, selectionJSON);
-        logger('full query:', fullQuery);
-
-        return fullQuery;
+            return fullQuery;
+        } catch (error) {
+            logger('Error occurred while fetching users given json. Error:', error);
+        }
     }
 }
 

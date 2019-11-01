@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "DEBUG=jupiter:audience-selection:* nyc mocha './test/unit.test.js'",
+    "test": "DEBUG=jupiter:audience-selection:* nyc mocha 'test/audience.selection.unit.test.js'",
     "test-all": "DEBUG=jupiter:audience-selection:* nyc mocha --exit",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint .",
