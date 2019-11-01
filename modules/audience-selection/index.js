@@ -6,7 +6,14 @@ class AudienceSelection {
 
     constructor () {
         this.supportedTables = ['transactions'];
-        this.supportedColumns = ['transaction_type', 'settlement_status', 'responsible_client_id', 'account_id', 'creation_time'];
+        this.supportedColumns = [
+            'transaction_type',
+            'settlement_status',
+            'responsible_client_id',
+            'account_id',
+            'creation_time',
+            'owner_user_id'
+        ];
     }
 
     whereFilterBuilder (unit) {
@@ -36,12 +43,20 @@ class AudienceSelection {
     }
 
     validateAndParseColumns (columns) {
-        return columns.filter((column) => this.supportedColumns.includes(column)).join(', ');
+        return columns.filter((column) => this.supportedColumns.includes(column));
+    }
+
+    extractColumnsToCount (selectionJSON) {
+        if (selectionJSON.columnsToCount) {
+            return this.validateAndParseColumns(selectionJSON.columnsToCount).
+                map((filteredColumn) => `count(${filteredColumn})`).
+                join(', ');
+        }
     }
 
     extractColumns (selectionJSON) {
         if (selectionJSON.columns) {
-            return this.validateAndParseColumns(selectionJSON.columns);
+            return this.validateAndParseColumns(selectionJSON.columns).join(', ');
         }
 
         // columns filter not passed, therefore select all columns
@@ -72,13 +87,13 @@ class AudienceSelection {
 
     constructFullQuery (selectionJSON, parsedValues) {
         const {
-            columns,
+            columnsToFetch,
             table,
             whereFilters,
             groupByFilters
         } = parsedValues;
 
-        let mainQuery = `select ${columns} from ${table} where ${whereFilters}`;
+        let mainQuery = `select ${columnsToFetch} from ${table} where ${whereFilters}`;
 
         if (groupByFilters) {
             mainQuery = `${mainQuery} ${groupByFilters}`;
@@ -94,16 +109,19 @@ class AudienceSelection {
     fetchUsersGivenJSON (selectionJSON) {
         try {
             const columns = this.extractColumns(selectionJSON);
+            const columnsToCount = this.extractColumnsToCount(selectionJSON);
+            const columnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
             const table = this.extractTable(selectionJSON);
             const whereFilters = this.extractWhereConditions(selectionJSON);
             const groupByFilters = this.extractGroupBy(selectionJSON);
             logger('parsed columns:', columns);
+            logger('parsed columns to count:', columnsToCount);
             logger('parsed table:', table);
             logger('where filters:', whereFilters);
             logger('groupBy filters:', groupByFilters);
 
             const parsedValues = {
-                columns,
+                columnsToFetch,
                 table,
                 whereFilters,
                 groupByFilters
