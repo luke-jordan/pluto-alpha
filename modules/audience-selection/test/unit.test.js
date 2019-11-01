@@ -122,7 +122,7 @@ describe('Audience Selection', () => {
             }]
         });
 
-        const expectedQuery = `select * from (select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')) tablesample system(50)`;
+        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') order by random() limit 50`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;

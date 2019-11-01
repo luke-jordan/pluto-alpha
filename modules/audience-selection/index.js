@@ -32,7 +32,7 @@ class AudienceSelection {
 
     checkRandomSampleExpectation (queryWithConditions, selectionJSON) {
         if (selectionJSON.sample && selectionJSON.sample.random) {
-            return `select * from (${queryWithConditions}) tablesample system(${selectionJSON.sample.random})`;
+            return `${queryWithConditions} order by random() limit ${selectionJSON.sample.random}`;
         }
 
         return queryWithConditions;
