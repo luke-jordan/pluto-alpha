@@ -68,11 +68,13 @@ module.exports.fetchInfoForBankRef = async (accountId) => {
     return camelizeKeys(resultOfQuery[0]);
 };
 
-module.exports.findClientAndFloatForAccount = async (accountId = 'some-account-uid') => {
-    const searchQuery = `select default_float_id, responsible_client_id from ${config.get('tables.accountLedger')} where account_id = $1`;
+module.exports.getOwnerInfoForAccount = async (accountId = 'some-account-uid') => {
+    const searchQuery = `select owner_user_id, default_float_id, responsible_client_id from ${config.get('tables.accountLedger')} ` +
+        `where account_id = $1`;
     logger('Search query: ', searchQuery);
     const resultOfQuery = await rdsConnection.selectQuery(searchQuery, [accountId]);
     return resultOfQuery.length === 0 ? null : {
+        systemWideUserId: resultOfQuery[0]['owner_user_id'],
         floatId: resultOfQuery[0]['default_float_id'],
         clientId: resultOfQuery[0]['responsible_client_id']
     };
@@ -321,7 +323,7 @@ module.exports.addSavingToTransactions = async (saveDetails) => {
  * @param {string} paymentReference The reference for the payment provided by the payment intermediary
  * @param {moment} settlementTime When the payment settled
  */
-module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, settlementTime) => {
+module.exports.updateSaveTxToSettled = async (transactionId, settlementTime) => {
     const responseEntity = { };
 
     const accountTxTable = config.get('tables.accountTransactions');
@@ -335,8 +337,8 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
     logger('Resulting save details: ', saveDetails);
 
     if (saveDetails.settlementStatus === 'SETTLED') {
-        logger('Asked to update already settled save, just returning that it is settled');
-        return { result: 'ALREADY_SETTLED' };
+        logger('Asked to update already settled save, should not have reached here, throw error');
+        throw new Error('Reached into persistence with updating to settled already settled transaction');
     }
 
     const updateQueryDef = {
@@ -346,12 +348,11 @@ module.exports.updateSaveTxToSettled = async (transactionId, paymentDetails, set
             settlementStatus: 'SETTLED',
             settlementTime: settlementTime.format(),
             floatAdjustTxId: floatAdjustmentTxId,
-            floatAllocTxId: floatAllocationTxId,
-            paymentReference: paymentDetails.paymentRef,
-            paymentProvider: paymentDetails.paymentProvider
+            floatAllocTxId: floatAllocationTxId
         },
         returnClause: 'transaction_id, updated_time'
     };
+    
     const floatQueryDef = assembleFloatTxInsertions(transactionId, saveDetails, { floatAdjustmentTxId, floatAllocationTxId });
     logger('Assembled float query def: ', floatQueryDef);
 

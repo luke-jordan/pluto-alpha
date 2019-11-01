@@ -30,7 +30,8 @@
     },
     "lambdas": {
         "paymentUrlGet": "payment_url_request",
-        "paymentStatusCheck": "payment_status_check"
+        "paymentStatusCheck": "payment_status_check",
+        "checkSavePayment": "save_payment_check"
     },
     "logging": {
         "enabled": "false"
@@ -52,6 +53,11 @@
     "templates": {
         "bucket": "staging.jupiter.templates",
         "saveEmail": "emails/savingEventEmail.html",
-        "withdrawalEmail": "emails/withdrawalEmail.html"
+        "withdrawalEmail": "emails/withdrawalEmail.html",
+        "payment": {
+            "success": "payment-success.html",
+            "error": "payment-error.html",
+            "cancelled": "payment-cancelled.html"
+        }
     }
 }

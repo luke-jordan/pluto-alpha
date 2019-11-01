@@ -3,6 +3,7 @@
 process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('jupiter:save:test');
+const config = require('config');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -40,42 +41,50 @@ const sumOfTestAmounts = testAmounts.reduce((cum, value) => cum + value, 0);
 logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmounts);
 
 const findMatchingTxStub = sinon.stub();
-const findFloatStub = sinon.stub();
+const findFloatOrIdStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
 const updateSaveRdsStub = sinon.stub();
 const fetchTransactionStub = sinon.stub();
 const countSettledSavesStub = sinon.stub();
+const getAccountBalanceStub = sinon.stub();
 
 const fetchBankRefStub = sinon.stub();
 const getPaymentUrlStub = sinon.stub();
+const triggerTxStatusStub = sinon.stub();
+const getPaymentStatusStub = sinon.stub();
 
 const publishStub = sinon.stub();
+const templateStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
 const handler = proxyquire('../saving-handler', {
     './persistence/rds': { 
         'findMatchingTransaction': findMatchingTxStub,
-        'findClientAndFloatForAccount': findFloatStub, 
+        'getOwnerInfoForAccount': findFloatOrIdStub, 
         'addSavingToTransactions': addSavingsRdsStub,
         'updateSaveTxToSettled': updateSaveRdsStub,
         'fetchTransaction': fetchTransactionStub,
         'countSettledSaves': countSettledSavesStub,
-        'fetchInfoForBankRef': fetchBankRefStub
+        'fetchInfoForBankRef': fetchBankRefStub,
+        'sumAccountBalance': getAccountBalanceStub
     },
     './payment-link': {
         'getPaymentLink': getPaymentUrlStub,
+        'triggerTxStatusCheck': triggerTxStatusStub,
+        'checkPayment': getPaymentStatusStub,
         'warmUpPayment': sinon.stub() // storing/inspecting would add clutter for no robustness
     },
     'publish-common': {
-        'publishUserEvent': publishStub
+        'publishUserEvent': publishStub,
+        'obtainTemplate': templateStub
     },
     'moment-timezone': momentStub
 });
 
 const resetStubHistory = () => {
     findMatchingTxStub.resetHistory();
-    findFloatStub.resetHistory();
+    findFloatOrIdStub.resetHistory();
     addSavingsRdsStub.resetHistory();
     updateSaveRdsStub.reset();
     fetchTransactionStub.reset();
@@ -158,7 +167,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
     };
 
     before(() => {
-        findFloatStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
+        findFloatOrIdStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
         addSavingsRdsStub.withArgs(sinon.match(wellFormedMinimalSettledRequestToRds)).resolves(responseToTxSettled);
         addSavingsRdsStub.withArgs(wellFormedMinimalPendingRequestToRds).resolves(responseToTxPending);
     });
@@ -232,7 +241,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         const saveBody = JSON.parse(saveResult.body);
         expect(saveBody).to.deep.equal(responseToTxPending);
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
-        expect(findFloatStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(findFloatOrIdStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMatchingTxStub).to.have.not.been.called;
     });
 
@@ -251,7 +260,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         const saveBody = JSON.parse(saveResult.body);
         expect(saveBody).to.deep.equal(responseToTxPending);
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
-        expect(findFloatStub).to.not.have.been.called;
+        expect(findFloatOrIdStub).to.not.have.been.called;
         expect(findMatchingTxStub).to.have.not.been.called;
     });
 
@@ -276,24 +285,100 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         testHelper.checkErrorResultForMsg(expectedNoCurrencyError, 'Error! No currency specified for the saving event');
         testHelper.checkErrorResultForMsg(expectedNoUnitError, 'Error! No unit specified for the saving event');
     });
-
-    /* 
-    it('Throws an error when provided a misaligned client Id and floatId', async () => {
-
-    });
-
-    it('Throw an error if state is PENDING but includes settlement time', () => {
-
-    });
-     */
     
 });
 
-describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
+describe('*** UNIT TESTING PAYMENT COMPLETE PAGES ***', () => {
+
+    const testPendingTxId = uuid();
+
+    const successTemplateKey = `payment/${config.get('templates.payment.success')}`;
+    const expectedHeader = { 'Content-Type': 'text/html' };
+
+    beforeEach(() => testHelper.resetStubs(templateStub, triggerTxStatusStub));
+    
+    it('Handles warmup properly', async () => {
+        const warmupResult = await handler.completeSavingPaymentFlow({});
+        expect(warmupResult).to.deep.equal({ statusCode: 400, body: 'Empty invocation' });
+        expect(templateStub).to.have.been.calledOnceWithExactly(successTemplateKey);
+    });
+
+    it('Swallows error gracefully, showing an error page', async () => {
+        const updateErrorResult = await handler.completeSavingPaymentFlow({ pathParameters: 'bad-path' });
+        expect(updateErrorResult).to.exist;
+        expect(updateErrorResult).to.have.property('statusCode', 500);
+        expect(updateErrorResult).to.have.property('headers');
+        expect(updateErrorResult.headers).to.deep.equal(expectedHeader);
+        expect(updateErrorResult).to.have.property('body');
+    });
+
+    it('Maps results to correct pages', async () => {
+        const resultTypes = ['SUCCESS', 'ERROR', 'CANCELLED'];
+        
+        const mapPathParams = (result) => ({ 
+            pathParameters: { proxy: `PROVIDER/${testPendingTxId}/${result}` } 
+        });
+        const resultEvents = resultTypes.map(mapPathParams);
+        
+        fetchTransactionStub.withArgs(testPendingTxId).resolves({ transactionId: testPendingTxId });
+        resultTypes.forEach((type) => {
+            templateStub.withArgs(`payment/${config.get(`templates.payment.${type.toLowerCase()}`)}`).resolves(`<html>${type}</html>`);
+        });
+
+        const results = await Promise.all(resultEvents.map((event) => handler.completeSavingPaymentFlow(event)));
+        results.forEach((result, idx) => {
+            expect(result).to.exist;
+            expect(result).to.deep.equal({
+                statusCode: 200,
+                headers: expectedHeader,
+                body: `<html>${resultTypes[idx]}</html>`
+            })
+        });
+
+        expect(fetchTransactionStub).to.have.been.calledThrice;
+    });
+
+    it('Invokes transaction check lambda (on success)', async () => {
+        const resultOfCall = await handler.completeSavingPaymentFlow({
+            pathParameters: { proxy: `PROVIDER/${testPendingTxId}/SUCCESS` }
+        });
+
+        expect(resultOfCall).to.exist;
+        expect(triggerTxStatusStub).to.have.been.calledOnceWithExactly({ 
+            transactionId: testPendingTxId,
+            paymentProvider: 'PROVIDER'
+        });
+        expect(fetchTransactionStub).to.have.been.calledWith(testPendingTxId);
+    });
+
+    it('Rejects unknown result type', async () => {
+        const result = await handler.completeSavingPaymentFlow({
+            pathParameters: { proxy: `PROVIDER/${testPendingTxId}/SOMETHINGOROTHER` }
+        });
+
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 500);
+        expect(templateStub).to.not.have.been.called;
+        expect(triggerTxStatusStub).to.not.have.been.called;
+    });
+
+    it('Rejects unknown transaction ID', async () => {
+        const result = await handler.completeSavingPaymentFlow({
+            pathParameters: { proxy: `PROVIDER/some-bad-id/SUCCESS` }
+        });
+
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 500);
+        expect(templateStub).to.not.have.been.called;
+        expect(triggerTxStatusStub).to.not.have.been.called;
+    });
+
+});
+
+describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
 
     const testPendingTxId = uuid();
     const testSettlementTime = moment();
-    const testPaymentDetails = { paymentProvider: 'OZOW', paymentRef: 'xyz123' };
 
     const testTxId = uuid();
     const testSaveAmount = 1000;
@@ -311,43 +396,65 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
         settlementTime: testSettlementTime
     };
 
+    const mockNewBalance = { amount: sumOfTestAmounts, unit: 'HUNDREDTH_CENT' }; 
     const responseToTxUpdated = {
         transactionDetails: [
             { accountTransactionId: testPendingTxId, updatedTime: moment().format() }, 
             { floatAdditionTransactionId: uuid(), creationTime: moment().format() },
             { floatAllocationTransactionId: uuid(), creationTime: moment().format() }
         ],
-        newBalance: { amount: sumOfTestAmounts, unit: 'HUNDREDTH_CENT' }
+        newBalance: mockNewBalance
     };
 
     const wrapTestParams = (queryParams) => ({ queryStringParameters: queryParams, requestContext: testAuthContext });
 
-    beforeEach(() => testHelper.resetStubs(updateSaveRdsStub, publishStub, fetchTransactionStub, countSettledSavesStub, momentStub));
+    beforeEach(() => testHelper.resetStubs(getPaymentStatusStub, updateSaveRdsStub, publishStub, fetchTransactionStub, countSettledSavesStub, momentStub));
 
-    it('Check for payment settles if payment has been successful', async () => {
-        const expectedResult = JSON.parse(JSON.stringify(responseToTxUpdated));
-        expectedResult.result = 'PAYMENT_SUCCEEDED';
-
-        const dummyPaymentDetails = { paymentRef: sinon.match.string, paymentProvider: 'OZOW' };
-        updateSaveRdsStub.withArgs(testPendingTxId, dummyPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
+    it('Returns immediately if payment status is settled', async () => {
         fetchTransactionStub.withArgs(testPendingTxId).resolves(testTransaction);
+        getAccountBalanceStub.resolves(mockNewBalance);
+        momentStub.returns(testSettlementTime);
+        
+        const paymentCheckSuccessResult = await handler.checkPendingPayment(wrapTestParams({ transactionId: testPendingTxId }));
+        
+        expect(paymentCheckSuccessResult).to.exist;
+        expect(paymentCheckSuccessResult).to.deep.equal({ 
+            statusCode: 200,
+            body: JSON.stringify({ result: 'PAYMENT_SUCCEEDED', newBalance: mockNewBalance }) 
+        });
+        
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(testPendingTxId);
+        expect(getAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR', testSettlementTime);
+    });
+
+    it('Check for payment and settles if payment has been successful but was not settled before', async () => {
+        const expectedResult = { ...responseToTxUpdated, result: 'PAYMENT_SUCCEEDED' };
+        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING' };
+
+        fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
+        findFloatOrIdStub.withArgs(testAccountId).resolves({ systemWideUserId: testUserId });
+        getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ result: 'SETTLED' });
+        updateSaveRdsStub.resolves(responseToTxUpdated);
         countSettledSavesStub.withArgs(testAccountId).resolves(5);
         momentStub.returns(testSettlementTime);
 
-        const paymentCheckSuccessResult = await handler.checkPendingPayment(wrapTestParams({ transactionId: testPendingTxId }));
+        const paymentCheckSuccessResult = await handler.checkPendingPayment({ transactionId: testPendingTxId });
+        
         expect(paymentCheckSuccessResult).to.have.property('statusCode', 200);
         expect(paymentCheckSuccessResult).to.have.property('body');
         const resultOfCheck = JSON.parse(paymentCheckSuccessResult.body);
         expect(resultOfCheck).to.deep.equal(expectedResult);
+        
         expect(publishStub).to.have.been.calledTwice;
-        expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly(testPendingTxId, dummyPaymentDetails, testSettlementTime);
-        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(testPendingTxId);
+        expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly(testPendingTxId, testSettlementTime);
+        expect(fetchTransactionStub).to.have.been.calledTwice;
+        expect(fetchTransactionStub).to.have.been.calledWith(testPendingTxId);
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(momentStub).to.have.been.called;
     });
 
     it('Fails on missing authorization', async () => {
-        const result = await handler.checkPendingPayment({ transactionId: testPendingTxId });
+        const result = await handler.checkPendingPayment({ httpMethod: 'GET', queryStringParameters: { transactionId: testPendingTxId }});
         expect(result).to.exist;
         expect(result.statusCode).to.deep.equal(403);
         expect(result.message).to.deep.equal('User ID not found in context');
@@ -355,11 +462,17 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
 
     it('Handles failed payments properly', async () => {
         const expectedResult = { 
-            messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank',
+            messageToUser: 'Sorry the payment failed. Please contact your bank or contact support and quote reference ABC123',
             result: 'PAYMENT_FAILED'
         };
-        const testEvent = { transactionId: testPendingTxId, failureType: 'FAILED' };
+        const testEvent = { transactionId: testPendingTxId };
+        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING' };
+        
+        fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
+        getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ result: 'ERROR' });
+
         const paymentCheckFailureResult = await handler.checkPendingPayment(wrapTestParams(testEvent));
+        
         expect(paymentCheckFailureResult).to.exist;
         expect(paymentCheckFailureResult).to.have.property('statusCode', 200);
         expect(paymentCheckFailureResult).to.have.property('body');
@@ -368,7 +481,12 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
     });
 
     it('Handles pending payments properly', async () => {
-        const expectedEvent = { transactionId: testPendingTxId, failureType: 'PENDING' };
+        const expectedEvent = { transactionId: testPendingTxId };
+        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING' };        
+
+        fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
+        getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ result: 'PENDING' });
+        
         const paymentCheckPendingResult = await handler.checkPendingPayment(wrapTestParams(expectedEvent));
         expect(paymentCheckPendingResult).to.exist;
         expect(paymentCheckPendingResult).to.have.property('statusCode', 200);
@@ -378,98 +496,11 @@ describe('*** UNIT TESTING PAYMENT UPDATE TO SETTLED ****', () => {
     });
 
     it('Catches thrown errors', async () => {
-        publishStub.throws(new Error('PublishError'));
         const paymentCheckErrorResult = await handler.checkPendingPayment(wrapTestParams({ transactionId: testPendingTxId }));
-        logger('Result:', paymentCheckErrorResult);
-        expect(paymentCheckErrorResult).to.exist;
-        expect(paymentCheckErrorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify('PublishError') });
-        expect(publishStub).to.have.been.calledOnce;
-        expect(updateSaveRdsStub).to.have.not.been.called;
-        expect(fetchTransactionStub).to.have.not.been.called;
-        expect(countSettledSavesStub).to.have.not.been.called;
-        expect(momentStub).to.have.not.been.called;        
-    });
-
-    it('Happy path, completes an update properly, no settlement time', async () => {
-        updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
-        momentStub.returns(testSettlementTime);
-
-        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'OZOW' });
-        expect(updateTxResult).to.exist;
-        expect(updateTxResult).to.have.property('statusCode', 200);
-        expect(updateTxResult).to.have.property('body');
-        const resultOfUpdate = JSON.parse(updateTxResult.body);
-        expect(resultOfUpdate).to.deep.equal(responseToTxUpdated);
-    });
-
-    it('Handles validation errors properly', async () => {
-        const expectNoTxError = await handler.settle({ paymentRef: 'xyz123', paymentProvider: 'STRIPE' });
-        testHelper.checkErrorResultForMsg(expectNoTxError, 'Error! No transaction ID provided');
-        const expectNoPaymentRefError = await handler.settle({ transactionId: testPendingTxId, paymentProvider: 'STRIPE' });
-        testHelper.checkErrorResultForMsg(expectNoPaymentRefError, 'Error! No payment reference or provider');
-        const expectNoPaymentProviderErr = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123' });
-        testHelper.checkErrorResultForMsg(expectNoPaymentProviderErr, 'Error! No payment reference or provider');
-    });
-
-    // restore once this is complete
-    // it('Wrapper inserts payment provider properly', async () => {
-    //     updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).resolves(responseToTxUpdated);
-    //     momentStub.returns(testSettlementTime);
-
-    //     const testBody = { 
-    //         transactionId: testPendingTxId,
-    //         settlementTimeEpochMillis: testSettlementTime.valueOf(), 
-    //         paymentRef: 'xyz123' 
-    //     };
-
-    //     const testRequest = {
-    //         requestContext: { authorizer: { systemWideUserId: uuid() }},
-    //         body: JSON.stringify(testBody)
-    //     };
-
-    //     const updateTxResult = await handler.settleInitiatedSave(testRequest);
-    //     expect(updateTxResult).to.exist;
-    //     expect(updateTxResult).to.have.property('statusCode', 200);
-    //     expect(updateTxResult).to.have.property('body');
-    //     const resultOfUpdate = JSON.parse(updateTxResult.body);
-    //     expect(resultOfUpdate).to.deep.equal(responseToTxUpdated);
-    // });
-
-    // it('Wrapper handles warmup gracefully', async () => {
-    //     const expectedWarmupResponse = await handler.settleInitiatedSave({});
-    //     expect(expectedWarmupResponse).to.exist;
-    //     expect(expectedWarmupResponse).to.have.property('statusCode', 400);
-    //     expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
-    // });
-
-    // it('Swallows context error gracefully', async () => {
-    //     const updateErrorResult = await handler.settleInitiatedSave({ transactionId: testPendingTxId, paymentRef: 'xyz123' });
-    //     logger('Looks like: ', updateErrorResult);
-    //     expect(updateErrorResult).to.exist;
-    //     expect(updateErrorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify(`Cannot read property 'authorizer' of undefined`) });
-    // });
-
-    it('Swallows RDS error gracefully', async () => {
-        updateSaveRdsStub.withArgs(testPendingTxId, testPaymentDetails, testSettlementTime).rejects(new Error('Commit error!'));
-        momentStub.returns(testSettlementTime);
         
-        const updateTxResult = await handler.settle({ transactionId: testPendingTxId, paymentRef: 'xyz123', paymentProvider: 'OZOW' });
-        expect(updateTxResult).to.exist;
-        expect(updateTxResult).to.have.property('statusCode', 500);
-        expect(updateTxResult).to.have.property('body');
-        const resultOfUpdate = JSON.parse(updateTxResult.body);
-        expect(resultOfUpdate).to.deep.equal('Commit error!');
+        expect(paymentCheckErrorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify(`Cannot read property 'settlementStatus' of undefined`) });
+        expect(fetchTransactionStub).to.have.been.calledOnce;
+        testHelper.expectNoCalls(publishStub, getPaymentStatusStub, updateSaveRdsStub, countSettledSavesStub, momentStub);
     });
-
-    // todo : restore once have configured to check if it is in fact Ozow
-    // it('Rejects unauthorized requests properly', async () => {
-    //     const unauthorizedResponse = await handler.settleInitiatedSave({ 
-    //         body: JSON.stringify({ transactionId: testPendingTxId }), 
-    //         requestContext: { }
-    //     });
-
-    //     expect(unauthorizedResponse).to.exist;
-    //     expect(unauthorizedResponse).to.deep.equal({ statusCode: 403, message: 'User ID not found in context' });
-    // });
 
 });

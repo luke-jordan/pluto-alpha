@@ -68,6 +68,27 @@ resource "aws_iam_policy" "migration_script_s3_access" {
 EOF
 }
 
+resource "aws_iam_policy" "templates_s3_access" {
+    name      = "${terraform.workspace}_templates_s3_access"
+    path      = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "GenericTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
     name = "warmup_ops_lambda_invoke_access_${terraform.workspace}"
     path = "/"

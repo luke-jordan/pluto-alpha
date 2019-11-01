@@ -48,22 +48,24 @@ const expectNoCalls = (stubList) => stubList.forEach((stub) => expect(stub).to.n
 
 const testFloatId = 'zar_cash_float';
 const testClientId = 'pluto_savings_za';
-const testPaymentRef = uuid();
+const testUserId = uuid();
 const testAccountId = uuid();
+const testPaymentRef = uuid();
 
 describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transactions', () => {
     
     beforeEach(resetStubs);
 
     it('Obtain a default float id and client id', async () => {
-        const queryString = 'select default_float_id, responsible_client_id from account_data.core_account_ledger where account_id = $1';
+        const queryString = 'select owner_user_id, default_float_id, responsible_client_id from account_data.core_account_ledger where account_id = $1';
         queryStub.withArgs(queryString, sinon.match([testAccountId])).resolves([{ 
             'default_float_id': testFloatId,
-            'responsible_client_id': testClientId 
+            'responsible_client_id': testClientId,
+            'owner_user_id': testUserId
         }]);
-        const floatResult = await rds.findClientAndFloatForAccount(testAccountId);
+        const floatResult = await rds.getOwnerInfoForAccount(testAccountId);
         expect(floatResult).to.exist;
-        expect(floatResult).to.deep.equal({ clientId: testClientId, floatId: testFloatId });
+        expect(floatResult).to.deep.equal({ clientId: testClientId, floatId: testFloatId, systemWideUserId: testUserId });
         expect(queryStub).to.have.been.calledOnceWithExactly(queryString, sinon.match([testAccountId]));
         expectNoCalls([insertStub, multiTableStub]);
     });
@@ -392,7 +394,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(resultOfSaveUpdate.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
     });
 
-    it('If a transaction is already settled, just return already settled', async () => {
+    it('If a transaction is already settled, throw an error', async () => {
         const testAcTxId = uuid();
         const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: testPaymentRef };
         const testSettlementTime = moment();
@@ -407,15 +409,10 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
         queryStub.withArgs(expectedRetrieveTxQuery, [testAcTxId]).resolves(txDetailsFromRdsOnFetch);
         
-        const resultOfSaveUpdate = await rds.updateSaveTxToSettled(testAcTxId, testPaymentDetails, testSettlementTime);
-
-        expect(resultOfSaveUpdate).to.exist;
-        expect(resultOfSaveUpdate).to.deep.equal({ result: 'ALREADY_SETTLED' });
-
+        await expect(rds.updateSaveTxToSettled(testAcTxId, testPaymentDetails, testSettlementTime)).to.be.rejected;
+        expect(queryStub).to.have.been.calledOnce;
+        testHelper.expectNoCalls(multiOpStub);
     });
-
-    // todo: restore
-    // it('Throw an error if state is SETTLED but no float id', () => { });
 
     // it('Throws errors if missing necessary arguments (times, etc)', () => {    });
 
