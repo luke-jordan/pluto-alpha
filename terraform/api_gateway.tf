@@ -242,7 +242,7 @@ resource "aws_api_gateway_integration" "save_payment_check" {
   uri                     = "${aws_lambda_function.save_payment_check.invoke_arn}"
 }
 
-//// EXPERIMENT STARTS HERE
+// INBOUND COMPLETION PAGE STARTS HERE
 
 resource "aws_api_gateway_resource" "save_result_root" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
@@ -259,7 +259,7 @@ resource "aws_api_gateway_resource" "save_payment_result" {
 resource "aws_api_gateway_method" "save_payment_result" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   resource_id   = aws_api_gateway_resource.save_payment_result.id
-  http_method   = "GET"
+  http_method   = "ANY" // since redirect is sometimes POST, sometimes GET, and other methods will achieve nothing
   authorization = "NONE" // since this will come in from a redirect
 }
 

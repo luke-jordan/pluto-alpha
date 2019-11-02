@@ -106,6 +106,11 @@ resource "aws_iam_role_policy_attachment" "save_payment_check_secret_get" {
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
+resource "aws_iam_role_policy_attachment" "save_payment_check_status_get" {
+  role = aws_iam_role.save_payment_check_role.name
+  policy_arn = aws_iam_policy.payment_status_invoke_access.arn
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_save_payment_check" {

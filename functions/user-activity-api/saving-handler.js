@@ -293,7 +293,13 @@ const dummyPaymentResult = async (systemWideUserId, params) => {
  * @param {string} transactionId The transaction ID of the pending payment
  */
 module.exports.checkPendingPayment = async (event) => {
+  if (warmupCheck(event)) {
+    await payment.warmUpPayment();
+    return warmupResponse;
+  }
+  
   try {
+
     if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }

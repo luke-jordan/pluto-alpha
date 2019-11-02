@@ -113,12 +113,18 @@ module.exports.triggerTxStatusCheck = async ({ transactionId, paymentProvider })
 module.exports.checkPayment = async ({ transactionId }) => {
     logger('Checking payment status on transaction : ', transactionId);
 
+    // for now, while wait for OZOW
+    if (config.get('payment.test')) {
+        return { paymentStatus: 'SETTLED' };
+    }
+
     const statusInvocation = {
         FunctionName: config.get('lambdas.paymentStatusCheck'),
         InvocationType: 'RequestResponse',  
         Payload: JSON.stringify({ transactionId, isTest: config.get('payment.test') })
     };
 
+    logger('Sending invocation to payment status getter: ', statusInvocation);
     const paymentStatusResult = await lambda.invoke(statusInvocation).promise();
     
     logger('Result of invocation: ', paymentStatusResult);

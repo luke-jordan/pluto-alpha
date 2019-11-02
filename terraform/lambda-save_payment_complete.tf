@@ -35,6 +35,9 @@ resource "aws_lambda_function" "save_payment_complete" {
                 "names": {
                     "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
+              },
+              "payment": {
+                "test": terraform.workspace == "staging"
               }
           }
       )}"
@@ -94,6 +97,11 @@ resource "aws_iam_role_policy_attachment" "save_complete_secret_get" {
 resource "aws_iam_role_policy_attachment" "save_payment_complete_templates_policy" {
   role = aws_iam_role.save_payment_complete_role.name
   policy_arn = aws_iam_policy.templates_s3_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "save_payment_complete_trigger_check" {
+  role = aws_iam_role.save_payment_complete_role.name
+  policy_arn = aws_iam_policy.save_check_invoke_access.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

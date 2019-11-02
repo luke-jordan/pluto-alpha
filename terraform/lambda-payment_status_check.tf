@@ -24,18 +24,17 @@ resource "aws_lambda_function" "payment_status_check" {
           {
               "aws": {
                 "region": "${var.aws_default_region[terraform.workspace]}"
+              },
+              "ozow": {
+                "apiKey": "EB5758F2C3B4DF3FF4F2669D5FF5B",
+                "siteCode": "TSTSTE0001",
+                "privateKey": "215114531AFF7134A94C88CEEA48E"
               }
           }
       )}"
     }
   }
   
-  # may not need as does not access db
-  # vpc_config {
-  #   subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-  #   security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
-  # }
-
   depends_on = [aws_cloudwatch_log_group.payment_status_check]
 }
 

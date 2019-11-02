@@ -159,7 +159,7 @@ module.exports.statusCheck = async (event) => {
             IsTest: event.isTest ? event.isTest : true
         };
         const options = assembleRequest('GET', config.get('ozow.endpoints.transactionStatus'), params);
-        logger('Created status options:', options);
+        logger('Created status options:', options, 'with headers: ', JSON.stringify(options.headers));
         const paymentStatus = await request(options);
         logger('Recieved payment status:', paymentStatus);
 

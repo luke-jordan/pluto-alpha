@@ -287,6 +287,52 @@ resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
 EOF
 }
 
+resource "aws_iam_policy" "save_check_invoke_access" {
+    name    = "${terraform.workspace}_save_check_lambda_access"
+    path    = "/"
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SaveCheckLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.save_payment_check.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "payment_status_invoke_access" {
+    name    = "${terraform.workspace}_payment_status_lambda_access"
+    path    = "/"
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PaymentStatusInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.payment_status_check.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 /////////////// COMPOSITE POLICIES FOR PROCESSING/ADMIN LAMBDAS THAT DO A LOT ///////////////////
 
 resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
