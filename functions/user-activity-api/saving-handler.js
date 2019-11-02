@@ -338,7 +338,7 @@ module.exports.checkPendingPayment = async (event) => {
     
     let responseBody = { };
 
-    if (statusCheckResult.result === 'SETTLED') {
+    if (statusCheckResult.paymentStatus === 'SETTLED') {
       const settlementInstruction = { 
         transactionId
       };

@@ -215,7 +215,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
 
         fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
         findFloatOrIdStub.withArgs(testAccountId).resolves({ systemWideUserId: testUserId });
-        getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ result: 'SETTLED' });
+        getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ paymentStatus: 'SETTLED' });
         updateSaveRdsStub.resolves(responseToTxUpdated);
         countSettledSavesStub.withArgs(testAccountId).resolves(5);
         momentStub.returns(testSettlementTime);
