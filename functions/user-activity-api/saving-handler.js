@@ -50,7 +50,7 @@ const save = async (eventBody) => {
     }
     
     logger('Sending to persistence: ', saveInformation);
-    const savingResult = await persistence.addSavingToTransactions(saveInformation);
+    const savingResult = await persistence.addTransactionToAccount(saveInformation);
 
     logger('Completed the save, result: ', savingResult);
 
@@ -205,7 +205,7 @@ module.exports.completeSavingPaymentFlow = async (event) => {
       body: `<html><title>Internal Error</title><body>` +
             `<p>Please return to the app and contact support. If you made payment, don't worry, we will reflect it on yoru account.` + 
             `<p>Server error details: ${JSON.stringify(err)}</p>`
-    }
+    };
   }
 };
 
@@ -263,7 +263,7 @@ const settle = async (settleInfo) => {
     settleInfo.settlementTime = moment();
   }
   
-  const resultOfUpdate = await persistence.updateSaveTxToSettled(settleInfo.transactionId, settleInfo.settlementTime);
+  const resultOfUpdate = await persistence.updateTxToSettled(settleInfo);
   logger('Completed the update: ', resultOfUpdate);
 
   return resultOfUpdate;
@@ -272,15 +272,17 @@ const settle = async (settleInfo) => {
 // used quite a lot in testing
 const dummyPaymentResult = async (systemWideUserId, params) => {
   const paymentSuccessful = !params.failureType; // for now
+  
   if (paymentSuccessful) {
     const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
+    const transactionId = params.transactionId;
     const resultOfSave = await settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
     logger('Result of save: ', resultOfSave);
     await publishSaveSucceeded(systemWideUserId, transactionId);
     return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
-  } else {
-    return handlePaymentFailure(params.failureType);
-  }
+  } 
+
+  return handlePaymentFailure(params.failureType);
 };
 
 /**

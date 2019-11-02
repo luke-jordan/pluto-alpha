@@ -33,8 +33,8 @@
         "paymentStatusCheck": "payment_status_check",
         "checkSavePayment": "save_payment_check"
     },
-    "logging": {
-        "enabled": "false"
+    "payment": {
+        "test": false
     },
     "publishing": {
         "userEvents": {

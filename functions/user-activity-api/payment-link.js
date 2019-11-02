@@ -72,7 +72,7 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
         countryCode: CURRENCY_COUNTRY_LOOKUP[amountDict.currency],
         currencyCode: amountDict.currency,
         amount: wholeCurrencyAmount,
-        isTest: true
+        isTest: config.get('payment.test')
     };
 
     logger('Sending payload to payment url generation: ', payload);
@@ -89,26 +89,27 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
     return typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
 };
 
-module.exports.triggerTxStatusCheck = async ({ transactionId, paymentProvider, paymentLink }) => {
+module.exports.triggerTxStatusCheck = async ({ transactionId, paymentProvider }) => {
     const lambdaInvocation = { 
         FunctionName: config.get('lambdas.checkSavePayment'),
         InvocationType: 'Event',
-        Payload: JSON.stringify({ transactionId, paymentProvider, paymentLink })
+        Payload: JSON.stringify({ transactionId, paymentProvider })
     };
 
     logger('Background firing off event: ', lambdaInvocation);
 
     const invocationResult = await lambda.invoke(lambdaInvocation).promise();
     logger('Result of invocation: ', invocationResult);
+    return invocationResult;
 };
 
-module.exports.checkPayment = async ({ transactionId, isTest }) => {
+module.exports.checkPayment = async ({ transactionId }) => {
     logger('Checking payment status on transaction : ', transactionId);
 
     const statusInvocation = {
         FunctionName: config.get('lambdas.paymentStatusCheck'),
         InvocationType: 'RequestResponse',  
-        Payload: JSON.stringify({ transactionId, isTest })
+        Payload: JSON.stringify({ transactionId, isTest: config.get('payment.test') })
     };
 
     const paymentStatusResult = await lambda.invoke(statusInvocation).promise();
