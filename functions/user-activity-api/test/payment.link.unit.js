@@ -41,9 +41,9 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
     });
 
     it('Generate payment references, properly', async () => {
-        const testStems = ['LJORDAN1', 'ABRIJMOHUN12', 'BNDLOVU102', 'BAJIBAWO1002'];
-        const testNumberSaves = [104, 2045, 1, 4095];
-        const expectedRef = ['LJORDAN1-00104', 'ABRIJMOHUN12-02045', 'BNDLOVU102-00001', 'BAJIBAWO1002-04095'];
+        const testStems = ['LJORDAN1', 'ABRIJMOHUN12', 'BNDLOVU102', 'BAJIBAWO1002', 'ALONGLONGNAME01002'];
+        const testNumberSaves = [104, 2045, 1, 4095, 1];
+        const expectedRef = ['LJORDAN1-00104', 'ABRIJMOHUN12-02045', 'BNDLOVU102-00001', 'BAJIBAWO1002-04095', 'ALONGLONGNAME01002-1'];
 
         testStems.forEach((stem, idx) => {
             const assembledRef = paymentLinkHandler.generateBankRef({ bankRefStem: stem, priorSaveCount: testNumberSaves[idx] });
@@ -53,7 +53,6 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
     });
 
     it('Get a payment link, happy path', async () => {
-        
         const linkRequest = {
             transactionId: testTxId,
             amountDict: {
@@ -76,20 +75,28 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
             amount: testAmountWhole,
             transactionId: testTxId,
             bankReference: expectedBankRef,
-            isTest: true
+            isTest: config.get('payment.test')
         };
 
         const mockLambdaPayload = {
             result: 'PAYMENT_INITIATED',
+            paymentProvider: 'PROVIDER',
             paymentUrl: 'https://pay.me/1234',
             requestId: testReqId
+        };
+
+        const expectedResult = {
+            paymentProvider: 'PROVIDER',
+            paymentUrl: mockLambdaPayload.paymentUrl,
+            paymentRef: testReqId,
+            bankRef: expectedBankRef
         };
 
         lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse(mockLambdaPayload) });
         const paymentLink = await paymentLinkHandler.getPaymentLink(linkRequest);
 
         expect(paymentLink).to.exist;
-        expect(paymentLink).to.deep.equal(mockLambdaPayload);
+        expect(paymentLink).to.deep.equal(expectedResult);
 
         const expectedLambdaInvoke = testHelper.wrapLambdaInvoc(config.get('lambdas.paymentUrlGet'), false, expectedLamdbaInvokeBody);
         testHelper.testLambdaInvoke(lambdaStub, expectedLambdaInvoke);
@@ -105,7 +112,7 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
 
         const expectedInvokeBody = {
             transactionId: testTxId,
-            isTest: true
+            isTest: config.get('payment.test')
         };
 
         const mockLambdaPayload = {
@@ -126,6 +133,26 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
 
         const expectedInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.paymentStatusCheck'), false, expectedInvokeBody);
         testHelper.testLambdaInvoke(lambdaStub, expectedInvocation);
+    });
+
+    it('Check payment status, still pending', async () => {
+        lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse({ result: 'pending' })});
+        const paymentResult = await paymentLinkHandler.checkPayment({ transactionId: testTxId });
+        expect(paymentResult).to.deep.equal({ paymentStatus: 'PENDING' });
+    });
+
+    it('Trigger a status check', async () => {
+        const expectedInvokeBody = { 
+            transactionId: testTxId,
+            paymentProvider: 'PROVIDER'
+        };
+        const expectedInvoke = testHelper.wrapLambdaInvoc(config.get('lambdas.checkSavePayment'), true, expectedInvokeBody);
+
+        lambdaStub.returns({ promise: () => ({ StatusCode: 202 }) });
+
+        const triggerResult = await paymentLinkHandler.triggerTxStatusCheck({ transactionId: testTxId, paymentProvider: 'PROVIDER' });
+        expect(triggerResult).to.exist;
+        expect(lambdaStub).to.have.been.calledWith(expectedInvoke);
     });
 
     it('Warmup payment lambda', async () => {

@@ -72,7 +72,7 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
         countryCode: CURRENCY_COUNTRY_LOOKUP[amountDict.currency],
         currencyCode: amountDict.currency,
         amount: wholeCurrencyAmount,
-        isTest: true
+        isTest: config.get('payment.test')
     };
 
     logger('Sending payload to payment url generation: ', payload);
@@ -86,7 +86,28 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
     logger('Result of payment url: ', paymentUrlResponse);
 
     const rawPayload = paymentUrlResponse['Payload'];
-    return typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+    const responseResult = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+
+    return {
+        paymentUrl: responseResult.paymentUrl,
+        paymentProvider: responseResult.paymentProvider,
+        paymentRef: responseResult.requestId,
+        bankRef: bankReference
+    };
+};
+
+module.exports.triggerTxStatusCheck = async ({ transactionId, paymentProvider }) => {
+    const lambdaInvocation = { 
+        FunctionName: config.get('lambdas.checkSavePayment'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify({ transactionId, paymentProvider })
+    };
+
+    logger('Background firing off event: ', lambdaInvocation);
+
+    const invocationResult = await lambda.invoke(lambdaInvocation).promise();
+    logger('Result of invocation: ', invocationResult);
+    return invocationResult;
 };
 
 module.exports.checkPayment = async ({ transactionId }) => {
@@ -95,7 +116,7 @@ module.exports.checkPayment = async ({ transactionId }) => {
     const statusInvocation = {
         FunctionName: config.get('lambdas.paymentStatusCheck'),
         InvocationType: 'RequestResponse',  
-        Payload: JSON.stringify({ transactionId, isTest: true })
+        Payload: JSON.stringify({ transactionId, isTest: config.get('payment.test') })
     };
 
     const paymentStatusResult = await lambda.invoke(statusInvocation).promise();

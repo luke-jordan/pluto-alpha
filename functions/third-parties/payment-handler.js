@@ -35,12 +35,14 @@ const assembleBody = (params) => {
         }
     });
 
+    const assembleUrl = (stage) => `${config.get('ozow.endpoints.completionBase')}/OZOW/${params.transactionId}/${stage}`;
+
     const body = {
         TransactionReference: params.transactionId,
         BankReference: params.bankReference,
-        CancelUrl: params.cancelUrl ? params.cancelUrl : config.get('ozow.endpoints.cancelUrl'),
-        ErrorUrl: params.errorUrl ? params.errorUrl : config.get('ozow.endpoints.errorUrl'),
-        SuccessUrl: params.successUrl ? params.successUrl : config.get('ozow.endpoints.successUrl'),
+        CancelUrl: assembleUrl('CANCELLED'),
+        ErrorUrl: assembleUrl('ERROR'),
+        SuccessUrl: assembleUrl('SUCCESS'),
         IsTest: params.isTest,
         SiteCode: config.get('ozow.siteCode'),
         CountryCode: params.countryCode,
@@ -115,7 +117,8 @@ module.exports.paymentUrlRequest = async (event) => {
         return {
             result: 'PAYMENT_INITIATED',
             paymentUrl: paymentResponse.url,
-            requestId: paymentResponse.paymentRequestId
+            requestId: paymentResponse.paymentRequestId,
+            paymentProvider: 'OZOW'
         };
     } catch (err) {
         logger('FATAL_ERROR:', err);
