@@ -88,7 +88,7 @@ module.exports.initiatePendingSave = async (event) => {
   try {
     if (warmupCheck(event)) {
       logger('Warming up; tell payment link to stay warm, else fine');
-      await payment.warmUpPayment();
+      await payment.warmUpPayment({ type: 'INITIATE' });
       logger('Warmed payment, return');
       return warmupResponse;
     }
@@ -154,7 +154,10 @@ module.exports.initiatePendingSave = async (event) => {
 module.exports.completeSavingPaymentFlow = async (event) => {
   try {
     if (warmupCheck(event)) {
-      await Promise.all([publisher.obtainTemplate(`payment/${config.get('templates.payment.success')}`), payment.warmUpPayment()]);
+      await Promise.all([
+        publisher.obtainTemplate(`payment/${config.get('templates.payment.success')}`), 
+        payment.warmUpPayment({ type: 'TRIGGER_CHECK' })
+      ]);
       return warmupResponse;
     }
 
@@ -294,7 +297,7 @@ const dummyPaymentResult = async (systemWideUserId, params) => {
  */
 module.exports.checkPendingPayment = async (event) => {
   if (warmupCheck(event)) {
-    await payment.warmUpPayment();
+    await payment.warmUpPayment({ type: 'CHECK' });
     return warmupResponse;
   }
   

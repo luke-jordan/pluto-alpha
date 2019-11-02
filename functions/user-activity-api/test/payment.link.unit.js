@@ -159,7 +159,7 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
         const expectedInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.paymentUrlGet'), true, {});
         lambdaStub.returns({ promise: () => ({ StatusCode: 202 }) });
         
-        const resultOfWarmup = await paymentLinkHandler.warmUpPayment();
+        const resultOfWarmup = await paymentLinkHandler.warmUpPayment({ type: 'INITIATE' });
         expect(resultOfWarmup).to.deep.equal({ result: 'TRIGGERED' });
         testHelper.testLambdaInvoke(lambdaStub, expectedInvocation);
     });

@@ -263,8 +263,8 @@ resource "aws_iam_policy" "lambda_invoke_msg_instruct_access" {
 EOF
 }
 
-resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
-    name = "lambda_invoke_payment_url_access_${terraform.workspace}"
+resource "aws_iam_policy" "lambda_invoke_payment_access" {
+    name = "lambda_invoke_payment_urls_access_${terraform.workspace}"
     path = "/"
 
     policy = <<EOF
@@ -279,7 +279,8 @@ resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.payment_url_request.arn}"
+                "${aws_lambda_function.payment_url_request.arn}",
+                "${aws_lambda_function.payment_status_check.arn}"
             ]
         }
     ]
@@ -303,29 +304,6 @@ resource "aws_iam_policy" "save_check_invoke_access" {
             ],
             "Resource": [
                 "${aws_lambda_function.save_payment_check.arn}"
-            ]
-        }
-    ]
-}
-EOF
-}
-
-resource "aws_iam_policy" "payment_status_invoke_access" {
-    name    = "${terraform.workspace}_payment_status_lambda_access"
-    path    = "/"
-    policy = <<EOF
-{
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Sid": "PaymentStatusInvokeAccess",
-            "Effect": "Allow",
-            "Action": [
-                "lambda:InvokeFunction",
-                "lambda:InvokeAsync"
-            ],
-            "Resource": [
-                "${aws_lambda_function.payment_status_check.arn}"
             ]
         }
     ]

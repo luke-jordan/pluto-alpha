@@ -29,6 +29,9 @@ resource "aws_lambda_function" "payment_status_check" {
                 "apiKey": "EB5758F2C3B4DF3FF4F2669D5FF5B",
                 "siteCode": "TSTSTE0001",
                 "privateKey": "215114531AFF7134A94C88CEEA48E"
+              },
+              "payment": {
+                "dummy": "ON"
               }
           }
       )}"

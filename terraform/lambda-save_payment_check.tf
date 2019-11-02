@@ -111,7 +111,7 @@ resource "aws_iam_role_policy_attachment" "save_payment_check_secret_get" {
 
 resource "aws_iam_role_policy_attachment" "save_payment_check_status_get" {
   role = aws_iam_role.save_payment_check_role.name
-  policy_arn = aws_iam_policy.payment_status_invoke_access.arn
+  policy_arn = aws_iam_policy.lambda_invoke_payment_access.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

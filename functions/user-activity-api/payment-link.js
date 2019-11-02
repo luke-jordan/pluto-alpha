@@ -21,9 +21,10 @@ const CURRENCY_COUNTRY_LOOKUP = {
     'ZAR': 'ZA'
 };
 
-module.exports.warmUpPayment = async () => {
+module.exports.warmUpPayment = async (type) => {
+    const functionName = type && type === 'TRIGGER_CHECK' ? config.get('lambdas.checkSavePayment') : config.get('lambdas.paymentUrlGet');
     const invocation = {
-        FunctionName: config.get('lambdas.paymentUrlGet'),
+        FunctionName: functionName,
         InvocationType: 'Event',
         Payload: JSON.stringify({})
     };
@@ -112,11 +113,6 @@ module.exports.triggerTxStatusCheck = async ({ transactionId, paymentProvider })
 
 module.exports.checkPayment = async ({ transactionId }) => {
     logger('Checking payment status on transaction : ', transactionId);
-
-    // for now, while wait for OZOW
-    if (config.get('payment.test')) {
-        return { paymentStatus: 'SETTLED' };
-    }
 
     const statusInvocation = {
         FunctionName: config.get('lambdas.paymentStatusCheck'),
