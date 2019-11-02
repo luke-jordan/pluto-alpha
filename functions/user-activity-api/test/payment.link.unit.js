@@ -116,12 +116,12 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
         };
 
         const mockLambdaPayload = {
-            result: 'COMPLETED',
+            result: 'COMPLETE',
             createdDate: testCreatedDate.format(),
             paymentDate: testPaymentDate.format()
         };
 
-        lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse(mockLambdaPayload) });
+        lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse(JSON.stringify(mockLambdaPayload)) });
         const paymentResult = await paymentLinkHandler.checkPayment(statusRequest);
 
         expect(paymentResult).to.exist;

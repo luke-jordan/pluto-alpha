@@ -124,10 +124,12 @@ module.exports.checkPayment = async ({ transactionId }) => {
     const paymentStatusResult = await lambda.invoke(statusInvocation).promise();
     
     logger('Result of invocation: ', paymentStatusResult);
-    
+    const payload = typeof paymentStatusResult['Payload'] === 'string' ? JSON.parse(paymentStatusResult['Payload']) : paymentStatusResult['Payload'];
+    logger('Payload: ', payload);
+
     let returnResult = { };
-    if (paymentStatusResult['StatusCode'] === 200 && paymentStatusResult['Payload']['result'] === 'COMPLETED') {
-        const payload = paymentStatusResult['Payload'];
+    if (paymentStatusResult['StatusCode'] === 200 && payload.result === 'COMPLETE') {
+        logger('Payload created date: ', moment(payload.createdDate));
         returnResult = {
             paymentStatus: 'SETTLED',
             createdDate: payload.createdDate ? moment(payload.createdDate) : moment(),
