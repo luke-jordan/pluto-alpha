@@ -122,6 +122,27 @@ module.exports.extractUserDetails = (event) => {
     return event.requestContext.authorizer;
 };
 
+const normalizeExpectedBody = (event) => {
+    // logger('Event: ', event);
+    let params = { };
+    if (!event.body && !event.queryStringParameters) {
+        params = typeof event === 'string' ? JSON.parse(event) : event;
+    } else if (typeof event.body === 'string') {
+        params = JSON.parse(event.body);
+    } else {
+        params = event.body;
+    }
+    return params;
+};
+
+module.exports.extractParamsFromEvent = (event) => {
+    let params = normalizeExpectedBody(event);
+    if (!params || Object.keys(params).size === 0) {
+        return event.queryStringParameters || event;
+    }
+    return params;
+};
+
 module.exports.isDirectInvokeAdminOrSelf = (event) => {
     const isHttpRequest = Reflect.has(event, 'httpMethod'); // todo : tighten this in time
     if (!isHttpRequest) {

@@ -84,7 +84,7 @@ const resetStubHistory = () => {
     momentStub.callsFake(moment); // as with uuid in RDS, too much time being sunk into test framework's design flaws, so a work around here
 };
 
-describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward, sync or async', () => {
+describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event', () => {
 
     const testTransactionId = uuid();
 

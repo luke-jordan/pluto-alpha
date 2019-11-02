@@ -188,7 +188,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         newBalance: mockNewBalance
     };
 
-    const wrapTestParams = (queryParams) => ({ queryStringParameters: queryParams, requestContext: testAuthContext });
+    const wrapTestParams = (queryParams) => ({ httpMethod: 'GET', queryStringParameters: queryParams, requestContext: testAuthContext });
 
     beforeEach(() => testHelper.resetStubs(getPaymentStatusStub, updateSaveRdsStub, publishStub, fetchTransactionStub, countSettledSavesStub, momentStub));
 
