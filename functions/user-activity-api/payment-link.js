@@ -86,7 +86,14 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
     logger('Result of payment url: ', paymentUrlResponse);
 
     const rawPayload = paymentUrlResponse['Payload'];
-    return typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+    const responseResult = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+
+    return {
+        paymentUrl: responseResult.paymentUrl,
+        paymentProvider: responseResult.paymentProvider,
+        paymentRef: responseResult.requestId,
+        bankRef: bankReference
+    };
 };
 
 module.exports.triggerTxStatusCheck = async ({ transactionId, paymentProvider }) => {

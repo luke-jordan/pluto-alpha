@@ -80,15 +80,23 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
 
         const mockLambdaPayload = {
             result: 'PAYMENT_INITIATED',
+            paymentProvider: 'PROVIDER',
             paymentUrl: 'https://pay.me/1234',
             requestId: testReqId
+        };
+
+        const expectedResult = {
+            paymentProvider: 'PROVIDER',
+            paymentUrl: mockLambdaPayload.paymentUrl,
+            paymentRef: testReqId,
+            bankRef: expectedBankRef
         };
 
         lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse(mockLambdaPayload) });
         const paymentLink = await paymentLinkHandler.getPaymentLink(linkRequest);
 
         expect(paymentLink).to.exist;
-        expect(paymentLink).to.deep.equal(mockLambdaPayload);
+        expect(paymentLink).to.deep.equal(expectedResult);
 
         const expectedLambdaInvoke = testHelper.wrapLambdaInvoc(config.get('lambdas.paymentUrlGet'), false, expectedLamdbaInvokeBody);
         testHelper.testLambdaInvoke(lambdaStub, expectedLambdaInvoke);

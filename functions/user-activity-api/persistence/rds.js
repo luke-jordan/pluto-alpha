@@ -262,7 +262,7 @@ const extractTxDetails = (keyForTransactionId, row) => {
  * @param {string} settlementStatus The status of the saving event (initiated or settled)
  * @param {string} floatId The float to which this amount of saving is allocated
  * @param {string} offerId (Optional) Include if the saving event is clearly linked to a specific inducement/reward
- * @param {string} paymentRef If settled: the reference at the payment provider for the transaction
+ * @param {string} paymentRef The reference at the payment provider for the transaction
  * @param {string} paymentProvider If settled: who the payment provider was
  * @param {list(string)} tags (Optional) Any tags to include in the event
  * @param {list(string)} flags (Optional) Any flags to add to the event (e.g., if the saving is restricted in withdrawals)
@@ -370,4 +370,36 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
     responseEntity['newBalance'] = { amount: balanceCount.amount, unit: balanceCount.unit, currency: balanceCount.currency };
 
     return responseEntity;
+};
+
+/**
+ * Simple quick utility to add important payment parameters 
+ * @param {string} transactionId The ID of the transaction
+ * @param {string} paymentProvider The third party used for the payment
+ * @param {string} paymentRef The machine readable reference from the provider
+ * @param {string} bankReference The human readable short bank reference for the payment 
+ */
+module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, paymentRef, bankRef }) => {
+    logger('Adding payment info to TX before returning');
+
+    // persistence stores in more general form, hence key conversion
+    const value = {
+        paymentProvider,
+        paymentReference: paymentRef,
+        humanReference: bankRef
+    };
+
+    const updateQueryDef = {
+        table: config.get('tables.accountTransactions'),
+        key: { transactionId },
+        value,
+        returnClause: 'updated_time'
+    };
+
+    const resultOfUpdate = await rdsConnection.updateRecordObject(updateQueryDef);
+    logger('Payment info result from RDS: ', resultOfUpdate);
+
+    const updateMoment = moment(resultOfUpdate[0]['updated_time']);
+    logger('Extracted moment: ', updateMoment);
+    return { updatedTime: updateMoment };
 };

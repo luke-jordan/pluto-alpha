@@ -135,6 +135,9 @@ module.exports.initiatePendingSave = async (event) => {
     logger('Returning with url to complete payment: ', urlToCompletePayment);
     initiationResult.paymentRedirectDetails = { urlToCompletePayment };
 
+    const paymentStash = await persistence.addPaymentInfoToTx({ transactionId, ...paymentLinkResult });
+    logger('Result of stashing payment details: ', paymentStash);
+
     return { statusCode: 200, body: JSON.stringify(initiationResult) };
 
   } catch (e) {

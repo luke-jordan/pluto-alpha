@@ -18,6 +18,7 @@ const uuid = require('uuid/v4');
 
 const queryStub = sinon.stub();
 const insertStub = sinon.stub();
+const updateRecordStub = sinon.stub();
 const multiTableStub = sinon.stub();
 const multiOpStub = sinon.stub();
 
@@ -27,6 +28,7 @@ class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
+        this.updateRecordObject = updateRecordStub;
         this.largeMultiTableInsert = multiTableStub;
         this.multiTableUpdateAndInsert = multiOpStub;
     }
@@ -346,69 +348,6 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
 });
 
-describe('*** UNIT TEST ADD TRANSACTION TO ACCOUNT ***', async () => {
-    
-    const testTxId = uuid();
-    const testFlTxAdjustId = uuid();
-    const testFlTxAllocId = uuid();
-    
-    const testCreationTime = moment().format();
-    const testInitiationTime = moment();
-    const testSettlementTime = moment(); 
-
-    const testSaveAmount = 1050000;
-
-    const expectedTxDetails = {
-        accountId: testAccountId,
-        currency: 'ZAR',
-        unit: 'HUNDREDTH_CENT',
-        amount: testSaveAmount, 
-        floatId: testFloatId,
-        clientId: testClientId,
-        initiationTime: testInitiationTime,
-        settlementTime: testSettlementTime,
-        paymentRef: testPaymentRef,
-        paymentProvider: 'STRIPE',
-        settlementStatus: 'SETTLED'
-    };
-
-    beforeEach(() => {
-       resetStubs();
-    });
-
-    it('Adds transaction to account', async () => {
-        // note : as above, balance testing is covered elsewhere, so just use first and second call
-        const findMomentOfLastSettlementQuery = `select creation_time from transaction_data.core_transaction_ledger where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
-        
-        uuidStub.onFirstCall().returns(testAccountId);
-        uuidStub.onSecondCall().returns(testFlTxAdjustId);
-        uuidStub.onThirdCall().returns(testFlTxAllocId);
-        
-        queryStub.onFirstCall().resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.onSecondCall().resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testSaveAmount }]);
-        queryStub.withArgs(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]).resolves([{ 'creation_time': testCreationTime }]);
-        
-        multiTableStub.resolves([
-            [{ 'transaction_id': testTxId, 'creation_time': testCreationTime }],
-            [{ 'transaction_id': testTxId, 'creation_time': testCreationTime }]
-        ]);
-
-        const resultOfInsertion = await rds.addTransactionToAccount(expectedTxDetails);
-        logger('Result of transaction insertion:', resultOfInsertion);
-
-        expect(resultOfInsertion).to.exist;
-        expect(resultOfInsertion).to.have.property('transactionDetails');
-        expect(resultOfInsertion.transactionDetails[0]).to.have.keys(['accountTransactionId', 'creationTimeEpochMillis']);
-        expect(resultOfInsertion.transactionDetails[1]).to.have.keys(['floatAdditionTransactionId', 'creationTimeEpochMillis']);
-        expect(resultOfInsertion.transactionDetails[2]).to.have.keys(['floatAllocationTransactionId', 'creationTimeEpochMillis']);
-        expect(resultOfInsertion).to.have.property('newBalance');
-        expect(resultOfInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
-        expect(uuidStub).to.have.been.calledThrice;
-        expect(queryStub).to.have.been.calledWith(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]);
-        expect(multiTableStub).to.have.been.calledOnce;
-    });
-});
-
 describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
     const testSettlementTime = moment();
     const testUpdatedTime = moment().format();
@@ -473,5 +412,30 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(queryStub).to.have.been.calledWith(pendingTxQuery, [testTxId]);
         expect(queryStub).to.have.been.calledWith(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]);
         expect(multiOpStub).to.have.been.calledOnce;
+    });
+
+    it('Updates transaction with payment info', async () => {
+        const updateTime = moment();
+        const expectedUpdateDef = {
+            table: config.get('tables.accountTransactions'),
+            key: { transactionId: testTxId },
+            value: { 
+                paymentProvider: 'PROVIDER',
+                paymentReference: 'test-reference',
+                humanReference: 'JUPSAVER31-0001'
+            },
+            returnClause: 'updated_time'
+        };
+        updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
+
+        const passedParams = { transactionId: testTxId, paymentProvider: 'PROVIDER', paymentRef: 'test-reference', bankRef: 'JUPSAVER31-0001' };
+        
+        const resultOfUpdate = await rds.addPaymentInfoToTx(passedParams);
+        
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.have.property('updatedTime');
+        expect(resultOfUpdate.updatedTime).to.deep.equal(moment(updateTime.format()));
+        
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedUpdateDef);
     });
 });

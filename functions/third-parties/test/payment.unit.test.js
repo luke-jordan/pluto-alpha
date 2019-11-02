@@ -48,6 +48,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         expect(result).to.have.property('result', 'PAYMENT_INITIATED');
         expect(result).to.have.property('paymentUrl', `${mockPaymentUrl}${mockPaymentEndpoint}`);
         expect(result).to.have.property('requestId', mockRequestId);
+        expect(result).to.have.property('paymentProvider', 'OZOW');
         expect(requestStub).to.have.been.calledOnce;
     };
 

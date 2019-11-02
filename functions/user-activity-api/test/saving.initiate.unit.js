@@ -40,6 +40,7 @@ logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmount
 const findMatchingTxStub = sinon.stub();
 const findFloatOrIdStub = sinon.stub();
 const addSavingsRdsStub = sinon.stub();
+const addPaymentInfoRdsStub = sinon.stub();
 const updateSaveRdsStub = sinon.stub();
 const fetchTransactionStub = sinon.stub();
 const countSettledSavesStub = sinon.stub();
@@ -57,6 +58,7 @@ const handler = proxyquire('../saving-handler', {
         'getOwnerInfoForAccount': findFloatOrIdStub, 
         'addTransactionToAccount': addSavingsRdsStub,
         'countSettledSaves': countSettledSavesStub,
+        'addPaymentInfoToTx': addPaymentInfoRdsStub,
         'fetchInfoForBankRef': fetchBankRefStub
     },
     './payment-link': {
@@ -73,6 +75,7 @@ const resetStubHistory = () => {
     findMatchingTxStub.resetHistory();
     findFloatOrIdStub.resetHistory();
     addSavingsRdsStub.resetHistory();
+    addPaymentInfoRdsStub.reset();
     updateSaveRdsStub.reset();
     fetchTransactionStub.reset();
     countSettledSavesStub.reset();
@@ -110,13 +113,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         unit: 'HUNDREDTH_CENT'
     });
 
-    const testBankRefInfo = { humanRef: 'JUPSAVER', count: 10 };
-    const expectedPaymentInfo = {
-        transactionId: testTransactionId,
-        accountInfo: { bankRefStem: 'JUPSAVER', priorSaveCount: 10 },
-        amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
-    };
-
     const wellFormedMinimalPendingRequestToRds = {
         accountId: testAccountId,
         initiationTime: testHelper.momentMatcher(testTimeInitiated),
@@ -127,7 +123,21 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         clientId: testClientId,
         floatId: testFloatId
     };
-    
+
+    const testBankRefInfo = { humanRef: 'JUPSAVER31', count: 10 };
+    const expectedPaymentInfo = {
+        transactionId: testTransactionId,
+        accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10 },
+        amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
+    };
+
+    const expectedPaymentParams = {
+        paymentUrl: 'https://pay.me/1234',
+        paymentRef: testPaymentRef,
+        paymentProvider: 'PROVIDER',
+        bankRef: 'JUPSAVER31-00001'
+    };
+
     const responseToTxPending = {
         transactionDetails: [{ accountTransactionId: testTransactionId, persistedTimeEpochMillis: moment().format() }]
     };
@@ -153,7 +163,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         addSavingsRdsStub.withArgs(badRdsRequest).rejects(new Error('Error! Bad account ID'));
         
         const expectedError2 = await handler.initiatePendingSave({ body: JSON.stringify(badEvent), requestContext: testAuthContext });
-        // testHelper.logNestedMatches(badRdsRequest, addSavingsRdsStub.getCall(0).args[0]);
         
         expect(expectedError2).to.exist;
         expect(expectedError2).to.have.property('statusCode', 500);
@@ -174,7 +183,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
         momentStub.returns(testTimeInitiated);
 
         fetchBankRefStub.resolves(testBankRefInfo);
-        getPaymentUrlStub.resolves({ paymentUrl: 'https://pay.me/1234 '});
+        getPaymentUrlStub.resolves(expectedPaymentParams);
         
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
@@ -184,6 +193,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User saves, without reward,
 
         expect(fetchBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
     });
 
     it('Wrapper fails if no auth context', async () => {
