@@ -46,6 +46,9 @@ resource "aws_lambda_function" "save_initiate" {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
                 }
+              },
+              "payment": {
+                "test": terraform.workspace == "staging"
               }
           }
       )}"

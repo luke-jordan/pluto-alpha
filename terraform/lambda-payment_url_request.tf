@@ -30,7 +30,7 @@ resource "aws_lambda_function" "payment_url_request" {
                 "siteCode": "TSTSTE0001",
                 "privateKey": "215114531AFF7134A94C88CEEA48E",
                 "endpoints": {
-                  "completionBase": "${aws_api_gateway_domain_name.custom_doname_name.domain_name}/addcash/result"
+                  "completionBase": "https://${aws_api_gateway_domain_name.custom_doname_name.domain_name}/addcash/result"
                 }
               }
           }

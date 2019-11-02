@@ -45,6 +45,9 @@ resource "aws_lambda_function" "save_payment_check" {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
                 }
+              },
+              "payment": {
+                "test": terraform.workspace == "staging"
               }
           }
       )}"
