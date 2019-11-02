@@ -116,7 +116,7 @@ module.exports.checkPayment = async ({ transactionId }) => {
 
     const statusInvocation = {
         FunctionName: config.get('lambdas.paymentStatusCheck'),
-        InvocationType: 'RequestResponse',  
+        InvocationType: 'RequestResponse',
         Payload: JSON.stringify({ transactionId, isTest: config.get('payment.test') })
     };
 

@@ -154,7 +154,7 @@ module.exports.paymentUrlRequest = async (event) => {
 module.exports.statusCheck = async (event) => {
     try {
         if (config.has('payment.dummy') && config.get('payment.dummy') === 'ON') {
-            return { result: 'COMPLETED' };
+            return { result: 'COMPLETE' };
         }
 
         const params = {
