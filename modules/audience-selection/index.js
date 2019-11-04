@@ -1,6 +1,9 @@
 'use strict';
 
 const logger = require('debug')('jupiter:audience-selection');
+const config = require('config');
+const RdsConnection = require('rds-common');
+const rdsConnection = new RdsConnection(config.get('db'));
 
 class AudienceSelection {
 
@@ -129,30 +132,40 @@ class AudienceSelection {
         return mainQuery;
     }
 
-    fetchUsersGivenJSON (selectionJSON) {
+    extractSQLQueryFromJSON (selectionJSON) {
+        logger('extracting sql query from JSON: ', selectionJSON);
+
+        const columns = this.extractColumns(selectionJSON);
+        const columnsToCount = this.extractColumnsToCount(selectionJSON);
+        const columnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
+        const table = this.extractTable(selectionJSON);
+        const whereFilters = this.extractWhereConditions(selectionJSON);
+        const groupByFilters = this.extractGroupBy(selectionJSON);
+        logger('parsed columns:', columns);
+        logger('parsed table:', table);
+        logger('where filters:', whereFilters);
+        logger('parsed columns to count:', columnsToCount);
+        logger('groupBy filters:', groupByFilters);
+
+        const parsedValues = {
+            columnsToFetch,
+            table,
+            whereFilters,
+            groupByFilters
+        };
+        const fullQuery = this.constructFullQuery(selectionJSON, parsedValues);
+        logger('full sql query:', fullQuery);
+
+        return fullQuery;
+    }
+
+    async fetchUsersGivenJSON (selectionJSON) {
         try {
-            const columns = this.extractColumns(selectionJSON);
-            const columnsToCount = this.extractColumnsToCount(selectionJSON);
-            const columnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
-            const table = this.extractTable(selectionJSON);
-            const whereFilters = this.extractWhereConditions(selectionJSON);
-            const groupByFilters = this.extractGroupBy(selectionJSON);
-            logger('parsed columns:', columns);
-            logger('parsed table:', table);
-            logger('where filters:', whereFilters);
-            logger('parsed columns to count:', columnsToCount);
-            logger('groupBy filters:', groupByFilters);
-
-            const parsedValues = {
-                columnsToFetch,
-                table,
-                whereFilters,
-                groupByFilters
-            };
-            const fullQuery = this.constructFullQuery(selectionJSON, parsedValues);
-            logger('full query:', fullQuery);
-
-            return fullQuery;
+            logger('Selecting accounts according to: ', selectionJSON);
+            const sqlQuery = this.extractSQLQueryFromJSON(selectionJSON);
+            const queryResult = await rdsConnection.selectFullQuery(sqlQuery);
+            logger('Number of records from query: ', queryResult.length);
+            return queryResult;
         } catch (error) {
             logger('Error occurred while fetching users given json. Error:', error);
         }

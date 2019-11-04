@@ -116,6 +116,23 @@ class RdsConnection {
         logger('Pool has drained');
     }
 
+    async selectFullQuery (fullQuery) {
+        let results = null;
+        const client = await this._getConnection();
+        try {
+            await client.query('SET SESSION CHARACTERISTICS AS TRANSACTION READ ONLY');
+            const queryResult = await client.query(fullQuery);
+            results = queryResult.rows;
+        } catch (error) {
+            logger('Error in query: ', error);
+            throw new QueryError(fullQuery);
+        } finally {
+            await client.release();
+        }
+
+        return results;
+    }
+
     async selectQuery (query = 'SELECT * FROM TABLE WHERE VALUE = $1', values) {
         if (typeof values === 'undefined') {
             logger('Throwing no values error!');

@@ -14,6 +14,10 @@
     "lint:fix": "eslint . --fix"
   },
   "author": "Bolu Ajibawo",
+  "dependencies": {
+    "config": "^3.1.0",
+    "debug": "^4.1.1"
+  },
   "devDependencies": {
     "chai": "^4.2.0",
     "eslint": "^6.0.1",
@@ -21,8 +25,5 @@
     "mocha": "^6.1.4",
     "nyc": "^14.1.1",
     "sinon": "^7.3.2"
-  },
-  "dependencies": {
-    "debug": "^4.1.1"
   }
 }

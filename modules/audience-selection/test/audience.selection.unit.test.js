@@ -10,7 +10,7 @@ const rootJSON = {
     "table": "transactions"
 };
 
-describe('Audience Selection', () => {
+describe('Audience Selection - SQL Query Construction', () => {
 
     it(`should handle 'is' operator`, async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
@@ -20,7 +20,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where transaction_type='USER_SAVING_EVENT'`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -34,7 +34,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where creation_time>'2019-08-07'`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -48,7 +48,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where creation_time>='2019-08-07'`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -62,7 +62,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where creation_time<'2019-08-07'`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -76,7 +76,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where creation_time<='2019-08-07'`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -93,7 +93,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -109,7 +109,7 @@ describe('Audience Selection', () => {
             }]
         });
         const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -129,7 +129,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -153,7 +153,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or (creation_time='2019-01-27' and responsible_client_id=1))`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -175,7 +175,7 @@ describe('Audience Selection', () => {
             }]
         });
         const expectedQuery = `select account_id from transactions where (((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') and responsible_client_id=1)`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -193,7 +193,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') order by random() limit 50`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -211,7 +211,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select account_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -230,7 +230,7 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select responsible_client_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by responsible_client_id`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
@@ -250,24 +250,24 @@ describe('Audience Selection', () => {
         });
 
         const expectedQuery = `select responsible_client_id, count(account_id), count(owner_user_id) from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by responsible_client_id`;
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedQuery);
     });
 });
 
-// describe('Audience Selection', () => {
+// describe('Audience Selection - fetch users given JSON', () => {
 //
-//     it(`should handle 'is' operator`, async () => {
+//     it(`should handle fetch users given 'client_id'`, async () => {
 //         const mockSelectionJSON = Object.assign({}, rootJSON, {
 //             "conditions": [
-//                 {"op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT"}
+//                 { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" }
 //             ]
 //         });
 //
 //         const expectedQuery = `select account_id from transactions where transaction_type='USER_SAVING_EVENT'`;
-//         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+//         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 //
 //         expect(result).to.exist;
 //         expect(result).to.deep.equal(expectedQuery);
