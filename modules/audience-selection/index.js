@@ -83,7 +83,7 @@ class AudienceSelection {
         }
 
         // columns filter not passed, therefore select all columns
-        return `*`;
+        return `account_id`;
     }
 
     extractTable (selectionJSON) {
