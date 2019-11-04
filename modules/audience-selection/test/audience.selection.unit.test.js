@@ -19,7 +19,7 @@ describe('Audience Selection', () => {
             ]
         });
 
-        const expectedQuery = `select * from transactions where transaction_type='USER_SAVING_EVENT'`;
+        const expectedQuery = `select account_id from transactions where transaction_type='USER_SAVING_EVENT'`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -33,7 +33,7 @@ describe('Audience Selection', () => {
             ]
         });
 
-        const expectedQuery = `select * from transactions where creation_time>'2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time>'2019-08-07'`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -47,7 +47,7 @@ describe('Audience Selection', () => {
             ]
         });
 
-        const expectedQuery = `select * from transactions where creation_time>='2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time>='2019-08-07'`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -61,7 +61,7 @@ describe('Audience Selection', () => {
             ]
         });
 
-        const expectedQuery = `select * from transactions where creation_time<'2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time<'2019-08-07'`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -75,7 +75,7 @@ describe('Audience Selection', () => {
             ]
         });
 
-        const expectedQuery = `select * from transactions where creation_time<='2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time<='2019-08-07'`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -92,7 +92,7 @@ describe('Audience Selection', () => {
             }]
         });
 
-        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
+        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -108,7 +108,7 @@ describe('Audience Selection', () => {
                 ]
             }]
         });
-        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')`;
+        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -128,7 +128,7 @@ describe('Audience Selection', () => {
             }]
         });
 
-        const expectedQuery = `select * from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')`;
+        const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -152,7 +152,7 @@ describe('Audience Selection', () => {
             }]
         });
 
-        const expectedQuery = `select * from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or (creation_time='2019-01-27' and responsible_client_id=1))`;
+        const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or (creation_time='2019-01-27' and responsible_client_id=1))`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -174,7 +174,7 @@ describe('Audience Selection', () => {
                 ]
             }]
         });
-        const expectedQuery = `select * from transactions where (((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') and responsible_client_id=1)`;
+        const expectedQuery = `select account_id from transactions where (((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') and responsible_client_id=1)`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -192,7 +192,7 @@ describe('Audience Selection', () => {
             }]
         });
 
-        const expectedQuery = `select * from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') order by random() limit 50`;
+        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') order by random() limit 50`;
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -256,3 +256,20 @@ describe('Audience Selection', () => {
         expect(result).to.deep.equal(expectedQuery);
     });
 });
+
+// describe('Audience Selection', () => {
+//
+//     it(`should handle 'is' operator`, async () => {
+//         const mockSelectionJSON = Object.assign({}, rootJSON, {
+//             "conditions": [
+//                 {"op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT"}
+//             ]
+//         });
+//
+//         const expectedQuery = `select account_id from transactions where transaction_type='USER_SAVING_EVENT'`;
+//         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+//
+//         expect(result).to.exist;
+//         expect(result).to.deep.equal(expectedQuery);
+//     });
+// });
