@@ -13,11 +13,13 @@ const expect = chai.expect;
 
 const docClientGetStub = sinon.stub();
 const docClientScanStub = sinon.stub();
+const docClientUpdateStub = sinon.stub();
 
 class MockDocClient {
     constructor () {
         this.get = docClientGetStub;
         this.scan = docClientScanStub;
+        this.update = docClientUpdateStub;
     }
 }
 
@@ -53,5 +55,32 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const clientFloatVars = await dynamo.fetchClientFloatVars(testClientId, testFloatId);
         logger('Result of client float listing:', clientFloatVars);
+    });
+
+    it('Updates client float vars', async () => {
+        const testClientId = uuid();
+        const testFloatId = uuid();
+        const testPrincipalVars = {
+            accrualRateAnnualBps: '',
+            bonusPoolShareOfAccrual: '',
+            clientShareOfAccrual: '',
+            prudentialFactor: ''
+        };
+        const testReferralDefaults = { };
+        const testComparatorMap = { };
+
+        const params = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            newPrincipalVars: testPrincipalVars,
+            newReferralDefaults: testReferralDefaults,
+            newComparatorMap: testComparatorMap
+        };
+
+        const expectedResult = { 'float_id': uuid(), 'client_id': uuid() };
+        docClientUpdateStub.returns({ promise: () => ({ Attributes: expectedResult })});
+
+        const updateResult = await dynamo.updateClientFloatVars(params);
+        logger('Result of float variables update:', updateResult);
     });
 });

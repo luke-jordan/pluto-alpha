@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jipiter:admin:rds');
+const logger = require('debug')('jupiter:admin:float-handler');
 const config = require('config');
 const moment = require('moment');
 

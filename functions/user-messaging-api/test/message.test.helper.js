@@ -16,7 +16,7 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     requestContext: {
         authorizer: {
             systemWideUserId,
-            userRole
+            userRole // role?
         }
     }
 });
