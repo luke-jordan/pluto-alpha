@@ -12,6 +12,11 @@ const pvtkey = config.get('ozow.privateKey');
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 
+const stdHeaders = {
+    'Accept': 'application/json',
+    'ApiKey': config.get('ozow.apiKey')
+};
+
 const generateHashCheck = (params) => {
     const hashFeed = (POST_KEY_ORDER.
         filter((key) => params[key]).
@@ -64,10 +69,7 @@ const assembleRequest = (method, endpoint, body) => ({
     method: method,
     uri: endpoint,
     body: body,
-    headers: {
-        'Accept': 'application/json',
-        'ApiKey': config.get('ozow.apiKey')
-    },
+    headers: stdHeaders,
     json: true
 });
 
@@ -162,7 +164,15 @@ module.exports.statusCheck = async (event) => {
             TransactionReference: event.transactionId,
             IsTest: event.isTest ? event.isTest : true
         };
-        const options = assembleRequest('GET', config.get('ozow.endpoints.transactionStatus'), params);
+
+        const options = {
+            method: 'GET',
+            uri: config.get('ozow.endpoints.transactionStatus'),
+            qs: params,
+            headers: stdHeaders,
+            json: true
+        };
+        
         logger('Created status options:', options, 'with headers: ', JSON.stringify(options.headers));
         const paymentStatus = await request(options);
         logger('Recieved payment status:', paymentStatus);
