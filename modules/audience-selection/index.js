@@ -15,7 +15,8 @@ class AudienceSelection {
             'responsible_client_id',
             'account_id',
             'creation_time',
-            'owner_user_id'
+            'owner_user_id',
+            'count(account_id)'
         ];
     }
 
@@ -65,7 +66,9 @@ class AudienceSelection {
     }
     
     extractWhereConditions (selectionJSON) {
-        return selectionJSON.conditions.map((block) => this.whereFilterBuilder(block)).join('');
+        if (selectionJSON.conditions) {
+            return selectionJSON.conditions.map((block) => this.whereFilterBuilder(block)).join('');
+        }
     }
 
     validateAndParseColumns (columns) {
@@ -99,7 +102,13 @@ class AudienceSelection {
     
     extractGroupBy (selectionJSON) {
         if (selectionJSON.groupBy) {
-            return `group by ${this.validateAndParseColumns(selectionJSON.groupBy)}`;
+            return `group by ${this.validateAndParseColumns(selectionJSON.groupBy).join(', ')}`;
+        }
+    }
+
+    extractHavingFilter (selectionJSON) {
+        if (selectionJSON.postConditions) {
+            return 'having ' + selectionJSON.postConditions.map((block) => this.whereFilterBuilder(block)).join('');
         }
     }
 
@@ -116,13 +125,22 @@ class AudienceSelection {
             columnsToFetch,
             table,
             whereFilters,
-            groupByFilters
+            groupByFilters,
+            havingFilters
         } = parsedValues;
 
-        let mainQuery = `select ${columnsToFetch} from ${table} where ${whereFilters}`;
+        let mainQuery = `select ${columnsToFetch} from ${table}`;
+
+        if (whereFilters) {
+            mainQuery = `${mainQuery} where ${whereFilters}`;
+        }
 
         if (groupByFilters) {
             mainQuery = `${mainQuery} ${groupByFilters}`;
+        }
+
+        if (havingFilters) {
+            mainQuery = `${mainQuery} ${havingFilters}`;
         }
 
         if (this.checkRandomSampleExpectation(selectionJSON)) {
@@ -141,17 +159,20 @@ class AudienceSelection {
         const table = this.extractTable(selectionJSON);
         const whereFilters = this.extractWhereConditions(selectionJSON);
         const groupByFilters = this.extractGroupBy(selectionJSON);
+        const havingFilters = this.extractHavingFilter(selectionJSON);
         logger('parsed columns:', columns);
         logger('parsed table:', table);
         logger('where filters:', whereFilters);
         logger('parsed columns to count:', columnsToCount);
         logger('groupBy filters:', groupByFilters);
+        logger('having filters:', havingFilters);
 
         const parsedValues = {
             columnsToFetch,
             table,
             whereFilters,
-            groupByFilters
+            groupByFilters,
+            havingFilters
         };
         const fullQuery = this.constructFullQuery(selectionJSON, parsedValues);
         logger('full sql query:', fullQuery);
