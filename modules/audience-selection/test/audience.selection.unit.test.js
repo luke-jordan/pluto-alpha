@@ -1,13 +1,30 @@
 'use strict';
 
 const chai = require('chai');
-// const sinon = require('sinon');
+const sinon = require('sinon');
+chai.use(require('sinon-chai'));
 const expect = chai.expect;
+const uuid = require('uuid/v4');
+const proxyquire = require('proxyquire').noCallThru();
 
-const audienceSelection = require('../index');
+const selectFullQueryStub = sinon.stub();
+
+class MockRdsConnection {
+    constructor () {
+        this.selectFullQuery = selectFullQueryStub;
+    }
+}
+
+const audienceSelection = proxyquire('../index', {
+    'rds-common': MockRdsConnection
+});
 
 const rootJSON = {
     "table": "transactions"
+};
+
+const resetStubs = () => {
+    selectFullQueryStub.reset();
 };
 
 describe('Audience Selection - SQL Query Construction', () => {
@@ -257,19 +274,28 @@ describe('Audience Selection - SQL Query Construction', () => {
     });
 });
 
-// describe('Audience Selection - fetch users given JSON', () => {
-//
-//     it(`should handle fetch users given 'client_id'`, async () => {
-//         const mockSelectionJSON = Object.assign({}, rootJSON, {
-//             "conditions": [
-//                 { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" }
-//             ]
-//         });
-//
-//         const expectedQuery = `select account_id from transactions where transaction_type='USER_SAVING_EVENT'`;
-//         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-//
-//         expect(result).to.exist;
-//         expect(result).to.deep.equal(expectedQuery);
-//     });
-// });
+describe('Audience Selection - fetch users given JSON', () => {
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it(`should handle fetch users given 'client_id'`, async () => {
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            "conditions": [
+                { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
+            ]
+        });
+        const mockAccountId = uuid();
+
+        const expectedQuery = `select account_id from transactions where responsible_client_id=1`;
+        const expectedResult = [{ 'account_id': mockAccountId }];
+        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedResult);
+
+        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(selectFullQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
+    });
+});
