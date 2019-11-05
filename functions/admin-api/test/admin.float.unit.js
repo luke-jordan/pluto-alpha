@@ -45,27 +45,22 @@ const handler = proxyquire('../admin-float-handler', {
         'fetchClientFloatVars': fetchClientFloatVarsStub,
         'updateClientFloatVars': updateClientFloatVarsStub
     },
-    // 'moment': momentStub,
     'aws-sdk': {
         'Lambda': MockLambdaClient  
     }
 });
 
-describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
+describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
     const testUserId = uuid();
     const testClientId = uuid();
     const testFloatId = uuid();
+    const testLogId = uuid();
 
     const testTime = moment();
-    const testTimeZone = '';
+    const testTimeZone = 'America/New_York';
     const testCurrency = 'USD';
-
-    const mockLambdaResponse = (body, statusCode = 200) => ({
-        Payload: JSON.stringify({
-            statusCode,
-            body: JSON.stringify(body)
-        })
-    });
+    const testClientName = '';
+    const testFloatName = '';
 
     beforeEach(() => {
         helper.resetStubs(getFloatBalanceStub, getFloatBonusBalanceStub, getFloatAlertsStub, insertFloatLogStub,
@@ -79,7 +74,7 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
             clientId: testClientId,
             timezone: testTimeZone,
             countryCode: 'USA',
-            clientName: ''
+            clientName: testClientName
         }];
 
         const testFloatIds = [{
@@ -87,8 +82,27 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
             floatId: testFloatId,
             defaultTimezone: testTimeZone,
             currency: testCurrency,
-            floatName: ''
+            floatName: testFloatName
         }];
+
+        const expectedResult = {
+            [testClientId]: {
+                timeZone: testTimeZone,
+                countryCode: 'USA',
+                clientName: testClientName,
+                floats: [{
+                    floatId: testFloatId,
+                    floatName: testFloatName,
+                    floatTimeZone: testTimeZone,
+                    floatBalance: { amount: 100, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
+                    floatMonthGrowth: { amount: 200, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
+                    bonusPoolBalance: { amount: 500, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
+                    bonusOutflow: { amount: 510, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
+                    bonusInflowSum: { amount: 462, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
+                    bonusPoolIds: [ testFloatId ]
+                }]
+            }
+        };
 
         momentStub.returns({
             startOf: () => testTime
@@ -114,6 +128,17 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
         const resultOfListing = await handler.listClientsAndFloats(testEvent);
         logger('Result of listing', resultOfListing);
 
+        expect(resultOfListing).to.exist;
+        expect(resultOfListing).to.have.property('statusCode', 200);
+        expect(resultOfListing.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfListing.body).to.deep.equal(JSON.stringify(expectedResult));
+        expect(listCountriesClientsStub).to.have.been.calledOnceWithExactly();
+        expect(listClientFloatsStub).to.have.been.calledOnceWithExactly();
+        expect(getFloatBalanceStub).to.have.been.calledWith([testFloatId]);
+        expect(getFloatBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any);
+        expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId]);
+        expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any, sinon.match.any, -1);
+        expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any, sinon.match.any, 1);
     });
 
     it('Client-Float listing fails on unauthorized access', async () => {
@@ -127,19 +152,50 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
         };
 
         const resultOfListing = await handler.listClientsAndFloats(testEvent);
-        logger('Result of listing', resultOfListing);
+        logger('Result of unauthorized listing', resultOfListing);
+
+        expect(resultOfListing).to.exist;
+        expect(resultOfListing).to.have.property('statusCode', 403);
+        expect(resultOfListing.headers).to.deep.equal(helper.expectedHeaders);
+        expect(listCountriesClientsStub).to.have.not.been.called;
+        expect(listClientFloatsStub).to.have.not.been.called;
+        expect(getFloatBalanceStub).to.have.not.been.called;
+        expect(getFloatBonusBalanceStub).to.have.not.been.called;
     });
 
     it('Fetches client float details', async () => {
+        const testUpdateTime = moment().format();
         fetchClientFloatVarsStub.resolves({ currency: testCurrency });
         getFloatBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' }}]]));
-        getFloatAlertsStub.resolves([{ logType: 'BALANCE_UNOBTAINABLE', logId: uuid(), logContext: { resolved: true }}])
+        getFloatAlertsStub.resolves([{ logType: 'BALANCE_UNOBTAINABLE', logId: testLogId, logContext: { resolved: true }, updatedTime: testUpdateTime }])
 
-        const testRequestBody = { floatId: testFloatId };
+        const testRequestBody = { clientId: testClientId, floatId: testFloatId };
         const testEvent = helper.wrapQueryParamEvent(testRequestBody, testUserId, 'SYSTEM_ADMIN', 'GET');
+
+        const expectedResult = {
+            currency: testCurrency,
+            floatBalance: { amount: 100, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
+            floatAlerts: [{
+                logId: testLogId,
+                logType: 'BALANCE_UNOBTAINABLE',
+                updatedTimeMillis: moment(testUpdateTime).valueOf(),
+                logDescription: 'System error: something is wrong, the current balance cannot be retrieved',
+                logContext: { resolved: true },
+                isResolved: true,
+                isRedFlag: false
+            }]
+        };
 
         const result = await handler.fetchClientFloatDetails(testEvent);
         logger('Result client float details extraction:', result);
+
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 200);
+        expect(result.headers).to.deep.equal(helper.expectedHeaders);
+        expect(result.body).to.deep.equal(JSON.stringify(expectedResult));
+        expect(fetchClientFloatVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        expect(getFloatBalanceStub).to.have.been.calledOnceWithExactly([testFloatId]);
+        expect(getFloatAlertsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
     });
 
     it('Client float details extraction fails on unauthorized access', async () => {
@@ -147,16 +203,19 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
         const testEvent = helper.wrapQueryParamEvent(testRequestBody, testUserId, 'ORDINARY_USER', 'GET');
 
         const result = await handler.fetchClientFloatDetails(testEvent);
-        logger('Result client float details extraction:', result);;
+        logger('Result client float details extraction:', result);
+
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 403);
+        expect(result.headers).to.deep.equal(helper.expectedHeaders);
+        expect(fetchClientFloatVarsStub).to.have.not.been.called;
+        expect(getFloatBalanceStub).to.have.not.been.called;
+        expect(getFloatAlertsStub).to.have.not.been.called;
     });
 
-    ///////////////////////////////////////////////////////////
-    ////////////////// adjustClientFloat() ////////////////////
-    ///////////////////////////////////////////////////////////
+    const testResolutionNote = 'Just because.';
 
     it('Resolves client float alert', async () => {
-        const testLogId = uuid();
-        const testResolutionNote = 'Just because.';
 
         const testLogContext = {
             resolved: true,
@@ -189,11 +248,15 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const resultOfAdjustment = await handler.adjustClientFloat(testEvent);
         logger('Update result', resultOfAdjustment);
+
+        expect(resultOfAdjustment).to.exist;
+        expect(resultOfAdjustment).to.have.property('statusCode', 200);
+        expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
+        expect(updateFloatLogStub).to.have.been.calledOnceWithExactly({ logId: testLogId, contextToUpdate: testLogContext});
     });
 
     it('Reopens client float alert', async () => {
-        const testLogId = uuid();
-        const testResolutionNote = 'Just because.';
 
         const testLogContext = {
             resolved: false,
@@ -226,13 +289,17 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const resultOfAdjustment = await handler.adjustClientFloat(testEvent);
         logger('Update result', resultOfAdjustment);
+
+        expect(resultOfAdjustment).to.exist;
+        expect(resultOfAdjustment).to.have.property('statusCode', 200);
+        expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
+        expect(updateFloatLogStub).to.have.been.calledOnceWithExactly({ logId: testLogId, contextToUpdate: testLogContext});
     });
 
     it('Adjusts accrual vars', async () => {
-        const testLogId = uuid();
-        const testResolutionNote = 'Just because.';
 
-        const expectedFloatVars = {
+        const existingFloatVars = {
             currency: testCurrency,
             accrualRateAnnualBps: '',
             bonusPoolShareOfAccrual: '',
@@ -240,9 +307,36 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
             prudentialFactor: ''
         };
 
-        fetchClientFloatVarsStub.resolves(expectedFloatVars);
-        updateClientFloatVarsStub.resolves({ result: 'SUCCESS' });
-        insertFloatLogStub.resolves(testLogId);
+        const updateFloatVarsArgs = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            newPrincipalVars: {
+                accrualRateAnnualBps: '',
+                bonusPoolShareOfAccrual: '',
+                clientShareOfAccrual: '',
+                prudentialFactor: ''
+            }
+        };
+
+        const floatLogInsertArgs = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            logType: 'PARAMETERS_UPDATED',
+            logContext: {
+                logReason: testResolutionNote,
+                priorState: {
+                    accrualRateAnnualBps: existingFloatVars.accrualRateAnnualBps,
+                    bonusPoolShareOfAccrual: existingFloatVars.bonusPoolShareOfAccrual,
+                    clientShareOfAccrual: existingFloatVars.clientShareOfAccrual,
+                    prudentialFactor: existingFloatVars.prudentialFactor
+                },
+                newState: updateFloatVarsArgs.newPrincipalVars
+            }
+        };
+
+        fetchClientFloatVarsStub.withArgs(testClientId, testFloatId).resolves(existingFloatVars);
+        updateClientFloatVarsStub.withArgs(updateFloatVarsArgs).resolves({ result: 'SUCCESS' });
+        insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);
 
         const testEvent = {
             requestContext: {
@@ -257,11 +351,7 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
                 floatId: testFloatId,
                 logId: testLogId,
                 reasonToLog: testResolutionNote,
-                amountToProcess: {
-                    currency: testCurrency,
-                    amount: 100,
-                    unit: 'HUNDREDTH_CENT'
-                },
+                amountToProcess: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' },
                 newAccrualVars: {
                     accrualRateAnnualBps: '',
                     bonusPoolShareOfAccrual: '',
@@ -273,57 +363,107 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const resultOfAdjustment = await handler.adjustClientFloat(testEvent);
         logger('Update result', resultOfAdjustment);
+
+        expect(resultOfAdjustment).to.exist;
+        expect(resultOfAdjustment).to.have.property('statusCode', 200);
+        expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
+        expect(fetchClientFloatVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        expect(updateClientFloatVarsStub).to.have.been.calledOnceWithExactly(updateFloatVarsArgs);
+        expect(insertFloatLogStub).to.have.been.calledOnceWithExactly(floatLogInsertArgs);
     });
 
     it('Allocates funds', async () => {
-        const testLogId = uuid();
-        const testResolutionNote = 'Just because.';
 
-        insertFloatLogStub.resolves(testLogId);        
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})});
+        const floatLogInsertArgs = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            logType: 'ADMIN_ALLOCATE_FUNDS',
+            logContext: {
+                adminUserId: testUserId,
+                amountAllocated: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' },
+                logReason: testResolutionNote
+            }
+        };
+
+        const lambdaPayload = {
+            instructions: [{
+                floatId: testFloatId,
+                clientId: testClientId,
+                currency: testCurrency,
+                unit: 'HUNDREDTH_CENT',
+                amount: 100,
+                identifier: testLogId,
+                relatedEntityType: 'ADMIN_INSTRUCTION',
+                recipients: [{ recipientId: testUserId, amount: 100, recipientType: '' }]
+            }]
+        };
+
+        insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
+            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})
+        });
 
         const testEvent = {
-            requestContext: {
-                authorizer: {
-                    role: 'SYSTEM_ADMIN',
-                    systemWideUserId: testUserId
-                }
-            },
+            requestContext: { authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }},
             body: JSON.stringify({
                 operation: 'ALLOCATE_FUNDS',
-                allocateTo: {
-                    id: testUserId,
-                    type: ''
-                },
+                allocateTo: { id: testUserId, type: '' },
                 clientId: testClientId,
                 floatId: testFloatId,
                 logId: testLogId,
                 reasonToLog: testResolutionNote,
-                amountToProcess: {
-                    currency: testCurrency,
-                    amount: 100,
-                    unit: 'HUNDREDTH_CENT'
-                }
+                amountToProcess: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' }
             })
         };
 
-        const resultOfAdjustment = await handler.adjustClientFloat(testEvent);
-        logger('Update result', resultOfAdjustment);
+        const resultOfAllocation = await handler.adjustClientFloat(testEvent);
+        logger('Update result', resultOfAllocation);
+
+        expect(resultOfAllocation).to.exist;
+        expect(resultOfAllocation).to.have.property('statusCode', 200);
+        expect(resultOfAllocation.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfAllocation.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
+        expect(insertFloatLogStub).to.have.been.calledOnceWithExactly(floatLogInsertArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload));
     });
 
     it('Adds or subtract funds', async () => {
-        const testLogId = uuid();
-        const testResolutionNote = 'Just because.';
 
-        insertFloatLogStub.resolves(testLogId);        
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})});
+        const floatLogInsertArgs = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            logType: 'BALANCE_UPDATED_MANUALLY',
+            logContext: {
+                adminUserId: testUserId,
+                amountAdjusted: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' },
+                logReason: testResolutionNote
+            }
+        };
+
+        const lambdaPayload = {
+            instructions: [{
+                identifier: testLogId,
+                floatId: testFloatId,
+                clientId: testClientId,
+                currency: testCurrency,
+                unit: 'HUNDREDTH_CENT',
+                amount: 100,
+                transactionType: 'ADMIN_BALANCE_RECON',
+                logType: 'ADMIN_BALANCE_RECON',
+                relatedEntityType: 'ADMIN_INSTRUCTION',
+                recipients: [{ recipientId: testFloatId, amount: 100, recipientType: 'FLOAT_ITSELF'}]
+            }]
+        };
+
+        insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
+            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})
+        });       
 
         const testEvent = {
             requestContext: {
-                authorizer: {
-                    role: 'SYSTEM_ADMIN',
-                    systemWideUserId: testUserId
-                }
+                authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }
             },
             body: JSON.stringify({
                 operation: 'ADD_SUBTRACT_FUNDS',
@@ -331,31 +471,55 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
                 floatId: testFloatId,
                 logId: testLogId,
                 reasonToLog: testResolutionNote,
-                amountToProcess: {
-                    currency: testCurrency,
-                    amount: 100,
-                    unit: 'HUNDREDTH_CENT'
-                }
+                amountToProcess: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' }
             })
         };
 
         const resultOfAdjustment = await handler.adjustClientFloat(testEvent);
         logger('Update result', resultOfAdjustment);
+
+        expect(resultOfAdjustment).to.exist;
+        expect(resultOfAdjustment).to.have.property('statusCode', 200);
+        expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
+        expect(insertFloatLogStub).to.have.been.calledOnceWithExactly(floatLogInsertArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload));
     });
 
     it('Distributes float to users', async () => {
-        const testLogId = uuid();
-        const testResolutionNote = 'Just because.';
 
-        insertFloatLogStub.resolves(testLogId);        
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})});
+        const floatLogInsertArgs = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            logType: 'ADMIN_DISTRIBUTE_USERS',
+            logContext: {
+                adminUserId: testUserId,
+                amountDistributed: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' },
+                logReason: testResolutionNote
+            }
+        };
+
+        const lambdaPayload = {
+            instructions: [{
+                floatId: testFloatId,
+                clientId: testClientId,
+                currency: testCurrency,
+                amount: 100,
+                unit: 'HUNDREDTH_CENT',
+                identifier: testLogId,
+                relatedEntityType: 'ADMIN_INSTRUCTION',
+                recipients: [{'recipientType':'ALL_USERS','amount':100 }]
+            }]
+        };
+
+        insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
+            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})
+        });
 
         const testEvent = {
             requestContext: {
-                authorizer: {
-                    role: 'SYSTEM_ADMIN',
-                    systemWideUserId: testUserId
-                }
+                authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }
             },
             body: JSON.stringify({
                 operation: 'DISTRIBUTE_TO_USERS',
@@ -363,28 +527,26 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
                 floatId: testFloatId,
                 logId: testLogId,
                 reasonToLog: testResolutionNote,
-                amountToProcess: {
-                    currency: testCurrency,
-                    amount: 100,
-                    unit: 'HUNDREDTH_CENT'
-                }
+                amountToProcess: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' }
             })
         };
 
         const resultOfAdjustment = await handler.adjustClientFloat(testEvent);
         logger('Update result', resultOfAdjustment);
+
+        expect(resultOfAdjustment).to.exist;
+        expect(resultOfAdjustment).to.have.property('statusCode', 200);
+        expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
+        expect(insertFloatLogStub).to.have.been.calledOnceWithExactly(floatLogInsertArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload));
     });
 
     it('Cathces thrown errors', async () => {
-        const testLogId = uuid();
-        const testResolutionNote = 'Just because.';
 
         const testEvent = {
             requestContext: {
-                authorizer: {
-                    role: 'SYSTEM_ADMIN',
-                    systemWideUserId: testUserId
-                }
+                authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }
             },
             body: JSON.stringify({
                 operation: 'DO_SOMETHING_UNKNOWN',
@@ -392,15 +554,18 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
                 floatId: testFloatId,
                 logId: testLogId,
                 reasonToLog: testResolutionNote,
-                amountToProcess: {
-                    currency: testCurrency,
-                    amount: 100,
-                    unit: 'HUNDREDTH_CENT'
-                }
+                amountToProcess: { currency: testCurrency, amount: 100, unit: 'HUNDREDTH_CENT' }
             })
         };
 
         const resultOfAdjustment = await handler.adjustClientFloat(testEvent);
         logger('Update result', resultOfAdjustment);
+
+        expect(resultOfAdjustment).to.exist;
+        expect(resultOfAdjustment).to.have.property('statusCode', 500);
+        expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
+        expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify('Missing or unknown operation: '));
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(insertFloatLogStub).to.have.not.been.called;
     });
 });

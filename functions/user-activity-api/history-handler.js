@@ -14,6 +14,12 @@ AWS.config.update({ region: config.get('aws.region') });
 
 const lambda = new AWS.Lambda();
 
+const UNIT_DIVISORS = {
+    'HUNDREDTH_CENT': 100 * 100,
+    'WHOLE_CENT': 100,
+    'WHOLE_CURRENCY': 1 
+};
+
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
 
 const fetchUserDefaultAccount = async (systemWideUserId) => {
@@ -55,6 +61,34 @@ const obtainUserHistory = async (systemWideUserId) => {
     return JSON.parse(historyFetchResult['Payload']).userEvents;
 };
 
+const formatAmountResult = (amountResult) => {
+    logger('Formatting amount result: ', amountResult);
+    const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
+
+    // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
+    // implement for those countries where client opcos have launched
+    if (amountResult.currency === 'ZAR') {
+        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+        return `R${emFormat.format(wholeCurrencyAmount)}`;
+    }
+
+    const numberFormat = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: amountResult.currency,
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0
+    });
+    
+    return numberFormat.format(wholeCurrencyAmount);
+};
+
+const fetchAccountInterest = async (systemWideUserId, currency, sinceTimeMillis) => {
+    const operation = `interest::WHOLE_CENT::${currency}::${sinceTimeMillis}`;
+    const amountResult = await persistence.getUserAccountFigure({ systemWideUserId, operation });
+    logger('Retrieved from persistence: ', amountResult);
+    return formatAmountResult(amountResult);
+};
+
 const obtainUserBalance = async (userProfile) => {
     const balancePayload = {
         userId: userProfile.systemWideUserId,
@@ -71,6 +105,43 @@ const obtainUserBalance = async (userProfile) => {
     return extractLambdaBody(userBalanceResult);
 };
 
+const normalizeHistory = (events) => {
+    const result = [];
+    events.forEach((event) => {
+        result.push({
+            timestamp: event.timestamp,
+            type: 'HISTORY',
+            details: {
+                initiator: event.initiator,
+                context: event.context,
+                interface: event.interface,
+                eventType: event.eventType
+            }
+        });
+    });
+    return result;
+};
+
+const normalizeTx = (events) => {
+    const result = [];
+    events.forEach((event) => {
+        result.push({
+            timestamp: moment(event.creationTime).valueOf(),
+            type: 'TRANSACTION',
+            details: {
+                accountId: event.accountId,
+                transactionType: event.transactionType,
+                settlementStatus: event.settlementStatus,
+                amount: event.amount,
+                currency: event.currency,
+                unit: event.unit,
+                humanReference: event.humanReference
+            }
+        })
+    });
+    return result;
+};
+
 /**
  * Fetches user history which includes current balance, current months interest, prior transactions, and past major user events.
  * @param {object} event An event object containing the request context and query paramaters specifying the search to make
@@ -84,6 +155,10 @@ module.exports.fetchUserHistory = async (event) => {
         }
 
         const lookUpPayload = opsCommonUtil.extractQueryParams(event);
+        if (lookUpPayload.dryRun && lookUpPayload.dryRun === true) {
+            return opsCommonUtil.wrapResponse(util.dryRunResponse); // for stability during mobile development, in the event of query syntax errors, though unlikely
+        };
+
         const lookUpInvoke = util.invokeLambda(config.get('lambdas.systemWideIdLookup'), lookUpPayload);
 
         logger('Invoking system wide user ID lookup with params: ', lookUpInvoke);
@@ -102,14 +177,14 @@ module.exports.fetchUserHistory = async (event) => {
         ]);
 
         const userBalance = await obtainUserBalance(userProfile);
-        const accruedInterest = { }; // implement
+        const accruedInterest = await fetchAccountInterest(systemWideUserId, userProfile.defaultCurrency, moment().startOf('month').valueOf());
+
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
-
         const priorTransactions = await persistence.fetchPriorTransactions(accountId);
         logger('Got prior transactions:', priorTransactions);
 
-        const userHistory = [...util.normalize(priorEvents.userEvents, 'HISTORY'), ...util.normalize(priorTransactions, 'TRANSACTION')];
+        const userHistory = [ ...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
         logger('Created formatted array:', userHistory);
 
         const resultObject = { 

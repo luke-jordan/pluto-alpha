@@ -57,7 +57,7 @@ module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
 module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
     FunctionName: functionName,
     InvocationType: async ? 'Event' : 'RequestResponse',
-    Payload: stringify(payload)
+    Payload: JSON.stringify(payload)
 });
 
 module.exports.mockLambdaResponse = (body, statusCode = 200) => ({

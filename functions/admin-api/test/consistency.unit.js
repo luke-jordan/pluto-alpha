@@ -36,11 +36,11 @@ describe('*** UNIT TEST ADMIN FLOAT CONSISTENCY ***', () => {
         const testClientId = uuid();
         const testFloatBalanceMap = new Map([[testFloatId, { currency: { amount: 100, unit: 'HUNDREDTH_CENT' } }]]);
 
-        getFloatBalanceAndFlowsStub.resolves(testFloatBalanceMap);
-        getFloatAllocatedTotalStub.resolves({
+        getFloatBalanceAndFlowsStub.withArgs([testFloatId]).resolves(testFloatBalanceMap);
+        getFloatAllocatedTotalStub.withArgs(testClientId, testFloatId).resolves({
             currency: { amount: 100, unit: 'HUNDREDTH_CENT' }
         });
-        getUserAllocationsStub.resolves({
+        getUserAllocationsStub.withArgs(testClientId, testFloatId).resolves({
             floatAccountTotal: {
                 currency: { amount: 100, unit: 'HUNDREDTH_CENT' }
             },
@@ -49,35 +49,67 @@ describe('*** UNIT TEST ADMIN FLOAT CONSISTENCY ***', () => {
             }
         });
         insertFloatLogStub.resolves();
-        listClientFloatsStub.resolves([
+        listClientFloatsStub.withArgs().resolves([
             { clientId: testClientId, floatId: testFloatId },
             { clientId: testClientId, floatId: testFloatId },
             { clientId: testClientId, floatId: testFloatId }
         ]);
 
+        const expectedResult = { result: 'NO_ANOMALIES' };
+
         const result = await handler.checkAllFloats();
         logger('Result of anomaly checks', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal([ expectedResult, expectedResult, expectedResult ]);
+        expect(getFloatBalanceAndFlowsStub).to.have.been.calledWith([testFloatId]);
+        expect(getFloatAllocatedTotalStub).to.have.been.calledWith(testClientId, testFloatId);
+        expect(getUserAllocationsStub).to.have.been.calledWith(testClientId, testFloatId);
+        expect(insertFloatLogStub).to.have.not.been.called;
+        expect(listClientFloatsStub).to.have.been.calledOnceWithExactly();
     });
 
     it('Catches anomalies', async () => {
         const testFloatId = uuid();
         const testClientId = uuid();
-        const testFloatBalanceMap = new Map([[testFloatId, { currency: { amount: 100, unit: 'HUNDREDTH_CENT' } }]]);
+        const testCurrency = 'USD';
 
-        getFloatBalanceAndFlowsStub.resolves(testFloatBalanceMap);
-        getFloatAllocatedTotalStub.resolves({
-            currency: { amount: 100, unit: 'HUNDREDTH_CENT' }
+        const testAnomaly = {
+            mismatch: -1,
+            floatAccountsTotal: 100,
+            accountsTxTotal: 101,
+            currency: testCurrency,
+            unit: 'HUNDREDTH_CENT'
+        };
+
+        const expectedResult = {
+            result: 'ANOMALIES_FOUND',
+            anomalies: { BALANCE_MISMATCH: [ null ], ALLOCATION_TOTAL_MISMATCH: [ testAnomaly ] }
+        };
+
+        const anomalyLogEntry = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            logType: 'ALLOCATION_TOTAL_MISMATCH',
+            logContext: testAnomaly
+        };
+
+        const testFloatBalanceMap = new Map([[testFloatId, { [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' } }]]);
+
+        getFloatBalanceAndFlowsStub.withArgs([testFloatId]).resolves(testFloatBalanceMap);
+        getFloatAllocatedTotalStub.withArgs(testClientId, testFloatId).resolves({
+            [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' }
         });
-        getUserAllocationsStub.resolves({
+        getUserAllocationsStub.withArgs(testClientId, testFloatId).resolves({
             floatAccountTotal: {
-                currency: { amount: 100, unit: 'HUNDREDTH_CENT' }
+                [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' }
             },
             accountTxTotal: {
-                currency: { amount: 101, unit: 'HUNDREDTH_CENT' }                
+                [testCurrency]: { amount: 101, unit: 'HUNDREDTH_CENT' }                
             }
         });
-        insertFloatLogStub.resolves({ result: 'SUCCESS' });
-        listClientFloatsStub.resolves([
+        insertFloatLogStub.withArgs(anomalyLogEntry).resolves({ result: 'SUCCESS' });
+        listClientFloatsStub.withArgs().resolves([
             { clientId: testClientId, floatId: testFloatId },
             { clientId: testClientId, floatId: testFloatId },
             { clientId: testClientId, floatId: testFloatId }
@@ -85,5 +117,13 @@ describe('*** UNIT TEST ADMIN FLOAT CONSISTENCY ***', () => {
 
         const result = await handler.checkAllFloats();
         logger('Result of anomaly checks', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal([ expectedResult, expectedResult, expectedResult]);
+        expect(getFloatBalanceAndFlowsStub).to.have.been.calledWith([testFloatId]);
+        expect(getFloatAllocatedTotalStub).to.have.been.calledWith(testClientId, testFloatId);
+        expect(getUserAllocationsStub).to.have.been.calledWith(testClientId, testFloatId);
+        expect(insertFloatLogStub).to.have.been.calledWith(anomalyLogEntry);
+        expect(listClientFloatsStub).to.have.been.calledWith();
     });
 });

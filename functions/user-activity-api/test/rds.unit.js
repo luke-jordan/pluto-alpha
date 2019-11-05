@@ -700,3 +700,30 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
     });
 
 });
+
+describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
+
+    const testUserId = uuid();
+
+    it('Retrieves and sums user interest correctly', async () => {
+        const expectedInterestQuery = `select sum(amount), unit from ${config.get('tables.accountTransactions')} where owner_user_id = $1 and ` +
+            `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
+        const expectedTxTypes = [`'ACCRUAL'`, `'CAPITALIZATION'`];
+        const expectedValues = [testUserId, 'USD', 'SETTLED', expectedTxTypes.join(','), moment(0).format()];
+
+        queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
+        const resultOfInterest = await rds.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CURRENCY::USD::0'});
+        logger('Result of interest calc: ', resultOfInterest);
+        logger('args    :', queryStub.getCall(0).args);
+        logger('expected:', [expectedInterestQuery, expectedValues]);
+
+        expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
+        expect(queryStub).to.have.been.calledWith(expectedInterestQuery, expectedValues);
+    });
+
+    it('Gracefully handles unknown parameter', async () => {
+        const resultOfBadQuery = await rds.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
+        logger('Result of bad query: ', resultOfBadQuery);
+        expect(resultOfBadQuery).to.be.null;
+    });
+})

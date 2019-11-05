@@ -364,7 +364,7 @@ module.exports.adjustClientFloat = async (event) => {
     }
 
     try {
-        const adminUserId = event.requestContext.systemWideUserId;
+        const adminUserId = event.requestContext.authorizer.systemWideUserId;
 
         const params = adminUtil.extractEventBody(event);
         logger('Extract params for float adjustment: ', params);

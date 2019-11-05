@@ -11,6 +11,8 @@ const chai = require('chai');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
+const helper = require('./test.helper');
+
 const momentStub = sinon.stub();
 const pendingTxStub = sinon.stub();
 const countUsersStub = sinon.stub();
@@ -39,19 +41,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     const testPhone = '27820234324';
     const testNationalId = '03122893249435034';
     const testTime = moment();
-
-    const wrapLambdaInvoc = (functionName, async, payload) => ({
-        FunctionName: functionName,
-        InvocationType: async ? 'Event' : 'RequestResponse',
-        Payload: JSON.stringify(payload)
-    });
-    
-    const mockLambdaResponse = (body, statusCode = 200) => ({
-        Payload: JSON.stringify({
-            statusCode,
-            body: JSON.stringify(body)
-        })
-    });
 
     const expectedTxResponse = {
         transactionId: uuid(),
@@ -155,23 +144,30 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             subtract: () => testTime
         });        
 
-        lamdbaInvokeStub.withArgs(wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId })).returns({ 
-            promise: () => mockLambdaResponse({ systemWideUserId: testUserId })
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId })).returns({ 
+            promise: () => helper.mockLambdaResponse({ systemWideUserId: testUserId })
         });
 
-        lamdbaInvokeStub.withArgs(wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
-            promise: () => mockLambdaResponse(expectedProfile)
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
+            promise: () => helper.mockLambdaResponse(expectedProfile)
         });
 
-        lamdbaInvokeStub.withArgs(wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({
             promise: () => expectedHistory
         });
 
-        lamdbaInvokeStub.withArgs(wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
-            promise: () => mockLambdaResponse(expectedBalance)
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
+            promise: () => helper.mockLambdaResponse(expectedBalance)
         });
 
-        pendingTxStub.withArgs(testUserId, sinon.match.any).resolves(expectedTxResponse)
+        pendingTxStub.withArgs(testUserId, sinon.match.any).resolves(expectedTxResponse);
+
+        const expectedResult = {
+            ...expectedProfile,
+            userBalance: expectedBalance,
+            pendingTransactions: expectedTxResponse,
+            userHistory: JSON.parse(expectedHistory.Payload).userEvents
+        };
 
         const testEvent = {
             requestContext: {
@@ -188,11 +184,22 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         const result = await handler.lookUpUser(testEvent);
         logger('Result of user look up:', result);
+
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 200);
+        expect(result.headers).to.deep.equal(helper.expectedHeaders);
+        expect(result.body).to.deep.equal(JSON.stringify(expectedResult));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(pendingTxStub).to.have.been.calledWith(testUserId, sinon.match.any);
     });
 });
 
 
 describe('*** UNIT TEST USER COUNT ***', () => {
+    
     const testUserId = uuid();
 
     const adminHandler = proxyquire('../admin-user-handler', {
@@ -206,7 +213,9 @@ describe('*** UNIT TEST USER COUNT ***', () => {
     });
 
     it('Fetches user count', async () => {
-        countUsersStub.resolves(5000000);
+        const testUserCount = Math.trunc(Math.floor(Math.random() * (10000000 - 9000000) + 9000000));
+
+        countUsersStub.resolves(testUserCount);
 
         const testEvent = {
             requestContext: {
@@ -223,6 +232,12 @@ describe('*** UNIT TEST USER COUNT ***', () => {
 
         const userCount = await adminHandler.fetchUserCounts(testEvent);
         logger('Result of user count:', userCount);
+
+        expect(userCount).to.exist;
+        expect(userCount).to.have.property('statusCode', 200);
+        expect(userCount.headers).to.deep.equal(helper.expectedHeaders);
+        expect(userCount.body).to.deep.equal(JSON.stringify({ userCount: testUserCount }));
+        expect(countUsersStub).to.have.been.calledOnce;
     });
     
-})
+});
