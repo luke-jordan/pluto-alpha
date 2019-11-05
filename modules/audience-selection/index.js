@@ -32,7 +32,7 @@ class AudienceSelection {
         return `${unit.prop}${operatorTranslated}'${unit.value}'`;
     }
 
-    whereFilterBuilder (unit) {
+    conditionsFilterBuilder (unit) {
         // base cases
         if (unit.op === 'is') {
             return this.baseCaseQueryBuilder(unit, '=');
@@ -57,17 +57,17 @@ class AudienceSelection {
         // end of base cases
 
         if (unit.op === 'and' && unit.children) {
-            return '(' + unit.children.map((innerUnit) => this.whereFilterBuilder(innerUnit)).join(' and ') + ')';
+            return '(' + unit.children.map((innerUnit) => this.conditionsFilterBuilder(innerUnit)).join(' and ') + ')';
         }
 
         if (unit.op === 'or' && unit.children) {
-            return '(' + unit.children.map((innerUnit) => this.whereFilterBuilder(innerUnit)).join(' or ') + ')';
+            return '(' + unit.children.map((innerUnit) => this.conditionsFilterBuilder(innerUnit)).join(' or ') + ')';
         }
     }
     
     extractWhereConditions (selectionJSON) {
         if (selectionJSON.conditions) {
-            return selectionJSON.conditions.map((block) => this.whereFilterBuilder(block)).join('');
+            return selectionJSON.conditions.map((block) => this.conditionsFilterBuilder(block)).join('');
         }
     }
 
@@ -88,7 +88,7 @@ class AudienceSelection {
             return this.validateAndParseColumns(selectionJSON.columns).join(', ');
         }
 
-        // columns filter not passed, therefore select all columns
+        // columns filter not passed, therefore select only `account_id`
         return `account_id`;
     }
 
@@ -102,13 +102,13 @@ class AudienceSelection {
     
     extractGroupBy (selectionJSON) {
         if (selectionJSON.groupBy) {
-            return `group by ${this.validateAndParseColumns(selectionJSON.groupBy).join(', ')}`;
+            return this.validateAndParseColumns(selectionJSON.groupBy).join(', ');
         }
     }
 
     extractHavingFilter (selectionJSON) {
         if (selectionJSON.postConditions) {
-            return 'having ' + selectionJSON.postConditions.map((block) => this.whereFilterBuilder(block)).join('');
+            return selectionJSON.postConditions.map((block) => this.conditionsFilterBuilder(block)).join('');
         }
     }
 
@@ -122,12 +122,15 @@ class AudienceSelection {
 
     constructFullQuery (selectionJSON, parsedValues) {
         const {
-            columnsToFetch,
+            columns,
+            columnsToCount,
             table,
             whereFilters,
             groupByFilters,
             havingFilters
         } = parsedValues;
+
+        const columnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
 
         let mainQuery = `select ${columnsToFetch} from ${table}`;
 
@@ -136,11 +139,11 @@ class AudienceSelection {
         }
 
         if (groupByFilters) {
-            mainQuery = `${mainQuery} ${groupByFilters}`;
+            mainQuery = `${mainQuery} group by ${groupByFilters}`;
         }
 
         if (havingFilters) {
-            mainQuery = `${mainQuery} ${havingFilters}`;
+            mainQuery = `${mainQuery} having ${havingFilters}`;
         }
 
         if (this.checkRandomSampleExpectation(selectionJSON)) {
@@ -155,7 +158,6 @@ class AudienceSelection {
 
         const columns = this.extractColumns(selectionJSON);
         const columnsToCount = this.extractColumnsToCount(selectionJSON);
-        const columnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
         const table = this.extractTable(selectionJSON);
         const whereFilters = this.extractWhereConditions(selectionJSON);
         const groupByFilters = this.extractGroupBy(selectionJSON);
@@ -168,7 +170,8 @@ class AudienceSelection {
         logger('having filters:', havingFilters);
 
         const parsedValues = {
-            columnsToFetch,
+            columns,
+            columnsToCount,
             table,
             whereFilters,
             groupByFilters,
