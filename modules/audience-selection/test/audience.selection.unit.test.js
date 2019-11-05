@@ -27,7 +27,8 @@ const resetStubs = () => {
     selectFullQueryStub.reset();
 };
 const mockAccountId = uuid();
-const expectedResult = [{ 'account_id': mockAccountId }];
+const expectedRawQueryResult = [{ 'account_id': mockAccountId }];
+const expectedParsedUserIds = [mockAccountId];
 
 
 describe('Audience Selection - SQL Query Construction', () => {
@@ -310,12 +311,12 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
 
-        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedResult);
+        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
 
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
+        expect(result).to.deep.equal(expectedParsedUserIds);
         expect(selectFullQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
     });
 
@@ -334,11 +335,11 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
 
-        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedResult);
+        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
 
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
         expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
+        expect(result).to.deep.equal(expectedParsedUserIds);
         expect(selectFullQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
     });
 
@@ -368,11 +369,11 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
 
-        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedResult);
+        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
 
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
         expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
+        expect(result).to.deep.equal(expectedParsedUserIds);
         expect(selectFullQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
     });
 });

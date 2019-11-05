@@ -189,7 +189,7 @@ class AudienceSelection {
             const sqlQuery = this.extractSQLQueryFromJSON(selectionJSON);
             const queryResult = await rdsConnection.selectFullQuery(sqlQuery);
             logger('Number of records from query: ', queryResult.length);
-            return queryResult;
+            return queryResult.map((row) => row['account_id']);
         } catch (error) {
             logger('Error occurred while fetching users given json. Error:', error);
         }
