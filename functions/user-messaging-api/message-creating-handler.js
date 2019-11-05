@@ -6,6 +6,7 @@ const moment = require('moment');
 const uuid = require('uuid/v4');
 
 const rdsUtil = require('./persistence/rds.notifications');
+const audienceSelection = require('audience-selection');
 const msgUtil = require('./msg.util');
 
 // todo : stick in a common file
@@ -167,7 +168,7 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
     }
     
     const selectionInstruction = instruction.selectionInstruction || null;
-    const userIds = destinationUserId ? [destinationUserId] : await rdsUtil.getUserIds(selectionInstruction);
+    const userIds = destinationUserId ? [destinationUserId] : await audienceSelection.fetchUsersGivenJSON(selectionInstruction);
     logger(`Retrieved ${userIds.length} user id(s) for instruction`);
     
     const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
@@ -225,7 +226,7 @@ module.exports.createUserMessages = async (event) => {
 const generateRecurringMessages = async (recurringInstruction) => {
     const instructionId = recurringInstruction.instructionId;
     
-    const userIds = await rdsUtil.getUserIds(recurringInstruction.selectionInstruction);
+    const userIds = await audienceSelection.fetchUsersGivenJSON(recurringInstruction.selectionInstruction);
     const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
    
     const userMessages = await createAndStoreMsgsForUserIds(usersForMessages, recurringInstruction);
