@@ -168,7 +168,7 @@ describe('Audience Selection - SQL Query Construction', () => {
                     { "op": "and", "children": [
                         { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
                         { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
-                     ]}
+                    ]}
                 ]
             }]
         });
