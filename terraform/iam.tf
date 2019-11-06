@@ -68,6 +68,27 @@ resource "aws_iam_policy" "migration_script_s3_access" {
 EOF
 }
 
+resource "aws_iam_policy" "templates_s3_access" {
+    name      = "${terraform.workspace}_templates_s3_access"
+    path      = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "GenericTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
     name = "warmup_ops_lambda_invoke_access_${terraform.workspace}"
     path = "/"
@@ -242,8 +263,8 @@ resource "aws_iam_policy" "lambda_invoke_msg_instruct_access" {
 EOF
 }
 
-resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
-    name = "lambda_invoke_payment_url_access_${terraform.workspace}"
+resource "aws_iam_policy" "lambda_invoke_payment_access" {
+    name = "lambda_invoke_payment_urls_access_${terraform.workspace}"
     path = "/"
 
     policy = <<EOF
@@ -258,7 +279,31 @@ resource "aws_iam_policy" "lambda_invoke_payment_url_access" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.payment_url_request.arn}"
+                "${aws_lambda_function.payment_url_request.arn}",
+                "${aws_lambda_function.payment_status_check.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "save_check_invoke_access" {
+    name    = "${terraform.workspace}_save_check_lambda_access"
+    path    = "/"
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SaveCheckLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.save_payment_check.arn}"
             ]
         }
     ]
@@ -380,8 +425,8 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
 EOF
 }
 
-resource "aws_iam_policy" "admin_user_lambda_policy" {
-    name = "lambda_ops_admin_user_acces_${terraform.workspace}"
+resource "aws_iam_policy" "balance_lambda_invoke_policy" {
+    name = "${terraform.workspace}_lambda_balance_fetch_invoke"
     path = "/"
 
     policy = <<EOF

@@ -9,7 +9,6 @@ resource "aws_lambda_function" "save_initiate" {
   role                           = "${aws_iam_role.save_initiate_role.arn}"
   handler                        = "saving-handler.initiatePendingSave"
   memory_size                    = 256
-  reserved_concurrent_executions = 20
   runtime                        = "nodejs10.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
@@ -46,6 +45,9 @@ resource "aws_lambda_function" "save_initiate" {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
                 }
+              },
+              "payment": {
+                "test": terraform.workspace == "staging"
               }
           }
       )}"
@@ -109,12 +111,12 @@ resource "aws_iam_role_policy_attachment" "save_initiate_user_event_publish_poli
 
 resource "aws_iam_role_policy_attachment" "save_initiate_payment_url_get" {
   role = "${aws_iam_role.save_initiate_role.name}"
-  policy_arn = "${aws_iam_policy.lambda_invoke_payment_url_access.arn}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_payment_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_secret_get" {
   role = "${aws_iam_role.save_initiate_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

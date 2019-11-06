@@ -257,7 +257,8 @@ describe('Primary allocation of inbound accrual lambda', () => {
             totalAmount: expectedUserAmount,
             currency: 'ZAR',
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-            backingEntityIdentifier: accrualEvent.backingEntityIdentifier
+            backingEntityIdentifier: accrualEvent.backingEntityIdentifier,
+            bonusPoolIdForExcess: common.testValueBonusPoolTracker
         };
 
         // we test bonus allocation of any fractional amount in the tests below, so here just set to none
@@ -352,7 +353,8 @@ describe('Primary allocation of unallocated float lamdba', () => {
             currency: 'ZAR',
             unit: constants.floatUnits.HUNDREDTH_CENT,
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-            backingEntityIdentifier: uuid()
+            backingEntityIdentifier: uuid(),
+            bonusPoolIdForExcess: common.testValueBonusPoolTracker
         };
 
 

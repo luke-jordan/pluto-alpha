@@ -88,12 +88,12 @@ resource "aws_iam_role_policy_attachment" "admin_user_fetch_profile_invoke_polic
 
 resource "aws_iam_role_policy_attachment" "admin_user_ops_invocation_policy" {
   role = "${aws_iam_role.admin_user_find_role.name}"
-  policy_arn = "${aws_iam_policy.admin_user_lambda_policy.arn}"
+  policy_arn = "${aws_iam_policy.balance_lambda_invoke_policy.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_user_find_secret_get" {
   role = "${aws_iam_role.admin_user_find_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_admin_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

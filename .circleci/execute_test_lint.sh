@@ -1,5 +1,7 @@
 #! /bin/sh
 
+set -e
+
 CWD=$PWD
 MODULE_OR_FUNCTION=$1
 SKIP_OPTION=$2

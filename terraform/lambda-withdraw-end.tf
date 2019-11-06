@@ -103,7 +103,7 @@ resource "aws_iam_role_policy_attachment" "withdraw_end_user_event_publish_polic
 
 resource "aws_iam_role_policy_attachment" "withdraw_end_secret_get" {
   role = "${aws_iam_role.withdraw_end_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

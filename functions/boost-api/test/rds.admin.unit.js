@@ -187,3 +187,51 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
     });
 
 });
+
+describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
+    const testUserId = uuid();
+    const testAccountId = uuid();
+    const testBoostId = uuid();
+
+    const testStartTime = moment();
+    const testEndTime = moment();
+    
+    const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
+
+    const boostFromPersistence = {
+        'creating_user_id': testUserId,
+        'boost_id': testBoostId,
+        'boost_type': 'SIMPLE',
+        'label': 'SDFSDF',
+        'boost_category': 'TIME_LIMITED',
+        'boost_amount': 100000,
+        'boost_unit': 'HUNDREDTH_CENT',
+        'active': true,
+        'boost_currency': 'USD',
+        'from_float_id': 'primary_cash',
+        'for_client_id': 'some_client_co',
+        'start_time': testStartTime.format(),
+        'end_time': testEndTime.format(),
+        'status_conditions': testStatusCondition,
+        'initial_status': 'PENDING'
+    };
+
+    beforeEach(() => {
+        testHelper.resetStubs(queryStub);
+    });
+
+    // add expectations, with args
+    it('Fetches user boosts', async () => {
+        queryStub.resolves([boostFromPersistence, boostFromPersistence]);
+
+        const result = await rds.fetchUserBoosts(testAccountId);
+        logger('Result of user boost extraction:', result);
+    });
+
+    it('Finds user accounts', async () => {
+        queryStub.resolves([{ 'account_id': uuid() }, { 'account_id': uuid() }]);
+
+        const result = await rds.findAccountsForUser(testUserId);
+        logger('Got user accounts:', result);
+    });
+});

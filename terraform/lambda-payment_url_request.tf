@@ -28,7 +28,10 @@ resource "aws_lambda_function" "payment_url_request" {
               "ozow": {
                 "apiKey": "EB5758F2C3B4DF3FF4F2669D5FF5B",
                 "siteCode": "TSTSTE0001",
-                "privateKey": "215114531AFF7134A94C88CEEA48E"
+                "privateKey": "215114531AFF7134A94C88CEEA48E",
+                "endpoints": {
+                  "completionBase": "https://${aws_api_gateway_domain_name.custom_doname_name.domain_name}/addcash/result"
+                }
               }
           }
       )}"

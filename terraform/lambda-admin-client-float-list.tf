@@ -7,7 +7,7 @@ resource "aws_lambda_function" "admin_client_float_list" {
 
   function_name                  = "${var.admin_client_float_list_lambda_function_name}"
   role                           = "${aws_iam_role.admin_client_float_list_role.arn}"
-  handler                        = "admin-float-handler.fetchClientFloatVars"
+  handler                        = "admin-float-handler.listClientsAndFloats"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
@@ -89,7 +89,7 @@ resource "aws_iam_role_policy_attachment" "admin_client_float_list_vpc_execution
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_list_secret_get" {
   role = "${aws_iam_role.admin_client_float_list_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_admin_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_client_float_list_table_access" {

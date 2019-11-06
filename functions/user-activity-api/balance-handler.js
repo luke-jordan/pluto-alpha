@@ -139,7 +139,7 @@ module.exports.balance = async (event) => {
     } else {
       // note: if these are misaligned the variables will not be found in the dyanmodb and error will be thrown below
       // in other words, a check here might be theoretically needed but would require further dynamo/rds calls and would be somewhat redundant
-      const defaultClientAndFloat = await persistence.findClientAndFloatForAccount(accountId);
+      const defaultClientAndFloat = await persistence.getOwnerInfoForAccount(accountId);
       logger('Received default client and float: ', defaultClientAndFloat);
       clientId = params.clientId || defaultClientAndFloat.clientId;
       floatId = params.floatId || defaultClientAndFloat.floatId;
@@ -199,7 +199,7 @@ module.exports.balanceWrapper = async (event) => {
 
     const systemWideUserId = authParams.systemWideUserId;
     const accountId = await fetchUserDefaultAccount(systemWideUserId);
-    const floatAndClient = await persistence.findClientAndFloatForAccount(accountId);
+    const floatAndClient = await persistence.getOwnerInfoForAccount(accountId);
     logger('Received float and client: ', floatAndClient);
     const floatParams = await dynamodb.fetchFloatVarsForBalanceCalc(floatAndClient.clientId, floatAndClient.floatId);
     logger('Received float params: ', floatParams);

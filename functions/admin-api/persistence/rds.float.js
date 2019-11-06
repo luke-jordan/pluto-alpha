@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('pluto:admin:rds');
+const logger = require('debug')('jupiter:admin:rds-float');
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');

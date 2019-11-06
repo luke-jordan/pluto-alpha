@@ -90,7 +90,7 @@ const floatPrincipalVarsStub = sinon.stub();
 const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
-        'findClientAndFloatForAccount': accountClientFloatStub,
+        'getOwnerInfoForAccount': accountClientFloatStub,
         'findAccountsForUser': findAccountsForUserStub
     },
     './persistence/dynamodb': {
@@ -215,12 +215,12 @@ describe('Fetches user balance and makes projections', () => {
         expect(balanceAndProjections).to.exist.and.have.property('statusCode', 200);
         expect(balanceAndProjections).to.have.property('headers');
         expect(balanceAndProjections.headers).to.have.property('Access-Control-Allow-Origin');
+        
         const bodyReturned = JSON.parse(balanceAndProjections.body);
         expect(bodyReturned).to.exist;
         expect(bodyReturned.currentBalance.datetime).to.be.a.string;
         expect(bodyReturned.currentBalance.epochMilli).to.be.a('number');
-        // and this is the point at which I truly loathe Sinon and matchers, which can be utterly stupid; what follows 
-        // becomes necessary to get around matching equality
+        
         const strippedReturned = stripCurrBalanceDateTime(bodyReturned);
         expect(strippedReturned).to.deep.equal(expectedBody);
     });

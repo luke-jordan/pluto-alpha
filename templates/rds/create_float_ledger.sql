@@ -18,7 +18,7 @@ create table if not exists float_data.float_transaction_ledger (
 -- todo : definitely do not do this once into production
 alter table float_data.float_transaction_ledger drop constraint if exists float_transaction_type_check;
 alter table float_data.float_transaction_ledger add constraint float_transaction_type_check check (
-    t_type in ('ACCRUAL', 'ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION')
+    t_type in ('ACCRUAL', 'ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION', 'ADMIN_BALANCE_RECON')
 );
 
 -- Used for, e.g., recording the date & time of the last float calculation (as well as audit trail). Use log context to store information

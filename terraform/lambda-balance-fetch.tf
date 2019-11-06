@@ -102,7 +102,7 @@ resource "aws_iam_role_policy_attachment" "balance_fetch_client_float_table_acce
 
 resource "aws_iam_role_policy_attachment" "balance_fetch_transaction_secret_get" {
   role = "${aws_iam_role.balance_fetch_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/secrets_read_transaction_worker"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

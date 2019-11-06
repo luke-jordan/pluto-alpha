@@ -12,6 +12,11 @@ const pvtkey = config.get('ozow.privateKey');
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
 
+const stdHeaders = {
+    'Accept': 'application/json',
+    'ApiKey': config.get('ozow.apiKey')
+};
+
 const generateHashCheck = (params) => {
     const hashFeed = (POST_KEY_ORDER.
         filter((key) => params[key]).
@@ -35,12 +40,14 @@ const assembleBody = (params) => {
         }
     });
 
+    const assembleUrl = (stage) => `${config.get('ozow.endpoints.completionBase')}/OZOW/${params.transactionId}/${stage}`;
+
     const body = {
         TransactionReference: params.transactionId,
         BankReference: params.bankReference,
-        CancelUrl: params.cancelUrl ? params.cancelUrl : config.get('ozow.endpoints.cancelUrl'),
-        ErrorUrl: params.errorUrl ? params.errorUrl : config.get('ozow.endpoints.errorUrl'),
-        SuccessUrl: params.successUrl ? params.successUrl : config.get('ozow.endpoints.successUrl'),
+        CancelUrl: assembleUrl('CANCELLED'),
+        ErrorUrl: assembleUrl('ERROR'),
+        SuccessUrl: assembleUrl('SUCCESS'),
         IsTest: params.isTest,
         SiteCode: config.get('ozow.siteCode'),
         CountryCode: params.countryCode,
@@ -62,10 +69,7 @@ const assembleRequest = (method, endpoint, body) => ({
     method: method,
     uri: endpoint,
     body: body,
-    headers: {
-        'Accept': 'application/json',
-        'ApiKey': config.get('ozow.apiKey')
-    },
+    headers: stdHeaders,
     json: true
 });
 
@@ -115,7 +119,8 @@ module.exports.paymentUrlRequest = async (event) => {
         return {
             result: 'PAYMENT_INITIATED',
             paymentUrl: paymentResponse.url,
-            requestId: paymentResponse.paymentRequestId
+            requestId: paymentResponse.paymentRequestId,
+            paymentProvider: 'OZOW'
         };
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -150,13 +155,25 @@ module.exports.paymentUrlRequest = async (event) => {
 
 module.exports.statusCheck = async (event) => {
     try {
+        if (config.has('payment.dummy') && config.get('payment.dummy') === 'ON') {
+            return { result: 'COMPLETE' };
+        }
+
         const params = {
             SiteCode: config.get('ozow.siteCode'),
             TransactionReference: event.transactionId,
             IsTest: event.isTest ? event.isTest : true
         };
-        const options = assembleRequest('GET', config.get('ozow.endpoints.transactionStatus'), params);
-        logger('Created status options:', options);
+
+        const options = {
+            method: 'GET',
+            uri: config.get('ozow.endpoints.transactionStatus'),
+            qs: params,
+            headers: stdHeaders,
+            json: true
+        };
+        
+        logger('Created status options:', options, 'with headers: ', JSON.stringify(options.headers));
         const paymentStatus = await request(options);
         logger('Recieved payment status:', paymentStatus);
 

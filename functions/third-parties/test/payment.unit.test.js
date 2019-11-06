@@ -48,6 +48,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
         expect(result).to.have.property('result', 'PAYMENT_INITIATED');
         expect(result).to.have.property('paymentUrl', `${mockPaymentUrl}${mockPaymentEndpoint}`);
         expect(result).to.have.property('requestId', mockRequestId);
+        expect(result).to.have.property('paymentProvider', 'OZOW');
         expect(requestStub).to.have.been.calledOnce;
     };
 
@@ -183,7 +184,22 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         expect(transactionStatus).to.have.property('result', 'COMPLETE');
         expect(transactionStatus).to.have.property('createdDate', mockTransactionStatus.createdDate);
         expect(transactionStatus).to.have.property('paymentDate', mockTransactionStatus.paymentDate);
-        expect(requestStub).to.have.been.called;
+
+        const expectedRequestOptions = {
+            method: 'GET',
+            uri: config.get('ozow.endpoints.transactionStatus'),
+            qs: {
+                SiteCode: config.get('ozow.siteCode'),
+                IsTest: true,
+                TransactionReference: mockTransactionReference
+            },
+            headers: {
+                ApiKey: config.get('ozow.apiKey'),
+                Accept: 'application/json'
+            },
+            json: true
+        };
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
     });
 
     it('Catches thrown errors', async () => {

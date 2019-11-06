@@ -138,7 +138,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         withdrawalInformation.initiationTime = moment();
 
         if (!withdrawalInformation.floatId || !withdrawalInformation.clientId) {
-            const floatAndClient = await persistence.findClientAndFloatForAccount(accountId);
+            const floatAndClient = await persistence.getOwnerInfoForAccount(accountId);
             withdrawalInformation.floatId = withdrawalInformation.floatId || floatAndClient.floatId;
             withdrawalInformation.clientId = withdrawalInformation.clientId || floatAndClient.clientId;
         }
