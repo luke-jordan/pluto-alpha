@@ -1,6 +1,8 @@
 'use strict';
 
 const config = require('config');
+const moment = require('moment');
+const uuid = require('uuid/v4');
 // const logger = require('debug')('jupiter:message:util');
 
 const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
@@ -45,3 +47,25 @@ module.exports.errorResponse = (err) => ({
     headers: corsHeaders,
     body: JSON.stringify(err.message)
 });
+
+const MockBoostResponse = {
+    boostId: uuid(),
+    creatingUserId: '',
+    label: 'DRY RUN BOOST',
+    active: true,
+    boostType: 'SIMPLE',
+    boostCategory: 'TIME_LIMITED',
+    boostAmount: 100000,
+    boostUnit: 'HUNDREDTH_CENT',
+    boostCurrency: 'USD',
+    boostRedeemed: 600000,
+    fromFloatId: 'primary_cash',
+    forClientId: 'some_client_co',
+    startTime: moment().format(),
+    endTime: moment().add(1, 'week').format(),
+    statusConditions: { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] },
+    initialStatus: 'PENDING',
+};
+
+
+module.exports.dryRunResponse = [ MockBoostResponse, MockBoostResponse, MockBoostResponse ];

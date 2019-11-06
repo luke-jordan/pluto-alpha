@@ -109,3 +109,58 @@ module.exports.extractQueryParams = (event) => {
 module.exports.isObjectEmpty = (object) => {
     return !object || typeof object !== 'object' || Object.keys(object).length === 0;
 };
+
+module.exports.extractUserDetails = (event) => {
+    if (typeof event.requestContext !== 'object') {
+        return null;
+    }
+
+    if (typeof event.requestContext.authorizer !== 'object') {
+        return null;
+    }
+
+    return event.requestContext.authorizer;
+};
+
+const normalizeExpectedBody = (event) => {
+    // logger('Event: ', event);
+    let params = { };
+    if (!event.body && !event.queryStringParameters) {
+        params = typeof event === 'string' ? JSON.parse(event) : event;
+    } else if (typeof event.body === 'string') {
+        params = JSON.parse(event.body);
+    } else {
+        params = event.body;
+    }
+    return params;
+};
+
+module.exports.extractParamsFromEvent = (event) => {
+    let params = normalizeExpectedBody(event);
+    if (!params || Object.keys(params).size === 0) {
+        return event.queryStringParameters || event;
+    }
+    return params;
+};
+
+module.exports.isDirectInvokeAdminOrSelf = (event) => {
+    const isHttpRequest = Reflect.has(event, 'httpMethod'); // todo : tighten this in time
+    if (!isHttpRequest) {
+        return true; // by definition -- means it must be via lambda direct invoke, hence allowed by IAM
+    }
+
+    const userDetails = exports.extractUserDetails(event);
+    logger('User details: ', userDetails);
+    if (!userDetails) {
+        return false;
+    }
+
+    const params = exports.extractParamsFromEvent(event);
+    const needAdminRole = params.systemWideUserId && userDetails.systemWideUserId !== params.systemWideUserId;
+    if (needAdminRole && ['SYSTEM_ADMIN', 'SYSTEM_WORKER'].indexOf(userDetails.role) < 0) {
+        return false;
+    }
+
+    // todo : probably want to add in uuid validation on id
+    return Reflect.has(userDetails, 'systemWideUserId');
+}

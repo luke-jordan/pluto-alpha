@@ -37,6 +37,10 @@ module.exports.resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
+module.exports.expectNoCalls = (...stubs) => {
+    stubs.forEach((stub) => expect(stub).to.not.have.been.called);
+};
+
 module.exports.standardOkayChecks = (result) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);

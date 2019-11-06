@@ -121,7 +121,7 @@ const assembleSaveEmail = async (eventBody) => {
             countText = 'third'; 
             break;
         default: 
-            countText = `${saveContext.count}th`; 
+            countText = `${saveContext.saveCount}th`; 
     }
 
     templateVariables.saveCountText = countText;
@@ -132,7 +132,7 @@ const assembleSaveEmail = async (eventBody) => {
     
     const htmlTemplate = await obtainTemplate(config.get('templates.saveEmail'));
     const htmlBody = format(htmlTemplate, templateVariables);
-    const textBody = 'Error. Tell system admin text emails still live.';
+    const textBody = `A user just made their ${countText} save`;
 
     const emailParams = { toAddresses, subject, htmlBody, textBody };
     logger('Assembling email parameters: ', emailParams);

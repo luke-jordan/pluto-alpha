@@ -6,6 +6,7 @@ const moment = require('moment-timezone');
 const status = require('statuses');
 
 const publisher = require('publish-common');
+const opsUtil = require('ops-util-common');
 
 const persistence = require('./persistence/rds');
 const payment = require('./payment-link');
@@ -35,7 +36,7 @@ const save = async (eventBody) => {
     logger('Have a saving request inbound: ', saveInformation);
 
     if (!eventBody.floatId && !eventBody.clientId) {
-      const floatAndClient = await persistence.findClientAndFloatForAccount(saveInformation.accountId);
+      const floatAndClient = await persistence.getOwnerInfoForAccount(saveInformation.accountId);
       saveInformation.floatId = eventBody.floatId || floatAndClient.floatId;
       saveInformation.clientId = eventBody.clientId || floatAndClient.clientId;
     }
@@ -49,45 +50,11 @@ const save = async (eventBody) => {
     }
     
     logger('Sending to persistence: ', saveInformation);
-    const savingResult = await persistence.addSavingToTransactions(saveInformation);
+    const savingResult = await persistence.addTransactionToAccount(saveInformation);
 
     logger('Completed the save, result: ', savingResult);
 
     return savingResult;
-};
-
-module.exports.settle = async (event) => {
-  try {
-
-    const settleInfo = event['body'] ? JSON.parse(event['body']) : event;
-    logger('Settling payment, event: ', settleInfo);
-
-    if (!settleInfo.transactionId) {
-      return invalidRequestResponse('Error! No transaction ID provided');
-    } else if (!settleInfo.paymentRef || !settleInfo.paymentProvider) {
-      return invalidRequestResponse('Error! No payment reference or provider');
-    }
-
-    if (Reflect.has(settleInfo, 'settlementTimeEpochMillis')) {
-      settleInfo.settlementTime = moment(settleInfo.settlementTimeEpochMillis);
-      Reflect.deleteProperty(settleInfo, 'settlementTimeEpochMillis');
-    } else {
-      settleInfo.settlementTime = moment();
-    }
-    
-    const paymentDetails = { 
-      paymentProvider: settleInfo.paymentProvider,
-      paymentRef: settleInfo.paymentRef
-    };
-
-    const resultOfUpdate = await persistence.updateSaveTxToSettled(settleInfo.transactionId, paymentDetails, settleInfo.settlementTime);
-    logger('Completed the update: ', resultOfUpdate);
-
-    return { statusCode: 200, body: JSON.stringify(resultOfUpdate) };
-
-  } catch (err) {
-    return handleError(err);
-  }
 };
 
 // can _definitely_parallelize this, also:
@@ -121,7 +88,7 @@ module.exports.initiatePendingSave = async (event) => {
   try {
     if (warmupCheck(event)) {
       logger('Warming up; tell payment link to stay warm, else fine');
-      await payment.warmUpPayment();
+      await payment.warmUpPayment({ type: 'INITIATE' });
       logger('Warmed payment, return');
       return warmupResponse;
     }
@@ -168,6 +135,9 @@ module.exports.initiatePendingSave = async (event) => {
     logger('Returning with url to complete payment: ', urlToCompletePayment);
     initiationResult.paymentRedirectDetails = { urlToCompletePayment };
 
+    const paymentStash = await persistence.addPaymentInfoToTx({ transactionId, ...paymentLinkResult });
+    logger('Result of stashing payment details: ', paymentStash);
+
     return { statusCode: 200, body: JSON.stringify(initiationResult) };
 
   } catch (e) {
@@ -176,13 +146,18 @@ module.exports.initiatePendingSave = async (event) => {
   }
 };
 
-/* Method to change a pending save to complete. Wrapper. Once integration is done, will query payment provider first.
- */
-module.exports.settleInitiatedSave = async (event) => {
-  logger('Settling save, logging this: ', event);
+// ///////////////////////////////// WHERE USER RETURNS AFTER PAYMENT FLOW //////////////////////////////////
 
+/* 
+ * Method to display a page to user on their copmletion of payment flow (e.g., in OZOW)
+ */
+module.exports.completeSavingPaymentFlow = async (event) => {
   try {
     if (warmupCheck(event)) {
+      await Promise.all([
+        publisher.obtainTemplate(`payment/${config.get('templates.payment.success')}`), 
+        payment.warmUpPayment({ type: 'TRIGGER_CHECK' })
+      ]);
       return warmupResponse;
     }
 
@@ -190,18 +165,30 @@ module.exports.settleInitiatedSave = async (event) => {
     const splitParams = pathParams.split('/'); // not the best thing 
     logger('Split path params: ', splitParams);
 
-    const paymentProvider = pathParams[0];
-    const transactionId = pathParams[1];
-    const resultType = pathParams[pathParams.length - 1];
+    const paymentProvider = splitParams[0];
+    const transactionId = splitParams[1];
+    const resultType = splitParams[splitParams.length - 1];
 
     logger(`Handling process, from ${paymentProvider}, with result ${resultType}, for ID: ${transactionId}`);
 
-    if (!resultType) {
-      throw new Error('Error!');
+    if (!resultType || ['SUCCESS', 'ERROR', 'CANCELLED'].indexOf(resultType) < 0) {
+      throw new Error('Error! Bad URL structure');
     }
 
-    const htmlTemplateKey = config.get(`templates.payment.${resultType.toLowerCase()}`);
-    const htmlPage = await publisher.obtainTemplate(htmlTemplateKey);
+    const matchingTx = await persistence.fetchTransaction(transactionId);
+    if (!matchingTx) {
+      throw new Error('No transaction with that ID exists, malicious actor likely');
+    }
+
+    const htmlFile = config.get(`templates.payment.${resultType.toLowerCase()}`);
+    const htmlPage = await publisher.obtainTemplate(`payment/${htmlFile}`);
+
+    // for security reasons, we obviously don't trust the incoming path variables for payment status, but trigger a background check
+    // to payment provider to make sure of it -- that then stores the result for when the user resumes
+    if (resultType === 'SUCCESS') {
+      logger('Payment result is a success, fire off lambda invocation in the background');
+      await payment.triggerTxStatusCheck({ transactionId, paymentProvider });
+    }
 
     const response = {
       statusCode: 200,
@@ -215,22 +202,34 @@ module.exports.settleInitiatedSave = async (event) => {
     return response;
   } catch (err) {
     // return the error page
-
+    logger('FATAL_ERROR: ', err);
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'text/html'
+      },
+      body: `<html><title>Internal Error</title><body>` +
+            `<p>Please return to the app and contact support. If you made payment, don't worry, we will reflect it on yoru account.` + 
+            `<p>Server error details: ${JSON.stringify(err)}</p>`
+    };
   }
 };
 
+// /////////////////// FOR CHECKING THAT PAYMENT WENT THROUGH ///////////////////////////////////////////////////////////////////
+
 const handlePaymentFailure = (failureType) => {
   logger('Payment failed, consider how and return which way');
-  if (failureType === 'FAILED') {
+  if (failureType === 'PAYMENT_FAILED') {
     return { 
       result: 'PAYMENT_FAILED', 
-      messageToUser: 'Sorry the payment failed for some reason, which we will explain, later. Please contact your bank' 
+      messageToUser: 'Sorry the payment failed. Please contact your bank or contact support and quote reference ABC123' 
     };
   } 
   return { result: 'PAYMENT_PENDING' };
 };
 
-// note: we can definitely optimize this guy when combined with the others (e.g., stick the relevant details in return clause on update)
+// slightly redundant to fetch tx again, but doing so on a primary key is very fast, very efficient, and ensure we 
+// return everything (although could also be done via better use of updating clause in TX - in future)
 const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
   const txDetails = await persistence.fetchTransaction(transactionId);
   const count = await persistence.countSettledSaves(txDetails.accountId);
@@ -249,42 +248,118 @@ const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
   await publisher.publishUserEvent(systemWideUserId, 'SAVING_PAYMENT_SUCCESSFUL', { context });
 };
 
+const assembleResponseAlreadySettled = async (transactionRecord) => {
+  const balanceSum = await persistence.sumAccountBalance(transactionRecord['accountId'], transactionRecord['currency'], moment());
+  logger('Retrieved balance sum: ', balanceSum);
+  return { 
+    result: 'PAYMENT_SUCCEEDED',
+    newBalance: { amount: balanceSum.amount, unit: balanceSum.unit }
+  };
+};
+
+const settle = async (settleInfo) => {
+  if (!settleInfo.transactionId) {
+    return invalidRequestResponse('Error! No transaction ID provided');
+  }
+
+  if (Reflect.has(settleInfo, 'settlementTimeEpochMillis')) {
+    settleInfo.settlementTime = moment(settleInfo.settlementTimeEpochMillis);
+    Reflect.deleteProperty(settleInfo, 'settlementTimeEpochMillis');
+  } else {
+    settleInfo.settlementTime = moment();
+  }
+  
+  const resultOfUpdate = await persistence.updateTxToSettled(settleInfo);
+  logger('Completed the update: ', resultOfUpdate);
+
+  return resultOfUpdate;
+};
+
+// used quite a lot in testing
+const dummyPaymentResult = async (systemWideUserId, params) => {
+  const paymentSuccessful = !params.failureType; // for now
+  
+  if (paymentSuccessful) {
+    const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
+    const transactionId = params.transactionId;
+    const resultOfSave = await settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
+    logger('Result of save: ', resultOfSave);
+    await publishSaveSucceeded(systemWideUserId, transactionId);
+    return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
+  } 
+
+  return handlePaymentFailure(params.failureType);
+};
+
 /**
  * Checks on the backend whether this payment is done
- * todo: validation that the TX belongs to the user
  * @param {string} transactionId The transaction ID of the pending payment
  */
 module.exports.checkPendingPayment = async (event) => {
+  if (warmupCheck(event)) {
+    await payment.warmUpPayment({ type: 'CHECK' });
+    return warmupResponse;
+  }
+  
   try {
-    const authParams = event.requestContext ? event.requestContext.authorizer : null;
-    if (!authParams || !authParams.systemWideUserId) {
+
+    if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
     
     logger('Checking for payment with inbound event: ', event);
     const params = event.queryStringParameters || event;
-    logger('Extracted params: ', params);
     const transactionId = params.transactionId;
-    logger('Transaction ID: ', transactionId);
+    
+    const transactionRecord = await persistence.fetchTransaction(transactionId);
+    logger('Transaction record: ', transactionRecord);
 
-    await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_PAYMENT_CHECK', { context: { transactionId }});
-
-    let resultBody = { };
-    const paymentSuccessful = !params.failureType; // for now
-    if (paymentSuccessful) {
-      const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
-      const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
-      
-      logger('Result of save: ', resultOfSave);
-      resultBody = JSON.parse(resultOfSave.body);
-      resultBody.result = 'PAYMENT_SUCCEEDED';
-      
-      await publishSaveSucceeded(authParams.systemWideUserId, transactionId);
-    } else {
-      resultBody = handlePaymentFailure(params.failureType);
+    if (transactionRecord.settlementStatus === 'SETTLED') {
+      const responseBody = await assembleResponseAlreadySettled(transactionRecord);
+      return { statusCode: 200, body: JSON.stringify(responseBody)};
     }
 
-    return { statusCode: 200, body: JSON.stringify(resultBody)};
+    let systemWideUserId = '';
+    if (event.requestContext && event.requestContext.authorizer) {
+      systemWideUserId = event.requestContext.authorizer.systemWideUserId;
+    } else {
+      const accountId = transactionRecord.accountId;
+      const accountInfo = await persistence.getOwnerInfoForAccount(accountId);
+      systemWideUserId = accountInfo.systemWideUserId;
+    }
+
+    await publisher.publishUserEvent(systemWideUserId, 'SAVING_EVENT_PAYMENT_CHECK', { context: { transactionId }});
+
+    const dummySuccess = config.has('dummy') && config.get('dummy') === 'ON';
+    if (dummySuccess) {
+      const dummyResult = await dummyPaymentResult(systemWideUserId, params);
+      return { statusCode: 200, body: JSON.stringify(dummyResult) };
+    }
+
+    const statusCheckResult = await payment.checkPayment({ transactionId });
+    logger('Result of check: ', statusCheckResult);
+    
+    let responseBody = { };
+
+    if (statusCheckResult.paymentStatus === 'SETTLED') {
+      const settlementInstruction = { 
+        transactionId
+      };
+
+      // do these one after the other instead of parallel because don't want to fire if something goes wrong
+      const resultOfSave = await settle(settlementInstruction);
+      await publishSaveSucceeded(systemWideUserId, transactionId);
+      
+      responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
+    } else if (statusCheckResult.result === 'ERROR') {
+      responseBody = handlePaymentFailure('PAYMENT_FAILED');
+    } else {
+      responseBody = handlePaymentFailure('Payment failed');
+    }
+    
+
+    return { statusCode: 200, body: JSON.stringify(responseBody) };
+
   } catch (err) {
     return handleError(err);
   }

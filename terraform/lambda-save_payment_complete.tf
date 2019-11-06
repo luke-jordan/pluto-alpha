@@ -7,7 +7,7 @@ resource "aws_lambda_function" "save_payment_complete" {
 
   function_name                  = "${var.save_payment_complete_lambda_function_name}"
   role                           = "${aws_iam_role.save_payment_complete_role.arn}"
-  handler                        = "saving-handler.settleInitiatedSave"
+  handler                        = "saving-handler.completeSavingPaymentFlow"
   memory_size                    = 512
   runtime                        = "nodejs10.x"
   timeout                        = 15
@@ -22,6 +22,9 @@ resource "aws_lambda_function" "save_payment_complete" {
       NODE_CONFIG = "${
         jsonencode(
           {
+              "aws": {
+                "region": "${var.aws_default_region[terraform.workspace]}"
+              },
               "db": {
                 "host": "${local.database_config.host}",
                 "database": "${local.database_config.database}",
@@ -32,6 +35,9 @@ resource "aws_lambda_function" "save_payment_complete" {
                 "names": {
                     "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
+              },
+              "payment": {
+                "test": terraform.workspace == "staging"
               }
           }
       )}"
@@ -86,6 +92,16 @@ resource "aws_iam_role_policy_attachment" "save_payment_complete_vpc_execution_p
 resource "aws_iam_role_policy_attachment" "save_complete_secret_get" {
   role = "${aws_iam_role.save_payment_complete_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
+}
+
+resource "aws_iam_role_policy_attachment" "save_payment_complete_templates_policy" {
+  role = aws_iam_role.save_payment_complete_role.name
+  policy_arn = aws_iam_policy.templates_s3_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "save_payment_complete_trigger_check" {
+  role = aws_iam_role.save_payment_complete_role.name
+  policy_arn = aws_iam_policy.save_check_invoke_access.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
