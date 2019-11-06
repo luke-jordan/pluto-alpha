@@ -101,7 +101,7 @@ resource "aws_iam_role_policy_attachment" "account_create_boost_create_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "account_create_secret_get" {
-  role = "${aws_iam_role.balance_fetch_role.name}"
+  role = "${aws_iam_role.account_create_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_account_worker_read"
 }
 

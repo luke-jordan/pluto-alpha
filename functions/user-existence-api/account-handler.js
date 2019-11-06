@@ -48,6 +48,10 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
   }
 
   const referralContext = referralCodeDetails.context;
+  if (!referralContext) {
+    logger('No referral context to give boost amount etc, exiting');
+    return;
+  }
 
   const referralType = referralCodeDetails.codeType;
   const boostCategory = `${referralType}_CODE_USED`;
