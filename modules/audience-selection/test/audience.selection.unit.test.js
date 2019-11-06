@@ -7,11 +7,11 @@ const expect = chai.expect;
 const uuid = require('uuid/v4');
 const proxyquire = require('proxyquire').noCallThru();
 
-const selectFullQueryStub = sinon.stub();
+const selectQueryStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
-        this.selectFullQuery = selectFullQueryStub;
+        this.selectQuery = selectQueryStub;
     }
 }
 
@@ -24,7 +24,7 @@ const rootJSON = {
 };
 
 const resetStubs = () => {
-    selectFullQueryStub.reset();
+    selectQueryStub.reset();
 };
 const mockAccountId = uuid();
 const expectedRawQueryResult = [{ 'account_id': mockAccountId }];
@@ -311,13 +311,13 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
 
-        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
+        selectQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
 
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedParsedUserIds);
-        expect(selectFullQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
     });
 
     it('should get user ids based on sign_up intervals', async () => {
@@ -335,12 +335,12 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
 
-        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
+        selectQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
 
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedParsedUserIds);
-        expect(selectFullQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
     });
 
     it('should get user ids based on activity counts', async () => {
@@ -369,11 +369,11 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
 
-        selectFullQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
+        selectQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
 
         const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedParsedUserIds);
-        expect(selectFullQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery);
     });
 });
