@@ -1,0 +1,99 @@
+'use strict';
+
+const config = require('config');
+const moment = require('moment');
+const uuid = require('uuid/v4');
+
+const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
+const corsHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': allowedCors
+};
+
+module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
+
+module.exports.isUserAuthorized = (event, requiredRole = 'SYSTEM_ADMIN') => {
+    const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+    
+    if (!userDetails || !Reflect.has(userDetails, 'systemWideUserId')) {
+        return false;
+    }
+
+    return userDetails.role === requiredRole;
+};
+
+module.exports.unauthorizedResponse = {
+    statusCode: 403,
+    headers: corsHeaders
+};
+
+module.exports.invokeLambda = (functionName, payload, sync = true) => ({
+    FunctionName: functionName,
+    InvocationType: sync ? 'RequestResponse' : 'Event',
+    Payload: JSON.stringify(payload)
+});
+
+const testBalance = () => ({
+    amount: Math.trunc(Math.floor(Math.random() * (6000000 - 5000000) + 5000000)),
+    unit: 'HUNDREDTH_CENT',
+    currency: 'USD',
+    datetime: moment().format(),
+    epochMilli: moment().valueOf(),
+    timezone: 'America/New_York'
+});
+
+module.exports.dryRunResponse = {
+    userBalance: {
+        accountId: [ uuid() ],
+        balanceStartDayOrLastSettled: testBalance(),
+        balanceEndOfToday: testBalance(),
+        currentBalance: testBalance(),
+        balanceSubsequentDays: [ testBalance(), testBalance(), testBalance() ]
+    },
+    accruedInterest: '$20',
+    userHistory: [
+        {
+            timestamp: 1572551269491,
+            type: 'HISTORY',
+            details: {
+                initiator: 'SYSTEM',
+                context: '{"freeForm":"JSON object"}',
+                interface: 'MOBILE_APP',
+                eventType: 'REGISTERED'
+            }
+        },
+        {
+            timestamp: 1572637669491,
+            type: 'HISTORY',
+            details: {
+                initiator: 'SYSTEM',
+                context: '{"freeForm":"JSON object"}',
+                interface: 'MOBILE_APP',
+                eventType: 'PASSWORD_SET'
+            }
+        },
+        {
+            timestamp: 1572810469491,
+            type: 'HISTORY',
+            details: {
+                initiator: 'SYSTEM',
+                context: '{"freeForm":"JSON object"}',
+                interface: 'MOBILE_APP',
+                eventType: 'USER_LOGIN'
+            }
+        },
+        {
+            timestamp: 1572983269000,
+            type: 'TRANSACTION',
+            details: {
+                accountId: '0d287f65-2663-449d-80f6-404730023bf6',
+                transactionType: 'ALLOCATION',
+                settlementStatus: 'SETTLED',
+                amount: '100',
+                currency: 'USD',
+                unit: 'HUNDREDTH_CENT',
+                humanReference: 'BUSANI6'
+            }
+        }
+    ]
+};

@@ -80,3 +80,32 @@ module.exports.updateBoost = async (updateParameters) => {
     return response.map(camelizeKeys);
 };
 
+module.exports.fetchUserBoosts = async (accountId) => {
+    const boostMainTable = config.get('tables.boostTable');
+    const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
+    const columns = [
+        'boost_id', 'creating_user_id', 'label', 'start_time', 'end_time', 'active',
+        'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
+        'for_client_id', 'status_conditions'
+    ];
+
+    const selectBoostQuery = `select ${columns} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
+       `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 order by creation_time desc`;
+
+    const values = [accountId];
+    logger('Assembled select query: ', selectBoostQuery);
+    logger('Values for query: ', values);
+    const boostsResult = await rdsConnection.selectQuery(selectBoostQuery, values);
+    logger('Retrieved boosts: ', boostsResult);
+    
+    let boostList = boostsResult.map((boost) => camelizeKeys(boost));
+
+    return boostList;
+};
+
+module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
+    const findQuery = `select account_id from ${config.get('tables.accountLedger')} where owner_user_id = $1 order by creation_time desc`;
+    const resultOfQuery = await rdsConnection.selectQuery(findQuery, [userId]);
+    logger('Result of account find query: ', resultOfQuery);
+    return resultOfQuery.map((row) => row['account_id']);
+};

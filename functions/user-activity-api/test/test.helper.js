@@ -22,6 +22,11 @@ module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
     });
 };
 
+module.exports.expectedHeaders = {
+    'Content-Type': 'application/json',
+    'Access-Control-Allow-Origin': '*'
+};
+
 module.exports.checkErrorResultForMsg = (errorResult, expectedErrorMsg) => {
     expect(errorResult).to.exist;
     expect(errorResult).to.have.property('statusCode', 400);
@@ -51,8 +56,45 @@ module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
 
 module.exports.mockLambdaResponse = (payload) => ({
     StatusCode: 200,
-    Payload: payload
+    Payload: payload // stringify ?
 });
+
+module.exports.normalizeHistory = (events) => {
+    const result = [];
+    events.forEach((event) => {
+        result.push({
+            timestamp: event.timestamp,
+            type: 'HISTORY',
+            details: {
+                initiator: event.initiator,
+                context: event.context,
+                interface: event.interface,
+                eventType: event.eventType
+            }
+        });
+    });
+    return result;
+};
+
+module.exports.normalizeTx = (events) => {
+    const result = [];
+    events.forEach((event) => {
+        result.push({
+            timestamp: moment(event.creationTime).valueOf(),
+            type: 'TRANSACTION',
+            details: {
+                accountId: event.accountId,
+                transactionType: event.transactionType,
+                settlementStatus: event.settlementStatus,
+                amount: event.amount,
+                currency: event.currency,
+                unit: event.unit,
+                humanReference: event.humanReference
+            }
+        })
+    });
+    return result;
+};
 
 module.exports.testLambdaInvoke = (lambdaStub, requiredInvocation) => {
     expect(lambdaStub).to.have.been.calledOnce;

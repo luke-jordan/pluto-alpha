@@ -31,7 +31,11 @@
     "lambdas": {
         "paymentUrlGet": "payment_url_request",
         "paymentStatusCheck": "payment_status_check",
-        "checkSavePayment": "save_payment_check"
+        "systemWideIdLookup": "profile_find_by_details",
+        "checkSavePayment": "save_payment_check",
+        "fetchUserBalance": "balance_fetch",
+        "userHistory": "user_log_reader",
+        "fetchProfile": "profile_fetch"
     },
     "payment": {
         "test": false
@@ -58,6 +62,12 @@
             "success": "payment-success.html",
             "error": "payment-error.html",
             "cancelled": "payment-cancelled.html"
+        }
+    },
+    "defaults": {
+        "userHistory": {
+            "eventTypes": ["PASSWORD_SET", "USER_REGISTERED"],
+            "daysInHistory": 90
         }
     }
 }
