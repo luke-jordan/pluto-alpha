@@ -30,10 +30,15 @@
     },
     "lambdas": {
         "paymentUrlGet": "payment_url_request",
-        "paymentStatusCheck": "payment_status_check"
+        "paymentStatusCheck": "payment_status_check",
+        "systemWideIdLookup": "profile_find_by_details",
+        "checkSavePayment": "save_payment_check",
+        "fetchUserBalance": "balance_fetch",
+        "userHistory": "user_log_reader",
+        "fetchProfile": "profile_fetch"
     },
-    "logging": {
-        "enabled": "false"
+    "payment": {
+        "test": false
     },
     "publishing": {
         "userEvents": {
@@ -52,6 +57,17 @@
     "templates": {
         "bucket": "staging.jupiter.templates",
         "saveEmail": "emails/savingEventEmail.html",
-        "withdrawalEmail": "emails/withdrawalEmail.html"
+        "withdrawalEmail": "emails/withdrawalEmail.html",
+        "payment": {
+            "success": "payment-success.html",
+            "error": "payment-error.html",
+            "cancelled": "payment-cancelled.html"
+        }
+    },
+    "defaults": {
+        "userHistory": {
+            "eventTypes": ["PASSWORD_SET", "USER_REGISTERED"],
+            "daysInHistory": 90
+        }
     }
 }

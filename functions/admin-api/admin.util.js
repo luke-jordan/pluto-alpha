@@ -18,7 +18,7 @@ module.exports.isUserAuthorized = (event, requiredRole = 'SYSTEM_ADMIN') => {
         return false;
     }
 
-    return userDetails.role === requiredRole;
+    return userDetails.role === requiredRole; // userRole?
 };
 
 module.exports.wrapHttpResponse = (body, statusCode = 200) => ({    

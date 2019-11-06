@@ -1,8 +1,11 @@
 {
+    "aws": {
+        "region": ""
+    },
     "db": {
         "user": "admin_api_worker",
         "host": "localhost",
-        "database": "pluto",
+        "database": "jupiter",
         "password": "pwd_for_admin_api",
         "port" :"5430"
     },
@@ -19,7 +22,8 @@
         "systemWideIdLookup": "profile_find_by_details",
         "fetchProfile": "profile_fetch",
         "fetchUserBalance": "balance_fetch",
-        "userHistory": "user_log_reader"
+        "userHistory": "user_log_reader",
+        "floatTransfer": "float_transfer"
     },
     "email": {
         "systemStats": {

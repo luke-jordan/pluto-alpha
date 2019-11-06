@@ -4,9 +4,7 @@
             "payment": "https://api.ozow.com/PostPaymentRequest",
             "transactionStatus": "https://api.ozow.com/GetTransactionByReference",
             "warmup": "https://api.ozow.com/",
-            "successUrl": "",
-            "cancelUrl": "",
-            "errorUrl": "",
+            "completionBase": "https://localhost/addcash/result",
             "dryRun": "https://dry.run.com/p/2AATFG45"
         },
         "siteCode": "",

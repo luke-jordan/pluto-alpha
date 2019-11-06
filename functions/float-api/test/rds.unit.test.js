@@ -388,8 +388,11 @@ describe('User account allocation', () => {
 
         const insertionResult = await rds.allocateToUsers(common.testValidClientId, common.testValidFloatId, allocRequests);
         
+        const extractedFloatIds = allocRequests.map((request) => request.floatTxId);
+        const extractAccountTxIds = allocRequests.map((request) => request.accountTxId);
+
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.eql({ result: 'SUCCESS', floatTxIds: floatTxArray, accountTxIds: accountTxArray });
+        expect(insertionResult).to.eql({ result: 'SUCCESS', floatTxIds: extractedFloatIds, accountTxIds: extractAccountTxIds });
         expect(multiTableStub).to.be.calledOnceWithExactly([floatQueryDef, accountQueryDef]);
     });
 
@@ -425,26 +428,22 @@ describe('Test account summation and float balances', () => {
         const hundredthsObject = accountIds.reduce((o, accountId) => ({ ...o, [accountId]: Math.round(Math.random() * 1000 * 100 * 100) }), {});
         const hundredthsRowResponse = accountIds.map((id) => ({ 'account_id': id, 'unit': constants.floatUnits.HUNDREDTH_CENT, 'sum': hundredthsObject[id] }));
 
+        const consolidatedRows = wholeCentRowResponse.concat(hundredthsRowResponse);
+
         const expectedSumObject = new Map();
         accountIds.forEach((accountId) => {
             expectedSumObject.set(accountId, ((wholeCentObject[accountId] * constants.floatUnitTransforms.WHOLE_CENT) +
                 (hundredthsObject[accountId] * constants.floatUnitTransforms.HUNDREDTH_CENT)));
         });
 
-        const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
         // NB : todo : filter on transaction_type (i.e., accruals vs others)
         const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
             `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
-            `where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 group by account_id, unit`;
+            `where float_id = $1 and currency = $2 and allocated_to_type = $3 group by account_id, unit`;
+        const valuesArray = [common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT];
 
-        const matchUnitQArray = sinon.match([common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT]);
-        queryStub.withArgs(unitQuery, matchUnitQArray).resolves([{ unit: constants.floatUnits.HUNDREDTH_CENT}, { unit: constants.floatUnits.WHOLE_CENT }]);
+        queryStub.withArgs(sumQuery, valuesArray).resolves(consolidatedRows);
         
-        const matchCentQArray = sinon.match([common.testValidFloatId, 'ZAR', constants.floatUnits.WHOLE_CENT, constants.entityTypes.END_USER_ACCOUNT]);
-        queryStub.withArgs(sumQuery, matchCentQArray).returns(Promise.resolve(wholeCentRowResponse));
-        const matchHundredthsQArray = sinon.match([common.testValidFloatId, 'ZAR', constants.floatUnits.HUNDREDTH_CENT, constants.entityTypes.END_USER_ACCOUNT]);
-        queryStub.withArgs(sumQuery, matchHundredthsQArray).returns(Promise.resolve(hundredthsRowResponse));
-
         logger('Completed setup, calling main method');
         const accountQueryResult = await rds.obtainAllAccountsWithPriorAllocations(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT);
         logger('Finished main method');
@@ -456,17 +455,18 @@ describe('Test account summation and float balances', () => {
         expect(accountQueryResult).to.deep.equal(expectedSumObject);
         logger('Finished deep equal check');
 
-        expect(queryStub).to.have.been.callCount(3);
-        expect(queryStub).to.have.been.calledWithExactly(unitQuery, matchUnitQArray);
-        expect(queryStub).to.have.been.calledWithExactly(sumQuery, matchCentQArray);
-        expect(queryStub).to.have.been.calledWithExactly(sumQuery, matchHundredthsQArray);
+        expect(queryStub).to.have.been.callCount(1);
+        expect(queryStub).to.have.been.calledWithExactly(sumQuery, valuesArray);
         expect(insertStub).to.not.have.been.called;
         expect(multiTableStub).to.not.have.been.called;
     }).timeout('3000');
 
     it('Should handle case where no accounts found for float', async () => {
-        const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
-        queryStub.withArgs(unitQuery, ['bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT]).returns([]);
+        const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
+            `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
+            `where float_id = $1 and currency = $2 and allocated_to_type = $3 group by account_id, unit`;
+
+        queryStub.withArgs(sumQuery, ['bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT]).returns([]);
         const queryResult = await rds.obtainAllAccountsWithPriorAllocations('bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT);
         logger('Result: ', queryResult);
         expect(queryResult).to.exist;
