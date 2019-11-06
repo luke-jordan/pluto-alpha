@@ -425,8 +425,8 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
 EOF
 }
 
-resource "aws_iam_policy" "admin_user_lambda_policy" {
-    name = "lambda_ops_admin_user_acces_${terraform.workspace}"
+resource "aws_iam_policy" "balance_lambda_invoke_policy" {
+    name = "${terraform.workspace}_lambda_balance_fetch_invoke"
     path = "/"
 
     policy = <<EOF

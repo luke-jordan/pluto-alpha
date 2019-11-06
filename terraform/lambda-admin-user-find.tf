@@ -88,7 +88,7 @@ resource "aws_iam_role_policy_attachment" "admin_user_fetch_profile_invoke_polic
 
 resource "aws_iam_role_policy_attachment" "admin_user_ops_invocation_policy" {
   role = "${aws_iam_role.admin_user_find_role.name}"
-  policy_arn = "${aws_iam_policy.admin_user_lambda_policy.arn}"
+  policy_arn = "${aws_iam_policy.balance_lambda_invoke_policy.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "admin_user_find_secret_get" {
