@@ -64,8 +64,8 @@ const MockBoostResponse = {
     startTime: moment().format(),
     endTime: moment().add(1, 'week').format(),
     statusConditions: { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] },
-    initialStatus: 'PENDING',
+    initialStatus: 'PENDING'
 };
 
 
-module.exports.dryRunResponse = [ MockBoostResponse, MockBoostResponse, MockBoostResponse ];
+module.exports.dryRunResponse = [MockBoostResponse, MockBoostResponse, MockBoostResponse];

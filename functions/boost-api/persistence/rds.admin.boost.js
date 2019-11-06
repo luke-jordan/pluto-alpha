@@ -83,24 +83,32 @@ module.exports.updateBoost = async (updateParameters) => {
 module.exports.fetchUserBoosts = async (accountId) => {
     const boostMainTable = config.get('tables.boostTable');
     const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
+    
     const columns = [
-        'boost_id', 'creating_user_id', 'label', 'start_time', 'end_time', 'active',
+        `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
         'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-        'for_client_id', 'status_conditions'
+        'status_conditions', 'message_instruction_ids'
     ];
 
-    const selectBoostQuery = `select ${columns} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
-       `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 order by creation_time desc`;
+    const excludedStatus = ['CREATED'];
+    const statusIndex = 2;
 
-    const values = [accountId];
+    const excludedType = ['REFERRAL']; // for now
+    const typeIndex = statusIndex + excludedStatus.length;
+
+    const selectBoostQuery = `select ${columns} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
+       `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 and ` + 
+       `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
+       `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ` +
+       `order by ${boostAccountJoinTable}.creation_time desc`;
+
+    const values = [accountId, ...excludedStatus, ...excludedType];
     logger('Assembled select query: ', selectBoostQuery);
     logger('Values for query: ', values);
     const boostsResult = await rdsConnection.selectQuery(selectBoostQuery, values);
     logger('Retrieved boosts: ', boostsResult);
     
-    let boostList = boostsResult.map((boost) => camelizeKeys(boost));
-
-    return boostList;
+    return boostsResult.map((boost) => camelizeKeys(boost));
 };
 
 module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {

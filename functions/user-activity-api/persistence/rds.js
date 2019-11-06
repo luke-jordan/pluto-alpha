@@ -64,8 +64,9 @@ module.exports.fetchTransaction = async (transactionId) => {
 };
 
 module.exports.fetchPriorTransactions = async (accountId) => {
-    const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1`;
-    const rows = await rdsConnection.selectQuery(query, [accountId]);
+    const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
+        `and transaction_type in ($2, $3) order by creation_time desc`;
+    const rows = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT', 'WITHDRAWAL']);
     return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : null;
 };
 
@@ -79,6 +80,7 @@ const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') =>
 // to reinclude later, possibly: and transaction_type in ($4) 
 const accountSumQuery = async (params, systemWideUserId) => {
     // const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
+    const userAccountTable = config.get('tables.accountLedger');
     const query = `select sum(amount), unit from ${userAccountTable} inner join ${config.get('tables.accountTransactions')} ` +
         `on ${userAccountTable}.account_id = ${config.get('tables.accountTransactions')}.account_id ` +
         `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
@@ -89,9 +91,15 @@ const accountSumQuery = async (params, systemWideUserId) => {
 
 const interestHistoryQuery = async (params, systemWideUserId) => {
     const transTypesToInclude = [`'ACCRUAL'`, `'CAPITALIZATION'`].join(',');
+    const userAccountTable = config.get('tables.accountLedger');
+    const txTable = config.get('tables.accountTransactions');
     const cutOffMoment = moment(params.startTimeMillis, 'x');
-    const query = `select sum(amount), unit from ${config.get('tables.accountTransactions')} where owner_user_id = $1 and ` +
-        `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
+    
+    const query = `select sum(amount), unit from ${userAccountTable} inner join ${txTable} ` +
+        `on ${userAccountTable}.account_id = ${config.get('tables.accountTransactions')}.account_id ` + 
+        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and transaction_type in ($4) ` +
+        `and ${txTable}.creation_time > $5 group by unit`;
+    
     const values = [systemWideUserId, params.currency, 'SETTLED', transTypesToInclude, cutOffMoment.format()];
     const fetchRows = await rdsConnection.selectQuery(query, values);
     return { ...params, amount: sumOverUnits(fetchRows, params.unit) };

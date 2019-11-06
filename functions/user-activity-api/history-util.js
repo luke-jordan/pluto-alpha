@@ -2,6 +2,8 @@
 
 const moment = require('moment');
 const uuid = require('uuid/v4');
+const MAX_AMOUNT = 6000000;
+const MIN_AMOUNT = 5000000;
 
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
 
@@ -25,8 +27,16 @@ module.exports.invokeLambda = (functionName, payload, sync = true) => ({
     Payload: JSON.stringify(payload)
 });
 
+const generateAmount = () => {
+    const base = Math.floor(Math.random());
+    const multiplier = (MAX_AMOUNT - MIN_AMOUNT);
+    const normalizer = MIN_AMOUNT;
+    const rawResult = base * multiplier;
+    return rawResult + normalizer;
+};
+
 const testBalance = () => ({
-    amount: Math.trunc(Math.floor(Math.random() * (6000000 - 5000000) + 5000000)),
+    amount: generateAmount(),
     unit: 'HUNDREDTH_CENT',
     currency: 'USD',
     datetime: moment().format(),
@@ -36,11 +46,11 @@ const testBalance = () => ({
 
 module.exports.dryRunResponse = {
     userBalance: {
-        accountId: [ uuid() ],
+        accountId: [uuid()],
         balanceStartDayOrLastSettled: testBalance(),
         balanceEndOfToday: testBalance(),
         currentBalance: testBalance(),
-        balanceSubsequentDays: [ testBalance(), testBalance(), testBalance() ]
+        balanceSubsequentDays: [testBalance(), testBalance(), testBalance()]
     },
     accruedInterest: '$20',
     userHistory: [

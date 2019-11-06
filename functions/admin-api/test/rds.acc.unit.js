@@ -45,6 +45,17 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         'human_reference': 'FRTNX191'
     };
 
+    const MAX_USERS = 10000000;
+    const MIN_USERS = 9000000;
+    
+    const generateUserCount = () => {
+        const base = Math.floor(Math.random());
+        const multiplier = (MAX_USERS - MIN_USERS);
+        const normalizer = MIN_USERS;
+        const rawResult = base * multiplier;
+        return rawResult + normalizer;
+    };
+
     beforeEach(() => {
         helper.resetStubs(queryStub, updateRecordStub);
     });
@@ -53,7 +64,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         const startDate = moment();
         const endDate = moment();
 
-        const testsUserCount = Math.trunc(Math.floor(Math.random() * (10000000 - 9000000) + 9000000));
+        const testsUserCount = generateUserCount();
 
         const expectedQuery = `select count(distinct(owner_user_id)) from ${accountTable} ` + 
             `inner join ${transactionTable} on ${accountTable}.account_id = ${transactionTable}.account_id ` + 
@@ -62,7 +73,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
             'USER_SAVING_EVENT',
             'SETTLED',
             sinon.match.string,
-            sinon.match.string,
+            sinon.match.string
         ];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'count': testsUserCount }]);
@@ -78,7 +89,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     it('Fetches user count where include no save is set to true', async () => {
         const startDate = moment();
         const endDate = moment();
-        const testsUserCount = Math.trunc(Math.floor(Math.random() * (10000000 - 9000000) + 9000000));
+        const testsUserCount = generateUserCount();
 
         const expectedQuery = `select count(distinct(owner_user_id)) from ${accountTable} left join ` + 
             `${transactionTable} on ${accountTable}.account_id = ${transactionTable}.account_id ` + 
@@ -89,7 +100,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
             'USER_SAVING_EVENT',
             'SETTLED',
             sinon.match.string,
-            sinon.match.string,
+            sinon.match.string
         ];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'count': testsUserCount }]);
@@ -111,7 +122,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
             `on ${accountTable}.account_id = ${transactionTable}.account_id where ${accountTable}.owner_user_id = $1 ` + 
             `and ${transactionTable}.creation_time > $2 and settlement_status = $3`;
 
-        const expectedValues = [ testUserId, startDate.format(), 'PENDING' ];
+        const expectedValues = [testUserId, startDate.format(), 'PENDING'];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves(expectedPendingTx);
 
@@ -142,7 +153,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
             {'transaction_id': testTransactionId, 'creation_time': testCreationTime }            
         ]});
 
-        const expectedResult = { transactionId: testTransactionId, creationTime: testCreationTime }
+        const expectedResult = { transactionId: testTransactionId, creationTime: testCreationTime };
 
         const resultOfUpdate = await persistence.expireHangingTransactions();
         logger('Result of hanging transactions update:', resultOfUpdate);
@@ -152,6 +163,3 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedUpdateQuery, expectedValues);
     });
 });
-
-
-

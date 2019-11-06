@@ -3,7 +3,6 @@
 const logger = require('debug')('jupiter:history:main');
 const config = require('config');
 const moment = require('moment');
-const status = require('statuses');
 
 const persistence = require('./persistence/rds');
 const util = require('./history-util');
@@ -138,7 +137,7 @@ const normalizeTx = (events) => {
                 unit: event.unit,
                 humanReference: event.humanReference
             }
-        })
+        });
     });
     return result;
 };
@@ -170,7 +169,7 @@ module.exports.fetchUserHistory = async (event) => {
         const priorTransactions = await persistence.fetchPriorTransactions(accountId);
         logger('Got prior transactions:', priorTransactions);
 
-        const userHistory = [ ...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
+        const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
         logger('Created formatted array:', userHistory);
 
         const resultObject = { 

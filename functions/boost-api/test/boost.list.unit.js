@@ -58,7 +58,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         startTime: testStartTime.format(),
         endTime: testEndTime.format(),
         statusConditions: testStatusCondition,
-        initialStatus: 'PENDING',
+        initialStatus: 'PENDING'
     };
 
     beforeEach(() => {

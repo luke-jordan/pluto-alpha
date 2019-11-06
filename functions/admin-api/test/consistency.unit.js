@@ -1,8 +1,6 @@
 'use strict';
 
 const logger = require('debug')('jupiter:admin:consistency-test');
-const config = require('config');
-const moment = require('moment');
 const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
@@ -61,7 +59,7 @@ describe('*** UNIT TEST ADMIN FLOAT CONSISTENCY ***', () => {
         logger('Result of anomaly checks', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal([ expectedResult, expectedResult, expectedResult ]);
+        expect(result).to.deep.equal([expectedResult, expectedResult, expectedResult]);
         expect(getFloatBalanceAndFlowsStub).to.have.been.calledWith([testFloatId]);
         expect(getFloatAllocatedTotalStub).to.have.been.calledWith(testClientId, testFloatId);
         expect(getUserAllocationsStub).to.have.been.calledWith(testClientId, testFloatId);
@@ -84,7 +82,7 @@ describe('*** UNIT TEST ADMIN FLOAT CONSISTENCY ***', () => {
 
         const expectedResult = {
             result: 'ANOMALIES_FOUND',
-            anomalies: { BALANCE_MISMATCH: [ null ], ALLOCATION_TOTAL_MISMATCH: [ testAnomaly ] }
+            anomalies: { BALANCE_MISMATCH: [null], ALLOCATION_TOTAL_MISMATCH: [testAnomaly] }
         };
 
         const anomalyLogEntry = {
@@ -119,7 +117,7 @@ describe('*** UNIT TEST ADMIN FLOAT CONSISTENCY ***', () => {
         logger('Result of anomaly checks', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal([ expectedResult, expectedResult, expectedResult]);
+        expect(result).to.deep.equal([expectedResult, expectedResult, expectedResult]);
         expect(getFloatBalanceAndFlowsStub).to.have.been.calledWith([testFloatId]);
         expect(getFloatAllocatedTotalStub).to.have.been.calledWith(testClientId, testFloatId);
         expect(getUserAllocationsStub).to.have.been.calledWith(testClientId, testFloatId);
