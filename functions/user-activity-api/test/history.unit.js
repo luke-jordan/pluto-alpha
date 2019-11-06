@@ -56,22 +56,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         humanReference: 'BUSANI6'
     };
 
-    const expectedProfile = {
-        systemWideUserId: testUserId,
-        clientId: 'some_client_co',
-        defaultFloatId: 'some_float',
-        defaultCurrency: 'USD',
-        defaultTimezone: 'America/New_York',
-        nationalId: 'some_national_id_here',
-        primaryPhone: testPhone,
-        userStatus: 'USER_HAS_SAVED',
-        kycStatus: 'VERIFIED_AS_PERSON',
-        kycRiskRating: 0,
-        securedStatus: 'PASSWORD_SET',
-        userRole: 'ORDINARY_USER',
-        tags: 'GRANTED_GIFT'
-    };
-
     // non-redundant usage
     const mockLambdaResponse = (body, statusCode = 200) => ({
         Payload: JSON.stringify({
@@ -135,7 +119,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         helper.resetStubs(momentStub, findAccountStub, fetchPriorTxStub, lamdbaInvokeStub, getAccountFigureStub);
     });
 
-    it('Fetches user balance, accrued interest, previous user transactions, and major user events', async () => {
+    it.only('Fetches user balance, accrued interest, previous user transactions, and major user events', async () => {
 
         const testHistoryEvent = {
             userId: testUserId,
@@ -145,11 +129,11 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         };
 
         const testBalancePayload = {
-            userId: expectedProfile.systemWideUserId,
-            currency: expectedProfile.defaultCurrency,
+            userId: testUserId,
+            currency: 'USD',
             atEpochMillis: testTime.valueOf(),
-            timezone: expectedProfile.defaultTimezone, 
-            clientId: expectedProfile.clientId,
+            timezone: 'America/New_York', 
+            clientId: 'some_client_co',
             daysToProject: 0
         };
 
@@ -157,14 +141,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             valueOf: () => testTime.valueOf(),
             subtract: () => testTime,
             startOf: () => testTime
-        });
-
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId })).returns({ 
-            promise: () => mockLambdaResponse({ systemWideUserId: testUserId })
-        });
-
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
-            promise: () => mockLambdaResponse(expectedProfile)
         });
 
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({
@@ -185,10 +161,9 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         const testEvent = {
             requestContext: {
-                authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }
+                authorizer: { systemWideUserId: testUserId }
             },
-            httpMethod: 'GET',
-            queryStringParameters: { nationalId: testNationalId }
+            httpMethod: 'GET'
         };
 
         const userHistoryArray = JSON.parse(expectedHistory.Payload).userEvents.userEvents;
@@ -204,12 +179,9 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
       
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
-        expect(result.headers).to.deep.equal(helper.expectedHeaders);
         // expect(result.body).to.deep.equal(JSON.stringify(expectedResult)); // momentStub isn't stubbing out a specific instance. to be seen to. all else is as expected. 
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
         expect(getAccountFigureStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testUserId, operation: `interest::WHOLE_CENT::USD::${testTime.valueOf()}`});
         expect(findAccountStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(fetchPriorTxStub).to.have.been.calledOnceWithExactly(testAccountId);
@@ -218,10 +190,10 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     it('Handles dry run', async () => {
         const testEvent = {
             requestContext: {
-                authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }
+                authorizer: { systemWideUserId: testUserId }
             },
             httpMethod: 'GET',
-            queryStringParameters: { nationalId: testNationalId, dryRun: true }
+            queryStringParameters: { dryRun: true }
         };
 
         const result = await handler.fetchUserHistory(testEvent);
@@ -229,7 +201,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
-        expect(result.headers).to.deep.equal(helper.expectedHeaders);
         expect(lamdbaInvokeStub).to.have.not.been.called;
         expect(getAccountFigureStub).to.have.not.been.called;
         expect(findAccountStub).to.have.not.been.called;
@@ -238,9 +209,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
     it('Fails on unauthorized access', async () => {
         const testEvent = {
-            requestContext: {
-                authorizer: { role: 'ORDINARY_USER', systemWideUserId: testUserId }
-            },
             httpMethod: 'GET',
             queryStringParameters: { nationalId: testNationalId }
         };
@@ -250,7 +218,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 403);
-        expect(result.headers).to.deep.equal(helper.expectedHeaders);
         expect(lamdbaInvokeStub).to.have.not.been.called;
         expect(getAccountFigureStub).to.have.not.been.called;
         expect(findAccountStub).to.have.not.been.called;
@@ -262,10 +229,9 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         const testEvent = {
             requestContext: {
-                authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }
+                authorizer: { systemWideUserId: testUserId }
             },
-            httpMethod: 'GET',
-            queryStringParameters: { nationalId: testNationalId }
+            httpMethod: 'GET'
         };
 
         const result = await handler.fetchUserHistory(testEvent);
@@ -273,9 +239,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 500);
-        expect(result.headers).to.deep.equal(helper.expectedHeaders);
         expect(result.body).to.deep.equal(JSON.stringify('ERROR'));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId }));
         expect(getAccountFigureStub).to.have.not.been.called;
         expect(findAccountStub).to.have.not.been.called;
         expect(fetchPriorTxStub).to.have.not.been.called;

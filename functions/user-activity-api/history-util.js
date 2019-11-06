@@ -1,30 +1,22 @@
 'use strict';
 
-const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
-const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
-const corsHeaders = {
-    'Content-Type': 'application/json',
-    'Access-Control-Allow-Origin': allowedCors
-};
-
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
 
-module.exports.isUserAuthorized = (event, requiredRole = 'SYSTEM_ADMIN') => {
+module.exports.isUserAuthorized = (event) => {
     const userDetails = event.requestContext ? event.requestContext.authorizer : null;
     
     if (!userDetails || !Reflect.has(userDetails, 'systemWideUserId')) {
         return false;
     }
 
-    return userDetails.role === requiredRole;
+    return true;
 };
 
 module.exports.unauthorizedResponse = {
-    statusCode: 403,
-    headers: corsHeaders
+    statusCode: 403
 };
 
 module.exports.invokeLambda = (functionName, payload, sync = true) => ({

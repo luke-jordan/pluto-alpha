@@ -99,6 +99,7 @@ const obtainUserBalance = async (userProfile) => {
         daysToProject: 0
     };
 
+    logger('Balance payload: ', balancePayload);
     const balanceLambdaInvocation = util.invokeLambda(config.get('lambdas.fetchUserBalance'), balancePayload);
 
     const userBalanceResult = await lambda.invoke(balanceLambdaInvocation).promise();
@@ -146,7 +147,6 @@ const normalizeTx = (events) => {
  * Fetches user history which includes current balance, current months interest, prior transactions, and past major user events.
  * @param {object} event An event object containing the request context and query paramaters specifying the search to make
  * @property {object} requestContext As in method above (contains context, from auth, etc)
- * @property {object} queryStringParamaters Contains one of nationalId & country code, phone number, and email address
  */
 module.exports.fetchUserHistory = async (event) => {
     try {
@@ -154,23 +154,9 @@ module.exports.fetchUserHistory = async (event) => {
             return util.unauthorizedResponse;
         }
 
-        const lookUpPayload = opsCommonUtil.extractQueryParams(event);
-        if (lookUpPayload.dryRun && lookUpPayload.dryRun === true) {
-            return opsCommonUtil.wrapResponse(util.dryRunResponse); // for stability during mobile development, in the event of query syntax errors, though unlikely
-        };
-
-        const lookUpInvoke = util.invokeLambda(config.get('lambdas.systemWideIdLookup'), lookUpPayload);
-
-        logger('Invoking system wide user ID lookup with params: ', lookUpInvoke);
-        const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
-        const systemIdPayload = JSON.parse(systemWideIdResult['Payload']);
-
-        if (systemIdPayload.statusCode !== 200) {
-            return opsCommonUtil.wrapResponse({ result: 'USER_NOT_FOUND' }, status('Not Found'));
-        }
-
-        const { systemWideUserId } = JSON.parse(systemIdPayload.body);
-        logger(`From query params: ${JSON.stringify(lookUpPayload)}, got system ID: ${systemWideUserId}`);
+        // extract user details will only come back null if authorized check has failed
+        const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
+        logger(`Looking up system ID: ${systemWideUserId}`);
 
         const [userProfile, priorEvents] = await Promise.all([
             fetchUserProfile(systemWideUserId), obtainUserHistory(systemWideUserId)
