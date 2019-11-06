@@ -2,7 +2,6 @@
 
 const logger = require('debug')('jupiter:admin:dynamo-float-test');
 const config = require('config');
-const moment = require('moment');
 const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
@@ -100,7 +99,7 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
         const expectedUpdateArgs = {
             TableName: config.get('tables.clientFloatTable'),
-            Key: { client_id: testClientId, float_id: testFloatId },
+            Key: { 'client_id': testClientId, 'float_id': testFloatId },
             UpdateExpression: 'set accrual_rate_annual_bps = :arr, bonus_pool_share_of_accrual = :bpoolshare, client_share_of_accrual = :csharerate, prudential_factor = :prud',
             ExpressionAttributeValues: { ':arr': '', ':bpoolshare': '', ':csharerate': '', ':prud': '' },
             ReturnValues: 'ALL_NEW'

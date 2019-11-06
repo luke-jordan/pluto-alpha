@@ -46,11 +46,11 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
 
     beforeEach(() => {
         helper.resetStubs(queryStub, updateRecordStub, insertRecordsStub);
-    })
+    });
 
     it('Gets float balance', async () => {
         const expectedQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where float_id ` + 
-           `in ($1) and allocated_to_type = $2 and creation_time between $3 and $4 group by float_id, currency, unit`
+           `in ($1) and allocated_to_type = $2 and creation_time between $3 and $4 group by float_id, currency, unit`;
         const expectedValues = [
             testFloatId,
             'FLOAT_ITSELF',
@@ -72,8 +72,8 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
 
     it('Gets float allocated total', async () => {
         const expectedQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} ` + 
-            `where allocated_to_type != $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 group by float_id, currency, unit`
-        const expectedValues = [ 'FLOAT_ITSELF', testStartTime.format(), testEndTime.format(), testClientId, testFloatId ];
+            `where allocated_to_type != $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 group by float_id, currency, unit`;
+        const expectedValues = ['FLOAT_ITSELF', testStartTime.format(), testEndTime.format(), testClientId, testFloatId];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'float_id': testFloatId, 'currency': 'USD', 'unit': 'HUNDREDTH_CENT', 'sum': 100 }]);
 
@@ -90,12 +90,12 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
     it('Gets user allocation and accounts transactions', async () => {
         const expectedQuery = `select currency, unit, sum(amount) from ${floatTxTable} where ` + 
             `allocated_to_type = $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 group by currency, unit`;
-        const expectedValues = [ 'END_USER_ACCOUNT', testStartTime.format(), testEndTime.format(), testClientId, testFloatId ];
+        const expectedValues = ['END_USER_ACCOUNT', testStartTime.format(), testEndTime.format(), testClientId, testFloatId];
 
         const expectedSettlementQuery = `select currency, unit, sum(amount) from ${accountTxTable} where ` +
             `settlement_status = $1 and settlement_time between $2 and $3 and client_id = $4 and float_id = $5 ` +
             `group by currency, unit`;
-        const expectedSettlementValues = [ 'SETTLED', testStartTime.format(), testEndTime.format(), testClientId, testFloatId ];
+        const expectedSettlementValues = ['SETTLED', testStartTime.format(), testEndTime.format(), testClientId, testFloatId];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'currency': 'USD', 'unit': 'HUNDREDTH_CENT', 'sum': 100 }]);
         queryStub.withArgs(expectedSettlementQuery, expectedSettlementValues).resolves([
@@ -120,7 +120,7 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
         const expectedQuery = `select float_id, currency, unit, allocated_to_id, sum(amount) from ` + 
             `${floatTxTable} where float_id in ($1) and allocated_to_type = $2 and creation_time between $3 ` + 
             `and $4 and amount > 0 group by float_id, currency, unit, allocated_to_id`;
-        const expectedValues = [ testFloatId, 'BONUS_POOL', testStartTime.format(), testEndTime.format()];
+        const expectedValues = [testFloatId, 'BONUS_POOL', testStartTime.format(), testEndTime.format()];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'float_id': testFloatId, 'currency': 'USD', 'unit': 'HUNDREDTH_CENT', 'allocated_to_id': testUserId, 'sum': 100 }]);
 
@@ -138,7 +138,7 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
     it('Gets last float accrual time', async () => {
         const expectedQuery = `select reference_time from float_data.float_log where float_id = $1 and ` + 
             `client_id = $2 and log_type = $3 order by creation_time desc limit 1`;
-        const expectedValues = [ testFloatId, testClientId, 'WHOLE_FLOAT_ACCRUAL'];
+        const expectedValues = [testFloatId, testClientId, 'WHOLE_FLOAT_ACCRUAL'];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'reference_time': testReferenceTime, 'creation_time': testCreationTime }]);
 
@@ -153,7 +153,7 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
     it('Returns creation time where no float accrual has occured', async () => {
         const expectedQuery = `select creation_time from ${floatTxTable} where float_id = $1 and client_id = $2 and allocated_to_type = $3 ` +
             `order by creation_time asc limit 1`;
-        const expectedValues = [ testFloatId, testClientId, 'FLOAT_ITSELF'];
+        const expectedValues = [testFloatId, testClientId, 'FLOAT_ITSELF'];
 
         queryStub.onFirstCall().resolves([]);
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'creation_time': testCreationTime }]);
@@ -170,7 +170,7 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
         const logTypes = config.get('defaults.floatAlerts.logTypes');
         const expectedQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 and ` + 
             `log_type in ($3, $4, $5, $6, $7, $8) order by updated_time desc`;
-        const expectedValues = [ testClientId, testFloatId, ...logTypes ];
+        const expectedValues = [testClientId, testFloatId, ...logTypes];
 
         const expectedResult = {
             'log_id': uuid(),
@@ -180,7 +180,7 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
             'updated_time': moment().format(),
             'reference_time': moment().format(),
             'log_type': 'BALANCE_UNOBTAINABLE',
-            'log_context': { resolved: false },
+            'log_context': { resolved: false }
         };
 
         const finalResult = camelCaseKeys(expectedResult);
@@ -208,7 +208,7 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
         const columnTemplate = '${logId}, ${clientId}, ${floatId}, ${logType}, ${logContext}';
         const logRow = { logId: sinon.match.string, ...testLogObject };
 
-        insertRecordsStub.withArgs(insertQuery, columnTemplate, [logRow]).resolves({ 'command': 'INSERT', rows: [{ 'log_id': testLogId }]})
+        insertRecordsStub.withArgs(insertQuery, columnTemplate, [logRow]).resolves({ 'command': 'INSERT', rows: [{ 'log_id': testLogId }]});
 
         const insertionResult = await persistence.insertFloatLog(testLogObject);
         logger('Result of log log insertion:', insertionResult);

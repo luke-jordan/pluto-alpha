@@ -26,14 +26,14 @@ module.exports.listUserBoosts = async (event) => {
         const params = util.extractQueryParams(event);
         if (params.dryRun && params.dryRun === true) {
             return util.wrapHttpResponse(util.dryRunResponse);
-        };
+        }
     
         const systemWideUserId = authParams.systemWideUserId;
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
         if (!accountId) {
             return util.wrapHttpResponse({ message: 'No account found for this user' }, status('Forbidden'));
-        };
+        }
 
         const listBoosts = await persistence.fetchUserBoosts(accountId);
         logger('Got boosts:', listBoosts);

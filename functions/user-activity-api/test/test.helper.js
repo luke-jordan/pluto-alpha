@@ -91,7 +91,7 @@ module.exports.normalizeTx = (events) => {
                 unit: event.unit,
                 humanReference: event.humanReference
             }
-        })
+        });
     });
     return result;
 };

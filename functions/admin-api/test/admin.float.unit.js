@@ -4,6 +4,7 @@ const logger = require('debug')('jupiter:admin:float-test');
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
+const status = require('statuses');
 
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -12,6 +13,9 @@ chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
 const helper = require('./test.helper');
+
+const NEG_FLOW_FLAG = -1;
+const POS_FLOW_FLAG = 1;
 
 const getFloatBalanceStub = sinon.stub();
 const getFloatBonusBalanceStub = sinon.stub();
@@ -63,7 +67,8 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
     const testFloatName = '';
 
     beforeEach(() => {
-        helper.resetStubs(getFloatBalanceStub, getFloatBonusBalanceStub, getFloatAlertsStub, insertFloatLogStub,
+        helper.resetStubs(
+            getFloatBalanceStub, getFloatBonusBalanceStub, getFloatAlertsStub, insertFloatLogStub,
             updateFloatLogStub, listCountriesClientsStub, listClientFloatsStub, fetchClientFloatVarsStub, updateClientFloatVarsStub,
             momentStub, lamdbaInvokeStub
         );
@@ -99,7 +104,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                     bonusPoolBalance: { amount: 500, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
                     bonusOutflow: { amount: 510, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
                     bonusInflowSum: { amount: 462, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
-                    bonusPoolIds: [ testFloatId ]
+                    bonusPoolIds: [testFloatId]
                 }]
             }
         };
@@ -113,8 +118,8 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         getFloatBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' }}]]));
         getFloatBalanceStub.withArgs([testFloatId], sinon.match.any).resolves(new Map([[testFloatId, { 'USD': { amount: 200, unit: 'HUNDREDTH_CENT' }}]]));
         getFloatBonusBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 500, unit: 'HUNDREDTH_CENT' }}}]]));
-        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, -1).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 510, unit: 'HUNDREDTH_CENT' }}}]]));
-        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, 1).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 462, unit: 'HUNDREDTH_CENT' }}}]]));        
+        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, NEG_FLOW_FLAG).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 510, unit: 'HUNDREDTH_CENT' }}}]]));
+        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, POS_FLOW_FLAG).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 462, unit: 'HUNDREDTH_CENT' }}}]]));        
 
         const testEvent = {
             requestContext: {
@@ -137,8 +142,8 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         expect(getFloatBalanceStub).to.have.been.calledWith([testFloatId]);
         expect(getFloatBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any);
         expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId]);
-        expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any, sinon.match.any, -1);
-        expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any, sinon.match.any, 1);
+        expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any, sinon.match.any, NEG_FLOW_FLAG);
+        expect(getFloatBonusBalanceStub).to.have.been.calledWith([testFloatId], sinon.match.any, sinon.match.any, POS_FLOW_FLAG);
     });
 
     it('Client-Float listing fails on unauthorized access', async () => {
@@ -155,7 +160,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         logger('Result of unauthorized listing', resultOfListing);
 
         expect(resultOfListing).to.exist;
-        expect(resultOfListing).to.have.property('statusCode', 403);
+        expect(resultOfListing).to.have.property('statusCode', status('Forbidden'));
         expect(resultOfListing.headers).to.deep.equal(helper.expectedHeaders);
         expect(listCountriesClientsStub).to.have.not.been.called;
         expect(listClientFloatsStub).to.have.not.been.called;
@@ -167,7 +172,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         const testUpdateTime = moment().format();
         fetchClientFloatVarsStub.resolves({ currency: testCurrency });
         getFloatBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' }}]]));
-        getFloatAlertsStub.resolves([{ logType: 'BALANCE_UNOBTAINABLE', logId: testLogId, logContext: { resolved: true }, updatedTime: testUpdateTime }])
+        getFloatAlertsStub.resolves([{ logType: 'BALANCE_UNOBTAINABLE', logId: testLogId, logContext: { resolved: true }, updatedTime: testUpdateTime }]);
 
         const testRequestBody = { clientId: testClientId, floatId: testFloatId };
         const testEvent = helper.wrapQueryParamEvent(testRequestBody, testUserId, 'SYSTEM_ADMIN', 'GET');
@@ -206,7 +211,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         logger('Result client float details extraction:', result);
 
         expect(result).to.exist;
-        expect(result).to.have.property('statusCode', 403);
+        expect(result).to.have.property('statusCode', status('Forbidden'));
         expect(result.headers).to.deep.equal(helper.expectedHeaders);
         expect(fetchClientFloatVarsStub).to.have.not.been.called;
         expect(getFloatBalanceStub).to.have.not.been.called;
@@ -401,7 +406,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
 
         insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
-            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})
+            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [uuid()]}})
         });
 
         const testEvent = {
@@ -458,7 +463,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
 
         insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
-            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})
+            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [uuid()]}})
         });       
 
         const testEvent = {
@@ -508,13 +513,13 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                 unit: 'HUNDREDTH_CENT',
                 identifier: testLogId,
                 relatedEntityType: 'ADMIN_INSTRUCTION',
-                recipients: [{'recipientType':'ALL_USERS','amount':100 }]
+                recipients: [{'recipientType': 'ALL_USERS', 'amount': 100 }]
             }]
         };
 
         insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
-            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [ uuid() ]}})
+            promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [uuid()]}})
         });
 
         const testEvent = {

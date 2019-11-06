@@ -13,6 +13,9 @@ const expect = chai.expect;
 
 const helper = require('./test.helper');
 
+const MAX_AMOUNT = 6000000;
+const MIN_AMOUNT = 5000000;
+
 const momentStub = sinon.stub();
 const pendingTxStub = sinon.stub();
 const countUsersStub = sinon.stub();
@@ -38,8 +41,13 @@ const handler = proxyquire('../admin-user-handler', {
 describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     const testUserId = uuid();
     const testAccountId = uuid();
+
     const testPhone = '27820234324';
     const testNationalId = '03122893249435034';
+
+    const startDay = 5;
+    const interval = 1;
+
     const testTime = moment();
 
     const expectedTxResponse = {
@@ -70,8 +78,16 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         tags: 'GRANTED_GIFT'
     };
 
+    const generateAmount = () => {
+        const base = Math.floor(Math.random());
+        const multiplier = (MAX_AMOUNT - MIN_AMOUNT);
+        const normalizer = MIN_AMOUNT;
+        const rawResult = base * multiplier;
+        return rawResult + normalizer;
+    };
+
     const testBalance = () => ({
-        amount: Math.trunc(Math.floor(Math.random() * (6000000 - 5000000) + 5000000)),
+        amount: generateAmount(),
         unit: 'HUNDREDTH_CENT',
         currency: 'USD',
         datetime: moment().format(),
@@ -80,11 +96,11 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     });
 
     const expectedBalance = {
-        accountId: [ testAccountId ],
+        accountId: [testAccountId],
         balanceStartDayOrLastSettled: testBalance(),
         balanceEndOfToday: testBalance(),
         currentBalance: testBalance(),
-        balanceSubsequentDays: [ testBalance(), testBalance(), testBalance() ]
+        balanceSubsequentDays: [testBalance(), testBalance(), testBalance()]
     };
 
     const expectedHistory = {
@@ -97,7 +113,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
                     initiator: 'SYSTEM',
                     context: JSON.stringify({ freeForm: 'JSON object' }),
                     interface: 'MOBILE_APP',
-                    timestamp: moment().subtract(5, 'days').valueOf(),
+                    timestamp: moment().subtract(startDay, 'days').valueOf(),
                     userId: testUserId,
                     eventType: 'REGISTERED'
                 },
@@ -105,7 +121,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
                     initiator: 'SYSTEM',
                     context: JSON.stringify({ freeForm: 'JSON object' }),
                     interface: 'MOBILE_APP',
-                    timestamp: moment().subtract(4, 'days').valueOf(),
+                    timestamp: moment().subtract(startDay - interval, 'days').valueOf(),
                     userId: testUserId,
                     eventType: 'PASSWORD_SET'
                 },
@@ -113,7 +129,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
                     initiator: 'SYSTEM',
                     context: JSON.stringify({ freeForm: 'JSON object' }),
                     interface: 'MOBILE_APP',
-                    timestamp: moment().subtract(2, 'days').valueOf(),
+                    timestamp: moment().subtract((startDay - interval) - interval, 'days').valueOf(),
                     userId: testUserId,
                     eventType: 'USER_LOGIN'
                 }]
@@ -201,6 +217,16 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 describe('*** UNIT TEST USER COUNT ***', () => {
     
     const testUserId = uuid();
+    const MAX_USERS = 10000000;
+    const MIN_USERS = 9000000;
+    
+    const generateUserCount = () => {
+        const base = Math.floor(Math.random());
+        const multiplier = (MAX_USERS - MIN_USERS);
+        const normalizer = MIN_USERS;
+        const rawResult = base * multiplier;
+        return rawResult + normalizer;
+    };
 
     const adminHandler = proxyquire('../admin-user-handler', {
         './persistence/rds.account': {
@@ -213,7 +239,7 @@ describe('*** UNIT TEST USER COUNT ***', () => {
     });
 
     it('Fetches user count', async () => {
-        const testUserCount = Math.trunc(Math.floor(Math.random() * (10000000 - 9000000) + 9000000));
+        const testUserCount = generateUserCount;
 
         countUsersStub.resolves(testUserCount);
 

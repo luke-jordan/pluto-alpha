@@ -1,7 +1,6 @@
 'use strict';
 
 const logger = require('debug')('jupiter:admin:test-helper');
-const stringify = require('json-stable-stringify');
 
 const sinon = require('sinon');
 const chai = require('chai');

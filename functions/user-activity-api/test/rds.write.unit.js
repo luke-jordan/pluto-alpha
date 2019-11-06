@@ -445,8 +445,13 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
     const testUserId = uuid();
 
     it('Retrieves and sums user interest correctly', async () => {
-        const expectedInterestQuery = `select sum(amount), unit from ${config.get('tables.accountTransactions')} where owner_user_id = $1 and ` +
-            `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
+        const userAccountTable = config.get('tables.accountLedger');
+        const txTable = config.get('tables.accountTransactions');
+
+        const expectedInterestQuery = `select sum(amount), unit from ${userAccountTable} inner join ${txTable} ` +
+            `on ${userAccountTable}.account_id = ${config.get('tables.accountTransactions')}.account_id ` + 
+            `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and transaction_type in ($4) ` +
+            `and ${txTable}.creation_time > $5 group by unit`;
         const expectedTxTypes = [`'ACCRUAL'`, `'CAPITALIZATION'`];
         const expectedValues = [testUserId, 'USD', 'SETTLED', expectedTxTypes.join(','), moment(0).format()];
 
@@ -465,4 +470,4 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
         logger('Result of bad query: ', resultOfBadQuery);
         expect(resultOfBadQuery).to.be.null;
     });
-})
+});

@@ -13,9 +13,12 @@ const expect = chai.expect;
 
 const helper = require('./test.helper');
 
+const MAX_AMOUNT = 6000000;
+const MIN_AMOUNT = 5000000;
+
 const momentStub = sinon.stub();
 const findAccountStub = sinon.stub();
-const fetchPriorTxStub = sinon.stub()
+const fetchPriorTxStub = sinon.stub();
 const getAccountFigureStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 
@@ -80,8 +83,16 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         })
     });
 
+    const generateAmount = () => {
+        const base = Math.floor(Math.random());
+        const multiplier = (MAX_AMOUNT - MIN_AMOUNT);
+        const normalizer = MIN_AMOUNT;
+        const rawResult = base * multiplier;
+        return rawResult + normalizer;
+    };
+
     const testBalance = () => ({
-        amount: Math.trunc(Math.floor(Math.random() * (6000000 - 5000000) + 5000000)),
+        amount: generateAmount(),
         unit: 'HUNDREDTH_CENT',
         currency: 'USD',
         datetime: moment().format(),
@@ -90,11 +101,11 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     });
 
     const expectedBalance = {
-        accountId: [ testAccountId ],
+        accountId: [testAccountId],
         balanceStartDayOrLastSettled: testBalance(),
         balanceEndOfToday: testBalance(),
         currentBalance: testBalance(),
-        balanceSubsequentDays: [ testBalance(), testBalance(), testBalance() ]
+        balanceSubsequentDays: [testBalance(), testBalance(), testBalance()]
     };
 
     const expectedHistory = {
@@ -163,21 +174,17 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             promise: () => mockLambdaResponse(expectedProfile)
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({
-            promise: () => expectedHistory
-        });
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({ promise: () => expectedHistory });
 
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
             promise: () => mockLambdaResponse(expectedBalance)
         });
 
-        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: `interest::WHOLE_CENT::USD::${testTime.valueOf()}`}).resolves(
-            { amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' }
-        );
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: `interest::WHOLE_CENT::USD::${testTime.valueOf()}`}).resolves({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
 
         findAccountStub.withArgs(testUserId).resolves([testAccountId]);
 
-        fetchPriorTxStub.withArgs(testAccountId).resolves([expectedTxResponse])
+        fetchPriorTxStub.withArgs(testAccountId).resolves([expectedTxResponse]);
 
         const testEvent = {
             requestContext: {
@@ -196,6 +203,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         const result = await handler.fetchUserHistory(testEvent);
         logger('Result of user look up:', result);
+        logger('expected result:', expectedResult);
        
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
