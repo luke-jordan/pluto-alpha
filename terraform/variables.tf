@@ -52,8 +52,8 @@ variable user_profile_admin_policy_arn {
 
 variable user_profile_history_invoke_policy_arn {
     default = {
-        "staging" = "aws:iam::455943420663:policy/staging_lambda_user_history_read",
-        "master" = "aws:iam::455943420663:policy/master_lambda_user_history_read"
+        "staging" = "arn:aws:iam::455943420663:policy/staging_lambda_user_history_read",
+        "master" = "aws:aws:iam::455943420663:policy/master_lambda_user_history_read"
     }
     type = "map"
 }
