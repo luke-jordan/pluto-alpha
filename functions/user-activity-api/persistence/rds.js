@@ -80,6 +80,7 @@ const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') =>
 // to reinclude later, possibly: and transaction_type in ($4) 
 const accountSumQuery = async (params, systemWideUserId) => {
     // const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
+    const userAccountTable = config.get('tables.accountLedger');
     const query = `select sum(amount), unit from ${userAccountTable} inner join ${config.get('tables.accountTransactions')} ` +
         `on ${userAccountTable}.account_id = ${config.get('tables.accountTransactions')}.account_id ` +
         `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;

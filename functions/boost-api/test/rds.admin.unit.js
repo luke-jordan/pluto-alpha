@@ -213,7 +213,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         'start_time': testStartTime.format(),
         'end_time': testEndTime.format(),
         'status_conditions': testStatusCondition,
-        'initial_status': 'PENDING',
+        'initial_status': 'PENDING'
     };
 
     beforeEach(() => {
