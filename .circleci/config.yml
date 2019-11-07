@@ -102,6 +102,7 @@ jobs:
             /bin/sh execute_test_lint.sh functions/user-activity-api
             /bin/sh execute_test_lint.sh functions/user-existence-api
             /bin/sh execute_test_lint.sh functions/boost-api
+            /bin/sh execute_test_lint.sh functions/audience-selection
             /bin/sh execute_test_lint.sh functions/user-messaging-api
             /bin/sh execute_test_lint.sh functions/third-parties
             /bin/sh execute_test_lint.sh functions/db-migration no-test
@@ -175,6 +176,10 @@ jobs:
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_boost_api_$CIRCLE_SHA1.zip .
 
+                cd $HOME/app/functions/audience-selection
+                echo $CIRCLE_SHA1 > last_commit.txt
+                zip -rq $HOME/deploy_audience_selection_$CIRCLE_SHA1.zip .
+
                 cd $HOME/app/functions/user-messaging-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_messaging_api_$CIRCLE_SHA1.zip .
@@ -207,6 +212,7 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_activity_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_existence_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_boost_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/boost_api/$CIRCLE_SHA1.zip
+                /home/circleci/bin/aws s3 cp deploy_audience_selection_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/audience_selection/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_messaging_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_messaging_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_admin_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/admin_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_third_parties_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/third_parties/$CIRCLE_SHA1.zip
