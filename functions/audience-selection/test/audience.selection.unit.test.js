@@ -17,7 +17,7 @@ class MockRdsConnection {
 
 const audienceSelection = proxyquire('../index', {
     'rds-common': MockRdsConnection
-});
+}).original;
 
 const rootJSON = {
     "table": "transactions"

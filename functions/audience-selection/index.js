@@ -196,4 +196,18 @@ class AudienceSelection {
     }
 }
 
-module.exports = new AudienceSelection();
+module.exports.original = new AudienceSelection();
+
+module.exports.processRequestFromAnotherLambda = async (event) => {
+    try {
+        const users = await new AudienceSelection.fetchUsersGivenJSON(event);
+        logger('Successfully retrieved users', users);
+        return {
+            statusCode: 200,
+            message: users
+        };
+    } catch(error) {
+        logger('FATAL_ERROR:', error);
+        return { statusCode: 500, message: error.message };
+    }
+};
