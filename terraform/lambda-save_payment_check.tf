@@ -10,7 +10,7 @@ resource "aws_lambda_function" "save_payment_check" {
   handler                        = "saving-handler.checkPendingPayment"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
-  timeout                        = 900
+  timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
@@ -24,11 +24,6 @@ resource "aws_lambda_function" "save_payment_check" {
           {
               "aws": {
                 "region": "${var.aws_default_region[terraform.workspace]}"
-              },
-              "tables": {
-                  "accountTransactions": "transaction_data.core_transaction_ledger",
-                  "rewardTransactions": "transaction_data.core_transaction_ledger",
-                  "floatTransactions": "float_data.float_transaction_ledger"
               },
               "db": {
                 "host": "${local.database_config.host}",

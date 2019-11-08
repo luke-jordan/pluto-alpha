@@ -49,6 +49,7 @@
             "boosts": "boost_event_process",
             "status": "profile_status_update"
         },
+        "eventsEmailEnabled": true,
         "withdrawalEmailDestination": ["luke@jupitersave.com"],
         "saveEmailDestination": ["luke@jupitersave.com"],
         "eventsEmailAddress": "noreply@jupitersave.com",

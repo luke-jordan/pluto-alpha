@@ -63,6 +63,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "ops_warmup" {
   name = "/aws/lambda/${var.ops_warmup_lambda_function_name}"
+  retention_in_days = 1
 
   tags = {
     environment = "${terraform.workspace}"

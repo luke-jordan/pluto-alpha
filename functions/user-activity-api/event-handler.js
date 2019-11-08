@@ -172,6 +172,17 @@ const assembleStatusUpdateInvocation = (systemWideUserId, statusInstruction) => 
     return invokeParams;
 };
 
+const safeEmailAttempt = async (eventBody) => {
+    try {
+        const emailToSend = await assembleSaveEmail(eventBody);
+        logger('Sending save event emails: ', emailToSend);
+        const emailResult = await ses.sendEmail(emailToSend).promise();
+        logger('Well where did that get us: ', emailResult);
+    } catch (err) {
+        logger('Email sending conked out: ', err);
+    }
+}
+
 // todo : parallelize, obviously
 const handleSavingEvent = async (eventBody) => {
     logger('Saving event triggered!: ', eventBody);
@@ -180,10 +191,10 @@ const handleSavingEvent = async (eventBody) => {
     const resultOfInvoke = await lambda.invoke(boostProcessInvocation).promise();
     logger('Result of invoking boost process: ', resultOfInvoke);
 
-    const emailToSend = await assembleSaveEmail(eventBody);
-    logger('Sending save event emails: ', emailToSend);
-    const emailResult = await ses.sendEmail(emailToSend).promise();
-    logger('Well where did that get us: ', emailResult);
+    const sendEmail = config.get('publishing.eventsEmailEnabled');
+    if (sendEmail) {
+        await safeEmailAttempt(eventBody);
+    }
 
     // todo : in time, make sure that this doesn't go backwards
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};

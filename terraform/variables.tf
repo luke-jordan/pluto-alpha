@@ -29,7 +29,7 @@ variable user_event_topic_arn {
 variable "user_status_lambda_arn" {
   default = {
       "staging" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
-      "master" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
+      "master" = "arn:aws:lambda:eu-west-1:455943420663:function:profile_status_update"
   }
   type = "map"
 }

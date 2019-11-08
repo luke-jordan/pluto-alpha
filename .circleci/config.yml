@@ -233,6 +233,9 @@ jobs:
              cd $HOME/app/terraform
 
              if [ $CIRCLE_BRANCH == 'master' ] || [ $CIRCLE_BRANCH == 'staging' ] ; then
+                echo "Fetch private credentials used in some lambdas"
+                /home/circleci/bin/aws s3 cp s3://jupiter.deploy.files/ops-private-vars.tf .
+
                 terraform init
                 terraform workspace select $CIRCLE_BRANCH
                 
@@ -246,7 +249,6 @@ jobs:
                 if [ $CIRCLE_BRANCH == 'staging' ]; then
                     migrator_region=us-east-1
                 fi
-
 
                 /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload file://$HOME/app/functions/db-migration/create_roles_event.json  --log-type Tail -
                 /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload '{"type": "SETUP_TABLES"}' --log-type Tail -

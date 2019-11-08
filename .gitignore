@@ -44,3 +44,6 @@ atlassian-ide-plugin.xml
 /.idea
 cache.properties
 .DS_Store
+
+# private variables (keys etc)
+*private*.tf
