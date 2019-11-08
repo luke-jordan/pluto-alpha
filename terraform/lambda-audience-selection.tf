@@ -7,7 +7,7 @@ resource "aws_lambda_function" "audience_selection" {
   function_name = "${var.audience_selection_lambda_function_name}"
   role = "${aws_iam_role.audience_selection_role.arn}"
   handler = "index.processRequestFromAnotherLambda"
-  memory_size = 512
+  memory_size = 256
   runtime = "nodejs10.x"
   timeout = 900
   tags = {"environment"  = "${terraform.workspace}"}
@@ -32,11 +32,6 @@ resource "aws_lambda_function" "audience_selection" {
                 "enabled": true,
                 "names": {
                   "audience_selection_worker": "${terraform.workspace}/ops/psql/audience-selection"
-                }
-              },
-              "publishing": {
-                "userEvents": {
-                  "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
                 }
               }
             }
@@ -91,21 +86,6 @@ policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 resource "aws_iam_role_policy_attachment" "audience_selection_vpc_execution_policy" {
 role = "${aws_iam_role.audience_selection_role.name}"
 policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
-}
-
-resource "aws_iam_role_policy_attachment" "audience_selection_invoke_transfer_policy" {
-role = "${aws_iam_role.audience_selection_role.name}"
-policy_arn = "${aws_iam_policy.lambda_invoke_float_transfer_access.arn}"
-}
-
-resource "aws_iam_role_policy_attachment" "audience_selection_invoke_message_create_policy" {
-role = "${aws_iam_role.audience_selection_role.name}"
-policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
-}
-
-resource "aws_iam_role_policy_attachment" "audience_selection_user_event_publish_policy" {
-role = "${aws_iam_role.audience_selection_role.name}"
-policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "audience_selection_secret_get" {
