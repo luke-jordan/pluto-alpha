@@ -4,11 +4,8 @@ The best way to explain how this works is to show examples. We would do this by 
 
 
 ### Example 1 - Columns and Table
-Say we wanted to run an sql query:
 
-```
-select account_id from transactions
-```
+Say we wanted to choose all `users`:
 
 The JSON structure the backend is expecting would be:
 
@@ -20,15 +17,17 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query: 
+```
+select account_id from transactions
+```
+
 The `columns` key is used to specify columns to be selected and the `table` key stands for the table to be selected from.
 If the `columns` key or the `table` key is left out, then the assumption is `"columns": ["account_id"]` or `"table": "transaction_data.core_transaction_ledger"`
 
 ### Example 2  - Two Plus Columns
-Say we wanted to run an sql query:
 
-```
-select account_id, creation_time from transactions
-```
+Say we wanted to choose all `users` and view their `sign up times`:
 
 The JSON structure the backend is expecting would be:
 
@@ -40,13 +39,14 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query: 
+
+```
+select account_id, creation_time from transactions
+```
 
 ### Example 3 - General Where Conditions
-Say we wanted to run an sql query:
-
-```
-select account_id from transactions where transaction_type='USER_SAVING_EVENT'
-```
+Say we wanted to choose `users` that have carried out a `saving event`:
 
 The JSON structure the backend is expecting would be:
 
@@ -61,18 +61,20 @@ The JSON structure the backend is expecting would be:
 
 ```
 
-`where` clauses are introduced above using three properties:
+This is equivalent to the SQL query: 
+
+```
+select account_id from transactions where transaction_type='USER_SAVING_EVENT'
+```
+
+`where` clauses are introduced above using three properties in the `conditions` key:
 `op` represents the operation being carried out.
 `prop` represents the column in the condition
 `value` represents the value of the column
 
 
 ### Example 4 - And Conditions
-Say we wanted to run an sql query:
-
-```
-select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')
-```
+Say we wanted to choose `users` that have carried out a `saving event` `AND` the status of the saving event is `settled`:
 
 The JSON structure the backend is expecting would be:
 
@@ -90,15 +92,18 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query:
+
+```
+select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')
+```
+
 More complex `where` clauses can be represented with the `and` operator.
 
 
 ### Example 5 - Or Conditions
-Say we wanted to run an sql query:
+Say we wanted to choose `users` that have carried out a `saving event` `OR` the status of the saving event is `settled`:
 
-```
-select account_id from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')
-```
 
 The JSON structure the backend is expecting would be:
 
@@ -116,15 +121,17 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query: 
+```
+select account_id from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')
+```
+
 More complex `where` clauses can also be represented with the `or` operator.
 
 
 ### Example 6 - Simple `or`/`and` conditions
-Say we wanted to run an sql query:
-
-```
-select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')
-```
+Say we wanted to choose `users` that have carried out a (`saving event` `AND` the status of the saving event is `settled`)
+`OR` (users that signed up on `2019-01-27`)
 
 The JSON structure the backend is expecting would be:
 
@@ -144,17 +151,20 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query::
+
+```
+select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')
+```
+
 More complex `where` clauses can also be represented with the `and`/`or` operator.
 
 `N/B`: `account_id` stands for the default column when a "columns" key is not passed.
 
 
 ### Example 7 - `or` / `and` / `and` conditions
-Say we wanted to run an sql query:
-
-```
-select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')
-```
+Say we wanted to choose `users` that have carried out a (`saving event` `AND` the status of the saving event is `settled`)
+`OR` (users that signed up on `2019-01-27` and their responsible_client_id is `1`)
 
 The JSON structure the backend is expecting would be:
 
@@ -176,6 +186,12 @@ The JSON structure the backend is expecting would be:
 }
 ```
 
+This is equivalent to the SQL query:
+
+```
+select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')
+```
+
 More complex `where` clauses can also be represented with the `or` / `and` / `and` operator.
 
 
@@ -183,11 +199,6 @@ Here we also introduce the `type: int` key which indicates that the value is an 
 
 
 ### Example 8 - Random Samples
-Say we wanted to run an sql query:
-
-```
-select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') order by random() limit 50
-```
 
 The JSON structure the backend is expecting would be:
 
@@ -205,17 +216,19 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query:
+
+```
+select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') order by random() limit 50
+```
+
 This covers selecting random samples after selecting users based on conditions.
 
 The key `sample` and subkey `random` is used to specify that a random amount (in this case the amount=50) of the users selected using the conditions should be returned. This means that if 200 users were initially returned from the query, 50 of them would be selected at random and returned to the client.
 
 
 ### Example 9 - Group By Filters
-Say we wanted to run an sql query:
 
-```
-select responsible_client_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by responsible_client_id
-```
 
 The JSON structure the backend is expecting would be:
 
@@ -234,14 +247,15 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query:
+
+```
+select responsible_client_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by responsible_client_id
+```
+
 The `groupBy` key covers selecting `group by` filters and can be expanded into multiple columns.
 
 ### Example 10 - Columns to Count
-Say we wanted to run an sql query:
-
-```
-select responsible_client_id, count(account_id) from transactions group by responsible_client_id
-```
 
 The JSON structure the backend is expecting would be:
 
@@ -255,14 +269,15 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query:
+
+```
+select responsible_client_id, count(account_id) from transactions group by responsible_client_id
+```
+
 The `columnsToCount` key covers selecting columns to count and can be expanded into multiple columns.
 
 ### Example 11 - Having Filters
-Say we wanted to run an sql query:
-
-```
-select responsible_client_id, count(account_id) from transactions group by responsible_client_id having count(account_id)=20
-```
 
 The JSON structure the backend is expecting would be:
 
@@ -274,7 +289,12 @@ The JSON structure the backend is expecting would be:
     "groupBy": ["responsible_client_id"],
     "postConditions": [{ "op": "is", "prop": "count(account_id)", "type": "int", "value": 20 }]
 }
+```
 
+This is equivalent to the SQL query:
+
+```
+select responsible_client_id, count(account_id) from transactions group by responsible_client_id having count(account_id)=20
 ```
 
 The `postConditions` key covers `having` filters.
@@ -308,11 +328,7 @@ The types of `value` default to `string` and could be specified as `int` when ne
 ## Typical Real World Scenarios
 
 ### Example 12 - get user ids based on sign_up intervals
-Say we wanted to run an sql query:
-
-```
-select account_id from transactions where (creation_time>='2018-07-01' and creation_time<='2019-11-23'
-```
+Say we wanted to choose `users` that `signed up` between `2018-07-01` and `2019-11-23`
 
 The JSON structure the backend is expecting would be:
 
@@ -329,17 +345,17 @@ The JSON structure the backend is expecting would be:
 
 ```
 
+This is equivalent to the SQL query:
+
+```
+select account_id from transactions where (creation_time>='2018-07-01' and creation_time<='2019-11-23')
+```
+
 `sign_up` intervals are represented with the `>=` and `<=` operators which replaces sql's `between` operator
 
 
 ### Example 13 - get user ids based on activity counts
-Say we wanted to run an sql query:
-
-```
-    select account_id, count(account_id) from transactions
-    where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')
-    group by account_id having (count(account_id)>=10 and count(account_id)<=50)
-```
+Say we wanted to choose `users` with activity counts between `10` and `50`
 
 The JSON structure the backend is expecting would be:
 ```
@@ -361,6 +377,14 @@ The JSON structure the backend is expecting would be:
         ]
     }]
 }
+```
+
+This is equivalent to the SQL query:
+
+```
+    select account_id, count(account_id) from transactions
+    where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')
+    group by account_id having (count(account_id)>=10 and count(account_id)<=50)
 ```
 
 ## SENDING & RECURRENCE INSTRUCTIONS
