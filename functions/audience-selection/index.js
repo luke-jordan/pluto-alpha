@@ -4,11 +4,13 @@ const logger = require('debug')('jupiter:audience-selection');
 const config = require('config');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
+const defaultTable = 'transaction_data.core_transaction_ledger';
+const dummyTableForTests = 'transactions';
 
 class AudienceSelection {
 
     constructor () {
-        this.supportedTables = ['transactions'];
+        this.supportedTables = [dummyTableForTests, defaultTable];
         this.supportedColumns = [
             'transaction_type',
             'settlement_status',
@@ -17,6 +19,14 @@ class AudienceSelection {
             'creation_time',
             'owner_user_id',
             'count(account_id)'
+        ];
+    }
+
+    static fetchCodeLabelsAndTypes () {
+        // TODO: reduce duplication as this response is similar to `this.supportedColumns`
+        return [
+            { code: "count(account_id)", label: "Activity Count", type: "count" },
+            { code: "creation_time", label: "Signed Up", type: "entity" }
         ];
     }
 
@@ -94,7 +104,7 @@ class AudienceSelection {
 
     extractTable (selectionJSON) {
         if (!selectionJSON.table) {
-            return 'transaction_data.core_transaction_ledger';
+            return defaultTable;
         }
 
         if (!this.supportedTables.includes(selectionJSON.table)) {
@@ -191,7 +201,7 @@ class AudienceSelection {
         try {
             logger('Selecting accounts according to: ', selectionJSON);
             const sqlQuery = this.extractSQLQueryFromJSON(selectionJSON);
-            const queryResult = await rdsConnection.selectQuery(sqlQuery);
+            const queryResult = await rdsConnection.selectQuery(sqlQuery, []);
             logger('Number of records from query: ', queryResult.length);
             return queryResult.map((row) => row['account_id']);
         } catch (error) {
@@ -201,6 +211,11 @@ class AudienceSelection {
 }
 
 module.exports.original = new AudienceSelection();
+
+module.exports.fetchPropertyMapping = () => ({
+        statusCode: 200,
+        message: AudienceSelection.fetchCodeLabelsAndTypes()
+});
 
 module.exports.processRequestFromAnotherLambda = async (event) => {
     try {
