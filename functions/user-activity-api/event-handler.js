@@ -181,7 +181,7 @@ const safeEmailAttempt = async (eventBody) => {
     } catch (err) {
         logger('Email sending conked out: ', err);
     }
-}
+};
 
 // todo : parallelize, obviously
 const handleSavingEvent = async (eventBody) => {

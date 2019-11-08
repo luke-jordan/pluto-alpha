@@ -15,11 +15,13 @@ create table if not exists float_data.float_transaction_ledger (
     related_entity_id varchar(50)
 );
 
--- todo : definitely do not do this once into production
+-- todo : move this into migration handling once that is built
 alter table float_data.float_transaction_ledger drop constraint if exists float_transaction_type_check;
 alter table float_data.float_transaction_ledger add constraint float_transaction_type_check check (
     t_type in ('ACCRUAL', 'ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION', 'ADMIN_BALANCE_RECON')
 );
+
+create index if not exists idx_allocated_to_id on float_data.float_transaction_ledger (allocated_to_id);
 
 -- Used for, e.g., recording the date & time of the last float calculation (as well as audit trail). Use log context to store information
 create table if not exists float_data.float_log (
@@ -38,7 +40,6 @@ create table if not exists float_data.float_log (
 drop trigger if exists update_float_log_modtime on float_data.float_log;
 create trigger update_float_log_modtime before update on float_data.float_log for each row execute procedure trigger_set_updated_timestamp();
 
--- todo: indices
 revoke all on float_data.float_transaction_ledger from public;
 
 grant usage on schema float_data to float_api_worker;

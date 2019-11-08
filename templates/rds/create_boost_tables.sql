@@ -40,6 +40,7 @@ create table if not exists boost_data.boost_account_status (
     unique (boost_id, account_id)
 );
 
+create index if not exists idx_boost_account_id on boost_data.boost_account_status (account_id);
 create index if not exists idx_boost_account_status on boost_data.boost_account_status (boost_status);
 
 drop trigger if exists update_boost_status_modtime on boost_data.boost_account_status;

@@ -21,7 +21,6 @@ create table if not exists message_data.message_instruction (
     flags text[] default '{}'
 );
 
-create index if not exists idx_creation_time on message_data.message_instruction (creation_time);
 drop trigger if exists update_msg_instruction_modtime on message_data.message_instruction;
 create trigger update_msg_instruction_modtime before update on message_data.message_instruction for each row execute procedure trigger_set_updated_timestamp();
 
@@ -48,9 +47,11 @@ create table if not exists message_data.user_message (
     flags text[] default '{}'
 );
 
-create index if not exists idx_creation_time on message_data.user_message (creation_time);
 drop trigger if exists update_msg_instruction_modtime on message_data.message_instruction;
 create trigger update_msg_instruction_modtime before update on message_data.message_instruction for each row execute procedure trigger_set_updated_timestamp();
+
+create index if not exists idx_message_destination_id on message_data.user_message (destination_user_id);
+create index if not exists idx_message_processed_status on message_data.user_message (processed_status);
 
 create table if not exists message_data.user_push_token (
     insertion_id serial primary key,

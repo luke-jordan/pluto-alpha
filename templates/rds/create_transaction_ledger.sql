@@ -35,7 +35,10 @@ alter table transaction_data.core_transaction_ledger add constraint account_tran
         transaction_type in ('ACCRUAL', 'FLOAT_ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION')
 );
 
--- todo : indices
+-- add core indices :: note, any search by human ref, etc., will know the account id beforehand, so include that in where clause
+-- in order to use that index, after which the search will be near-instant as small number of rows
+create index if not exists idx_account_transactions on transaction_data.core_transaction_ledger (account_id);
+create index if not exists idx_account_status on transaction_data.core_transaction_ledger (settlement_status);
 
 -- todo : tighten up / narrow grants
 revoke all on transaction_data.core_transaction_ledger from public;
