@@ -21,7 +21,7 @@ The JSON structure the backend is expecting would be:
 ```
 
 The `columns` key is used to specify columns to be selected and the `table` key stands for the table to be selected from.
-
+If the `columns` key or the `table` key is left out, then the assumption is `"columns": ["account_id"]` or `"table": "transaction_data.core_transaction_ledger"`
 
 ### Example 2  - Two Plus Columns
 Say we wanted to run an sql query:

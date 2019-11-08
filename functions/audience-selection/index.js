@@ -93,6 +93,10 @@ class AudienceSelection {
     }
 
     extractTable (selectionJSON) {
+        if (!selectionJSON.table) {
+            return 'transaction_data.core_transaction_ledger';
+        }
+
         if (!this.supportedTables.includes(selectionJSON.table)) {
             throw new Error('Table not supported at the moment');
         }
