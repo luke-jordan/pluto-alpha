@@ -224,7 +224,8 @@ select account_id from transactions where (transaction_type='USER_SAVING_EVENT' 
 
 This covers selecting random samples after selecting users based on conditions.
 
-The key `sample` and subkey `random` is used to specify that a random amount (in this case the amount=50) of the users selected using the conditions should be returned. This means that if 200 users were initially returned from the query, 50 of them would be selected at random and returned to the client.
+The key `sample` and subkey `random` is used to specify that a random percentage (in this case the percentage=50) of the users selected using the conditions should be returned. 
+This means that if 200 users were initially returned from the query, half (50%) of them would be selected at random and returned to the client.
 
 
 ### Example 9 - Group By Filters

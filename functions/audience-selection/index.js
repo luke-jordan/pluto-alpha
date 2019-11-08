@@ -6,6 +6,7 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 const defaultTable = 'transaction_data.core_transaction_ledger';
 const dummyTableForTests = 'transactions';
+const HUNDRED_PERCENT = 100;
 
 class AudienceSelection {
 
@@ -134,6 +135,53 @@ class AudienceSelection {
         return false;
     }
 
+    addWhereFiltersToQuery (whereFilters, query) {
+        if (whereFilters) {
+            return `${query} where ${whereFilters}`;
+        }
+        return query;
+    }
+
+    addGroupByFiltersToQuery (groupByFilters, query) {
+        if (groupByFilters) {
+            return `${query} group by ${groupByFilters}`;
+        }
+        return query;
+    }
+
+    addHavingFiltersToQuery (havingFilters, query) {
+        if (havingFilters) {
+            return `${query} having ${havingFilters}`;
+        }
+        return query;
+    }
+
+    getLimitForRandomSample (filters, value) {
+        const {
+            table,
+            whereFilters,
+            groupByFilters,
+            havingFilters
+        } = filters;
+
+        let query = `select count(*) from ${table}`;
+
+        query = this.addWhereFiltersToQuery(whereFilters, query);
+        query = this.addGroupByFiltersToQuery(groupByFilters, query);
+        query = this.addHavingFiltersToQuery(havingFilters, query);
+
+        const percentageAsFraction = value / HUNDRED_PERCENT;
+        return `((${query}) * ${percentageAsFraction})`;
+    }
+
+    addRandomExpectationToQuery (query, filters, selectionJSON) {
+        if (this.checkRandomSampleExpectation(selectionJSON)) {
+            const limitValue = this.getLimitForRandomSample(filters, selectionJSON.sample.random);
+            return `${query} order by random() limit ${limitValue}`;
+        }
+        return query;
+    }
+
     constructFullQuery (selectionJSON, parsedValues) {
         const {
             columns,
@@ -148,21 +196,17 @@ class AudienceSelection {
 
         let mainQuery = `select ${columnsToFetch} from ${table}`;
 
-        if (whereFilters) {
-            mainQuery = `${mainQuery} where ${whereFilters}`;
-        }
+        mainQuery = this.addWhereFiltersToQuery(whereFilters, mainQuery);
+        mainQuery = this.addGroupByFiltersToQuery(groupByFilters, mainQuery);
+        mainQuery = this.addHavingFiltersToQuery(havingFilters, mainQuery);
 
-        if (groupByFilters) {
-            mainQuery = `${mainQuery} group by ${groupByFilters}`;
-        }
-
-        if (havingFilters) {
-            mainQuery = `${mainQuery} having ${havingFilters}`;
-        }
-
-        if (this.checkRandomSampleExpectation(selectionJSON)) {
-            return `${mainQuery} order by random() limit ${selectionJSON.sample.random}`;
-        }
+        const filters = {
+            table,
+            whereFilters,
+            groupByFilters,
+            havingFilters
+        };
+        mainQuery = this.addRandomExpectationToQuery(mainQuery, filters, selectionJSON);
 
         return mainQuery;
     }
