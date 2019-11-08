@@ -9,7 +9,7 @@ resource "aws_lambda_function" "audience_selection" {
   handler = "index.processRequestFromAnotherLambda"
   memory_size = 256
   runtime = "nodejs10.x"
-  timeout = 900
+  timeout = 10
   tags = {"environment"  = "${terraform.workspace}"}
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "audience_selection/${var.deploy_code_commit_hash}.zip"
