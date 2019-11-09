@@ -1,0 +1,276 @@
+'use strict';
+
+const logger = require('debug')('jupiter:audience-selection');
+const config = require('config');
+const RdsConnection = require('rds-common');
+const rdsConnection = new RdsConnection(config.get('db'));
+const defaultTable = 'transaction_data.core_transaction_ledger';
+const dummyTableForTests = 'transactions';
+const HUNDRED_PERCENT = 100;
+
+class AudienceSelection {
+
+    constructor () {
+        this.supportedTables = [dummyTableForTests, defaultTable];
+        this.supportedColumns = [
+            'transaction_type',
+            'settlement_status',
+            'responsible_client_id',
+            'account_id',
+            'creation_time',
+            'owner_user_id',
+            'count(account_id)'
+        ];
+    }
+
+    static fetchCodeLabelsAndTypes () {
+        // TODO: reduce duplication as this response is similar to `this.supportedColumns`
+        return [
+            { code: "count(account_id)", label: "Activity Count", type: "count" },
+            { code: "creation_time", label: "Signed Up", type: "entity" }
+        ];
+    }
+
+    baseCaseQueryBuilder (unit, operatorTranslated) {
+        if (!this.supportedColumns.includes(unit.prop)) {
+            throw new Error('Property not supported at the moment');
+        }
+
+        if (unit.type === 'int') {
+            return `${unit.prop}${operatorTranslated}${unit.value}`;
+        }
+
+        return `${unit.prop}${operatorTranslated}'${unit.value}'`;
+    }
+
+    conditionsFilterBuilder (unit) {
+        // base cases
+        if (unit.op === 'is') {
+            return this.baseCaseQueryBuilder(unit, '=');
+        }
+
+        if (unit.op === 'greater_than') {
+            return this.baseCaseQueryBuilder(unit, '>');
+        }
+
+        if (unit.op === 'greater_than_or_equal_to') {
+            return this.baseCaseQueryBuilder(unit, '>=');
+        }
+
+        if (unit.op === 'less_than') {
+            return this.baseCaseQueryBuilder(unit, '<');
+        }
+
+        if (unit.op === 'less_than_or_equal_to') {
+            return this.baseCaseQueryBuilder(unit, '<=');
+        }
+
+        // end of base cases
+
+        if (unit.op === 'and' && unit.children) {
+            return '(' + unit.children.map((innerUnit) => this.conditionsFilterBuilder(innerUnit)).join(' and ') + ')';
+        }
+
+        if (unit.op === 'or' && unit.children) {
+            return '(' + unit.children.map((innerUnit) => this.conditionsFilterBuilder(innerUnit)).join(' or ') + ')';
+        }
+    }
+    
+    extractWhereConditions (selectionJSON) {
+        if (selectionJSON.conditions) {
+            return selectionJSON.conditions.map((block) => this.conditionsFilterBuilder(block)).join('');
+        }
+    }
+
+    validateAndParseColumns (columns) {
+        return columns.filter((column) => this.supportedColumns.includes(column));
+    }
+
+    extractColumnsToCount (selectionJSON) {
+        if (selectionJSON.columnsToCount) {
+            return this.validateAndParseColumns(selectionJSON.columnsToCount).
+                map((filteredColumn) => `count(${filteredColumn})`).
+                join(', ');
+        }
+    }
+
+    extractColumns (selectionJSON) {
+        if (selectionJSON.columns) {
+            return this.validateAndParseColumns(selectionJSON.columns).join(', ');
+        }
+
+        // columns filter not passed, therefore select only `account_id`
+        return `account_id`;
+    }
+
+    extractTable (selectionJSON) {
+        if (!selectionJSON.table) {
+            return defaultTable;
+        }
+
+        if (!this.supportedTables.includes(selectionJSON.table)) {
+            throw new Error('Table not supported at the moment');
+        }
+
+        return selectionJSON.table;
+    }
+    
+    extractGroupBy (selectionJSON) {
+        if (selectionJSON.groupBy) {
+            return this.validateAndParseColumns(selectionJSON.groupBy).join(', ');
+        }
+    }
+
+    extractHavingFilter (selectionJSON) {
+        if (selectionJSON.postConditions) {
+            return selectionJSON.postConditions.map((block) => this.conditionsFilterBuilder(block)).join('');
+        }
+    }
+
+    checkRandomSampleExpectation (selectionJSON) {
+        if (selectionJSON.sample && selectionJSON.sample.random) {
+            return true;
+        }
+
+        return false;
+    }
+
+    addWhereFiltersToQuery (whereFilters, query) {
+        if (whereFilters) {
+            return `${query} where ${whereFilters}`;
+        }
+        return query;
+    }
+
+    addGroupByFiltersToQuery (groupByFilters, query) {
+        if (groupByFilters) {
+            return `${query} group by ${groupByFilters}`;
+        }
+        return query;
+    }
+
+    addHavingFiltersToQuery (havingFilters, query) {
+        if (havingFilters) {
+            return `${query} having ${havingFilters}`;
+        }
+        return query;
+    }
+
+    getLimitForRandomSample (filters, value) {
+        const {
+            table,
+            whereFilters,
+            groupByFilters,
+            havingFilters
+        } = filters;
+
+        let query = `select count(*) from ${table}`;
+
+        query = this.addWhereFiltersToQuery(whereFilters, query);
+        query = this.addGroupByFiltersToQuery(groupByFilters, query);
+        query = this.addHavingFiltersToQuery(havingFilters, query);
+
+        const percentageAsFraction = value / HUNDRED_PERCENT;
+        return `((${query}) * ${percentageAsFraction})`;
+    }
+
+    addRandomExpectationToQuery (query, filters, selectionJSON) {
+        if (this.checkRandomSampleExpectation(selectionJSON)) {
+            const limitValue = this.getLimitForRandomSample(filters, selectionJSON.sample.random);
+            return `${query} order by random() limit ${limitValue}`;
+        }
+        return query;
+    }
+
+    constructFullQuery (selectionJSON, parsedValues) {
+        const {
+            columns,
+            columnsToCount,
+            table,
+            whereFilters,
+            groupByFilters,
+            havingFilters
+        } = parsedValues;
+
+        const columnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
+
+        let mainQuery = `select ${columnsToFetch} from ${table}`;
+
+        mainQuery = this.addWhereFiltersToQuery(whereFilters, mainQuery);
+        mainQuery = this.addGroupByFiltersToQuery(groupByFilters, mainQuery);
+        mainQuery = this.addHavingFiltersToQuery(havingFilters, mainQuery);
+
+        const filters = {
+            table,
+            whereFilters,
+            groupByFilters,
+            havingFilters
+        };
+        mainQuery = this.addRandomExpectationToQuery(mainQuery, filters, selectionJSON);
+
+        return mainQuery;
+    }
+
+    extractSQLQueryFromJSON (selectionJSON) {
+        logger('extracting sql query from JSON: ', selectionJSON);
+
+        const columns = this.extractColumns(selectionJSON);
+        const columnsToCount = this.extractColumnsToCount(selectionJSON);
+        const table = this.extractTable(selectionJSON);
+        const whereFilters = this.extractWhereConditions(selectionJSON);
+        const groupByFilters = this.extractGroupBy(selectionJSON);
+        const havingFilters = this.extractHavingFilter(selectionJSON);
+        logger('parsed columns:', columns);
+        logger('parsed table:', table);
+        logger('where filters:', whereFilters);
+        logger('parsed columns to count:', columnsToCount);
+        logger('groupBy filters:', groupByFilters);
+        logger('having filters:', havingFilters);
+
+        const parsedValues = {
+            columns,
+            columnsToCount,
+            table,
+            whereFilters,
+            groupByFilters,
+            havingFilters
+        };
+        const fullQuery = this.constructFullQuery(selectionJSON, parsedValues);
+        logger('full sql query:', fullQuery);
+
+        return fullQuery;
+    }
+
+    async fetchUsersGivenJSON (selectionJSON) {
+        try {
+            logger('Selecting accounts according to: ', selectionJSON);
+            const sqlQuery = this.extractSQLQueryFromJSON(selectionJSON);
+            const queryResult = await rdsConnection.selectQuery(sqlQuery, []);
+            logger('Number of records from query: ', queryResult.length);
+            return queryResult.map((row) => row['account_id']);
+        } catch (error) {
+            logger('Error occurred while fetching users given json. Error:', error);
+        }
+    }
+}
+
+module.exports.original = new AudienceSelection();
+
+module.exports.fetchPropertyMapping = () => ({
+        statusCode: 200,
+        message: AudienceSelection.fetchCodeLabelsAndTypes()
+});
+
+module.exports.processRequestFromAnotherLambda = async (event) => {
+    try {
+        const users = await new AudienceSelection().fetchUsersGivenJSON(event);
+        logger('Successfully retrieved users', users);
+        return {
+            statusCode: 200,
+            message: users
+        };
+    } catch (error) {
+        logger('FATAL_ERROR:', error);
+        return { statusCode: 500, message: error.message };
+    }
+};
