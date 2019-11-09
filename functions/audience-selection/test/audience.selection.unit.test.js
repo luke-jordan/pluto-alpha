@@ -1,381 +1,126 @@
 'use strict';
 
+const config = require('config');
+const uuid = require('uuid/v4');
+const moment = require('moment');
+
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
-const uuid = require('uuid/v4');
 const proxyquire = require('proxyquire').noCallThru();
 
-const selectQueryStub = sinon.stub();
+const executeConditionsStub = sinon.stub();
+const countAudienceStub = sinon.stub();
+const selectAudienceStub = sinon.stub();
 
-class MockRdsConnection {
-    constructor () {
-        this.selectQuery = selectQueryStub;
+const audienceHandler = proxyquire('../audience-handler', {
+    'persistence': {
+        'executeColumnConditions': executeConditionsStub,
+        'countAudienceSize': countAudienceStub,
+        'selectAudienceActive': selectAudienceStub
     }
-}
-
-const audienceSelection = proxyquire('../index', {
-    'rds-common': MockRdsConnection
-}).original;
+});
 
 const rootJSON = {
     "table": "transactions"
 };
 
 const resetStubs = () => {
-    selectQueryStub.reset();
+    executeConditionsStub.reset();
+    countAudienceStub.reset();
+    selectAudienceStub.reset();
 };
-const mockAccountId = uuid();
-const expectedRawQueryResult = [{ 'account_id': mockAccountId }];
-const expectedParsedUserIds = [mockAccountId];
-const emptyArray = [];
 
+describe('Audience selection - obtain & utilize list of standard properties', () => {
 
-describe('Audience Selection - SQL Query Construction', () => {
+    beforeEach(() => resetStubs());
 
-    it(`should handle 'is' operator`, async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [
-                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" }
+    it('Should return acceptable properties, with types and labels', async () => {
+        const activityCountProperty = { type: 'aggregate', name: 'saveCount', description: 'Number of saves', expects: 'number' };
+        const lastSaveTimeProperty = { type: 'match', name: 'lastSaveTime', description: 'Last save date', expects: 'epochMillis' };
+        
+        const availableProperties = audienceHandler.fetchAvailableProperties();
+        
+        expect(availableProperties).to.exist;
+        expect(availableProperties).to.be.an.array;
+        expect(availableProperties).to.have.length.greaterThan(1);
+        expect(availableProperties).to.include(activityCountProperty);
+        expect(availableProperties).to.include(lastSaveTimeProperty);
+    });
+
+    it('Converts properties as we wish', async () => {
+        const oneWeekAgo = moment().subtract(7, 'days');
+        
+        const mockClientId = 'test-client-id';
+        const mockSubAudienceId = uuid();
+
+        const mockWholeAudienceId = uuid();
+        const mockNumberAccounts = Math.floor(Math.random() * 1000);
+        
+        const mockSelectionJSON = {
+            client: mockClientId,
+            conditions: [
+                { op: 'or', children: [
+                    { op: 'greater_than', prop: 'lastSaveTime', type: 'match', value: oneWeekAgo.valueOf() },
+                    { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3 }
+                ]}
+            ]
+        };
+
+        const expectedSaveCountSelection = Object.assign({}, rootJSON, {
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'client_id', value: mockClientId },
+                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
+                ]}
+            ],
+            groupBy: [
+                "account_id"
+            ],
+            postConditions: [
+                { op: 'greater_than', prop: 'count(transaction_id)', value: 3 }
             ]
         });
 
-        const expectedQuery = `select account_id from transactions where transaction_type='USER_SAVING_EVENT'`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it(`should handle 'greater_than' operator`, async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [
-                    { "op": "greater_than", "prop": "creation_time", "value": "2019-08-07" }
-            ]
-        });
-
-        const expectedQuery = `select account_id from transactions where creation_time>'2019-08-07'`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it(`should handle 'greater_than_or_equal_to' operator`, async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [
-                    { "op": "greater_than_or_equal_to", "prop": "creation_time", "value": "2019-08-07" }
-            ]
-        });
-
-        const expectedQuery = `select account_id from transactions where creation_time>='2019-08-07'`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it(`should handle 'less_than' operator`, async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [
-                    { "op": "less_than", "prop": "creation_time", "value": "2019-08-07" }
-            ]
-        });
-
-        const expectedQuery = `select account_id from transactions where creation_time<'2019-08-07'`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it(`should handle 'less_than_or_equal_to' operator`, async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [
-                    { "op": "less_than_or_equal_to", "prop": "creation_time", "value": "2019-08-07" }
-            ]
-        });
-
-        const expectedQuery = `select account_id from transactions where creation_time<='2019-08-07'`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should be able to handle simple AND statements', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [{
-                 "op": "and", "children": [
-                     { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                     { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                ]
-            }]
-        });
-
-        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should be able to handle simple OR statements', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [{
-                "op": "or", "children": [
-                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                ]
-            }]
-        });
-        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should be able to handle simple AND and OR statements', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [{
-                "op": "or", "children": [
-                    { "op": "and", "children": [
-                        { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                    ]},
-                    { "op": "is", "prop": "creation_time", "value": "2019-01-27" }
-                ]
-            }]
-        });
-
-        const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-
-    it('should be able to handle complex AND and OR statements', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [{
-                "op": "or", "children": [
-                    { "op": "and", "children": [
-                        { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                        { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                    ]},
-                    { "op": "and", "children": [
-                        { "op": "is", "prop": "creation_time", "value": "2019-01-27" },
-                        { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
-                    ]}
-                ]
-            }]
-        });
-
-        const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or (creation_time='2019-01-27' and responsible_client_id=1))`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should be able to handle more complex AND and OR statements', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [{
-                "op": "and", "children": [
-                    { "op": "or", "children": [
-                        { "op": "and", "children": [
-                                { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                                { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
+        const expectedSubAudienceQuery = `select account_id from ${config.get('tables.audienceTable')} ` + 
+            `where audience_id = '${mockSubAudienceId}' and active = true`;
+        
+        const expectedWholeAudienceSelection = Object.assign({}, rootJSON, {
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'client_id', value: mockClientId },
+                    { op: 'or', children: [
+                        { op: 'and', children: [
+                            { op: 'greater_than', prop: 'creation_time', value: oneWeekAgo.format() },
+                            { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
                         ]},
-                        { "op": "is", "prop": "creation_time", "value": "2019-01-27" }
-                    ]},
-                    { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
-                ]
-            }]
-        });
-        const expectedQuery = `select account_id from transactions where (((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') and responsible_client_id=1)`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should handle random samples with conditions', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "sample": { random: 50 },
-            "conditions": [{
-                "op": "and", "children": [
-                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                ]
-            }]
-        });
-
-        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')` +
-            ` order by random() limit ((select count(*) from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')) * 0.5)`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should handle column filters', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "columns": ["account_id", "creation_time"],
-            "conditions": [{
-                "op": "and", "children": [
-                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                ]
-            }]
-        });
-
-        const expectedQuery = `select account_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should handle groupBy filters', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "columns": ["responsible_client_id", "creation_time"],
-            "conditions": [{
-                "op": "and", "children": [
-                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                ]
-            }],
-            "groupBy": ["responsible_client_id"]
-        });
-
-        const expectedQuery = `select responsible_client_id, creation_time from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by responsible_client_id`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should handle column to count along with groupBy filters', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "columns": ["responsible_client_id"],
-            "columnsToCount": ["account_id", "owner_user_id"],
-            "conditions": [{
-                "op": "and", "children": [
-                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                ]
-            }],
-            "groupBy": ["responsible_client_id"]
-        });
-
-        const expectedQuery = `select responsible_client_id, count(account_id), count(owner_user_id) from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by responsible_client_id`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-
-    it('should handle having filters along with column to count', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "columns": ["responsible_client_id"],
-            "columnsToCount": ["account_id"],
-            "groupBy": ["responsible_client_id"],
-            "postConditions": [{ "op": "greater_than_or_equal_to", "prop": "count(account_id)", "type": "int", "value": 20 }]
-        });
-
-        const expectedQuery = `select responsible_client_id, count(account_id) from transactions group by responsible_client_id having count(account_id)>=20`;
-        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedQuery);
-    });
-});
-
-describe('Audience Selection - fetch users given JSON', () => {
-
-    beforeEach(() => {
-        resetStubs();
-    });
-
-    it(`should handle fetch users given 'client_id'`, async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [
-                { "op": "is", "prop": "responsible_client_id", "value": 1, "type": "int" }
+                        { op: 'in', prop: 'account_id', value: expectedSubAudienceQuery }
+                    ]}
+                ]}
             ]
         });
 
-        const expectedQuery = `select account_id from transactions where responsible_client_id=1`;
-        const sqlQuery = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-        expect(sqlQuery).to.exist;
-        expect(sqlQuery).to.deep.equal(expectedQuery);
+        // not actually assembled here, instead in RDS, but placing here for reference for now
+        // const expectedFullQuery = `select distinct(account_id) from ${config.get('tables.transactionTable')} ` +
+        //     `where (client_id = '${mockClientId} and ` +
+        //     `((creation_time > '${oneWeekAgo.format()}' and settlement_status = 'SETTLED') or account_id in (${expectedSubAudienceQuery}))` +
+        //     `)`;
 
-        selectQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
+        executeConditionsStub.onFirstCall().resolves({ audienceId: mockSubAudienceId });
+        executeConditionsStub.onSecondCall().resolves({ audienceId: mockWholeAudienceId, audienceCount: mockNumberAccounts });
 
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedParsedUserIds);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, emptyArray);
-    });
-
-    it('should get user ids based on sign_up intervals', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "conditions": [{
-                "op": "and", "children": [
-                    { "op": "greater_than_or_equal_to", "prop": "creation_time", "value": "2018-07-01" },
-                    { "op": "less_than_or_equal_to", "prop": "creation_time", "value": "2019-11-23" }
-                ]
-            }]
+        const resultOfCall = await audienceHandler.processRequestFromAnotherLambda(mockSelectionJSON);
+        
+        expect(resultOfCall).to.exist;
+        expect(resultOfCall).to.deep.equal({
+            statusCode: 200,
+            body: JSON.stringify({ })
         });
 
-        const expectedQuery = `select account_id from transactions where (creation_time>='2018-07-01' and creation_time<='2019-11-23')`;
-        const sqlQuery = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-        expect(sqlQuery).to.exist;
-        expect(sqlQuery).to.deep.equal(expectedQuery);
-
-        selectQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
-
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedParsedUserIds);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, emptyArray);
+        expect(executeConditionsStub).to.have.been.calledWith(expectedSaveCountSelection, true);
+        expect(executeConditionsStub).to.have.been.calledWith(expectedWholeAudienceSelection, true);
+        
     });
 
-    it('should get user ids based on activity counts', async () => {
-        const mockSelectionJSON = Object.assign({}, rootJSON, {
-            "columns": ["account_id"],
-            "columnsToCount": ["account_id"],
-            "conditions": [{
-                "op": "and", "children": [
-                    { "op": "is", "prop": "transaction_type", "value": "USER_SAVING_EVENT" },
-                    { "op": "is", "prop": "settlement_status", "value": "SETTLED" }
-                ]
-            }],
-            "groupBy": ["account_id"],
-            "postConditions": [{
-                "op": "and", "children": [
-                    {"op": "greater_than_or_equal_to", "prop": "count(account_id)", "type": "int", "value": 10},
-                    {"op": "less_than_or_equal_to", "prop": "count(account_id)", "type": "int", "value": 50}
-                ]
-            }]
-        });
-
-        const expectedQuery = `select account_id, count(account_id) from transactions` +
-            ` where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')` +
-            ` group by account_id having (count(account_id)>=10 and count(account_id)<=50)`;
-        const sqlQuery = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
-        expect(sqlQuery).to.exist;
-        expect(sqlQuery).to.deep.equal(expectedQuery);
-
-        selectQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
-
-        const result = await audienceSelection.fetchUsersGivenJSON(mockSelectionJSON);
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedParsedUserIds);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, emptyArray);
-    });
 });

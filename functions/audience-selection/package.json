@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "DEBUG=jupiter:audience-selection:* nyc mocha 'test/audience.selection.unit.test.js'",
+    "test": "DEBUG=jupiter:audience-selection:* nyc mocha",
     "test-all": "DEBUG=jupiter:audience-selection:* nyc mocha --exit",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint .",
@@ -16,7 +16,8 @@
   "author": "Bolu Ajibawo",
   "dependencies": {
     "config": "^3.1.0",
-    "debug": "^4.1.1"
+    "debug": "^4.1.1",
+    "moment": "^2.24.0"
   },
   "devDependencies": {
     "chai": "^4.2.0",

@@ -3,11 +3,13 @@
     "region": "us-east-1"
   },
   "db": {
+    "user": "audience_worker",
     "host": "localhost",
-    "port": "5432",
-    "testDb": "jupitertest",
-    "testUser": "jupitertest",
-    "testPassword": "verylongpassword"
+    "database": "jupiter",
+    "password": "pwd_for_audience_worker",
+    "port" :"5430"
   },
-  "RdsConnection": { }
+  "tables": {
+    "audienceTable": "audience_data.audience"
+  }
 }

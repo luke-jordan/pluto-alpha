@@ -31,7 +31,7 @@ resource "aws_lambda_function" "audience_selection" {
               "secrets": {
                 "enabled": true,
                 "names": {
-                  "audience_selection_worker": "${terraform.workspace}/ops/psql/audience-selection"
+                  "audience_worker": "${terraform.workspace}/ops/psql/audience"
                 }
               }
             }

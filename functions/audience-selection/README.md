@@ -1,7 +1,41 @@
 # AUDIENCE SELECTION CLAUSES
 
-The best way to explain how this works is to show examples. We would do this by showing the final sql query and the JSON that generates that.
+<< scratch >>
 
+Audience types ::
+
+-- Static :: composed at time of creation, doesn't change, even if future users match its conditions
+-- Dynamic :: reconstructed at each time of execution (of boost or message), e.g., for recurring ones
+
+Audiences are used in three places:
+
+1. Boosts
+2. Messages
+3. Other audiences, e.g., when we replace an aggregate function on one side of an "or" clause with a sub-audience matching that aggregate
+clause and then use "account_id in", for it.
+
+The core condition logic is highly extensive, flexible and recursive. But to be used by the outside world two problems have to be overcome:
+
+1. Some properties that are 'trivial' from the perspective of the consumer / rest of the world (e.g., save count) is non-trivial from the
+column perspective as it involves aggregate functions mixed with where clauses
+
+2. The distinction in SQL between entity conditions (i.e., where clause) and aggregate conditions (i.e., having clause with group by) causes a number of possible problems, most of all in the presence of "or" conjunctions, because "where" and "having" by definition combine as "and"
+
+We overcome the first problem by the use of templates for standard properties, e.g., the user gives us a "save_count" condition and this is
+converted into column language. The audience handler converts these properties into column conditions that the core engine in the persistence
+module then executes.
+
+For the second problem, as long as the tree is all "and", or none of the tree descending from an "or" straddles both an aggregate and 
+matching query, we are fine, and can compose normally. But as soon as we have an aggregate condition on one side of an "or", we have to
+replace it with an entity match, which we do by turning it into its own sub-audience, inserting that audience, and then replacing the 
+relevant condition with an "in" clause on a sub-query (i.e., where in (select account_id from join table where audience_id = )).
+
+(Note : in theory we could also solve the second problem by construct the whole sub-audience selection as a sub-query, but that would lead
+to likely vast / unintelligible / fragile queries, whereas the quick insert and subquery will have minimal performance impact given these are raw native queries and in any case will only be executed in either background jobs or admin-facing jobs that are not millisecs critical)
+
+### Condition logic
+
+The best way to explain how this works is to show examples. We would do this by showing the final sql query and the JSON that generates that.
 
 ### Example 1 - Columns and Table
 
