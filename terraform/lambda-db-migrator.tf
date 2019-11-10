@@ -7,11 +7,10 @@ resource "aws_lambda_function" "db_migration" {
 
   function_name                  = "${var.db_migration_lambda_function_name}"
   role                           = "${aws_iam_role.db_migration_role.arn}"
-  handler                        = "index.handler"
+  handler                        = "handler.migrate"
   memory_size                    = 256
-  reserved_concurrent_executions = 20
   runtime                        = "nodejs10.x"
-  timeout                        = 900
+  timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
@@ -29,9 +28,13 @@ resource "aws_lambda_function" "db_migration" {
               "db": {
                   "host": "${local.database_config.host}",
                   "port" :"${local.database_config.port}"
-                  "database": "${var.db_name}",
-                  "user": "${var.db_user}",
-                  "password": "${var.db_password}"
+                  "database": "${var.db_name}"
+              },
+              "secrets": {
+                  "enabled": true,
+                  "names": {
+                      "master": "${terraform.workspace}/ops/psql/main"
+                  }
               }
           }
       )}"

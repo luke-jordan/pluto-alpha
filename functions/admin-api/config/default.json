@@ -23,7 +23,9 @@
         "fetchProfile": "profile_fetch",
         "fetchUserBalance": "balance_fetch",
         "userHistory": "user_log_reader",
-        "floatTransfer": "float_transfer"
+        "floatTransfer": "float_transfer",
+        "directSettle": "save_admin_settle",
+        "statusUpdate": "profile_status_update"
     },
     "email": {
         "systemStats": {

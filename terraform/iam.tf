@@ -448,3 +448,27 @@ resource "aws_iam_policy" "balance_lambda_invoke_policy" {
 }
 EOF
 }
+
+resource "aws_iam_policy" "admin_save_settle_lambda_invoke_policy" {
+    name = "${terraform.workspace}_lambda_save_settle_invoke"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SettleLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.save_payment_complete.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
