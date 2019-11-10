@@ -71,7 +71,7 @@ resource "aws_iam_role_policy" "invocation_policy" {
     {
       "Action": "lambda:InvokeFunction",
       "Effect": "Allow",
-      "Resource": "${var.jwt_authorizer_arn}"
+      "Resource": "${var.jwt_authorizer_arn[terraform.workspace]}"
     }
   ]
 }
