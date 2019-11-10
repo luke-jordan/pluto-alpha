@@ -30,4 +30,4 @@ echo "Setting up boost tables in RDS local"
 psql -f ./templates/rds/create_boost_tables.sql
 
 echo "Setting up message tables in RDS local"
-psql -f ./templates/rds/create_boost_tables.sql
+psql -f ./templates/rds/create_message_tables.sql

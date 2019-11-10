@@ -30,12 +30,15 @@ create trigger update_transaction_modtime before update on transaction_data.core
     for each row execute procedure trigger_set_updated_timestamp();
 
 -- as with float, replace with proper before production (as well as general migration)
-alter table transaction_data.core_transaction_ledger drop constraint account_transaction_type_check; 
+alter table transaction_data.core_transaction_ledger drop constraint if exists account_transaction_type_check; 
 alter table transaction_data.core_transaction_ledger add constraint account_transaction_type_check check (
         transaction_type in ('ACCRUAL', 'FLOAT_ALLOCATION', 'USER_SAVING_EVENT', 'WITHDRAWAL', 'CAPITALIZATION', 'BOOST_REDEMPTION')
 );
 
--- todo : indices
+-- add core indices :: note, any search by human ref, etc., will know the account id beforehand, so include that in where clause
+-- in order to use that index, after which the search will be near-instant as small number of rows
+create index if not exists idx_account_transactions on transaction_data.core_transaction_ledger (account_id);
+create index if not exists idx_account_status on transaction_data.core_transaction_ledger (settlement_status);
 
 -- todo : tighten up / narrow grants
 revoke all on transaction_data.core_transaction_ledger from public;

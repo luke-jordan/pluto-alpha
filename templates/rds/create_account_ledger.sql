@@ -18,7 +18,6 @@ create table if not exists account_data.core_account_ledger (
 );
 
 create index if not exists owner_id_idx on account_data.core_account_ledger (owner_user_id);
-create index if not exists opening_user_idx on account_data.core_account_ledger (opening_user_id);
 
 revoke all on account_data.core_account_ledger from public;
 

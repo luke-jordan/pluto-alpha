@@ -25,11 +25,6 @@ resource "aws_lambda_function" "withdraw_end" {
               "aws": {
                 "region": "${var.aws_default_region[terraform.workspace]}"
               },
-              "tables": {
-                  "accountTransactions": "transaction_data.core_transaction_ledger",
-                  "rewardTransactions": "transaction_data.core_transaction_ledger",
-                  "floatTransactions": "float_data.float_transaction_ledger"
-              },
               "db": {
                 "host": "${local.database_config.host}",
                 "database": "${local.database_config.database}",

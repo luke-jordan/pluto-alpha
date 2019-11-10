@@ -3,7 +3,7 @@ variable "country_client_table_arn" {
   type = "map"
   default = {
     "staging" = "arn:aws:dynamodb:us-east-1:455943420663:table/CountryClientTable"
-    "master" = "arn:aws:dynamodb:us-east-1:455943420663:table/CountryClientTable"
+    "master" = "arn:aws:dynamodb:eu-west-1:455943420663:table/CountryClientTable"
   }
 }
 

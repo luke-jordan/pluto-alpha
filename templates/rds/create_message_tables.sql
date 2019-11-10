@@ -1,7 +1,7 @@
 create schema if not exists message_data;
 
 create table if not exists message_data.message_instruction (
-    instruction_id uuid not null,
+    instruction_id uuid not null primary key,
     creating_user_id uuid not null,
     presentation_type varchar (100) not null,
     active boolean not null default true,
@@ -19,15 +19,13 @@ create table if not exists message_data.message_instruction (
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
     flags text[] default '{}'
-    primary key (instruction_id)
 );
 
-create index if not exists idx_creation_time on message_data.message_instruction (creation_time);
 drop trigger if exists update_msg_instruction_modtime on message_data.message_instruction;
 create trigger update_msg_instruction_modtime before update on message_data.message_instruction for each row execute procedure trigger_set_updated_timestamp();
 
 create table if not exists message_data.user_message (
-    message_id uuid not null,
+    message_id uuid not null primary key,
     creation_time timestamp with time zone not null default current_timestamp,
     destination_user_id uuid not null,
     instruction_id uuid not null references message_data.message_instruction(instruction_id),
@@ -46,13 +44,14 @@ create table if not exists message_data.user_message (
     deliveries_max integer not null default 1,
     deliveries_done integer not null default 0,
     message_variant varchar(255) default 'DEFAULT' not null,
-    flags text[] default '{}',
-    primary key (message_id)
+    flags text[] default '{}'
 );
 
-create index if not exists idx_creation_time on message_data.user_message (creation_time);
 drop trigger if exists update_msg_instruction_modtime on message_data.message_instruction;
 create trigger update_msg_instruction_modtime before update on message_data.message_instruction for each row execute procedure trigger_set_updated_timestamp();
+
+create index if not exists idx_message_destination_id on message_data.user_message (destination_user_id);
+create index if not exists idx_message_processed_status on message_data.user_message (processed_status);
 
 create table if not exists message_data.user_push_token (
     insertion_id serial primary key,

@@ -421,10 +421,6 @@ describe('Primary allocation of unallocated float lamdba', () => {
         expect(allocationResult).to.deep.equal(expectedBody);
         expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false);
         expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, rdsMatcher);
-    });
-
-    // it('Happy path, when not given a balance', async () => {
-    //     const allocationResult = await handler.allocate({ clientId: common.testValidClientId, floatId: common.testValidFloatId}, { });
-    // });
+    }).timeout(3000);
 
 });

@@ -111,7 +111,7 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
             bonusPoolBalance: wrapAmount(bonusPoolSum, floatBalanceInfo.unit, currency),
             bonusOutflow: wrapAmount(bonusOutflowSum, floatBalanceInfo.unit, currency),
             bonusInflowSum: wrapAmount(bonusInflowSum, floatBalanceInfo.unit, currency),
-            bonusPoolIds: Object.keys(bonusPools.get(floatId))
+            bonusPoolIds: bonusPools.has(floatId) ? Object.keys(bonusPools.get(floatId)) : []
         };
 
         const clientFloats = clientResults[clientId].floats;

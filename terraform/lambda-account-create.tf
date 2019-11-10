@@ -8,10 +8,9 @@ resource "aws_lambda_function" "account_create" {
   function_name                  = "${var.account_create_lambda_function_name}"
   role                           = "${aws_iam_role.account_create_role.arn}"
   handler                        = "account-handler.create"
-  memory_size                    = 256
-  reserved_concurrent_executions = 20
+  memory_size                    = 512
   runtime                        = "nodejs10.x"
-  timeout                        = 900
+  timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
@@ -25,7 +24,6 @@ resource "aws_lambda_function" "account_create" {
           {
             "aws": {
                 "region": "${var.aws_default_region[terraform.workspace]}",
-                "apiVersion": "2012-08-10",
                 "endpoints": {
                     "dynamodb": null
                 }
@@ -101,7 +99,7 @@ resource "aws_iam_role_policy_attachment" "account_create_boost_create_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "account_create_secret_get" {
-  role = "${aws_iam_role.balance_fetch_role.name}"
+  role = "${aws_iam_role.account_create_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_account_worker_read"
 }
 

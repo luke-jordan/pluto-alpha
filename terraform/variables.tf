@@ -29,7 +29,7 @@ variable user_event_topic_arn {
 variable "user_status_lambda_arn" {
   default = {
       "staging" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
-      "master" = "arn:aws:lambda:us-east-1:455943420663:function:profile_status_update"
+      "master" = "arn:aws:lambda:eu-west-1:455943420663:function:profile_status_update"
   }
   type = "map"
 }
@@ -53,7 +53,7 @@ variable user_profile_admin_policy_arn {
 variable user_profile_history_invoke_policy_arn {
     default = {
         "staging" = "arn:aws:iam::455943420663:policy/staging_lambda_user_history_read",
-        "master" = "aws:aws:iam::455943420663:policy/master_lambda_user_history_read"
+        "master" = "arn:aws:iam::455943420663:policy/master_lambda_user_history_read"
     }
     type = "map"
 }

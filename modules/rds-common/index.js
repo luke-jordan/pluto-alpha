@@ -50,7 +50,7 @@ class RdsConnection {
             logger('Secrets management enabled, fetching');
             self._obtainSecretPword(config.get('RdsConnection.user'));    
         } else {
-            self._initializePool();
+            self._initializePool({});
         }
     }
 
@@ -70,7 +70,7 @@ class RdsConnection {
             logger('No error, got the secret, moving onward: ', fetchedSecretData);
             if ('SecretString' in fetchedSecretData) {
                 const secret = JSON.parse(fetchedSecretData.SecretString);
-                self._initializePool(secret.password);
+                self._initializePool({ userOverride: secret.username, pwordOverride: secret.password });
             } else {
                 const buff = Buffer.from(fetchedSecretData.SecretBinary, 'base64');
                 const decodedBinarySecret = buff.toString('ascii');
@@ -79,15 +79,17 @@ class RdsConnection {
         });
     }
 
-    _initializePool (pwordOverride) {
+    _initializePool ({ userOverride, pwordOverride }) {
         const self = this;
-        const pwordToUse = pwordOverride ? pwordOverride : config.get('RdsConnection.password'); 
-        
+
+        const userToUse = userOverride || config.get('RdsConnection.user'); 
+        const pwordToUse = pwordOverride || config.get('RdsConnection.password'); 
+
         self._pool = new Pool({
             host: config.get('RdsConnection.host'),
             port: config.get('RdsConnection.port'),
             database: config.get('RdsConnection.database'),
-            user: config.get('RdsConnection.user'),
+            user: userToUse,
             password: pwordToUse
         });
         
