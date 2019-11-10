@@ -14,8 +14,11 @@ variable "aws_account" {
 }
 
 variable jwt_authorizer_arn {
-  default = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
-  type = "string"
+    default = {
+        "staging" = "arn:aws:lambda:us-east-1:455943420663:function:authorizer"
+        "master" = "arn:aws:lambda:eu-west-1:455943420663:function:authorizer"
+    }
+    type = "map"
 }
 
 variable user_event_topic_arn {

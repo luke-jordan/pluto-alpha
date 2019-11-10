@@ -10,7 +10,36 @@ AWS.config.update({
 });
 
 const { Pool } = require('pg');
-const pool = new Pool(config.get('db'));
+let pool;
+
+const initiateConnection = () => {
+  const secretName = config.get(`secrets.names.${rdsUserName}`);
+  logger('Fetching secret with name: ', secretName);
+
+  const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
+  
+  if (secretsMgmtEnabled) {
+    pool = new Pool(config.get('db'));
+    return;
+  }
+
+  const secretsClient = new AWS.SecretsManager({ region: config.get('aws.region') });        
+  secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
+      if (err) {
+          logger('Error retrieving auth secret for RDS: ', err);
+          throw err;
+      }
+      // Decrypts secret using the associated KMS CMK.
+      // Depending on whether the secret is a string or binary, one of these fields will be populated.
+      logger('No error, got the secret, moving onward: ', fetchedSecretData);
+      const secret = JSON.parse(fetchedSecretData.SecretString);
+      const dbConfig = config.get('db');
+      dbConfig.user = secret.username;
+      dbConfig.password = secret.password;
+      
+      pool = new Pool(dbConfig);
+  });
+};
 
 const extractCommands = (pgResult) => {
   if (pgResult.length === 0) {
@@ -99,8 +128,15 @@ const createInitialTables = async () => {
 };
 
 module.exports.migrate = async (event) => {
+  initiateConnection();
+
   const typeOfExecution = event.type;
   logger('Executing migration of type: ', typeOfExecution);
+
+  while (!pool) {
+      logger('No pool yet, waiting ...');
+      await sleep(100);
+  }
 
   let result = { };
   if (typeOfExecution === 'S3SCRIPT') {
