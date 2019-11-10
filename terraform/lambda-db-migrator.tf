@@ -7,7 +7,7 @@ resource "aws_lambda_function" "db_migration" {
 
   function_name                  = "${var.db_migration_lambda_function_name}"
   role                           = "${aws_iam_role.db_migration_role.arn}"
-  handler                        = "index.handler"
+  handler                        = "handler.migrate"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 60

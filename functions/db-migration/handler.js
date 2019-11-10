@@ -2,7 +2,9 @@
 
 const config = require('config');
 const logger = require('debug')('jupiter:migration:main');
+
 const fs = require('fs');
+const sleep = require('util').promisify(setTimeout);
 
 const AWS = require('aws-sdk');
 AWS.config.update({
@@ -10,11 +12,13 @@ AWS.config.update({
 });
 
 const { Pool } = require('pg');
-let pool;
+let pool = null;
 
 const initiateConnection = () => {
-  const secretName = config.get(`secrets.names.${rdsUserName}`);
-  logger('Fetching secret with name: ', secretName);
+  if (pool !== null) {
+    logger('Warm start, pool established, exit');
+    return;
+  }
 
   const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
   
@@ -22,6 +26,9 @@ const initiateConnection = () => {
     pool = new Pool(config.get('db'));
     return;
   }
+
+  const secretName = config.get(`secrets.names.master`);
+  logger('Fetching secret with name: ', secretName);
 
   const secretsClient = new AWS.SecretsManager({ region: config.get('aws.region') });        
   secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
@@ -133,7 +140,7 @@ module.exports.migrate = async (event) => {
   const typeOfExecution = event.type;
   logger('Executing migration of type: ', typeOfExecution);
 
-  while (!pool) {
+  while (pool === null) {
       logger('No pool yet, waiting ...');
       await sleep(100);
   }
