@@ -1,6 +1,8 @@
 'use strict';
 
+const logger = require('debug')('jupiter:audience-selection:test');
 const config = require('config');
+
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
@@ -32,22 +34,45 @@ const resetStubs = () => {
     selectAudienceStub.reset();
 };
 
-describe('Audience selection - obtain & utilize list of standard properties', () => {
+describe.only('Audience selection - obtain & utilize list of standard properties', () => {
 
     beforeEach(() => resetStubs());
 
-    it('Should return acceptable properties, with types and labels', async () => {
+    it.only('Should return acceptable properties, with types and labels', async () => {
         const activityCountProperty = { type: 'aggregate', name: 'saveCount', description: 'Number of saves', expects: 'number' };
         const lastSaveTimeProperty = { type: 'match', name: 'lastSaveTime', description: 'Last save date', expects: 'epochMillis' };
         
         const availableProperties = audienceHandler.fetchAvailableProperties();
-        
+        logger('Properties: ', availableProperties);
+
         expect(availableProperties).to.exist;
-        expect(availableProperties).to.be.an.array;
+        expect(availableProperties).to.be.an('array');
         expect(availableProperties).to.have.length.greaterThan(1);
-        expect(availableProperties).to.include(activityCountProperty);
-        expect(availableProperties).to.include(lastSaveTimeProperty);
+
+        expect(availableProperties).to.deep.include(activityCountProperty);
+        expect(availableProperties).to.deep.include(lastSaveTimeProperty);
     });
+
+    it.only('Should return list correctly, wrapped, in response to web request', async () => {
+        const authorizedRequest = {
+            httpMethod: 'get',
+            pathParameters: { proxy: 'properties' },
+            requestContext: { authorizer: { systemWideUserId: uuid(), role: 'SYSTEM_ADMIN' } }
+        };
+
+        const wrappedProperties = await audienceHandler.handleInboundRequest(authorizedRequest);
+        logger('Wrapped response to property fetch: ', wrappedProperties);
+
+        expect(wrappedProperties).to.have.property('statusCode', 200);
+        expect(wrappedProperties).to.have.property('headers');
+        expect(wrappedProperties).to.have.property('body');
+
+        const unwrappedProps = JSON.parse(wrappedProperties.body);
+        expect(unwrappedProps).to.be.an('array').of.length.greaterThan(1);
+    });
+});
+
+describe('Converts standard properties into column conditions', () => {
 
     it('Converts properties as we wish', async () => {
         const oneWeekAgo = moment().subtract(7, 'days');

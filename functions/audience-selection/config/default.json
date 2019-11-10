@@ -10,6 +10,7 @@
     "port" :"5430"
   },
   "tables": {
-    "audienceTable": "audience_data.audience"
+    "audienceTable": "audience_data.audience",
+    "transactionTable": "transaction_data.core_transaction_ledger"
   }
 }
