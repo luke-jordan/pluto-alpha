@@ -257,7 +257,7 @@ const assembleResponseAlreadySettled = async (transactionRecord) => {
   };
 };
 
-const settle = async (settleInfo) => {
+module.exports.settle = async (settleInfo) => {
   if (!settleInfo.transactionId) {
     return invalidRequestResponse('Error! No transaction ID provided');
   }
@@ -282,7 +282,7 @@ const dummyPaymentResult = async (systemWideUserId, params) => {
   if (paymentSuccessful) {
     const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
     const transactionId = params.transactionId;
-    const resultOfSave = await settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
+    const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
     logger('Result of save: ', resultOfSave);
     await publishSaveSucceeded(systemWideUserId, transactionId);
     return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
@@ -347,7 +347,7 @@ module.exports.checkPendingPayment = async (event) => {
       };
 
       // do these one after the other instead of parallel because don't want to fire if something goes wrong
-      const resultOfSave = await settle(settlementInstruction);
+      const resultOfSave = await exports.settle(settlementInstruction);
       await publishSaveSucceeded(systemWideUserId, transactionId);
       
       responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };

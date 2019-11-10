@@ -120,9 +120,9 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         const expectedQuery = `select transaction_id, ${accountTable}.account_id, ${transactionTable}.creation_time, ` + 
             `transaction_type, settlement_status, amount, currency, unit, human_reference from ${accountTable} inner join ${transactionTable} ` + 
             `on ${accountTable}.account_id = ${transactionTable}.account_id where ${accountTable}.owner_user_id = $1 ` + 
-            `and ${transactionTable}.creation_time > $2 and settlement_status = $3`;
+            `and ${transactionTable}.creation_time > $2 and settlement_status in ($3, $4)`;
 
-        const expectedValues = [testUserId, startDate.format(), 'PENDING'];
+        const expectedValues = [testUserId, startDate.format(), 'INITIATED', 'PENDING'];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves(expectedPendingTx);
 

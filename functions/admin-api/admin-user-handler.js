@@ -16,6 +16,13 @@ const lambda = new AWS.Lambda();
 
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
 
+const validKycStatus = ['NO_INFO', 'CONTACT_VERIFIED', 'PENDING_VERIFICATION_AS_PERSON', 'VERIFIED_AS_PERSON', 
+    'FAILED_VERIFICATION', 'FLAGGED_FOR_REVIEW', 'PENDING_INFORMATION', 'REVIEW_CLEARED', 'REVIEW_FAILED'];
+
+const validUserStatus = ['CREATED', 'ACCOUNT_OPENED', 'USER_HAS_INITIATED_SAVE', 'USER_HAS_SAVED', 'USER_HAS_WITHDRAWN', 'SUSPENDED_FOR_KYC'];
+
+const validTxStatus = ['INITIATED', 'PENDING', 'SETTLED', 'EXPIRED'];
+
 /**
  * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default
  * @param {object} event An event containing the request context and the request body. The body's properties a decribed below.
@@ -135,7 +142,7 @@ module.exports.lookUpUser = async (event) => {
         const userBalance = await obtainUserBalance(userProfile);
 
         const resultObject = { 
-            ...userProfile, 
+            ...userProfile,
             userBalance,
             pendingTransactions,
             userHistory 
@@ -144,6 +151,120 @@ module.exports.lookUpUser = async (event) => {
         logger('Returning: ', resultObject);
 
         return opsCommonUtil.wrapResponse(resultObject);
+
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return opsCommonUtil.wrapResponse(err.message, 500);
+    }
+};
+
+// checking for reason to log is across any update, hence here just check right field and valid type
+const validateStatusUpdate = ({ fieldToUpdate, newStatus }) => {
+    if (fieldToUpdate === 'KYC' && validKycStatus.indexOf(newStatus) >= 0) {
+        return true;
+    }
+
+    if (fieldToUpdate === 'STATUS' && validUserStatus.indexOf(newStatus) >= 0) {
+        return true;
+    }
+
+    return false;
+};
+
+const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate, newStatus, reasonToLog }) => {
+    const statusPayload = { systemWideUserId, initiator: adminUserId };
+    
+    if (fieldToUpdate === 'KYC') {
+        statusPayload.updatedKycStatus = {
+            changeTo: newStatus,
+            reasonToLog
+        };
+    } else if (fieldToUpdate === 'STATUS') {
+        statusPayload.updatedUserStatus = {
+            changeTo: newStatus,
+            reasonToLog
+        };
+    }
+
+    const updateInvoke = adminUtil.invokeLambda(config.get('lambdas.statusUpdate'), statusPayload);
+    const updateResult = await lambda.invoke(updateInvoke).promise();
+    logger('Result from status update Lambda: ', updateResult);
+    const updatePayload = updateResult['Payload'];
+    
+    const returnResult = updatePayload.statusCode === 200
+        ? { result: 'SUCCESS', updateLog: JSON.parse(updatePayload.body) }
+        : { result: 'FAILURE', message: JSON.parse(updatePayload.body)};
+
+    logger('Returning result: ', returnResult);
+
+    return updateResult;
+};
+
+const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
+    // todo : definitely need audit tables to do something with the logs
+    logger(`Updating transaction, for user ${systemWideUserId}, should log: ${reasonToLog}`);
+
+    let resultBody = { };
+    if (newTxStatus === 'SETTLED') {
+        const settlePayload = { transactionId, paymentRef: reasonToLog, paymentProvider: 'ADMIN_OVERRIDE' };
+        const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
+        const resultPayload = settleResponse['Payload'];
+        if (resultPayload.statusCode === 200) {
+            resultBody = { result: 'SUCCESS', updateLog: JSON.parse(resultPayload.body) };
+        } else {
+            resultBody = { result: 'ERROR', message: JSON.parse(resultPayload.body) };
+        }
+    } else {
+        const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, reasong: reasonToLog };
+        const resultOfRdsUpdate = await persistence.adjustTxStatus({ transactionId, newTxStatus, logContext });
+        logger('Result of straight persistence adjustment: ', resultOfRdsUpdate);
+        resultBody = { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
+    }
+
+    logger('Completed transaction update, result: ', resultBody);
+    return resultBody;
+};
+
+/**
+ * @property {string} systemWideUserId The ID of the user to adjust
+ * @property {string} fieldToUpdate One of: KYC, STATUS, TRANSACTION 
+ */
+module.exports.manageUser = async (event) => {
+    try {
+        if (!adminUtil.isUserAuthorized(event)) {
+            return adminUtil.unauthorizedResponse;
+        }
+
+        const params = opsCommonUtil.extractParamsFromEvent(event);
+        logger('Params for user management: ', event);
+
+        if (!params.systemWideUserId || !params.fieldToUpdate || !params.reasonToLog) {
+            const message = 'Requests must include a user ID to update, a field, and a reason to log';
+            return opsCommonUtil.wrapResponse(message, 400);
+        }
+
+        let resultOfUpdate = { };
+        if (params.fieldToUpdate === 'TRANSACTION') {
+            logger('Updating a transaction, tell RDS to execute and return');
+            if (!params.transactionId || !params.newTxStatus || validTxStatus.indexOf(params.newTxStatus) < 0) {
+                return opsCommonUtil.wrapResponse('Error, transaction ID needed and valid transaction status', 400);
+            }
+            resultOfUpdate = await handleTxUpdate(params);
+        }
+
+        if (params.fieldToUpdate === 'KYC' || params.fieldToUpdate === 'STATUS') {
+            logger('Updating user status, validate types and return okay');
+            if (!validateStatusUpdate(params)) {
+                return opsCommonUtil.wrapResponse('Error, bad field or type for user update', 400);
+            }
+            resultOfUpdate = await handleStatusUpdate(params);
+        }
+
+        if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {
+            return opsCommonUtil.wrapResponse('Error! Non-standard operation passed', 400);
+        }
+
+        return opsCommonUtil.wrapResponse(resultOfUpdate);
 
     } catch (err) {
         logger('FATAL_ERROR: ', err);

@@ -54,9 +54,9 @@ module.exports.fetchUserPendingTransactions = async (systemWideUserId, startMome
 
     const fetchQuery = `select ${columns} from ${accountTable} inner join ${txTable} on ` +
         `${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.owner_user_id = $1 and ` +
-        `${txTable}.creation_time > $2 and settlement_status = $3`;
+        `${txTable}.creation_time > $2 and settlement_status in ($3, $4)`;
     
-    const values = [systemWideUserId, startMoment.format(), 'PENDING'];
+    const values = [systemWideUserId, startMoment.format(), 'INITIATED', 'PENDING'];
 
     logger('Sending query to RDS: ', fetchQuery);
     logger('With values: ', values);
@@ -81,4 +81,17 @@ module.exports.expireHangingTransactions = async () => {
 
     return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
+};
+
+module.exports.adjustTxStatus = async ({ transactionId, newStatus, logContext }) => {
+    logger('Would be logging this context: ', logContext);
+
+    const txTable = config.get('tables.transactionTable');
+    const updateQuery = `update $${txTable} set settlement_status = $1 where transaction_id = $2`;
+
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [newStatus, transactionId]);
+    logger('Result of transaction update: ', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
+        ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
 };
