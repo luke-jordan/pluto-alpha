@@ -79,6 +79,8 @@ const resetStubHistory = () => {
     updateSaveRdsStub.reset();
     fetchTransactionStub.reset();
     countSettledSavesStub.reset();
+    getPaymentUrlStub.reset();
+    fetchBankRefStub.reset();
     publishStub.reset();
     momentStub.reset();
     momentStub.callsFake(moment); // as with uuid in RDS, too much time being sunk into test framework's design flaws, so a work around here
@@ -196,6 +198,47 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
     });
 
+    it('Handles test request, configures request to third party sandbox', async () => {
+        const minimalPendingRequestToRds = {
+            accountId: testAccountId,
+            initiationTime: testHelper.momentMatcher(testTimeInitiated),
+            settlementStatus: 'INITIATED',
+            amount: sinon.match.number,
+            currency: 'USD',
+            unit: 'HUNDREDTH_CENT',
+            dummy: 'ON',
+            clientId: testClientId,
+            floatId: testFloatId,
+
+        };
+
+        const expectedPaymentInfo = {
+            transactionId: testTransactionId,
+            accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10 },
+            amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT', isTest: true }
+        };
+
+        const saveEventToWrapper = testSavePendingBase();
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        saveEventToWrapper.dummy = 'ON';
+        momentStub.returns(testTimeInitiated);
+
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
+        addSavingsRdsStub.withArgs(minimalPendingRequestToRds).resolves(responseToTxPending);
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        logger('Received: ', resultOfWrapperCall);
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        expect(saveBody).to.deep.equal(responseToTxPending);
+
+        expect(fetchBankRefStub).to.have.been.calledWithExactly(testAccountId);
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
+    });
+
     it('Wrapper fails if no auth context', async () => {
         const noAuthEvent = { body: JSON.stringify(testSavePendingBase()), requestContext: { }};
         const resultOfCallWithNoContext = await handler.initiatePendingSave(noAuthEvent);
@@ -207,6 +250,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const saveEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
         
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
 
@@ -226,6 +271,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         saveEvent.clientId = testClientId;
 
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
 

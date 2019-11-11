@@ -73,7 +73,7 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
         countryCode: CURRENCY_COUNTRY_LOOKUP[amountDict.currency],
         currencyCode: amountDict.currency,
         amount: wholeCurrencyAmount,
-        isTest: config.get('payment.test')
+        isTest: Reflect.has(amountDict, 'isTest') ? amountDict.isTest : config.get('payment.test')
     };
 
     logger('Sending payload to payment url generation: ', payload);
