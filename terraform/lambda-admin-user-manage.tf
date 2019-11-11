@@ -92,6 +92,11 @@ resource "aws_iam_role_policy_attachment" "admin_user_manage_profile_invoke_poli
   policy_arn = "${var.user_profile_admin_policy_arn[terraform.workspace]}"
 }
 
+resource "aws_iam_role_policy_attachment" "admin_user_manage_tx_settle" {
+  role = aws_iam_role.admin_user_manage_role.name
+  policy_arn = aws_iam_policy.admin_save_settle_lambda_invoke_policy.arn 
+}
+
 resource "aws_iam_role_policy_attachment" "admin_user_manage_secret_get" {
   role = "${aws_iam_role.admin_user_manage_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"

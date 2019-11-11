@@ -167,15 +167,35 @@ describe('Converts standard properties into column conditions', () => {
         expect(secondCallArgs[0]).to.deep.equal(expectedWholeAudienceSelection);        
     });
 
-    // it('Handles the simplest case - whole client, no properties - properly', async () => {
-    //     const mockSelectionJSON = {
-    //         clientId: mockClientId,
-    //         creatingUserId: mockUserId,
-    //         isDynamic: true,
-    //         conditions: []
-    //     };
+    it('Handles the simplest case - whole client, no properties - properly', async () => {
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            creatingUserId: mockUserId,
+            isDynamic: true,
+            conditions: []
+        };
 
+        const authorizedRequest = {
+            httpMethod: 'POST',
+            pathParameters: { proxy: 'create' },
+            requestContext: { authorizer: { systemWideUserId: uuid(), role: 'SYSTEM_ADMIN' } },
+            body: JSON.stringify(mockSelectionJSON)
+        };
+
+        const mockAudienceId = uuid();
+
+        executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
+
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
         
-    // });
+        expect(wrappedResult).to.have.property('statusCode', 200);
+        expect(wrappedResult).to.have.property('headers');
+        expect(wrappedResult).to.have.property('body');
+
+        const unWrappedResult = JSON.parse(wrappedResult.body);
+        expect(unWrappedResult).to.deep.equal({ audienceId: mockAudienceId, audienceCount: 10000 });
+        
+        expect(executeConditionsStub).to.have.been.calledOnce;
+    });
 
 });

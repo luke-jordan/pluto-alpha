@@ -466,7 +466,7 @@ resource "aws_iam_policy" "admin_save_settle_lambda_invoke_policy" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.save_payment_complete.arn}"
+                "${aws_lambda_function.save_admin_settle.arn}"
             ]
         }
     ]

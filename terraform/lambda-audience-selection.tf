@@ -7,7 +7,7 @@ resource "aws_lambda_function" "audience_selection" {
 
   function_name       = "${var.audience_selection_lambda_function_name}"
   role                = "${aws_iam_role.audience_selection_role.arn}"
-  handler             = "index.processRequestFromAnotherLambda"
+  handler             = "audience-handler.handleInboundRequest"
   memory_size         = 256
   runtime             = "nodejs10.x"
   timeout             = 30

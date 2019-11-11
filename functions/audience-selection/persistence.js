@@ -270,6 +270,7 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
         objectArray: [audienceObject]
     };
 
+    logger('Inserting audience itself: ', createAudienceDef);
     const audienceResult = await rdsConnection.insertRecords(createAudienceDef);
     logger('Result of inserting bare audience: ', audienceResult);
 

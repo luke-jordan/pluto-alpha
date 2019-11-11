@@ -60,7 +60,13 @@ const addTableAndClientId = (selection, clientId, tableName) => {
     const clientCondition = { op: 'is', prop: 'client_id', value: clientId };
 
     let newTopLevel = {};
-    if (existingTopLevel.op === 'and') {
+
+    // three cases: either no top level, or it's an and, so just add the client condition, or it's more complex, and need to construct a new head
+    if (opsUtil.isObjectEmpty(existingTopLevel)) {
+        // means no conditions provided, i.e., select whole client
+        newTopLevel = clientCondition;
+    } else if (existingTopLevel.op === 'and') {
+        // already an 'and', so just add as another child
         const topLevelChildren = existingTopLevel.children;
         topLevelChildren.push(clientCondition);
         newTopLevel = { op: 'and', children: topLevelChildren };    
@@ -149,7 +155,7 @@ const extractRequestType = (event) => {
     // if it's an http request, validate that it is admin calling, and extract from path parameters
     if (Reflect.has(event, 'httpMethod')) {
         const operation = event.pathParameters.proxy;
-        const params = event.httpMethod === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
+        const params = event.httpMethod.toUpperCase() === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
         return { operation, params };
     }
 
@@ -171,7 +177,7 @@ module.exports.handleInboundRequest = async (event) => {
         const requestInfo = extractRequestType(event);
         const { operation, params } = requestInfo;
         
-        const resultOfProcess = dispatcher[operation](params);
+        const resultOfProcess = await dispatcher[operation](params);
         logger('Result of audience processing: ', resultOfProcess);
 
         return opsUtil.wrapResponse(resultOfProcess);
