@@ -485,7 +485,8 @@ describe('Audience Selection - fetch users given JSON', () => {
 
         // expect(resultOfInsertion).to.deep.equal({ audienceId: mockAudienceId });
 
-        expect(insertStub).to.have.been.calledOnceWithExactly(expectedAudienceInsertion);
+        const { queryTemplate, columnTemplate, objectArray } = expectedAudienceInsertion;
+        expect(insertStub).to.have.been.calledOnceWithExactly(queryTemplate, columnTemplate, objectArray);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedJoinQuery, emptyArray);
 
     });

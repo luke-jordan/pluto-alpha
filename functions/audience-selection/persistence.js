@@ -264,14 +264,14 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
     const audienceProps = Object.keys(audienceObject); // to make sure no accidents from different sorting
     const audienceColumns = audienceProps.map((column) => decamelize(column, '_')).join(', ');
 
-    const createAudienceDef = {
+    const createDef = {
         queryTemplate: `insert into ${audienceTable} (${audienceColumns}) values %L returning audience_id`,
         columnTemplate: audienceProps.map((prop) => `\${${prop}}`).join(', '),
         objectArray: [audienceObject]
     };
 
-    logger('Inserting audience itself: ', createAudienceDef);
-    const audienceResult = await rdsConnection.insertRecords(createAudienceDef);
+    logger('Inserting audience itself: ', createDef);
+    const audienceResult = await rdsConnection.insertRecords(createDef.queryTemplate, createDef.columnTemplate, createDef.objectArray);
     logger('Result of inserting bare audience: ', audienceResult);
 
     // rely on query construction engine to do the insertion query as we need it
