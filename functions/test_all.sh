@@ -11,6 +11,7 @@ cd ../float-api; npm test; npm run-script generate-coverage
 cd ../boost-api; npm test; npm run-script generate-coverage
 cd ../user-messaging-api; npm test; npm run-script generate-coverage
 cd ../user-messaging-api; npm test; npm run-script generate-coverage
+cd ../audience-selection; npm test; npm run-script generate-coverage
 cd ../third-parties; npm test; npm run-script generate-coverage
 cd ..
 

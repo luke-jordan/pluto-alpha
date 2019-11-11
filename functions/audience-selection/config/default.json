@@ -1,0 +1,17 @@
+{
+  "aws": {
+    "region": "us-east-1"
+  },
+  "db": {
+    "user": "audience_worker",
+    "host": "localhost",
+    "database": "jupiter",
+    "password": "pwd_for_audience_worker",
+    "port" :"5430"
+  },
+  "tables": {
+    "audienceTable": "audience_data.audience",
+    "audienceJoinTable": "audience_data.audience_account_join",
+    "transactionTable": "transaction_data.core_transaction_ledger"
+  }
+}
