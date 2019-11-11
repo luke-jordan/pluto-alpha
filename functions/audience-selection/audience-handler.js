@@ -109,13 +109,14 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
         const matchCondition = await convertAggregateIntoEntity(propertyCondition, persistenceParams);
         logger('Matched condition: ', matchCondition);
         return matchCondition;
-    } else {
-        logger('Converting from property: ', propertyCondition.prop);
-        const columnConverter = columnConverters[propertyCondition.prop];
-        const columnCondition = columnConverter(propertyCondition);
-        logger('Column condition: ', JSON.stringify(columnCondition, null, 2));
-        return columnCondition.conditions[0];
-    }
+    } 
+    
+    // remaining is simple match condition, execute and return
+    logger('Converting from property: ', propertyCondition.prop);
+    const columnConverter = columnConverters[propertyCondition.prop];
+    const columnCondition = columnConverter(propertyCondition);
+    logger('Column condition: ', JSON.stringify(columnCondition, null, 2));
+    return columnCondition.conditions[0];
 };
 
 module.exports.createAudience = async (params) => {
@@ -152,9 +153,9 @@ const extractRequestType = (event) => {
         return { operation, params };
     }
 
-    logger('Event is not http, must be another lambda, return event itself')
+    logger('Event is not http, must be another lambda, return event itself');
     return event;
-}
+};
 
 const dispatcher = {
     'properties': () => exports.fetchAvailableProperties(),

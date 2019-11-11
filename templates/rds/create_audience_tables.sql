@@ -34,7 +34,9 @@ grant select, insert, update on audience_data.audience_account_join to audience_
 
 -- So that boost worker and message worker can populate their tables with reference to here
 grant usage on schema audience_data to boost_worker;
+grant select (audience_id, is_dynamic) on audience_data.audience to boost_worker;
 grant select (account_id, active) on audience_data.audience_account_join to boost_worker;
 
 grant usage on schema audience_data to message_api_worker;
+grant select (audience_id, is_dynamic) on audience_data.audience to message_api_worker;
 grant select (account_id, active) on audience_data.audience_account_join to message_api_worker;

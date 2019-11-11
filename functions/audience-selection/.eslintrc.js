@@ -148,7 +148,7 @@ module.exports = {
         'no-extend-native': 'error',
         'no-extra-bind': 'error',
         'no-extra-label': 'error',
-        'no-extra-parens': 'error',
+        'no-extra-parens': 'warn',
         'no-floating-decimal': 'error',
         'no-implicit-coercion': 'error',
         'no-implicit-globals': 'error',
@@ -164,7 +164,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 400, 500]
+                'ignore': [0, 1, 2, 100, 200, 400, 403, 500]
             }
         ],
         'no-mixed-operators': 'error',
@@ -245,7 +245,8 @@ module.exports = {
         'prefer-reflect': 'error',
         'prefer-rest-params': 'error',
         'prefer-spread': 'error',
-        'quote-props': 'off',
+        'quote-props': ['error', 'consistent'],
+        'quotes': ['error', 'single', { 'allowTemplateLiterals': true }],
         'radix': 'error',
         'require-await': 'off',
         'require-jsdoc': 'error',

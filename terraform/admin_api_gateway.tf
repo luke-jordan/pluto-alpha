@@ -179,7 +179,7 @@ module "admin_user_find_cors" {
 resource "aws_api_gateway_resource" "admin_user_manage" {
   rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
   parent_id   = "${aws_api_gateway_resource.admin_user_path_root.id}"
-  path_part   = "manage"
+  path_part   = "update"
 }
 
 resource "aws_api_gateway_method" "admin_user_manage" {

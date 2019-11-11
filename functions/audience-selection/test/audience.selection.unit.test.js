@@ -76,11 +76,14 @@ describe('Audience selection - obtain & utilize list of standard properties', ()
 
 describe('Converts standard properties into column conditions', () => {
 
+    const mockClientId = 'test-client-id';
+    const mockSubAudienceId = uuid();
+
+    beforeEach(() => resetStubs());
+
     it('Converts properties as we wish', async () => {
         const oneWeekAgo = moment().subtract(7, 'days');
         
-        const mockClientId = 'test-client-id';
-        const mockSubAudienceId = uuid();
 
         const mockWholeAudienceId = uuid();
         const mockNumberAccounts = Math.floor(Math.random() * 1000);
@@ -106,7 +109,7 @@ describe('Converts standard properties into column conditions', () => {
                 ]}
             ],
             groupBy: [
-                "account_id"
+                'account_id'
             ],
             postConditions: [
                 { op: 'greater_than', prop: 'count(transaction_id)', value: 3, valueType: 'int' }
@@ -163,5 +166,16 @@ describe('Converts standard properties into column conditions', () => {
         expect(secondCallArgs[1]).to.be.true;
         expect(secondCallArgs[0]).to.deep.equal(expectedWholeAudienceSelection);        
     });
+
+    // it('Handles the simplest case - whole client, no properties - properly', async () => {
+    //     const mockSelectionJSON = {
+    //         clientId: mockClientId,
+    //         creatingUserId: mockUserId,
+    //         isDynamic: true,
+    //         conditions: []
+    //     };
+
+        
+    // });
 
 });

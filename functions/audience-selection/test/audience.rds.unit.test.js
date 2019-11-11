@@ -21,7 +21,7 @@ class MockRdsConnection {
         this.selectQuery = selectQueryStub;
         this.insertRecords = insertStub;
     }
-};
+}
 
 const audienceSelection = proxyquire('../persistence.js', {
     'rds-common': MockRdsConnection,
@@ -396,7 +396,6 @@ describe('Audience Selection - fetch users given JSON', () => {
 
     it('Should execute with subqueries, matching apex test in main handler', async () => {
         const mockClientId = 'test-client';
-        const audienceJoinTable = 'audience_join';
         const oneWeekAgo = moment().subtract(7, 'days');
 
         const expectedSubAudienceQuery = `select distinct(account_id) from ${audienceJoinTable} ` + 
@@ -445,7 +444,7 @@ describe('Audience Selection - fetch users given JSON', () => {
                 ]}
             ],
             groupBy: [
-                "account_id"
+                'account_id'
             ],
             postConditions: [
                 { op: 'greater_than', prop: 'count(transaction_id)', value: 3, valueType: 'int' }

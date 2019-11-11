@@ -20,7 +20,7 @@ create table if not exists boost_data.boost (
     for_client_id varchar (255) not null,
     status_conditions jsonb not null,
     boost_audience varchar (255) not null,
-    audience_selection text not null,
+    audience_id varchar (50) references audience_data.audience (audience_id),
     message_instruction_ids jsonb,
     initial_status varchar (100) check (initial_status in ('CREATED', 'OFFERED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED')),
     flags text[] default '{}',

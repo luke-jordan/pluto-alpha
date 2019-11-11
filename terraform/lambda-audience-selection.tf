@@ -46,7 +46,7 @@ resource "aws_lambda_function" "audience_selection" {
   depends_on = [aws_cloudwatch_log_group.audience_selection]
 }
   
-  
+
   
 resource "aws_iam_role" "audience_selection_role" {
   name = "${var.audience_selection_lambda_function_name}_role_${terraform.workspace}"

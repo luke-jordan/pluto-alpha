@@ -31,12 +31,12 @@ const supportedColumns = [
 ];
 
 const baseCaseQueryBuilder = (unit, operatorTranslated) => {
-    if (unit.valueType === 'int' || unit.valueType == 'boolean') {
+    if (unit.valueType === 'int' || unit.valueType === 'boolean') {
         return `${unit.prop}${operatorTranslated}${unit.value}`;
     }
 
     if (operatorTranslated === 'in') {
-        return `${unit.prop} ${operatorTranslated} (${unit.value})`
+        return `${unit.prop} ${operatorTranslated} (${unit.value})`;
     }
 
     return `${unit.prop}${operatorTranslated}'${unit.value}'`;
@@ -65,7 +65,7 @@ const conditionsFilterBuilder = (unit) => {
     }
 
     if (unit.op === 'in') {
-        return baseCaseQueryBuilder(unit, 'in')
+        return baseCaseQueryBuilder(unit, 'in');
     }
 
     // end of base cases
@@ -85,11 +85,9 @@ const extractWhereConditions = (selectionJSON) => {
     }
 };
 
-const validateAndParseColumns = (columns) => {
-    // escape supported columns to allow for selecting constants (as in insert), but prevent injection 
-    // return columns.map((column) => supportedColumns.includes(column));
-    return columns.map((column) => supportedColumns.includes(column) ? column : `'${column}'`);
-};
+// escape supported columns to allow for selecting constants (as in insert), but prevent injection 
+// return columns.map((column) => supportedColumns.includes(column));    
+const validateAndParseColumns = (columns) => columns.map((column) => (supportedColumns.includes(column) ? column : `'${column}'`));
 
 const extractColumnsToCount = (selectionJSON) => {
     if (selectionJSON.columnsToCount) {
@@ -311,17 +309,17 @@ module.exports.executeColumnConditions = async (selectionJSON, persistSelection 
         const persistenceResult = await insertQuery(selectionJSON, persistenceParams);
         logger('Result of persistence: ', persistenceResult);
         return persistenceResult;
-    } else {    
-        logger('Selecting accounts according to: ', selectionJSON);
-        const sqlQuery = exports.extractSQLQueryFromJSON(selectionJSON);
-        const queryResult = await rdsConnection.selectQuery(sqlQuery, []);
-        logger('Number of records from query: ', queryResult.length);
-        return queryResult.map((row) => row['account_id']);
-    }
+    } 
+    
+    logger('Selecting accounts according to: ', selectionJSON);
+    const sqlQuery = exports.extractSQLQueryFromJSON(selectionJSON);
+    const queryResult = await rdsConnection.selectQuery(sqlQuery, []);
+    logger('Number of records from query: ', queryResult.length);
+    return queryResult.map((row) => row['account_id']);
 };
 
 module.exports.countAudienceSize = async (audienceId, activeOnly = true) => {
-    const query = `select count(account_id) from ${accountJoinTable} where audience_id = $1` + 
+    const query = `select count(account_id) from ${audienceJoinTable} where audience_id = $1` + 
         `${activeOnly ? ' and active = true' : ''}`;
 
     logger('Counting audience size, with query: ', query);
@@ -331,7 +329,7 @@ module.exports.countAudienceSize = async (audienceId, activeOnly = true) => {
 };
 
 module.exports.selectAudienceActive = async (audienceId, activeOnly = true) => {
-    const query = `select account_id from ${accountJoinTable} where audience_id = $1` +
+    const query = `select account_id from ${audienceJoinTable} where audience_id = $1` +
         `${activeOnly ? ' and active = true' : ''}`;
     
     logger('Retrieving audience with query: ', query);
