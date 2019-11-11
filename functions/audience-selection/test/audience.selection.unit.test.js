@@ -17,15 +17,17 @@ const countAudienceStub = sinon.stub();
 const selectAudienceStub = sinon.stub();
 
 const audienceHandler = proxyquire('../audience-handler', {
-    'persistence': {
+    './persistence': {
         'executeColumnConditions': executeConditionsStub,
         'countAudienceSize': countAudienceStub,
         'selectAudienceActive': selectAudienceStub
     }
 });
 
+const mockUserId = uuid();
 const rootJSON = {
-    "table": "transactions"
+    'creatingUserId': mockUserId,
+    'table': config.get('tables.transactionTable')
 };
 
 const resetStubs = () => {
@@ -34,11 +36,11 @@ const resetStubs = () => {
     selectAudienceStub.reset();
 };
 
-describe.only('Audience selection - obtain & utilize list of standard properties', () => {
+describe('Audience selection - obtain & utilize list of standard properties', () => {
 
     beforeEach(() => resetStubs());
 
-    it.only('Should return acceptable properties, with types and labels', async () => {
+    it('Should return acceptable properties, with types and labels', async () => {
         const activityCountProperty = { type: 'aggregate', name: 'saveCount', description: 'Number of saves', expects: 'number' };
         const lastSaveTimeProperty = { type: 'match', name: 'lastSaveTime', description: 'Last save date', expects: 'epochMillis' };
         
@@ -53,7 +55,7 @@ describe.only('Audience selection - obtain & utilize list of standard properties
         expect(availableProperties).to.deep.include(lastSaveTimeProperty);
     });
 
-    it.only('Should return list correctly, wrapped, in response to web request', async () => {
+    it('Should return list correctly, wrapped, in response to web request', async () => {
         const authorizedRequest = {
             httpMethod: 'get',
             pathParameters: { proxy: 'properties' },
@@ -83,8 +85,11 @@ describe('Converts standard properties into column conditions', () => {
         const mockWholeAudienceId = uuid();
         const mockNumberAccounts = Math.floor(Math.random() * 1000);
         
+        // note 'dynamic' is a reserved word in SQL, hence using explicit 'is' prefix
         const mockSelectionJSON = {
-            client: mockClientId,
+            clientId: mockClientId,
+            creatingUserId: mockUserId,
+            isDynamic: true,
             conditions: [
                 { op: 'or', children: [
                     { op: 'greater_than', prop: 'lastSaveTime', type: 'match', value: oneWeekAgo.valueOf() },
@@ -104,11 +109,11 @@ describe('Converts standard properties into column conditions', () => {
                 "account_id"
             ],
             postConditions: [
-                { op: 'greater_than', prop: 'count(transaction_id)', value: 3 }
+                { op: 'greater_than', prop: 'count(transaction_id)', value: 3, valueType: 'int' }
             ]
         });
 
-        const expectedSubAudienceQuery = `select account_id from ${config.get('tables.audienceTable')} ` + 
+        const expectedSubAudienceQuery = `select account_id from ${config.get('tables.audienceJoinTable')} ` + 
             `where audience_id = '${mockSubAudienceId}' and active = true`;
         
         const expectedWholeAudienceSelection = Object.assign({}, rootJSON, {
@@ -126,26 +131,37 @@ describe('Converts standard properties into column conditions', () => {
             ]
         });
 
-        // not actually assembled here, instead in RDS, but placing here for reference for now
+        const expectedPersistenceParams = {
+            clientId: mockClientId,
+            creatingUserId: mockUserId,
+            isDynamic: true,
+            propertyConditions: mockSelectionJSON.conditions
+        };
+
+        // not actually assembled here, instead in RDS, but placing here for reference for now (see final test in audience.rds.unit.test)
         // const expectedFullQuery = `select distinct(account_id) from ${config.get('tables.transactionTable')} ` +
         //     `where (client_id = '${mockClientId} and ` +
         //     `((creation_time > '${oneWeekAgo.format()}' and settlement_status = 'SETTLED') or account_id in (${expectedSubAudienceQuery}))` +
         //     `)`;
 
-        executeConditionsStub.onFirstCall().resolves({ audienceId: mockSubAudienceId });
+        executeConditionsStub.onFirstCall().resolves({ audienceId: mockSubAudienceId, audienceCount: Math.floor(mockNumberAccounts / 2) });
         executeConditionsStub.onSecondCall().resolves({ audienceId: mockWholeAudienceId, audienceCount: mockNumberAccounts });
 
-        const resultOfCall = await audienceHandler.processRequestFromAnotherLambda(mockSelectionJSON);
+        const resultOfCall = await audienceHandler.createAudience(mockSelectionJSON);
         
         expect(resultOfCall).to.exist;
-        expect(resultOfCall).to.deep.equal({
-            statusCode: 200,
-            body: JSON.stringify({ })
-        });
+        expect(resultOfCall).to.deep.equal({ audienceCount: mockNumberAccounts, audienceId: mockWholeAudienceId });
 
-        expect(executeConditionsStub).to.have.been.calledWith(expectedSaveCountSelection, true);
-        expect(executeConditionsStub).to.have.been.calledWith(expectedWholeAudienceSelection, true);
-        
+        expect(executeConditionsStub).to.have.been.calledTwice;
+        // these could be consolidated into a single calledWith but output then gets a bit harder to debug, so trading off some verbosity here        
+        const firstCallArgs = executeConditionsStub.getCall(0).args;
+        expect(firstCallArgs[0]).to.deep.equal(expectedSaveCountSelection);
+        expect(firstCallArgs[1]).to.be.true;
+        expect(firstCallArgs[2]).to.deep.equal(expectedPersistenceParams);
+
+        const secondCallArgs = executeConditionsStub.getCall(1).args;
+        expect(secondCallArgs[1]).to.be.true;
+        expect(secondCallArgs[0]).to.deep.equal(expectedWholeAudienceSelection);        
     });
 
 });

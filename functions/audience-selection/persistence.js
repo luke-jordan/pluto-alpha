@@ -3,6 +3,9 @@
 const logger = require('debug')('jupiter:audience-selection:persistence');
 const config = require('config');
 
+const uuid = require('uuid/v4');
+const decamelize = require('decamelize');
+
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
@@ -10,6 +13,9 @@ const defaultTable = 'transaction_data.core_transaction_ledger';
 const dummyTableForTests = 'transactions';
 
 const supportedTables = [dummyTableForTests, defaultTable];
+
+const audienceTable = config.get('tables.audienceTable');
+const audienceJoinTable = config.get('tables.audienceJoinTable');
 
 const HUNDRED_PERCENT = 100;
 
@@ -20,12 +26,17 @@ const supportedColumns = [
     'account_id',
     'creation_time',
     'owner_user_id',
-    'count(account_id)'
+    'count(account_id)',
+    'distinct(account_id)'
 ];
 
 const baseCaseQueryBuilder = (unit, operatorTranslated) => {
-    if (unit.type === 'int') {
+    if (unit.valueType === 'int' || unit.valueType == 'boolean') {
         return `${unit.prop}${operatorTranslated}${unit.value}`;
+    }
+
+    if (operatorTranslated === 'in') {
+        return `${unit.prop} ${operatorTranslated} (${unit.value})`
     }
 
     return `${unit.prop}${operatorTranslated}'${unit.value}'`;
@@ -53,6 +64,10 @@ const conditionsFilterBuilder = (unit) => {
         return baseCaseQueryBuilder(unit, '<=');
     }
 
+    if (unit.op === 'in') {
+        return baseCaseQueryBuilder(unit, 'in')
+    }
+
     // end of base cases
 
     if (unit.op === 'and' && unit.children) {
@@ -71,7 +86,9 @@ const extractWhereConditions = (selectionJSON) => {
 };
 
 const validateAndParseColumns = (columns) => {
-    return columns.filter((column) => supportedColumns.includes(column));
+    // escape supported columns to allow for selecting constants (as in insert), but prevent injection 
+    // return columns.map((column) => supportedColumns.includes(column));
+    return columns.map((column) => supportedColumns.includes(column) ? column : `'${column}'`);
 };
 
 const extractColumnsToCount = (selectionJSON) => {
@@ -87,8 +104,8 @@ const extractColumns = (selectionJSON) => {
         return validateAndParseColumns(selectionJSON.columns).join(', ');
     }
 
-    // columns filter not passed, therefore select only `account_id`
-    return `account_id`;
+    // columns filter not passed, therefore select only distinct `account_id`
+    return `distinct(account_id)`;
 };
 
 const extractTable = (selectionJSON) => {
@@ -229,25 +246,95 @@ module.exports.extractSQLQueryFromJSON = (selectionJSON) => {
     return fullQuery;
 };
 
+// todo : construct version of insert into select in RdsConnection when we protect / validate method-SQL query correspondence
+const insertQuery = async (selectionJSON, persistenceParams) => {
+    // todo : validation prior to creating the audience
+        
+    const audienceId = uuid();
+    const audienceObject = { 
+        audienceId,
+        creatingUserId: persistenceParams.creatingUserId,
+        clientId: persistenceParams.clientId,
+        selectionInstruction: selectionJSON,
+        isDynamic: persistenceParams.isDynamic || false
+    };
+
+    if (persistenceParams.propertyConditions) {
+        audienceObject.propertyConditions = { conditions: persistenceParams.propertyConditions }; // to distinguish from JSON for Postgres
+    }
+
+    const audienceProps = Object.keys(audienceObject); // to make sure no accidents from different sorting
+    const audienceColumns = audienceProps.map((column) => decamelize(column, '_')).join(', ');
+
+    const createAudienceDef = {
+        queryTemplate: `insert into ${audienceTable} (${audienceColumns}) values %L returning audience_id`,
+        columnTemplate: audienceProps.map((prop) => `\${${prop}}`).join(', '),
+        objectArray: [audienceObject]
+    };
+
+    const audienceResult = await rdsConnection.insertRecords(createAudienceDef);
+    logger('Result of inserting bare audience: ', audienceResult);
+
+    // rely on query construction engine to do the insertion query as we need it
+    const insertionJSON = { ...selectionJSON };
+    insertionJSON.columns = ['distinct(account_id)', audienceId];
+    const selectForInsert = exports.extractSQLQueryFromJSON(insertionJSON, persistenceParams);
+
+    // use the compiled selection in the insert query, after converting ID to UUID
+    const crossInsertionQuery = `insert into ${audienceJoinTable} (account_id, audience_id) ${selectForInsert}`.
+        replace(`'${audienceId}'`, `'${audienceId}'::uuid`);
+    logger('Compiled query: ', crossInsertionQuery);
+
+    const joinResult = await rdsConnection.selectQuery(crossInsertionQuery, []);
+    logger('Join result: ', joinResult);
+
+    const persistenceResult = {
+        audienceId,
+        audienceCount: joinResult.length
+    };
+
+    return persistenceResult;
+};
+
 /**
- * Called right at the end when the column conditions are all in good oder
+ * Called right at the end when the column conditions are all in good oder. FOr selection query only, just past the object.
+ * If the audience is to be persisted, set persistSelection to true and pass these parameters:
+ * @param {object} persistenceParams A map of properties for the audience
+ * @property {string} creatingUserId Who is creating this audience
+ * @property {string} clientId What client is responsible for it
+ * @property {boolean} isDynamic (Optional) Defaults to false. Set to true if audience should be recalculated when it is used (e.g., if for a recurring message)
+ * @property {object} propertyConditions (Optional) Preserves the original property conditions that gave rise to this audience. Note: the column conditions created from those properties are always stored.
  */
-module.exports.executeColumnConditions = async (selectionJSON, persistSelection = false) => {
-    try {
+module.exports.executeColumnConditions = async (selectionJSON, persistSelection = false, persistenceParams = null) => {
+    if (persistSelection) {
+        logger('Persisting an audience, according to: ', selectionJSON);
+        const persistenceResult = await insertQuery(selectionJSON, persistenceParams);
+        logger('Result of persistence: ', persistenceResult);
+        return persistenceResult;
+    } else {    
         logger('Selecting accounts according to: ', selectionJSON);
         const sqlQuery = exports.extractSQLQueryFromJSON(selectionJSON);
         const queryResult = await rdsConnection.selectQuery(sqlQuery, []);
         logger('Number of records from query: ', queryResult.length);
         return queryResult.map((row) => row['account_id']);
-    } catch (error) {
-        logger('Error occurred while fetching users given json. Error:', error);
     }
 };
 
-module.exports.countAudienceSize = (audienceId) => {
-    
+module.exports.countAudienceSize = async (audienceId, activeOnly = true) => {
+    const query = `select count(account_id) from ${accountJoinTable} where audience_id = $1` + 
+        `${activeOnly ? ' and active = true' : ''}`;
+
+    logger('Counting audience size, with query: ', query);
+    const resultOfQuery = await rdsConnection.selectQuery(query, [audienceId]);
+    logger('Result of audience count: ', resultOfQuery);
+    return resultOfQuery[0]['count'];
 };
 
-module.exports.selectAudienceActive = (audienceId) => {
-
+module.exports.selectAudienceActive = async (audienceId, activeOnly = true) => {
+    const query = `select account_id from ${accountJoinTable} where audience_id = $1` +
+        `${activeOnly ? ' and active = true' : ''}`;
+    
+    logger('Retrieving audience with query: ', query);
+    const queryResult = await rdsConnection.selectQuery(query, [audienceId]);
+    return queryResult.map((row) => row['account_id']);
 };

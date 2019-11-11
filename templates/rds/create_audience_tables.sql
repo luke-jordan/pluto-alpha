@@ -7,20 +7,20 @@ create table if not exists audience_data.audience (
     creating_user_id uuid not null,
     client_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
-    is_dynamic default false,
-    property_conditions jsonb not null,
-    column_conditions jsonb not null
+    is_dynamic boolean default false,
+    selection_instruction jsonb not null,
+    property_conditions jsonb
 );
 
 -- The 'active' column is for dynamic audiences in which someone may drop out but we want to retain record that they were selected 
-create table if not exists audience_data.audience_account_join {
+create table if not exists audience_data.audience_account_join (
     audience_id uuid not null references audience_data.audience (audience_id),
     account_id uuid not null references account_data.core_account_ledger(account_id),
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
     active boolean default true,
-    unique (boost_id, account_id)
-};
+    unique (audience_id, account_id)
+);
 
 create index if not exists audience_join_audience_id on audience_data.audience_account_join (audience_id);
 create index if not exists audience_join_account_id on audience_data.audience_account_join (account_id); 

@@ -11,6 +11,7 @@
   },
   "tables": {
     "audienceTable": "audience_data.audience",
+    "audienceJoinTable": "audience_data.audience_account_join",
     "transactionTable": "transaction_data.core_transaction_ledger"
   }
 }

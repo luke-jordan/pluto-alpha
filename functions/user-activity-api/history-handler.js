@@ -149,6 +149,10 @@ const normalizeTx = (events) => {
  */
 module.exports.fetchUserHistory = async (event) => {
     try {
+        if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
+            return { statusCode: 400, body: 'Empty invocation' };
+        }
+
         if (!util.isUserAuthorized(event)) {
             return util.unauthorizedResponse;
         }
