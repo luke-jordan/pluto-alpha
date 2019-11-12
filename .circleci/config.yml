@@ -55,7 +55,6 @@ jobs:
       - run:
           name: Search for commited credentials
             command: |
-              # If credentials are picked up here, then Luke has already issued the kill order. Run. 
               git clone https://github.com/awslabs/git-secrets
               ls git-secrets
               cd git-secrets && sudo make install
