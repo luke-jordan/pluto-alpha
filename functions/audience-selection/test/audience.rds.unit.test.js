@@ -453,6 +453,7 @@ describe('Audience Selection - fetch users given JSON', () => {
 
         const expectedAudienceObject = {
             audienceId: mockAudienceId,
+            audienceType: 'PRIMARY',
             creatingUserId: mockUserId,
             clientId: mockClientId,
             selectionInstruction: mockSelection,
@@ -462,7 +463,7 @@ describe('Audience Selection - fetch users given JSON', () => {
 
         const audienceProps = Object.keys(expectedAudienceObject); // to make sure no accidents from different sorting
         const audienceColumns = audienceProps.map((column) => decamelize(column, '_')).join(', ');
-        const audienceIndices = '$1, $2, $3, $4, $5, $6';
+        const audienceIndices = '$1, $2, $3, $4, $5, $6, $7';
 
         const expectedAudienceInsertion = {
             template: `insert into ${audienceTable} (${audienceColumns}) values (${audienceIndices}) returning audience_id`,
@@ -476,13 +477,13 @@ describe('Audience Selection - fetch users given JSON', () => {
 
         const expectedJoinQuery = { template: expectedJoinTemplate, values: [] };
         
-        const persistenceParams = { creatingUserId: mockUserId, isDynamic: true, clientId: mockClientId, propertyConditions };
+        const persistenceParams = { creatingUserId: mockUserId, audienceType: 'PRIMARY', isDynamic: true, clientId: mockClientId, propertyConditions };
         
         uuidStub.returns(mockAudienceId);
 
         const mockJoinCount = 10;
         const audienceCreationResult = { rows: [{ 'audience_id': mockAudienceId }] };
-        const joinInsertResult = { rows: Array.from({ length: mockJoinCount }, () => `account_${Math.floor(Math.random() * 100)}`) };
+        const joinInsertResult = { rowCount: mockJoinCount };
         freeFormStub.resolves([audienceCreationResult, joinInsertResult]);
 
         const resultOfInsertion = await audienceSelection.executeColumnConditions(mockSelection, true, persistenceParams);

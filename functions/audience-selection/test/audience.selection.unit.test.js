@@ -141,6 +141,9 @@ describe('Converts standard properties into column conditions', () => {
             propertyConditions: mockSelectionJSON.conditions
         };
 
+        const intermediateParams = { ...expectedPersistenceParams, audienceType: 'INTERMEDIATE' };
+        const primaryParams = { ...expectedPersistenceParams, audienceType: 'PRIMARY' };
+
         // not actually assembled here, instead in RDS, but placing here for reference for now (see final test in audience.rds.unit.test)
         // const expectedFullQuery = `select distinct(account_id) from ${config.get('tables.transactionTable')} ` +
         //     `where (client_id = '${mockClientId} and ` +
@@ -160,11 +163,12 @@ describe('Converts standard properties into column conditions', () => {
         const firstCallArgs = executeConditionsStub.getCall(0).args;
         expect(firstCallArgs[0]).to.deep.equal(expectedSaveCountSelection);
         expect(firstCallArgs[1]).to.be.true;
-        expect(firstCallArgs[2]).to.deep.equal(expectedPersistenceParams);
+        expect(firstCallArgs[2]).to.deep.equal(intermediateParams);
 
         const secondCallArgs = executeConditionsStub.getCall(1).args;
-        expect(secondCallArgs[1]).to.be.true;
         expect(secondCallArgs[0]).to.deep.equal(expectedWholeAudienceSelection);        
+        expect(secondCallArgs[1]).to.be.true;
+        expect(secondCallArgs[2]).to.deep.equal(primaryParams);
     });
 
     it('Handles the simplest case - whole client, no properties - properly', async () => {

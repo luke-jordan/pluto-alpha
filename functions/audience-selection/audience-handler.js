@@ -91,7 +91,9 @@ const convertAggregateIntoEntity = async (aggregateCondition, persistenceParams)
     const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId);
     
     logger('Transforming aggregate condition: ', clientRestricted);
-    const subAudienceResult = await persistence.executeColumnConditions(clientRestricted, true, persistenceParams);
+    const copiedParams = { ...persistenceParams };
+    copiedParams.audienceType = 'INTERMEDIATE';
+    const subAudienceResult = await persistence.executeColumnConditions(clientRestricted, true, copiedParams);
     const subAudienceId = subAudienceResult.audienceId;
 
     const subAudienceQuery = `select account_id from ${audienceJoinTable} where audience_id = '${subAudienceId}' and active = true`;
@@ -115,7 +117,7 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
         const matchCondition = await convertAggregateIntoEntity(propertyCondition, persistenceParams);
         logger('Matched condition: ', matchCondition);
         return matchCondition;
-    } 
+    }
     
     // remaining is simple match condition, execute and return
     logger('Converting from property: ', propertyCondition.prop);
@@ -125,7 +127,7 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
     return columnCondition.conditions[0];
 };
 
-module.exports.createAudience = async (params) => {
+const constructColumnConditions = async (params) => {
     const passedPropertyConditions = params.conditions;
     
     const { clientId, creatingUserId, isDynamic } = params;
@@ -145,9 +147,26 @@ module.exports.createAudience = async (params) => {
     const withClientId = addTableAndClientId(selectionObject, clientId);
     
     logger('Reassembled conditions: ', JSON.stringify(withClientId, null, 2));
-    const persistedAudience = await persistence.executeColumnConditions(withClientId, true, persistenceParams);
+    return { columnConditions: withClientId, persistenceParams };
+};
+
+module.exports.createAudience = async (params) => {
+    const { columnConditions, persistenceParams } = await constructColumnConditions(params);
+    persistenceParams.audienceType = 'PRIMARY';
+    
+    const persistedAudience = await persistence.executeColumnConditions(columnConditions, true, persistenceParams);
     logger('Received from RDS: ', persistedAudience);
+    
     return persistedAudience;
+};
+
+module.exports.previewAudience = async (params) => {
+    const { columnConditions } = await constructColumnConditions(params);
+    const persistedAudience = await persistence.executeColumnConditions(columnConditions);
+
+    logger('Result of preview: ', persistedAudience);
+
+    return { audienceCount: persistedAudience.length };
 };
 
 // utility method as essentially the same logic will be called in several different ways
@@ -165,7 +184,8 @@ const extractRequestType = (event) => {
 
 const dispatcher = {
     'properties': () => exports.fetchAvailableProperties(),
-    'create': (params) => exports.createAudience(params)
+    'create': (params) => exports.createAudience(params),
+    'preview': (params) => exports.previewAudience(params)
 };
 
 module.exports.handleInboundRequest = async (event) => {

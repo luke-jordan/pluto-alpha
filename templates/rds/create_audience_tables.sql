@@ -7,10 +7,14 @@ create table if not exists audience_data.audience (
     creating_user_id uuid not null,
     client_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
+    audience_type varchar (50) not null,
     is_dynamic boolean default false,
     selection_instruction jsonb not null,
     property_conditions jsonb
 );
+
+alter table audience_data.audience drop constraint if exists audience_type_check;
+alter table audience_data.audience add constraint audience_type_check check (audience_type in ('PRIMARY', 'INTERMEDIATE'));
 
 -- The 'active' column is for dynamic audiences in which someone may drop out but we want to retain record that they were selected 
 create table if not exists audience_data.audience_account_join (

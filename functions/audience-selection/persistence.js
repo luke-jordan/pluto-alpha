@@ -252,6 +252,7 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
 
     const audienceObject = { 
         audienceId,
+        audienceType: persistenceParams.audienceType,
         creatingUserId: persistenceParams.creatingUserId,
         clientId: persistenceParams.clientId,
         selectionInstruction: selectionJSON,
@@ -287,7 +288,7 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
     const joinResult = await rdsConnection.freeFormInsert([createAudienceQuery, joinInsertionQuery]);
     logger('Join result: ', joinResult);
 
-    const audienceCount = joinResult[1].rows.length;
+    const audienceCount = joinResult[1]['rowCount'];
 
     const persistenceResult = {
         audienceId,
