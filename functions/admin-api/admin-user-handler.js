@@ -189,7 +189,7 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
     const updateInvoke = adminUtil.invokeLambda(config.get('lambdas.statusUpdate'), statusPayload);
     const updateResult = await lambda.invoke(updateInvoke).promise();
     logger('Result from status update Lambda: ', updateResult);
-    const updatePayload = updateResult['Payload'];
+    const updatePayload = JSON.parse(updateResult['Payload']);
     
     const returnResult = updatePayload.statusCode === 200
         ? { result: 'SUCCESS', updateLog: JSON.parse(updatePayload.body) }

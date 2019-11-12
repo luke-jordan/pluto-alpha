@@ -6,3 +6,4 @@ create role float_api_worker with nosuperuser login password 'pwd_for_float_api'
 create role boost_worker with nosuperuser login password 'pwd_for_boost_worker';
 create role message_api_worker with nosuperuser login password 'pwd_for_message_worker';
 create role admin_api_worker with nosuperuser login password 'pwd_for_admin_api';
+create role audience_worker with nosuperuser login password 'pwd_for_audience_worker';

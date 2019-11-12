@@ -83,13 +83,13 @@ module.exports.expireHangingTransactions = async () => {
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
 };
 
-module.exports.adjustTxStatus = async ({ transactionId, newStatus, logContext }) => {
+module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext }) => {
     logger('Would be logging this context: ', logContext);
 
     const txTable = config.get('tables.transactionTable');
     const updateQuery = `update $${txTable} set settlement_status = $1 where transaction_id = $2`;
 
-    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [newStatus, transactionId]);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [newTxStatus, transactionId]);
     logger('Result of transaction update: ', resultOfUpdate);
 
     return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 

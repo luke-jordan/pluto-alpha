@@ -109,7 +109,8 @@ resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
                 "${aws_lambda_function.balance_fetch_wrapper.arn}",
                 "${aws_lambda_function.save_initiate.arn}",
                 "${aws_lambda_function.save_payment_check.arn}",
-                "${aws_lambda_function.message_user_fetch.arn}"
+                "${aws_lambda_function.message_user_fetch.arn}",
+                "${aws_lambda_function.user_history_list.arn}"
             ],
             "Condition": {
                 "StringEquals": {
@@ -465,7 +466,7 @@ resource "aws_iam_policy" "admin_save_settle_lambda_invoke_policy" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.save_payment_complete.arn}"
+                "${aws_lambda_function.save_admin_settle.arn}"
             ]
         }
     ]

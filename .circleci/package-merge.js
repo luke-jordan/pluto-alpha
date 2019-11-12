@@ -9,6 +9,7 @@ const fs = require('fs');
 const functionFolders = [
     './functions/admin-api',
     './functions/boost-api',
+    './functions/audience-selection',
     './functions/float-api',
     './functions/user-activity-api',
     './functions/user-existence-api',
