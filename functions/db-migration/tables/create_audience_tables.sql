@@ -1,0 +1,1 @@
+../../../templates/rds/create_audience_tables.sql

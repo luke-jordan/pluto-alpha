@@ -30,7 +30,7 @@ revoke all on schema audience_data from public cascade;
 grant usage on schema audience_data to audience_worker;
 
 grant select, insert on audience_data.audience to audience_worker;
-grant select, insert, update on audience_data.audience_account_join to audience_join_audience_id;
+grant select, insert, update on audience_data.audience_account_join to audience_worker;
 
 -- So that boost worker and message worker can populate their tables with reference to here
 grant usage on schema audience_data to boost_worker;

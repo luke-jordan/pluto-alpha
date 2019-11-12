@@ -202,6 +202,34 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
     });
 
+    it.only('Sets test to false when false', async () => {
+        requestStub.resolves([mockTransactionStatus, mockTransactionStatus, mockTransactionStatus]);
+        const mockEvent = { transactionId: mockTransactionReference, isTest: false };
+
+        const transactionStatus = await handler.statusCheck(mockEvent);
+        logger('Transaction status result:', transactionStatus);
+
+        // rest is tested up above
+        expect(transactionStatus).to.exist;
+        expect(transactionStatus).to.have.property('result', 'COMPLETE');
+
+        const expectedRequestOptions = {
+            method: 'GET',
+            uri: config.get('ozow.endpoints.transactionStatus'),
+            qs: {
+                SiteCode: config.get('ozow.siteCode'),
+                IsTest: false,
+                TransactionReference: mockTransactionReference
+            },
+            headers: {
+                ApiKey: config.get('ozow.apiKey'),
+                Accept: 'application/json'
+            },
+            json: true
+        };
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
+    });
+
     it('Catches thrown errors', async () => {
         requestStub.throws(new Error('RequestError'));
         const mockEvent = { transactionId: mockTransactionReference };
