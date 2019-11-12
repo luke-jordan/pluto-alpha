@@ -21,7 +21,7 @@ const initiateConnection = () => {
   }
 
   const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
-  logger('Is secrets enabled? : ', secretsMgmtEnabled)
+  logger('Is secrets enabled? : ', secretsMgmtEnabled);
 
   if (!secretsMgmtEnabled) {
     pool = new Pool(config.get('db'));
