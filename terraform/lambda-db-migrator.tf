@@ -94,6 +94,11 @@ resource "aws_iam_role_policy_attachment" "db_migration_vpc_execution_policy" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "db_migration_get_secret" {
+  role = aws_iam_role.db_migration_role.name
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_main_worker_read"
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_db_migration" {

@@ -113,8 +113,7 @@ module.exports = {
         'max-classes-per-file': 'warn',
         'max-depth': 'error',
         'max-len': 'off',
-        'max-lines': ['error', 600],
-        'max-lines-per-function': 'error',
+        'max-lines': ['error', 500],
         'max-nested-callbacks': 'error',
         'max-params': ['error', 5],
         'max-statements': 'off',
@@ -149,7 +148,7 @@ module.exports = {
         'no-extend-native': 'error',
         'no-extra-bind': 'error',
         'no-extra-label': 'error',
-        'no-extra-parens': 'error',
+        'no-extra-parens': 'warn',
         'no-floating-decimal': 'error',
         'no-implicit-coercion': 'error',
         'no-implicit-globals': 'error',
@@ -165,7 +164,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 400, 500]
+                'ignore': [0, 1, 2, 100, 200, 400, 403, 500]
             }
         ],
         'no-mixed-operators': 'error',
@@ -242,20 +241,12 @@ module.exports = {
         'prefer-destructuring': 'off',
         'prefer-named-capture-group': 'off',
         'prefer-numeric-literals': 'error',
-        'prefer-object-spread': 'error',
         'prefer-promise-reject-errors': 'error',
         'prefer-reflect': 'error',
         'prefer-rest-params': 'error',
         'prefer-spread': 'error',
-        'prefer-template': 'error',
-        'quote-props': 'off',
-        'quotes': [
-            'error',
-            'single', {
-                avoidEscape: true,
-                allowTemplateLiterals: true
-            }
-        ],
+        'quote-props': ['error', 'consistent'],
+        'quotes': ['error', 'single', { 'allowTemplateLiterals': true }],
         'radix': 'error',
         'require-await': 'off',
         'require-jsdoc': 'error',

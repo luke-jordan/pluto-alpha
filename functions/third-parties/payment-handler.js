@@ -159,7 +159,7 @@ module.exports.statusCheck = async (event) => {
         const params = {
             SiteCode: config.get('ozow.siteCode'),
             TransactionReference: event.transactionId,
-            IsTest: event.isTest ? event.isTest : true
+            IsTest: typeof event.isTest === 'boolean' ? event.isTest : true
         };
 
         const options = {
