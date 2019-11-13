@@ -72,10 +72,6 @@ const assemblePaymentInfo = async (saveInformation, transactionId) => {
     currency: saveInformation.currency
   };
 
-  if (config.has('payment.dummy') && config.get('payment.dummy') === 'ON' && Reflect.has(saveInformation, 'dummy') && saveInformation.dummy === 'ON') {
-    amountDict.isTest = true;
-  }
-
   return { transactionId, accountInfo, amountDict };
 };
   

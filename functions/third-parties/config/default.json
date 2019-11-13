@@ -58,8 +58,5 @@
             "TRANSMISSION",
             "BOND"
         ]
-    },
-    "payment": {
-        "test": false
     }
 }

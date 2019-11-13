@@ -90,7 +90,6 @@
     "extendedRequestId": "dFh3BHa8IAMFjgQ=",
     "requestTime": "19/Jul/2019:19:14:27 +0000",
     "path": "/staging/balance",
-    "accountId": "455943420663",
     "protocol": "HTTP/1.1",
     "stage": "staging",
     "domainPrefix": "5qg7smp6w6",

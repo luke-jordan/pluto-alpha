@@ -59,9 +59,15 @@ module.exports.generateBankRef = (accountInfo) => {
 
 module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict }) => {
     logger('Received params: ', transactionId, accountInfo, amountDict);
-
+    const dummyPayment = config.has('dummy') && config.get('dummy') === 'ON';
+    
     const bankReference = exports.generateBankRef(accountInfo);
     logger('Generated bank ref: ', bankReference);
+
+    if (dummyPayment) {
+        const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
+        return { paymentUrl: 'https://pay.me/1234', paymentProvider: 'STRIPE', bankRef: bankReference, paymentRef: dummyPaymentRef };
+    }
 
     const wholeCurrencyAmount = opsUtil.convertToUnit(amountDict.amount, amountDict.unit, 'WHOLE_CURRENCY');
     
