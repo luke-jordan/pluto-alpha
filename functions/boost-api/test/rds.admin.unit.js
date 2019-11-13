@@ -49,6 +49,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     const boostFromPersistence = {
         'boost_id': testBoostId,
+        'label': 'Win a boost!',
         'boost_type': 'SIMPLE',
         'boost_category': 'TIME_LIMITED',
         'boost_amount': 100000,
@@ -77,6 +78,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     const expectedBoostResult = {
         boostId: testBoostId,
+        label: 'Win a boost!',
         boostType: 'SIMPLE',
         boostCategory: 'TIME_LIMITED',
         boostAmount: 100000,

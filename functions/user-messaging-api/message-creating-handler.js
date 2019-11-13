@@ -155,7 +155,7 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
  * It uses these details to retrieve the associated instruction from persistence, assemble the user message(s), and finally persists the assembled user message(s) to RDS.
  * @param {object} instructionDetail An object containing the following properties: instructionId, destinationUserId, and parameters. These are elaborated below.
  * @property {string} instructionId The instruction id assigned during instruction creation.
- * @property {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's selectionInstruction property.
+ * @property {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's audience ID property.
  * @property {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.
  */
 const processNonRecurringInstruction = async ({ instructionId, destinationUserId, parameters }) => {
@@ -166,8 +166,7 @@ const processNonRecurringInstruction = async ({ instructionId, destinationUserId
         return { instructionId, processResult: 'INSTRUCTION_SCHEDULED' };
     }
     
-    const selectionInstruction = instruction.selectionInstruction || null;
-    const userIds = destinationUserId ? [destinationUserId] : await rdsUtil.getUserIds(selectionInstruction);
+    const userIds = destinationUserId ? [destinationUserId] : await rdsUtil.getUserIds(instruction.audienceId);
     logger(`Retrieved ${userIds.length} user id(s) for instruction`);
     
     const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
@@ -225,7 +224,7 @@ module.exports.createUserMessages = async (event) => {
 const generateRecurringMessages = async (recurringInstruction) => {
     const instructionId = recurringInstruction.instructionId;
     
-    const userIds = await rdsUtil.getUserIds(recurringInstruction.selectionInstruction);
+    const userIds = await rdsUtil.getUserIds(recurringInstruction.audienceId);
     const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
    
     const userMessages = await createAndStoreMsgsForUserIds(usersForMessages, recurringInstruction);

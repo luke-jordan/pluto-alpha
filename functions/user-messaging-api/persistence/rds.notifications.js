@@ -8,8 +8,8 @@ const camelcase = require('camelcase');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
+
 const accountsTable = config.get('tables.accountLedger');
-const transactionsTable = config.get('tables.transactionLedger');
 
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
@@ -199,162 +199,25 @@ module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses
     return updateResponse; // camelize?
 };
 
-// ///////////////////////////////////////////////////////////////////////////////////////
-// /////////////////////// User ID extraction begins here ////////////////////////////////
-// ///////////////////////////////////////////////////////////////////////////////////////
-
-const validateAndExtractUniverse = (universeComponent) => {
-    logger('Universe component: ', universeComponent);
-    const universeMatch = universeComponent.match(/#{(?<universeDef>.*)}/);
-    logger('Universe match: ', universeMatch);
-    if (!universeMatch || universeMatch.length === 0) {
-        throw new Error('Error! Universe definition passed incorrectly: ', universeComponent);
-    }
-
-    logger('Parsing: ', universeMatch[1]);
-    const universeDefinition = JSON.parse(universeMatch.groups.universeDef);
-    logger('Resulting definition: ', universeDefinition);
-    if (typeof universeDefinition !== 'object' || Object.keys(universeDefinition) === 0) {
-        throw new Error('Error! Universe definition not a valid object');
-    }
-
-    return universeDefinition;
-};
-
-
-// note : this _could_ be simplified by relying on ordering of Object.keys, but that would be dangerous/fragile
-const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey) => {
-    if (currentKey === 'specific_accounts') {
-        logger('Specific account IDs selected');
-        const accountIds = universeDefinition[currentKey];
-        const placeHolders = accountIds.map((_, index) => `$${currentIndex + index + 1}`).join(', ');
-        logger('Created place holder: ', placeHolders);
-        const assembledClause = `owner_user_id in (${placeHolders})`;
-        return [assembledClause, accountIds, currentIndex + accountIds.length];
-    } else if (currentKey === 'client_id') {
-        const newIndex = currentIndex + 1;
-        const assembledClause = `responsible_client_id = $${newIndex}`;
-        return [assembledClause, [universeDefinition[currentKey]], newIndex];
-    } else if (currentKey === 'interval') {
-        const startIntervalIndex = currentIndex + 1;
-        const endIntervalIndex = currentIndex + 2;
-        const assembledClause = `creation_time between $${startIntervalIndex} and $${endIntervalIndex}`;
-
-        const startTimeAsDateString = moment(universeDefinition[currentKey]['start']).format();
-        const endTimeAsDateString = moment(universeDefinition[currentKey]['end']).format();
-        return [assembledClause, [startTimeAsDateString, endTimeAsDateString], endIntervalIndex];
-    } else if (currentKey === 'activityCountRange') {
-        const startIntervalIndex = currentIndex + 1;
-        const endIntervalIndex = currentIndex + 2;
-        const assembledClause = `transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED'` +
-            ` group by account_id having count(*) between $${startIntervalIndex} and $${endIntervalIndex}`;
-
-        const startActivityCount = universeDefinition[currentKey]['start'];
-        const endActivityCount = universeDefinition[currentKey]['end'];
-        return [assembledClause, [startActivityCount, endActivityCount], endIntervalIndex];
-    }
-    const newIndex = currentIndex + 1;
-    return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
-};
-
-// const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
-
-const extractWhereClausesValues = (universeDefinition) => {
-    const [clauseStrings, clauseValues] = [[], []];
-    const universeKeys = Object.keys(universeDefinition);
-    let currentIndex = 0;
-    universeKeys.forEach((key) => {
-        logger('Next clause extraction, current key: ', key, ' and current index: ', currentIndex);
-        const [nextClause, nextValues, newCurrentIndex] = extractSubClauseAndValues(universeDefinition, currentIndex, key);
-        clauseStrings.push(nextClause);
-        clauseValues.push(...nextValues);
-        currentIndex = newCurrentIndex;
-    });
-    return [clauseStrings, clauseValues];
-};
-
-const assembleMatchEntityClauseValues = (universeDefinition) => {
-    const entityType = universeDefinition.entityType;
-    logger('Matching entity of type: ', entityType);
-    if (entityType === 'boost') {
-        const boostAccountTable = config.get('tables.boostAccountTable');
-        const selectQuery = `select distinct(owner_user_id) from ${accountsTable} inner join ${boostAccountTable} on ` +
-            `${accountsTable}.account_id = ${boostAccountTable}.account_id where boost_id = $1`;
-        return [selectQuery, [universeDefinition.entityId]];
-    }
-    throw new Error('Unimplemented matching entity');
-};
-
-const assembleQueryClause = (selectionMethod, universeDefinition) => {
-    if (selectionMethod === 'whole_universe') {
-        logger('We are selecting all parts of the universe');
-        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
-        const whereClause = conditionClauses.join(' and ');
-        const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
-        return [selectionQuery, conditionValues];
-    } else if (selectionMethod === 'sign_up_cohort') {
-        logger(`We are selecting users based on sign up interval`);
-        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
-        const whereClause = conditionClauses.join(' and ');
-        const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where ${whereClause}`;
-        return [selectionQuery, conditionValues];
-    } else if (selectionMethod === 'activity_count') {
-        logger(`We are selecting users based on activity count`);
-        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
-        const whereClause = conditionClauses.join(' and ');
-        const selectionQuery = `select account_id, owner_user_id, count(*) from ${transactionsTable}` +
-            ` where ${whereClause}`;
-        return [selectionQuery, conditionValues];
-    } else if (selectionMethod === 'random_sample') {
-        logger('We are selecting some random sample of a universe');
-        const samplePercentage = Number(universeDefinition.replace(/^0./, ''));
-        if (isNaN(samplePercentage)) {
-            throw new Error('Invalid row percentage.');
-        }
-        const selectionQuery = `select owner_user_id from ${accountsTable} tablesample bernoulli ($1)`;
-        const conditionValues = samplePercentage;
-        return [selectionQuery, [conditionValues]];
-    } else if (selectionMethod === 'match_other') {
-        logger('We are selecting so as to match another entity: ', universeDefinition);
-        return assembleMatchEntityClauseValues(universeDefinition);
-    }
-
-    throw new Error(`Invalid selection method provided: ${selectionMethod}`);
-};
-
-const extractUserIds = async (selectionClause) => {
-    logger('Selecting accounts according to: ', selectionClause);
-    const clauseComponents = selectionClause.split(' ');
-    logger('Split pieces: ', clauseComponents);
-    const hasMethodParameters = clauseComponents[1] !== 'from';
+const extractUserIds = async (audienceId) => {
+    logger('Selecting accounts from audience: ', audienceId);
     
-    const selectionMethod = clauseComponents[0];
-    const universeComponents = selectionClause.match(/#{{.*?}}|#{.*?}/g);
-    const universeComponent = universeComponents[hasMethodParameters ? 1 : 0];
-    let universeDefinition = null;
-    if (selectionMethod === 'random_sample') {
-        universeDefinition = universeComponents[0].replace(/#{|\}/g, '');
-    } else {
-        universeDefinition = validateAndExtractUniverse(universeComponent);
-    }
-    
-    const [selectionQuery, selectionValues] = assembleQueryClause(selectionMethod, universeDefinition);
-    logger('Assembled selection clause: ', selectionQuery);
-    logger('And selection values: ', selectionValues);
+    const selectionQuery = `select account_id, owner_user_id from ${accountsTable} where account_id in ` +
+        `(select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2)`;
 
-    const queryResult = await rdsConnection.selectQuery(selectionQuery, selectionValues);
+    logger('Assembled audience ID selection clause: ', selectionQuery);
+    const queryResult = await rdsConnection.selectQuery(selectionQuery, [audienceId, true]);
     logger('Number of records from query: ', queryResult.length);
-
 
     return queryResult.map((row) => row['owner_user_id']);
 };
 
 /**
- * This function accepts a selection instruction and returns an array of user ids.
- * @param {string} selectionInstruction see DSL documentation.
+ * This function accepts an existing audience ID and returns the corresponding user IDs.
+ * @param {string} audienceId see DSL documentation.
  */
-module.exports.getUserIds = async (selectionInstruction) => {
-    const userIds = await extractUserIds(selectionInstruction);
+module.exports.getUserIds = async (audienceId) => {
+    const userIds = await extractUserIds(audienceId);
     logger('Got this back from user ids extraction:', userIds);
     return userIds;
 };

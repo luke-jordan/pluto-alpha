@@ -1,6 +1,8 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:test');
+
+const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
@@ -54,6 +56,7 @@ const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, f
 const testStartTime = moment();
 const testEndTime = moment().add(7, 'days');
 const testMktingAdmin = uuid();
+const testAudienceId = uuid();
 
 describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () => {
 
@@ -90,6 +93,9 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
     const testCreatingUserId = uuid();
 
+    const testClientId = 'some_client_co';
+
+    // `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`
     const mockBoostToFromPersistence = {
         creatingUserId: testCreatingUserId,
         label: 'Referral::Luke::Avish',
@@ -106,7 +112,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         boostEndTime: referralWindowEnd,
         statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
         boostAudience: 'INDIVIDUAL',
-        boostAudienceSelection: `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`,
+        audienceId: testAudienceId,
         defaultStatus: 'PENDING',
         messageInstructionIds: [
             { accountId: testReferringUser, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
@@ -121,6 +127,11 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         const testPersistedTime = moment();
         momentStub.withArgs().returns(testStartTime);
         momentStub.withArgs(referralWindowEnd.valueOf()).returns(referralWindowEnd);
+
+        const testCreatedAudienceId = uuid();
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
+            body: JSON.stringify({ audienceId: testCreatedAudienceId })
+        })})});
 
         findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRER').resolves(testReferringMsgId);
         findMsgInstructStub.withArgs('REFERRAL::REDEEMED::REFERRED').resolves(testReferredMsgId);
@@ -141,12 +152,15 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             boostBudget: '10000000::HUNDREDTH_CENT::USD',
             boostSource: {
                 bonusPoolId: 'primary_bonus_pool',
-                clientId: 'some_client_co',
+                clientId: testClientId,
                 floatId: 'primary_cash'
             },
             endTimeMillis: referralWindowEnd.valueOf(),
             boostAudience: 'INDIVIDUAL',
-            boostAudienceSelection: `whole_universe from #{'{"specific_accounts": ["${testReferringUser}","${testReferredUser}"]}'}`,
+            boostAudienceSelection: {
+                table: config.get('tables.accountLedger'),
+                conditions: [{ op: 'in', prop: 'account_id', value: `${testReferringUser}, ${testReferredUser}` }]
+            },
             initialStatus: 'PENDING',
             statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
             messageInstructionFlags: {
@@ -160,10 +174,23 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         const resultOfInstruction = await handler.createBoost(testBodyOfEvent);
         expect(resultOfInstruction).to.deep.equal(expectedFromRds);
 
-        const objectToRds = insertBoostStub.getCall(0).args[0];
-        logger('Sent to RDS: ', objectToRds);
-        
-        expect(insertBoostStub).to.have.been.calledWithExactly(mockBoostToFromPersistence);
+        const expectedAudiencePayload = {
+            operation: 'create',
+            params: {
+                clientId: testClientId,
+                creatingUserId: testCreatingUserId,
+                isDynamic: false,
+                propertyConditions: testBodyOfEvent.boostAudienceSelection
+            }
+        };
+        const wrappedInvoke = testHelper.wrapLambdaInvoc('audience_selection', false, expectedAudiencePayload);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(wrappedInvoke);
+
+        // const objectToRds = insertBoostStub.getCall(0).args[0];
+        // logger('Sent to RDS: ', objectToRds);
+        const expectedBoost = { ...mockBoostToFromPersistence };
+        expectedBoost.audienceId = testCreatedAudienceId;
+        expect(insertBoostStub).to.have.been.calledWithExactly(expectedBoost);
     });
 
 });
@@ -173,7 +200,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     beforeEach(() => resetStubs());
 
     const testRedemptionMsgId = uuid();
-
+    
     const mockBoostToFromPersistence = {
         creatingUserId: testMktingAdmin,
         label: 'Monday Limited Time Boost',
@@ -190,7 +217,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         boostEndTime: testEndTime,
         statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
         boostAudience: 'GENERAL',
-        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+        audienceId: testAudienceId,
         defaultStatus: 'CREATED',
         messageInstructionIds: [{ accountId: 'ALL', status: 'REDEEMED', msgInstructionId: testRedemptionMsgId }]
     };
@@ -224,7 +251,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             endTimeMillis: testEndTime.valueOf(),
             statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
             boostAudience: 'GENERAL',
-            boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+            audienceId: testAudienceId,
             redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
         };
 
@@ -336,7 +363,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         },
         endTimeMillis: testEndTime.valueOf(),
         boostAudience: 'GENERAL',
-        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+        audienceId: testAudienceId,
         messagesToCreate: [messageReqBody],
         gameParams
     };
@@ -357,7 +384,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         boostEndTime: testEndTime,
         statusConditions: testStatusConditions,
         boostAudience: 'GENERAL',
-        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+        audienceId: testAudienceId,
         defaultStatus: 'CREATED',
         messageInstructionIds: { } 
     };
@@ -379,7 +406,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         messagePayload.boostStatus = 'ALL';
         messagePayload.audienceType = 'GENERAL';
         messagePayload.presentationType = 'ONCE_OFF';
-        messagePayload.selectionInstruction = `match_other from #{{\"entityType\": \"boost\", \"entityId\": \"${testBoostId}\"}}`;
+        messagePayload.audienceId = testAudienceId;
         messagePayload.endTime = testEndTime.format();
         
         const assembledMessageTemplates = Object.keys(messageTemplates).map((key) => {

@@ -24,7 +24,7 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region') });
  * @property {boolean} active Indicates whether the message is active or not.
  * @property {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @property {object} templates Required. Message instruction must include at least one template, ie, the notification message to be displayed
- * @property {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @property {string} audienceId Required when audience type is either INDIVIDUAL or GROUP. Specifies the ID of the audience for the message. 
  * @property {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @property {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
  * @property {object} responseContext An object that includes details such as the boost ID.
@@ -43,10 +43,10 @@ module.exports.validateMessageInstruction = (instruction) => {
     switch (true) {
         case instruction.presentationType === 'RECURRING' && !instruction.recurrenceParameters:
             throw new Error('recurrenceParameters is required where presentationType is set to RECURRING.');
-        case instruction.audienceType === 'INDIVIDUAL' && !instruction.selectionInstruction:
-            throw new Error('selectionInstruction required on indivdual notification.');
-        case instruction.audienceType === 'GROUP' && !instruction.selectionInstruction:
-            throw new Error('selectionInstruction required on group notification.');
+        case instruction.audienceType === 'INDIVIDUAL' && !instruction.audienceId:
+            throw new Error('Audience ID required on indivdual notification.');
+        case instruction.audienceType === 'GROUP' && !instruction.audienceId:
+            throw new Error('Audience ID required on group notification.');
         case !instruction.templates.sequence && !instruction.templates.template:
             throw new Error('Templates must define either a sequence or a single template.');
         case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory:
@@ -66,7 +66,7 @@ module.exports.validateMessageInstruction = (instruction) => {
  * @property {string} instruction.audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @property {string} instruction.defaultTemplate Required when otherTemplates is null. Templates describe the message to be shown in the notification.
  * @property {string} instruction.otherTemplates Required when defaultTemplate is null.
- * @property {object} instruction.selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @property {string} instruction.audienceId Required when audience type is either INDIVIDUAL or GROUP. 
  * @property {object} instruction.recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @property {string} instruction.eventTypeCategory The event type and category for this instruction, controlled by caller's logic (e.g., REFERRAL::REDEEMED::REFERRER);
  */
@@ -94,7 +94,7 @@ const createPersistableObject = (instruction, creatingUserId) => {
         active: true,
         audienceType: instruction.audienceType,
         templates: instruction.templates,
-        selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
+        audienceId: instruction.audienceId,
         recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: moment().format(),
         messagePriority,
@@ -154,7 +154,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
  * @property {boolean} active Indicates whether the message is active or not.
  * @property {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @property {string} template Provides message templates, as described above
- * @property {object} selectionInstruction Required when audience type is either INDIVIDUAL or GROUP. 
+ * @property {string} audienceId Required when audience type is either INDIVIDUAL or GROUP. 
  * @property {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @property {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
  * @property {object} responseContext An object that includes details such as the boost ID.

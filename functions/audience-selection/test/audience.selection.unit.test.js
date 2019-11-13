@@ -104,8 +104,9 @@ describe('Converts standard properties into column conditions', () => {
         const expectedSaveCountSelection = Object.assign({}, rootJSON, {
             conditions: [
                 { op: 'and', children: [
-                    { op: 'is', prop: 'client_id', value: mockClientId },
-                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
+                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
+                    { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'is', prop: 'client_id', value: mockClientId }
                 ]}
             ],
             groupBy: [

@@ -110,6 +110,25 @@ describe('Audience Selection - SQL Query Construction', () => {
         expect(result).to.deep.equal(expectedQuery);
     });
 
+    it('should handle in operator', async () => {
+        const mockAccountId1 = uuid();
+        const mockAccountId2 = uuid();
+
+        // looks a bit weird but is used extensively in aggregate->match conversions, and more mundanely in selecting specific accounts
+        // e.g., when they come from referrals
+        const mockSelectionObject = { 
+            table: config.get('tables.accountTable'), 
+            columns: ['account_id'],
+            conditions: [{
+                'op': 'in', 'prop': 'account_id', 'value': `${mockAccountId1}, ${mockAccountId2}`
+            }]
+        };
+
+        const expectedQuery = `select account_id from ${config.get('tables.accountTable')} where account_id in (${mockAccountId1}, ${mockAccountId2})`;
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionObject);
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
     it('should be able to handle simple AND statements', async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             'conditions': [{

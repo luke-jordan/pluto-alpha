@@ -26,14 +26,12 @@ const transformBoostFromRds = (boost) => {
     // logger('Working? : ', transformedBoost);
     transformedBoost.messageInstructions = transformedBoost.messageInstructionIds.instructions;
     // transformedBoost.statusConditions = JSON.parse(transformedBoost.statusConditions);
-    transformedBoost.boostAudienceSelection = transformedBoost.audienceSelection;
     transformedBoost.boostStartTime = moment(transformedBoost.startTime);
     transformedBoost.boostEndTime = moment(transformedBoost.endTime);
     transformedBoost.defaultStatus = transformedBoost.initialStatus;
 
     // then clean up
     Reflect.deleteProperty(transformedBoost, 'messageInstructionIds');
-    Reflect.deleteProperty(transformedBoost, 'audienceSelection');
     Reflect.deleteProperty(transformedBoost, 'startTime');
     Reflect.deleteProperty(transformedBoost, 'endTime');
     Reflect.deleteProperty(transformedBoost, 'initialStatus');
@@ -267,89 +265,12 @@ module.exports.updateBoostAmountRedeemed = async (boostIds) => {
 // //////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
 // ///////////////////////////////////////////////////////////////
 
-const validateAndExtractUniverse = (universeComponent) => {
-    logger('Universe component: ', universeComponent);
+// todo : turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
+const extractAccountIds = async (audienceId) => {
+    const selectionQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
     
-    const universeMatch = universeComponent.match(/#{(.*)}/);
-    if (!universeMatch || universeMatch.length === 0) {
-        throw new Error('Error! Universe definition passed incorrectly: ', universeComponent);
-    }
-
-    logger('Parsing: ', universeMatch[1]);
-    const universeDefinition = JSON.parse(universeMatch[1]);
-    logger('Resulting definition: ', universeDefinition);
-    if (typeof universeDefinition !== 'object' || Object.keys(universeDefinition) === 0) {
-        throw new Error('Error! Universe definition not a valid object');
-    }
-
-    return universeDefinition;
-};
-
-// note : this _could_ be simplified by relying on ordering of Object.keys, but that would be dangerous/fragile
-const extractSubClauseAndValues = (universeDefinition, currentIndex, currentKey) => {
-    if (currentKey === 'specific_accounts') {
-        logger('Specific account IDs selected');
-        const accountIds = universeDefinition[currentKey];
-        const placeHolders = accountIds.map((_, index) => `$${currentIndex + index + 1}`).join(', ');
-        logger('Created place holder: ', placeHolders);
-        const assembledClause = `account_id in (${placeHolders})`;
-        return [assembledClause, accountIds, currentIndex + accountIds.length];
-    } else if (currentKey === 'client_id') {
-        const newIndex = currentIndex + 1;
-        const assembledClause = `responsible_client_id = $${newIndex}`;
-        return [assembledClause, [universeDefinition[currentKey]], newIndex];
-    }
-    const newIndex = currentIndex + 1;
-    return [`${decamelize(currentKey, '_')} = $${newIndex}`, [universeDefinition[currentKey]], newIndex];
-};
-
-// const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
-
-const extractWhereClausesValues = (universeDefinition) => {
-    const [clauseStrings, clauseValues] = [[], []];
-    const universeKeys = Object.keys(universeDefinition);
-    let currentIndex = 0;
-    universeKeys.forEach((key) => {
-        logger('Next clause extraction, current key: ', key, ' and current index: ', currentIndex);
-        const [nextClause, nextValues, newCurrentIndex] = extractSubClauseAndValues(universeDefinition, currentIndex, key);
-        clauseStrings.push(nextClause);
-        clauseValues.push(...nextValues);
-        currentIndex = newCurrentIndex;
-    });
-    return [clauseStrings, clauseValues];
-};
-
-const assembleQueryClause = (selectionMethod, universeDefinition) => {
-    if (selectionMethod === 'whole_universe') {
-        logger('We are selecting all parts of the universe');
-        const [conditionClauses, conditionValues] = extractWhereClausesValues(universeDefinition);
-        const whereClause = conditionClauses.join(' and ');
-        const selectionQuery = `select account_id from ${accountsTable} where ${whereClause}`;
-        return [selectionQuery, conditionValues];
-    } else if (selectionMethod === 'random_sample') {
-        logger('We are selecting some random sample of a universe');
-    } else if (selectionMethod === 'match_other') {
-        logger('We are selecting so as to match another entity');
-    }
-
-    throw new Error('Invalid selection method provided: ', selectionMethod);
-};
-
-const extractAccountIds = async (selectionClause) => {
-    logger('Selecting accounts according to: ', selectionClause);
-    const clauseComponents = selectionClause.split(' ');
-    logger('Split pieces: ', clauseComponents);
-    const hasMethodParameters = clauseComponents[1] !== 'from';
-    
-    const selectionMethod = clauseComponents[0];
-    const universeComponent = selectionClause.match(/#{.*}/g)[hasMethodParameters ? 1 : 0];
-    const universeDefinition = validateAndExtractUniverse(universeComponent);
-    
-    const [selectionQuery, selectionValues] = assembleQueryClause(selectionMethod, universeDefinition);
-    logger('Assembled selection clause: ', selectionQuery);
-    logger('And selection values: ', selectionValues);
-
-    const queryResult = await rdsConnection.selectQuery(selectionQuery, selectionValues);
+    logger('Audience selection query: ', selectionQuery);
+    const queryResult = await rdsConnection.selectQuery(selectionQuery, [audienceId, true]);
     logger('Number of records from query: ', queryResult.length);
 
     return queryResult.map((row) => row['account_id']);
@@ -363,13 +284,14 @@ const extractAccountIds = async (selectionClause) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const accountIds = await extractAccountIds(boostDetails.boostAudienceSelection);
+    const accountIds = await extractAccountIds(boostDetails.audienceId);
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();
     const boostObject = {
         boostId: boostId,
         creatingUserId: boostDetails.creatingUserId,
+        label: boostDetails.label,
         startTime: boostDetails.boostStartTime.format(),
         endTime: boostDetails.boostEndTime.format(),
         boostType: boostDetails.boostType,
@@ -383,7 +305,7 @@ module.exports.insertBoost = async (boostDetails) => {
         fromFloatId: boostDetails.fromFloatId,
         forClientId: boostDetails.forClientId,
         boostAudience: boostDetails.boostAudience,
-        audienceSelection: boostDetails.boostAudienceSelection,
+        audienceId: boostDetails.audienceId,
         statusConditions: boostDetails.statusConditions,
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };

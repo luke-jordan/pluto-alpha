@@ -17,12 +17,12 @@ const proxyquire = require('proxyquire').noCallThru();
 const insertRecordStub = sinon.stub();
 const countRefStemStub = sinon.stub();
 const getAccountIdForUserStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
+const lambdaInvokeStub = sinon.stub();
 const uuidStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
-        this.invoke = lamdbaInvokeStub;
+        this.invoke = lambdaInvokeStub;
     }
 }
 
@@ -170,7 +170,7 @@ describe('createAccountMethod and wrapper', () => {
         insertRecordStub.reset();
         getAccountIdForUserStub.reset();
         countRefStemStub.reset();
-        lamdbaInvokeStub.reset();
+        lambdaInvokeStub.reset();
         uuidStub.reset();
 
         uuidStub.returns(testAccountId);
@@ -180,7 +180,7 @@ describe('createAccountMethod and wrapper', () => {
         countRefStemStub.resolves(1);
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
         insertRecordStub.resolves(testAccountOpeningResult);
-        lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         
         const response = await accountHandler.createAccount(testCreationRequest);
         
@@ -190,7 +190,7 @@ describe('createAccountMethod and wrapper', () => {
         
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(lamdbaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.been.calledOnce;
         
         testInsertArgs();
     });
@@ -199,7 +199,7 @@ describe('createAccountMethod and wrapper', () => {
         countRefStemStub.resolves(1);
         getAccountIdForUserStub.withArgs(testUserId).resolves(null);
         insertRecordStub.resolves(testAccountOpeningResult);
-        lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         
         const response = await accountHandler.createAccount(testCreationRequest);
         
@@ -209,7 +209,7 @@ describe('createAccountMethod and wrapper', () => {
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
-        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
     });
@@ -218,7 +218,7 @@ describe('createAccountMethod and wrapper', () => {
         countRefStemStub.resolves(1);
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
         insertRecordStub.resolves(testAccountOpeningResult);
-        lamdbaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         testCreationRequest.referralCodeDetails.codeType = 'OTHER';
         
         const response = await accountHandler.createAccount(testCreationRequest);
@@ -230,7 +230,7 @@ describe('createAccountMethod and wrapper', () => {
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
         expect(getAccountIdForUserStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.been.calledOnce;
+        expect(lambdaInvokeStub).to.have.been.calledOnce;
         
         testInsertArgs();
     });
