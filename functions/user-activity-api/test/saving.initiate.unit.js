@@ -79,6 +79,8 @@ const resetStubHistory = () => {
     updateSaveRdsStub.reset();
     fetchTransactionStub.reset();
     countSettledSavesStub.reset();
+    getPaymentUrlStub.reset();
+    fetchBankRefStub.reset();
     publishStub.reset();
     momentStub.reset();
     momentStub.callsFake(moment); // as with uuid in RDS, too much time being sunk into test framework's design flaws, so a work around here
@@ -207,6 +209,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const saveEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
         
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
 
@@ -226,6 +230,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         saveEvent.clientId = testClientId;
 
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
 

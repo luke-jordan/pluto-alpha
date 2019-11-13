@@ -38,7 +38,8 @@
         "fetchProfile": "profile_fetch"
     },
     "payment": {
-        "test": false
+        "test": false,
+        "dummy": "ON"
     },
     "publishing": {
         "userEvents": {

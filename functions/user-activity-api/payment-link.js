@@ -59,9 +59,15 @@ module.exports.generateBankRef = (accountInfo) => {
 
 module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict }) => {
     logger('Received params: ', transactionId, accountInfo, amountDict);
-
+    const dummyPayment = config.has('dummy') && config.get('dummy') === 'ON';
+    
     const bankReference = exports.generateBankRef(accountInfo);
     logger('Generated bank ref: ', bankReference);
+
+    if (dummyPayment) {
+        const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
+        return { paymentUrl: 'https://pay.me/1234', paymentProvider: 'STRIPE', bankRef: bankReference, paymentRef: dummyPaymentRef };
+    }
 
     const wholeCurrencyAmount = opsUtil.convertToUnit(amountDict.amount, amountDict.unit, 'WHOLE_CURRENCY');
     
@@ -73,7 +79,7 @@ module.exports.getPaymentLink = async ({ transactionId, accountInfo, amountDict 
         countryCode: CURRENCY_COUNTRY_LOOKUP[amountDict.currency],
         currencyCode: amountDict.currency,
         amount: wholeCurrencyAmount,
-        isTest: config.get('payment.test')
+        isTest: Reflect.has(amountDict, 'isTest') ? amountDict.isTest : config.get('payment.test')
     };
 
     logger('Sending payload to payment url generation: ', payload);
