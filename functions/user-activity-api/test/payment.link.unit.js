@@ -102,6 +102,57 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
         testHelper.testLambdaInvoke(lambdaStub, expectedLambdaInvoke);
     });
 
+    it('Handles test request', async () => {
+        const linkRequest = {
+            transactionId: testTxId,
+            amountDict: {
+                currency: 'ZAR',
+                unit: 'HUNDREDTH_CENT',
+                amount: testAmountBp,
+                isTest: true
+            },
+            accountInfo: {
+                bankRefStem: 'LJORDAN1',
+                priorSaveCount: testSaveNumber
+            }
+        };
+
+        // tested above, so no need here
+        const expectedBankRef = paymentLinkHandler.generateBankRef(linkRequest.accountInfo);
+
+        const expectedLamdbaInvokeBody = {
+            countryCode: 'ZA',
+            currencyCode: 'ZAR',
+            amount: testAmountWhole,
+            transactionId: testTxId,
+            bankReference: expectedBankRef,
+            isTest: true
+        };
+
+        const mockLambdaPayload = {
+            result: 'PAYMENT_INITIATED',
+            paymentProvider: 'PROVIDER',
+            paymentUrl: 'https://pay.me/1234',
+            requestId: testReqId
+        };
+
+        const expectedResult = {
+            paymentProvider: 'PROVIDER',
+            paymentUrl: mockLambdaPayload.paymentUrl,
+            paymentRef: testReqId,
+            bankRef: expectedBankRef
+        };
+
+        lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse(mockLambdaPayload) });
+        const paymentLink = await paymentLinkHandler.getPaymentLink(linkRequest);
+
+        expect(paymentLink).to.exist;
+        expect(paymentLink).to.deep.equal(expectedResult);
+
+        const expectedLambdaInvoke = testHelper.wrapLambdaInvoc(config.get('lambdas.paymentUrlGet'), false, expectedLamdbaInvokeBody);
+        testHelper.testLambdaInvoke(lambdaStub, expectedLambdaInvoke);
+    });
+
     it('Check payment status, happy path', async () => {
         const testCreatedDate = moment().subtract(30, 'seconds');
         const testPaymentDate = moment();

@@ -52,6 +52,17 @@ jobs:
             /bin/sh execute_test_lint.sh modules/dynamo-common
             /bin/sh execute_test_lint.sh modules/publish-common
 
+      - run:
+          name: Search for commited credentials
+            command: |
+              git clone https://github.com/awslabs/git-secrets
+              ls git-secrets
+              cd git-secrets && sudo make install
+              git secrets --install
+              git secrets --register-aws
+              git secrets --scan -r
+              git secrets --scan-history          
+
       # Note: we do this _after_ the cache steps, so the cache includes all the modules needed for tests
       - run:
           name: Prune module dependencies then copy into modules themselves

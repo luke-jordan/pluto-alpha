@@ -5,6 +5,7 @@ The master branch is protected and will not accept pull requests from any branch
 The staging branch is not protected against pushes but will accept pull requests from development branches. Every PR to staging requires code review 
 security and linting to all pass, as well as at least one code review. New branches should fork from the current staging branch. 
 Pull requests should aim for 400-500 lines of code at a time to facilitate reviews. Larger PRs will require more reviews before acceptance.
+It is mandatory that all developers use git-secrets as a safe-guard against credentials being commited to the repository. Installation and usage instructions may be found here https://github.com/awslabs/git-secrets .
 
 ## STEP 1: Quickstart => Install packages, link modules and run tests
 Please install Nodejs if you don't have it installed: <https://nodejs.org/en/>.
