@@ -179,7 +179,7 @@ module.exports.previewAudience = async (params) => {
 
 const extractParamsFromHttpEvent = (event) => {
     const params = event.httpMethod.toUpperCase() === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
-    const userDetails = opsUtil.extractParamsFromEvent(event);
+    const userDetails = opsUtil.extractUserDetails(event);
     if (params && userDetails) {
         params.creatingUserId = userDetails.systemWideUserId;
     }
