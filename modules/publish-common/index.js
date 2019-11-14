@@ -74,34 +74,29 @@ const assembleEmailParameters = ({ sourceEmail, toList, subject, htmlBody, textB
 });
 
 module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTemplateKey, templateVariables }) => {
-    // try {
-        let sourceEmail = 'noreply@jupitersave.com';
-        
-        if (originAddress) {
-            sourceEmail = originAddress;
-        } else if (config.has('publishing.eventsEmailAddres')) {
-            sourceEmail = config.get('publishing.eventsEmailAddress');
-        }
+    let sourceEmail = 'noreply@jupitersave.com';
+    
+    if (originAddress) {
+        sourceEmail = originAddress;
+    } else if (config.has('publishing.eventsEmailAddress')) {
+        sourceEmail = config.get('publishing.eventsEmailAddress');
+    }
 
-        const template = await exports.obtainTemplate(bodyTemplateKey);
-        const htmlBody = format(template, templateVariables);
-        const textBody = 'Error. Tell system admin text emails still live.'; // generic
+    const template = await exports.obtainTemplate(bodyTemplateKey);
+    const htmlBody = format(template, templateVariables);
+    const textBody = 'Jupiter system email.'; // generic (Google shows in preview)
 
-        const sesInvocation = assembleEmailParameters({
-            sourceEmail,
-            toList,
-            subject,
-            htmlBody,
-            textBody
-        });
+    const sesInvocation = assembleEmailParameters({
+        sourceEmail,
+        toList,
+        subject,
+        htmlBody,
+        textBody
+    });
 
-        const emailResult = await ses.sendEmail(sesInvocation).promise();
+    const emailResult = await ses.sendEmail(sesInvocation).promise();
 
-        logger('Result of email send: ', emailResult);
-        
-        return { result: 'SUCCESS' };
-    // } catch (err) {
-    //     logger('FATAL_ERROR: ', err);
-    //     return { result: 'FAILED' }; 
-    // }
+    logger('Result of email send: ', emailResult);
+    
+    return { result: 'SUCCESS' };
 };

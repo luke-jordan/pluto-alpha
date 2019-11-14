@@ -132,6 +132,7 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
 
     // i.e., if the instruction holds a sequence of messages (like in a boost offer), generate all of those for each user, else just the one
     if (topLevelKey === 'template') {
+        logger('Constructing messages from template: ', templates.template);
         rows = userIds.map((destinationUserId) => (
             generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
     } else if (topLevelKey === 'sequence') {
