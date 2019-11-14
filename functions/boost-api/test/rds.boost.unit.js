@@ -55,7 +55,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
     const standardBoostKeys = ['boostId', 'creatingUserId', 'label', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
         'boostBudget', 'boostRedeemed', 'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 
-        'boostAudience', 'audienceId', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
+        'boostAudienceType', 'audienceId', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
     const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
@@ -96,7 +96,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             fromBonusPoolId: 'primary_bonus_pool',
             fromFloatId: 'primary_float',
             forClientId: 'some_client_co',
-            boostAudience: 'INDIVIDUAL',
+            boostAudienceType: 'INDIVIDUAL',
             audienceId: testAudienceId,
             statusConditions: testStatusCondition,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
@@ -136,7 +136,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostStartTime: testBoostStartTime,
             boostEndTime: testBoostEndTime,
             statusConditions: testStatusCondition,
-            boostAudience: 'INDIVIDUAL',
+            boostAudienceType: 'INDIVIDUAL',
             audienceId: testAudienceId,
             redemptionMsgInstructions: testRedemptionMsgs,
             messageInstructionIds: [testInstructionId, testInstructionId],
@@ -210,7 +210,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         'start_time': testStartTime.format(),
         'end_time': testEndTime.format(),
         'status_conditions': testStatusCondition,
-        'boost_audience': 'INDIVIDUAL',
+        'boost_audience_type': 'INDIVIDUAL',
         'audience_id': testAudienceId,
         'message_instruction_ids': { instructions: [testInstructionId, testInstructionId] },
         'initial_status': 'PENDING',
@@ -230,7 +230,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         boostStartTime: moment(testStartTime.format()),
         boostEndTime: moment(testEndTime.format()),
         statusConditions: testStatusCondition,
-        boostAudience: 'INDIVIDUAL',
+        boostAudienceType: 'INDIVIDUAL',
         audienceId: testAudienceId,
         defaultStatus: 'PENDING',
         messageInstructions: [testInstructionId, testInstructionId],

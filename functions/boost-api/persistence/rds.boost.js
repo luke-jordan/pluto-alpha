@@ -304,7 +304,7 @@ module.exports.insertBoost = async (boostDetails) => {
         fromBonusPoolId: boostDetails.fromBonusPoolId,
         fromFloatId: boostDetails.fromFloatId,
         forClientId: boostDetails.forClientId,
-        boostAudience: boostDetails.boostAudience,
+        boostAudienceType: boostDetails.boostAudienceType,
         audienceId: boostDetails.audienceId,
         statusConditions: boostDetails.statusConditions,
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }

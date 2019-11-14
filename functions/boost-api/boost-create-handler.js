@@ -111,7 +111,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
         creatingUserId: boostParams.creatingUserId,
         boostStatus: messageDefinition.boostStatus,
         presentationType: messageDefinition.presentationType,
-        audienceType: boostParams.audienceType,
+        audienceType: boostParams.boostAudienceType,
         audienceId: boostParams.audienceId,
         endTime: boostParams.boostEndTime.format()
     };
@@ -191,14 +191,24 @@ const generateAudienceInline = async (boostParams, isDynamic = false) => {
     return resultBody.audienceId;
 };
 
-const obtainAudienceId = async (params) => {
-    if (typeof params.audienceId === 'string' && params.audienceId.trim().length > 0) {
-        return params.audienceId;
+const obtainAudienceDetails = async (params) => {
+    // this is slightly redundant, but will probably be useful for storing in future
+    let boostAudienceType = '';
+    if (params.boostAudienceType) {
+        boostAudienceType = params.boostAudienceType;
+    } else {
+        boostAudienceType = 'GENERAL';
     }
-    
-    const createdAudienceId = await generateAudienceInline(params);
-    logger('Created audience: ', createdAudienceId);
-    return createdAudienceId;
+
+    let audienceId = '';
+    if (typeof params.audienceId === 'string' && params.audienceId.trim().length > 0) {
+        audienceId = params.audienceId;
+    } else {  
+        audienceId = await generateAudienceInline(params);
+        logger('Created audience: ', audienceId);
+    }
+
+    return { boostAudienceType, audienceId };
 };
 
 const splitBasicParams = (params) => ({
@@ -248,15 +258,15 @@ const retrieveBoostAmounts = (params) => {
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudience A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
  * @property {string} audienceId The ID of the audience that the boost will be offered to. If left out, must have boostAudienceSelection.
  * @property {object} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
  * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
 module.exports.createBoost = async (event) => {
-    if (!event) {
-        logger('Test run on lambda, exiting');
+    if (!event || Object.keys(event).length === 0) {
+        logger('Warmup run on lambda, exiting');
         return { statusCode: 400 };
     }
 
@@ -291,8 +301,9 @@ module.exports.createBoost = async (event) => {
         messageInstructionIds = await obtainDefaultMessageInstructions(params.messageInstructionFlags);
     }
 
-    const audienceId = await obtainAudienceId(params);
-    
+    const { audienceId, boostAudienceType } = await obtainAudienceDetails(params);
+    logger('Boost audience type: ', boostAudienceType, ' and audience ID: ', audienceId);
+
     const instructionToRds = {
         creatingUserId: params.creatingUserId,
         label,
@@ -308,8 +319,8 @@ module.exports.createBoost = async (event) => {
         fromFloatId: params.boostSource.floatId,
         forClientId: params.boostSource.clientId,
         statusConditions: params.statusConditions,
-        boostAudience: params.boostAudience,
         audienceId,
+        boostAudienceType,
         messageInstructionIds,
         defaultStatus: params.initialStatus || 'CREATED'
     };
@@ -331,10 +342,12 @@ module.exports.createBoost = async (event) => {
         const boostParams = {
             boostId: persistedBoost.boostId,
             creatingUserId: instructionToRds.creatingUserId, 
-            audienceType: params.boostAudience,
+            boostAudienceType,
             audienceId: params.audienceId,
             boostEndTime
         };
+
+        logger('Passing boost params: ', boostParams);
 
         const messagePayloads = params.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
         logger('Assembled message payloads: ', messagePayloads);
@@ -367,7 +380,7 @@ module.exports.createBoost = async (event) => {
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudience A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
  * @property {string} boostAudienceSelection A DSL string containing instructions as to which users to send the boost to. 
  * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.

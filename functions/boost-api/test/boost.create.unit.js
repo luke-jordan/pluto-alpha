@@ -111,7 +111,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         boostStartTime: testStartTime,
         boostEndTime: referralWindowEnd,
         statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
-        boostAudience: 'INDIVIDUAL',
+        boostAudienceType: 'INDIVIDUAL',
         audienceId: testAudienceId,
         defaultStatus: 'PENDING',
         messageInstructionIds: [
@@ -156,7 +156,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 floatId: 'primary_cash'
             },
             endTimeMillis: referralWindowEnd.valueOf(),
-            boostAudience: 'INDIVIDUAL',
+            boostAudienceType: 'INDIVIDUAL',
             boostAudienceSelection: {
                 table: config.get('tables.accountLedger'),
                 conditions: [{ op: 'in', prop: 'account_id', value: `${testReferringUser}, ${testReferredUser}` }]
@@ -216,7 +216,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         boostStartTime: testStartTime,
         boostEndTime: testEndTime,
         statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
-        boostAudience: 'GENERAL',
+        boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
         defaultStatus: 'CREATED',
         messageInstructionIds: [{ accountId: 'ALL', status: 'REDEEMED', msgInstructionId: testRedemptionMsgId }]
@@ -250,7 +250,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             },
             endTimeMillis: testEndTime.valueOf(),
             statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
-            boostAudience: 'GENERAL',
+            boostAudienceType: 'GENERAL',
             audienceId: testAudienceId,
             redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
         };
@@ -362,7 +362,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
             floatId: 'primary_cash'
         },
         endTimeMillis: testEndTime.valueOf(),
-        boostAudience: 'GENERAL',
+        boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
         messagesToCreate: [messageReqBody],
         gameParams
@@ -383,7 +383,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         boostStartTime: testStartTime,
         boostEndTime: testEndTime,
         statusConditions: testStatusConditions,
-        boostAudience: 'GENERAL',
+        boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
         defaultStatus: 'CREATED',
         messageInstructionIds: { } 

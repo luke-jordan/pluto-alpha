@@ -7,7 +7,7 @@ create table if not exists message_data.message_instruction (
     active boolean not null default true,
     audience_type varchar (100) not null,
     templates jsonb not null,
-    audience_id varchar (50) references audience_data.audience (audience_id),
+    audience_id uuid references audience_data.audience (audience_id),
     recurrence_parameters jsonb,
     response_action varchar (100),
     response_context jsonb,
