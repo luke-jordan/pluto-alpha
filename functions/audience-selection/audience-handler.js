@@ -36,8 +36,11 @@ const convertEpochToFormat = (epochMilli) => moment(parseInt(epochMilli, 10)).fo
 const columnConverters = {
     saveCount: (condition) => ({
         conditions: [
-            { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
-        ],
+            { op: 'and', children: [
+                { prop: 'settlement_status', op: 'is', value: 'SETTLED' },
+                { prop: 'transaction_type', op: 'is', value: 'USER_SAVING_EVENT' }
+            ]
+        }],
         groupBy: ['account_id'],
         postConditions: [
             { op: condition.op, prop: 'count(transaction_id)', value: condition.value, valueType: 'int' }
@@ -119,7 +122,12 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
         return matchCondition;
     }
     
-    // remaining is simple match condition, execute and return
+    // remaining is simple match condition, execute and return if it's a property, or just use the column
+    if (!Object.keys(columnConverters).includes(propertyCondition.prop)) {
+        logger('Should be a column: ', propertyCondition);
+        return propertyCondition;
+    }
+
     logger('Converting from property: ', propertyCondition.prop);
     const columnConverter = columnConverters[propertyCondition.prop];
     const columnCondition = columnConverter(propertyCondition);
@@ -144,7 +152,7 @@ const constructColumnConditions = async (params) => {
     const selectionObject = {
         conditions: columnConditions, creatingUserId
     };
-    const withClientId = addTableAndClientId(selectionObject, clientId);
+    const withClientId = addTableAndClientId(selectionObject, clientId, passedPropertyConditions.table);
     
     logger('Reassembled conditions: ', JSON.stringify(withClientId, null, 2));
     return { columnConditions: withClientId, persistenceParams };
@@ -169,12 +177,21 @@ module.exports.previewAudience = async (params) => {
     return { audienceCount: persistedAudience.length };
 };
 
+const extractParamsFromHttpEvent = (event) => {
+    const params = event.httpMethod.toUpperCase() === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
+    const userDetails = opsUtil.extractUserDetails(event);
+    if (params && userDetails) {
+        params.creatingUserId = userDetails.systemWideUserId;
+    }
+    return params;
+};
+
 // utility method as essentially the same logic will be called in several different ways
 const extractRequestType = (event) => {
     // if it's an http request, validate that it is admin calling, and extract from path parameters
     if (Reflect.has(event, 'httpMethod')) {
         const operation = event.pathParameters.proxy;
-        const params = event.httpMethod.toUpperCase() === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
+        const params = extractParamsFromHttpEvent(event);
         return { operation, params };
     }
 
@@ -188,6 +205,16 @@ const dispatcher = {
     'preview': (params) => exports.previewAudience(params)
 };
 
+/**
+ * Primary method. Can be called directly via invoke or as admin from form. Event or body require the following:
+ * @param {object} event An event object containing the invocation payload or the request context and request body.
+ * @property {string} operation A string specifying one of : create, preview, properties (path param in API call)
+ * @property {object} params The body of the API call or a passed dictionary
+ * @property {string} creatingUserId The ID of the user creating this (left out in POST call as obtained from header)
+ * @property {string} clientId The ID of the client for which this audience is created
+ * @property {boolean} isDynamic Whether or not the audience should be recalculated, e.g., for recurring messages
+ * @property {object} propertyConditions The primary instruction. Contains the conditions assembled as per README. 
+ */
 module.exports.handleInboundRequest = async (event) => {
     try {
         if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
@@ -196,8 +223,8 @@ module.exports.handleInboundRequest = async (event) => {
 
         const requestInfo = extractRequestType(event);
         const { operation, params } = requestInfo;
-        
-        const resultOfProcess = await dispatcher[operation](params);
+
+        const resultOfProcess = await dispatcher[operation.trim().toLowerCase()](params);
         logger('Result of audience processing: ', resultOfProcess);
 
         return opsUtil.wrapResponse(resultOfProcess);

@@ -49,13 +49,13 @@ const boostLogTable = config.get('tables.boostLogTable');
 describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-user records', () => {
 
     const testBoostId = uuid();
+    const testAudienceId = uuid();
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
     const testRedemptionMsgs = [{ accountId: 'ALL', msgInstructionId: uuid() }];
 
-    const audienceQueryBase = `select account_id from ${accountTable}`;
-    const standardBoostKeys = ['boostId', 'creatingUserId', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
+    const standardBoostKeys = ['boostId', 'creatingUserId', 'label', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
         'boostBudget', 'boostRedeemed', 'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 
-        'boostAudience', 'audienceSelection', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
+        'boostAudienceType', 'audienceId', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
     const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
@@ -70,15 +70,11 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const testCreatingUserId = uuid();
         const testReferringAccountId = uuid();
         const testReferredUserAccountId = uuid();
+
         const relevantUsers = [testReferringAccountId, testReferredUserAccountId];
 
-
         // first, obtain the audience & generate a UID
-        const expectedSelectQuery = `${audienceQueryBase} where account_id in ($1, $2)`;
-        queryStub.withArgs(expectedSelectQuery, sinon.match(relevantUsers)).resolves([ 
-            { 'account_id': testReferringAccountId }, { 'account_id': testReferredUserAccountId }
-        ]);
-
+        queryStub.onFirstCall().resolves([{ 'account_id': testReferringAccountId }, { 'account_id': testReferredUserAccountId }]);
         uuidStub.onFirstCall().returns(testBoostId);
 
         // then, construct the simultaneous insert operations
@@ -86,6 +82,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const expectedFirstQuery = `insert into ${boostTable} (${extractQueryClause(standardBoostKeys)}) values %L returning boost_id, creation_time`;
         const expectedFirstRow = {
             boostId: testBoostId,
+            label: 'Referral Code Boost!',
             creatingUserId: testCreatingUserId,
             startTime: testBoostStartTime.format(),
             endTime: testBoostEndTime.format(),
@@ -99,8 +96,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             fromBonusPoolId: 'primary_bonus_pool',
             fromFloatId: 'primary_float',
             forClientId: 'some_client_co',
-            boostAudience: 'INDIVIDUAL',
-            audienceSelection: `whole_universe from #{ {"specific_accounts": ["${testReferringAccountId}","${testReferredUserAccountId}"]} }`,
+            boostAudienceType: 'INDIVIDUAL',
+            audienceId: testAudienceId,
             statusConditions: testStatusCondition,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
             conditionValues: ['TEST_VALUE'],
@@ -126,6 +123,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
         const testInstruction = {
             creatingUserId: testCreatingUserId,
+            label: 'Referral Code Boost!',
             boostType: 'REFERRAL',
             boostCategory: 'USER_CODE_USED',
             boostAmount: 100000,
@@ -138,8 +136,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             boostStartTime: testBoostStartTime,
             boostEndTime: testBoostEndTime,
             statusConditions: testStatusCondition,
-            boostAudience: 'INDIVIDUAL',
-            boostAudienceSelection: `whole_universe from #{ {"specific_accounts": ["${testReferringAccountId}","${testReferredUserAccountId}"]} }`,
+            boostAudienceType: 'INDIVIDUAL',
+            audienceId: testAudienceId,
             redemptionMsgInstructions: testRedemptionMsgs,
             messageInstructionIds: [testInstructionId, testInstructionId],
             defaultStatus: 'PENDING',
@@ -157,6 +155,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(resultOfInsertion).to.have.property('persistedTimeMillis', expectedMillis);
         expect(resultOfInsertion).to.have.property('numberOfUsersEligible', relevantUsers.length);
 
+        const expectedSelectQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedSelectQuery, [testAudienceId, true]);
+
         expect(multiTableStub).to.have.been.calledOnce;
         const multiTableArgs = multiTableStub.getCall(0).args[0];
         expect(multiTableArgs[1]).to.deep.equal(expectedSecondDef);
@@ -170,13 +171,12 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     const testAccountId = uuid();
     const testBoostId = uuid();
     const testInstructionId = uuid();
-
+    const testAudienceId = uuid();
 
     const testStartTime = moment();
     const testEndTime = moment().add(1, 'week');
 
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
-    const testAudienceSelection = `whole_universe from #{'{"specific_users": ["${uuid()}","${uuid()}"]}'}`;
     // const testRedemptionMsgs = [{ accountId: uuid(), msgInstructionId: uuid() }, { accountId: uuid(), msgInstructionId: uuid() }];
 
     const updateAccountStatusDef = (boostId, accountId, newStatus) => ({
@@ -210,8 +210,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         'start_time': testStartTime.format(),
         'end_time': testEndTime.format(),
         'status_conditions': testStatusCondition,
-        'boost_audience': 'INDIVIDUAL',
-        'audience_selection': testAudienceSelection,
+        'boost_audience_type': 'INDIVIDUAL',
+        'audience_id': testAudienceId,
         'message_instruction_ids': { instructions: [testInstructionId, testInstructionId] },
         'initial_status': 'PENDING',
         'flags': ['REDEEM_ALL_AT_ONCE']
@@ -230,8 +230,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         boostStartTime: moment(testStartTime.format()),
         boostEndTime: moment(testEndTime.format()),
         statusConditions: testStatusCondition,
-        boostAudience: 'INDIVIDUAL',
-        boostAudienceSelection: testAudienceSelection,
+        boostAudienceType: 'INDIVIDUAL',
+        audienceId: testAudienceId,
         defaultStatus: 'PENDING',
         messageInstructions: [testInstructionId, testInstructionId],
         flags: ['REDEEM_ALL_AT_ONCE']
@@ -279,7 +279,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         
         expect(findBoostResponse).to.exist;
         expect(findBoostResponse).to.deep.equal([expectedBoostResult]);
-
 
     });
 

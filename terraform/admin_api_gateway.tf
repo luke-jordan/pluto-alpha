@@ -594,3 +594,9 @@ resource "aws_api_gateway_integration" "audience_handle" {
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.audience_selection.invoke_arn
 }
+
+module "audience_handler_cors" {
+  source = "./modules/cors"
+  api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  api_resource_id = "${aws_api_gateway_resource.audience_handle.id}"
+}

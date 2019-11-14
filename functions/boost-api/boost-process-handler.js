@@ -80,7 +80,7 @@ const extractStatusChangesMet = (event, boost) => {
 const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
     const selectPromises = boosts.map((boost) => {
         const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
-        const restrictToInitiator = boost.boostAudience === 'GENERAL' || !redeemsAll;
+        const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
         const findAccountsParams = { boostIds: [boost.boostId], status: ['OFFERED', 'PENDING'] };
         if (restrictToInitiator) {
             findAccountsParams.accountIds = [initiatingAccountId];

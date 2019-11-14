@@ -1,7 +1,7 @@
 {
     "audienceType": "GENERAL",
     "presentationType": "EVENT_DRIVEN",
-    "selectionInstruction": "match_other from #{entityType: 'boost', entityId: 7db707fa-2313-4626-8df8-74b40d9ff786}",
+    "audienceId": "7db707fa-2313-4626-8df8-74b40d9ff786",
     "templates": {
         "sequence": [
             {

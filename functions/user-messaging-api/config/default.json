@@ -9,6 +9,8 @@
         "pushTokenTable": "message_data.user_push_token",
         "boostAccountTable": "boost_data.boost_account_status",
         "transactionLedger": "transaction_data.core_transaction_ledger",
+        "audienceTable": "audience_data.audience",
+        "audienceJoinTable": "audience_data.audience_account_join",
         "dynamoProfileTable": "UserProfileTable"
     },
     "lambdas": {

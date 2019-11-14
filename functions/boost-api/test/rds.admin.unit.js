@@ -49,6 +49,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     const boostFromPersistence = {
         'boost_id': testBoostId,
+        'label': 'Win a boost!',
         'boost_type': 'SIMPLE',
         'boost_category': 'TIME_LIMITED',
         'boost_amount': 100000,
@@ -62,7 +63,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         'start_time': testStartTime.format(),
         'end_time': testEndTime.format(),
         'status_conditions': testStatusCondition,
-        'boost_audience': 'INDIVIDUAL',
+        'boost_audience_type': 'INDIVIDUAL',
         'audience_selection': testAudienceSelection,
         'redemption_messages': { instructions: testRedemptionMsgs },
         'initial_status': 'PENDING',
@@ -77,6 +78,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     const expectedBoostResult = {
         boostId: testBoostId,
+        label: 'Win a boost!',
         boostType: 'SIMPLE',
         boostCategory: 'TIME_LIMITED',
         boostAmount: 100000,
@@ -90,7 +92,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         startTime: testStartTime.format(),
         endTime: testEndTime.format(),
         statusConditions: testStatusCondition,
-        boostAudience: 'INDIVIDUAL',
+        boostAudienceType: 'INDIVIDUAL',
         audienceSelection: testAudienceSelection,
         redemptionMessages: { instructions: testRedemptionMsgs },
         initialStatus: 'PENDING',

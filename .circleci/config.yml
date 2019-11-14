@@ -18,6 +18,17 @@ jobs:
       - checkout
 
       - run:
+          name: Search for commited credentials
+          command: |
+            cd $HOME/app
+            git clone https://github.com/awslabs/git-secrets
+            cd git-secrets && sudo make install
+            cd $HOME/app
+            git secrets --install
+            git secrets --register-aws
+            git secrets --scan -r
+
+      - run:
           name: Generate modules package.json to use for cache, install, etc
           command: |
             mv .circleci/package-merge.js ./

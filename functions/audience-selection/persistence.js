@@ -9,10 +9,11 @@ const decamelize = require('decamelize');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-const defaultTable = 'transaction_data.core_transaction_ledger';
+const defaultTable = config.get('tables.transactionTable');
+const accountTable = config.get('tables.accountTable');
 const dummyTableForTests = 'transactions';
 
-const supportedTables = [dummyTableForTests, defaultTable];
+const supportedTables = [dummyTableForTests, defaultTable, accountTable];
 
 const audienceTable = config.get('tables.audienceTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');

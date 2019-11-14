@@ -124,6 +124,7 @@ module.exports.initiatePendingSave = async (event) => {
     // todo : verify user account ownership
     const initiationResult = await save(saveInformation);
 
+    logger('sending saveInfo:', initiationResult);
     // todo : print a 'contact support?' in the URL if there is an error?
     const transactionId = initiationResult.transactionDetails[0].accountTransactionId;
     logger('Extracted transaction ID: ', transactionId);

@@ -57,13 +57,12 @@ const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', 
 
 describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
     const mockBoostId = uuid();
+    const mockAudienceId = uuid();
 
     const instructionTable = config.get('tables.messageInstructionTable');
-    const boostAccountTable = config.get('tables.boostAccountTable');
     const messageTable = config.get('tables.userMessagesTable');
     const accountTable = config.get('tables.accountLedger');
-    const transactionsTable = config.get('tables.transactionLedger');
-
+    
     const createPersistableInstruction = (instructionId) => ({
         instructionId: instructionId,
         presentationType: 'RECURRING',
@@ -73,7 +72,7 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
             default: config.get('instruction.templates.default'),
             otherTemplates: null
         }),
-        selectionInstruction: null,
+        audienceId: mockAudienceId,
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
         responseContext: JSON.stringify({ boostId: mockBoostId }),
@@ -143,24 +142,6 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(result).to.deep.equal(expectedResult);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
     });
-
-    // it('****', async () => {
-    //     const mockInstructionId = uuid();
-    //     const mockInstruction = createPersistableInstruction(mockInstructionId);
-    //     const mockSelectArgs = [
-    //         `select * from ${config.get('tables.messageInstructionTable')} where presentation_type = $1 and active = true and end_time > current_timestamp and audience_type in ($2) and processed_status in ($3)`,
-    //         ['ALL_USERS', 'RECURRING', 'READY_TO_SEND']
-    //     ];
-    //     selectQueryStub.withArgs(...mockSelectArgs).returns([mockInstruction, mockInstruction, mockInstruction]);
-    //     const expectedResult = [mockInstruction, mockInstruction, mockInstruction];
-
-    //     const result = await rdsUtil.getInstructionsByType('ALL_USERS', ['RECURRING'], ['READY_TO_SEND']);
-    //     logger('Result of instruction extraction from db:', result);
-
-    //     expect(result).to.exist;
-    //     expect(result).to.deep.equal(expectedResult);
-    //     expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
-    // });
 
     it('should update message instruction', async () => {
         const mockInstructionId = uuid();
@@ -280,192 +261,27 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(selectQueryStub).to.have.been.calledWith(...secondSelectArgs);
     });
 
-    // //////////////////////////////////////////////////////////////////////////////////
-    // ///////////////////////// TO BE SEPERATED ////////////////////////////////////////
-    // //////////////////////////////////////////////////////////////////////////////////
+    // ////////////////////////////////////////////////////////////////////////////////////////////////////
+    // ///////////////////////// CONVERTED TO JUST USE AUDIENCE ID ////////////////////////////////////////
+    // ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-    it('should get user ids', async () => {
-        const mockClientId = uuid();
-        const mockAccountId = uuid();
-        const mockSelectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
-        const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1`;
-        selectQueryStub.withArgs(expectedQuery, [mockClientId]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
+    it('should get user ids from audience ID', async () => {
+        const mockUserId = uuid();
 
-        const expectedResult = [mockAccountId];
+        const expectedQuery = `select account_id, owner_user_id from ${accountTable} where account_id in ` +
+            `(select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2)`;
+        selectQueryStub.withArgs(expectedQuery, [mockAudienceId, true]).
+            resolves([{ 'account_id': uuid(), 'owner_user_id': mockUserId }]);
 
-        const result = await rdsUtil.getUserIds(mockSelectionInstruction);
+        const expectedResult = [mockUserId];
+
+        const result = await rdsUtil.getUserIds(mockAudienceId);
         logger('got this back from user id extraction:', result);
         
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId]);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockAudienceId, true]);
     });
-
-    it('should get user ids based on sign_up intervals', async () => {
-       const mockClientId = uuid();
-       const mockAccountId = uuid();
-
-       const mockStartTime = moment();
-       const mockEndTime = moment();
-
-       const mockStartTimeAsEpochMilli = mockStartTime.valueOf();
-       const mockEndTimeAsEpochMilli = mockEndTime.valueOf();
-
-       const mockStartTimeAsDateString = mockStartTime.format();
-       const mockEndTimeAsDateString = mockEndTime.format();
-
-       momentStub.withArgs(mockStartTimeAsEpochMilli).returns({ format: () => mockStartTimeAsDateString });
-       momentStub.withArgs(mockEndTimeAsEpochMilli).returns({ format: () => mockEndTimeAsDateString });
-
-       const mockSelectionInstruction = `sign_up_cohort from #{{"client_id":"${mockClientId}", "interval":{"start": ${mockStartTimeAsEpochMilli},"end": ${mockEndTimeAsEpochMilli}} }}`;
-       const expectedQuery = `select account_id, owner_user_id from ${accountTable} where responsible_client_id = $1 and creation_time between $2 and $3`;
-       selectQueryStub.withArgs(expectedQuery, [mockClientId, mockStartTimeAsDateString, mockEndTimeAsDateString]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
-
-       const expectedResult = [mockAccountId];
-
-       const result = await rdsUtil.getUserIds(mockSelectionInstruction);
-       logger('got this back from user id extraction based on sign_up times:', result);
-
-       expect(result).to.exist;
-       expect(result).to.deep.equal(expectedResult);
-       expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockClientId, mockStartTimeAsDateString, mockEndTimeAsDateString]);
-    });
-
-    it('should get user ids based on activity counts', async () => {
-       const mockAccountId = uuid();
-
-       const startCount = Math.floor(Math.random() * 10);
-       const endCount = Math.floor(Math.random() * 10);
-
-       const mockSelectionInstruction = `activity_count from #{{"activityCountRange": {"start": ${startCount}, "end": ${endCount} } }}`;
-       const expectedQuery = `select account_id, owner_user_id, count(*) from ${transactionsTable}` +
-           ` where transaction_type='USER_SAVING_EVENT' and settlement_status = 'SETTLED'` +
-           ` group by account_id having count(*) between $1 and $2`;
-       selectQueryStub.withArgs(expectedQuery, [startCount, endCount]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
-
-       const expectedResult = [mockAccountId];
-
-       const result = await rdsUtil.getUserIds(mockSelectionInstruction);
-       logger('got this back from user id extraction based on activity count. Result: ', result);
-
-       expect(result).to.exist;
-       expect(result).to.deep.equal(expectedResult);
-       expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [startCount, endCount]);
-    });
-
-    it('should get user ids (on float_id universe selection)', async () => {
-        const mockFloatId = uuid();
-        const mockAccountId = uuid();
-        const mockSelectionInstruction = `whole_universe from #{{"float_id":"${mockFloatId}"}}`;
-        const expectedQuery = `select account_id, owner_user_id from ${accountTable} where float_id = $1`;
-        selectQueryStub.withArgs(expectedQuery, [mockFloatId]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
-
-        const expectedResult = [mockAccountId];
-
-        const result = await rdsUtil.getUserIds(mockSelectionInstruction);
-        logger('got this back from user id extraction:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockFloatId]);
-    });
-
-    it('should get user ids (on specific_accounts universe selection)', async () => {
-        const mockAccountId = uuid();
-        const mockSelectionInstruction = `whole_universe from #{{"specific_accounts":["${mockAccountId}","${mockAccountId}"]}}`;
-        const expectedQuery = `select account_id, owner_user_id from ${accountTable} where owner_user_id in ($1, $2)`;
-        selectQueryStub.withArgs(expectedQuery, [mockAccountId, mockAccountId]).resolves([{ 'account_id': mockAccountId, 'owner_user_id': mockAccountId }]);
-
-        const expectedResult = [mockAccountId];
-
-        const result = await rdsUtil.getUserIds(mockSelectionInstruction);
-        logger('got this back from user id extraction:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockAccountId, mockAccountId]);
-    });
-
-    it('should get user ids where selection clause is random_sample', async () => {
-        const mockPercentage = '0.33';
-        const mockAccountId = uuid();
-        const mockSelectionInstruction = `random_sample #{${mockPercentage}}`;
-        const mockSelectArgs = [
-            'select owner_user_id from account_data.core_account_ledger tablesample bernoulli ($1)',
-            [Number(mockPercentage.replace(/^0./, ''))]
-        ];
-        const mockSelectResult = [
-            { 'owner_user_id': mockAccountId },
-            { 'owner_user_id': mockAccountId },
-            { 'owner_user_id': mockAccountId }
-        ];
-        selectQueryStub.withArgs(...mockSelectArgs).resolves(mockSelectResult);
-
-        const expectedResult = [mockAccountId, mockAccountId, mockAccountId];
-
-        const result = await rdsUtil.getUserIds(mockSelectionInstruction);
-        logger('got this back from user id extraction:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
-    });
-
-    it('should throw an error on invalid row percentage in radom sample selection instruction', async () => {
-        const mockClientId = uuid();
-        const mockPercentage = 'half';
-        const mockSelectionInstruction = `random_sample #{${mockPercentage}} from #{{"client_id":"${mockClientId}"}}`;
-
-        const expectedResult = 'Invalid row percentage.';
-        await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.be.rejectedWith(expectedResult);
-    });
-
-    it('Selects users that match another entity', async () => {
-        const mockUserId = uuid();
-        const mockEntityId = uuid();
-        const mockSelectionInstruction = `match_other from #{{"entityType":"boost","entityId":"${mockEntityId}"}}`;
-
-        const mockSelectArgs = [
-            `select distinct(owner_user_id) from ${accountTable} inner join ${boostAccountTable} on ${accountTable}.account_id = ${boostAccountTable}.account_id where boost_id = $1`,
-            [mockEntityId]
-        ];
-
-        const mockSelectResult = [
-            { 'owner_user_id': mockUserId },
-            { 'owner_user_id': mockUserId },
-            { 'owner_user_id': mockUserId }
-        ];
-        selectQueryStub.withArgs(...mockSelectArgs).resolves(mockSelectResult);
-
-        const fetchResult = await rdsUtil.getUserIds(mockSelectionInstruction);
-        logger('got this back from user id extraction:', fetchResult);
-
-        expect(fetchResult).to.exist;
-        expect(fetchResult).to.deep.equal([mockUserId, mockUserId, mockUserId]);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
-    });
-
-    it('Fails on unimplemented matching entity', async () => {
-        const mockEntityId = uuid();
-        const mockSelectionInstruction = `match_other from #{{"entityType":"games","entityId":"${mockEntityId}"}}`;
-        await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.be.rejectedWith('Unimplemented matching entity');
-        expect(selectQueryStub).to.have.not.been.called;
-    });
-
-    it('Fails on invalid selection method', async () => {
-        const mockClientId = uuid();
-        const mockSelectionInstruction = `parallel_universe from #{{"client_id":"${mockClientId}"}}`;
-        await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.be.rejectedWith('Invalid selection method provided: parallel_universe');
-        expect(selectQueryStub).to.have.not.been.called;
-    });
-
-    // it.only('Fails on invalid universe definition', async () => {
-    //     const mockClientId = uuid();
-    //     const mockSelectionInstruction = `whole_universe from #{'"client_id"'}`;
-    //     // await expect(rdsUtil.getUserIds(mockSelectionInstruction)).to.be.rejectedWith('Invalid selection method provided: parallel_universe');
-    //     const result = await rdsUtil.getUserIds(mockSelectionInstruction);
-    //     logger('Result:', result);
-    // });
 
     it('should insert user messages', async () => {
         const mockAccountId = uuid();
