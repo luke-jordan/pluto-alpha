@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:admin:rds');
+const logger = require('debug')('jupiter:admin:user');
 const config = require('config');
 const moment = require('moment');
 const status = require('statuses');
@@ -202,17 +202,19 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
 
 const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
     // todo : definitely need audit tables to do something with the logs
-    logger(`Updating transaction, for user ${systemWideUserId}, should log: ${reasonToLog}`);
+    logger(`Updating transaction, for user ${systemWideUserId}, transaction ${transactionId}, new status ${newTxStatus}, should log: ${reasonToLog}`);
 
     let resultBody = { };
     if (newTxStatus === 'SETTLED') {
         const settlePayload = { transactionId, paymentRef: reasonToLog, paymentProvider: 'ADMIN_OVERRIDE' };
+        logger('Invoking settle lambda ...');
         const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
-        const resultPayload = settleResponse['Payload'];
-        if (resultPayload.statusCode === 200) {
-            resultBody = { result: 'SUCCESS', updateLog: JSON.parse(resultPayload.body) };
+        logger('Transaction settle, result: ', settleResponse);
+        const resultPayload = JSON.parse(settleResponse['Payload']);
+        if (settleResponse['StatusCode'] === 200) {
+            resultBody = { result: 'SUCCESS', updateLog: resultPayload };
         } else {
-            resultBody = { result: 'ERROR', message: JSON.parse(resultPayload.body) };
+            resultBody = { result: 'ERROR', message: resultPayload };
         }
     } else {
         const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, reasong: reasonToLog };
