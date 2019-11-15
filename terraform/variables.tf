@@ -116,3 +116,11 @@ variable "events_source_email_address" {
   }
 }
 
+variable "events_email_receipients" {
+    description = "Recipient list for daily stats and system emails"
+    type = "map"
+    default = {
+        "staging" = ["luke@jupitersave.com"],
+        "master" = ["luke@jupitersave.com", "avish@jupitersave.com"]
+    }
+}

@@ -29,11 +29,13 @@
     },
     "email": {
         "systemStats": {
-            "toList": ["luke@jupitersave.com", "avish@jupitersave.com"],
+            "toList": ["luke@jupitersave.com"],
+            "subject": "Daily system stats",
             "templateKey": "emails/systemStatsEmail.html"
         },
         "accrualResult": {
             "toList": ["luke@jupitersave.com"],
+            "subject": "Float accrual results",
             "templateKey": "emails/floatAccrualEmail.html"
         }
     },

@@ -22,6 +22,9 @@ resource "aws_lambda_function" "audience_selection" {
       NODE_CONFIG = "${
         jsonencode(
           {
+              "aws": {
+                  "region": "${var.aws_default_region[terraform.workspace]}"
+              },
               "db": {
                 "host": "${local.database_config.host}",
                 "database": "${local.database_config.database}",

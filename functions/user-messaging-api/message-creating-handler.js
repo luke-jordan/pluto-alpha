@@ -75,7 +75,6 @@ const generateMessageFromTemplate = ({ destinationUserId, template, instruction,
         display: msgTemplate.display,
         startTime: instruction.startTime,
         endTime: instruction.endTime,
-        presentationType: instruction.presentationType,
         messagePriority: instruction.messagePriority,
         followsPriorMessage: false,
         hasFollowingMessage: false

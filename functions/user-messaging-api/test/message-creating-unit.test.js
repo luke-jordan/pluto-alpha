@@ -95,7 +95,6 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         display: msgTemplate.display,
         instructionId: mockInstructionId,
         messagePriority: 100,
-        presentationType: 'ONCE_OFF',
         followsPriorMessage: false,
         hasFollowingMessage: false,
         actionContext: {
