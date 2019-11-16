@@ -1,13 +1,13 @@
-variable "message_token_store_lambda_function_name" {
-  default = "message_token_store"
+variable "message_token_manage_lambda_function_name" {
+  default = "message_token_manage"
   type = "string"
 }
 
-resource "aws_lambda_function" "message_token_store" {
+resource "aws_lambda_function" "message_token_manage" {
 
-  function_name                  = "${var.message_token_store_lambda_function_name}"
-  role                           = "${aws_iam_role.message_token_store_role.arn}"
-  handler                        = "message-push-handler.insertPushToken"
+  function_name                  = "${var.message_token_manage_lambda_function_name}"
+  role                           = "${aws_iam_role.message_token_manage_role.arn}"
+  handler                        = "message-push-handler.managePushToken"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 60
@@ -45,11 +45,11 @@ resource "aws_lambda_function" "message_token_store" {
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.message_token_store]
+  depends_on = [aws_cloudwatch_log_group.message_token_manage]
 }
 
-resource "aws_iam_role" "message_token_store_role" {
-  name = "${var.message_token_store_lambda_function_name}_role_${terraform.workspace}"
+resource "aws_iam_role" "message_token_manage_role" {
+  name = "${var.message_token_manage_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -68,47 +68,47 @@ resource "aws_iam_role" "message_token_store_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "message_token_store" {
-  name = "/aws/lambda/${var.message_token_store_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "message_token_manage" {
+  name = "/aws/lambda/${var.message_token_manage_lambda_function_name}"
 
   tags = {
     environment = "${terraform.workspace}"
   }
 }
 
-resource "aws_iam_role_policy_attachment" "message_token_store_basic_execution_policy" {
-  role = "${aws_iam_role.message_token_store_role.name}"
+resource "aws_iam_role_policy_attachment" "message_token_manage_basic_execution_policy" {
+  role = "${aws_iam_role.message_token_manage_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "message_token_store_vpc_execution_policy" {
-  role = "${aws_iam_role.message_token_store_role.name}"
+resource "aws_iam_role_policy_attachment" "message_token_manage_vpc_execution_policy" {
+  role = "${aws_iam_role.message_token_manage_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "message_token_store_secret_get" {
-  role = "${aws_iam_role.message_token_store_role.name}"
+resource "aws_iam_role_policy_attachment" "message_token_manage_secret_get" {
+  role = "${aws_iam_role.message_token_manage_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_message_token_store" {
-  log_group_name = "${aws_cloudwatch_log_group.message_token_store.name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_message_token_manage" {
+  log_group_name = "${aws_cloudwatch_log_group.message_token_manage.name}"
   metric_transformation {
-    name = "${var.message_token_store_lambda_function_name}_fatal_api_alarm"
+    name = "${var.message_token_manage_lambda_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.message_token_store_lambda_function_name}_fatal_api_alarm"
+  name = "${var.message_token_manage_lambda_function_name}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_message_token_store" {
-  alarm_name = "${var.message_token_store_lambda_function_name}_fatal_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_message_token_manage" {
+  alarm_name = "${var.message_token_manage_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_message_token_store.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_message_token_manage.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
@@ -116,22 +116,22 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_message_token_store" 
   alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
 }
 
-resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_message_token_store" {
-  log_group_name = "${aws_cloudwatch_log_group.message_token_store.name}"
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_message_token_manage" {
+  log_group_name = "${aws_cloudwatch_log_group.message_token_manage.name}"
   metric_transformation {
-    name = "${var.message_token_store_lambda_function_name}_security_api_alarm"
+    name = "${var.message_token_manage_lambda_function_name}_security_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.message_token_store_lambda_function_name}_security_api_alarm"
+  name = "${var.message_token_manage_lambda_function_name}_security_api_alarm"
   pattern = "SECURITY_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_message_token_store" {
-  alarm_name = "${var.message_token_store_lambda_function_name}_security_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_message_token_manage" {
+  alarm_name = "${var.message_token_manage_lambda_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_message_token_store.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_message_token_manage.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
