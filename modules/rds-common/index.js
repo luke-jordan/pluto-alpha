@@ -317,6 +317,53 @@ class RdsConnection {
 
         return results;
     }
+    
+    /**
+     * Highly specialised, dangerous method that allows the execution of free form queries. Restricted to inserts, and restricted
+     * to inserts into allowed tables. At present allowed only for audience creation
+     * @param {array[object]} queries Array of queries to execute, in order
+     * @property {string} template Within each query object (in array), the template query string to execute
+     * @property {array} values Within each query object, the values to execute in the query
+     */
+    async freeFormInsert (queries) {
+        const client = await this._getConnection();
+
+        const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
+        const thisRoleResult = await client.query('select current_role');
+        const connectedRole = thisRoleResult.rows[0]['current_role'];
+        logger('Calling free form insert with role: ', connectedRole);
+        if (!allowedRoles.includes(connectedRole)) {
+            throw new Error('Attempting to call freeform insert from disallowed user');
+        }
+
+        const allowedTables = ['audience_data.audience', 'audience_data.audience_account_join'];
+        const queryTest = (query) => allowedTables.some((table) => query.template.startsWith(`insert into ${table}`));
+        if (!queries.every((query) => queryTest(query))) {
+            throw new Error('Attempting to call freeform insert into forbidden tables');
+        }
+
+        const results = [];
+        
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            // must do these in sequence, hence for in loop
+            for (const query of queries) {
+                logger('Executing query: ', query);
+                const result = await client.query(query.template, query.values);
+                results.push(result);
+            }
+            await client.query('COMMIT');
+        } catch (e) {
+            logger('Error committing queries: ', e);
+            await client.query('ROLLBACK');
+            throw new CommitError();
+        } finally {
+            await client.release();
+        }
+        
+        return results;
+    }
 
     /**
      * Deletes a row from a table. Must be scarcely used. Must have conditions on it.

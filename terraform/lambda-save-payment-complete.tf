@@ -38,6 +38,9 @@ resource "aws_lambda_function" "save_payment_complete" {
               },
               "payment": {
                 "test": terraform.workspace == "staging"
+              },
+              "templates": {
+                "bucket": "${terraform.workspace}.jupiter.templates"
               }
           }
       )}"

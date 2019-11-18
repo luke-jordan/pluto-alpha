@@ -9,10 +9,11 @@ const decamelize = require('decamelize');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-const defaultTable = 'transaction_data.core_transaction_ledger';
+const defaultTable = config.get('tables.transactionTable');
+const accountTable = config.get('tables.accountTable');
 const dummyTableForTests = 'transactions';
 
-const supportedTables = [dummyTableForTests, defaultTable];
+const supportedTables = [dummyTableForTests, defaultTable, accountTable];
 
 const audienceTable = config.get('tables.audienceTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');
@@ -244,13 +245,15 @@ module.exports.extractSQLQueryFromJSON = (selectionJSON) => {
     return fullQuery;
 };
 
-// todo : construct version of insert into select in RdsConnection when we protect / validate method-SQL query correspondence
+// note : this is the only method authorized to use free form insert (via that method rejecting any other role / tables)
 const insertQuery = async (selectionJSON, persistenceParams) => {
     // todo : validation prior to creating the audience
         
     const audienceId = uuid();
+
     const audienceObject = { 
         audienceId,
+        audienceType: persistenceParams.audienceType,
         creatingUserId: persistenceParams.creatingUserId,
         clientId: persistenceParams.clientId,
         selectionInstruction: selectionJSON,
@@ -264,15 +267,12 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
     const audienceProps = Object.keys(audienceObject); // to make sure no accidents from different sorting
     const audienceColumns = audienceProps.map((column) => decamelize(column, '_')).join(', ');
 
-    const createDef = {
-        queryTemplate: `insert into ${audienceTable} (${audienceColumns}) values %L returning audience_id`,
-        columnTemplate: audienceProps.map((prop) => `\${${prop}}`).join(', '),
-        objectArray: [audienceObject]
-    };
-
-    logger('Inserting audience itself: ', createDef);
-    const audienceResult = await rdsConnection.insertRecords(createDef.queryTemplate, createDef.columnTemplate, createDef.objectArray);
-    logger('Result of inserting bare audience: ', audienceResult);
+    const columnIndices = audienceProps.map((prop, index) => `$${index + 1}`).join(', ');
+    const columnValues = audienceProps.map((prop) => audienceObject[prop]); // again, instead of Object.values, to keep order
+    const createAudienceTemplate = `insert into ${audienceTable} (${audienceColumns}) values (${columnIndices}) returning audience_id`;
+    
+    const createAudienceQuery = { template: createAudienceTemplate, values: columnValues };
+    logger('Create audience query: ', createAudienceQuery);
 
     // rely on query construction engine to do the insertion query as we need it
     const insertionJSON = { ...selectionJSON };
@@ -280,16 +280,20 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
     const selectForInsert = exports.extractSQLQueryFromJSON(insertionJSON, persistenceParams);
 
     // use the compiled selection in the insert query, after converting ID to UUID
-    const crossInsertionQuery = `insert into ${audienceJoinTable} (account_id, audience_id) ${selectForInsert}`.
+    const crossInsertionTemplate = `insert into ${audienceJoinTable} (account_id, audience_id) ${selectForInsert}`.
         replace(`'${audienceId}'`, `'${audienceId}'::uuid`);
-    logger('Compiled query: ', crossInsertionQuery);
+    
+    const joinInsertionQuery = { template: crossInsertionTemplate, values: [] };
+    logger('Compiled query: ', joinInsertionQuery);
 
-    const joinResult = await rdsConnection.selectQuery(crossInsertionQuery, []);
+    const joinResult = await rdsConnection.freeFormInsert([createAudienceQuery, joinInsertionQuery]);
     logger('Join result: ', joinResult);
+
+    const audienceCount = joinResult[1]['rowCount'];
 
     const persistenceResult = {
         audienceId,
-        audienceCount: joinResult.length
+        audienceCount
     };
 
     return persistenceResult;

@@ -14,12 +14,12 @@ const proxyquire = require('proxyquire').noCallThru();
 const uuidStub = sinon.stub();
 
 const selectQueryStub = sinon.stub();
-const insertStub = sinon.stub();
+const freeFormStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
         this.selectQuery = selectQueryStub;
-        this.insertRecords = insertStub;
+        this.freeFormInsert = freeFormStub;
     }
 }
 
@@ -34,7 +34,7 @@ const rootJSON = {
 
 const resetStubs = () => {
     selectQueryStub.reset();
-    insertStub.reset();
+    freeFormStub.reset();
     uuidStub.reset();
 };
 
@@ -107,6 +107,25 @@ describe('Audience Selection - SQL Query Construction', () => {
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+    it('should handle in operator', async () => {
+        const mockAccountId1 = uuid();
+        const mockAccountId2 = uuid();
+
+        // looks a bit weird but is used extensively in aggregate->match conversions, and more mundanely in selecting specific accounts
+        // e.g., when they come from referrals
+        const mockSelectionObject = { 
+            table: config.get('tables.accountTable'), 
+            columns: ['account_id'],
+            conditions: [{
+                'op': 'in', 'prop': 'account_id', 'value': `${mockAccountId1}, ${mockAccountId2}`
+            }]
+        };
+
+        const expectedQuery = `select account_id from ${config.get('tables.accountTable')} where account_id in (${mockAccountId1}, ${mockAccountId2})`;
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionObject);
         expect(result).to.deep.equal(expectedQuery);
     });
 
@@ -453,6 +472,7 @@ describe('Audience Selection - fetch users given JSON', () => {
 
         const expectedAudienceObject = {
             audienceId: mockAudienceId,
+            audienceType: 'PRIMARY',
             creatingUserId: mockUserId,
             clientId: mockClientId,
             selectionInstruction: mockSelection,
@@ -462,32 +482,34 @@ describe('Audience Selection - fetch users given JSON', () => {
 
         const audienceProps = Object.keys(expectedAudienceObject); // to make sure no accidents from different sorting
         const audienceColumns = audienceProps.map((column) => decamelize(column, '_')).join(', ');
+        const audienceIndices = '$1, $2, $3, $4, $5, $6, $7';
 
         const expectedAudienceInsertion = {
-            queryTemplate: `insert into ${audienceTable} (${audienceColumns}) values %L returning audience_id`,
-            columnTemplate: audienceProps.map((prop) => `\${${prop}}`).join(', '),
-            objectArray: [expectedAudienceObject]
+            template: `insert into ${audienceTable} (${audienceColumns}) values (${audienceIndices}) returning audience_id`,
+            values: audienceProps.map((prop) => expectedAudienceObject[prop])
         };
 
-        const expectedJoinQuery = `insert into ${audienceJoinTable} (account_id, audience_id) ` +
+        const expectedJoinTemplate = `insert into ${audienceJoinTable} (account_id, audience_id) ` +
             `select distinct(account_id), '${mockAudienceId}'::uuid from transactions where ` +
             `(client_id='${mockClientId}' and settlement_status='SETTLED') group by account_id ` +
             `having count(transaction_id)>3`;
+
+        const expectedJoinQuery = { template: expectedJoinTemplate, values: [] };
         
-        const persistenceParams = { creatingUserId: mockUserId, isDynamic: true, clientId: mockClientId, propertyConditions };
+        const persistenceParams = { creatingUserId: mockUserId, audienceType: 'PRIMARY', isDynamic: true, clientId: mockClientId, propertyConditions };
         
         uuidStub.returns(mockAudienceId);
-        insertStub.resolves({ rows: [{ 'audience_id': mockAudienceId }] });
-        selectQueryStub.resolves(Array.from({ length: 1 }, () => `account_${Math.floor(Math.random() * 100)}`));
+
+        const mockJoinCount = 10;
+        const audienceCreationResult = { rows: [{ 'audience_id': mockAudienceId }] };
+        const joinInsertResult = { rowCount: mockJoinCount };
+        freeFormStub.resolves([audienceCreationResult, joinInsertResult]);
 
         const resultOfInsertion = await audienceSelection.executeColumnConditions(mockSelection, true, persistenceParams);
         expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.deep.equal({ audienceId: mockAudienceId, audienceCount: mockJoinCount });
 
-        // expect(resultOfInsertion).to.deep.equal({ audienceId: mockAudienceId });
-
-        const { queryTemplate, columnTemplate, objectArray } = expectedAudienceInsertion;
-        expect(insertStub).to.have.been.calledOnceWithExactly(queryTemplate, columnTemplate, objectArray);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedJoinQuery, emptyArray);
+        expect(freeFormStub).to.have.been.calledWith([expectedAudienceInsertion, expectedJoinQuery]);
 
     });
 });

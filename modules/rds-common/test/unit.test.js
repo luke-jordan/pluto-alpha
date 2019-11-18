@@ -267,6 +267,55 @@ describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
 
 });
 
+describe('*** UNIT TEST RESTRICTED FREE FORM INSERT ***', () => {
+
+    let rdsClient = { };
+    before(() => {
+        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
+    });
+
+    beforeEach(() => {
+        queryStub.reset();
+    });
+
+    it('Rejects non-allowed users', async () => {
+        queryStub.withArgs('select current_role').resolves({ rows: [{'current_role': 'malicious' }]});
+
+        await expect(rdsClient.freeFormInsert(['select everything', 'delete from table'])).to.be.rejected;
+        expect(queryStub).to.have.been.calledOnce;
+    });
+
+    it('Rejects bad queries', async () => {
+        queryStub.withArgs('select current_role').resolves({ rows: [{'current_role': 'audience_worker' }]});
+        
+        const firstQueries = [{ template: 'insert into account table', values: []}];
+        await expect(rdsClient.freeFormInsert(firstQueries)).to.be.rejected;
+        expect(queryStub).to.have.been.calledOnce;
+
+        queryStub.resetHistory(); // just to make clear
+        const secondQueries = [{ template: 'select from audience_data.audience_join_table lots of things', values: []}];
+        await expect(rdsClient.freeFormInsert(secondQueries)).to.be.rejected;
+        expect(queryStub).to.have.been.calledOnce;
+    });
+
+    it('When authorized, executes appropriately', async () => {
+        const queries = [
+            { template: 'insert into audience_data.audience (some things)', values: ['something'] },
+            { template: 'insert into audience_data.audience_join_table the joins', values: ['something'] }
+        ];
+        
+        queryStub.withArgs('select current_role').resolves({ rows: [{'current_role': 'audience_worker' }]});
+        queryStub.withArgs(queries[0]).resolves({ rows: [{ 'audience_id': 'something' }]});
+        queryStub.withArgs(queries[1]).resolves({ rows: 'many rows' });
+
+        const properResult = await rdsClient.freeFormInsert(queries);
+        expect(properResult).to.exist;
+        expect(queryStub).to.have.been.calledWith(queries[0].template, queries[0].values);
+        expect(queryStub).to.have.been.calledWith(queries[1].template, queries[1].values);
+    });
+
+});
+
 describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
     
     let rdsClient = { };

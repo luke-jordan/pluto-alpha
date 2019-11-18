@@ -11,6 +11,7 @@ cd ../user-messaging-api; npm run-script lint
 cd ../audience-selection; npm run-script lint
 cd ../admin-api; npm run-script lint
 cd ../third-parties; npm run-script lint
+cd ../db-migration; npm run-script lint
 cd ..
 
 echo "Running module tests"

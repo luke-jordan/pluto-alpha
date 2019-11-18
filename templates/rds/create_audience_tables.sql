@@ -7,10 +7,14 @@ create table if not exists audience_data.audience (
     creating_user_id uuid not null,
     client_id varchar(50) not null,
     creation_time timestamp with time zone not null default current_timestamp,
+    audience_type varchar (50) not null,
     is_dynamic boolean default false,
     selection_instruction jsonb not null,
     property_conditions jsonb
 );
+
+alter table audience_data.audience drop constraint if exists audience_type_check;
+alter table audience_data.audience add constraint audience_type_check check (audience_type in ('PRIMARY', 'INTERMEDIATE'));
 
 -- The 'active' column is for dynamic audiences in which someone may drop out but we want to retain record that they were selected 
 create table if not exists audience_data.audience_account_join (
@@ -30,13 +34,13 @@ revoke all on schema audience_data from public cascade;
 grant usage on schema audience_data to audience_worker;
 
 grant select, insert on audience_data.audience to audience_worker;
-grant select, insert, update on audience_data.audience_account_join to audience_join_audience_id;
+grant select, insert, update on audience_data.audience_account_join to audience_worker;
 
 -- So that boost worker and message worker can populate their tables with reference to here
 grant usage on schema audience_data to boost_worker;
 grant select (audience_id, is_dynamic) on audience_data.audience to boost_worker;
-grant select (account_id, active) on audience_data.audience_account_join to boost_worker;
+grant select (account_id, audience_id, active) on audience_data.audience_account_join to boost_worker;
 
 grant usage on schema audience_data to message_api_worker;
 grant select (audience_id, is_dynamic) on audience_data.audience to message_api_worker;
-grant select (account_id, active) on audience_data.audience_account_join to message_api_worker;
+grant select (account_id, audience_id, active) on audience_data.audience_account_join to message_api_worker;

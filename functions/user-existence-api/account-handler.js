@@ -39,6 +39,12 @@ module.exports.validateRequest = (creationRequest) => {
   return true;
 };
 
+// note : psql handles uuids without quotes (and that will throw an error without a uuid cast)
+const createAudienceConditions = (boostAccounts) => ({
+    table: config.get('tables.accountData'),
+    conditions: [{ op: 'in', prop: 'account_id', value: boostAccounts.join(', ') }]
+});
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) => {
@@ -71,8 +77,7 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
     boostAccounts.push(referringAccountId);
   }
 
-  const accountsToSelect = boostAccounts.map((accountId) => `"${accountId}"`).join(', ');
-  const boostAudienceSelection = `whole_universe from #{{"specific_accounts": [${accountsToSelect}]}}`;
+  const boostAudienceSelection = createAudienceConditions(boostAccounts);
   const bonusExpiryTime = moment().add(config.get('referral.expiryTimeDays'), 'days');
 
   // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for

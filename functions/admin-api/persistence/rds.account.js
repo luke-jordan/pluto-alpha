@@ -87,8 +87,10 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
     logger('Would be logging this context: ', logContext);
 
     const txTable = config.get('tables.transactionTable');
-    const updateQuery = `update $${txTable} set settlement_status = $1 where transaction_id = $2`;
+    const updateQuery = `update ${txTable} set settlement_status = $1 where transaction_id = $2 returning settlement_status, updated_time`;
 
+    logger('Updating transaction status, query: ', updateQuery);
+    logger('Updating tx status, values: ', [newTxStatus, transactionId]);
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [newTxStatus, transactionId]);
     logger('Result of transaction update: ', resultOfUpdate);
 

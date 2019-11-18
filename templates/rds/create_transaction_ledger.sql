@@ -61,8 +61,9 @@ grant select on transaction_data.core_transaction_ledger to message_api_worker;
 
 -- And so that analytics can work, as well as cleaning up old transactions
 grant usage on schema transaction_data to admin_api_worker;
-grant select (transaction_id, account_id, creation_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference) on transaction_data.core_transaction_ledger to admin_api_worker;
+grant select (transaction_id, account_id, creation_time, updated_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference) on transaction_data.core_transaction_ledger to admin_api_worker;
 grant update (settlement_status) on transaction_data.core_transaction_ledger to admin_api_worker;
 
--- For the audience worker to run what it needs
+-- For the audience worker to run what it needs, including several complex queries
 grant usage on schema transaction_data to audience_worker;
+grant select on transaction_data.core_transaction_ledger to audience_worker;

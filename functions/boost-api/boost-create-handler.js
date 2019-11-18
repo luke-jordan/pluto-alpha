@@ -111,9 +111,9 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
         creatingUserId: boostParams.creatingUserId,
         boostStatus: messageDefinition.boostStatus,
         presentationType: messageDefinition.presentationType,
-        audienceType: boostParams.audienceType,
-        endTime: boostParams.boostEndTime.format(),
-        selectionInstruction: `match_other from #{{"entityType": "boost", "entityId": "${boostParams.boostId}"}}`
+        audienceType: boostParams.boostAudienceType,
+        audienceId: boostParams.audienceId,
+        endTime: boostParams.boostEndTime.format()
     };
     logger('Base of message payload: ', msgPayload);
         
@@ -160,11 +160,81 @@ const assembleMsgLamdbaInvocation = async (msgPayload) => {
     const resultOfMsgCreation = await lambda.invoke(messageInstructInvocation).promise();
     logger('Result of message invocation: ', resultOfMsgCreation);
 
-    const resultPayload = JSON.parse(resultOfMsgCreation.Payload);
+    const resultPayload = JSON.parse(resultOfMsgCreation['Payload']);
     const resultBody = JSON.parse(resultPayload.body);
     logger('Result body on invocation: ', resultBody);
 
     return { accountId: 'ALL', status: msgPayload.boostStatus, msgInstructionId: resultBody.message.instructionId };
+};
+
+const generateAudienceInline = async (boostParams, isDynamic = false) => {
+    const audiencePayload = {
+        operation: 'create',
+        params: {
+            creatingUserId: boostParams.creatingUserId,
+            clientId: boostParams.boostSource.clientId,
+            isDynamic,
+            propertyConditions: boostParams.boostAudienceSelection
+        }
+    };
+
+    const audienceInvocation = {
+        FunctionName: config.get('lambdas.audienceHandle'),
+        InvocationType: 'RequestResponse',
+        Payload: stringify(audiencePayload)
+    };
+
+    const resultOfAudienceCreation = await lambda.invoke(audienceInvocation).promise();
+    const resultPayload = JSON.parse(resultOfAudienceCreation['Payload']);
+    const resultBody = JSON.parse(resultPayload.body);
+    logger('Result body for audience creation: ', resultBody);
+    return resultBody.audienceId;
+};
+
+const obtainAudienceDetails = async (params) => {
+    // this is slightly redundant, but will probably be useful for storing in future
+    let boostAudienceType = '';
+    if (params.boostAudienceType) {
+        boostAudienceType = params.boostAudienceType;
+    } else {
+        boostAudienceType = 'GENERAL';
+    }
+
+    let audienceId = '';
+    if (typeof params.audienceId === 'string' && params.audienceId.trim().length > 0) {
+        audienceId = params.audienceId;
+    } else {  
+        audienceId = await generateAudienceInline(params);
+        logger('Created audience: ', audienceId);
+    }
+
+    return { boostAudienceType, audienceId };
+};
+
+const splitBasicParams = (params) => ({
+    label: params.label || params.boostTypeCategory,
+    boostType: params.boostTypeCategory.split('::')[0],
+    boostCategory: params.boostTypeCategory.split('::')[1]
+});
+
+const retrieveBoostAmounts = (params) => {
+    const boostAmountDetails = params.boostAmountOffered.split('::');
+    logger('Boost amount details: ', boostAmountDetails);
+    
+    let boostBudget = 0;
+    if (typeof params.boostBudget === 'number') {
+        boostBudget = params.boostBudget;
+    } else if (typeof params.boostBudget === 'string') {
+        const boostBudgetParams = params.boostBudget.split('::');
+        if (boostAmountDetails[1] !== boostBudgetParams[1] || boostAmountDetails[2] !== boostBudgetParams[2]) {
+            return util.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
+        }
+        boostBudget = parseInt(boostBudgetParams[0], 10);
+    } else {
+        throw new Error('Boost must have a budget');
+    }
+
+    return { boostAmountDetails, boostBudget };
 };
 
 /**
@@ -188,54 +258,34 @@ const assembleMsgLamdbaInvocation = async (msgPayload) => {
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudience A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
- * @property {string} boostAudienceSelection A DSL string containing instructions as to which users to send the boost to. 
+ * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} audienceId The ID of the audience that the boost will be offered to. If left out, must have boostAudienceSelection.
+ * @property {object} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
  * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
 module.exports.createBoost = async (event) => {
-    if (!event) {
-        logger('Test run on lambda, exiting');
+    if (!event || Object.keys(event).length === 0) {
+        logger('Warmup run on lambda, exiting');
         return { statusCode: 400 };
     }
 
     const params = event;
-    // logger('Received boost instruction event: ', params);
 
     // todo : extensive validation
     if (typeof params.creatingUserId !== 'string') {
         throw new Error('Boost requires creating user ID');
     }
 
-    const label = params.label || params.boostTypeCategory; // i.e., using default
-    const boostType = params.boostTypeCategory.split('::')[0];
-    const boostCategory = params.boostTypeCategory.split('::')[1];
-
-    logger(`Boost type: ${boostType} and category: ${boostCategory}`);
-
-    const boostAmountDetails = params.boostAmountOffered.split('::');
-    logger('Boost amount details: ', boostAmountDetails);
-    
-    let boostBudget = 0;
-    if (typeof params.boostBudget === 'number') {
-        boostBudget = params.boostBudget;
-    } else if (typeof params.boostBudget === 'string') {
-        const boostBudgetParams = params.boostBudget.split('::');
-        if (boostAmountDetails[1] !== boostBudgetParams[1] || boostAmountDetails[2] !== boostBudgetParams[2]) {
-            return util.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
-        }
-        boostBudget = parseInt(boostBudgetParams[0], 10);
-    } else {
-        throw new Error('Boost must have a budget');
-    }
+    const { label, boostType, boostCategory } = splitBasicParams(params);
+    const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
 
     // start now if nothing provided
     const boostStartTime = params.startTimeMillis ? moment(params.startTimeMillis) : moment();
     const boostEndTime = params.endTimeMillis ? moment(params.endTimeMillis) : moment().add(config.get('time.defaultEnd.number'), config.get('time.defaultEnd.unit'));
 
     logger(`Boost start time: ${boostStartTime.format()} and end time: ${boostEndTime.format()}`);
-    logger('Boost source: ', params.boostSource);
-    logger('Creating user: ', params.creatingUserId);
+    logger('Boost source: ', params.boostSource, 'and creating user: ', params.creatingUserId);
 
     // todo : more validation & error throwing here, e.g., if neither exists
     logger('Game params: ', params.gameParams);
@@ -250,7 +300,10 @@ module.exports.createBoost = async (event) => {
     } else if (params.messageInstructionFlags) {
         messageInstructionIds = await obtainDefaultMessageInstructions(params.messageInstructionFlags);
     }
-    
+
+    const { audienceId, boostAudienceType } = await obtainAudienceDetails(params);
+    logger('Boost audience type: ', boostAudienceType, ' and audience ID: ', audienceId);
+
     const instructionToRds = {
         creatingUserId: params.creatingUserId,
         label,
@@ -266,8 +319,8 @@ module.exports.createBoost = async (event) => {
         fromFloatId: params.boostSource.floatId,
         forClientId: params.boostSource.clientId,
         statusConditions: params.statusConditions,
-        boostAudience: params.boostAudience,
-        boostAudienceSelection: params.boostAudienceSelection,
+        audienceId,
+        boostAudienceType,
         messageInstructionIds,
         defaultStatus: params.initialStatus || 'CREATED'
     };
@@ -289,9 +342,12 @@ module.exports.createBoost = async (event) => {
         const boostParams = {
             boostId: persistedBoost.boostId,
             creatingUserId: instructionToRds.creatingUserId, 
-            audienceType: params.boostAudience, 
+            boostAudienceType,
+            audienceId: params.audienceId,
             boostEndTime
         };
+
+        logger('Passing boost params: ', boostParams);
 
         const messagePayloads = params.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
         logger('Assembled message payloads: ', messagePayloads);
@@ -324,7 +380,7 @@ module.exports.createBoost = async (event) => {
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudience A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
  * @property {string} boostAudienceSelection A DSL string containing instructions as to which users to send the boost to. 
  * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.

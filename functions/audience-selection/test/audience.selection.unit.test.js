@@ -84,7 +84,6 @@ describe('Converts standard properties into column conditions', () => {
     it('Converts properties as we wish', async () => {
         const oneWeekAgo = moment().subtract(7, 'days');
         
-
         const mockWholeAudienceId = uuid();
         const mockNumberAccounts = Math.floor(Math.random() * 1000);
         
@@ -104,8 +103,9 @@ describe('Converts standard properties into column conditions', () => {
         const expectedSaveCountSelection = Object.assign({}, rootJSON, {
             conditions: [
                 { op: 'and', children: [
-                    { op: 'is', prop: 'client_id', value: mockClientId },
-                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
+                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
+                    { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'is', prop: 'client_id', value: mockClientId }
                 ]}
             ],
             groupBy: [
@@ -141,6 +141,9 @@ describe('Converts standard properties into column conditions', () => {
             propertyConditions: mockSelectionJSON.conditions
         };
 
+        const intermediateParams = { ...expectedPersistenceParams, audienceType: 'INTERMEDIATE' };
+        const primaryParams = { ...expectedPersistenceParams, audienceType: 'PRIMARY' };
+
         // not actually assembled here, instead in RDS, but placing here for reference for now (see final test in audience.rds.unit.test)
         // const expectedFullQuery = `select distinct(account_id) from ${config.get('tables.transactionTable')} ` +
         //     `where (client_id = '${mockClientId} and ` +
@@ -160,17 +163,17 @@ describe('Converts standard properties into column conditions', () => {
         const firstCallArgs = executeConditionsStub.getCall(0).args;
         expect(firstCallArgs[0]).to.deep.equal(expectedSaveCountSelection);
         expect(firstCallArgs[1]).to.be.true;
-        expect(firstCallArgs[2]).to.deep.equal(expectedPersistenceParams);
+        expect(firstCallArgs[2]).to.deep.equal(intermediateParams);
 
         const secondCallArgs = executeConditionsStub.getCall(1).args;
-        expect(secondCallArgs[1]).to.be.true;
         expect(secondCallArgs[0]).to.deep.equal(expectedWholeAudienceSelection);        
+        expect(secondCallArgs[1]).to.be.true;
+        expect(secondCallArgs[2]).to.deep.equal(primaryParams);
     });
 
     it('Handles the simplest case - whole client, no properties - properly', async () => {
         const mockSelectionJSON = {
             clientId: mockClientId,
-            creatingUserId: mockUserId,
             isDynamic: true,
             conditions: []
         };
@@ -178,7 +181,7 @@ describe('Converts standard properties into column conditions', () => {
         const authorizedRequest = {
             httpMethod: 'POST',
             pathParameters: { proxy: 'create' },
-            requestContext: { authorizer: { systemWideUserId: uuid(), role: 'SYSTEM_ADMIN' } },
+            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
             body: JSON.stringify(mockSelectionJSON)
         };
 
@@ -196,6 +199,10 @@ describe('Converts standard properties into column conditions', () => {
         expect(unWrappedResult).to.deep.equal({ audienceId: mockAudienceId, audienceCount: 10000 });
         
         expect(executeConditionsStub).to.have.been.calledOnce;
+
+        // direct invoke aspects are done aboe, here just make sure extracts creating user ID properly
+        const executeParams = executeConditionsStub.getCall(0).args[2];
+        expect(executeParams).to.have.property('creatingUserId', mockUserId);
     });
 
 });

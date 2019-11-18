@@ -21,8 +21,9 @@ const initiateConnection = () => {
   }
 
   const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
-  
-  if (secretsMgmtEnabled) {
+  logger('Is secrets enabled? : ', secretsMgmtEnabled);
+
+  if (!secretsMgmtEnabled) {
     pool = new Pool(config.get('db'));
     return;
   }
@@ -40,7 +41,7 @@ const initiateConnection = () => {
       // Depending on whether the secret is a string or binary, one of these fields will be populated.
       logger('No error, got the secret, moving onward: ', fetchedSecretData);
       const secret = JSON.parse(fetchedSecretData.SecretString);
-      const dbConfig = config.get('db');
+      const dbConfig = { ...config.get('db') };
       dbConfig.user = secret.username;
       dbConfig.password = secret.password;
       
@@ -135,10 +136,14 @@ const createInitialTables = async () => {
 };
 
 module.exports.migrate = async (event) => {
+  logger('Initiating DB migration');
+
   initiateConnection();
 
   const typeOfExecution = event.type;
   logger('Executing migration of type: ', typeOfExecution);
+
+  logger('Pool at present: ? :', pool);
 
   while (pool === null) {
       logger('No pool yet, waiting ...');

@@ -17,6 +17,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.message_fetch_wrapper,
   aws_api_gateway_integration.message_process,
   aws_api_gateway_integration.message_token_store,
+  aws_api_gateway_integration.message_token_delete,
   aws_api_gateway_integration.boost_user_process,
   aws_api_gateway_integration.boost_user_list
   ]
@@ -436,7 +437,7 @@ resource "aws_api_gateway_integration" "message_process" {
 
 // STORE PUSH NOTIFICATION TOKEN FOR USER
 
-resource "aws_api_gateway_resource" "message_token_store" {
+resource "aws_api_gateway_resource" "message_token_manage" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_resource.message_path_root.id}"
   path_part   = "token"
@@ -444,7 +445,7 @@ resource "aws_api_gateway_resource" "message_token_store" {
 
 resource "aws_api_gateway_method" "message_token_store" {
   rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
-  resource_id   = "${aws_api_gateway_resource.message_token_store.id}"
+  resource_id   = "${aws_api_gateway_resource.message_token_manage.id}"
   http_method   = "POST"
   authorization = "CUSTOM"
   authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
@@ -452,7 +453,7 @@ resource "aws_api_gateway_method" "message_token_store" {
 
 resource "aws_lambda_permission" "message_token_store" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.message_token_store.function_name}"
+  function_name = "${aws_lambda_function.message_token_manage.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
@@ -464,7 +465,34 @@ resource "aws_api_gateway_integration" "message_token_store" {
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.message_token_store.invoke_arn}"
+  uri                     = "${aws_lambda_function.message_token_manage.invoke_arn}"
+}
+
+// DELETE PUSH NOTIFICATION TOKEN FOR USER
+
+resource "aws_api_gateway_method" "message_token_delete" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.message_token_manage.id}"
+  http_method   = "DELETE"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "message_token_delete" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.message_token_manage.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "message_token_delete" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.message_token_delete.resource_id}"
+  http_method = "${aws_api_gateway_method.message_token_delete.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.message_token_manage.invoke_arn}"
 }
 
 /////////////// BOOST LAMBDAS //////////////////////////////////////////////////////////////////////////

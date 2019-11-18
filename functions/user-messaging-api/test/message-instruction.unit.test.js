@@ -63,7 +63,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     const mockUserId = uuid();
     const mockInstructionId = uuid();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
-    const mockClientId = uuid();
+    const mockAudienceId = uuid();
     const testTime = moment();
 
     const mockInstruction = {
@@ -71,7 +71,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         presentationType: 'ONCE_OFF',
         audienceType: 'ALL_USERS',
         templates: { template: { 'DEFAULT': testRecurringTemplate }},
-        selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+        audienceId: mockAudienceId,
         recurrenceParameters: null,
         endTime: '2061-01-09T11:47:41.596Z',
         messagePriority: 0,
@@ -82,7 +82,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         mockInstruction.presentationType = 'ONCE_OFF';
         mockInstruction.audienceType = 'ALL_USERS';
         mockInstruction.templates = { template: { 'DEFAULT': testRecurringTemplate }};
-        mockInstruction.selectionInstruction = `whole_universe from #{{"client_id":"${mockClientId}"}}`;
+        mockInstruction.audienceId = mockAudienceId;
     };
 
     const mockPersistableObject = (instruction = mockInstruction) => ({
@@ -95,7 +95,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         active: true,
         audienceType: instruction.audienceType,
         templates: instruction.templates,
-        selectionInstruction: instruction.selectionInstruction ? instruction.selectionInstruction : null,
+        audienceId: instruction.audienceId,
         recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: testTime.format(),
         messagePriority: instruction.messagePriority,
@@ -127,7 +127,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
                 presentationType: 'ONCE_OFF',
                 audienceType: 'ALL_USERS',
                 templates: { template: { 'DEFAULT': testRecurringTemplate }},
-                selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+                audienceId: mockAudienceId,
                 recurrenceParameters: null,
                 messagePriority: 0,
                 holdFire: true
@@ -154,7 +154,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('Inserts new message intruction and populates messages table', async () => {
-        Reflect.deleteProperty(mockInstruction, 'selectionInstruction'); // sets selection intruction to null where not provided
+        Reflect.deleteProperty(mockInstruction, 'audienceId');
         
         const mockInvocation = {
             FunctionName: 'message_user_create_once',
@@ -256,7 +256,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
                 presentationType: 'ONCE_OFF',
                 audienceType: 'ALL_USERS',
                 templates: { template: { 'DEFAULT': testRecurringTemplate }},
-                selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+                audienceId: mockAudienceId,
                 recurrenceParameters: null,
                 messagePriority: 0,
                 startTime: moment().add(2, 'days').format(),
@@ -321,9 +321,9 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(insertMessageInstructionStub).to.have.not.been.called;
     });
 
-    it('should throw an error on missing selection instruction on individual notification', async () => {
-        mockInstruction.selectionInstruction = null;
-        const expectedResult = { message: 'selectionInstruction required on indivdual notification.' };
+    it('should throw an error on missing audience ID on individual notification', async () => {
+        mockInstruction.audienceId = null;
+        const expectedResult = { message: 'Audience ID required on indivdual notification.' };
         mockInstruction.audienceType = 'INDIVIDUAL';
 
         const result = await handler.insertMessageInstruction(mockInstruction);
@@ -334,8 +334,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('should throw an error on missing selection instruction on group notification', async () => {
-        mockInstruction.selectionInstruction = null;
-        const expectedResult = { message: 'selectionInstruction required on group notification.' };
+        mockInstruction.audienceId = null;
+        const expectedResult = { message: 'Audience ID required on group notification.' };
         mockInstruction.audienceType = 'GROUP';
 
         const result = await handler.insertMessageInstruction(mockInstruction);
@@ -384,7 +384,7 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
     const mockUserId = uuid();
     const mockInstructionId = uuid();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
-    const mockClientId = uuid();
+    const mockAudienceId = uuid();
 
     const instructionHandler = proxyquire('../msg-instruction-handler', {
         './persistence/rds.notifications': {
@@ -405,7 +405,7 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
                 presentationType: 'ONCE_OFF',
                 audienceType: 'ALL_USERS',
                 templates: { template: { 'DEFAULT': testRecurringTemplate }},
-                selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+                audienceId: mockAudienceId,
                 recurrenceParameters: null,
                 messagePriority: 0,
                 startTime: testStartTime.format()
@@ -533,7 +533,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
 
     const mockInstructionId = uuid();
     const mockInstructionIdOnError = uuid();
-    const mockClientId = uuid();
+    const mockAudienceId = uuid();
     const boostId = uuid();
 
     const mockPersistedInstuction = (instructionId) => ({
@@ -545,7 +545,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
             default: config.get('instruction.templates.default'),
             otherTemplates: null
         },
-        selectionInstruction: `whole_universe from #{{"client_id":"${mockClientId}"}}`,
+        audienceId: mockAudienceId,
         recurrenceInstruction: null,
         responseAction: 'VIEW_HISTORY',
         responseContext: { boostId: boostId },
@@ -607,7 +607,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
         active: true,
         audienceType: 'ALL_USERS',
         templates: null,
-        selectionInstruction: 'whole_universe from #{{"client_id":"72d08e86-6641-435e-bf9c-68c7a6c71512"}}',
+        audienceId: uuid(),
         recurrenceParameters: null,
         lastProcessedTime: '2019-09-18T11:07:42+02:00',
         messagePriority: 0,

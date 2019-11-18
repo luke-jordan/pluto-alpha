@@ -106,3 +106,21 @@ variable "db_allocated_storage" {
 
 variable "deploy_code_commit_hash" {
 }
+
+variable "events_source_email_address" {
+  description = "The source email address that will serve as the origin of various events emails"
+  type = "map"
+  default = {
+      "staging" = "noreply@jupitersave.com",
+      "master" = "service@jupitersave.com"
+  }
+}
+
+variable "events_email_receipients" {
+    description = "Recipient list for daily stats and system emails"
+    type = "map"
+    default = {
+        "staging" = ["luke@jupitersave.com"],
+        "master" = ["luke@jupitersave.com", "avish@jupitersave.com"]
+    }
+}
