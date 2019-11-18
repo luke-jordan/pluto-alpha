@@ -1,6 +1,8 @@
+'use strict';
+
 const logger = require('debug')('jupiter:migration:run_migrations');
-const {migrate} = require("postgres-migrations")
-const migrationScriptsLocation = "scripts";
+const {migrate} = require('postgres-migrations');
+const migrationScriptsLocation = 'scripts';
 
 logger('running migrations');
 
@@ -8,15 +10,15 @@ logger('running migrations');
 // pass the db variables
 // run on deploying the function
 migrate({
-    database: "testing-migrations",
-    user: "admin",
-    password: "admin",
-    host: "localhost",
-    port: 5430,
-  }, migrationScriptsLocation)
-.then(() => {
+    database: 'testing-migrations',
+    user: 'admin',
+    password: 'admin',
+    host: 'localhost',
+    port: 5430
+  }, migrationScriptsLocation).
+then(() => {
     logger('migrations ran successfully');
-})
-.catch((error) => {
+}).
+catch((error) => {
   logger('Error occurred while running migrations: ', error);
 });
