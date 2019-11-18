@@ -32,9 +32,10 @@ create table if not exists float_data.float_log (
     updated_time timestamp with time zone not null default current_timestamp,
     reference_time timestamp with time zone not null default current_timestamp,
     log_type varchar(50) not null,
-    log_context jsonb default '{}',
-    unique(client_id, float_id)
+    log_context jsonb default '{}'
 );
+
+create index if not exists idx_float_log_type_id on float_data.float_log (float_id, log_type);
 
 -- Since we will, for example, set a log to processed, and by whom
 drop trigger if exists update_float_log_modtime on float_data.float_log;

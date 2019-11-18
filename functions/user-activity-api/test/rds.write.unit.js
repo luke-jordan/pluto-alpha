@@ -366,7 +366,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         'amount': testSaveAmount,
         'float_id': testFloatId,
         'client_id': testClientId,
-        'settlement_status': 'SETTLED',
+        'settlement_status': 'PENDING',
         'initiation_time': moment().subtract(5, 'minutes').format(),
         'settlement_time': moment().format()
     };

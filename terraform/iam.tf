@@ -361,10 +361,13 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             "Action": [
                 "ses:SendEmail"
             ],
-            "Resource": "arn:aws:ses:us-east-1:455943420663:identity/jupitersave.com",
+            "Resource": [
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_email_address[terraform.workspace]}"
+            ],
             "Condition": {
                 "StringLike": {
-                    "ses:FromAddress": "noreply@jupitersave.com"
+                    "ses:FromAddress": "${var.events_source_email_address[terraform.workspace]}"
                 }
             }
         },
@@ -406,10 +409,13 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
             "Action": [
                 "ses:SendEmail"
             ],
-            "Resource": "arn:aws:ses:us-east-1:455943420663:identity/jupitersave.com",
+            "Resource": [
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_email_address[terraform.workspace]}"
+            ],
             "Condition": {
                 "StringLike": {
-                    "ses:FromAddress": "noreply@jupitersave.com"
+                    "ses:FromAddress": "${var.events_source_email_address[terraform.workspace]}"
                 }
             }
         },

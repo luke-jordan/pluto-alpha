@@ -430,6 +430,14 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
     const txDetails = camelizeKeys(pendingTxResult[0]);
     logger('Retrieved pending save: ', txDetails);
 
+    // todo : also check it has float tx IDs
+    if (txDetails.settlementStatus === 'SETTLED') {
+        logger('Already settled, must be direct invoke repeated, return');
+        const currBalance = await exports.sumAccountBalance(txDetails['accountId'], txDetails['currency'], moment());
+        const existingTxs = { floatAdditionTransactionId: txDetails.floatAdjustTxId, floatAllocationTransactionId: txDetails.floatAllocTxId };
+        return { newBalance: currBalance, transactionDetails: existingTxs};
+    }
+
     const updateValue = {
         settlementStatus: 'SETTLED',
         settlementTime: settlementTime.format(),

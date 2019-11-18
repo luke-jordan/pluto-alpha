@@ -21,7 +21,7 @@ const expo = new Expo();
  * @property {string} provider The push tokens provider.
  * @property {string} token The push token.
  */
-module.exports.insertPushToken = async (event) => {
+module.exports.managePushToken = async (event) => {
     try {
         const userDetails = msgUtil.extractUserDetails(event);
         logger('User details: ', userDetails);
@@ -30,7 +30,11 @@ module.exports.insertPushToken = async (event) => {
         }
 
         const params = msgUtil.extractEventBody(event);
-        logger('Got event:', params);
+        logger('Got http method: ', event.httpMethod, 'and params: ', params);
+
+        if (event.httpMethod === 'DELETE') {
+            return exports.deletePushToken(event);
+        }
 
         const pushToken = await rdsMainUtil.getPushTokens([userDetails.systemWideUserId], params.provider);
         if (typeof pushToken === 'object' && Object.keys(pushToken).length > 0) {

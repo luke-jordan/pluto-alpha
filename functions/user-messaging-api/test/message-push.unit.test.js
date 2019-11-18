@@ -72,7 +72,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
             requestContext: testHelper.requestContext(mockUserId)
         };
 
-        const resultOfInsertion = await handler.insertPushToken(mockEvent);
+        const resultOfInsertion = await handler.managePushToken(mockEvent);
         logger('Result of token insertion:', resultOfInsertion);
 
         expect(resultOfInsertion).to.exist;
@@ -90,7 +90,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
         const expectedToken = uuid();
         const mockEvent = { provider: expectedProvider, token: expectedToken };
 
-        const resultOfInsertion = await handler.insertPushToken(mockEvent);
+        const resultOfInsertion = await handler.managePushToken(mockEvent);
         logger('Result of unauthorized token insertion:', resultOfInsertion);
 
         expect(resultOfInsertion).to.exist;
@@ -113,7 +113,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
             requestContext: testHelper.requestContext(mockUserId)
         };
 
-        const resultOfInsertion = await handler.insertPushToken(mockEvent);
+        const resultOfInsertion = await handler.managePushToken(mockEvent);
         logger('Result of token insertion:', resultOfInsertion);
 
         expect(resultOfInsertion).to.exist;
