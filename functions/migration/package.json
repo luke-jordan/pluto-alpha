@@ -1,0 +1,14 @@
+{
+  "name": "migration",
+  "version": "0.0.1",
+  "description": "Handles the migration scripts and process",
+  "main": "run_migrations.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "Bolu Ajibawo",
+  "dependencies": {
+    "debug": "^4.1.1",
+    "postgres-migrations": "^3.0.2"
+  }
+}
