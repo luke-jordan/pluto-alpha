@@ -12,7 +12,7 @@ const migrationScriptsLocation = 'scripts';
 const secretName = config.get(`secrets.names.master`);
 logger('Fetching secret with name: ', secretName);
 
-let dbConfig;
+let dbConfig = {};
 const secretsClient = new AWS.SecretsManager({ region: config.get('aws.region') });        
 secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
     if (err) {
@@ -30,9 +30,6 @@ secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData
 
 logger('running migrations');
 
-// TODO:
-// pass the db variables
-// run on deploying the function
 migrate({
     database: dbConfig.database,
     user: dbConfig.user,
