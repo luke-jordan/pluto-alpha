@@ -4,7 +4,8 @@
   "description": "Handles the migration scripts and process",
   "main": "run_migrations.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 0",
+    "test": "echo \"No test specified\" && exit 0",
+    "generate-coverage": "echo \"No test coverage at the moment \" && exit 0",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
   },
