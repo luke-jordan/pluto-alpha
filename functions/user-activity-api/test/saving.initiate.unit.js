@@ -208,11 +208,10 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
             unit: 'HUNDREDTH_CENT',
             dummy: 'ON',
             clientId: testClientId,
-            floatId: testFloatId,
-
+            floatId: testFloatId
         };
 
-        const expectedPaymentInfo = {
+        const expectedPaymentInfoTest = {
             transactionId: testTransactionId,
             accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10 },
             amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT', isTest: true }
@@ -235,7 +234,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(saveBody).to.deep.equal(responseToTxPending);
 
         expect(fetchBankRefStub).to.have.been.calledWithExactly(testAccountId);
-        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfoTest);
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
     });
 
