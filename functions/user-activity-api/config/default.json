@@ -35,7 +35,9 @@
         "checkSavePayment": "save_payment_check",
         "fetchUserBalance": "balance_fetch",
         "userHistory": "user_log_reader",
-        "fetchProfile": "profile_fetch"
+        "fetchProfile": "profile_fetch",
+        "createFinWorksAccount": "create_fw_account",
+        "createFinWorksInvestment": "create_fw_investment"
     },
     "payment": {
         "test": false,

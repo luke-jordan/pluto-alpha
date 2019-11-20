@@ -19,6 +19,7 @@ const uuid = require('uuid/v4');
 const queryStub = sinon.stub();
 const insertStub = sinon.stub();
 const updateRecordStub = sinon.stub();
+const updateRecordsStub = sinon.stub();
 const multiTableStub = sinon.stub();
 const multiOpStub = sinon.stub();
 
@@ -28,7 +29,8 @@ class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
-        this.updateRecordObject = updateRecordStub;
+        this.updateRecord = updateRecordStub;
+        this.updateRecordObject = updateRecordsStub;
         this.largeMultiTableInsert = multiTableStub;
         this.multiTableUpdateAndInsert = multiOpStub;
     }
@@ -41,7 +43,7 @@ const rds = proxyquire('../persistence/rds', {
 });
 
 const resetStubs = () => {
-    testHelper.resetStubs(queryStub, insertStub, multiTableStub, multiOpStub, uuidStub);
+    testHelper.resetStubs(queryStub, insertStub, multiTableStub, multiOpStub, uuidStub, updateRecordStub);
     uuidStub.callsFake(uuid); // not actually a fake but call through is tricky, so this is simpler
 };
 
@@ -426,7 +428,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
             },
             returnClause: 'updated_time'
         };
-        updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
+        updateRecordsStub.resolves([{ 'updated_time': updateTime.format() }]);
 
         const passedParams = { transactionId: testTxId, paymentProvider: 'PROVIDER', paymentRef: 'test-reference', bankRef: 'JUPSAVER31-0001' };
         
@@ -436,7 +438,44 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(resultOfUpdate).to.have.property('updatedTime');
         expect(resultOfUpdate.updatedTime).to.deep.equal(moment(updateTime.format()));
         
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedUpdateDef);
+        expect(updateRecordsStub).to.have.been.calledOnceWithExactly(expectedUpdateDef);
+    });
+
+    it('Updates transaction flags', async () => {
+        const updateTime = moment();
+        const testFlag = 'FINWORKS_RECORDED';
+        
+        const accountTxTable = config.get('tables.accountTransactions');
+        const updateQuery = `update ${accountTxTable} set flags = flags || '{${testFlag}}' where account_id = $1 returning updated_time`;
+
+        updateRecordStub.withArgs(updateQuery, [testAccountId]).resolves([{ 'updated_time': updateTime.format() }]);
+
+        const updateResult = await rds.updateTxFlags(testAccountId, testFlag);
+        logger('Result of flag update:', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.have.property('updatedTime');
+        expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testAccountId]);
+    });
+
+    it('Updates transaction tags', async () => {
+        const updateTime = moment();
+        const testUserId = uuid();
+        const testTag = 'FINWORKS::POL1';
+        
+        const userAccountTable = config.get('tables.accountLedger');
+        const updateTagQuery = `update ${userAccountTable} set tags = tags || '{${testTag}}' where owner_user_id = $1 returning updated_time`;
+
+        updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
+
+        const updateResult = await rds.updateAccountTags(testUserId, testTag);
+        logger('Result of tag update:', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.have.property('updatedTime');
+        expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateTagQuery, [testUserId]);
     });
 });
 

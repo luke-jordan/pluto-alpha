@@ -14,6 +14,7 @@
   "dependencies": {
     "aws-sdk": "^2.503.0",
     "config": "^3.1.0",
+    "debug": "^4.1.1",
     "decamelize-keys": "^1.1.0",
     "logger": "0.0.1",
     "pg": "^7.11.0",

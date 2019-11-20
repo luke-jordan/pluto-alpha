@@ -1,4 +1,15 @@
 {
+    "finworks": {
+        "endpoints": {
+            "accountCreation": "https://fwtest.jupitersave.com/api/accounts/createPersonAndAccount",
+            "addCash": "https://fwtest.jupitersave.com/api/accounts/%s/investments"
+        },
+        "s3": {
+            "bucket": "",
+            "crt": "",
+            "pem": ""
+        }
+    },
     "ozow": {
         "endpoints": {
             "payment": "https://api.ozow.com/PostPaymentRequest",

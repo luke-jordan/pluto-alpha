@@ -266,4 +266,18 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(countQuery, [testAccountId, 'USER_SAVING_EVENT', 'SETTLED']);
     });
 
+    it('Fetches Finworks account number', async () => {
+        const userAccountTable = config.get('tables.accountLedger');
+        const selectQuery = `select flags from ${userAccountTable} where account_id = $1`;
+
+        queryStub.resolves(['TEST_TAG::1', 'TEST_TAG::2', 'FINWORKS::POL1']);
+
+        const result = await rds.fetchFinWorksAccountNo(testAccountId);
+        logger('Result of FinWorks account number extraction:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal('POL1');
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId]);
+    });
+
 });
