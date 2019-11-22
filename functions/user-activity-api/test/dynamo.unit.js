@@ -63,4 +63,11 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
         await expect(dynamo.fetchFloatVarsForBalanceCalc(testClientId)).to.be.rejectedWith(errorMsg);
     });
 
+    it('Handles warm up call', async () => {
+        fetchStub.withArgs(config.get('tables.clientFloatVars'), { clientId: 'non', floatId: 'existent' }).resolves({});
+        const warmupResult = await dynamo.warmupCall();
+        expect(warmupResult).to.deep.equal({});
+        expect(fetchStub).to.have.been.calledOnceWithExactly(config.get('tables.clientFloatVars'), { clientId: 'non', floatId: 'existent' });
+    });
+
 });

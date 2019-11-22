@@ -326,24 +326,29 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(resultOfSaveUpdate.newBalance).to.deep.equal({ amount: testSaveAmount, currency: 'ZAR', unit: 'HUNDREDTH_CENT' });
     });
 
-    it('If a transaction is already settled, throw an error', async () => {
-        const testAcTxId = uuid();
-        const testPaymentDetails = { paymentProvider: 'STRIPE', paymentRef: testPaymentRef };
-        const testSettlementTime = moment();
+    it('If a transaction is already settled, skip update step', async () => {
+        const testAdjustTxId = uuid();
+        const testAllocTxId = uuid();
+        const transactionId = uuid();
+        const paymentDetails = { paymentProvider: 'STRIPE', paymentRef: testPaymentRef };
+        const settlementTime = moment();
 
         const expectedTable = config.get('tables.accountTransactions');
         const expectedRetrieveTxQuery = `select * from ${expectedTable} where transaction_id = $1`;
 
         const txDetailsFromRdsOnFetch = [{ 
-            'transaction_id': testAcTxId, 'account_id': testAccountId, 'currency': 'ZAR', 'unit': 'HUNDREDTH_CENT', 'amount': 1050000,
-            'float_id': testFloatId, 'client_id': testClientId, 'settlement_status': 'SETTLED'
+            'transaction_id': transactionId, 'account_id': testAccountId, 'currency': 'ZAR', 'unit': 'HUNDREDTH_CENT', 'amount': 1050000,
+            'float_adjust_tx_id': testAdjustTxId, 'float_alloc_tx_id': testAllocTxId, 'settlement_status': 'SETTLED'
         }];
 
-        queryStub.withArgs(expectedRetrieveTxQuery, [testAcTxId]).resolves(txDetailsFromRdsOnFetch);
+        queryStub.withArgs(expectedRetrieveTxQuery, [transactionId]).resolves(txDetailsFromRdsOnFetch);
+        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onThirdCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);        
         
-        await expect(rds.updateTxToSettled(testAcTxId, testPaymentDetails, testSettlementTime)).to.be.rejected;
-        expect(queryStub).to.have.been.calledOnce;
-        testHelper.expectNoCalls(multiOpStub);
+        const resultOfUpdate = await rds.updateTxToSettled({ transactionId, paymentDetails, settlementTime });
+        logger('Result of settlement of already settled transaction:', resultOfUpdate);
+        
+        // todo: add expectations   
     });
 
     // it('Throws errors if missing necessary arguments (times, etc)', () => {    });
@@ -502,6 +507,24 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
 
         expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
         expect(queryStub).to.have.been.calledWith(expectedInterestQuery, expectedValues);
+    });
+
+    it('Retrieves and sums user balance correctly', async () => {
+        const userAccountTable = config.get('tables.accountLedger');
+
+        const expectedBalanceQuery = `select sum(amount), unit from ${userAccountTable} inner join ${config.get('tables.accountTransactions')} ` +
+            `on ${userAccountTable}.account_id = ${config.get('tables.accountTransactions')}.account_id ` +
+            `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
+        const expectedValues = [testUserId, 'USD', 'SETTLED'];
+
+        queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
+        const resultOfInterest = await rds.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CURRENCY::USD::100'});
+        logger('Result of interest calc: ', resultOfInterest);
+        logger('args    :', queryStub.getCall(0).args);
+        logger('expected:', [expectedBalanceQuery, expectedValues]);
+
+        expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
+        expect(queryStub).to.have.been.calledWith(expectedBalanceQuery, expectedValues);
     });
 
     it('Gracefully handles unknown parameter', async () => {

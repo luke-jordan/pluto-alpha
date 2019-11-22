@@ -222,6 +222,18 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         'settlement_time': moment().format()
     };
 
+    const expectedTxRow = {
+        'transaction_id': testTxId,
+        'account_id': testAccountId,
+        'creation_time': moment().format(),
+        'transaction_type': 'ALLOCATION',
+        'settlement_status': 'SETTLED',
+        'amount': '100',
+        'currency': 'USD',
+        'unit': 'HUNDREDTH_CENT',
+        'human_reference': 'BUSANI7'
+    };
+
     const camelizeKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [camelcase(key)]: object[key] }), {});
 
     beforeEach(() => {
@@ -235,6 +247,20 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(camelizeKeys(expectedRowItem));
         expect(queryStub).to.have.been.calledOnceWithExactly(txQuery, [testTxId]);
+    });
+
+    it('Fetches prior transactions', async () => {
+        const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
+        `and transaction_type in ($2, $3) order by creation_time desc`;
+        const selectValues = [testAccountId, 'USER_SAVING_EVENT', 'WITHDRAWAL'];
+
+        queryStub.resolves([expectedTxRow, expectedTxRow, expectedTxRow]);
+        const priorTxs = await rds.fetchPriorTransactions(testAccountId);
+        logger('Got prior txs:', priorTxs);
+
+        expect(priorTxs).to.exist;
+        expect(priorTxs).to.deep.equal([expectedTxRow, expectedTxRow, expectedTxRow].map((row) => camelizeKeys(row)));
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, selectValues);
     });
 
     it('Finds most common currency', async () => {
@@ -277,6 +303,23 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal('POL1');
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId]);
+    });
+
+    it('Fetches bank reference information', async () => {
+        const accountTable = config.get('tables.accountLedger');
+        const txTable = config.get('tables.accountTransactions');
+
+        const selectQuery = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
+            `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 group by human_ref`;
+
+        queryStub.resolves([{ 'human_ref': 'BUS123', 'count': 2 }]);
+
+        const bankRefInfo = await rds.fetchInfoForBankRef(testAccountId);
+        logger('Result of reference info extraction:', bankRefInfo);
+
+        expect(bankRefInfo).to.exist;
+        expect(bankRefInfo).to.deep.equal({ humanRef: 'BUS123', count: 2 });
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId]);
     });
 

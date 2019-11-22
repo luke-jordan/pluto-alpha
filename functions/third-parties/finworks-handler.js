@@ -9,43 +9,33 @@ const AWS = require('aws-sdk');
 
 const s3 = new AWS.S3();
 
-const fetchAccessCred = async (bucket, key) => {
-    const object = await s3.getObject({ Bucket: bucket, Key: key }).promise();
-    return object.Body.toString('ascii');
+const fetchAccessCreds = async () => {
+    const bucket = config.get('finworks.s3.bucket');
+    const crt = await s3.getObject({ Bucket: bucket, Key: config.get('finworks.s3.crt') }).promise();
+    const pem = await s3.getObject({ Bucket: bucket, Key: config.get('finworks.s3.pem') }).promise();
+    return [crt.Body.toString('ascii'), pem.Body.toString('ascii')];
 };
 
-const assembleRequest = (endpoint, method, data) => {
+const assembleRequest = (method, endpoint, data) => {
     const options = {
         method,
         uri: endpoint,
-        json: true,
-        agentOptions: {
-            cert: data.crt,
-            key: data.pem
-        }
+        agentOptions: { cert: data.crt, key: data.pem },
+        json: true
     };
     if (data) {
         options.body = data.body;
     }
-    logger('assembled options:', options);
     return options;
 };
 
 module.exports.createAccount = async (event) => {
     try {
-        // authorizer?        
         const params = opsUtil.extractParamsFromEvent(event);
+        const body = { idNumber: params.idNumber, surname: params.surname, firstNames: params.firstNames };
+        const [crt, pem] = await fetchAccessCreds();
+        const options = assembleRequest('POST', config.get('finworks.endpoints.accountCreation'), { body, crt, pem });
 
-        const body = {
-            idNumber: params.idNumber,
-            surname: params.surname,
-            firstNames: params.firstNames
-        };
-
-        const bucket = config.get('finworks.s3.bucket');
-        const [crt, pem] = await Promise.all([fetchAccessCred(bucket, config.get('finworks.s3.crt')), fetchAccessCred(bucket, config.get('finworks.s3.pem'))]);
-
-        const options = assembleRequest(config.get('finworks.endpoints.accountCreation'), 'POST', { body, crt, pem });
         const response = await request(options);
         logger('Got response:', response);
 
@@ -59,21 +49,13 @@ module.exports.createAccount = async (event) => {
 
 module.exports.addCash = async (event) => {
     try {
-        // authorizer?
         const params = opsUtil.extractParamsFromEvent(event);
-
-        const body = {
-            amount: params.amount,
-            unit: params.unit,
-            currency: params.currency
-        };
-
-        const bucket = config.get('finworks.s3.bucket');
-        const [crt, pem] = await Promise.all([fetchAccessCred(bucket, config.get('finworks.s3.crt')), fetchAccessCred(bucket, config.get('finworks.s3.pem'))]);
+        const body = { amount: params.amount, unit: params.unit, currency: params.currency };
+        const [crt, pem] = await fetchAccessCreds();
         const endpoint = util.format(config.get('finworks.endpoints.addCash'), params.accountId);
-
         logger('Assembled endpoint:', endpoint);
-        const options = assembleRequest(endpoint, 'POST', { body, crt, pem });
+
+        const options = assembleRequest('POST', endpoint, { body, crt, pem });
         const response = await request(options);
         logger('Got response:', response);
 

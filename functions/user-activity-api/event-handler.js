@@ -96,14 +96,14 @@ const formatAmountText = (amountText) => {
 };
 
 const assembleEmailParameters = ({ toAddresses, subject, htmlBody, textBody }) => ({
-    Destination: {
-        ToAddresses: toAddresses
+    Destination: { ToAddresses: toAddresses },
+    Message: {
+        Body: {
+            Html: { Data: htmlBody },
+            Text: { Data: textBody }
+        },
+        Subject: { Data: subject }
     },
-    Message: { Body: { 
-        Html: { Data: htmlBody },
-        Text: { Data: textBody }
-    },
-    Subject: { Data: subject }},
     Source: sourceEmail,
     ReplyToAddresses: [sourceEmail],
     ReturnPath: sourceEmail
@@ -262,9 +262,7 @@ const handleSavingEvent = async (eventBody) => {
     logger('Result of lambda invoke: ', statusResult);
 
     const accountNumber = await fetchFWAccountNumber(eventBody.context.accountId);
-    const currency = eventBody.context.savedAmount.split('::')[2];
-    const amount = eventBody.context.savedAmount.split('::')[0];
-    const unit = eventBody.context.savedAmount.split('::')[1];
+    const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
 
     const thirdPartyResponse = await handleInvestment({ accountNumber, amount, unit, currency });
     logger('Investment result from third party:', thirdPartyResponse);
@@ -311,8 +309,9 @@ const handleAccountOpenedEvent = async (eventBody) => {
 const handleAccountOpened = async (eventBody) => {
     logger('Handling event:', eventBody);
     const userProfile = await fetchUserProfile(eventBody.userId);
-    logger('Got user profile:', userProfile);
+    // logger('Got user profile:', userProfile);
     const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
+    // logger('Assembled user details:', userDetails);
     const FWAccountCreationResult = await createFinWorksAccount(userDetails);
     if (typeof FWAccountCreationResult !== 'object' || !Object.keys(FWAccountCreationResult).includes('accountNumber')) {
         throw new Error(`Error creating user FinWorks account: ${FWAccountCreationResult}`);
