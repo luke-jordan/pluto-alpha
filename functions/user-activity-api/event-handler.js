@@ -226,7 +226,7 @@ const createFinWorksAccount = async (userDetails) => {
 };
 
 const fetchFWAccountNumber = async (accountId) => {
-    const accountNumber = await persistence.fetchAccountTagByPrefix(accountId);
+    const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, 'FINWORKS');
     logger('Got third party account number:', accountNumber);
 
     return accountNumber;

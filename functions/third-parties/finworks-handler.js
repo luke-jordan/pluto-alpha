@@ -18,6 +18,7 @@ const fetchAccessCreds = async () => {
     return [crt.Body.toString('ascii'), pem.Body.toString('ascii')];
 };
 
+
 const assembleRequest = (method, endpoint, data) => {
     const options = {
         method,
@@ -91,7 +92,6 @@ module.exports.getMarketValue = async (event) => {
         return opsUtil.wrapResponse(err.message, 500);
     }
 };
-
 
 
 module.exports.sendWithdrawal = async (event) => {

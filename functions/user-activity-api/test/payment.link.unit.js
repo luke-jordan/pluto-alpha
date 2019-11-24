@@ -108,7 +108,7 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
             amountDict: {
                 currency: 'ZAR',
                 unit: 'HUNDREDTH_CENT',
-                amount: testAmountBp,
+                amount: testAmountBp
             },
             accountInfo: {
                 bankRefStem: 'LJORDAN1',

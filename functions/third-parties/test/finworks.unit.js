@@ -153,7 +153,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
 
     it('Fetches user market value', async () => {
         const testAccountNumber = 'POL122';
-        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/marketValue`
+        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/marketValue`;
 
         const expectedOptions = {
             method: 'GET',
@@ -163,7 +163,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ 'amount' : '599.9900', 'currency' : 'ZAR' });
+        requestStub.resolves({ amount: '599.9900', currency: 'ZAR' });
 
         const testEvent = { accountNumber: 'POL122' };
 
@@ -172,14 +172,14 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
 
         expect(accountMarketValue.statusCode).to.deep.equal(200);
         expect(accountMarketValue.headers).to.deep.equal(expectedHeaders);
-        expect(accountMarketValue.body).to.deep.equal(JSON.stringify({ 'amount' : '599.9900', 'currency' : 'ZAR' }));
+        expect(accountMarketValue.body).to.deep.equal(JSON.stringify({ amount: '599.9900', currency: 'ZAR' }));
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
 
     it('Catches market value errors', async () => {
         const testAccountNumber = 'POL122';
-        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/marketValue`
+        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/marketValue`;
 
         const expectedOptions = {
             method: 'GET',
@@ -226,7 +226,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         requestStub.resolves({ statusCode: 201 });
 
         const testEvent = {
-            amount : 1234.56,
+            amount: 1234.56,
             currency: 'ZAR',
             holderName: 'John Doe',
             accountNumber: 'POL122',
@@ -268,7 +268,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         requestStub.throws(new Error('Negative contact'));
 
         const testEvent = {
-            amount : 1234.56,
+            amount: 1234.56,
             currency: 'ZAR',
             holderName: 'John Doe',
             accountNumber: 'POL122',
