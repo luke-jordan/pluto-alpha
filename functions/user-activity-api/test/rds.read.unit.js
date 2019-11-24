@@ -298,7 +298,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
         queryStub.resolves(['TEST_TAG::1', 'TEST_TAG::2', 'FINWORKS::POL1']);
 
-        const result = await rds.fetchFinWorksAccountNo(testAccountId);
+        const result = await rds.fetchAccountTagByPrefix(testAccountId, 'FINWORKS');
         logger('Result of FinWorks account number extraction:', result);
 
         expect(result).to.exist;

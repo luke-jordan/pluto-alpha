@@ -67,7 +67,7 @@ const eventHandler = proxyquire('../event-handler', {
     './persistence/rds': {
         'updateAccountTags': updateTagsStub,
         'updateTxFlags': updateTxFlagsStub,
-        'fetchFinWorksAccountNo': fetchAccNumberStub
+        'fetchAccountTagByPrefix': fetchAccNumberStub
     }
 });
 

@@ -255,9 +255,9 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
  */
 module.exports.updateAccountTags = async (systemWideUserId, tag) => {
     const userAccountTable = config.get('tables.accountLedger');
-    const updateTagQuery = `update ${userAccountTable} set tags = tags || '{${tag}}' where owner_user_id = $1 returning updated_time`;
+    const updateTagQuery = `update ${userAccountTable} set tags = array_append(tags, $1) where owner_user_id = $2 returning updated_time`;
 
-    const updateTagResult = await rdsConnection.updateRecord(updateTagQuery, [systemWideUserId]);
+    const updateTagResult = await rdsConnection.updateRecord(updateTagQuery, [tag, systemWideUserId]);
     logger('Account tags update resulted in:', updateTagResult);
 
     const updateMoment = moment(updateTagResult[0]['updated_time']);
@@ -269,9 +269,9 @@ module.exports.updateAccountTags = async (systemWideUserId, tag) => {
 module.exports.updateTxFlags = async (accountId, flag) => {
     const accountTxTable = config.get('tables.accountTransactions');
 
-    const updateQuery = `update ${accountTxTable} set flags = flags || '{${flag}}' where account_id = $1 returning updated_time`;
+    const updateQuery = `update ${accountTxTable} set flags = array_append(flags, $1) where account_id = $2 returning updated_time`;
 
-    const updateResult = await rdsConnection.updateRecord(updateQuery, [accountId]);
+    const updateResult = await rdsConnection.updateRecord(updateQuery, [flag, accountId]);
     logger('Account flag update resulted in:', updateResult);
 
     const updateMoment = moment(updateResult[0]['updated_time']);
@@ -280,14 +280,14 @@ module.exports.updateTxFlags = async (accountId, flag) => {
 };
 
 
-module.exports.fetchFinWorksAccountNo = async (accountId) => {
+module.exports.fetchAccountTagByPrefix = async (accountId, prefix) => {
     const userAccountTable = config.get('tables.accountLedger');
     const selectQuery = `select flags from ${userAccountTable} where account_id = $1`;
 
     const flags = await rdsConnection.selectQuery(selectQuery, [accountId]);
     logger('Got account flags:', flags);
 
-    return flags.filter((flag) => flag.includes('FINWORKS::'))[0].split('FINWORKS::')[1];
+    return flags.filter((flag) => flag.includes(`${prefix}::`))[0].split(`${prefix}::`)[1];
 };
 
 

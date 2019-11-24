@@ -226,7 +226,7 @@ const createFinWorksAccount = async (userDetails) => {
 };
 
 const fetchFWAccountNumber = async (accountId) => {
-    const accountNumber = await persistence.fetchFinWorksAccountNo(accountId);
+    const accountNumber = await persistence.fetchAccountTagByPrefix(accountId);
     logger('Got third party account number:', accountNumber);
 
     return accountNumber;
@@ -301,12 +301,12 @@ const handleWithdrawalEvent = async (eventBody) => {
     // const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
 };
 
-const handleAccountOpenedEvent = async (eventBody) => {
+const handleAccountOpened = async (eventBody) => {
     logger('Account open handled!: ', eventBody);
 };
 
 // merge with above?
-const handleAccountOpened = async (eventBody) => {
+const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
     const userProfile = await fetchUserProfile(eventBody.userId);
     // logger('Got user profile:', userProfile);
@@ -339,10 +339,10 @@ module.exports.handleUserEvent = async (snsEvent) => {
                 await handleWithdrawalEvent(eventBody);
                 break;
             case 'PASSWORD_SET':
-                await handleAccountOpenedEvent(eventBody);
+                await handleAccountOpened(eventBody);
                 break;
             case 'USER_CREATED_ACCOUNT':
-                await handleAccountOpened(eventBody);
+                await handleAccountOpenedEvent(eventBody);
                 break;
             default:
                 logger(`We don't handle ${eventType}, let it pass`);

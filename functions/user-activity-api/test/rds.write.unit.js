@@ -451,9 +451,9 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         const testFlag = 'FINWORKS_RECORDED';
         
         const accountTxTable = config.get('tables.accountTransactions');
-        const updateQuery = `update ${accountTxTable} set flags = flags || '{${testFlag}}' where account_id = $1 returning updated_time`;
+        const updateQuery = `update ${accountTxTable} set flags = array_append(flags, $1) where account_id = $2 returning updated_time`;
 
-        updateRecordStub.withArgs(updateQuery, [testAccountId]).resolves([{ 'updated_time': updateTime.format() }]);
+        updateRecordStub.withArgs(updateQuery, [testFlag, testAccountId]).resolves([{ 'updated_time': updateTime.format() }]);
 
         const updateResult = await rds.updateTxFlags(testAccountId, testFlag);
         logger('Result of flag update:', updateResult);
@@ -461,7 +461,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('updatedTime');
         expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testAccountId]);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testFlag, testAccountId]);
     });
 
     it('Updates transaction tags', async () => {
@@ -470,7 +470,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         const testTag = 'FINWORKS::POL1';
         
         const userAccountTable = config.get('tables.accountLedger');
-        const updateTagQuery = `update ${userAccountTable} set tags = tags || '{${testTag}}' where owner_user_id = $1 returning updated_time`;
+        const updateTagQuery = `update ${userAccountTable} set tags = array_append(tags, $1) where owner_user_id = $2 returning updated_time`;
 
         updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
 
@@ -480,7 +480,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('updatedTime');
         expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateTagQuery, [testUserId]);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateTagQuery, [testTag, testUserId]);
     });
 });
 

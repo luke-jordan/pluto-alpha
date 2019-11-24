@@ -214,7 +214,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const expectedPaymentInfoTest = {
             transactionId: testTransactionId,
             accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10 },
-            amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT', isTest: true }
+            amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
         };
 
         const saveEventToWrapper = testSavePendingBase();

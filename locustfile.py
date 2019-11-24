@@ -90,20 +90,20 @@ class TestAuthEndpoints(TaskSequence):
         print('Response status code (/referral/verify):', response.status_code)
         print('Response content (/referral/verify):', response.text)
 
-    @task    
-    def register_list(self):
-        data = {
-            'phoneOrEmail': self.email,
-            'countryCode3Letter': 'ZAF',
-            'source': 'ANDROID'
-        }
-        response = self.client.post(
-            url=f'{self.base_url}/register/list',
-            data=json.dumps(data),
-            headers={'authorization': 'Bearer ' + self.token}
-        )
-        print('Response status code (/register/list): %s' % response.status_code)
-        print('Response content (/register/list): %s' % response.text)
+    # @task    
+    # def register_list(self):
+    #     data = {
+    #         'phoneOrEmail': self.email,
+    #         'countryCode3Letter': 'ZAF',
+    #         'source': 'ANDROID'
+    #     }
+    #     response = self.client.post(
+    #         url=f'{self.base_url}/register/list',
+    #         data=json.dumps(data),
+    #         headers={'authorization': 'Bearer ' + self.token}
+    #     )
+    #     print('Response status code (/register/list): %s' % response.status_code)
+    #     print('Response content (/register/list): %s' % response.text)
 
     @seq_task(1)
     @task
@@ -280,13 +280,7 @@ class TestOpsEndpoints(TaskSet):
    
     @task
     def add_cash_initiate(self):
-        test_amount = '10'
-        data = {
-            'accountId': f'{self.account_id}',
-            'savedAmount': f'{test_amount}',
-            'savedCurrency': 'ZAR',
-            'savedUnit': 'HUNDREDTH_CENT',
-        }
+        data = { }
         response = self.client.post(
             url=f'{self.base_url}/addcash/initiate',
             data=json.dumps(data),
@@ -394,7 +388,7 @@ class TestOpsEndpoints(TaskSet):
 
 class AuthUser(HttpLocust):
     task_set = TestAuthEndpoints
-    min_wait = 5000 # min wait between user requests
+    min_wait = 5000 # min wait between user/locust requests
     max_wait = 9000 # max wait for response
 
 class OpsUser(HttpLocust):
