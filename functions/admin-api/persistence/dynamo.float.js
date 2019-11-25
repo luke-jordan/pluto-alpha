@@ -30,6 +30,11 @@ const FLOAT_KEY_SUBSTITUTIONS = {
     'comparator_rates': ':crrates'
 };
 
+// not strictly float related but used all over
+module.exports.verifyOtpPassed = async () => {
+    logger('Need to wire this up');
+};
+
 // todo : restrict admin access to certain clients/floats
 module.exports.listCountriesClients = async () => {
     logger('Fetching countries and clients');

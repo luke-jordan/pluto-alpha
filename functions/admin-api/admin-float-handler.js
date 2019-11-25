@@ -106,6 +106,7 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
             floatId,
             floatName: clientFloatItem.floatName,
             floatTimeZone: clientFloatItem.defaultTimezone,
+            floatComparisons: clientFloatItem.comparatorRates,
             floatBalance: wrapAmount(floatBalanceInfo.amount, floatBalanceInfo.unit, currency),
             floatMonthGrowth: wrapAmount(floatInflowInfo.amount, floatInflowInfo.unit, currency),
             bonusPoolBalance: wrapAmount(bonusPoolSum, floatBalanceInfo.unit, currency),
