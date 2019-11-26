@@ -15,7 +15,8 @@
         "floatLogTable": "float_data.float_log",
         "transactionTable": "transaction_data.core_transaction_ledger",
         "clientFloatTable": "ClientFloatTable",
-        "countryClientTable": "CountryClientTable"
+        "countryClientTable": "CountryClientTable",
+        "authCacheTable": "AuthSucceededEvents"
     },
     "lambdas": {
         "processAccrual": "float_accrue",
@@ -38,6 +39,9 @@
             "subject": "Float accrual results",
             "templateKey": "emails/floatAccrualEmail.html"
         }
+    },
+    "verification": {
+        "otpEnabled": true
     },
     "defaults": {
         "userCounts": {

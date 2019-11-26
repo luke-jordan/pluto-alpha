@@ -45,33 +45,32 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
         const testReferenceEvent = {
             clientId: testClientId,
             floatId: testFloatId,
-            intervalUnit: 'WHOLE_CURRENCY',
-            rateUnit: 'BASIS_POINT',
-            comparisonRates: {
-                'JPM': {
-                    'label': 'JP Morgan Chase',
-                    '999': 20,
-                    '9999': 50,
-                    '99999': 100
-                },
-                'WF': {
-                    'label': 'Wells Fargo',
-                    '100': 10,
-                    '1000': 100,
-                    '10000': 110
+            comparatorRates: {
+                intervalUnit: 'WHOLE_CURRENCY',
+                rateUnit: 'BASIS_POINT',
+                rates: {
+                    'JPM': {
+                        'label': 'JP Morgan Chase',
+                        '999': 20,
+                        '9999': 50,
+                        '99999': 100
+                    },
+                    'WF': {
+                        'label': 'Wells Fargo',
+                        '100': 10,
+                        '1000': 100,
+                        '10000': 110
+                    }
                 }
             }
         };
 
         const testInvocation = helper.wrapEvent(testReferenceEvent, testUserId, 'SYSTEM_ADMIN');
         
-        const expectedMap = { ...testReferenceEvent };
-        Reflect.deleteProperty(expectedMap, 'clientId');
-        Reflect.deleteProperty(expectedMap, 'floatId');
         const expectedUpdateArgs = {
             clientId: testClientId,
             floatId: testFloatId,
-            newComparatorMap: expectedMap
+            newComparatorMap: testReferenceEvent.comparatorRates
         };
 
         checkOtpVerifiedStub.resolves(true);
@@ -90,12 +89,14 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
         const malformedEvent = {
             clientId: testClientId,
             floatId: testFloatId,
-            intervalUnit: 'WHOLE_CURRENCY',
-            rateUnit: 'BASIS_POINT',
-            comparisonRates: {
-                'JPM': {
-                    'label': 'JP Morgan',
-                    '-10': 2.5
+            comparatorRates: {
+                intervalUnit: 'WHOLE_CURRENCY',
+                rateUnit: 'BASIS_POINT',
+                rates: {
+                    'JPM': {
+                        'label': 'JP Morgan',
+                        '-10': 2.5
+                    }
                 }
             }
         };
@@ -112,7 +113,7 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
     it('Should reject unauthorized requests', async () => {
         const badEvent = {
             floatId: testFloatId,
-            comparisonRates: {
+            comparatorRates: {
                 'JPM': {
                     '99': 450
                 }
@@ -134,10 +135,12 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
         const irrelevantEvent = {
             clientId: testClientId,
             floatId: testFloatId,
-            intervalUnit: 'WHOLE_CURRENCY',
-            rateUnit: 'BASIS_POINT',
-            comparisonRates: { 
-                'JPM': { }
+            comparatorRates: {
+                intervalUnit: 'WHOLE_CURRENCY',
+                rateUnit: 'BASIS_POINT',
+                rates: { 
+                    'JPM': { }
+                }
             }
         };
 

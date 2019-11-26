@@ -38,18 +38,19 @@ const validateReferenceRates = (params) => {
     if (!Reflect.has(params, 'clientId') || !Reflect.has(params, 'floatId')) {
         return { validated: false, reason: 'Must include float ID and client ID' };
     }
-
-    if (!Reflect.has(params, 'intervalUnit') || !Reflect.has(params, 'rateUnit')) {
+    
+    const ratesMap = params.comparatorRates;
+    if (!Reflect.has(ratesMap, 'intervalUnit') || !Reflect.has(ratesMap, 'rateUnit')) {
         return { validated: false, reason: 'Must specify units for intervals and rates' };
     }
 
-    const ratesMap = params.comparisonRates;
-    if (opsCommonUtil.isObjectEmpty(ratesMap)) {
+    const newRates = ratesMap.rates;
+    if (opsCommonUtil.isObjectEmpty(newRates)) {
         return { validated: false, reason: 'Must contain a map of comparison rates'};
     }
 
-    const rateFailures = Object.keys(ratesMap).
-        map((comparator) => validateComparatorDef(comparator, ratesMap[comparator])).
+    const rateFailures = Object.keys(newRates).
+        map((comparator) => validateComparatorDef(comparator, newRates[comparator])).
         filter((result) => !result.validated);
     
     logger('Found rate failures? : ', rateFailures);
@@ -83,11 +84,7 @@ module.exports.setFloatReferenceRates = async (event) => {
         }
 
         const { clientId, floatId } = params;
-        const mapToStore = { 
-            intervalUnit: params.intervalUnit,
-            rateUnit: params.rateUnit,
-            comparisonRates: params.comparisonRates
-        };
+        const mapToStore = params.comparatorRates;
 
         const resultOfUpdate = await dynamo.updateClientFloatVars({ clientId, floatId, newComparatorMap: mapToStore});
         logger('Result of updating reference map: ', resultOfUpdate);
