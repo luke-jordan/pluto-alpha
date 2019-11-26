@@ -1,7 +1,14 @@
 # Migrations
-This function is run on deploy and it automatically runs all .js files in the folder `functions/migrations/scrips/`.
+This function is run on deploy.
 
-You should create migration scripts in the `/scripts` folder following the naming format:
+It downloads all files in specific amazon s3 folders and stores said files in the local folder `functions/migrations/scrips/`.
+It then runs the downloaded files as migrations.
+
+You should create migration scripts as `.js` files in the Amazon s3 folders: 
+Staging Folder: `s3://jupiter.db.migration.scripts/staging`
+Production Folder: `s3://jupiter.db.migration.scripts/master` 
+ 
+The migration scripts should follow the naming format:
 
 ```
 00001_create-initial-tables.js

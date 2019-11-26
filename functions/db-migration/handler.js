@@ -12,8 +12,7 @@ AWS.config.update({
   'region': awsRegion
 });
 const migrationScriptsLocation = 'scripts';
-// const secretName = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
-const secretName = 'hello'
+const secretName = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
 const secretsClient = new AWS.SecretsManager({ region: awsRegion });
 
 const client = s3.createClient({
@@ -23,40 +22,42 @@ const BUCKET_NAME = config.get('aws.bucketName');
 const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('environment');
 
 
-const fetchDBUsernameAndPasswordFromSecrets = () => {
+const fetchDBUsernameAndPasswordFromSecrets = async () => {
     logger('Fetching secret with name: ', secretName);
-    return secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
-        if (err) {
-            logger('Error retrieving auth secret for: ', err);
-            throw err;
-        }
-        // Decrypts secret using the associated KMS CMK.
-        // Depending on whether the secret is a string or binary, one of these fields will be populated.
-        logger('No error, got the secret, moving onward: ', fetchedSecretData);
-        const secret = JSON.parse(fetchedSecretData.SecretString);
 
-        return {
-            user: secret.username,
-            password: secret.password
-        };
+    return new Promise((resolve) => {
+        secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
+            if (err) {
+                logger('Error retrieving auth secret for: ', err);
+                throw err;
+            }
+            // Decrypts secret using the associated KMS CMK.
+            // Depending on whether the secret is a string or binary, one of these fields will be populated.
+            logger('No error, got the secret, moving onward: ', fetchedSecretData);
+            const secret = JSON.parse(fetchedSecretData.SecretString);
+
+            resolve({
+                user: secret.username,
+                password: secret.password
+            });
+        });
     });
 };
 
-const fetchDBConnectionDetails = () => {
-  logger('Fetching database connection details');
-  const dbConfig = { ...config.get('db') };
+const fetchDBConnectionDetails = async () => {
+    logger('Fetching database connection details');
+    const dbConfig = { ...config.get('db') };
 
-  if (secretName) {
-      const { user, password } = fetchDBUsernameAndPasswordFromSecrets();
-      if (user && password) {
-          dbConfig.user = user;
-          dbConfig.password = password;
-      }
-  }
+    if (secretName) {
+        const { user, password } = await fetchDBUsernameAndPasswordFromSecrets();
+        if (user && password) {
+            dbConfig.user = user;
+            dbConfig.password = password;
+        }
+    }
 
-  return dbConfig;
+    return dbConfig;
 };
-
 
 const runMigrations = (dbConfig) => {
   logger('Running Migrations');
