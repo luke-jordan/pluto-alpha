@@ -1,16 +1,27 @@
 'use strict';
 
 const config = require('config');
-const logger = require('debug')('jupiter:migration:run_migrations');
+const logger = require('debug')('jupiter:migration:handler');
 const {migrate} = require('postgres-migrations');
 const AWS = require('aws-sdk');
+const s3 = require('s3');
 
+const awsRegion = config.get('aws.region');
 AWS.config.update({
-  'region': config.get('aws.region')
+  'region': awsRegion
 });
 const migrationScriptsLocation = 'scripts';
 const secretName = config.get(`secrets.names.master`);
-const secretsClient = new AWS.SecretsManager({ region: config.get('aws.region') });
+const secretsClient = new AWS.SecretsManager({ region: awsRegion });
+
+const client = s3.createClient({
+  s3Options: {
+    accessKeyId: config.get('secrets.accessKeyId'),
+    secretAccessKey: config.get('secrets.secretAccessKey'),
+    region: awsRegion
+  }
+});
+const BUCKET_PREFIX = 's3://';
 
 const fetchDBConnectionDetails = () => {
   logger('Fetching database connection details');
@@ -18,7 +29,7 @@ const fetchDBConnectionDetails = () => {
   logger('Fetching secret with name: ', secretName);
   secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
     if (err) {
-      logger('Error retrieving auth secret for RDS: ', err);
+      logger('Error retrieving auth secret for: ', err);
       throw err;
     }
     // Decrypts secret using the associated KMS CMK.
@@ -52,19 +63,56 @@ const runMigrations = (dbConfig) => {
   });
 };
 
+const syncFilesFromS3BucketToLocalDirectory = async (bucketName, pathToLocalDirectory) => {
+  logger(`Fetching script from s3 bucket ${BUCKET_PREFIX}${bucketName}`);
+
+  const params = {
+    localFile: pathToLocalDirectory,
+    s3Params: {
+      Bucket: bucketName,
+      Prefix: BUCKET_PREFIX
+    },
+    deleteRemoved: true
+  };
+
+  return client.downloadDir(params);
+};
+
+const handleFailureResponseOfDownloader = (err, event) => {
+    logger('unable to download:', err.stack);
+    return {
+      statusCode: 500,
+      body: JSON.stringify({
+        message: 'error while downloading files from s3 bucket',
+        input: event
+      })
+    };
+};
+
+const handleSuccessResponseOfDownloader = async (dbConfig, event) => {
+    logger(
+        `Completed download of files from s3 bucket`
+    );
+    const message = await runMigrations(dbConfig);
+    return {
+      statusCode: 200,
+      body: JSON.stringify({
+        message,
+        input: event
+      })
+    };
+};
+
 module.exports.migrate = async (event) => {
   logger('Handling request to run migrations');
   const dbConfig = fetchDBConnectionDetails();
-  const message = await runMigrations(dbConfig);
 
-  const payload = {
-    statusCode: 200,
-    body: JSON.stringify({
-      message,
-      input: event
-    })
-  };
+  const bucketName = config.get('aws.bucketName');
+  const downloader = syncFilesFromS3BucketToLocalDirectory(bucketName, migrationScriptsLocation);
 
-  logger(`sending response for request to run migrations with payload: ${JSON.stringify(payload)}`);
-  return payload;
+  downloader.on('error', (err) => handleFailureResponseOfDownloader(err, event));
+  downloader.on('progress', () => {
+    logger('progress', downloader.progressAmount, downloader.progressTotal);
+  });
+  downloader.on('end', () => handleSuccessResponseOfDownloader(dbConfig, event));
 };

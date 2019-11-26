@@ -11,10 +11,11 @@
   },
   "author": "Bolu Ajibawo",
   "dependencies": {
-    "aws-sdk": "^2.574.0",
+    "aws-sdk": "^2.503.0",
     "config": "^3.2.4",
     "debug": "^4.1.1",
-    "postgres-migrations": "^3.0.2"
+    "postgres-migrations": "^3.0.2",
+    "s3": "^4.4.0"
   },
   "devDependencies": {
     "chai": "^4.2.0",

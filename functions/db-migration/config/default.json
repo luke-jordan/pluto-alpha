@@ -1,6 +1,7 @@
 {
     "aws": {
-        "region": "us-east-1"
+        "region": "us-east-1",
+        "bucketName": "jupiter.db.migration.scripts/staging/"
     },
     "db": {
         "host": "localhost",
@@ -8,5 +9,9 @@
         "database": "jupiter",
         "user": "master",
         "password": "alpineskiing"
+    },
+    "secrets": {
+        "accessKeyId": "xxx",
+        "secretAccessKey": "xxx"
     }
 }
