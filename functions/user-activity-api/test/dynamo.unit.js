@@ -40,7 +40,7 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
         fetchStub.withArgs(config.get('tables.clientFloatVars'), { 
             clientId: testClientId,
             floatId: testFloatId
-        }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency']).
+        }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates']).
         resolves(expectedFloatParameters);
     });
 
