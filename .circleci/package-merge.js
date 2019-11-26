@@ -10,7 +10,6 @@ const functionFolders = [
     './functions/admin-api',
     './functions/boost-api',
     './functions/audience-selection',
-    './functions/migration',
     './functions/float-api',
     './functions/user-activity-api',
     './functions/user-existence-api',
