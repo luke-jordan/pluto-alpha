@@ -301,17 +301,10 @@ const handleWithdrawalEvent = async (eventBody) => {
     // const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
 };
 
-const handleAccountOpened = async (eventBody) => {
-    logger('Account open handled!: ', eventBody);
-};
-
-// merge with above?
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
     const userProfile = await fetchUserProfile(eventBody.userId);
-    // logger('Got user profile:', userProfile);
     const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
-    // logger('Assembled user details:', userDetails);
     const FWAccountCreationResult = await createFinWorksAccount(userDetails);
     if (typeof FWAccountCreationResult !== 'object' || !Object.keys(FWAccountCreationResult).includes('accountNumber')) {
         throw new Error(`Error creating user FinWorks account: ${FWAccountCreationResult}`);
@@ -337,9 +330,6 @@ module.exports.handleUserEvent = async (snsEvent) => {
                 break;
             case 'WITHDRAWAL_EVENT_CONFIRMED':
                 await handleWithdrawalEvent(eventBody);
-                break;
-            case 'PASSWORD_SET':
-                await handleAccountOpened(eventBody);
                 break;
             case 'USER_CREATED_ACCOUNT':
                 await handleAccountOpenedEvent(eventBody);

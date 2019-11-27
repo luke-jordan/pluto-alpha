@@ -28,11 +28,6 @@ const resetStubs = (...stubs) => {
 
 describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
 
-    const expectedHeaders = {
-        'Content-Type': 'application/json',
-        'Access-Control-Allow-Origin': '*'
-    };
-
     beforeEach(() => {
         resetStubs(requestStub, getObjectStub);
     });
@@ -59,9 +54,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const resultOfRegistration = await handler.createAccount(testEvent);
         logger('Result of FinWorks account creation:', resultOfRegistration);
 
-        expect(resultOfRegistration.statusCode).to.deep.equal(200);
-        expect(resultOfRegistration.headers).to.deep.equal(expectedHeaders);
-        expect(resultOfRegistration.body).to.deep.equal(JSON.stringify({ accountNumber: 'POL23' }));
+        expect(resultOfRegistration).to.exist;
+        expect(resultOfRegistration).to.deep.equal({ accountNumber: 'POL23' });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -81,16 +75,23 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.throws(new Error('Negative contact'));
+        requestStub.resolves({
+            errors: [{
+                description: 'A person matching the idNumber already exists',
+                code: 'ExistingPersonWithIDNumberFound'
+            }]
+        });
 
         const testEvent = { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName };
 
         const resultOfRegistration = await handler.createAccount(testEvent);
         logger('Result of FinWorks account creation on error:', resultOfRegistration);
 
-        expect(resultOfRegistration.statusCode).to.deep.equal(500);
-        expect(resultOfRegistration.headers).to.deep.equal(expectedHeaders);
-        expect(resultOfRegistration.body).to.deep.equal(JSON.stringify('Negative contact'));
+        expect(resultOfRegistration).to.exist;
+        expect(resultOfRegistration).to.have.property('result', 'ERROR');
+        expect(resultOfRegistration).to.have.property('details');
+        const parsedError = JSON.parse(resultOfRegistration.details);
+        expect(parsedError).to.have.property('errors');
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -116,9 +117,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const resultOfInvestement = await handler.addCash(testEvent);
         logger('Investment result from third party:', resultOfInvestement);
 
-        expect(resultOfInvestement.statusCode).to.deep.equal(200);
-        expect(resultOfInvestement.headers).to.deep.equal(expectedHeaders);
-        expect(resultOfInvestement.body).to.deep.equal(JSON.stringify({ }));
+        expect(resultOfInvestement).to.exist;
+        expect(resultOfInvestement).to.deep.equal({ });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -137,16 +137,23 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.throws(new Error('Negative contact'));
+        requestStub.resolves({
+            errors: [{
+                description: 'Account is inactive',
+                code: 'AccountInactiveError'
+            }]
+        });
 
         const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
 
         const resultOfInvestement = await handler.addCash(testEvent);
         logger('Investment result from third party:', resultOfInvestement);
 
-        expect(resultOfInvestement.statusCode).to.deep.equal(500);
-        expect(resultOfInvestement.headers).to.deep.equal(expectedHeaders);
-        expect(resultOfInvestement.body).to.deep.equal(JSON.stringify('Negative contact'));
+        expect(resultOfInvestement).to.exist;
+        expect(resultOfInvestement).to.have.property('result', 'ERROR');
+        expect(resultOfInvestement).to.have.property('details');
+        const parsedError = JSON.parse(resultOfInvestement.details);
+        expect(parsedError).to.have.deep.equal({ errors: [{ description: 'Account is inactive', code: 'AccountInactiveError' }]});
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -170,9 +177,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const accountMarketValue = await handler.getMarketValue(testEvent);
         logger('Result of market value extraction:', accountMarketValue);
 
-        expect(accountMarketValue.statusCode).to.deep.equal(200);
-        expect(accountMarketValue.headers).to.deep.equal(expectedHeaders);
-        expect(accountMarketValue.body).to.deep.equal(JSON.stringify({ amount: '599.9900', currency: 'ZAR' }));
+        expect(accountMarketValue).to.exist;
+        expect(accountMarketValue).to.deep.equal({ amount: '599.9900', currency: 'ZAR' });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -189,16 +195,23 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.throws(new Error('Negative contact'));
+        requestStub.resolves({
+            errors: [{
+                description: 'Account is inactive',
+                code: 'AccountInactiveError'
+            }]
+        });
 
         const testEvent = { accountNumber: testAccountNumber };
 
         const accountMarketValue = await handler.getMarketValue(testEvent);
         logger('Result of market value extraction:', accountMarketValue);
 
-        expect(accountMarketValue.statusCode).to.deep.equal(500);
-        expect(accountMarketValue.headers).to.deep.equal(expectedHeaders);
-        expect(accountMarketValue.body).to.deep.equal(JSON.stringify('Negative contact'));
+        expect(accountMarketValue).to.exist;
+        expect(accountMarketValue).to.have.property('result', 'ERROR');
+        expect(accountMarketValue).to.have.property('details');
+        const parsedError = JSON.parse(accountMarketValue.details);
+        expect(parsedError).to.have.deep.equal({ errors: [{ description: 'Account is inactive', code: 'AccountInactiveError' }]});
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -223,7 +236,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ statusCode: 201 });
+        requestStub.resolves({ });
 
         const testEvent = {
             amount: 1234.56,
@@ -238,9 +251,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const resultOfTransmission = await handler.sendWithdrawal(testEvent);
         logger('Investment result from third party:', resultOfTransmission);
 
-        expect(resultOfTransmission.statusCode).to.deep.equal(200);
-        expect(resultOfTransmission.headers).to.deep.equal(expectedHeaders);
-        expect(resultOfTransmission.body).to.deep.equal(JSON.stringify({ statusCode: 201 }));
+        expect(resultOfTransmission).to.exist;
+        expect(resultOfTransmission).to.deep.equal({ });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -265,7 +277,12 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.throws(new Error('Negative contact'));
+        requestStub.resolves({
+            errors: [{
+                description: 'Account is inactive',
+                code: 'AccountInactiveError'
+            }]
+        });
 
         const testEvent = {
             amount: 1234.56,
@@ -280,9 +297,11 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const resultOfTransmission = await handler.sendWithdrawal(testEvent);
         logger('Investment result from third party:', resultOfTransmission);
 
-        expect(resultOfTransmission.statusCode).to.deep.equal(500);
-        expect(resultOfTransmission.headers).to.deep.equal(expectedHeaders);
-        expect(resultOfTransmission.body).to.deep.equal(JSON.stringify('Negative contact'));
+        expect(resultOfTransmission).to.exist;
+        expect(resultOfTransmission).to.have.property('result', 'ERROR');
+        expect(resultOfTransmission).to.have.property('details');
+        const parsedError = JSON.parse(resultOfTransmission.details);
+        expect(parsedError).to.have.deep.equal({ errors: [{ description: 'Account is inactive', code: 'AccountInactiveError' }]});
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });

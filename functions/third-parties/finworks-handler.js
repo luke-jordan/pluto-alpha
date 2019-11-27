@@ -18,7 +18,6 @@ const fetchAccessCreds = async () => {
     return [crt.Body.toString('ascii'), pem.Body.toString('ascii')];
 };
 
-
 const assembleRequest = (method, endpoint, data) => {
     const options = {
         method,
@@ -32,7 +31,6 @@ const assembleRequest = (method, endpoint, data) => {
     return options;
 };
 
-
 module.exports.createAccount = async (event) => {
     try {
         const params = opsUtil.extractParamsFromEvent(event);
@@ -44,14 +42,17 @@ module.exports.createAccount = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        return opsUtil.wrapResponse(response, 200);
+        if (!Reflect.has(response, 'accountNumber')) {
+            throw new Error(JSON.stringify(response));
+        }
+
+        return response;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse(err.message, 500);
+        return { result: 'ERROR', details: err.message };
     }
 };
-
 
 module.exports.addCash = async (event) => {
     try {
@@ -65,14 +66,17 @@ module.exports.addCash = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        return opsUtil.wrapResponse(response, 200);
+        if (Reflect.has(response, 'errors')) {
+            throw new Error(JSON.stringify(response));
+        }
+
+        return response;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse(err.message, 500);
+        return { result: 'ERROR', details: err.message };
     }
 };
-
 
 module.exports.getMarketValue = async (event) => {
     try {
@@ -85,14 +89,17 @@ module.exports.getMarketValue = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        return opsUtil.wrapResponse(response, 200);
+        if (Reflect.has(response, 'errors')) {
+            throw new Error(JSON.stringify(response));
+        }
+
+        return response;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse(err.message, 500);
+        return { result: 'ERROR', details: err.message };
     }
 };
-
 
 module.exports.sendWithdrawal = async (event) => {
     try {
@@ -117,10 +124,14 @@ module.exports.sendWithdrawal = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        return opsUtil.wrapResponse(response, 200);
+        if (Reflect.has(response, 'errors')) {
+            throw new Error(JSON.stringify(response));
+        }
+
+        return response;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse(err.message, 500);
+        return { result: 'ERROR', details: err.message };
     }
 };
