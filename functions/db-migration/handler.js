@@ -12,17 +12,24 @@ AWS.config.update({
   'region': awsRegion
 });
 const migrationScriptsLocation = 'scripts';
-const secretName = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
+const SECRET_NAME = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
 const secretsClient = new AWS.SecretsManager({ region: awsRegion });
 
-const client = s3.createClient({
+const customS3Client = s3.createClient({
     s3Client: new AWS.S3()
 });
 const BUCKET_NAME = config.get('aws.bucketName');
 const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('environment');
+const DOWNLOAD_PARAMS = {
+    localDir: migrationScriptsLocation,
+    s3Params: {
+        Bucket: BUCKET_NAME,
+        Prefix: FOLDER_CONTAINING_MIGRATION_SCRIPTS
+    },
+    deleteRemoved: true
+};
 
-
-const fetchDBUsernameAndPasswordFromSecrets = async () => {
+module.exports.fetchDBUserAndPasswordFromSecrets = async (secretName) => {
     logger('Fetching secret with name: ', secretName);
 
     return new Promise((resolve) => {
@@ -44,19 +51,29 @@ const fetchDBUsernameAndPasswordFromSecrets = async () => {
     });
 };
 
-const fetchDBConnectionDetails = async () => {
+const updateDBConfigUserAndPassword = (dbConfig, userAndPassword) => {
+    return { ...dbConfig, ...userAndPassword };
+};
+
+const handleDBConfigUsingSecrets = async (secretName, dbConfig) => {
+    const { user, password } = await exports.fetchDBUserAndPasswordFromSecrets(secretName);
+    if (!user || !password) {
+        return dbConfig;
+    }
+
+    const userAndPassword = { user, password };
+    return updateDBConfigUserAndPassword(dbConfig, userAndPassword);
+};
+
+module.exports.fetchDBConnectionDetails = async (secretName) => {
     logger('Fetching database connection details');
     const dbConfig = { ...config.get('db') };
 
-    if (secretName) {
-        const { user, password } = await fetchDBUsernameAndPasswordFromSecrets();
-        if (user && password) {
-            dbConfig.user = user;
-            dbConfig.password = password;
-        }
+    if (!secretName) {
+        return dbConfig;
     }
 
-    return dbConfig;
+    return handleDBConfigUsingSecrets(secretName, dbConfig);
 };
 
 const runMigrations = (dbConfig) => {
@@ -98,21 +115,12 @@ const handleProgressResponseOfDownloader = (progressAmount, progressTotal) => {
     );
 };
 
-const downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
+module.exports.downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
     logger(
         `Fetching scripts from s3 bucket: ${BUCKET_NAME}/${FOLDER_CONTAINING_MIGRATION_SCRIPTS} to local directory: ${BUCKET_NAME}`
     );
 
-    const params = {
-        localDir: migrationScriptsLocation,
-        s3Params: {
-            Bucket: BUCKET_NAME,
-            Prefix: FOLDER_CONTAINING_MIGRATION_SCRIPTS
-        },
-        deleteRemoved: true
-    };
-
-    const downloader = client.downloadDir(params);
+    const downloader = customS3Client.downloadDir(DOWNLOAD_PARAMS);
     
     downloader.on('error', (err) => handleFailureResponseOfDownloader(err));
     downloader.on('progress', () => handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
@@ -122,8 +130,8 @@ const downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
 module.exports.migrate = async () => {
   logger('Handling request to run migrations');
   try {
-      const dbConfig = await fetchDBConnectionDetails();
-      await downloadFilesFromS3AndRunMigrations(dbConfig);
+      const dbConfig = await exports.fetchDBConnectionDetails(SECRET_NAME);
+      return await exports.downloadFilesFromS3AndRunMigrations(dbConfig);
   } catch (error) {
     logger(`Error occurred while handling request to run migrations. Error: ${JSON.stringify(error)}`);
       return {
@@ -134,5 +142,3 @@ module.exports.migrate = async () => {
       };
   }
 };
-
-
