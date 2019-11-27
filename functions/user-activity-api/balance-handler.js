@@ -88,7 +88,9 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
     }
 
     if (floatProjectionVars.comparatorRates) {
-      resultObject.comparatorRates = floatProjectionVars.comparatorRates;
+      const referenceRateDeductions = floatProjectionVars.bonusPoolShareOfAccrual + floatProjectionVars.clientShareOfAccrual;
+      const referenceRate = Math.floor(floatProjectionVars.accrualRateAnnualBps * (1 - referenceRateDeductions));
+      resultObject.comparatorRates = { referenceRate, ...floatProjectionVars.comparatorRates };
     }
 
     return resultObject;

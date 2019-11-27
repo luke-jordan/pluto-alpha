@@ -24,6 +24,9 @@ resource "aws_lambda_function" "admin_comparators_edit" {
           {
               "aws": {
                   "region": "${var.aws_default_region[terraform.workspace]}"
+              },
+              "verification": {
+                "otpEnabled": false
               }
           }
       )}"
@@ -79,4 +82,9 @@ resource "aws_iam_role_policy_attachment" "admin_comparators_edit_vpc_execution_
 resource "aws_iam_role_policy_attachment" "admin_comparators_edit_table_access" {
   role = "${aws_iam_role.admin_comparators_edit_role.name}"
   policy_arn = "${aws_iam_policy.admin_client_float_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "admin_comparators_auth_cache_read" {
+  role = "${aws_iam_role.admin_comparators_edit_role.name}"
+  policy_arn = var.auth_cache_read_policy_arn[terraform.workspace]
 }
