@@ -73,7 +73,6 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
 
     resultObject.currentBalance = createBalanceDict(currentBalanceAmount.decimalPlaces(0).toNumber(), unit, currency, timeForBalance);
 
-    logger('Doing a loop');
     if (daysToProject > 0) {
       let currentProjectedBalance = endOfTodayBalance;
       const balanceSubsequentDays = [];
@@ -87,7 +86,10 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
 
       resultObject.balanceSubsequentDays = balanceSubsequentDays;
     }
-    logger('Finished loop');
+
+    if (floatProjectionVars.comparatorRates) {
+      resultObject.comparatorRates = floatProjectionVars.comparatorRates;
+    }
 
     return resultObject;
 };

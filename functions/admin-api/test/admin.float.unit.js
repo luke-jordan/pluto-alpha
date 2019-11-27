@@ -99,6 +99,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                     floatId: testFloatId,
                     floatName: testFloatName,
                     floatTimeZone: testTimeZone,
+                    floatComparisons: {},
                     floatBalance: { amount: 100, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
                     floatMonthGrowth: { amount: 200, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
                     bonusPoolBalance: { amount: 500, currency: testCurrency, unit: 'HUNDREDTH_CENT' },

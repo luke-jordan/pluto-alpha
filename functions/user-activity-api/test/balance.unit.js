@@ -39,6 +39,7 @@ const testAccrualRateBps = 250;
 const testBonusPoolShare = 0.1; // percent of an accrual (not bps)
 const testClientCoShare = 0.05; // as above
 const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce projected increment by
+const testComparatorRates = { 'intervalUnit': 'WHOLE_CURRENCY' };
 
 const divisorForAccrual = 365;
 const expectedNetAccrualRateBps = new BigNumber(testAccrualRateBps / divisorForAccrual).
@@ -151,7 +152,8 @@ describe('Fetches user balance and makes projections', () => {
             'epochMilli': testTimeEOD.valueOf(),
             'timezone': testTimeZone
         },
-        balanceSubsequentDays: expectedBalanceSubsequentDays
+        balanceSubsequentDays: expectedBalanceSubsequentDays,
+        comparatorRates: testComparatorRates
     };
 
     // logger('Expected body: ', wellFormedResultBody);
@@ -195,7 +197,8 @@ describe('Fetches user balance and makes projections', () => {
             clientShareOfAccrual: testClientCoShare,
             prudentialFactor: testPrudentialDiscountFactor,
             defaultTimezone: 'America/New_York',
-            currency: 'USD'
+            currency: 'USD',
+            comparatorRates: testComparatorRates
         });
     });
 

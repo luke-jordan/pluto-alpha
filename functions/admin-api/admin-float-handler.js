@@ -10,6 +10,7 @@ const AWS = require('aws-sdk');
 
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
+const camelCaseKeys = require('camelcase-keys');
 
 const DESC_MAP = require('./descriptions');
 const FLAG_ALERTS = config.get('defaults.floatAlerts.redFlagTypes');
@@ -102,10 +103,13 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
         const bonusOutflowSum = sumBonusPools(bonusOutFlow.get(floatId), currency);
         const bonusInflowSum = sumBonusPools(bonusInflow.get(floatId), currency);
         
+        const floatComparisons = clientFloatItem.comparatorRates ? camelCaseKeys(clientFloatItem.comparatorRates) : {};
+        
         const floatItem = {
             floatId,
             floatName: clientFloatItem.floatName,
             floatTimeZone: clientFloatItem.defaultTimezone,
+            floatComparisons,
             floatBalance: wrapAmount(floatBalanceInfo.amount, floatBalanceInfo.unit, currency),
             floatMonthGrowth: wrapAmount(floatInflowInfo.amount, floatInflowInfo.unit, currency),
             bonusPoolBalance: wrapAmount(bonusPoolSum, floatBalanceInfo.unit, currency),
