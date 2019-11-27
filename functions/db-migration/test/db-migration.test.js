@@ -72,7 +72,6 @@ describe('DB Migration', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(sampleSuccessResponse);
 
-        // expect stubs to have been called with arguments and in order
         expect(fetchDBConnectionDetailsStub).to.have.been.calledWith();
         expect(downloadFilesFromS3AndRunMigrationsStub).to.have.been.calledWith(sampleDbConfig);
 
@@ -90,21 +89,28 @@ describe('DB Migration', () => {
         expect(fetchDBConnectionDetailsStub).to.have.been.calledWith();
     });
 
-    // test fetchDBConnectionDetails without passing in secretName
     it(`should fetch db connection details when 'secretName' is 'undefined'`, async () => {
         const result = await fetchDBConnectionDetails();
         expect(result).to.exist;
         expect(result).to.deep.equal(sampleDbConfig);
     });
 
-    // test fetchDBConnectionDetails while passing in secretName
-    it(`should fetch db connection details when 'secretName' exists`, async () => {
-       fetchDBUserAndPasswordFromSecretsStub.withArgs(sampleSecretName).resolves(sampleUserAndPasswordFromSecrets);
-       
-       const result = await fetchDBConnectionDetails(sampleSecretName);
-       expect(result).to.exist;
-       expect(result).to.deep.equal({ ...sampleDbConfig, ...sampleUserAndPasswordFromSecrets });
-       expect(fetchDBUserAndPasswordFromSecretsStub).to.have.been.calledWith(sampleSecretName);
+    it(`should fetch db connection details when 'secretName' exists works correctly`, async () => {
+        fetchDBUserAndPasswordFromSecretsStub.withArgs(sampleSecretName).resolves(sampleUserAndPasswordFromSecrets);
+
+        const result = await fetchDBConnectionDetails(sampleSecretName);
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ ...sampleDbConfig, ...sampleUserAndPasswordFromSecrets });
+        expect(fetchDBUserAndPasswordFromSecretsStub).to.have.been.calledWith(sampleSecretName);
+    });
+
+    it(`should fetch db connection details when 'secretName' exists but 'user' and 'password' not found`, async () => {
+        fetchDBUserAndPasswordFromSecretsStub.withArgs(sampleSecretName).resolves({});
+
+        const result = await fetchDBConnectionDetails(sampleSecretName);
+        expect(result).to.exist;
+        expect(result).to.deep.equal(sampleDbConfig);
+        expect(fetchDBUserAndPasswordFromSecretsStub).to.have.been.calledWith(sampleSecretName);
     });
 
     it(`should run migrations successfully`, async () => {
@@ -133,9 +139,4 @@ describe('DB Migration', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal({ ...sampleDbConfig, user: sampleUser, password: samplePassword });
     });
-
-
-    // test handleDBConfigUsingSecrets
-
-    // test updateDBConfigUserAndPassword
 });
