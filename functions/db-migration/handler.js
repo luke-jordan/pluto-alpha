@@ -51,9 +51,7 @@ module.exports.fetchDBUserAndPasswordFromSecrets = async (secretName) => {
     });
 };
 
-const updateDBConfigUserAndPassword = (dbConfig, userAndPassword) => {
-    return { ...dbConfig, ...userAndPassword };
-};
+module.exports.updateDBConfigUserAndPassword = (dbConfig, user, password) => ({ ...dbConfig, user, password });
 
 const handleDBConfigUsingSecrets = async (secretName, dbConfig) => {
     const { user, password } = await exports.fetchDBUserAndPasswordFromSecrets(secretName);
@@ -61,8 +59,7 @@ const handleDBConfigUsingSecrets = async (secretName, dbConfig) => {
         return dbConfig;
     }
 
-    const userAndPassword = { user, password };
-    return updateDBConfigUserAndPassword(dbConfig, userAndPassword);
+    return exports.updateDBConfigUserAndPassword(dbConfig, user, password);
 };
 
 module.exports.fetchDBConnectionDetails = async (secretName) => {
@@ -78,29 +75,32 @@ module.exports.fetchDBConnectionDetails = async (secretName) => {
 
 const runMigrations = (dbConfig) => {
   logger('Running Migrations');
+  const finalDBConfig = {
+      database: dbConfig.database,
+      user: dbConfig.user,
+      password: dbConfig.password,
+      host: dbConfig.host,
+      port: dbConfig.port
+  };
 
-  migrate({
-    database: dbConfig.database,
-    user: dbConfig.user,
-    password: dbConfig.password,
-    host: dbConfig.host,
-    port: dbConfig.port
-  }, migrationScriptsLocation).then(() => {
-    logger('Migrations ran successfully');
-  }).catch((error) => {
-    logger(`Error occurred while running migrations. Error: ${JSON.stringify(error)}`);
-    throw error;
-  });
+  migrate(finalDBConfig, migrationScriptsLocation).
+      then(() => {
+        logger('Migrations ran successfully');
+      }).catch((error) => {
+        logger(`Error occurred while running migrations. Error: ${JSON.stringify(error)}`);
+        throw error;
+      });
 };
 
-const handleFailureResponseOfDownloader = (error) => {
+module.exports.handleFailureResponseOfDownloader = (error) => {
     logger('Error while downloading files from s3 bucket. Error stack:', error.stack);
     throw error;
 };
 
-const successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig) => {
+module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig) => {
     logger(`Completed download of files from s3 bucket`);
     await runMigrations(dbConfig);
+
     return {
         statusCode: httpStatus.OK,
         body: JSON.stringify({
@@ -109,7 +109,7 @@ const successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig) => {
     };
 };
 
-const handleProgressResponseOfDownloader = (progressAmount, progressTotal) => {
+module.exports.handleProgressResponseOfDownloader = (progressAmount, progressTotal) => {
     logger(
         `Progress in downloading files from s3 bucket. Progress Amount: ${progressAmount}, Progress Total: ${progressTotal}`
     );
@@ -122,9 +122,9 @@ module.exports.downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
 
     const downloader = customS3Client.downloadDir(DOWNLOAD_PARAMS);
     
-    downloader.on('error', (err) => handleFailureResponseOfDownloader(err));
-    downloader.on('progress', () => handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
-    downloader.on('end', () => successfullyDownloadedFilesProceedToRunMigrations(dbConfig));
+    downloader.on('error', (err) => exports.handleFailureResponseOfDownloader(err));
+    downloader.on('progress', () => exports.handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
+    downloader.on('end', () => exports.successfullyDownloadedFilesProceedToRunMigrations(dbConfig));
 };
 
 module.exports.migrate = async () => {

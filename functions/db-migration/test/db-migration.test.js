@@ -4,12 +4,25 @@ const chai = require('chai');
 const expect = chai.expect;
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+const proxyquire = require('proxyquire').noCallThru();
+const migrationScriptsLocation = 'scripts';
 
-const migrationScript = require('../handler');
+const actualMigrationStub = sinon.stub();
+
+const MockPostgresMigrations = {
+    migrate: actualMigrationStub
+};
+
+const migrationScript = proxyquire('../handler', {
+    'postgres-migrations': MockPostgresMigrations
+});
 const {
     migrate,
     fetchDBConnectionDetails,
-    downloadFilesFromS3AndRunMigrations
+    successfullyDownloadedFilesProceedToRunMigrations,
+    handleFailureResponseOfDownloader,
+    handleProgressResponseOfDownloader,
+    updateDBConfigUserAndPassword
 } = migrationScript;
 
 
@@ -94,17 +107,33 @@ describe('DB Migration', () => {
        expect(fetchDBUserAndPasswordFromSecretsStub).to.have.been.calledWith(sampleSecretName);
     });
 
-    // test downloadFilesFromS3AndRunMigrations
-    it(`should download files from the amazon s3 bucket`, async () => {
+    it(`should run migrations successfully`, async () => {
+        actualMigrationStub.withArgs(sampleDbConfig, migrationScriptsLocation).resolves();
+        const result = await successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig);
+        expect(result).to.exist;
+        expect(result).to.deep.equal(sampleSuccessResponse);
+        expect(actualMigrationStub).to.have.been.calledWith(sampleDbConfig, migrationScriptsLocation);
+    });
 
-        // await downloadFilesFromS3AndRunMigrations(sampleDbConfig);
-        
-    })
+    it(`handle progress response of downloader should return undefined`, async () => {
+        const result = await handleProgressResponseOfDownloader();
+        expect(result).to.be.undefined;
+    });
 
+    it(`handle failure response of downloader throws an error`, async () => {
+        const errorMessage = 'error during download';
+        expect(() => handleFailureResponseOfDownloader(errorMessage)).to.throw(errorMessage);
+    });
 
-    // test successfullyDownloadedFilesProceedToRunMigrations
+    it(`should update the database config when given the 'user' and 'password'`, async () => {
+        const sampleUser = 'harry';
+        const samplePassword = 'potter';
+        const result = await updateDBConfigUserAndPassword(sampleDbConfig, sampleUser, samplePassword);
 
-    // test run migrations
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ ...sampleDbConfig, user: sampleUser, password: samplePassword });
+    });
+
 
     // test handleDBConfigUsingSecrets
 
