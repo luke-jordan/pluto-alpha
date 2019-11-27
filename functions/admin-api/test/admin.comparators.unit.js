@@ -78,7 +78,7 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
 
         const testResult = await handler.setFloatReferenceRates(testInvocation);
         expect(testResult).to.exist;
-        expect(testResult).to.deep.equal({ statusCode: 200 });
+        expect(testResult).to.deep.equal({ headers: helper.expectedHeaders, statusCode: 200 });
     
         expect(checkOtpVerifiedStub).to.have.been.calledOnceWithExactly(testUserId);
         // expect(fetchClientFloatVarsStub).to.have.been.calledOnce;
@@ -106,7 +106,7 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
         const testResult = await handler.setFloatReferenceRates(testInvocation);
         
         expect(testResult).to.exist;
-        expect(testResult).to.deep.equal({ statusCode: 400, body: JSON.stringify('Error for JPM, error entries: -10: 2.5') });
+        expect(testResult).to.deep.equal({ headers: helper.expectedHeaders, statusCode: 400, body: JSON.stringify('Error for JPM, error entries: -10: 2.5') });
         helper.expectNoCalls(checkOtpVerifiedStub, fetchClientFloatVarsStub, updateClientFloatVarsStub);
     });
 
@@ -150,7 +150,7 @@ describe('*** UNIT TEST SET REFERENCE RATES FOR FLOAT ***', () => {
 
         const testResult = await handler.setFloatReferenceRates(testInvocation);
         expect(testResult).to.exist;
-        expect(testResult).to.deep.equal({ statusCode: 401, body: JSON.stringify({ result: 'OTP_NEEDED' }) });
+        expect(testResult).to.deep.equal({ headers: helper.expectedHeaders, statusCode: 401, body: JSON.stringify({ result: 'OTP_NEEDED' }) });
         
         expect(checkOtpVerifiedStub).to.have.been.calledOnceWithExactly(testUserId);
         helper.expectNoCalls(fetchClientFloatVarsStub, updateClientFloatVarsStub);

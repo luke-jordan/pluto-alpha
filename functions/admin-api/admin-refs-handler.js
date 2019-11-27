@@ -73,14 +73,16 @@ module.exports.setFloatReferenceRates = async (event) => {
         const { validated, reason } = validateReferenceRates(params);
 
         if (!validated) {
-            return { statusCode: 400, body: JSON.stringify(reason) };
+            const invalidStatusCode = 400;
+            return opsCommonUtil.wrapResponse(reason, invalidStatusCode);
         }
 
         const adminUserId = event.requestContext.authorizer.systemWideUserId;
         const adminPassedOtp = await dynamo.verifyOtpPassed(adminUserId);
 
         if (!adminPassedOtp) {
-            return { statusCode: 401, body: JSON.stringify({ result: 'OTP_NEEDED' }) };
+            const otpNeededStatusCode = 401;
+            return opsCommonUtil.wrapResponse({ result: 'OTP_NEEDED' }, otpNeededStatusCode);
         }
 
         const { clientId, floatId } = params;
@@ -90,7 +92,7 @@ module.exports.setFloatReferenceRates = async (event) => {
         logger('Result of updating reference map: ', resultOfUpdate);
 
         if (resultOfUpdate.result === 'SUCCESS') {
-            return { statusCode: 200 };
+            return adminUtil.okayResponse();
         }
 
         throw new Error('Failure in updating dynamo, or some other unspecified error');
