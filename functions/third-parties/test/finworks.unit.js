@@ -42,12 +42,13 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'POST',
             uri: testEndpoint,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true,
             body: { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName }
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ accountNumber: 'POL23' });
+        requestStub.resolves({ statusCode: 200, body: { accountNumber: 'POL23' }});
 
         const testEvent = { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName };
 
@@ -70,16 +71,20 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'POST',
             uri: testEndpoint,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true,
             body: { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName }
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({
-            errors: [{
-                description: 'A person matching the idNumber already exists',
-                code: 'ExistingPersonWithIDNumberFound'
-            }]
+            statusCode: 400,
+            body: {
+                errors: [{
+                    description: 'A person matching the idNumber already exists',
+                    code: 'ExistingPersonWithIDNumberFound'
+                }]
+            }
         });
 
         const testEvent = { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName };
@@ -105,12 +110,13 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'POST',
             uri: testEndpoint,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true,
             body: { amount: testAmount, unit: testUnit, currency: testCurrency }
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ });
+        requestStub.resolves({ statusCode: 201, body: { } });
 
         const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
 
@@ -132,16 +138,20 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'POST',
             uri: testEndpoint,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true,
             body: { amount: testAmount, unit: testUnit, currency: testCurrency }
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({
-            errors: [{
-                description: 'Account is inactive',
-                code: 'AccountInactiveError'
-            }]
+            statusCode: 400,
+            body: {
+                errors: [{
+                    description: 'Account is inactive',
+                    code: 'AccountInactiveError'
+                }]
+            }
         });
 
         const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
@@ -166,11 +176,12 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'GET',
             uri: testEndpoint,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ amount: '599.9900', currency: 'ZAR' });
+        requestStub.resolves({ statusCode: 200, body: { amount: '599.9900', currency: 'ZAR' }});
 
         const testEvent = { accountNumber: 'POL122' };
 
@@ -191,15 +202,19 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'GET',
             uri: testEndpoint,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({
-            errors: [{
-                description: 'Account is inactive',
-                code: 'AccountInactiveError'
-            }]
+            statusCode: 400,
+            body: {
+                errors: [{
+                    description: 'Account is inactive',
+                    code: 'AccountInactiveError'
+                }]
+            }
         });
 
         const testEvent = { accountNumber: testAccountNumber };
@@ -221,6 +236,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'POST',
             uri: 'https://fwtest.jupitersave.com/api/accounts/POL122/withdrawals',
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true,
             body: {
                 amount: 1234.56,
@@ -236,7 +252,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ });
+        requestStub.resolves({ statusCode: 201, body: { } });
 
         const testEvent = {
             amount: 1234.56,
@@ -262,6 +278,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             method: 'POST',
             uri: 'https://fwtest.jupitersave.com/api/accounts/POL122/withdrawals',
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
             json: true,
             body: {
                 amount: 1234.56,
@@ -278,10 +295,13 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({
-            errors: [{
-                description: 'Account is inactive',
-                code: 'AccountInactiveError'
-            }]
+            statusCode: 400,
+            body: {
+                errors: [{
+                    description: 'Account is inactive',
+                    code: 'AccountInactiveError'
+                }]
+            }
         });
 
         const testEvent = {

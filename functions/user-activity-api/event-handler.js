@@ -270,7 +270,7 @@ const handleSavingEvent = async (eventBody) => {
     const statusResult = await lambda.invoke(statusInvocation).promise();
     logger('Result of lambda invoke: ', statusResult);
 
-    const sendInvestment = config.get('finworks.createAccount');
+    const sendInvestment = config.get('finworks.sendInvestment');
     if (sendInvestment) {
         const accountId = eventBody.context.accountId;
         const [amount, unit, currency] = eventBody.context.savedAmount.split('::');

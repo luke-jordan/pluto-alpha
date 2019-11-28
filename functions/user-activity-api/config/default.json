@@ -6,7 +6,7 @@
         "region": "eu-west-1"
     },
     "finworks": {
-        "createAccount": true
+        "sendInvestment": true
     },
     "tables": {
         "accountTransactions": "transaction_data.core_transaction_ledger",

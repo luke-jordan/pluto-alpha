@@ -89,15 +89,17 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
     const commonAssertions = ({ resultOfHandle, investmentInvocation }) => {
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
-        expect(lamdbaInvokeStub).to.have.been.calledThrice; // for balance & for status & investment
-        expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
         expect(getObjectStub).to.have.been.calledOnceWithExactly({
             Bucket: config.get('templates.bucket'), Key: config.get('templates.saveEmail')
         });
         expect(sendEmailStub).to.have.been.calledOnce;
-        expect(fetchAccNumberStub).to.have.been.calledOnce;
-        expect(updateTxFlagsStub).to.have.been.calledOnce;
         expectNoCalls(redisGetStub, sqsSendStub);
+        if (config.get('finworks.sendInvestment') === true) {
+            expect(lamdbaInvokeStub).to.have.been.calledThrice; // for balance & for status & investment
+            expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
+            expect(fetchAccNumberStub).to.have.been.calledOnce;
+            expect(updateTxFlagsStub).to.have.been.calledOnce;
+        }
     };
 
     it('Handles non-special (e.g., login) event properly', async () => {
@@ -305,12 +307,14 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
         logger('Result:', resultOfHandle);
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
-        expect(lamdbaInvokeStub).to.have.been.calledThrice;
-        expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
+        if (config.get('finworks.sendInvestment') === true) {
+            expect(lamdbaInvokeStub).to.have.been.calledThrice;
+            expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
+            expect(fetchAccNumberStub).to.have.been.calledOnce;
+            expect(updateTxFlagsStub).to.have.been.calledOnce;
+        };
         expect(getObjectStub).to.have.not.been.called;
         expect(sendEmailStub).to.have.not.been.called;
-        expect(fetchAccNumberStub).to.have.been.calledOnce;
-        expect(updateTxFlagsStub).to.have.been.calledOnce;
         expectNoCalls(redisGetStub, sqsSendStub);
     });
 

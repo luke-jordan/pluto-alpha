@@ -9,6 +9,8 @@ const AWS = require('aws-sdk');
 
 const s3 = new AWS.S3();
 
+const SUCCESS_RESPONSES = [200, 201];
+
 const fetchAccessCreds = async () => {
     const bucket = config.get('finworks.s3.bucket');
     const [crt, pem] = await Promise.all([
@@ -23,6 +25,7 @@ const assembleRequest = (method, endpoint, data) => {
         method,
         uri: endpoint,
         agentOptions: { cert: data.crt, key: data.pem },
+        resolveWithFullResponse: true,
         json: true
     };
     if (data.body) {
@@ -42,11 +45,11 @@ module.exports.createAccount = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        if (!Reflect.has(response, 'accountNumber')) {
-            throw new Error(JSON.stringify(response));
+        if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
+            throw new Error(JSON.stringify(response.body));
         }
 
-        return response;
+        return response.body;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -66,11 +69,11 @@ module.exports.addCash = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        if (Reflect.has(response, 'errors')) {
-            throw new Error(JSON.stringify(response));
+        if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
+            throw new Error(JSON.stringify(response.body));
         }
 
-        return response;
+        return response.body;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -89,11 +92,11 @@ module.exports.getMarketValue = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        if (Reflect.has(response, 'errors')) {
-            throw new Error(JSON.stringify(response));
+        if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
+            throw new Error(JSON.stringify(response.body));
         }
 
-        return response;
+        return response.body;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -124,11 +127,11 @@ module.exports.sendWithdrawal = async (event) => {
         const response = await request(options);
         logger('Got response:', response);
 
-        if (Reflect.has(response, 'errors')) {
-            throw new Error(JSON.stringify(response));
+        if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
+            throw new Error(JSON.stringify(response.body));
         }
 
-        return response;
+        return response.body;
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
