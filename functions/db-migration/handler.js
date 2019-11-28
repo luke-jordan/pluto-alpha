@@ -121,7 +121,7 @@ module.exports.downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
     );
 
     const downloader = customS3Client.downloadDir(DOWNLOAD_PARAMS);
-    
+
     downloader.on('error', (err) => exports.handleFailureResponseOfDownloader(err));
     downloader.on('progress', () => exports.handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
     downloader.on('end', () => exports.successfullyDownloadedFilesProceedToRunMigrations(dbConfig));

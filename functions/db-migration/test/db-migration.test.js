@@ -6,15 +6,26 @@ const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 const proxyquire = require('proxyquire').noCallThru();
 const migrationScriptsLocation = 'scripts';
+const config = require('config');
+const httpStatus = require('http-status');
+const EventEmitter = require('events').EventEmitter;
 
 const actualMigrationStub = sinon.stub();
-
+const downloadDirStub = sinon.stub();
 const MockPostgresMigrations = {
     migrate: actualMigrationStub
 };
 
+const MockCustomS3Client = {
+    createClient: () => ({
+        'downloadDir': downloadDirStub
+    })
+};
+const BUCKET_NAME = config.get('aws.bucketName');
+const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('environment');
 const migrationScript = proxyquire('../handler', {
-    'postgres-migrations': MockPostgresMigrations
+    'postgres-migrations': MockPostgresMigrations,
+    's3': MockCustomS3Client
 });
 const {
     migrate,
@@ -22,12 +33,9 @@ const {
     successfullyDownloadedFilesProceedToRunMigrations,
     handleFailureResponseOfDownloader,
     handleProgressResponseOfDownloader,
-    updateDBConfigUserAndPassword
+    updateDBConfigUserAndPassword,
+    downloadFilesFromS3AndRunMigrations
 } = migrationScript;
-
-
-const config = require('config');
-const httpStatus = require('http-status');
 
 const fetchDBConnectionDetailsStub = sinon.stub(migrationScript, 'fetchDBConnectionDetails');
 const downloadFilesFromS3AndRunMigrationsStub = sinon.stub(migrationScript, 'downloadFilesFromS3AndRunMigrations');
@@ -51,7 +59,14 @@ const sampleUserAndPasswordFromSecrets = {
     user: 'admin',
     password: 'password'
 };
-
+const DOWNLOAD_PARAMS = {
+    localDir: migrationScriptsLocation,
+    s3Params: {
+        Bucket: BUCKET_NAME,
+        Prefix: FOLDER_CONTAINING_MIGRATION_SCRIPTS
+    },
+    deleteRemoved: true
+};
 const resetStubs = () => {
     fetchDBConnectionDetailsStub.reset();
     downloadFilesFromS3AndRunMigrationsStub.reset();
@@ -138,5 +153,26 @@ describe('DB Migration', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ ...sampleDbConfig, user: sampleUser, password: samplePassword });
+    });
+
+    it('download files from s3 when called with appropriate parameters involves an event emitter', async () => {
+        const emitter = new EventEmitter();
+
+        downloadDirStub.withArgs(DOWNLOAD_PARAMS).returns(emitter);
+        const result = await downloadFilesFromS3AndRunMigrations();
+        expect(result).to.be.undefined;
+        expect(downloadDirStub).to.have.been.calledWith(DOWNLOAD_PARAMS);
+    });
+
+    it(`should handle errors when 'migrate' method from 'postgres-migrations' fails`, async () => {
+        const customErrorMessage = 'Error while running migrations';
+        actualMigrationStub.withArgs(sampleDbConfig, migrationScriptsLocation).rejects(customErrorMessage);
+        try {
+            await successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig);
+        } catch (error) {
+            expect(error).equal(customErrorMessage);
+        }
+
+        expect(actualMigrationStub).to.have.been.calledWith(sampleDbConfig, migrationScriptsLocation);
     });
 });
