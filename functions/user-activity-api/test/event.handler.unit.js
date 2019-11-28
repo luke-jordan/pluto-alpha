@@ -296,7 +296,6 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);
 
-        savingEvent.context.saveCount = 3;
         savingEvent.context.savedAmount = '::::';
         investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createFinWorksInvestment'), false, {
             accountNumber: testAccountNumber, amount: '', unit: '', currency: ''

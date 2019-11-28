@@ -232,14 +232,23 @@ const fetchFWAccountNumber = async (accountId) => {
     return accountNumber;
 };
 
-const handleInvestment = async ({accountNumber, amount, unit, currency}) => {
+const handleInvestment = async ({ accountId, amount, unit, currency }) => {
+    const accountNumber = await fetchFWAccountNumber(accountId);
+    
     const investmentDetails = { accountNumber, amount, unit, currency };
     const investmentInvocation = invokeLambda(config.get('lambdas.createFinWorksInvestment'), investmentDetails);
     logger('lambda args:', investmentInvocation);
     const investmentResult = await lambda.invoke(investmentInvocation).promise();
     logger('Investment result from third party:', investmentResult);
 
-    return extractLambdaBody(investmentResult);
+    const parsedResult = extractLambdaBody(investmentResult);
+    logger('Got response body', parsedResult);
+    if (Object.keys(parsedResult).includes('result') && parsedResult.result === 'ERROR') {
+        throw new Error(`Error sending investment to third party: ${parsedResult}`);
+    }
+
+    const txUpdateResult = await updateTxFlags(accountId, 'FINWORKS_RECORDED');
+    logger('Result of transaction update:', txUpdateResult);
 };
 
 // todo : parallelize, obviously
@@ -261,16 +270,12 @@ const handleSavingEvent = async (eventBody) => {
     const statusResult = await lambda.invoke(statusInvocation).promise();
     logger('Result of lambda invoke: ', statusResult);
 
-    const accountNumber = await fetchFWAccountNumber(eventBody.context.accountId);
-    const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
-
-    const thirdPartyResponse = await handleInvestment({ accountNumber, amount, unit, currency });
-    logger('Investment result from third party:', thirdPartyResponse);
-    // todo: ensure error is thrown on failure, dlq
-
-    const accountId = eventBody.context.accountId;
-    const txUpdateResult = await updateTxFlags(accountId, 'FINWORKS_RECORDED');
-    logger('Result of transaction update:', txUpdateResult);
+    const sendInvestment = config.get('finworks.createAccount');
+    if (sendInvestment) {
+        const accountId = eventBody.context.accountId;
+        const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
+        await handleInvestment({ accountId, amount, unit, currency });
+    }
 };
 
 const handleWithdrawalEvent = async (eventBody) => {
