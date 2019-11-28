@@ -12,6 +12,7 @@
   "author": "Bolu Ajibawo",
   "dependencies": {
     "aws-sdk": "^2.503.0",
+    "aws-sdk-mock": "^4.5.0",
     "config": "^3.2.4",
     "debug": "^4.1.1",
     "http-status": "^1.4.1",

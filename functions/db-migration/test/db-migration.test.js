@@ -5,24 +5,25 @@ const expect = chai.expect;
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 const proxyquire = require('proxyquire').noCallThru();
-const migrationScriptsLocation = 'scripts';
 const config = require('config');
 const httpStatus = require('http-status');
 const EventEmitter = require('events').EventEmitter;
+const AWS = require('aws-sdk');
+const AWSMock = require('aws-sdk-mock');
+
+const BUCKET_NAME = config.get('aws.bucketName');
+const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('environment');
 
 const actualMigrationStub = sinon.stub();
 const downloadDirStub = sinon.stub();
 const MockPostgresMigrations = {
     migrate: actualMigrationStub
 };
-
 const MockCustomS3Client = {
     createClient: () => ({
         'downloadDir': downloadDirStub
     })
 };
-const BUCKET_NAME = config.get('aws.bucketName');
-const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('environment');
 const migrationScript = proxyquire('../handler', {
     'postgres-migrations': MockPostgresMigrations,
     's3': MockCustomS3Client
@@ -34,7 +35,8 @@ const {
     handleFailureResponseOfDownloader,
     handleProgressResponseOfDownloader,
     updateDBConfigUserAndPassword,
-    downloadFilesFromS3AndRunMigrations
+    downloadFilesFromS3AndRunMigrations,
+    fetchDBUserAndPasswordFromSecrets
 } = migrationScript;
 
 const fetchDBConnectionDetailsStub = sinon.stub(migrationScript, 'fetchDBConnectionDetails');
@@ -59,6 +61,7 @@ const sampleUserAndPasswordFromSecrets = {
     user: 'admin',
     password: 'password'
 };
+const migrationScriptsLocation = 'scripts';
 const DOWNLOAD_PARAMS = {
     localDir: migrationScriptsLocation,
     s3Params: {
@@ -115,7 +118,7 @@ describe('DB Migration', () => {
 
         const result = await fetchDBConnectionDetails(sampleSecretName);
         expect(result).to.exist;
-        expect(result).to.deep.equal({ ...sampleDbConfig, ...sampleUserAndPasswordFromSecrets });
+        expect(result).to.deep.equal({...sampleDbConfig, ...sampleUserAndPasswordFromSecrets});
         expect(fetchDBUserAndPasswordFromSecretsStub).to.have.been.calledWith(sampleSecretName);
     });
 
@@ -152,7 +155,7 @@ describe('DB Migration', () => {
         const result = await updateDBConfigUserAndPassword(sampleDbConfig, sampleUser, samplePassword);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ ...sampleDbConfig, user: sampleUser, password: samplePassword });
+        expect(result).to.deep.equal({...sampleDbConfig, user: sampleUser, password: samplePassword});
     });
 
     it('download files from s3 when called with appropriate parameters involves an event emitter', async () => {
@@ -174,5 +177,57 @@ describe('DB Migration', () => {
         }
 
         expect(actualMigrationStub).to.have.been.calledWith(sampleDbConfig, migrationScriptsLocation);
+    });
+
+    it(`should fetch secrets data using secrets client successfully`, async () => {
+        const givenUser = 'john';
+        const givenPassword = 'password';
+        const JSONParsableUserNameAndPassword = `{
+            "username": "${givenUser}",
+            "password": "${givenPassword}"
+            }`;
+
+        const sampleFetchedSecretData = {
+            SecretString: JSONParsableUserNameAndPassword
+        };
+        AWSMock.setSDKInstance(AWS);
+        AWSMock.mock('SecretsManager', 'getSecretValue', (params, callback) => {
+            callback(null, sampleFetchedSecretData);
+        });
+
+        const result = await fetchDBUserAndPasswordFromSecrets(sampleSecretName);
+        expect(result).to.exist;
+        expect(result).to.deep.equal({
+            user: givenUser,
+            password: givenPassword
+        });
+        AWSMock.restore('SecretsManager');
+    });
+
+    it(`should handle errors when fetching secrets data using secrets client`, async () => {
+        const givenUser = 'john';
+        const givenPassword = 'password';
+        const JSONParsableUserNameAndPassword = `{
+            "username": "${givenUser}", 
+            "password": "${givenPassword}"
+            }`;
+
+        const sampleFetchedSecretData = {
+            SecretString: JSONParsableUserNameAndPassword
+        };
+        const customErrorMessage = 'Error while retrieving secret data';
+        AWSMock.setSDKInstance(AWS);
+        AWSMock.mock('SecretsManager', 'getSecretValue', (params, callback) => {
+            callback(customErrorMessage, sampleFetchedSecretData);
+        });
+
+        try {
+            await fetchDBUserAndPasswordFromSecrets(sampleSecretName);
+        } catch (error) {
+            expect(error).to.exist;
+            expect(error).to.equal(customErrorMessage);
+        }
+
+        AWSMock.restore('SecretsManager');
     });
 });

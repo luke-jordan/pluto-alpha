@@ -13,7 +13,6 @@ AWS.config.update({
 });
 const migrationScriptsLocation = 'scripts';
 const SECRET_NAME = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
-const secretsClient = new AWS.SecretsManager({ region: awsRegion });
 
 const customS3Client = s3.createClient({
     s3Client: new AWS.S3()
@@ -31,12 +30,13 @@ const DOWNLOAD_PARAMS = {
 
 module.exports.fetchDBUserAndPasswordFromSecrets = async (secretName) => {
     logger('Fetching secret with name: ', secretName);
+    const secretsClient = new AWS.SecretsManager({ region: awsRegion });
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
         secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
             if (err) {
                 logger('Error retrieving auth secret for: ', err);
-                throw err;
+                reject(err);
             }
             // Decrypts secret using the associated KMS CMK.
             // Depending on whether the secret is a string or binary, one of these fields will be populated.
