@@ -27,6 +27,11 @@ module.exports.wrapHttpResponse = (body, statusCode = 200) => ({
     body: JSON.stringify(body)
 });
 
+module.exports.okayResponse = (statusCode = 200) => ({
+    headers: corsHeaders,
+    statusCode
+});
+
 module.exports.unauthorizedResponse = {
     statusCode: 403,
     headers: corsHeaders

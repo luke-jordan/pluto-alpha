@@ -2,9 +2,11 @@
 
 const logger = require('debug')('jupiter:admin:dynamo');
 const config = require('config');
+const moment = require('moment');
+
 const opsUtil = require('ops-util-common');
 
-const camelCaseKeys = require('camelcase-keys');
+const camelize = require('camelcase');
 const decamelize = require('decamelize');
 
 // note: not using wrapper because scan operations in here are & should be restricted to this function
@@ -30,6 +32,54 @@ const FLOAT_KEY_SUBSTITUTIONS = {
     'comparator_rates': ':crrates'
 };
 
+// because stopPaths on the library is not working and camel case flips labels to upper case on rates map (plus can exclude others later)
+const shouldTouchKeys = (key, value) => key !== 'rates' && typeof value === 'object' && value !== null;
+
+const customDeepCamelKeys = (object) => Object.keys(object).reduce((accumulator, key) => {
+        const value = shouldTouchKeys(key, object[key]) ? customDeepCamelKeys(object[key]) : object[key];
+        return { ...accumulator, [camelize(key)]: value };
+}, {});
+
+const customDeepDecamelKeys = (object) => Object.keys(object).reduce((accumulator, key) => {
+        const value = shouldTouchKeys(key, object[key]) ? customDeepDecamelKeys(object[key]) : object[key];
+        return { ...accumulator, [decamelize(key, '_')]: value };
+}, {});
+
+// not strictly float related but used all over, may split out in future
+module.exports.verifyOtpPassed = async (systemWideUserId) => {
+    logger('Verifying OTP ...');
+    const otpVerificationEnabled = config.has('verification.otpEnabled') && config.get('verification.otpEnabled');
+    if (!otpVerificationEnabled) {
+        return true;
+    }
+    
+    const userIdEventType = `${systemWideUserId}::OTP_VERIFIED`;
+    const filterExpression = `expires_at >= ${moment().unix()}`;
+    const docParams = {
+        TableName: config.get('tables.authCacheTable'),
+        Key: { 'user_id_event_type': userIdEventType },
+        FilterExpression: filterExpression,
+        ProjectionExpression: 'expires_at'
+    };
+    
+    logger('Checking for OTP with params: ', docParams);
+    const ddbResult = await docC.get(docParams).promise();
+    if (!ddbResult || typeof ddbResult.Item !== 'object' || !ddbResult.Item) {
+        return false;
+    }
+    
+    const verificationEvent = ddbResult.Item;
+    if (Object.keys(verificationEvent).length === 0) {
+        return false;
+    }
+
+    if (moment().unix() > Number(verificationEvent.expiresAt)) {
+        return false;
+    }
+    
+    return true;
+};
+
 // todo : restrict admin access to certain clients/floats
 module.exports.listCountriesClients = async () => {
     logger('Fetching countries and clients');
@@ -38,7 +88,7 @@ module.exports.listCountriesClients = async () => {
     };
 
     const resultOfScan = await docC.scan(params).promise();
-    return resultOfScan.Items.map((item) => camelCaseKeys(item));
+    return resultOfScan.Items.map((item) => customDeepCamelKeys(item));
 };
 
 // probably want to add a projection expression here in time
@@ -49,7 +99,7 @@ module.exports.listClientFloats = async () => {
     };
 
     const resultOfScan = await docC.scan(params).promise();
-    return resultOfScan.Items.map((item) => camelCaseKeys(item));
+    return resultOfScan.Items.map((item) => customDeepCamelKeys(item));
 };
 
 module.exports.fetchClientFloatVars = async (clientId, floatId) => {
@@ -63,23 +113,26 @@ module.exports.fetchClientFloatVars = async (clientId, floatId) => {
     const ddbResult = await docC.get(params).promise();
     logger('Result from Dynamo: ', ddbResult);
 
-    return nonEmptyReturnItem(ddbResult) ? camelCaseKeys(ddbResult['Item']) : {};
+    return nonEmptyReturnItem(ddbResult) ? customDeepCamelKeys(ddbResult['Item']) : {};
 };
 
 module.exports.updateClientFloatVars = async ({ clientId, floatId, newPrincipalVars, newReferralDefaults, newComparatorMap }) => {
     logger(`Updating float with client ID ${clientId}, and float ID ${floatId}, using new vars: `, newPrincipalVars);
 
-    if (newReferralDefaults) {
-        logger('Updating referral defaults to: ', newReferralDefaults);
-    }
-
-    if (newComparatorMap) {
-        logger('New set of comparator variables: ', newComparatorMap);
-    }
-
     // here we go, dynamo db sdk joyfulness in process
     const expressionClauses = [];
     const expressionMap = { };
+    
+    if (!opsUtil.isObjectEmpty(newReferralDefaults)) {
+        logger('Updating referral defaults to: ', newReferralDefaults);
+    }
+
+    if (!opsUtil.isObjectEmpty(newComparatorMap)) {
+        logger('New set of comparator variables: ', newComparatorMap);
+        const mapToInsert = customDeepDecamelKeys(newComparatorMap);
+        expressionClauses.push(`comparator_rates = :crmap`);
+        expressionMap[':crmap'] = mapToInsert;
+    }
     
     if (!opsUtil.isObjectEmpty(newPrincipalVars)) {
         const propsToUpdate = Object.keys(newPrincipalVars);
@@ -103,6 +156,6 @@ module.exports.updateClientFloatVars = async ({ clientId, floatId, newPrincipalV
     logger('Updating Dynamo table with params: ', params);
     const updateResult = await docC.update(params).promise();
     logger('Result from update: ', updateResult);
-    const returnedAttributes = updateResult && updateResult['Attributes'] ? camelCaseKeys(updateResult['Attributes']) : { };
+    const returnedAttributes = updateResult && updateResult['Attributes'] ? customDeepCamelKeys(updateResult['Attributes']) : { };
     return { result: 'SUCCESS', returnedAttributes };
 };

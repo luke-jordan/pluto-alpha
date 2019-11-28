@@ -19,7 +19,7 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.clientFloatVars'), {
         clientId,
         floatId
-    }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency']);
+    }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates']);
     
     logger('Result from DynamoDB: ', rowFromDynamo);
     

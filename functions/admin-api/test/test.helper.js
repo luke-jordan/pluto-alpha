@@ -4,10 +4,15 @@ const logger = require('debug')('jupiter:admin:test-helper');
 
 const sinon = require('sinon');
 const chai = require('chai');
+chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
 module.exports.resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
+};
+
+module.exports.expectNoCalls = (...stubs) => {
+    stubs.forEach((stub) => expect(stub).to.not.have.been.called);
 };
 
 module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
