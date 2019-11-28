@@ -312,7 +312,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
             expect(fetchAccNumberStub).to.have.been.calledOnce;
             expect(updateTxFlagsStub).to.have.been.calledOnce;
-        };
+        }
         expect(getObjectStub).to.have.not.been.called;
         expect(sendEmailStub).to.have.not.been.called;
         expectNoCalls(redisGetStub, sqsSendStub);
