@@ -432,6 +432,30 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
 EOF
 }
 
+resource "aws_iam_policy" "referral_management_omnibus_policy" {
+    name = "lambda_admin_referral_manager_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ReferralCodeReadAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:Query",
+                "dynamodb:GetItem"
+            ],
+            "Resource": [
+                "${aws_dynamodb_table.active_referral_code_table.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "balance_lambda_invoke_policy" {
     name = "${terraform.workspace}_lambda_balance_fetch_invoke"
     path = "/"

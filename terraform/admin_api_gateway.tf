@@ -654,3 +654,50 @@ module "audience_handler_cors" {
   api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
   api_resource_id = "${aws_api_gateway_resource.audience_handle.id}"
 }
+
+/////////////////////// REFERRALS /////////////////////////////////////////////////////////////////////
+
+// using same pattern as above
+
+resource "aws_api_gateway_resource" "admin_referral_path_root" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.admin_api_gateway.root_resource_id}"
+  path_part   = "referral"
+}
+
+resource "aws_api_gateway_resource" "referral_handle" {
+  rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
+  parent_id   = aws_api_gateway_resource.admin_referral_path_root.id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "referral_handle" {
+  rest_api_id   = aws_api_gateway_rest_api.admin_api_gateway.id
+  resource_id   = aws_api_gateway_resource.referral_handle.id
+  http_method   = "ANY" // since redirect is sometimes POST, sometimes GET, and other methods will just fail
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.admin_jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "referral_handle" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.admin_referral_handle.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.admin_api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "referral_handle" {
+  rest_api_id   = aws_api_gateway_rest_api.admin_api_gateway.id
+  resource_id   = aws_api_gateway_method.referral_handle.resource_id
+  http_method   = aws_api_gateway_method.referral_handle.http_method
+  
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.admin_referral_handle.invoke_arn
+}
+
+module "referral_handler_cors" {
+  source = "./modules/cors"
+  api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  api_resource_id = "${aws_api_gateway_resource.referral_handle.id}"
+}
