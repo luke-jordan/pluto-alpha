@@ -22,10 +22,13 @@ const getFloatBonusBalanceStub = sinon.stub();
 const getFloatAlertsStub = sinon.stub();
 const insertFloatLogStub = sinon.stub();
 const updateFloatLogStub = sinon.stub();
+
 const listCountriesClientsStub = sinon.stub();
 const listClientFloatsStub = sinon.stub();
 const fetchClientFloatVarsStub = sinon.stub();
 const updateClientFloatVarsStub = sinon.stub();
+const listRefCodesStub = sinon.stub();
+
 const momentStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 
@@ -41,16 +44,19 @@ const handler = proxyquire('../admin-float-handler', {
         'getFloatBonusBalanceAndFlows': getFloatBonusBalanceStub,
         'getFloatAlerts': getFloatAlertsStub,
         'insertFloatLog': insertFloatLogStub,
-        'updateFloatLog': updateFloatLogStub
+        'updateFloatLog': updateFloatLogStub,
+        '@noCallThru': true
     },
     './persistence/dynamo.float': {
         'listCountriesClients': listCountriesClientsStub,
         'listClientFloats': listClientFloatsStub,
         'fetchClientFloatVars': fetchClientFloatVarsStub,
-        'updateClientFloatVars': updateClientFloatVarsStub
+        'updateClientFloatVars': updateClientFloatVarsStub,
+        'listReferralCodes': listRefCodesStub,
+        '@noCallThru': true
     },
     'aws-sdk': {
-        'Lambda': MockLambdaClient  
+        'Lambda': MockLambdaClient
     }
 });
 
@@ -90,6 +96,8 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
             floatName: testFloatName
         }];
 
+        const testBonusPoolId = 'some_bonus_pool';
+
         const expectedResult = {
             [testClientId]: {
                 timeZone: testTimeZone,
@@ -105,7 +113,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                     bonusPoolBalance: { amount: 500, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
                     bonusOutflow: { amount: 510, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
                     bonusInflowSum: { amount: 462, currency: testCurrency, unit: 'HUNDREDTH_CENT' },
-                    bonusPoolIds: [testFloatId]
+                    bonusPoolIds: [testBonusPoolId]
                 }]
             }
         };
@@ -118,9 +126,9 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         listClientFloatsStub.resolves(testFloatIds);
         getFloatBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' }}]]));
         getFloatBalanceStub.withArgs([testFloatId], sinon.match.any).resolves(new Map([[testFloatId, { 'USD': { amount: 200, unit: 'HUNDREDTH_CENT' }}]]));
-        getFloatBonusBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 500, unit: 'HUNDREDTH_CENT' }}}]]));
-        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, NEG_FLOW_FLAG).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 510, unit: 'HUNDREDTH_CENT' }}}]]));
-        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, POS_FLOW_FLAG).resolves(new Map([[testFloatId, { [testFloatId]: { [testCurrency]: { amount: 462, unit: 'HUNDREDTH_CENT' }}}]]));        
+        getFloatBonusBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testBonusPoolId]: { [testCurrency]: { amount: 500, unit: 'HUNDREDTH_CENT' }}}]]));
+        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, NEG_FLOW_FLAG).resolves(new Map([[testFloatId, { [testBonusPoolId]: { [testCurrency]: { amount: 510, unit: 'HUNDREDTH_CENT' }}}]]));
+        getFloatBonusBalanceStub.withArgs([testFloatId], sinon.match.any, sinon.match.any, POS_FLOW_FLAG).resolves(new Map([[testFloatId, { [testBonusPoolId]: { [testCurrency]: { amount: 462, unit: 'HUNDREDTH_CENT' }}}]]));        
 
         const testEvent = {
             requestContext: {
@@ -171,9 +179,15 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
 
     it('Fetches client float details', async () => {
         const testUpdateTime = moment().format();
+        const testBonusId = 'some_bonus_pool';
+        const testBonusPool = { [testCurrency]: { amount: 500, unit: 'HUNDREDTH_CENT' }};
+
         fetchClientFloatVarsStub.resolves({ currency: testCurrency });
         getFloatBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testCurrency]: { amount: 100, unit: 'HUNDREDTH_CENT' }}]]));
         getFloatAlertsStub.resolves([{ logType: 'BALANCE_UNOBTAINABLE', logId: testLogId, logContext: { resolved: true }, updatedTime: testUpdateTime }]);
+        getFloatBonusBalanceStub.withArgs([testFloatId]).resolves(new Map([[testFloatId, { [testBonusId]: testBonusPool }]]));
+        listRefCodesStub.resolves([]);
+
 
         const testRequestBody = { clientId: testClientId, floatId: testFloatId };
         const testEvent = helper.wrapQueryParamEvent(testRequestBody, testUserId, 'SYSTEM_ADMIN', 'GET');
@@ -189,7 +203,11 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                 logContext: { resolved: true },
                 isResolved: true,
                 isRedFlag: false
-            }]
+            }],
+            referralCodes: [],
+            floatBonusPools: {
+                [testBonusId]: testBonusPool
+            }
         };
 
         const result = await handler.fetchClientFloatDetails(testEvent);

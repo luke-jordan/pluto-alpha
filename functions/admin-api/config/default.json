@@ -1,6 +1,6 @@
 {
     "aws": {
-        "region": ""
+        "region": "us-east-1"
     },
     "db": {
         "user": "admin_api_worker",
@@ -16,7 +16,8 @@
         "transactionTable": "transaction_data.core_transaction_ledger",
         "clientFloatTable": "ClientFloatTable",
         "countryClientTable": "CountryClientTable",
-        "authCacheTable": "AuthSucceededEvents"
+        "authCacheTable": "AuthSucceededEvents",
+        "activeReferralCodeTable": "ActiveReferralCodes"
     },
     "lambdas": {
         "processAccrual": "float_accrue",

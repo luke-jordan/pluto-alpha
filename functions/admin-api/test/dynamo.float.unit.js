@@ -280,7 +280,7 @@ describe('*** UNIT TEST REFERRAL CODE ***', () => {
 
         const expectedCode = (code, idx) => ({
             referralCode: code,
-            countryCOde: 'RWA',
+            countryCode: 'RWA',
             clientId: testClientId,
             floatId: testFloatId,
             codeType: 'CHANNEL',
@@ -303,7 +303,7 @@ describe('*** UNIT TEST REFERRAL CODE ***', () => {
 
 });
 
-describe('*** UNIT TEST PUT ADMIN LOG ***', () => {
+describe.skip('*** UNIT TEST PUT ADMIN LOG ***', () => {
 
     const testAdminId = uuid();
 
