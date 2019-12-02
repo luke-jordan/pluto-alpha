@@ -101,3 +101,38 @@ module.exports.setFloatReferenceRates = async (event) => {
         return opsCommonUtil.wrapResponse(err.message, 500);
     }
 };
+
+// ///////////////////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////////// REFERRAL CODES //////////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////////////
+
+/**
+ * Operations: CREATE, MODIFY, DEACTIVATE, LIST
+ */
+module.exports.manageReferralCodes = async (event) => {
+    try {
+        if (!adminUtil.isUserAuthorized(event)) {
+            return adminUtil.unauthorizedResponse;
+        }
+
+        const operation = event.pathParameters.proxy;
+
+        const adminUserId = event.requestContext.authorizer.systemWideUserId;
+        const adminPassedOtp = await operation === 'LIST' || dynamo.verifyOtpPassed(adminUserId);
+
+        const params = adminUtil.extractEventBody(event);
+        logger('Extract params for float adjustment: ', params);
+
+        let resultOfOperation = {};
+        switch (operation) {
+
+        }
+
+        if (resultOfOperation.result === 'SUCCESS') {
+            return adminUtil.okayResponse();
+        }
+
+    } catch (err) {
+        return opsCommonUtil.wrapResponse(err.message, 500);
+    }
+};

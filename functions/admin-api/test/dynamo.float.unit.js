@@ -16,14 +16,19 @@ const helper = require('./test.helper');
 const momentStub = sinon.stub();
 
 const docClientGetStub = sinon.stub();
+const docClientQueryStub = sinon.stub();
 const docClientScanStub = sinon.stub();
+
 const docClientUpdateStub = sinon.stub();
+const docClientPutStub = sinon.stub();
 
 class MockDocClient {
     constructor () {
         this.get = docClientGetStub;
+        this.query = docClientQueryStub;
         this.scan = docClientScanStub;
         this.update = docClientUpdateStub;
+        this.put = docClientPutStub;
     }
 }
 
@@ -218,6 +223,125 @@ describe('*** UNIT TEST DYNAMO FLOAT ***', () => {
 
 });
 
+describe('*** UNIT TEST REFERRAL CODE ***', () => {
+
+    const testFloatId = 'some_mmkt_float';
+    const testClientId = 'client_somewhere';
+
+    beforeEach(() => helper.resetStubs(docClientGetStub));
+
+    it('Returns country code for client float', async () => {
+        const expectedQueryArgs = {
+            TableName: config.get('tables.clientFloatTable'),
+            Key: { 'client_id': testClientId, 'float_id': testFloatId },
+            ProjectionExpression: ['country_code']
+        };
+        const expectedItem = { 'client_id': testClientId, 'float_id': testFloatId, 'country_code': 'RWA' };
+
+        docClientGetStub.withArgs(expectedQueryArgs).returns({ promise: () => ({ Item: expectedItem })});
+
+        const resultOfCall = await dynamo.findCountryForClientFloat(testClientId, testFloatId);
+        expect(resultOfCall).to.equal('RWA');
+    });
+
+    it('Returns active referral codes for client float', async () => {
+        const testBoostSource = 'some_bonus_pool_id';
+        const someReferralCodes = ['LETMEIN', 'NOPLEASE', 'IREALLYWANTOJOIN'];
+
+        const mockReferralAmounts = someReferralCodes.map(() => Math.floor(Math.random() * 1000000));
+
+        const mockReferralCodeFromTable = (code, idx) => ({
+            'country_code': 'RWA',
+            'referral_code': code,
+            'client_id_float_id': `${testClientId}::${testFloatId}`,
+            'code_type': 'CHANNEL',
+            'referral_context': {
+                'boost_amount_offered': `${mockReferralAmounts[idx]}::HUNDREDTH_CENT::USD`,
+                'bonus_pool_id': testBoostSource
+            },
+            'tags': ['ALPHA']
+        });
+
+        const mockCodesFromTable = someReferralCodes.map((code, idx) => mockReferralCodeFromTable(code, idx));
+
+        const expectedQueryArgs = {
+            TableName: config.get('tables.activeReferralCodeTable'),
+            IndexName: 'ReferralCodeFloatIndex',
+            KeyConditionExpression: '#cifi = :client_id_float_id',
+            ExpressionAttributeNames: {
+                '#cifi': 'client_id_float_id'
+            },
+            ExpressionAttributeValues: {
+                ':client_id_float_id': `${testClientId}::${testFloatId}`
+            }
+        };
+
+        docClientQueryStub.withArgs(expectedQueryArgs).returns({ promise: () => ({ Items: mockCodesFromTable })});
+
+        const expectedCode = (code, idx) => ({
+            referralCode: code,
+            countryCOde: 'RWA',
+            clientId: testClientId,
+            floatId: testFloatId,
+            codeType: 'CHANNEL',
+            bonusAmount: {
+                amount: mockReferralAmounts[idx],
+                unit: 'HUNDREDTH_CENT',
+                currency: 'USD'
+            },
+            bonusSource: testBoostSource,
+            tags: ['ALPHA']
+        });
+
+        const mockCodesResponse = someReferralCodes.map((code, idx) => expectedCode(code, idx));
+
+        const resultOfFetch = await dynamo.listReferralCodes(testClientId, testFloatId);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(mockCodesResponse);
+    });
+
+});
+
+describe('*** UNIT TEST PUT ADMIN LOG ***', () => {
+
+    const testAdminId = uuid();
+
+    beforeEach(() => helper.resetStubs(docClientPutStub, momentStub));
+
+    it('Adds an admin log to the table', async () => {
+        const testMoment = moment();
+        momentStub.returns(testMoment);
+
+        const testEventType = 'REFERRAL_CODE_DEACTIVATED';
+
+        const expectedPutArgs = {
+            TableName: config.get('tables.adminLogsTable'),
+            Item: {
+                'admin_user_id_event_type': `${testAdminId}::${testEventType}`,
+                'timestamp': testMoment.valueOf(),
+                'context': {
+                    'reason_to_log': 'Stuff happened'
+                }
+            },
+            ExpressionAttributeNames: {
+                '#auid': 'admin_user_id_event_type'
+            },    
+            ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(timestamp)'
+        };
+
+        docClientPutStub.resolves({ });
+
+        const resultOfLog = await dynamo.putAdminLog(testAdminId, testEventType, { reasonToLog: 'Stuff happened' });
+        expect(resultOfLog).to.exist;
+        expect(resultOfLog).to.deep.equal({ result: 'SUCCESS' });
+
+        expect(docClientPutStub).to.have.been.calledOnceWithExactly(expectedPutArgs);
+        
+    });
+
+});
+
 describe('*** UNIT TEST OTP VERIFIED ***', () => {
 
     const testUserId = uuid();
@@ -287,6 +411,4 @@ describe('*** UNIT TEST OTP VERIFIED ***', () => {
         expect(result).to.be.false;
         expect(docClientGetStub).to.have.been.calledOnceWithExactly(expectedParams);
     });
-
-
 });

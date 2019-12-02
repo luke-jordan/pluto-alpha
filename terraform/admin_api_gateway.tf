@@ -43,6 +43,21 @@ resource "aws_api_gateway_authorizer" "admin_jwt_authorizer" {
   authorizer_uri = "arn:aws:apigateway:${var.aws_default_region[terraform.workspace]}:lambda:path/2015-03-31/functions/${var.jwt_authorizer_arn[terraform.workspace]}/invocations"
 }
 
+resource "aws_api_gateway_gateway_response" "admin_unauthorized_cors" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  status_code = "401"
+  response_type = "UNAUTHORIZED"
+
+  response_parameters = {
+    "gatewayresponse.header.Access-Control-Allow-Origin" = "'*'"
+  }
+
+  response_templates  = {
+    "application/json" = "{\"message\":$context.error.messageString}"
+  }
+
+}
+
 /////////////////////// API GW LOGGING ///////////////////////////////////////////////////////////////
 
 // note : also reusing a bunch from ops
