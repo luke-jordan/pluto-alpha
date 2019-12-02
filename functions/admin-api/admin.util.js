@@ -28,7 +28,7 @@ module.exports.wrapHttpResponse = (body, statusCode = 200) => ({
     body: JSON.stringify(body)
 });
 
-module.exports.okayResponse = (statusCode = 200) => ({
+module.exports.codeOnlyResponse = (statusCode = 200) => ({
     headers: corsHeaders,
     statusCode
 });

@@ -13,6 +13,8 @@ AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
 const otpNeededStatusCode = 401;
+const referralNotFoundCode = 404;
+const referralNotAvailableCode = 409;
 
 const validateInterval = (intervalKey, intervalValue) => {
     if (isNaN(intervalKey) || isNaN(intervalValue)) {
@@ -98,7 +100,7 @@ module.exports.setFloatReferenceRates = async (event) => {
         logger('Result of updating reference map: ', resultOfUpdate);
 
         if (resultOfUpdate.result === 'SUCCESS') {
-            return adminUtil.okayResponse();
+            return adminUtil.codeOnlyResponse();
         }
 
         throw new Error('Failure in updating dynamo, or some other unspecified error');
@@ -112,6 +114,8 @@ module.exports.setFloatReferenceRates = async (event) => {
 // ///////////////////////////// REFERRAL CODES //////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+const condenseBonusAmount = (bonusAmount) => `${bonusAmount.amount}::${bonusAmount.unit}::${bonusAmount.currency}`;
+
 const listReferralCodes = async (event) => {
     const { clientId, floatId } = event.queryStringParameters;
     logger('Looking up codes for clientId: ', clientId, ' and floatId: ', floatId);
@@ -122,14 +126,14 @@ const listReferralCodes = async (event) => {
 
 const createReferralCode = async (event) => {
     const params = opsCommonUtil.extractParamsFromEvent(event);
-    logger('Creating event with params: ', params);
+    logger('Creating referral code with params: ', params);
 
     const { clientId, floatId } = params;
     const countryCode = await dynamo.findCountryForClientFloat(clientId, floatId);
 
     const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
     
-    const assembledAmount = `${params.bonusAmount.amount}::${params.bonusAmount.unit}::${params.bonusAmount.currency}`;
+    const assembledAmount = condenseBonusAmount(params.bonusAmount);
 
     const createPayload = {
         referralCode: params.referralCode,
@@ -164,6 +168,106 @@ const createReferralCode = async (event) => {
     };
 };
 
+const deactivateCode = async (event) => {
+    const params = opsCommonUtil.extractParamsFromEvent(event);
+    logger('Deactivating referral code, params: ', params);
+
+    const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
+
+    const modifyPayload = {
+        operation: 'DEACTIVATE',
+        referralCode: params.referralCode,
+        clientId: params.clientId,
+        floatId: params.floatId,
+        initiator: systemWideUserId
+    };
+
+    const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.modifyReferralCode'), modifyPayload, true);
+    const resultOfOff = await lambda.invoke(lambdaInvocation).promise();
+    logger('Result of turning off: ', resultOfOff);
+
+    if (resultOfOff['StatusCode'] !== 200) {
+        throw new Error(resultOfOff['Payload']);
+    }
+
+    const { updatedTimeMillis } = JSON.parse(resultOfOff['Payload']);
+    const updatedCodes = await dynamo.listReferralCodes(params.clientId, params.floatId);
+
+    await dynamo.putAdminLog(systemWideUserId, 'REFERRAL_CODE_DEACTIVATED', params);
+
+    return {
+        result: 'DEACTIVATED',
+        updatedTimeMillis,
+        updatedCodes
+    };
+};
+
+const modifyCode = async (event) => {
+    const params = opsCommonUtil.extractParamsFromEvent(event);
+    logger('Updating referral code: ', params);
+
+    const { referralCode, clientId, floatId } = params;
+    const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
+
+    const modifyPayload = {
+        operation: 'UPDATE',
+        referralCode,
+        clientId,
+        floatId,
+        initiator: systemWideUserId,
+        newContext: { }
+    };
+
+    if (params.bonusAmount) {
+        modifyPayload.newContext.boostAmountOffered = condenseBonusAmount(params.bonusAmount);
+    }
+
+    if (params.bonusSource) {
+        modifyPayload.newContext.bonusPoolId = params.bonusSource;
+    }
+
+    if (params.tags) {
+        modifyPayload.tags = params.tags;
+    }
+
+    const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.modifyReferralCode'), modifyPayload, true);
+    const resultOfUpdate = await lambda.invoke(lambdaInvocation).promise();
+    
+    if (resultOfUpdate['StatusCode'] !== 200) {
+        throw new Error(resultOfUpdate['Payload']);
+    }
+
+    const { updatedTimeMillis } = JSON.parse(resultOfUpdate['Payload']);
+    
+    await dynamo.putAdminLog(systemWideUserId, 'REFERRAL_CODE_MODIFIED', params);
+
+    return {
+        result: 'UPDATED',
+        updatedTimeMillis
+    };
+ 
+};
+
+const validateCode = async (event) => {
+    const { clientId, floatId, referralCode } = event.queryStringParameters;
+    const countryCode = await dynamo.findCountryForClientFloat(clientId, floatId);
+    
+    const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.verifyReferralCode'), { countryCode, referralCode }, true);
+    const resultOfCheck = await lambda.invoke(lambdaInvocation).promise();
+
+    const resultCode = JSON.parse(resultOfCheck['Payload']).statusCode;
+    
+    // note: we flip here; if verify returns 200, the code exists, otherwise it doesn't
+    return resultCode === referralNotFoundCode;
+};
+
+const dispatcher = {
+    'list': (event) => listReferralCodes(event),
+    'create': (event) => createReferralCode(event),
+    'deactivate': (event) => deactivateCode(event),
+    'update': (event) => modifyCode(event)
+};
+
 /**
  * Operations: CREATE, MODIFY, DEACTIVATE, LIST
  */
@@ -183,20 +287,14 @@ module.exports.manageReferralCodes = async (event) => {
             return opsCommonUtil.wrapResponse({ result: 'OTP_NEEDED' }, otpNeededStatusCode);
         }
 
-        let resultOfOperation = {};
-        switch (operation) {
-            case 'list': 
-                resultOfOperation = await listReferralCodes(event);
-                break;
-            case 'create':
-                resultOfOperation = await createReferralCode(event);
-                break;
-            default:
-                logger('Well that went badly');
+        if (Object.keys(dispatcher).includes(operation)) {
+            const resultOfOperation = await dispatcher[operation](event);
+            return adminUtil.wrapHttpResponse(resultOfOperation);
         }
 
-        if (resultOfOperation !== {}) {
-            return adminUtil.wrapHttpResponse(resultOfOperation);
+        if (operation === 'available') {
+            const isCodeAvailable = await validateCode(event);
+            return adminUtil.codeOnlyResponse(isCodeAvailable ? 200 : referralNotAvailableCode);
         }
 
         throw new Error('Referral management reached end of method without completing');

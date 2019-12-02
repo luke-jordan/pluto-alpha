@@ -29,7 +29,9 @@
         "floatTransfer": "float_transfer",
         "directSettle": "save_admin_settle",
         "statusUpdate": "profile_status_update",
-        "createReferralCode": "referral_code_create"
+        "createReferralCode": "referral_code_create",
+        "modifyReferralCode": "referral_code_modify",
+        "verifyReferralCode": "referral_code_verify"
     },
     "email": {
         "systemStats": {
