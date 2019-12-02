@@ -95,7 +95,7 @@ resource "aws_dynamodb_table" "active_referral_code_table" {
   }
 
   attribute {
-    name = "client_id"
+    name = "country_code"
     type = "S"
   }
 
@@ -104,12 +104,17 @@ resource "aws_dynamodb_table" "active_referral_code_table" {
     type = "S"
   }
 
+  attribute {
+    name = "client_id_float_id"
+    type = "S"
+  }
+
   global_secondary_index {
     name                = "ReferralCodeFloatIndex"
     hash_key            = "client_id_float_id"
     range_key           = "referral_code"
     projection_type     = "INCLUDE"
-    non_key_attributes  = ["code_type", "bonus_source", "referral_context", "country_code", "tags"]
+    non_key_attributes  = ["referral_context", "country_code", "bonus_source", "tags", "code_type"]
   }
 
   tags = {
@@ -142,7 +147,7 @@ resource "aws_dynamodb_table" "archived_referral_code_table" {
 }
 
 resource "aws_dynamodb_table" "admin_log_table" {
-  name          = "AdminDynamoAuditTable"
+  name          = "AdminDynamoLogTable"
   billing_mode  = "PAY_PER_REQUEST"
 
   hash_key      = "admin_user_id_event_type"

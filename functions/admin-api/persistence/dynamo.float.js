@@ -81,6 +81,34 @@ module.exports.verifyOtpPassed = async (systemWideUserId) => {
     return true;
 };
 
+/**
+ * Generic function to add a log to the admin audit table
+ */
+module.exports.putAdminLog = async (adminUserId, eventType, passedEvent) => {
+    const putArgs = {
+        TableName: config.get('tables.adminLogsTable'),
+        Item: {
+            'admin_user_id_event_type': `${adminUserId}::${eventType}`,
+            'timestamp': moment().valueOf(),
+            'context': customDeepDecamelKeys(passedEvent)
+        },
+        ExpressionAttributeNames: {
+            '#auid': 'admin_user_id_event_type'
+        },    
+        ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(timestamp)'
+    };
+
+    try {
+        const resultOfPut = await docC.put(putArgs).promise();
+        logger('Result of put: ', resultOfPut);
+        return { result: 'SUCCESS' };
+    } catch (error) {
+        logger('Error! From AWS: ', error);
+        return { result: 'ERROR', error };
+    }
+
+};
+
 // todo : restrict admin access to certain clients/floats
 module.exports.listCountriesClients = async () => {
     logger('Fetching countries and clients');
