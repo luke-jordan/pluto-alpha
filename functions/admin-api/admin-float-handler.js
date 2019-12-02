@@ -175,6 +175,10 @@ module.exports.listClientsAndFloats = async (event) => {
     return adminUtil.wrapHttpResponse(assembledResults);
 };
 
+const fetchFloatReferralCodes = async (floatId) => {
+
+};
+
 /**
  * Fetches the details on a client float, including, e.g., accrual rates, referral codes, also soon competitor rates
  * as well as float logs, which it scans for 'alerts' (i.e., certain types of logs)
@@ -186,21 +190,24 @@ module.exports.fetchClientFloatDetails = async (event) => {
 
     const params = opsCommonUtil.extractQueryParams(event);
 
-    const [clientFloatVars, floatBalanceRaw, floatAlerts] = await Promise.all([
+    const [clientFloatVars, floatBalanceRaw, floatAlerts, floatBonusPoolRaw, referralCodes] = await Promise.all([
         dynamo.fetchClientFloatVars(params.clientId, params.floatId),
         persistence.getFloatBalanceAndFlows([params.floatId]),
-        fetchFloatAlertsIssues(params.clientId, params.floatId)
+        fetchFloatAlertsIssues(params.clientId, params.floatId),
+        persistence.getFloatBonusBalanceAndFlows([params.floatId]),
+        fetchFloatReferralCodes
     ]);
 
-    logger('Assembled client float vars: ', clientFloatVars);
-    logger('Assembled float alerts: ', floatAlerts);
+    // logger('Assembled float alerts: ', floatAlerts);
     logger('And float balance: ', floatBalanceRaw);
 
     const floatBalanceInfo = floatBalanceRaw.get(params.floatId)[clientFloatVars.currency];
     const floatBalance = wrapAmount(floatBalanceInfo.amount, floatBalanceInfo.unit, clientFloatVars.currency);
     logger('Extract float balance: ', floatBalance);
 
-    const clientFloatDetails = { ...clientFloatVars, floatBalance, floatAlerts };
+    const floatBonusPools = floatBonusPoolRaw ? floatBonusPoolRaw.get(floatId) : null;
+
+    const clientFloatDetails = { ...clientFloatVars, floatBalance, floatAlerts, referralCodes, floatBonusPools };
 
     return adminUtil.wrapHttpResponse(clientFloatDetails);
 };

@@ -38,9 +38,8 @@ resource "aws_dynamodb_table" "client-float-table" {
 
 resource "aws_dynamodb_table" "system_variable_table" {
   name           = "SystemVariableTable"
-  billing_mode   = "PROVISIONED"
-  read_capacity  = "${lookup(var.dynamo_tables_read_capacity[terraform.workspace], "system_variable_table")}"
-  write_capacity = "${lookup(var.dynamo_tables_write_capacity[terraform.workspace], "system_variable_table")}"
+  billing_mode   = "PAY_PER_REQUEST"
+
   hash_key       = "VariableKey"
   range_key      = "LastUpdatedTimestamp"
 
@@ -65,19 +64,102 @@ resource "aws_dynamodb_table" "system_variable_table" {
 }
 
 resource "aws_dynamodb_table" "responsible_clients_table" {
-  name           = "ResponsibleClientsTable"
-  billing_mode   = "PROVISIONED"
-  read_capacity  = "${lookup(var.dynamo_tables_read_capacity[terraform.workspace], "responsible_clients_table")}"
-  write_capacity = "${lookup(var.dynamo_tables_write_capacity[terraform.workspace], "responsible_clients_table")}"
-  hash_key       = "ResponsibleClientId"
+  name           = "ClientsTable"
+  billing_mode   = "PAY_PER_REQUEST"
+  hash_key       = "ClientId"
 
   point_in_time_recovery {
     enabled = true
   }
 
   attribute {
-    name = "ResponsibleClientId"
+    name = "ClientId"
     type = "S"
+  }
+
+  tags = {
+    Name        = "environment"
+    Environment = "${terraform.workspace}"
+  }
+}
+
+resource "aws_dynamodb_table" "active_referral_code_table" {
+  name           = "ActiveReferralCodes"
+  billing_mode   = "PAY_PER_REQUEST"
+
+  hash_key       = "country_code"
+  range_key      = "referral_code"
+
+    point_in_time_recovery {
+    enabled = false
+  }
+
+  attribute {
+    name = "client_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "referral_code"
+    type = "S"
+  }
+
+  global_secondary_index {
+    name                = "ReferralCodeFloatIndex"
+    hash_key            = "client_id_float_id"
+    range_key           = "referral_code"
+    projection_type     = "INCLUDE"
+    non_key_attributes  = ["code_type", "bonus_source", "referral_context", "country_code", "tags"]
+  }
+
+  tags = {
+    Name        = "environment"
+    Environment = "${terraform.workspace}"
+  }
+}
+
+resource "aws_dynamodb_table" "archived_referral_code_table" {
+  name          = "ArchivedReferralCodeTable"
+  billing_mode  = "PAY_PER_REQUEST"
+
+  hash_key      = "referral_code"
+  range_key     = "deactivated_time"
+
+  attribute {
+    name = "referral_code"
+    type = "S"
+  }
+
+  attribute {
+    name = "deactivated_time"
+    type = "N"
+  }
+
+  tags = {
+    Name          = "environment"
+    Environment   = "${terraform.workspace}"
+  }
+}
+
+resource "aws_dynamodb_table" "admin_log_table" {
+  name          = "AdminDynamoAuditTable"
+  billing_mode  = "PAY_PER_REQUEST"
+
+  hash_key      = "admin_user_id_event_type"
+  range_key     = "timestamp"
+
+  point_in_time_recovery {
+    enabled = true
+  }
+
+  attribute {
+    name = "admin_user_id_event_type"
+    type = "S"
+  }
+
+  attribute {
+    name = "timestamp"
+    type = "N"
   }
 
   tags = {

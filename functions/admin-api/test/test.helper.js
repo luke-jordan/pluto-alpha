@@ -25,6 +25,16 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     }
 });
 
+module.exports.wrapPathEvent = (body, userId, pathSegment, role = 'SYSTEM_ADMIN') => {
+    const wrappedEvent = exports.wrapEvent(body, userId, role);
+    if (pathSegment) {
+        wrappedEvent.pathParameters = {
+            proxy: pathSegment
+        }
+    }
+    return wrappedEvent;
+}
+
 module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod) => ({
     queryStringParameters: requestBody,
     httpMethod: httpMethod,
@@ -41,10 +51,14 @@ module.exports.expectedHeaders = {
     'Access-Control-Allow-Origin': '*'
 };
 
-module.exports.standardOkayChecks = (result) => {
+module.exports.standardOkayChecks = (result, checkHeaders = false) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
     expect(result).to.have.property('body');
+    if (checkHeaders) {
+        expect(result).to.have.property('headers');
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
     return JSON.parse(result.body);
 };
 
