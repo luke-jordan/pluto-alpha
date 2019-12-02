@@ -36,7 +36,7 @@ module.exports.wrapPathEvent = (body, userId, pathSegment, role = 'SYSTEM_ADMIN'
     return wrappedEvent;
 };
 
-module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod) => ({
+module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod = 'GET') => ({
     queryStringParameters: requestBody,
     httpMethod: httpMethod,
     requestContext: {

@@ -134,11 +134,11 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
         expect(listRefCodesStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
     });
 
-    it.skip('Should deactivate a referral code', async () => {
+    it('Should deactivate a referral code', async () => {
         const testEvent = {
             clientId: testClientId,
             floatId: testFloatId,
-            code: testRefCode,
+            referralCode: testRefCode,
             reasonToLog: 'Outlived its usefulness'
         };
 
@@ -150,26 +150,33 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
             initiator: testAdminId
         };
 
-        const apiGwEvent = helper.wrapEvent(testEvent, testAdminId, 'deactivate');
+        const testUpdatedTime = moment();
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaDirect({ updatedTimeMillis: testUpdatedTime.valueOf() })});
+
+        const apiGwEvent = helper.wrapPathEvent(testEvent, testAdminId, 'deactivate');
         const resultOfDeactivation = await handler.manageReferralCodes(apiGwEvent);
 
         helper.standardOkayChecks(resultOfDeactivation);
-        expect(resultOfDeactivation.body).to.equal(JSON.stringify({ result: 'DEACTIVATED' }));
+        expect(resultOfDeactivation.body).to.equal(JSON.stringify({ result: 'DEACTIVATED', updatedTimeMillis: testUpdatedTime.valueOf() }));
 
         const expectedLambdaInvoke = helper.wrapLambdaInvoc(config.get('lambdas.modifyReferralCode'), false, expectedPayload);
         expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
-
+        expect(listRefCodesStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
         expect(putAdminLogStub).to.have.been.calledOnceWithExactly(testAdminId, 'REFERRAL_CODE_DEACTIVATED', testEvent);
     });
 
-    it.skip('Should modify a referral code', async () => {
+    it('Should modify a referral code', async () => {
         const testEvent = {
             clientId: testClientId,
             floatId: testFloatId,
             referralCode: testRefCode,
-            amount: 1000000,
+            bonusAmount: {
+                amount: 1000000,
+                unit: 'HUNDREDTH_CENT',
+                currency: 'USD'
+            },
             bonusSource: 'test_bonus_pool',
-            tags: ['Added'],
+            tags: ['Added', 'Another'],
             reasonToLog: 'Giving people some motivation'
         };
 
@@ -180,15 +187,21 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
             operation: 'UPDATE',
             initiator: testAdminId,
             newContext: {
-
-            }
+                boostAmountOffered: '1000000::HUNDREDTH_CENT::USD',
+                bonusPoolId: 'test_bonus_pool'
+            },
+            tags: ['Added', 'Another']
         };
 
-        const apiGwEvent = helper.wrapEvent(testEvent, testAdminId, 'modify');
+        const apiGwEvent = helper.wrapPathEvent(testEvent, testAdminId, 'update');
+
+        const mockTime = moment();
+        lambdaInvokeStub.returns({ promise: () => helper.mockLambdaDirect({ updatedTimeMillis: mockTime.valueOf() })});
+
         const resultOfModification = await handler.manageReferralCodes(apiGwEvent);
 
         helper.standardOkayChecks(resultOfModification);
-        expect(resultOfModification.body).to.equal(JSON.stringify({ result: 'UPDATED' }));
+        expect(resultOfModification.body).to.equal(JSON.stringify({ result: 'UPDATED', updatedTimeMillis: mockTime.valueOf() }));
 
         const expectedLambdaInvoke = helper.wrapLambdaInvoc(config.get('lambdas.modifyReferralCode'), false, expectedPayload);
         expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
@@ -196,28 +209,31 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
         expect(putAdminLogStub).to.have.been.calledOnceWithExactly(testAdminId, 'REFERRAL_CODE_MODIFIED', testEvent);
     });
 
-    it.skip('Should accurately validate if a referral code is available', async () => {
+    it('Should accurately validate if a referral code is available', async () => {
         const eventBase = { clientId: testClientId, floatId: testFloatId };
+        findCountryStub.resolves('RWA');
 
         const availableTest = { ...eventBase, referralCode: 'AVAILABLE' };
-        const availableInvoke = helper.wrapLambdaInvoc(config.get('lambdas.verifyReferralCode'), false, availableTest);
+        const expectedPayload = { countryCode: 'RWA', referralCode: 'AVAILABLE' };
+        const availableInvoke = helper.wrapLambdaInvoc(config.get('lambdas.verifyReferralCode'), false, expectedPayload);
         lambdaInvokeStub.withArgs(availableInvoke).returns({ promise: () => helper.mockLambdaResponse({ result: 'CODE_NOT_FOUND' }, 404) });
 
         const unavailableTest = { ...eventBase, referralCode: 'UNAVAILABLE' };
-        const unavailableInvoke = helper.wrapLambdaInvoc(config.get('lambdas.verifyReferralCode'), false, unavailableTest);
+        const expectedPayload2 = { countryCode: 'RWA', referralCode: 'UNAVAILABLE' };
+        const unavailableInvoke = helper.wrapLambdaInvoc(config.get('lambdas.verifyReferralCode'), false, expectedPayload2);
         lambdaInvokeStub.withArgs(unavailableInvoke).returns({ promise: () => helper.mockLambdaResponse({ result: 'CODE_IS_ACTIVE' }, 200)});
         
 
-        const availableApiGwEvent = helper.wrapQueryParamEvent(availableTest, testAdminId);
+        const availableApiGwEvent = helper.wrapQueryParamEvent(availableTest, testAdminId, 'SYSTEM_ADMIN');
         availableApiGwEvent.pathParameters = { proxy: 'available' };
         
         const resultOfValidation = await handler.manageReferralCodes(availableApiGwEvent);
-        expect(resultOfValidation).to.deep.equal({ statusCode: 200 });
+        expect(resultOfValidation).to.deep.equal({ statusCode: 200, headers: helper.expectedHeaders });
 
-        const unavailableApiGwEvent = helper.wrapQueryParamEvent(unavailableTest, testAdminId);
+        const unavailableApiGwEvent = helper.wrapQueryParamEvent(unavailableTest, testAdminId, 'SYSTEM_ADMIN');
         unavailableApiGwEvent.pathParameters = { proxy: 'available' };
         const resultOfSecond = await handler.manageReferralCodes(unavailableApiGwEvent);
-        expect(resultOfSecond).to.deep.equal({ statusCode: 409 });
+        expect(resultOfSecond).to.deep.equal({ statusCode: 409, headers: helper.expectedHeaders });
     });
 
     // it('Should reject an unauthorized request', async () => {
