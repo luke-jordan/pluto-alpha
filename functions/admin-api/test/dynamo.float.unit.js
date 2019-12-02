@@ -303,7 +303,7 @@ describe('*** UNIT TEST REFERRAL CODE ***', () => {
 
 });
 
-describe.skip('*** UNIT TEST PUT ADMIN LOG ***', () => {
+describe('*** UNIT TEST PUT ADMIN LOG ***', () => {
 
     const testAdminId = uuid();
 
@@ -330,7 +330,7 @@ describe.skip('*** UNIT TEST PUT ADMIN LOG ***', () => {
             ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(timestamp)'
         };
 
-        docClientPutStub.resolves({ });
+        docClientPutStub.returns({ promise: () => ({ })});
 
         const resultOfLog = await dynamo.putAdminLog(testAdminId, testEventType, { reasonToLog: 'Stuff happened' });
         expect(resultOfLog).to.exist;

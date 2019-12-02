@@ -1,11 +1,16 @@
 'use strict';
 
 const logger = require('debug')('jupiter:admin:refs');
+const config = require('config');
 
 const dynamo = require('./persistence/dynamo.float');
 
 const opsCommonUtil = require('ops-util-common');
 const adminUtil = require('./admin.util');
+
+const AWS = require('aws-sdk');
+AWS.config.update({ region: config.get('aws.region') });
+const lambda = new AWS.Lambda();
 
 const otpNeededStatusCode = 401;
 
@@ -115,6 +120,50 @@ const listReferralCodes = async (event) => {
     return resultOfList;
 };
 
+const createReferralCode = async (event) => {
+    const params = opsCommonUtil.extractParamsFromEvent(event);
+    logger('Creating event with params: ', params);
+
+    const { clientId, floatId } = params;
+    const countryCode = await dynamo.findCountryForClientFloat(clientId, floatId);
+
+    const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
+    
+    const assembledAmount = `${params.bonusAmount.amount}::${params.bonusAmount.unit}::${params.bonusAmount.currency}`;
+
+    const createPayload = {
+        referralCode: params.referralCode,
+        codeType: params.codeType,
+        creatingUserId: systemWideUserId,
+        countryCode,
+        clientId,
+        floatId,
+        referralContext: {
+            boostAmountOffered: assembledAmount,
+            bonusPoolId: params.bonusSource
+        }
+    };
+
+    const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.createReferralCode'), createPayload, true);
+    const resultOfCreate = await lambda.invoke(lambdaInvocation).promise();
+    
+    logger('Received from create lambda: ', resultOfCreate);
+    if (resultOfCreate['StatusCode'] !== 200) {
+        throw new Error(resultOfCreate['Payload']);
+    }
+
+    const { persistedTimeMillis } = JSON.parse(resultOfCreate['Payload']);
+    const updatedCodes = await dynamo.listReferralCodes(clientId, floatId);
+
+    await dynamo.putAdminLog(systemWideUserId, 'REFERRAL_CODE_CREATED', params);
+
+    return {
+        result: 'SUCCESS',
+        persistedTimeMillis,
+        updatedCodes
+    };
+};
+
 /**
  * Operations: CREATE, MODIFY, DEACTIVATE, LIST
  */
@@ -138,6 +187,9 @@ module.exports.manageReferralCodes = async (event) => {
         switch (operation) {
             case 'list': 
                 resultOfOperation = await listReferralCodes(event);
+                break;
+            case 'create':
+                resultOfOperation = await createReferralCode(event);
                 break;
             default:
                 logger('Well that went badly');

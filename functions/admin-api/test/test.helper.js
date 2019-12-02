@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:admin:test-helper');
+const stringify = require('json-stable-stringify');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -75,7 +76,7 @@ module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
 module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
     FunctionName: functionName,
     InvocationType: async ? 'Event' : 'RequestResponse',
-    Payload: JSON.stringify(payload)
+    Payload: stringify(payload)
 });
 
 module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
@@ -83,4 +84,9 @@ module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
         statusCode,
         body: JSON.stringify(body)
     })
+});
+
+module.exports.mockLambdaDirect = (result, statusCode = 200) => ({
+    StatusCode: statusCode,
+    Payload: JSON.stringify(result)
 });
