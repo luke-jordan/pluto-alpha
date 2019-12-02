@@ -30,10 +30,10 @@ module.exports.wrapPathEvent = (body, userId, pathSegment, role = 'SYSTEM_ADMIN'
     if (pathSegment) {
         wrappedEvent.pathParameters = {
             proxy: pathSegment
-        }
+        };
     }
     return wrappedEvent;
-}
+};
 
 module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod) => ({
     queryStringParameters: requestBody,

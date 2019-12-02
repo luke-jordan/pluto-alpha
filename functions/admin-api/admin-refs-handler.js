@@ -7,6 +7,8 @@ const dynamo = require('./persistence/dynamo.float');
 const opsCommonUtil = require('ops-util-common');
 const adminUtil = require('./admin.util');
 
+const otpNeededStatusCode = 401;
+
 const validateInterval = (intervalKey, intervalValue) => {
     if (isNaN(intervalKey) || isNaN(intervalValue)) {
         return false;
@@ -81,7 +83,6 @@ module.exports.setFloatReferenceRates = async (event) => {
         const adminPassedOtp = await dynamo.verifyOtpPassed(adminUserId);
 
         if (!adminPassedOtp) {
-            const otpNeededStatusCode = 401;
             return opsCommonUtil.wrapResponse({ result: 'OTP_NEEDED' }, otpNeededStatusCode);
         }
 
@@ -106,11 +107,20 @@ module.exports.setFloatReferenceRates = async (event) => {
 // ///////////////////////////// REFERRAL CODES //////////////////////////////////////////////////////
 // ///////////////////////////////////////////////////////////////////////////////////////////////////
 
+const listReferralCodes = async (event) => {
+    const { clientId, floatId } = event.queryStringParameters;
+    logger('Looking up codes for clientId: ', clientId, ' and floatId: ', floatId);
+    const resultOfList = await dynamo.listReferralCodes(clientId, floatId);
+    logger('From Dynamo: ', resultOfList);
+    return resultOfList;
+};
+
 /**
  * Operations: CREATE, MODIFY, DEACTIVATE, LIST
  */
 module.exports.manageReferralCodes = async (event) => {
     try {
+        logger('Event: ', event);
         if (!adminUtil.isUserAuthorized(event)) {
             return adminUtil.unauthorizedResponse;
         }
@@ -120,19 +130,27 @@ module.exports.manageReferralCodes = async (event) => {
         const adminUserId = event.requestContext.authorizer.systemWideUserId;
         const adminPassedOtp = await operation === 'LIST' || dynamo.verifyOtpPassed(adminUserId);
 
-        const params = adminUtil.extractEventBody(event);
-        logger('Extract params for float adjustment: ', params);
+        if (!adminPassedOtp) {
+            return opsCommonUtil.wrapResponse({ result: 'OTP_NEEDED' }, otpNeededStatusCode);
+        }
 
         let resultOfOperation = {};
         switch (operation) {
-
+            case 'list': 
+                resultOfOperation = await listReferralCodes(event);
+                break;
+            default:
+                logger('Well that went badly');
         }
 
-        if (resultOfOperation.result === 'SUCCESS') {
-            return adminUtil.okayResponse();
+        if (resultOfOperation !== {}) {
+            return adminUtil.wrapHttpResponse(resultOfOperation);
         }
+
+        throw new Error('Referral management reached end of method without completing');
 
     } catch (err) {
+        logger('FATAL_ERROR: ', err);
         return opsCommonUtil.wrapResponse(err.message, 500);
     }
 };
