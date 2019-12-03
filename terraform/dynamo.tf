@@ -114,7 +114,7 @@ resource "aws_dynamodb_table" "active_referral_code_table" {
     hash_key            = "client_id_float_id"
     range_key           = "referral_code"
     projection_type     = "INCLUDE"
-    non_key_attributes  = ["referral_context", "country_code", "bonus_source", "tags", "code_type"]
+    non_key_attributes  = ["context", "country_code", "bonus_source", "tags", "code_type"]
   }
 
   tags = {
@@ -151,7 +151,7 @@ resource "aws_dynamodb_table" "admin_log_table" {
   billing_mode  = "PAY_PER_REQUEST"
 
   hash_key      = "admin_user_id_event_type"
-  range_key     = "timestamp"
+  range_key     = "creation_time"
 
   point_in_time_recovery {
     enabled = true
@@ -163,7 +163,7 @@ resource "aws_dynamodb_table" "admin_log_table" {
   }
 
   attribute {
-    name = "timestamp"
+    name = "creation_time"
     type = "N"
   }
 

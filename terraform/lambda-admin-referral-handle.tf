@@ -88,3 +88,8 @@ resource "aws_iam_role_policy_attachment" "admin_referral_handle_invoke_access" 
   role = aws_iam_role.admin_referral_handle_role.name
   policy_arn = aws_iam_policy.lambda_invoke_admin_referral_access.arn
 }
+
+resource "aws_iam_role_policy_attachment" "admin_referral_admin_log_write" {
+  role = aws_iam_role.admin_referral_handle_role.name
+  policy_arn = aws_iam_policy.admin_log_write_policy.arn
+}

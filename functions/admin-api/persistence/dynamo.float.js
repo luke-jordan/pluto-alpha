@@ -89,21 +89,22 @@ module.exports.putAdminLog = async (adminUserId, eventType, passedEvent) => {
         TableName: config.get('tables.adminLogsTable'),
         Item: {
             'admin_user_id_event_type': `${adminUserId}::${eventType}`,
-            'timestamp': moment().valueOf(),
+            'creation_time': moment().valueOf(),
             'context': customDeepDecamelKeys(passedEvent)
         },
         ExpressionAttributeNames: {
             '#auid': 'admin_user_id_event_type'
         },    
-        ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(timestamp)'
+        ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(creation_time)'
     };
 
     try {
+        logger('Inserting admin log: ', putArgs);
         const resultOfPut = await docC.put(putArgs).promise();
         logger('Result of put: ', resultOfPut);
         return { result: 'SUCCESS' };
     } catch (error) {
-        logger('Error! From AWS: ', error);
+        logger('Error inserting admin log! From AWS: ', error);
         return { result: 'ERROR', error };
     }
 
@@ -153,7 +154,9 @@ module.exports.findCountryForClientFloat = async (clientId, floatId) => {
         ProjectionExpression: ['country_code']
     };
 
+    logger('Params for obtaining country code: ', params);
     const ddbResult = await docC.get(params).promise();
+    logger('Result of obtaining country code: ', ddbResult);
 
     return nonEmptyReturnItem(ddbResult) ? ddbResult['Item']['country_code'] : null;
 };
@@ -232,14 +235,19 @@ module.exports.listReferralCodes = async (clientId, floatId) => {
         transformedItem.clientId = clientFloat[0];
         transformedItem.floatId = clientFloat[1];
         Reflect.deleteProperty(transformedItem, 'clientIdFloatId');
-        const amountDetails = item['referral_context']['boost_amount_offered'].split('::');
-        transformedItem.bonusAmount = {
-            amount: parseInt(amountDetails[0], 10),
-            unit: amountDetails[1],
-            currency: amountDetails[2]
-        };
-        transformedItem.bonusSource = item['referral_context']['bonus_pool_id'];
-        Reflect.deleteProperty(transformedItem, 'referralContext');
+        
+        if (item['context']) {
+            const boostContext = customDeepCamelKeys(item['context']);
+            const amountDetails = typeof boostContext.boostAmountOffered === 'string' ? boostContext.boostAmountOffered.split('::') : null;
+            transformedItem.bonusAmount = amountDetails ? {
+                amount: parseInt(amountDetails[0], 10),
+                unit: amountDetails[1],
+                currency: amountDetails[2]
+            } : {};
+            transformedItem.bonusSource = boostContext.bonusPoolId;
+            Reflect.deleteProperty(transformedItem, 'context');
+        }
+        
         return transformedItem;
     });
 

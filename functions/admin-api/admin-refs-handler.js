@@ -251,8 +251,11 @@ const modifyCode = async (event) => {
 const validateCode = async (event) => {
     const { clientId, floatId, referralCode } = event.queryStringParameters;
     const countryCode = await dynamo.findCountryForClientFloat(clientId, floatId);
+    logger('Country code for client-float: ', countryCode);
     
     const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.verifyReferralCode'), { countryCode, referralCode }, true);
+    
+    logger('Sending Lambda invocation: ', lambdaInvocation);
     const resultOfCheck = await lambda.invoke(lambdaInvocation).promise();
 
     const resultCode = JSON.parse(resultOfCheck['Payload']).statusCode;
@@ -294,7 +297,7 @@ module.exports.manageReferralCodes = async (event) => {
 
         if (operation === 'available') {
             const isCodeAvailable = await validateCode(event);
-            logger('Result of cod availability check: ', isCodeAvailable);
+            logger('Result of code availability check: ', isCodeAvailable);
             return adminUtil.codeOnlyResponse(isCodeAvailable ? 200 : referralNotAvailableCode);
         }
 

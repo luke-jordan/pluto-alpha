@@ -578,3 +578,26 @@ resource "aws_iam_policy" "lambda_invoke_admin_referral_access" {
 }
 EOF
 }
+
+resource "aws_iam_policy" "admin_log_write_policy" {
+    name = "dynamo_table_adminlog_write_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AdminLogPutAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:PutItem"
+            ],
+            "Resource": [
+                "${aws_dynamodb_table.admin_log_table.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}

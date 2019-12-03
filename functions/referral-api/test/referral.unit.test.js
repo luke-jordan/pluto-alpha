@@ -74,6 +74,7 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         codeType: 'BETA',
         clientId: 'some_client_co',
         floatId: 'primary_client_float',
+        clientIdFloatId: 'some_client_co::primary_client_float',
         persistedTimeMillis: testPersistenceMoment.valueOf(),
         expiryTimeMillis: testExpiryTimeShort.valueOf(),
         creatingUserId: testCreatingUserId,
@@ -99,6 +100,7 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         expiryTimeMillis: testExpiryTimeLong.valueOf(),
         creatingUserId: testOrdinaryUserId,
         ...stdCountryClientFloat,
+        clientIdFloatId: 'some_client_co::primary_client_float',
         context: {
             boostAmountOffered: '5::WHOLE_CURRENCY::USD',
             bonusPoolId: 'primary_bonus_pool'

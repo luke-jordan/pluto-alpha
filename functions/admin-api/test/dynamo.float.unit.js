@@ -255,7 +255,7 @@ describe('*** UNIT TEST REFERRAL CODE ***', () => {
             'referral_code': code,
             'client_id_float_id': `${testClientId}::${testFloatId}`,
             'code_type': 'CHANNEL',
-            'referral_context': {
+            'context': {
                 'boost_amount_offered': `${mockReferralAmounts[idx]}::HUNDREDTH_CENT::USD`,
                 'bonus_pool_id': testBoostSource
             },
@@ -319,7 +319,7 @@ describe('*** UNIT TEST PUT ADMIN LOG ***', () => {
             TableName: config.get('tables.adminLogsTable'),
             Item: {
                 'admin_user_id_event_type': `${testAdminId}::${testEventType}`,
-                'timestamp': testMoment.valueOf(),
+                'creation_time': testMoment.valueOf(),
                 'context': {
                     'reason_to_log': 'Stuff happened'
                 }
@@ -327,7 +327,7 @@ describe('*** UNIT TEST PUT ADMIN LOG ***', () => {
             ExpressionAttributeNames: {
                 '#auid': 'admin_user_id_event_type'
             },    
-            ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(timestamp)'
+            ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(creation_time)'
         };
 
         docClientPutStub.returns({ promise: () => ({ })});

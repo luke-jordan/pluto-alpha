@@ -24,6 +24,9 @@ resource "aws_lambda_function" "referral_create" {
           {
             "aws": {
                 "region": "${var.aws_default_region[terraform.workspace]}"
+            },
+            "tables": {
+              "activeCodes": "${aws_dynamodb_table.active_referral_code_table.name}"
             }
         }
       )}"

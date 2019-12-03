@@ -127,6 +127,7 @@ module.exports.create = async (event) => {
             creatingUserId: params.creatingUserId,
             clientId: params.clientId,
             floatId: params.floatId,
+            clientIdFloatId: `${params.clientId}::${params.floatId}`,
             persistedTimeMillis: moment().valueOf(),
             expiryTimeMillis: params.expiryTimeMillis
         };
