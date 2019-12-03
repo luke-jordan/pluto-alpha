@@ -5,13 +5,6 @@ jobs:
       - image: circleci/node:10
         environment:
 
-      # Postgres image for testing
-      # - image: circleci/postgres:9.6.5-alpine-ram
-      #   environment:
-      #     POSTGRES_USER: postgres
-      #     POSTGRES_DB: postgres
-      #     POSTGRES_PASSWORD: postgres
-
     working_directory: ~/app
 
     steps:
@@ -115,9 +108,10 @@ jobs:
             /bin/sh execute_test_lint.sh functions/boost-api
             /bin/sh execute_test_lint.sh functions/audience-selection
             /bin/sh execute_test_lint.sh functions/user-messaging-api
+            /bin/sh execute_test_lint.sh functions/referral-api
+            /bin/sh execute_test_lint.sh functions/admin-api
             /bin/sh execute_test_lint.sh functions/third-parties
             /bin/sh execute_test_lint.sh functions/db-migration no-test
-            /bin/sh execute_test_lint.sh functions/admin-api no-test
             /bin/sh execute_test_lint.sh functions/warmup link-only
             
             echo "Uploading coverage reports"
@@ -195,6 +189,10 @@ jobs:
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_messaging_api_$CIRCLE_SHA1.zip .
 
+                cd $HOME/app/functions/referral-api
+                echo $CIRCLE_SHA1 > last_commit.txt
+                zip -rq $HOME/deploy_referral_api_$CIRCLE_SHA1.zip .
+
                 cd $HOME/app/functions/admin-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_admin_api_$CIRCLE_SHA1.zip .
@@ -226,6 +224,7 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_audience_selection_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/audience_selection/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_messaging_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_messaging_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_admin_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/admin_api/$CIRCLE_SHA1.zip
+                /home/circleci/bin/aws s3 cp deploy_referral_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/referral_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_third_parties_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/third_parties/$CIRCLE_SHA1.zip
 
                 /home/circleci/bin/aws s3 cp deploy_ops_warmup_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/ops_warmup/$CIRCLE_SHA1.zip

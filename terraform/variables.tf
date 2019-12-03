@@ -45,6 +45,14 @@ variable user_profile_table_read_policy_arn {
     type = "map"
 }
 
+variable user_profile_table_update_policy_arn {
+    default = {
+        "staging" = "arn:aws:iam::455943420663:policy/UpdateProfileTable_access_staging"
+        "master" = "arn:aws:iam::455943420663:policy/UpdateProfileTable_access_master"
+    }
+    type = "map"
+}
+
 variable user_profile_admin_policy_arn {
     default = {
         "staging" = "arn:aws:iam::455943420663:policy/lambda_admin_user_mgmt_staging"

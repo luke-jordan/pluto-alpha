@@ -110,7 +110,8 @@ resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
                 "${aws_lambda_function.save_initiate.arn}",
                 "${aws_lambda_function.save_payment_check.arn}",
                 "${aws_lambda_function.message_user_fetch.arn}",
-                "${aws_lambda_function.user_history_list.arn}"
+                "${aws_lambda_function.user_history_list.arn}",
+                "${aws_lambda_function.referral_verify.arn}"
             ],
             "Condition": {
                 "StringEquals": {
@@ -432,8 +433,8 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
 EOF
 }
 
-resource "aws_iam_policy" "referral_management_omnibus_policy" {
-    name = "lambda_admin_referral_manager_${terraform.workspace}"
+resource "aws_iam_policy" "referral_code_read_policy" {
+    name = "dynamo_table_referral_read_${terraform.workspace}"
     path = "/"
 
     policy = <<EOF
@@ -448,7 +449,33 @@ resource "aws_iam_policy" "referral_management_omnibus_policy" {
                 "dynamodb:GetItem"
             ],
             "Resource": [
-                "${aws_dynamodb_table.active_referral_code_table.arn}"
+                "${aws_dynamodb_table.active_referral_code_table.arn}",
+                "${aws_dynamodb_table.active_referral_code_table.arn}/index/*"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "referral_code_write_policy" {
+    name = "dynamo_table_referral_write_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ReferralCodeWriteAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem"
+            ],
+            "Resource": [
+                "${aws_dynamodb_table.active_referral_code_table.arn}",
+                "${aws_dynamodb_table.active_referral_code_table.arn}/index/*"
             ]
         }
     ]
@@ -498,6 +525,28 @@ resource "aws_iam_policy" "admin_save_settle_lambda_invoke_policy" {
             "Resource": [
                 "${aws_lambda_function.save_admin_settle.arn}"
             ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "lambda_referral_code_open" {
+  name        = "lambda_referral_create_invoke_${terraform.workspace}"
+  path        = "/"
+
+  policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ReferralCodeCreateInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": "${aws_lambda_function.referral_create.arn}"
         }
     ]
 }

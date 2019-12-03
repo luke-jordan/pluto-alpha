@@ -1,0 +1,33 @@
+{
+  "name": "referral-mgmt",
+  "version": "0.0.1",
+  "description": "Lambdas for handling referral creation, verification",
+  "main": "referral-handler.js",
+  "scripts": {
+    "test": "DEBUG=jupiter:* nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint ."
+  },
+  "author": "Luke Jordan",
+  "license": "ISC",
+  "dependencies": {
+    "camelcase-keys": "^6.0.1",
+    "config": "^3.2.2",
+    "debug": "^4.1.1",
+    "moment": "^2.24.0",
+    "random-words": "^1.1.0",
+    "statuses": "^1.5.0"
+  },
+  "devDependencies": {
+    "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
+    "eslint": "^6.6.0",
+    "eslint-plugin-chai-friendly": "^0.5.0",
+    "mocha": "^6.2.0",
+    "nyc": "^14.1.1",
+    "proxyquire": "^2.1.1",
+    "sinon": "^7.3.2",
+    "sinon-chai": "^3.3.0",
+    "uuid": "^3.3.2"
+  }
+}
