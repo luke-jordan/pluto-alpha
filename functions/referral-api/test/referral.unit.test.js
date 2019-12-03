@@ -245,9 +245,7 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
         logger('Result of warm up call to lambda:', result);
 
         expect(result).to.exist;
-        expect(result.statusCode).to.equal(400);
-        expect(result).to.have.property('body');
-        expect(result.body).to.deep.equal('Empty invocation');
+        expect(result).to.deep.equal({ result: 'WARMED' });
     });
 
     it('Happy path referral code verification, when it exists, normal body', async () => {

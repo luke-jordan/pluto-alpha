@@ -9,7 +9,7 @@ const randomWord = require('random-words');
 const camelCaseKeys = require('camelcase-keys');
 
 const dynamo = require('dynamo-common');
-const authUtil = require('auth-util-common');
+const opsUtil = require('ops-util-common');
 
 const END_OF_TIME_YEAR = 2050;
 
@@ -20,7 +20,7 @@ const handleErrorAndReturn = (e) => {
 
 const isCodeAvailable = async (referralCode) => {
     const codeExistsTest = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode }, ['referralCode']);
-    return authUtil.isObjectEmpty(codeExistsTest);
+    return opsUtil.isObjectEmpty(codeExistsTest);
 };
 
 const generateUnusedCode = async () => {
@@ -31,7 +31,7 @@ const generateUnusedCode = async () => {
         attemptedWord = randomWord().toUpperCase().trim();
         logger('Trying this word: ', attemptedWord);
         const codeExistsTest = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode: attemptedWord }, ['referralCode']);
-        unusedWordFound = authUtil.isObjectEmpty(codeExistsTest);
+        unusedWordFound = opsUtil.isObjectEmpty(codeExistsTest);
     }
 
     return attemptedWord; 
@@ -51,7 +51,7 @@ const defineReferralContext = async (params) => {
     const clientFloatKey = { floatId: params.floatId, clientId: params.clientId };
 
     // if referral context is provided, just make sure client & float are in there and return it
-    if (!authUtil.isObjectEmpty(params.referralContext)) {
+    if (!opsUtil.isObjectEmpty(params.referralContext)) {
         return { ...clientFloatKey, ...params.referralContext };
     }
     
@@ -64,7 +64,7 @@ const defineReferralContext = async (params) => {
         logger('Received from client float vars: ', clientFloatVars);
         logger('Referral defaults :', clientFloatVars.userReferralDefaults);
 
-        if (!authUtil.isObjectEmpty(clientFloatVars.userReferralDefaults)) {
+        if (!opsUtil.isObjectEmpty(clientFloatVars.userReferralDefaults)) {
             const referralBoostDetails = camelCaseKeys(clientFloatVars.userReferralDefaults);
             logger('Referral details: ', referralBoostDetails);
             referralContext.boostAmountOffered = referralBoostDetails.boostAmountEach;
@@ -101,7 +101,7 @@ module.exports.create = async (event) => {
         // todo : validation of e.g., only system admin can open non-user referral codes
         
         logger('Referral creation event: ', event);
-        const params = authUtil.extractParamsFromEvent(event);
+        const params = opsUtil.extractParamsFromEvent(event);
         
         let codeToCreate = '';
         
@@ -160,19 +160,19 @@ module.exports.create = async (event) => {
  */
 module.exports.verify = async (event) => {
     try {
-        if (authUtil.isWarmup(event)) {
+        if (opsUtil.isWarmup(event)) {
             logger('Referral verify warmup');
-            return authUtil.warmUpResponse;
+            return { result: 'WARMED' };
         }
         // todo : validation of request
-        const params = authUtil.extractParamsFromEvent(event);
+        const params = opsUtil.extractParamsFromEvent(event);
         logger('Referral verification params: ', params);
         const referralCode = params.referralCode.toUpperCase().trim();
         const colsToReturn = ['referralCode', 'codeType', 'expiryTimeMillis', 'context'];
         const tableLookUpResult = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode }, colsToReturn);
         logger('Table lookup result: ', tableLookUpResult);
-        logger('Is this object empty? :', authUtil.isObjectEmpty(tableLookUpResult));
-        if (authUtil.isObjectEmpty(tableLookUpResult)) {
+        logger('Is this object empty? :', opsUtil.isObjectEmpty(tableLookUpResult));
+        if (opsUtil.isObjectEmpty(tableLookUpResult)) {
             return { statusCode: status['Not Found'], body: JSON.stringify({ result: 'CODE_NOT_FOUND' })};
         } 
         

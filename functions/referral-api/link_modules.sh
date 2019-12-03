@@ -1,2 +1,2 @@
 #! /bin/bash
-npm link dynamo-common auth-util-common 
+npm link dynamo-common ops-util-common
