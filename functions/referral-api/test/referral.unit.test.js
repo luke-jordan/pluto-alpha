@@ -50,10 +50,12 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
 
     const sampleRandomWord = 'chrysalis';
 
-    const stdClientFloat = { floatId: 'primary_client_float', clientId: 'some_client_co' };
+    const testCountryCode = 'RWA';
+    const stdCountryClientFloat = { floatId: 'primary_client_float', clientId: 'some_client_co', countryCode: testCountryCode };
 
     // admin created / creating code
     const wellFormedRequestBody = {
+        countryCode: testCountryCode,
         referralCode: testBetaCode,
         codeType: 'BETA',
         expiryTimeMillis: testExpiryTimeShort.valueOf(),
@@ -62,28 +64,27 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         clientId: 'some_client_co',
         referralContext: {
             boostAmountOffered: '5::WHOLE_CURRENCY::USD',
-            boostSource: { floatId: 'primary_client_float', clientId: 'some_client_co', bonusPoolId: 'primary_bonus_pool' }
+            bonusPoolId: 'primary_bonus_pool'
         }
     };
 
     const expectedDynamoInsertionBetaCode = {
+        countryCode: testCountryCode,
         referralCode: testBetaCode,
         codeType: 'BETA',
+        clientId: 'some_client_co',
+        floatId: 'primary_client_float',
         persistedTimeMillis: testPersistenceMoment.valueOf(),
         expiryTimeMillis: testExpiryTimeShort.valueOf(),
         creatingUserId: testCreatingUserId,
-        context: {
-            clientId: 'some_client_co',
-            floatId: 'primary_client_float',
-            ...wellFormedRequestBody.referralContext 
-        }
+        context: wellFormedRequestBody.referralContext 
     };
 
     // user referral codes things
     const userOpeningInvocation = {
         codeType: 'USER',
         creatingUserId: testOrdinaryUserId,
-        ...stdClientFloat
+        ...stdCountryClientFloat
     };
 
     const userReferralDefaults = {
@@ -97,10 +98,10 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         persistedTimeMillis: testPersistenceMoment.valueOf(),
         expiryTimeMillis: testExpiryTimeLong.valueOf(),
         creatingUserId: testOrdinaryUserId,
+        ...stdCountryClientFloat,
         context: {
-            ...stdClientFloat,
             boostAmountOffered: '5::WHOLE_CURRENCY::USD',
-            boostSource: { ...stdClientFloat, bonusPoolId: 'primary_bonus_pool' }
+            bonusPoolId: 'primary_bonus_pool'
         }
     };
 
@@ -115,7 +116,7 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
     beforeEach(() => testHelper.resetStubs(fetchRowStub, insertRowStub, updateRowStub, randomStub));
 
     it('Happy path referral code creation, beta code', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: testBetaCode }, ['referralCode']).resolves({});
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, ['referralCode']).resolves({});
         insertRowStub.resolves({ result: 'SUCCESS' });
         momentStub.returns(testPersistenceMoment);
 
@@ -124,14 +125,14 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
 
         const bodyOfResult = testHelper.standardOkayChecks(resultOfCall);
         expect(bodyOfResult).to.deep.equal({ persistedTimeMillis: testPersistenceMoment.valueOf() });
-        
         expect(insertRowStub).to.have.been.calledWithExactly(activeCodeTable, ['referralCode'], expectedDynamoInsertionBetaCode);
     });
 
     it('Happy path referral code creation, user code, no word conflict', async () => {
         randomStub.returns(sampleRandomWord);
-        fetchRowStub.withArgs(clientFloatTable, stdClientFloat).resolves({ userReferralDefaults });
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: sampleRandomWord.toUpperCase() }, ['referralCode']).resolves({});
+        const { clientId, floatId } = stdCountryClientFloat;
+        fetchRowStub.withArgs(clientFloatTable, { clientId, floatId }).resolves({ userReferralDefaults });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: sampleRandomWord.toUpperCase() }, ['referralCode']).resolves({});
         
         momentStub.withArgs().returns(testPersistenceMoment);
         momentStub.withArgs([2050, 0, 1]).returns(testExpiryTimeLong);
@@ -145,21 +146,25 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         const bodyOfResult = testHelper.standardOkayChecks(resultOfCall);
         expect(bodyOfResult).to.deep.equal({ persistedTimeMillis: testPersistenceMoment.valueOf() });
         
+        logger('Expected: ', expectedDynamoInsertionUserCode);
+        logger('Called:', insertRowStub.getCall(0).args[2]);
+
         expect(insertRowStub).to.have.been.calledOnceWith(activeCodeTable, ['referralCode'], expectedDynamoInsertionUserCode);
         expect(updateRowStub).to.have.been.calledOnceWith(expectedDynamoProfileUpdateParams);
-
     });
 
     it('Happy path referral code creation, user code, handles initial word conflict', async () => {
         randomStub.onFirstCall().returns('takenWord');
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: 'TAKENWORD' }, ['referralCode']).resolves({ referralCode: 'TAKENWORD' });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: 'TAKENWORD' }, ['referralCode']).resolves({ referralCode: 'TAKENWORD' });
         randomStub.onSecondCall().returns(sampleRandomWord);
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: sampleRandomWord }, ['referralCode']).resolves({});
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: sampleRandomWord }, ['referralCode']).resolves({});
         
         momentStub.withArgs().returns(testPersistenceMoment);
         momentStub.withArgs([2050, 0, 1]).returns(testExpiryTimeLong);
 
-        fetchRowStub.withArgs(clientFloatTable, stdClientFloat).resolves({ userReferralDefaults });
+        const { clientId, floatId } = stdCountryClientFloat;
+        fetchRowStub.withArgs(clientFloatTable, { clientId, floatId }).resolves({ userReferralDefaults });
+        
         insertRowStub.withArgs(activeCodeTable, ['referralCode'], expectedDynamoInsertionUserCode).resolves({ result: 'SUCCESS' });
         updateRowStub.withArgs(expectedDynamoProfileUpdateParams).resolves({ referralCode: sampleRandomWord.toUpperCase() });
 
@@ -173,30 +178,30 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
     });
 
     it('Handles case changes and whitespace properly', async () => {
-        const otherCaseReqBody = JSON.parse(JSON.stringify(wellFormedRequestBody));
+        const otherCaseReqBody = { ...wellFormedRequestBody };
         otherCaseReqBody.referralCode = testCodeCases;
 
         // since we assume upper case insertion, we leave this as above
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: testBetaCode }, ['referralCode']).resolves({});
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, ['referralCode']).resolves({});
         insertRowStub.withArgs(activeCodeTable, ['referralCode'], expectedDynamoInsertionBetaCode).resolves({ result: 'SUCCESS' });
         momentStub.returns(testPersistenceMoment);
 
         const resultOfCall = await handler.create(otherCaseReqBody);
         const bodyOfResult = testHelper.standardOkayChecks(resultOfCall);
         expect(bodyOfResult).to.deep.equal({ persistedTimeMillis: testPersistenceMoment.valueOf() });
-        expect(fetchRowStub).to.have.been.calledOnceWithExactly(activeCodeTable, { referralCode: testBetaCode }, ['referralCode']);
+        expect(fetchRowStub).to.have.been.calledOnceWithExactly(activeCodeTable, { referralCode: testBetaCode, countryCode: testCountryCode }, ['referralCode']);
         expect(insertRowStub).to.has.been.calledOnceWithExactly(activeCodeTable, ['referralCode'], expectedDynamoInsertionBetaCode);
     });
 
     it('Throws error if active code already exists', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: testBetaCode }, ['referralCode']).resolves({ referralCode: testBetaCode });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, ['referralCode']).resolves({ referralCode: testBetaCode });
         const resultOfCall = await handler.create(wellFormedRequestBody);
         expect(resultOfCall).to.exist;
         expect(resultOfCall).to.deep.equal({ statusCode: status['Conflict'], body: JSON.stringify({ result: 'CODE_ALREADY_EXISTS' })});
     });
 
     it('Handles insertion error properly', async () => {
-        const triggeringCall1 = JSON.parse(JSON.stringify(wellFormedRequestBody));
+        const triggeringCall1 = { ...wellFormedRequestBody };
         triggeringCall1.referralCode = 'mysteriousError';
         
         momentStub.returns(testPersistenceMoment);
@@ -208,9 +213,10 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
     });
 
     it('Swallows error throws appropriately', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: 'NASTYLOUSYCODE'}, ['referralCode']).rejects(new Error('Something weird happened'));
-        const triggeringCall2 = JSON.parse(JSON.stringify(wellFormedRequestBody));
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: 'BAD', referralCode: 'NASTYLOUSYCODE'}, ['referralCode']).rejects(new Error('Something weird happened'));
+        const triggeringCall2 = { ...wellFormedRequestBody };
         triggeringCall2.referralCode = 'nastyLousyCode';
+        triggeringCall2.countryCode = 'BAD';
         const triggeredError2 = await handler.create(triggeringCall2);
         expect(triggeredError2).to.exist;
         expect(triggeredError2).to.deep.equal({ statusCode: 500, body: JSON.stringify('Something weird happened') });
@@ -221,10 +227,12 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
 describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
 
     const nonExistentCode = 'LETMEIN';
+    const testCountryCode = 'RWA';
 
     const desiredCols = ['referralCode', 'codeType', 'expiryTimeMillis', 'context'];
     const returnedCodeDetails = {
         referralCode: testBetaCode,
+        countryCode: testCountryCode,
         codeType: 'BETA',
         expiryTimeMillis: moment().add(1, 'month').valueOf(),
         context: {
@@ -249,30 +257,30 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
     });
 
     it('Happy path referral code verification, when it exists, normal body', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: testBetaCode }, sinon.match(desiredCols)).resolves(returnedCodeDetails);
-        const resultOfVerification = await handler.verify({ referralCode: testBetaCode });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(desiredCols)).resolves(returnedCodeDetails);
+        const resultOfVerification = await handler.verify({ referralCode: testBetaCode, countryCode: testCountryCode });
         const verificationBody = testHelper.standardOkayChecks(resultOfVerification);
         expect(verificationBody).to.deep.equal({ result: 'CODE_IS_ACTIVE', codeDetails: returnedCodeDetails });
     });
 
     it('Happy path referral code verification, case insensitive', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: testBetaCode }, sinon.match(desiredCols)).resolves(returnedCodeDetails);
-        const resultOfVerification = await handler.verify({ referralCode: testCodeCases });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: testBetaCode }, sinon.match(desiredCols)).resolves(returnedCodeDetails);
+        const resultOfVerification = await handler.verify({ referralCode: testCodeCases, countryCode: testCountryCode });
         const verificationBody = testHelper.standardOkayChecks(resultOfVerification);
         expect(verificationBody).to.deep.equal({ result: 'CODE_IS_ACTIVE', codeDetails: returnedCodeDetails });
-        expect(fetchRowStub).to.have.been.calledWithExactly(activeCodeTable, { referralCode: testBetaCode }, sinon.match(desiredCols));
+        expect(fetchRowStub).to.have.been.calledWithExactly(activeCodeTable, { referralCode: testBetaCode, countryCode: testCountryCode }, sinon.match(desiredCols));
     });
 
     it('Happy path referral code does not exist / is not active', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: nonExistentCode }, desiredCols).resolves({ });
-        const resultOfVerification = await handler.verify({ referralCode: nonExistentCode });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: nonExistentCode }, desiredCols).resolves({ });
+        const resultOfVerification = await handler.verify({ referralCode: nonExistentCode, countryCode: testCountryCode });
         const verificationBody = testHelper.expectedErrorChecks(resultOfVerification, status['Not Found']);
         expect(verificationBody).to.deep.equal({ result: 'CODE_NOT_FOUND' });
     });
 
     it('Referral code verification swallows errors appropriately', async () => {
-        fetchRowStub.withArgs(activeCodeTable, { referralCode: 'THISISBAD' }, desiredCols).rejects(new Error('Got that wrong!'));
-        const errorThrow = await handler.verify({ referralCode: 'thisIsBad' });
+        fetchRowStub.withArgs(activeCodeTable, { countryCode: testCountryCode, referralCode: 'THISISBAD' }, desiredCols).rejects(new Error('Got that wrong!'));
+        const errorThrow = await handler.verify({ referralCode: 'thisIsBad', countryCode: testCountryCode });
         expect(errorThrow).to.exist;
         expect(errorThrow).to.deep.equal({ statusCode: 500, body: JSON.stringify('Got that wrong!') });
     });

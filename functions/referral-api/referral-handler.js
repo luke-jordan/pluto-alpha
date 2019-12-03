@@ -18,19 +18,19 @@ const handleErrorAndReturn = (e) => {
     return { statusCode: 500, body: JSON.stringify(e.message) };
 };
 
-const isCodeAvailable = async (referralCode) => {
-    const codeExistsTest = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode }, ['referralCode']);
+const isCodeAvailable = async (referralCode, countryCode) => {
+    const codeExistsTest = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode, countryCode }, ['referralCode']);
     return opsUtil.isObjectEmpty(codeExistsTest);
 };
 
-const generateUnusedCode = async () => {
+const generateUnusedCode = async (countryCode) => {
     logger('No referral code passed, so need to generate one randomly');
     let attemptedWord = null;
     let unusedWordFound = false;
     while (!unusedWordFound) {
         attemptedWord = randomWord().toUpperCase().trim();
         logger('Trying this word: ', attemptedWord);
-        const codeExistsTest = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode: attemptedWord }, ['referralCode']);
+        const codeExistsTest = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { countryCode, referralCode: attemptedWord }, ['referralCode']);
         unusedWordFound = opsUtil.isObjectEmpty(codeExistsTest);
     }
 
@@ -45,19 +45,19 @@ const generateUnusedCode = async () => {
  * @param {object} params The params passed into the parent function. Must have float ID and client ID. Can have boost details in
  * requestContext, otherwise for user referral codes they will be drawn from the client-float defaults. If they are passed in, require:
  * @property {string} boostAmountOffered In our standard pattern of amount::unit::currency
- * @property {string} boostSource A client ID, a floatID, and a bonus pool Id 
+ * @property {string} bonusPoolId Where the bonus is funded from 
  */
 const defineReferralContext = async (params) => {
     const clientFloatKey = { floatId: params.floatId, clientId: params.clientId };
 
     // if referral context is provided, just make sure client & float are in there and return it
     if (!opsUtil.isObjectEmpty(params.referralContext)) {
-        return { ...clientFloatKey, ...params.referralContext };
+        return params.referralContext;
     }
     
     // if nothing provided, and it's a user code, we draw from the defaults
     if (params.codeType === 'USER') {
-        const referralContext = { ...clientFloatKey };
+        const referralContext = { };
         
         const clientFloatVars = await dynamo.fetchSingleRow(config.get('tables.clientFloatTable'), clientFloatKey);
         
@@ -68,7 +68,7 @@ const defineReferralContext = async (params) => {
             const referralBoostDetails = camelCaseKeys(clientFloatVars.userReferralDefaults);
             logger('Referral details: ', referralBoostDetails);
             referralContext.boostAmountOffered = referralBoostDetails.boostAmountEach;
-            referralContext.boostSource = { ...clientFloatKey, bonusPoolId: referralBoostDetails.fromBonusPoolId};
+            referralContext.bonusPoolId = referralBoostDetails.fromBonusPoolId;
         }
         return referralContext;
     }
@@ -102,27 +102,31 @@ module.exports.create = async (event) => {
         
         logger('Referral creation event: ', event);
         const params = opsUtil.extractParamsFromEvent(event);
+        const { countryCode } = params;
         
         let codeToCreate = '';
         
         if (params.referralCode) {
             codeToCreate = params.referralCode.toUpperCase().trim();
-            const isCodeFree = await isCodeAvailable(codeToCreate);
+            const isCodeFree = await isCodeAvailable(codeToCreate, countryCode);
             if (!isCodeFree) {
                 logger('Code exists, returning error');
                 return { statusCode: status['Conflict'], body: JSON.stringify({ result: 'CODE_ALREADY_EXISTS' })};
             }
         } else {
-            codeToCreate = await generateUnusedCode(params);
+            codeToCreate = await generateUnusedCode(countryCode);
             logger('Generated random word: ', codeToCreate);
         }
 
         logger('Transformed referral code: ', codeToCreate);    
         
         const rowToInsert = {
+            countryCode,
             referralCode: codeToCreate,
             codeType: params.codeType,
             creatingUserId: params.creatingUserId,
+            clientId: params.clientId,
+            floatId: params.floatId,
             persistedTimeMillis: moment().valueOf(),
             expiryTimeMillis: params.expiryTimeMillis
         };
@@ -156,6 +160,7 @@ module.exports.create = async (event) => {
 /**
  * This function verifies a referral code.
  * @param {object} event An event object containing the referral code to be evaluated.
+ * @property {string} countryCode The country where the referral code is being used
  * @property {string} referralCode The referralCode to be verified.
  */
 module.exports.verify = async (event) => {
@@ -168,8 +173,9 @@ module.exports.verify = async (event) => {
         const params = opsUtil.extractParamsFromEvent(event);
         logger('Referral verification params: ', params);
         const referralCode = params.referralCode.toUpperCase().trim();
+        const codeKey = { referralCode, countryCode: params.countryCode };
         const colsToReturn = ['referralCode', 'codeType', 'expiryTimeMillis', 'context'];
-        const tableLookUpResult = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), { referralCode }, colsToReturn);
+        const tableLookUpResult = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), codeKey, colsToReturn);
         logger('Table lookup result: ', tableLookUpResult);
         logger('Is this object empty? :', opsUtil.isObjectEmpty(tableLookUpResult));
         if (opsUtil.isObjectEmpty(tableLookUpResult)) {

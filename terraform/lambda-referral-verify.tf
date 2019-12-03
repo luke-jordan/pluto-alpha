@@ -1,5 +1,5 @@
 variable "referral_verify_lambda_function_name" {
-  default = "referral_verify_ops"
+  default = "referral_verify"
   type = "string"
 }
 
@@ -24,13 +24,19 @@ resource "aws_lambda_function" "referral_verify" {
           {
             "aws": {
                 "region": "${var.aws_default_region[terraform.workspace]}"
+            },
+            "tables": {
+              "activeCodes": "${aws_dynamodb_table.active_referral_code_table.name}"
             }
         }
       )}"
     }
   }
 
-  depends_on = [aws_cloudwatch_log_group.referral_verify]
+  depends_on = [
+    aws_cloudwatch_log_group.referral_verify, 
+    aws_iam_role_policy_attachment.referral_verify_basic_execution_policy,
+    aws_iam_role_policy_attachment.referral_verify_table_read_access_policy]
 }
 
 resource "aws_iam_role" "referral_verify_role" {

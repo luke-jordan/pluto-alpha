@@ -294,6 +294,7 @@ module.exports.manageReferralCodes = async (event) => {
 
         if (operation === 'available') {
             const isCodeAvailable = await validateCode(event);
+            logger('Result of cod availability check: ', isCodeAvailable);
             return adminUtil.codeOnlyResponse(isCodeAvailable ? 200 : referralNotAvailableCode);
         }
 

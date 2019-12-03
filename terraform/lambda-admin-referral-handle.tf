@@ -83,3 +83,8 @@ resource "aws_iam_role_policy_attachment" "admin_referral_handle_omnibus_access"
   role = "${aws_iam_role.admin_referral_handle_role.name}"
   policy_arn = aws_iam_policy.referral_code_read_policy.arn
 }
+
+resource "aws_iam_role_policy_attachment" "admin_referral_handle_invoke_access" {
+  role = aws_iam_role.admin_referral_handle_role.name
+  policy_arn = aws_iam_policy.lambda_invoke_admin_referral_access.arn
+}
