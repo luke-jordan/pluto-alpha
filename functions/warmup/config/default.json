@@ -4,6 +4,6 @@
         "apiVersion": "2012-08-10"
     },
     "lambdas": [
-        "balance_fetch", "balance_fetch_wrapper", "save_initiate", "save_payment_complete", "message_user_fetch", "user_history_list"
+        "balance_fetch", "balance_fetch_wrapper", "save_initiate", "save_payment_complete", "message_user_fetch", "user_history_list", "referral_verify"
     ]
 }

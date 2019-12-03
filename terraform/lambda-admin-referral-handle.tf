@@ -24,6 +24,9 @@ resource "aws_lambda_function" "admin_referral_handle" {
           {
               "aws": {
                   "region": "${var.aws_default_region[terraform.workspace]}"
+              },
+              "verification": {
+                "otpEnabled": false
               }
           }
       )}"
@@ -78,5 +81,5 @@ resource "aws_iam_role_policy_attachment" "admin_referral_handle_client_float_ac
 
 resource "aws_iam_role_policy_attachment" "admin_referral_handle_omnibus_access" {
   role = "${aws_iam_role.admin_referral_handle_role.name}"
-  policy_arn = aws_iam_policy.referral_management_omnibus_policy.arn
+  policy_arn = aws_iam_policy.referral_code_read_policy.arn
 }
