@@ -114,7 +114,7 @@ resource "aws_dynamodb_table" "active_referral_code_table" {
     hash_key            = "client_id_float_id"
     range_key           = "referral_code"
     projection_type     = "INCLUDE"
-    non_key_attributes  = ["context", "country_code", "bonus_source", "tags", "code_type"]
+    non_key_attributes  = ["country_code", "context", "bonus_source", "tags", "code_type"]
   }
 
   tags = {
