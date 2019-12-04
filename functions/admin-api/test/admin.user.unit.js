@@ -158,7 +158,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         momentStub.returns({
             valueOf: () => testTime.valueOf(),
             subtract: () => testTime
-        });        
+        });
 
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId })).returns({ 
             promise: () => helper.mockLambdaResponse({ systemWideUserId: testUserId })

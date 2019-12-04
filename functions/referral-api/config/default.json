@@ -1,0 +1,12 @@
+{
+    "aws": {
+        "region": "eu-west-1",
+        "apiVersion": "2012-08-10"
+    },
+    "tables": {
+        "activeCodes": "ActiveReferralCodeTable",
+        "archivedCodes": "ArchivedReferralCodeTable",
+        "userProfile": "UserProfileTable",
+        "clientFloatTable": "ClientFloatTable"
+    }
+}

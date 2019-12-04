@@ -14,6 +14,7 @@ const functionFolders = [
     './functions/user-activity-api',
     './functions/user-existence-api',
     './functions/user-messaging-api',
+    './functions/referral-api',
     './functions/third-parties',
     './functions/warmup',
     './functions/db-migration', 

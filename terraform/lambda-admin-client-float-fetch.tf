@@ -96,3 +96,8 @@ resource "aws_iam_role_policy_attachment" "admin_client_float_fetch_table_access
   role = "${aws_iam_role.admin_client_float_fetch_role.name}"
   policy_arn = "${aws_iam_policy.admin_client_float_access.arn}"
 }
+
+resource "aws_iam_role_policy_attachment" "admin_client_float_fetch_read_referral_codes" {
+  role = aws_iam_role.admin_client_float_fetch_role.name
+  policy_arn = aws_iam_policy.referral_code_read_policy.arn
+}

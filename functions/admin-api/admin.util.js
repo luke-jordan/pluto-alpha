@@ -1,6 +1,7 @@
 'use strict';
 
 const config = require('config');
+const stringify = require('json-stable-stringify');
 // const logger = require('debug')('jupiter:message:util');
 
 const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
@@ -27,7 +28,7 @@ module.exports.wrapHttpResponse = (body, statusCode = 200) => ({
     body: JSON.stringify(body)
 });
 
-module.exports.okayResponse = (statusCode = 200) => ({
+module.exports.codeOnlyResponse = (statusCode = 200) => ({
     headers: corsHeaders,
     statusCode
 });
@@ -40,5 +41,5 @@ module.exports.unauthorizedResponse = {
 module.exports.invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,
     InvocationType: sync ? 'RequestResponse' : 'Event',
-    Payload: JSON.stringify(payload)
+    Payload: stringify(payload)
 });

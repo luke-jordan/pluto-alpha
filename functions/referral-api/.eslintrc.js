@@ -41,7 +41,7 @@ module.exports = {
             '1tbs'
         ],
         'callback-return': 'error',
-        'camelcase': 'error',
+        'camelcase': 'off',
         'capitalized-comments': 'off',
         'class-methods-use-this': 'error',
         'comma-dangle': 'error',
@@ -65,7 +65,7 @@ module.exports = {
         'consistent-this': 'error',
         'curly': 'error',
         'default-case': 'error',
-        'dot-location': 'error',
+        'dot-location': 'off',
         'dot-notation': 'off',
         'eol-last': 'error',
         'eqeqeq': 'error',
@@ -73,7 +73,7 @@ module.exports = {
         'func-name-matching': 'error',
         'func-names': 'error',
         'func-style': 'error',
-        'function-paren-newline': 'error',
+        'function-paren-newline': 'off',
         'generator-star-spacing': 'error',
         'global-require': 'error',
         'guard-for-in': 'error',
@@ -82,7 +82,7 @@ module.exports = {
         'id-length': [
             'error',
             {
-                'exceptions': ['_', 'e', 'i', 'o']
+                'exceptions': ['e', 'i', 'o', '_']
             }
         ],
         'id-match': 'error',
@@ -116,7 +116,7 @@ module.exports = {
         'max-params': [
             'error',
             {
-                'max': 5
+                'max': 4
             }
         ],
         'max-statements': 'off',
@@ -129,7 +129,7 @@ module.exports = {
         'newline-per-chained-call': 'off',
         'no-alert': 'error',
         'no-array-constructor': 'error',
-        'no-await-in-loop': 'error',
+        'no-await-in-loop': 'warn',
         'no-bitwise': 'error',
         'no-buffer-constructor': 'error',
         'no-caller': 'error',
@@ -167,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 2, 3, 100, 200, 400, 500, 365]
+                'ignore': [0, 1, 100, 200, 400, 500, 365]
             }
         ],
         'no-mixed-operators': 'error',

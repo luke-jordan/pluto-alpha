@@ -1,6 +1,6 @@
 {
     "aws": {
-        "region": ""
+        "region": "us-east-1"
     },
     "db": {
         "user": "admin_api_worker",
@@ -16,7 +16,9 @@
         "transactionTable": "transaction_data.core_transaction_ledger",
         "clientFloatTable": "ClientFloatTable",
         "countryClientTable": "CountryClientTable",
-        "authCacheTable": "AuthSucceededEvents"
+        "authCacheTable": "AuthSucceededEvents",
+        "activeReferralCodeTable": "ActiveReferralCodes",
+        "adminLogsTable": "AdminDynamoLogTable"
     },
     "lambdas": {
         "processAccrual": "float_accrue",
@@ -26,7 +28,10 @@
         "userHistory": "user_log_reader",
         "floatTransfer": "float_transfer",
         "directSettle": "save_admin_settle",
-        "statusUpdate": "profile_status_update"
+        "statusUpdate": "profile_status_update",
+        "createReferralCode": "referral_create",
+        "modifyReferralCode": "referral_modify",
+        "verifyReferralCode": "referral_verify"
     },
     "email": {
         "systemStats": {

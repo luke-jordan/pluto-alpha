@@ -33,7 +33,8 @@ const FLOAT_KEY_SUBSTITUTIONS = {
 };
 
 // because stopPaths on the library is not working and camel case flips labels to upper case on rates map (plus can exclude others later)
-const shouldTouchKeys = (key, value) => key !== 'rates' && typeof value === 'object' && value !== null;
+const untouchedKeys = ['rates', 'tags'];
+const shouldTouchKeys = (key, value) => untouchedKeys.indexOf(key) < 0 && typeof value === 'object' && value !== null;
 
 const customDeepCamelKeys = (object) => Object.keys(object).reduce((accumulator, key) => {
         const value = shouldTouchKeys(key, object[key]) ? customDeepCamelKeys(object[key]) : object[key];
@@ -80,6 +81,35 @@ module.exports.verifyOtpPassed = async (systemWideUserId) => {
     return true;
 };
 
+/**
+ * Generic function to add a log to the admin audit table
+ */
+module.exports.putAdminLog = async (adminUserId, eventType, passedEvent) => {
+    const putArgs = {
+        TableName: config.get('tables.adminLogsTable'),
+        Item: {
+            'admin_user_id_event_type': `${adminUserId}::${eventType}`,
+            'creation_time': moment().valueOf(),
+            'context': customDeepDecamelKeys(passedEvent)
+        },
+        ExpressionAttributeNames: {
+            '#auid': 'admin_user_id_event_type'
+        },    
+        ConditionExpression: 'attribute_not_exists(#auid) and attribute_not_exists(creation_time)'
+    };
+
+    try {
+        logger('Inserting admin log: ', putArgs);
+        const resultOfPut = await docC.put(putArgs).promise();
+        logger('Result of put: ', resultOfPut);
+        return { result: 'SUCCESS' };
+    } catch (error) {
+        logger('Error inserting admin log! From AWS: ', error);
+        return { result: 'ERROR', error };
+    }
+
+};
+
 // todo : restrict admin access to certain clients/floats
 module.exports.listCountriesClients = async () => {
     logger('Fetching countries and clients');
@@ -114,6 +144,21 @@ module.exports.fetchClientFloatVars = async (clientId, floatId) => {
     logger('Result from Dynamo: ', ddbResult);
 
     return nonEmptyReturnItem(ddbResult) ? customDeepCamelKeys(ddbResult['Item']) : {};
+};
+
+// note : in future we might enforce a separate table to track this, hence using its own, with simple projection
+module.exports.findCountryForClientFloat = async (clientId, floatId) => {
+    const params = {
+        TableName: config.get('tables.clientFloatTable'),
+        Key: { 'client_id': clientId, 'float_id': floatId },
+        ProjectionExpression: ['country_code']
+    };
+
+    logger('Params for obtaining country code: ', params);
+    const ddbResult = await docC.get(params).promise();
+    logger('Result of obtaining country code: ', ddbResult);
+
+    return nonEmptyReturnItem(ddbResult) ? ddbResult['Item']['country_code'] : null;
 };
 
 module.exports.updateClientFloatVars = async ({ clientId, floatId, newPrincipalVars, newReferralDefaults, newComparatorMap }) => {
@@ -158,4 +203,54 @@ module.exports.updateClientFloatVars = async ({ clientId, floatId, newPrincipalV
     logger('Result from update: ', updateResult);
     const returnedAttributes = updateResult && updateResult['Attributes'] ? customDeepCamelKeys(updateResult['Attributes']) : { };
     return { result: 'SUCCESS', returnedAttributes };
+};
+
+module.exports.listReferralCodes = async (clientId, floatId) => {
+    logger('Obtaining referral codes for: ', clientId, ' and float: ', floatId);
+    
+    const queryParams = {
+        TableName: config.get('tables.activeReferralCodeTable'),
+        IndexName: 'ReferralCodeFloatIndex',
+        KeyConditionExpression: '#cifi = :client_id_float_id',
+        ExpressionAttributeNames: {
+            '#cifi': 'client_id_float_id'
+        },
+        ExpressionAttributeValues: {
+            ':client_id_float_id': `${clientId}::${floatId}`
+        }
+    };
+
+    logger('Executing query with args: ', queryParams);
+    const queryResult = await docC.query(queryParams).promise();
+    logger('Result from Dynamo : ', queryResult);
+
+    if (!queryResult || typeof queryResult !== 'object' || !Array.isArray(queryResult.Items)) {
+        logger('Nothing found or syntax wrong...');
+        return [];    
+    }
+
+    const transformedItems = queryResult.Items.map((item) => {
+        const transformedItem = customDeepCamelKeys(item);
+        const clientFloat = item['client_id_float_id'].split('::');
+        transformedItem.clientId = clientFloat[0];
+        transformedItem.floatId = clientFloat[1];
+        Reflect.deleteProperty(transformedItem, 'clientIdFloatId');
+        
+        if (item['context']) {
+            const boostContext = customDeepCamelKeys(item['context']);
+            const amountDetails = typeof boostContext.boostAmountOffered === 'string' ? boostContext.boostAmountOffered.split('::') : null;
+            transformedItem.bonusAmount = amountDetails ? {
+                amount: parseInt(amountDetails[0], 10),
+                unit: amountDetails[1],
+                currency: amountDetails[2]
+            } : {};
+            transformedItem.bonusSource = boostContext.bonusPoolId;
+            Reflect.deleteProperty(transformedItem, 'context');
+        }
+        
+        return transformedItem;
+    });
+
+    return transformedItems;
+    
 };

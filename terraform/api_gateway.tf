@@ -10,6 +10,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   stage_name  = "${terraform.workspace}"
 
   depends_on = [
+  aws_api_gateway_integration.referral_verify,
   aws_api_gateway_integration.save_initiate,
   aws_api_gateway_integration.save_payment_check,
   aws_api_gateway_integration.balance_fetch_wrapper,
@@ -172,6 +173,44 @@ resource "aws_api_gateway_base_path_mapping" "custom_resourse_mapping" {
   api_id      = "${aws_api_gateway_rest_api.api_gateway.id}"
   stage_name  = "${aws_api_gateway_deployment.api_deployment.stage_name}"
   domain_name = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+}
+
+/////////////// REFERRAL CODE VERIFICATION //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "referral_path_root" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.api_gateway.root_resource_id}"
+  path_part   = "referral"
+}
+
+resource "aws_api_gateway_resource" "referral_verify" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.referral_path_root.id}"
+  path_part   = "verify"
+}
+
+resource "aws_api_gateway_method" "referral_verify" {
+  rest_api_id   = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.referral_verify.id}"
+  http_method   = "POST"
+  authorization = "NONE"
+}
+
+resource "aws_lambda_permission" "referral_verify" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.referral_verify.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:${var.aws_account}:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "referral_verify" {
+  rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.referral_verify.resource_id}"
+  http_method = "${aws_api_gateway_method.referral_verify.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.referral_verify.invoke_arn}"
 }
 
 /////////////// SAVE API LAMBDA (INITIATE & CHECK) //////////////////////////////////////////////////////////////////////////

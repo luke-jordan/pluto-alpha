@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:admin:test-helper');
+const stringify = require('json-stable-stringify');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -25,7 +26,17 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     }
 });
 
-module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod) => ({
+module.exports.wrapPathEvent = (body, userId, pathSegment, role = 'SYSTEM_ADMIN') => {
+    const wrappedEvent = exports.wrapEvent(body, userId, role);
+    if (pathSegment) {
+        wrappedEvent.pathParameters = {
+            proxy: pathSegment
+        };
+    }
+    return wrappedEvent;
+};
+
+module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod = 'GET') => ({
     queryStringParameters: requestBody,
     httpMethod: httpMethod,
     requestContext: {
@@ -41,10 +52,14 @@ module.exports.expectedHeaders = {
     'Access-Control-Allow-Origin': '*'
 };
 
-module.exports.standardOkayChecks = (result) => {
+module.exports.standardOkayChecks = (result, checkHeaders = false) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
     expect(result).to.have.property('body');
+    if (checkHeaders) {
+        expect(result).to.have.property('headers');
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
     return JSON.parse(result.body);
 };
 
@@ -61,7 +76,7 @@ module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
 module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
     FunctionName: functionName,
     InvocationType: async ? 'Event' : 'RequestResponse',
-    Payload: JSON.stringify(payload)
+    Payload: stringify(payload)
 });
 
 module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
@@ -69,4 +84,9 @@ module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
         statusCode,
         body: JSON.stringify(body)
     })
+});
+
+module.exports.mockLambdaDirect = (result, statusCode = 200) => ({
+    StatusCode: statusCode,
+    Payload: JSON.stringify(result)
 });

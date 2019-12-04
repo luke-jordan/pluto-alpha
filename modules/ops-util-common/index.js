@@ -110,6 +110,8 @@ module.exports.isObjectEmpty = (object) => {
     return !object || typeof object !== 'object' || Object.keys(object).length === 0;
 };
 
+module.exports.isWarmup = (event) => exports.isObjectEmpty(event) || (Reflect.has(event, 'warmupCall') && event.warmupCall);
+
 module.exports.extractUserDetails = (event) => {
     if (typeof event.requestContext !== 'object') {
         return null;
