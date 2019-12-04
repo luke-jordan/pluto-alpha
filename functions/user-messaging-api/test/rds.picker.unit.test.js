@@ -21,7 +21,6 @@ const testFollowingMsgId = uuid();
 const testBoostId = uuid();
 const testUserId = uuid();
 
-// todo : alter update record in RDS module to use same pattern as multi
 const updateRecordStub = sinon.stub();
 const selectQueryStub = sinon.stub();
 const multiUpdateInsertStub = sinon.stub();

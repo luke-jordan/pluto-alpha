@@ -173,12 +173,12 @@ const deactivateCode = async (event) => {
     logger('Deactivating referral code, params: ', params);
 
     const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
+    const countryCode = await dynamo.findCountryForClientFloat(params.clientId, params.floatId);
 
     const modifyPayload = {
         operation: 'DEACTIVATE',
         referralCode: params.referralCode,
-        clientId: params.clientId,
-        floatId: params.floatId,
+        countryCode,
         initiator: systemWideUserId
     };
 
@@ -207,13 +207,13 @@ const modifyCode = async (event) => {
     logger('Updating referral code: ', params);
 
     const { referralCode, clientId, floatId } = params;
+    const countryCode = await dynamo.findCountryForClientFloat(clientId, floatId);
     const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
 
     const modifyPayload = {
         operation: 'UPDATE',
         referralCode,
-        clientId,
-        floatId,
+        countryCode,
         initiator: systemWideUserId,
         newContext: { }
     };

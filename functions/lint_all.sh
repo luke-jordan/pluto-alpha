@@ -7,7 +7,6 @@ cd ../user-activity-api; npm run-script lint
 cd ../float-api; npm run-script lint
 cd ../boost-api; npm run-script lint
 cd ../user-messaging-api; npm run-script lint
-cd ../user-messaging-api; npm run-script lint
 cd ../audience-selection; npm run-script lint
 cd ../admin-api; npm run-script lint
 cd ../referral-api; npm run-script lint

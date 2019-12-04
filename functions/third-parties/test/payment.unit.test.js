@@ -202,7 +202,7 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
     });
 
-    it.only('Sets test to false when false', async () => {
+    it('Sets test to false when false', async () => {
         requestStub.resolves([mockTransactionStatus, mockTransactionStatus, mockTransactionStatus]);
         const mockEvent = { transactionId: mockTransactionReference, isTest: false };
 

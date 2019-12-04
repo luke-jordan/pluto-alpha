@@ -6,7 +6,7 @@ const config = require('config');
 const camelizeKeys = require('camelize-keys');
 
 const RdsConnection = require('rds-common');
-const rdsConnection = new RdsConnection(config.get('db')); // todo : consider if want to use admin worker instead of boost worker here
+const rdsConnection = new RdsConnection(config.get('db'));
 
 const STATUSSES = ['CREATED', 'OFFERED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED'];
 

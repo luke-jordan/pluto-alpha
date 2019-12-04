@@ -16,12 +16,14 @@ const uuid = require('uuid/v4');
 const docClientGetStub = sinon.stub();
 const docClientPutStub = sinon.stub();
 const docClientUpdateStub = sinon.stub();
+const docClientDeleteStub = sinon.stub();
 
 class MockDocClient {
     constructor () {
         this.get = docClientGetStub;
         this.put = docClientPutStub;
         this.update = docClientUpdateStub;
+        this.delete = docClientDeleteStub;
     }
 }
 
@@ -34,6 +36,7 @@ const resetStubs = () => {
     docClientGetStub.reset();
     docClientPutStub.reset();
     docClientUpdateStub.reset();
+    docClientDeleteStub.reset();
 };
 
 const testTableName = 'ClientCoFloatTableTest';
@@ -284,6 +287,40 @@ describe('*** UNIT TEST SIMPLE ROW UPDATING ***', () => {
         expect(updateResult).to.have.property('details');
         const errorBody = JSON.parse(updateResult.details);
         expect(errorBody).to.deep.equal(ddbError);
+    });
+
+});
+
+describe('*** UNIT TEST SIMPLE ROW DELETING ***', () => {
+
+    const testTable = 'ActiveReferralCodes';
+    const testKey = { 'country_code': 'RWA', 'referral_code': 'LETMEIN' };
+
+    const wellFormedParams = {
+        TableName: testTable,
+        Key: testKey
+    };
+
+    const testParams = {
+        tableName: testTable,
+        itemKey: { countryCode: 'RWA', referralCode: 'LETMEIN' }
+    };
+
+    it('Happy path, delete a referral code', async () => {
+        const ddbExpectedResult = { };
+        docClientDeleteStub.withArgs(wellFormedParams).returns({ promise: () => ddbExpectedResult });
+        const deleteResult = await dynamo.deleteRow(testParams);
+        expect(deleteResult).to.deep.equal({ result: 'DELETED' });
+        expect(docClientDeleteStub).to.have.been.calledOnceWithExactly(wellFormedParams);
+    });
+
+    it('Throws error if item not found', async () => {
+        const ddbError = { 'message': 'The conditional validation failed', code: 'ConditionalCheckFailedException' };
+        docClientDeleteStub.withArgs(wellFormedParams).returns({ promise: () => { 
+            throw ddbError;
+        }});
+        const deleteResult = await dynamo.deleteRow(testParams);
+        expect(deleteResult).to.deep.equal({ result: 'ERROR', details: ddbError });
     });
 
 });
