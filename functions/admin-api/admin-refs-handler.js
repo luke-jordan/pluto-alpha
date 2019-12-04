@@ -148,6 +148,10 @@ const createReferralCode = async (event) => {
         }
     };
 
+    if (Array.isArray(params.tags) && params.tags.length > 0) {
+        createPayload.tags = params.tags;
+    }
+
     const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.createReferralCode'), createPayload, true);
     const resultOfCreate = await lambda.invoke(lambdaInvocation).promise();
     

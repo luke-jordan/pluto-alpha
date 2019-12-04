@@ -45,6 +45,21 @@ const createAudienceConditions = (boostAccounts) => ({
     conditions: [{ op: 'in', prop: 'account_id', value: boostAccounts.join(', ') }]
 });
 
+const referralHasZeroRedemption = (referralContext) => {
+    if (!referralContext.boostAmountOffered || typeof referralContext.boostAmountOffered !== 'string') {
+      logger('No boost amount offered at all, return true');
+      return true;
+    }
+
+    try {
+      const splitAmount = parseInt(referralContext.boostAmountOffered.split('::'), 10);
+      return splitAmount === 0;
+    } catch (err) {
+      logger('Boost amount offered must be malformed: ', err);
+      return true;
+    }
+};
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) => {
@@ -59,6 +74,11 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
     return;
   }
 
+  if (referralHasZeroRedemption(referralContext)) {
+    logger('Referral context but amount offered is zero, exiting');
+    return;
+  }
+  
   const referralType = referralCodeDetails.codeType;
   const boostCategory = `${referralType}_CODE_USED`;
   

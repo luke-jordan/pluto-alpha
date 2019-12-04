@@ -79,7 +79,8 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
             referralContext: {
                 boostAmountOffered: '0::HUNDREDTH_CENT::USD',
                 bonusPoolId: testBonusPoolId
-            }
+            },
+            tags: ['Something']
         };
 
         findCountryStub.resolves('RWA');

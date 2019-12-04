@@ -127,7 +127,7 @@ describe('createAccountMethod and wrapper', () => {
             creatingUserId: testUserId,
             codeType: 'USER',
             context: {
-                boostAmountOffered: 20,
+                boostAmountOffered: '20::WHOLE_CURRENCY::ZAR',
                 boostSource: 'TEST_VAL'
             }
         }

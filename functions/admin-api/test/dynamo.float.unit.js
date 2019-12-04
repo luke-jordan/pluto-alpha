@@ -268,11 +268,13 @@ describe('*** UNIT TEST REFERRAL CODE ***', () => {
             TableName: config.get('tables.activeReferralCodeTable'),
             IndexName: 'ReferralCodeFloatIndex',
             KeyConditionExpression: '#cifi = :client_id_float_id',
+            FilterExpression: 'code_type <> :usr',
             ExpressionAttributeNames: {
                 '#cifi': 'client_id_float_id'
             },
             ExpressionAttributeValues: {
-                ':client_id_float_id': `${testClientId}::${testFloatId}`
+                ':client_id_float_id': `${testClientId}::${testFloatId}`,
+                ':usr': 'USER'
             }
         };
 

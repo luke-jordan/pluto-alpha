@@ -76,6 +76,11 @@ resource "aws_iam_role_policy_attachment" "referral_modify_table_write_policy" {
   policy_arn = aws_iam_policy.referral_code_write_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "referral_modify_archive_update_policy" {
+  role = aws_iam_role.referral_modify_role.name
+  policy_arn = aws_iam_policy.referral_code_deactivate_policy.arn
+}
+
 resource "aws_iam_role_policy_attachment" "referral_modify_client_float_table_policy" {
   role = aws_iam_role.referral_modify_role.name
   policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
