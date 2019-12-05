@@ -580,7 +580,6 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         logger('Result of pending intruction handling:', result);
     });
 
-    // todo : check this again (linting & test fixing may ahve warped)
     it('Fails on invalid template', async () => {
         const mockBadInstruction = {
             instructionId: mockInstructionId,

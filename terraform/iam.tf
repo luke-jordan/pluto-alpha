@@ -483,6 +483,41 @@ resource "aws_iam_policy" "referral_code_write_policy" {
 EOF
 }
 
+resource "aws_iam_policy" "referral_code_deactivate_policy" {
+    name = "dynamo_table_referral_archive_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ArchiveWriteAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem"
+            ],
+            "Resource": [
+                "${aws_dynamodb_table.archived_referral_code_table.arn}"
+            ]
+        },
+        {
+            "Sid": "ActiveDeleteAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:DeleteItem"
+            ],
+            "Resource": [
+                "${aws_dynamodb_table.active_referral_code_table.arn}",
+                "${aws_dynamodb_table.active_referral_code_table.arn}/index/*"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "balance_lambda_invoke_policy" {
     name = "${terraform.workspace}_lambda_balance_fetch_invoke"
     path = "/"

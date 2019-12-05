@@ -33,7 +33,6 @@ const placeParamsInTemplate = (template, passedParameters) => {
 
     let match = paramRegex.exec(template);
 
-    // todo : make less ugly, possibly
     let returnTemplate = template;
     while (match !== null) {
         const param = match.groups.param;

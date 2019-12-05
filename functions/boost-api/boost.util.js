@@ -22,7 +22,6 @@ module.exports.extractQueryParams = (event) => {
     return event;
 };
 
-// todo : transition to using permissions
 module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN') => {
     if (!userDetails || !Reflect.has(userDetails, 'systemWideUserId')) {
         return false;

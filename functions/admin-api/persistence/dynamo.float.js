@@ -212,11 +212,13 @@ module.exports.listReferralCodes = async (clientId, floatId) => {
         TableName: config.get('tables.activeReferralCodeTable'),
         IndexName: 'ReferralCodeFloatIndex',
         KeyConditionExpression: '#cifi = :client_id_float_id',
+        FilterExpression: 'code_type <> :usr',
         ExpressionAttributeNames: {
             '#cifi': 'client_id_float_id'
         },
         ExpressionAttributeValues: {
-            ':client_id_float_id': `${clientId}::${floatId}`
+            ':client_id_float_id': `${clientId}::${floatId}`,
+            ':usr': 'USER'
         }
     };
 

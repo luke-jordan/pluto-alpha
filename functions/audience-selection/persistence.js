@@ -247,7 +247,6 @@ module.exports.extractSQLQueryFromJSON = (selectionJSON) => {
 
 // note : this is the only method authorized to use free form insert (via that method rejecting any other role / tables)
 const insertQuery = async (selectionJSON, persistenceParams) => {
-    // todo : validation prior to creating the audience
         
     const audienceId = uuid();
 

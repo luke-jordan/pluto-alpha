@@ -22,6 +22,7 @@ const randomStub = sinon.stub();
 const fetchRowStub = sinon.stub();
 const insertRowStub = sinon.stub();
 const updateRowStub = sinon.stub();
+const deleteRowStub = sinon.stub();
 
 const handler = proxyquire('../referral-handler', {
     'moment': momentStub,
@@ -29,7 +30,8 @@ const handler = proxyquire('../referral-handler', {
     'dynamo-common': {
         fetchSingleRow: fetchRowStub,
         insertNewRow: insertRowStub,
-        updateRow: updateRowStub
+        updateRow: updateRowStub,
+        deleteRow: deleteRowStub
     }
 });
 
@@ -65,7 +67,8 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         referralContext: {
             boostAmountOffered: '5::WHOLE_CURRENCY::USD',
             bonusPoolId: 'primary_bonus_pool'
-        }
+        },
+        tags: ['TAGGED!', 'TWICE']
     };
 
     const expectedDynamoInsertionBetaCode = {
@@ -78,7 +81,8 @@ describe('*** UNIT TESTING CREATE REFERRAL CODE ***', () => {
         persistedTimeMillis: testPersistenceMoment.valueOf(),
         expiryTimeMillis: testExpiryTimeShort.valueOf(),
         creatingUserId: testCreatingUserId,
-        context: wellFormedRequestBody.referralContext 
+        context: wellFormedRequestBody.referralContext,
+        tags: ['TAGGED!', 'TWICE']
     };
 
     // user referral codes things
@@ -285,6 +289,95 @@ describe('*** UNIT TESTING VERIFY REFERRAL CODE ***', () => {
         const errorThrow = await handler.verify({ referralCode: 'thisIsBad', countryCode: testCountryCode });
         expect(errorThrow).to.exist;
         expect(errorThrow).to.deep.equal({ statusCode: 500, body: JSON.stringify('Got that wrong!') });
+    });
+
+});
+
+// todo : error testing, validation testing (& handling of those in handler)
+describe('*** UNIT TESTING MODIFY REFERRAL CODE ***', () => {
+    
+    const testCode = 'LETMEIN';
+    const testCountryCode = 'RWA';
+
+    beforeEach(() => testHelper.resetStubs(fetchRowStub, insertRowStub, updateRowStub, momentStub));
+
+    it('Deactivate a referral code appropriately', async () => {
+        const testMoment = moment();
+        const testAdminId = uuid();
+
+        const inboundEvent = {
+            operation: 'DEACTIVATE',
+            countryCode: testCountryCode,
+            referralCode: testCode,
+            initiator: testAdminId
+        };
+
+        const oldCode = {
+            countryCode: testCountryCode,
+            referralCode: testCode,
+            clientId: 'some-client',
+            floatId: 'some-float',
+            context: { boostSource: 'none' }
+        };
+
+        const expectedArchiveInsert = {
+            referralCode: testCode,
+            deactivatedTime: testMoment.valueOf(),
+            countryCode: testCountryCode,
+            deactivatingUserId: testAdminId, 
+            archivedCode: oldCode 
+        };
+
+        const expectedDelete = {
+            tableName: activeCodeTable,
+            itemKey: { countryCode: testCountryCode, referralCode: testCode }
+        };
+
+        momentStub.returns(testMoment);
+        fetchRowStub.resolves(oldCode);
+        insertRowStub.resolves({ result: 'SUCCESS' });
+        deleteRowStub.resolves({ result: 'DELETED' });
+
+        const resultOfDeactivate = await handler.modify(inboundEvent);
+        expect(resultOfDeactivate).to.deep.equal({ result: 'DEACTIVATED' });
+
+        expect(fetchRowStub).to.have.been.calledOnceWithExactly(activeCodeTable, { countryCode: testCountryCode, referralCode: testCode });
+        expect(insertRowStub).to.have.been.calledOnceWithExactly(config.get('tables.archivedCodes'), ['referralCode', 'deactivatedTime'], expectedArchiveInsert);
+        expect(deleteRowStub).to.have.been.calledOnceWithExactly(expectedDelete);
+    });
+
+    it('Modify a referral code, just the field that changed', async () => {
+            const inboundEvent = {
+            operation: 'UPDATE',
+            countryCode: testCountryCode,
+            referralCode: testCode,
+            newContext: {
+                boostAmountOffered: '1000000::HUNDREDTH_CENT::USD'
+            },
+            tags: ['TAGGEDONCE']
+        };
+
+        const expectedUpdate = {
+            tableName: activeCodeTable,
+            itemKey: { countryCode: testCountryCode, referralCode: testCode },
+            updateExpression: 'set context.boostAmountOffered = :bamount, tags = :rts',
+            substitutionDict: { ':bamount': '1000000::HUNDREDTH_CENT::USD', ':rts': ['TAGGEDONCE'] },
+            returnOnlyUpdated: false
+        };
+
+        updateRowStub.resolves({ result: 'SUCCESS', returnedAttributes: {
+            newContext: { boostAmountOffered: '1000000::HUNDREDTH_CENT::USD' },
+            tags: ['TAGGEDONCE']
+        }});
+
+        const resultOfUpdate = await handler.modify(inboundEvent);
+        
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.have.property('result', 'UPDATED');
+        expect(resultOfUpdate).to.have.property('updatedCode');
+        expect(resultOfUpdate.updatedCode.tags).to.deep.equal(['TAGGEDONCE']);
+
+        expect(updateRowStub).to.have.been.calledOnceWithExactly(expectedUpdate);
     });
 
 });

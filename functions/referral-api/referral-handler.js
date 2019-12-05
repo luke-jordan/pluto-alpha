@@ -139,6 +139,10 @@ module.exports.create = async (event) => {
         
         rowToInsert.context = await defineReferralContext(params);
 
+        if (Array.isArray(params.tags) && params.tags.length > 0) {
+            rowToInsert.tags = params.tags;
+        }
+
         logger('Row being inserted: ', rowToInsert);
         
         const insertionResult = await dynamo.insertNewRow(config.get('tables.activeCodes'), ['referralCode'], rowToInsert);
@@ -190,13 +194,113 @@ module.exports.verify = async (event) => {
     }
 };
 
+const deactivateCode = async (countryCode, referralCode, deactivatingUserId) => {
+    const activeTable = config.get('tables.activeCodes');
+    const archiveTable = config.get('tables.archivedCodes');
+
+    const existingCode = await dynamo.fetchSingleRow(activeTable, { countryCode, referralCode });
+    if (!existingCode) {
+        return { result: 'NOSUCHCODE' };
+    }
+
+    const archivedCode = {
+        referralCode,
+        deactivatedTime: moment().valueOf(),
+        countryCode,
+        deactivatingUserId,
+        archivedCode: existingCode
+    };
+
+    const resultOfInsert = await dynamo.insertNewRow(archiveTable, ['referralCode', 'deactivatedTime'], archivedCode);
+    logger('Result of archive insertion: ', resultOfInsert);
+    if (!resultOfInsert || resultOfInsert.result !== 'SUCCESS') {
+        throw new Error('Error archiving code: ', JSON.stringify(resultOfInsert));
+    }
+
+    const deleteParams = {
+        tableName: activeTable,
+        itemKey: { countryCode, referralCode }
+    };
+
+    const resultOfDelete = await dynamo.deleteRow(deleteParams);
+    logger('Result of deleting: ', resultOfDelete);
+    if (!resultOfDelete || resultOfDelete.result !== 'DELETED') {
+        throw new Error('Error deleting code: ', JSON.stringify(resultOfDelete));
+    }
+
+    return { result: 'DEACTIVATED' };
+};
+
+const modifyCode = async (params) => {
+    const expressionClauses = [];
+    const substitutionDict = { };
+
+    const { newContext, tags } = params;
+    if (newContext && newContext.boostAmountOffered) {
+        expressionClauses.push('context.boostAmountOffered = :bamount');
+        substitutionDict[':bamount'] = newContext.boostAmountOffered;
+    }
+
+    if (newContext && newContext.bonusPoolId) {
+        expressionClauses.push('context.bonusPoolId = :bsource');
+        substitutionDict[':bsource'] = newContext.bonusPoolId;
+    }
+    
+    if (tags) {
+        expressionClauses.push('tags = :rts');
+        substitutionDict[':rts'] = tags;
+    }
+
+    if (expressionClauses.length === 0) {
+        throw new Error('No valid properties to update');
+    }
+
+    const updateExpression = `set ${expressionClauses.join(', ')}`;
+    
+    const updateParams = {
+        tableName: config.get('tables.activeCodes'),
+        itemKey: { countryCode: params.countryCode, referralCode: params.referralCode },
+        updateExpression,
+        substitutionDict,
+        returnOnlyUpdated: false
+    };
+
+    const resultOfUpdate = await dynamo.updateRow(updateParams);
+    logger('Result of update: ', resultOfUpdate);
+    if (!resultOfUpdate || resultOfUpdate.result !== 'SUCCESS') {
+        throw new Error('Error updating: ', JSON.stringify(resultOfUpdate));
+    }
+
+    return { result: 'UPDATED', updatedCode: resultOfUpdate.returnedAttributes };
+};
+
 /**
- * To be implemented: This function updates a referral code.
+ * This function modifies a referral code, either deactivating it or updating certain properties. Only called directly so no wrapping.
  */
 module.exports.modify = async (event) => {
     try {
+
         logger('Referral update: ', event);
-    } catch (e) {
-        return handleErrorAndReturn(e);
+        const { operation, countryCode, referralCode, initiator } = event;
+        if (['DEACTIVATE', 'UPDATE'].indexOf(operation) < 0) {
+            throw new Error('Unsupported modification');
+        }
+
+        let result = { };        
+        if (operation === 'DEACTIVATE') {
+            result = await deactivateCode(countryCode, referralCode, initiator);
+        } else if (operation === 'UPDATE') {
+            result = await modifyCode(event);
+        }
+
+        if (opsUtil.isObjectEmpty(result)) {
+            throw new Error('Reached end without result');
+        }
+
+        return result;
+
+    } catch (error) {
+        logger('FATAL_ERROR: ', error);
+        return { result: 'ERROR', error };
     }
 };

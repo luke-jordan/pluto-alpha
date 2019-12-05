@@ -79,7 +79,8 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
             referralContext: {
                 boostAmountOffered: '0::HUNDREDTH_CENT::USD',
                 bonusPoolId: testBonusPoolId
-            }
+            },
+            tags: ['Something']
         };
 
         findCountryStub.resolves('RWA');
@@ -144,13 +145,14 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
 
         const expectedPayload = {
             referralCode: testRefCode,
-            clientId: testClientId,
-            floatId: testFloatId,
+            countryCode: 'RWA',
             operation: 'DEACTIVATE',
             initiator: testAdminId
         };
 
         const testUpdatedTime = moment();
+        
+        findCountryStub.resolves('RWA');
         lambdaInvokeStub.returns({ promise: () => helper.mockLambdaDirect({ updatedTimeMillis: testUpdatedTime.valueOf() })});
 
         const apiGwEvent = helper.wrapPathEvent(testEvent, testAdminId, 'deactivate');
@@ -182,8 +184,7 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
 
         const expectedPayload = {
             referralCode: testRefCode,
-            clientId: testClientId,
-            floatId: testFloatId,
+            countryCode: 'RWA',
             operation: 'UPDATE',
             initiator: testAdminId,
             newContext: {
@@ -196,6 +197,8 @@ describe('*** UNIT TEST RETRIEVING AND TRANSFORMING REFERRAL CODES ***', () => {
         const apiGwEvent = helper.wrapPathEvent(testEvent, testAdminId, 'update');
 
         const mockTime = moment();
+
+        findCountryStub.resolves('RWA');
         lambdaInvokeStub.returns({ promise: () => helper.mockLambdaDirect({ updatedTimeMillis: mockTime.valueOf() })});
 
         const resultOfModification = await handler.manageReferralCodes(apiGwEvent);

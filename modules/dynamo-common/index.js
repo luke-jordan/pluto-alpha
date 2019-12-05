@@ -176,7 +176,25 @@ module.exports.updateRow = async (updateParams) => {
     return resultDict;
 };
 
-// module.exports.debugAllTable = async (tableName) => {
-//     const results = await docC.scan({ TableName: tableName }).promise();
-//     logger('Results of scan: ', results);
-// }
+module.exports.deleteRow = async (deleteParams) => {
+    logger('Deleting a row from DynamoDb');
+
+    const awsParams = {
+        TableName: deleteParams.tableName,
+        Key: decamelizeKeys(deleteParams.itemKey)
+    };
+
+    logger('Deleting row with params: ', awsParams);
+
+    let resultDict = { };
+    try {
+        const deleteResult = await docC.delete(awsParams).promise();
+        logger('Result of delete: ', deleteResult); // an empty dict; errors get thrown
+        resultDict = { result: 'DELETED' };
+    } catch (err) {
+        logger('Error in deleting: ', err);
+        resultDict = { result: 'ERROR', details: err };
+    }
+
+    return resultDict;
+};
