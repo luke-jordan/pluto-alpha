@@ -1,1 +1,0 @@
-../../../templates/rds/create_functions.sql

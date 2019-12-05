@@ -1,9 +1,0 @@
--- Sets up the relevant roles and schemas
-
-create role account_api_worker with nosuperuser login password 'pwd_for_account_api';
-create role save_tx_api_worker with nosuperuser login password 'pwd_for_transaction_api';
-create role float_api_worker with nosuperuser login password 'pwd_for_float_api';
-create role boost_worker with nosuperuser login password 'pwd_for_boost_worker';
-create role message_api_worker with nosuperuser login password 'pwd_for_message_worker';
-create role admin_api_worker with nosuperuser login password 'pwd_for_admin_api';
-create role audience_worker with nosuperuser login password 'pwd_for_audience_worker';

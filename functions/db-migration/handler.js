@@ -2,23 +2,30 @@
 
 const config = require('config');
 const logger = require('debug')('jupiter:migration:handler');
-const {migrate} = require('postgres-migrations');
+const fs = require('fs');
+
+const { migrate } = require('postgres-migrations');
+
 const AWS = require('aws-sdk');
 const s3 = require('s3');
+
 const httpStatus = require('http-status');
 
 const awsRegion = config.get('aws.region');
 AWS.config.update({
   'region': awsRegion
 });
-const migrationScriptsLocation = 'scripts';
+
+const migrationScriptsLocation = config.get('scripts.location');
 const SECRET_NAME = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
 
 const customS3Client = s3.createClient({
     s3Client: new AWS.S3()
 });
-const BUCKET_NAME = config.get('aws.bucketName');
-const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('environment');
+
+const BUCKET_NAME = config.get('s3.bucket');
+const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('s3.folder');
+
 const DOWNLOAD_PARAMS = {
     localDir: migrationScriptsLocation,
     s3Params: {
@@ -39,8 +46,7 @@ module.exports.fetchDBUserAndPasswordFromSecrets = async (secretName) => {
                 reject(err);
             }
             // Decrypts secret using the associated KMS CMK.
-            // Depending on whether the secret is a string or binary, one of these fields will be populated.
-            logger('No error, got the secret, moving onward: ', fetchedSecretData);
+            // logger('No error, got the secret, moving onward: ', fetchedSecretData);
             const secret = JSON.parse(fetchedSecretData.SecretString);
 
             resolve({
@@ -73,8 +79,7 @@ module.exports.fetchDBConnectionDetails = async (secretName) => {
     return handleDBConfigUsingSecrets(secretName, dbConfig);
 };
 
-const runMigrations = (dbConfig) => {
-  logger('Running Migrations');
+const runMigrations = (dbConfig, resolve) => {
   const finalDBConfig = {
       database: dbConfig.database,
       user: dbConfig.user,
@@ -83,30 +88,41 @@ const runMigrations = (dbConfig) => {
       port: dbConfig.port
   };
 
+  logger('Config set, running migrations');
+  
   migrate(finalDBConfig, migrationScriptsLocation).
       then(() => {
         logger('Migrations ran successfully');
+        resolve({
+            statusCode: httpStatus.OK,
+            body: JSON.stringify({
+                message: 'Migrations ran successfully'
+            })
+        });
       }).catch((error) => {
         logger(`Error occurred while running migrations. Error: ${JSON.stringify(error)}`);
         throw error;
       });
 };
 
-module.exports.handleFailureResponseOfDownloader = (error) => {
+module.exports.handleFailureResponseOfDownloader = (error, reject) => {
     logger('Error while downloading files from s3 bucket. Error stack:', error.stack);
-    throw error;
+    reject(error);
 };
 
-module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig) => {
+module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig, resolve) => {
     logger(`Completed download of files from s3 bucket`);
-    await runMigrations(dbConfig);
-
-    return {
-        statusCode: httpStatus.OK,
-        body: JSON.stringify({
-            message: 'Migrations ran successfully'
-        })
-    };
+    // the S3 wrapper seems to cache the files and not download again if they are the same, so repeat runs
+    // with a warm start can result in "0" prints in the download progress, even though files are there.
+    // to avoid ambiguity and ensure thorough logging, doing this quick loop
+    
+    fs.readdir(migrationScriptsLocation, (err, files) => {
+        if (err) {
+            logger('Error reading files, check download logs');
+        }
+        files.forEach((file) => logger(file));
+        runMigrations(dbConfig, resolve);
+    });
 };
 
 module.exports.handleProgressResponseOfDownloader = (progressAmount, progressTotal) => {
@@ -117,14 +133,16 @@ module.exports.handleProgressResponseOfDownloader = (progressAmount, progressTot
 
 module.exports.downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
     logger(
-        `Fetching scripts from s3 bucket: ${BUCKET_NAME}/${FOLDER_CONTAINING_MIGRATION_SCRIPTS} to local directory: ${BUCKET_NAME}`
+        `Fetching scripts from s3 bucket: ${BUCKET_NAME}/${FOLDER_CONTAINING_MIGRATION_SCRIPTS} to local directory: ${migrationScriptsLocation}`
     );
 
     const downloader = customS3Client.downloadDir(DOWNLOAD_PARAMS);
 
-    downloader.on('error', (err) => exports.handleFailureResponseOfDownloader(err));
-    downloader.on('progress', () => exports.handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
-    downloader.on('end', () => exports.successfullyDownloadedFilesProceedToRunMigrations(dbConfig));
+    return new Promise((resolve, reject) => {
+        downloader.on('progress', () => exports.handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
+        downloader.on('error', (err) => exports.handleFailureResponseOfDownloader(err, reject));
+        downloader.on('end', () => exports.successfullyDownloadedFilesProceedToRunMigrations(dbConfig, resolve));
+    });
 };
 
 module.exports.migrate = async () => {
