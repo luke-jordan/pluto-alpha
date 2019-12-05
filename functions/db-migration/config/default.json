@@ -1,6 +1,7 @@
 {
     "aws": {
-        "region": "us-east-1"
+        "region": "us-east-1",
+        "bucketName": "jupiter.db.migration.scripts"
     },
     "db": {
         "host": "localhost",
@@ -8,5 +9,6 @@
         "database": "jupiter",
         "user": "master",
         "password": "alpineskiing"
-    }
+    },
+    "environment": "staging"
 }

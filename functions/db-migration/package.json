@@ -1,29 +1,32 @@
 {
   "name": "db-migration",
   "version": "0.0.1",
-  "description": "Lambda to execute a changescript on DB within auth",
+  "description": "Handles the migration scripts and process",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* mocha",
-    "lint": "eslint ."
+    "test": "DEBUG=jupiter:db-migration:* nyc mocha",
+    "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   },
-  "author": "Luke Jordan",
-  "license": "ISC",
+  "author": "Bolu Ajibawo",
   "dependencies": {
-    "aws-sdk": "^2.483.0",
-    "config": "^3.1.0",
+    "aws-sdk": "^2.503.0",
+    "aws-sdk-mock": "^4.5.0",
+    "config": "^3.2.4",
     "debug": "^4.1.1",
-    "pg": "^7.11.0",
-    "pg-pool": "^2.0.6",
-    "uuid": "^3.3.2"
+    "http-status": "^1.4.1",
+    "postgres-migrations": "^3.0.2",
+    "proxyquire": "^2.1.3",
+    "s3": "^4.4.0",
+    "sinon-chai": "^3.3.0"
   },
   "devDependencies": {
     "chai": "^4.2.0",
-    "chai-uuid": "^1.0.6",
-    "eslint": "^6.1.0",
-    "eslint-plugin-chai-friendly": "^0.4.1",
+    "eslint": "^6.6.0",
+    "eslint-plugin-chai-friendly": "^0.5.0",
     "mocha": "^6.1.4",
     "nyc": "^14.1.1",
-    "serverless-localstack": "^0.4.15"
+    "sinon": "^7.5.0"
   }
 }
