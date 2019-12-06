@@ -79,7 +79,7 @@ module.exports.fetchDBConnectionDetails = async (secretName) => {
     return handleDBConfigUsingSecrets(secretName, dbConfig);
 };
 
-const runMigrations = (dbConfig, resolve) => {
+module.exports.runMigrations = (dbConfig, resolve, reject) => {
   const finalDBConfig = {
       database: dbConfig.database,
       user: dbConfig.user,
@@ -101,7 +101,7 @@ const runMigrations = (dbConfig, resolve) => {
         });
       }).catch((error) => {
         logger(`Error occurred while running migrations. Error: ${JSON.stringify(error)}`);
-        throw error;
+        reject(error);
       });
 };
 
@@ -110,7 +110,7 @@ module.exports.handleFailureResponseOfDownloader = (error, reject) => {
     reject(error);
 };
 
-module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig, resolve) => {
+module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig, resolve, reject) => {
     logger(`Completed download of files from s3 bucket`);
     // the S3 wrapper seems to cache the files and not download again if they are the same, so repeat runs
     // with a warm start can result in "0" prints in the download progress, even though files are there.
@@ -121,7 +121,7 @@ module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConf
             logger('Error reading files, check download logs');
         }
         files.forEach((file) => logger(file));
-        runMigrations(dbConfig, resolve);
+        exports.runMigrations(dbConfig, resolve, reject);
     });
 };
 
@@ -141,7 +141,7 @@ module.exports.downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
     return new Promise((resolve, reject) => {
         downloader.on('progress', () => exports.handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
         downloader.on('error', (err) => exports.handleFailureResponseOfDownloader(err, reject));
-        downloader.on('end', () => exports.successfullyDownloadedFilesProceedToRunMigrations(dbConfig, resolve));
+        downloader.on('end', () => exports.successfullyDownloadedFilesProceedToRunMigrations(dbConfig, resolve, reject));
     });
 };
 

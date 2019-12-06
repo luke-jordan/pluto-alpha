@@ -11,8 +11,8 @@ const EventEmitter = require('events').EventEmitter;
 const AWS = require('aws-sdk');
 const AWSMock = require('aws-sdk-mock');
 
-const BUCKET_NAME = config.get('aws.bucketName');
-const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('environment');
+const BUCKET_NAME = config.get('s3.bucket');
+const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('s3.folder');
 
 const actualMigrationStub = sinon.stub();
 const downloadDirStub = sinon.stub();
@@ -28,6 +28,10 @@ const migrationScript = proxyquire('../handler', {
     'postgres-migrations': MockPostgresMigrations,
     's3': MockCustomS3Client
 });
+
+const fs = require('fs');
+const fsReadDirStub = sinon.stub(fs, 'readdir');
+
 const {
     migrate,
     fetchDBConnectionDetails,
@@ -36,7 +40,8 @@ const {
     handleProgressResponseOfDownloader,
     updateDBConfigUserAndPassword,
     downloadFilesFromS3AndRunMigrations,
-    fetchDBUserAndPasswordFromSecrets
+    fetchDBUserAndPasswordFromSecrets,
+    runMigrations
 } = migrationScript;
 
 const fetchDBConnectionDetailsStub = sinon.stub(migrationScript, 'fetchDBConnectionDetails');
@@ -61,7 +66,7 @@ const sampleUserAndPasswordFromSecrets = {
     user: 'admin',
     password: 'password'
 };
-const migrationScriptsLocation = 'scripts';
+const migrationScriptsLocation = config.get('scripts.location');
 const DOWNLOAD_PARAMS = {
     localDir: migrationScriptsLocation,
     s3Params: {
@@ -87,7 +92,7 @@ describe('DB Migration', () => {
 
         const result = await migrate();
 
-        expect(result).to.exist;
+        expect(result).to.be.exist;
         expect(result).to.deep.equal(sampleSuccessResponse);
 
         expect(fetchDBConnectionDetailsStub).to.have.been.calledWith();
@@ -133,7 +138,7 @@ describe('DB Migration', () => {
 
     it(`should run migrations successfully`, async () => {
         actualMigrationStub.withArgs(sampleDbConfig, migrationScriptsLocation).resolves();
-        const result = await successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig);
+        const result = await new Promise((resolve, reject) => runMigrations(sampleDbConfig, resolve, reject));
         expect(result).to.exist;
         expect(result).to.deep.equal(sampleSuccessResponse);
         expect(actualMigrationStub).to.have.been.calledWith(sampleDbConfig, migrationScriptsLocation);
@@ -146,7 +151,12 @@ describe('DB Migration', () => {
 
     it(`handle failure response of downloader throws an error`, async () => {
         const errorMessage = 'error during download';
-        expect(() => handleFailureResponseOfDownloader(errorMessage)).to.throw(errorMessage);
+        try {
+            await new Promise((resolve, reject) => handleFailureResponseOfDownloader(errorMessage, reject));
+        } catch (error) {
+            expect(error).to.exist;
+            expect(error).to.equal(errorMessage);
+        }
     });
 
     it(`should update the database config when given the 'user' and 'password'`, async () => {
@@ -162,16 +172,16 @@ describe('DB Migration', () => {
         const emitter = new EventEmitter();
 
         downloadDirStub.withArgs(DOWNLOAD_PARAMS).returns(emitter);
-        const result = await downloadFilesFromS3AndRunMigrations();
-        expect(result).to.be.undefined;
+        const result = downloadFilesFromS3AndRunMigrations(sampleDbConfig);
+        expect(result).to.exist;
         expect(downloadDirStub).to.have.been.calledWith(DOWNLOAD_PARAMS);
     });
 
     it(`should handle errors when 'migrate' method from 'postgres-migrations' fails`, async () => {
-        const customErrorMessage = 'Error while running migrations';
+        const customErrorMessage = new Error('Error while running migrations');
         actualMigrationStub.withArgs(sampleDbConfig, migrationScriptsLocation).rejects(customErrorMessage);
         try {
-            await successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig);
+            await new Promise((resolve, reject) => runMigrations(sampleDbConfig, resolve, reject));
         } catch (error) {
             expect(error).equal(customErrorMessage);
         }
@@ -208,7 +218,7 @@ describe('DB Migration', () => {
         const givenUser = 'john';
         const givenPassword = 'password';
         const JSONParsableUserNameAndPassword = `{
-            "username": "${givenUser}", 
+            "username": "${givenUser}",
             "password": "${givenPassword}"
             }`;
 
