@@ -165,4 +165,4 @@ module.exports.isDirectInvokeAdminOrSelf = (event) => {
 
     // todo : probably want to add in uuid validation on id
     return Reflect.has(userDetails, 'systemWideUserId');
-}
+};

@@ -35,7 +35,8 @@ resource "aws_lambda_function" "db_migration" {
                   "names": {
                       "master": "${terraform.workspace}/ops/psql/main"
                   }
-              }
+              },
+              "environment": "${terraform.workspace}"
           }
       )}"
     }

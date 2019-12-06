@@ -1,176 +1,169 @@
 'use strict';
 
 const config = require('config');
-const logger = require('debug')('jupiter:migration:main');
-
+const logger = require('debug')('jupiter:migration:handler');
 const fs = require('fs');
-const sleep = require('util').promisify(setTimeout);
+
+const { migrate } = require('postgres-migrations');
 
 const AWS = require('aws-sdk');
+const s3 = require('s3');
+
+const httpStatus = require('http-status');
+
+const awsRegion = config.get('aws.region');
 AWS.config.update({
-  'region': config.get('aws.region')
+  'region': awsRegion
 });
 
-const { Pool } = require('pg');
-let pool = null;
+const migrationScriptsLocation = config.get('scripts.location');
+const SECRET_NAME = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
 
-const initiateConnection = () => {
-  if (pool !== null) {
-    logger('Warm start, pool established, exit');
-    return;
-  }
+const customS3Client = s3.createClient({
+    s3Client: new AWS.S3()
+});
 
-  const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
-  logger('Is secrets enabled? : ', secretsMgmtEnabled);
+const BUCKET_NAME = config.get('s3.bucket');
+const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('s3.folder');
 
-  if (!secretsMgmtEnabled) {
-    pool = new Pool(config.get('db'));
-    return;
-  }
-
-  const secretName = config.get(`secrets.names.master`);
-  logger('Fetching secret with name: ', secretName);
-
-  const secretsClient = new AWS.SecretsManager({ region: config.get('aws.region') });        
-  secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
-      if (err) {
-          logger('Error retrieving auth secret for RDS: ', err);
-          throw err;
-      }
-      // Decrypts secret using the associated KMS CMK.
-      // Depending on whether the secret is a string or binary, one of these fields will be populated.
-      logger('No error, got the secret, moving onward: ', fetchedSecretData);
-      const secret = JSON.parse(fetchedSecretData.SecretString);
-      const dbConfig = { ...config.get('db') };
-      dbConfig.user = secret.username;
-      dbConfig.password = secret.password;
-      
-      pool = new Pool(dbConfig);
-  });
+const DOWNLOAD_PARAMS = {
+    localDir: migrationScriptsLocation,
+    s3Params: {
+        Bucket: BUCKET_NAME,
+        Prefix: FOLDER_CONTAINING_MIGRATION_SCRIPTS
+    },
+    deleteRemoved: true
 };
 
-const extractCommands = (pgResult) => {
-  if (pgResult.length === 0) {
-    return pgResult.command;
-  } else if (Array.isArray(pgResult)) {
-    return pgResult.map((result) => result.command).join(', ');
-  }
-  
-  return pgResult;
+module.exports.fetchDBUserAndPasswordFromSecrets = async (secretName) => {
+    logger('Fetching secret with name: ', secretName);
+    const secretsClient = new AWS.SecretsManager({ region: awsRegion });
+
+    return new Promise((resolve, reject) => {
+        secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
+            if (err) {
+                logger('Error retrieving auth secret for: ', err);
+                reject(err);
+            }
+            // Decrypts secret using the associated KMS CMK.
+            // logger('No error, got the secret, moving onward: ', fetchedSecretData);
+            const secret = JSON.parse(fetchedSecretData.SecretString);
+
+            resolve({
+                user: secret.username,
+                password: secret.password
+            });
+        });
+    });
 };
 
-const runS3script = async (bucket, key) => {
-  logger(`Fetching script from bucket ${bucket} and key ${key}`);
+module.exports.updateDBConfigUserAndPassword = (dbConfig, user, password) => ({ ...dbConfig, user, password });
 
-  const s3 = new AWS.S3();
-  const params = {
-    Bucket: bucket,
-    Key: key
+const handleDBConfigUsingSecrets = async (secretName, dbConfig) => {
+    const { user, password } = await exports.fetchDBUserAndPasswordFromSecrets(secretName);
+    if (!user || !password) {
+        return dbConfig;
+    }
+
+    return exports.updateDBConfigUserAndPassword(dbConfig, user, password);
+};
+
+module.exports.fetchDBConnectionDetails = async (secretName) => {
+    logger('Fetching database connection details');
+    const dbConfig = { ...config.get('db') };
+
+    if (!secretName) {
+        return dbConfig;
+    }
+
+    return handleDBConfigUsingSecrets(secretName, dbConfig);
+};
+
+module.exports.runMigrations = (dbConfig, resolve, reject) => {
+  const finalDBConfig = {
+      database: dbConfig.database,
+      user: dbConfig.user,
+      password: dbConfig.password,
+      host: dbConfig.host,
+      port: dbConfig.port
   };
 
-  const retrievalResult = await s3.getObject(params).promise();
-  // logger('File object: ', retrievalResult);
-  const sqlBody = retrievalResult.Body.toString('ascii');
-  logger('Executing SQL script: \n', sqlBody);
-
-  const queryResult = await pool.query(sqlBody);
-  logger('Result of queries: ', queryResult);
-
-  return 'S3SCRIPT_EXECUTED';
-};
-
-const executeRoleCreation = async (client, role, password) => {
-  // note: Postgres has no 'if not exists' on create role but will skip the line if the role exists
-  // note: if haven't switched to robust migration schema by then, put in 'if no exists' if/when Postgres allows it
-  // note: using literal template here because offline and need to get this finished, never repeat
-  // const result = await client.query('create role $1 with no superuser login password $2', [role, rolesToCreate[role]]);
-  try {
-    const queryString = `create role ${role} with nosuperuser login password '${password}'`;
-    logger('Executing role creation query : ', queryString);
-    const result = await client.query(queryString);
-    logger('Result of query: ', result.command);
-  } catch (e) {
-    logger('Role creation failed: ', e.message);
-  }
-};
-
-const createDbRoles = async (credentialsDict) => {
-  const rolesToCreate = Object.keys(credentialsDict);
-  logger('Creating roles: ', rolesToCreate);
+  logger('Config set, running migrations');
   
-  const client = await pool.connect();
-  try {
-    // note : we do this in the for loop so that failures eg on roles are contained
-    for (let i = 0; i < rolesToCreate.length; i += 1) {
-      const role = rolesToCreate[i];
-      await executeRoleCreation(client, role, credentialsDict[role]);
-    }
-  } catch (e) {
-    logger('Uncaught error: ', e);
-  } finally {
-    await client.release();
-  }
-  return 'EXECUTED';
+  migrate(finalDBConfig, migrationScriptsLocation).
+      then(() => {
+        logger('Migrations ran successfully');
+        resolve({
+            statusCode: httpStatus.OK,
+            body: JSON.stringify({
+                message: 'Migrations ran successfully'
+            })
+        });
+      }).catch((error) => {
+        logger(`Error occurred while running migrations. Error: ${JSON.stringify(error)}`);
+        reject(error);
+      });
 };
 
-const createInitialTables = async () => {
-  const scriptPath = './tables';
-  const scripts = fs.readdirSync(scriptPath).sort();
-  logger('Result of script folder read: ', scripts);
-  const client = await pool.connect();
-  try {
-    // we do this in a for loop as well as sequencing may matter
-    for (let i = 0; i < scripts.length; i += 1) {
-      const scriptName = scripts[i];
-      logger('Executing: ', scriptName);
-      const scriptContents = await fs.readFileSync(`${scriptPath}/${scriptName}`).toString();
-      // logger('Contents of script: ', scriptContents);
-      const result = await client.query(scriptContents);
-      logger('Result of script execution: ', extractCommands(result));
-    }
-  } catch (e) {
-    logger('Uncaught error: ', e);
-  } finally {
-    await client.release();
-  }
+module.exports.handleFailureResponseOfDownloader = (error, reject) => {
+    logger('Error while downloading files from s3 bucket. Error stack:', error.stack);
+    reject(error);
 };
 
-module.exports.migrate = async (event) => {
-  logger('Initiating DB migration');
+module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConfig, resolve, reject) => {
+    logger(`Completed download of files from s3 bucket`);
+    // the S3 wrapper seems to cache the files and not download again if they are the same, so repeat runs
+    // with a warm start can result in "0" prints in the download progress, even though files are there.
+    // to avoid ambiguity and ensure thorough logging, doing this quick loop
+    
+    fs.readdir(migrationScriptsLocation, (err, files) => {
+        if (err) {
+            logger('Error reading files, check download logs');
+            reject(err);
+        }
 
-  initiateConnection();
+        if (!files) {
+            logger('Migration files do not exist. Cannot run migrations');
+            reject(new Error('Migration files do not exist'));
+        }
 
-  const typeOfExecution = event.type;
-  logger('Executing migration of type: ', typeOfExecution);
+        files.forEach((file) => logger(file));
+        exports.runMigrations(dbConfig, resolve, reject);
+    });
+};
 
-  logger('Pool at present: ? :', pool);
+module.exports.handleProgressResponseOfDownloader = (progressAmount, progressTotal) => {
+    logger(
+        `Progress in downloading files from s3 bucket. Progress Amount: ${progressAmount}, Progress Total: ${progressTotal}`
+    );
+};
 
-  while (pool === null) {
-      logger('No pool yet, waiting ...');
-      await sleep(100);
+module.exports.downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
+    logger(
+        `Fetching scripts from s3 bucket: ${BUCKET_NAME}/${FOLDER_CONTAINING_MIGRATION_SCRIPTS} to local directory: ${migrationScriptsLocation}`
+    );
+
+    const downloader = customS3Client.downloadDir(DOWNLOAD_PARAMS);
+
+    return new Promise((resolve, reject) => {
+        downloader.on('progress', () => exports.handleProgressResponseOfDownloader(downloader.progressAmount, downloader.progressTotal));
+        downloader.on('error', (err) => exports.handleFailureResponseOfDownloader(err, reject));
+        downloader.on('end', () => exports.successfullyDownloadedFilesProceedToRunMigrations(dbConfig, resolve, reject));
+    });
+};
+
+module.exports.migrate = async () => {
+  logger('Handling request to run migrations');
+  try {
+      const dbConfig = await exports.fetchDBConnectionDetails(SECRET_NAME);
+      return await exports.downloadFilesFromS3AndRunMigrations(dbConfig);
+  } catch (error) {
+    logger(`Error occurred while handling request to run migrations. Error: ${JSON.stringify(error)}`);
+      return {
+          statusCode: httpStatus.INTERNAL_SERVER_ERROR,
+          body: JSON.stringify({
+              message: 'Error while handling request to run migrations'
+          })
+      };
   }
-
-  let result = { };
-  if (typeOfExecution === 'S3SCRIPT') {
-    const scriptBucket = event.bucket;
-    const scriptKey = event.key;
-    result = await runS3script(scriptBucket, scriptKey);
-  } else if (typeOfExecution === 'CREATE_ROLES') {
-    result = await createDbRoles(event.credentials);
-  } else if (typeOfExecution === 'SETUP_TABLES') {
-    result = await createInitialTables();
-  }
-  
-  // const objects = await s3.listObjects(params).promise();
-
-  return {
-    statusCode: 200,
-    body: JSON.stringify({
-      message: result,
-      input: event
-    })
-  };
-
-  // Use this code if you don't use the http event with the LAMBDA-PROXY integration
-  // return { message: 'Go Serverless v1.0! Your function executed successfully!', event };
 };

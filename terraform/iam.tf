@@ -62,6 +62,14 @@ resource "aws_iam_policy" "migration_script_s3_access" {
                 "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::jupiter.db.migration.scripts/${terraform.workspace}/*"
+        },
+        {
+            "Sid": "ListBucketAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:ListBucket"
+            ],
+            "Resource": "arn:aws:s3:::jupiter.db.migration.scripts"
         }
     ]
 }
