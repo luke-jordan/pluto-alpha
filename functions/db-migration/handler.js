@@ -119,7 +119,14 @@ module.exports.successfullyDownloadedFilesProceedToRunMigrations = async (dbConf
     fs.readdir(migrationScriptsLocation, (err, files) => {
         if (err) {
             logger('Error reading files, check download logs');
+            reject(err);
         }
+
+        if (!files) {
+            logger('Migration files do not exist. Cannot run migrations');
+            reject(new Error('Migration files do not exist'));
+        }
+
         files.forEach((file) => logger(file));
         exports.runMigrations(dbConfig, resolve, reject);
     });

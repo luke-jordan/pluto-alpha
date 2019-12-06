@@ -240,4 +240,55 @@ describe('DB Migration', () => {
 
         AWSMock.restore('SecretsManager');
     });
+
+    it('on successful download from s3 proceed to run migrations => correctly', async () => {
+        const firstArgumentToCallback = null;
+        const secondArgumentToCallback = [];
+        fsReadDirStub.callsArgWith(1, firstArgumentToCallback, secondArgumentToCallback);
+        actualMigrationStub.withArgs(sampleDbConfig, migrationScriptsLocation).resolves();
+
+        await new Promise((resolve, reject) => successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig, resolve, reject));
+    });
+
+    it('on successful download from s3 proceed to run migrations => handle run migration errors', async () => {
+        const firstArgumentToCallback = null;
+        const secondArgumentToCallback = [];
+        fsReadDirStub.callsArgWith(1, firstArgumentToCallback, secondArgumentToCallback);
+        const customErrorMessage = new Error('Error while running migrations');
+        actualMigrationStub.withArgs(sampleDbConfig, migrationScriptsLocation).rejects(customErrorMessage);
+        try {
+            await new Promise((resolve, reject) => successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig, resolve, reject));
+        } catch (error) {
+            expect(error).equal(customErrorMessage);
+        }
+
+        expect(actualMigrationStub).to.have.been.calledWith(sampleDbConfig, migrationScriptsLocation);
+    });
+
+    it(`on successful download from s3 proceed to run migrations => handle 'migration files not existing' errors`, async () => {
+        const firstArgumentToCallback = null;
+        const secondArgumentToCallback = null;
+        fsReadDirStub.callsArgWith(1, firstArgumentToCallback, secondArgumentToCallback);
+        const customFilesNotExistMessage = 'Migration files do not exist';
+        try {
+            await new Promise((resolve, reject) => successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig, resolve, reject));
+        } catch (error) {
+            expect(error).to.exist;
+            expect(error.message).equal(customFilesNotExistMessage);
+        }
+    });
+
+    it(`on successful download from s3 proceed to run migrations => handle 'read migration file' errors`, async () => {
+        const customErrorReadingMigrationFiles = new Error('Failure in reading migration files');
+        const firstArgumentToCallback = customErrorReadingMigrationFiles;
+        const secondArgumentToCallback = null;
+        fsReadDirStub.callsArgWith(1, firstArgumentToCallback, secondArgumentToCallback);
+
+        try {
+            await new Promise((resolve, reject) => successfullyDownloadedFilesProceedToRunMigrations(sampleDbConfig, resolve, reject));
+        } catch (error) {
+            expect(error).to.exist;
+            expect(error.message).equal(customErrorReadingMigrationFiles.message);
+        }
+    });
 });
