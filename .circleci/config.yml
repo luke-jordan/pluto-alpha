@@ -231,6 +231,7 @@ jobs:
 
                 /home/circleci/bin/aws s3 sync $HOME/app/templates/emails/ s3://$CIRCLE_BRANCH.jupiter.templates/emails/
                 /home/circleci/bin/aws s3 sync $HOME/app/templates/payment/ s3://$CIRCLE_BRANCH.jupiter.templates/payment/
+                /home/circleci/bin/aws s3 sync $HOME/app/templates/rds s3://jupiter.db.migration.scripts/$CIRCLE_BRANCH/ops/
              fi
 
       - run:

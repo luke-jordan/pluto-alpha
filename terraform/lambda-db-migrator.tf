@@ -30,13 +30,19 @@ resource "aws_lambda_function" "db_migration" {
                   "port" :"${local.database_config.port}"
                   "database": "${var.db_name}"
               },
+              "s3": {
+                "bucket": "jupiter.db.migration.scripts",
+                "folder": "${terraform.workspace}/ops/"
+              },
               "secrets": {
                   "enabled": true,
                   "names": {
                       "master": "${terraform.workspace}/ops/psql/main"
                   }
               },
-              "environment": "${terraform.workspace}"
+              "scripts": {
+                "location": "/tmp/scripts"
+              }
           }
       )}"
     }
