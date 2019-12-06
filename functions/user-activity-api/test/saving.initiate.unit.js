@@ -144,12 +144,41 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         transactionDetails: [{ accountTransactionId: testTransactionId, persistedTimeEpochMillis: moment().format() }]
     };
 
+    const expectedResponseBody = {
+        paymentRedirectDetails: {
+            urlToCompletePayment: expectedPaymentParams.paymentUrl
+        },
+        humanReference: expectedPaymentParams.bankRef,
+        transactionDetails: responseToTxPending.transactionDetails
+    };
+
     before(() => {
         findFloatOrIdStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
         addSavingsRdsStub.withArgs(wellFormedMinimalPendingRequestToRds).resolves(responseToTxPending);
     });
 
     beforeEach(() => resetStubHistory());
+
+    it('Most common route, initiated payment, works as wrapper, happy path', async () => {
+        const saveEventToWrapper = testSavePendingBase();
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        momentStub.returns(testTimeInitiated);
+
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        logger('Received: ', resultOfWrapperCall);
+
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        expect(saveBody).to.deep.equal(expectedResponseBody);
+
+        expect(fetchBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
+    });
 
     it('Fails gracefully, RDS failure', async () => {
         const badEvent = { ...testSavePendingBase() };
@@ -176,26 +205,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(expectedWarmupResponse).to.exist;
         expect(expectedWarmupResponse).to.have.property('statusCode', 400);
         expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
-    });
-
-    it('Most common route, initiated payment, works as wrapper, happy path', async () => {
-        const saveEventToWrapper = testSavePendingBase();
-        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
-        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
-        momentStub.returns(testTimeInitiated);
-
-        fetchBankRefStub.resolves(testBankRefInfo);
-        getPaymentUrlStub.resolves(expectedPaymentParams);
-        
-        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
-        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
-        logger('Received: ', resultOfWrapperCall);
-        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
-        expect(saveBody).to.deep.equal(responseToTxPending);
-
-        expect(fetchBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
-        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
     });
 
     it('Wrapper fails if no auth context', async () => {
