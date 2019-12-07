@@ -125,16 +125,17 @@ module.exports.initiatePendingSave = async (event) => {
     const initiationResult = await save(saveInformation);
 
     logger('sending saveInfo:', initiationResult);
-    // todo : print a 'contact support?' in the URL if there is an error?
+    
     const transactionId = initiationResult.transactionDetails[0].accountTransactionId;
     logger('Extracted transaction ID: ', transactionId);
     const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId);
     const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
-    logger('Got payment link result: ', paymentLinkResult); // todo : stash the bank ref & payment provider ref
+    logger('Got payment link result: ', paymentLinkResult);
     const urlToCompletePayment = paymentLinkResult.paymentUrl;
 
     logger('Returning with url to complete payment: ', urlToCompletePayment);
     initiationResult.paymentRedirectDetails = { urlToCompletePayment };
+    initiationResult.humanReference = paymentLinkResult.bankRef;
 
     const paymentStash = await persistence.addPaymentInfoToTx({ transactionId, ...paymentLinkResult });
     logger('Result of stashing payment details: ', paymentStash);

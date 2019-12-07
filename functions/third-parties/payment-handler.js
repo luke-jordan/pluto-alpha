@@ -70,6 +70,17 @@ const assembleRequest = (method, endpoint, body) => ({
     json: true
 });
 
+// this API has no status ping (at least not in docs), so to keep alive the connection we do a request we know will error out
+const maintainConnection = async () => {
+    try {
+        const options = assembleRequest('GET', config.get('ozow.endpoints.warmup'), {});
+        const warmupResult = await request(options);
+        logger('Warm up result:', warmupResult);
+    } catch (err) {
+        logger('Expected error: ', err.message);
+    }
+};
+
 
 /**
  * This function gets a payment url from a third-party. Property descriptions for the event object accepted by this function are provided below. Further information may be found here https://ozow.com/integrations/ .
@@ -89,9 +100,7 @@ const assembleRequest = (method, endpoint, body) => ({
 module.exports.paymentUrlRequest = async (event) => {
     try {
         if (warmupCheck(event)) {
-            const options = assembleRequest('POST', config.get('ozow.endpoints.warmup'), {});
-            const warmupResult = await request(options);
-            logger('Warm up result:', warmupResult); 
+            await maintainConnection();     
             return { result: 'WARMUP_COMPLETE' };
         }
 

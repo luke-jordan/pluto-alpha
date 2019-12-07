@@ -8,5 +8,12 @@
         "database": "jupiter",
         "user": "master",
         "password": "alpineskiing"
+    },
+    "s3": {
+        "bucket": "jupiter.db.migration.scripts",
+        "folder": "staging/newformat"
+    },
+    "scripts": {
+        "location": "scripts"
     }
 }

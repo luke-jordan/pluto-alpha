@@ -231,6 +231,7 @@ jobs:
 
                 /home/circleci/bin/aws s3 sync $HOME/app/templates/emails/ s3://$CIRCLE_BRANCH.jupiter.templates/emails/
                 /home/circleci/bin/aws s3 sync $HOME/app/templates/payment/ s3://$CIRCLE_BRANCH.jupiter.templates/payment/
+                /home/circleci/bin/aws s3 sync $HOME/app/templates/rds s3://jupiter.db.migration.scripts/$CIRCLE_BRANCH/ops/
              fi
 
       - run:
@@ -266,8 +267,7 @@ jobs:
                     migrator_region=us-east-1
                 fi
 
-                /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload file://$HOME/app/functions/db-migration/create_roles_event.json  --log-type Tail -
-                /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload '{"type": "SETUP_TABLES"}' --log-type Tail -
+                /home/circleci/bin/aws lambda invoke --region $migrator_region --invocation-type RequestResponse --function-name db_migration --payload '{}' --log-type Tail -
              fi
 
       - save_cache:

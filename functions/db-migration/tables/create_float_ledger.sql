@@ -1,1 +1,0 @@
-../../../templates/rds/create_float_ledger.sql
