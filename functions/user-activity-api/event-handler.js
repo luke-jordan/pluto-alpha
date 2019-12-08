@@ -9,6 +9,8 @@ const config = require('config');
 const format = require('string-format');
 const logger = require('debug')('jupiter:event-handling');
 
+const persistence = require('./persistence/rds');
+
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 
@@ -28,6 +30,8 @@ const UNIT_DIVISORS_TO_WHOLE = {
     'WHOLE_CENT': 100,
     'WHOLE_CURRENCY': 1 
 };
+
+const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
 
 const extractSnsMessage = async (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
 
@@ -92,14 +96,14 @@ const formatAmountText = (amountText) => {
 };
 
 const assembleEmailParameters = ({ toAddresses, subject, htmlBody, textBody }) => ({
-    Destination: {
-        ToAddresses: toAddresses
+    Destination: { ToAddresses: toAddresses },
+    Message: {
+        Body: {
+            Html: { Data: htmlBody },
+            Text: { Data: textBody }
+        },
+        Subject: { Data: subject }
     },
-    Message: { Body: { 
-        Html: { Data: htmlBody },
-        Text: { Data: textBody }
-    },
-    Subject: { Data: subject }},
     Source: sourceEmail,
     ReplyToAddresses: [sourceEmail],
     ReturnPath: sourceEmail
@@ -183,6 +187,70 @@ const safeEmailAttempt = async (eventBody) => {
     }
 };
 
+const invokeLambda = (functionName, payload, sync = true) => ({
+    FunctionName: functionName,
+    InvocationType: sync ? 'RequestResponse' : 'Event',
+    Payload: JSON.stringify(payload)
+});
+
+
+const fetchUserProfile = async (systemWideUserId) => {
+    const profileFetchLambdaInvoke = invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId });
+    const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
+    logger('Result of profile fetch: ', profileFetchResult);
+
+    return extractLambdaBody(profileFetchResult);
+};
+
+const updateAccountTags = async (systemWideUserId, FWAccountNumber) => {
+    const tag = `FINWORKS::${FWAccountNumber}`;
+    const accountUpdateResult = await persistence.updateAccountTags(systemWideUserId, tag);
+    logger('Updating account tags resulted in:', accountUpdateResult);
+    return accountUpdateResult;
+};
+
+const updateTxFlags = async (accountId, flag) => {
+    const txUpdateResult = await persistence.updateTxFlags(accountId, flag);
+    logger('Got this back from updating tx flags:', txUpdateResult);
+    
+    return txUpdateResult;
+};
+
+const createFinWorksAccount = async (userDetails) => {
+    logger('got user details:', userDetails);
+    const accountCreationInvoke = invokeLambda(config.get('lambdas.createFinWorksAccount'), userDetails);
+    const accountCreationResult = await lambda.invoke(accountCreationInvoke).promise();
+    logger('Result of FinWorks account creation:', accountCreationResult);
+
+    return extractLambdaBody(accountCreationResult);
+};
+
+const fetchFWAccountNumber = async (accountId) => {
+    const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, 'FINWORKS');
+    logger('Got third party account number:', accountNumber);
+
+    return accountNumber;
+};
+
+const handleInvestment = async ({ accountId, amount, unit, currency }) => {
+    const accountNumber = await fetchFWAccountNumber(accountId);
+    
+    const investmentDetails = { accountNumber, amount, unit, currency };
+    const investmentInvocation = invokeLambda(config.get('lambdas.createFinWorksInvestment'), investmentDetails);
+    logger('lambda args:', investmentInvocation);
+    const investmentResult = await lambda.invoke(investmentInvocation).promise();
+    logger('Investment result from third party:', investmentResult);
+
+    const parsedResult = extractLambdaBody(investmentResult);
+    logger('Got response body', parsedResult);
+    if (Object.keys(parsedResult).includes('result') && parsedResult.result === 'ERROR') {
+        throw new Error(`Error sending investment to third party: ${parsedResult}`);
+    }
+
+    const txUpdateResult = await updateTxFlags(accountId, 'FINWORKS_RECORDED');
+    logger('Result of transaction update:', txUpdateResult);
+};
+
 // todo : parallelize, obviously
 const handleSavingEvent = async (eventBody) => {
     logger('Saving event triggered!: ', eventBody);
@@ -201,6 +269,13 @@ const handleSavingEvent = async (eventBody) => {
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
     const statusResult = await lambda.invoke(statusInvocation).promise();
     logger('Result of lambda invoke: ', statusResult);
+
+    const sendInvestment = config.get('finworks.sendInvestment');
+    if (sendInvestment) {
+        const accountId = eventBody.context.accountId;
+        const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
+        await handleInvestment({ accountId, amount, unit, currency });
+    }
 };
 
 const handleWithdrawalEvent = async (eventBody) => {
@@ -232,7 +307,17 @@ const handleWithdrawalEvent = async (eventBody) => {
 };
 
 const handleAccountOpenedEvent = async (eventBody) => {
-    logger('Account open handled!: ', eventBody);
+    logger('Handling event:', eventBody);
+    const userProfile = await fetchUserProfile(eventBody.userId);
+    const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
+    const FWAccountCreationResult = await createFinWorksAccount(userDetails);
+    if (typeof FWAccountCreationResult !== 'object' || !Object.keys(FWAccountCreationResult).includes('accountNumber')) {
+        throw new Error(`Error creating user FinWorks account: ${FWAccountCreationResult}`);
+    }
+    logger('Finworks account creation resulted in:', FWAccountCreationResult);
+
+    const accountUpdateResult = await updateAccountTags(eventBody.userId, FWAccountCreationResult.accountNumber);
+    logger(`Result of user account update: ${accountUpdateResult}`);
 };
 
 /**
@@ -251,9 +336,9 @@ module.exports.handleUserEvent = async (snsEvent) => {
             case 'WITHDRAWAL_EVENT_CONFIRMED':
                 await handleWithdrawalEvent(eventBody);
                 break;
-            case 'PASSWORD_SET':
+            case 'USER_CREATED_ACCOUNT':
                 await handleAccountOpenedEvent(eventBody);
-                break; 
+                break;
             default:
                 logger(`We don't handle ${eventType}, let it pass`);
         }
