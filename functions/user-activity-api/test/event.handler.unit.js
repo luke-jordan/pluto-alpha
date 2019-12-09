@@ -228,7 +228,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(sqsSendStub).to.have.been.calledOnce;
     });
 
-    // extremely complicated. even for its author.
+    // extremely complicated. even for its author. todo : split this thing so it is possible to debug without as much pain.
     it('Handles saving event happy path correctly', async () => {
         const testAccountId = uuid();
         const testAccountNumber = 'POL1';
@@ -264,7 +264,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             context: {
                 accountId: testAccountId,
                 saveCount: 10,
-                savedAmount: '100::WHOLE_CURRENCY::USD'
+                savedAmount: '1000000::HUNDREDTH_CENT::USD'
             }
         };
 
@@ -290,7 +290,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         helper.resetStubs(...activeStubs);
 
         savingEvent.context.saveCount = 3;
-        savingEvent.context.savedAmount = '100::WHOLE_CURRENCY::ZAR';
+        savingEvent.context.savedAmount = '1000000::HUNDREDTH_CENT::ZAR';
         investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
             operation: 'INVEST',
             transactionDetails: { accountNumber: testAccountNumber, amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' }
@@ -305,7 +305,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         savingEvent.context.savedAmount = '::::';
         investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
             operation: 'INVEST',
-            transactionDetails: { accountNumber: testAccountNumber, amount: null, unit: '', currency: '' }
+            transactionDetails: { accountNumber: testAccountNumber, amount: null, unit: 'WHOLE_CURRENCY', currency: '' }
         });
         configureStubs(investmentInvocation);
         snsEvent = wrapEventSns(savingEvent);

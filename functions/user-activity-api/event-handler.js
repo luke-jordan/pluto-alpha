@@ -243,7 +243,9 @@ const fetchBSheetNumber = async (accountId) => {
 const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency }) => {
     const accountNumber = await fetchBSheetNumber(accountId);
     
-    const transactionDetails = { accountNumber, amount: parseInt(amount, 10), unit, currency };
+    const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
+
+    const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
     const investmentInvocation = invokeLambda(config.get('lambdas.addTxToBalanceSheet'), { operation, transactionDetails });
     
     logger('lambda args:', investmentInvocation);

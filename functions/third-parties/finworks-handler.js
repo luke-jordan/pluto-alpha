@@ -81,14 +81,28 @@ module.exports.addCash = async (event) => {
     }
 };
 
-module.exports.getMarketValue = async (event) => {
+module.exports.sendWithdrawal = async (event) => {
     try {
-        const params = opsUtil.extractParamsFromEvent(event);
+        const { accountNumber, amount, currency, unit, bankDetails } = opsUtil.extractParamsFromEvent(event);
+
+        const body = {
+            amount,
+            currency,
+            unit,
+            bankDetails: {
+                holderName: bankDetails.holderName,
+                accountNumber: bankDetails.accountNumber,
+                branchCode: bankDetails.branchCode,
+                type: bankDetails.accountType,
+                bankName: bankDetails.bankName
+            }
+        };
+
         const [crt, pem] = await fetchAccessCreds();
-        const endpoint = config.get('finworks.endpoints.rootUrl') + util.format(config.get('finworks.endpoints.marketValue'), params.accountNumber);
+        const endpoint = config.get('finworks.endpoints.rootUrl') + util.format(config.get('finworks.endpoints.withdrawals'), accountNumber);
         logger('Assembled endpoint:', endpoint);
 
-        const options = assembleRequest('GET', endpoint, { crt, pem });
+        const options = assembleRequest('POST', endpoint, { body, crt, pem });
         const response = await request(options);
         logger('Got response:', response);
 
@@ -104,26 +118,28 @@ module.exports.getMarketValue = async (event) => {
     }
 };
 
-module.exports.sendWithdrawal = async (event) => {
+module.exports.addTransaction = async (event) => {
+    logger('Adding transaction to balance sheet, event: ', event);
+    const { operation, transactionDetails } = event;
+
+    const dispatch = { 'INVEST': exports.addCash, 'WITHDRAW': exports.sendWithdrawal };    
+    if (!operation || !Object.keys(dispatch).includes(operation)) {
+        return { result: 'ERROR', message: 'No or invalid operation' };
+    }
+
+    const resultOfOperation = await dispatch[operation](transactionDetails);
+    logger('Result of operation in dispatcher: ', resultOfOperation);
+    return resultOfOperation;
+};
+
+module.exports.getMarketValue = async (event) => {
     try {
         const params = opsUtil.extractParamsFromEvent(event);
-        const body = {
-            amount: params.amount,
-            currency: params.currency,
-            bankDetails: {
-                holderName: params.holderName,
-                accountNumber: params.accountNumber,
-                branchCode: params.branchCode,
-                type: params.type,
-                bankName: params.bankName
-            }
-        };
-
         const [crt, pem] = await fetchAccessCreds();
-        const endpoint = config.get('finworks.endpoints.rootUrl') + util.format(config.get('finworks.endpoints.withdrawals'), params.accountNumber);
+        const endpoint = config.get('finworks.endpoints.rootUrl') + util.format(config.get('finworks.endpoints.marketValue'), params.accountNumber);
         logger('Assembled endpoint:', endpoint);
 
-        const options = assembleRequest('POST', endpoint, { body, crt, pem });
+        const options = assembleRequest('GET', endpoint, { crt, pem });
         const response = await request(options);
         logger('Got response:', response);
 

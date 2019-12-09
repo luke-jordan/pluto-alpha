@@ -241,9 +241,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             body: {
                 amount: 1234.56,
                 currency: 'ZAR',
+                unit: 'WHOLE_CURRENCY',
                 bankDetails: {
                     holderName: 'John Doe',
-                    accountNumber: 'POL122',
+                    accountNumber: '624563712',
                     branchCode: '222626',
                     type: 'Savings',
                     bankName: 'FNB'
@@ -257,11 +258,15 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const testEvent = {
             amount: 1234.56,
             currency: 'ZAR',
-            holderName: 'John Doe',
             accountNumber: 'POL122',
-            branchCode: '222626',
-            type: 'Savings',
-            bankName: 'FNB'
+            unit: 'WHOLE_CURRENCY',
+            bankDetails: {
+                holderName: 'John Doe',
+                accountNumber: '624563712',
+                branchCode: '222626',
+                accountType: 'Savings',
+                bankName: 'FNB'
+            }
         };
 
         const resultOfTransmission = await handler.sendWithdrawal(testEvent);
@@ -283,9 +288,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             body: {
                 amount: 1234.56,
                 currency: 'ZAR',
+                unit: 'WHOLE_CURRENCY',
                 bankDetails: {
                     holderName: 'John Doe',
-                    accountNumber: 'POL122',
+                    accountNumber: '624563712',
                     branchCode: '222626',
                     type: 'Savings',
                     bankName: 'FNB'
@@ -307,11 +313,16 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const testEvent = {
             amount: 1234.56,
             currency: 'ZAR',
+            unit: 'WHOLE_CURRENCY',
             holderName: 'John Doe',
             accountNumber: 'POL122',
-            branchCode: '222626',
-            type: 'Savings',
-            bankName: 'FNB'
+            bankDetails: {
+                holderName: 'John Doe',
+                accountNumber: '624563712',
+                branchCode: '222626',
+                accountType: 'Savings',
+                bankName: 'FNB'
+            }
         };
 
         const resultOfTransmission = await handler.sendWithdrawal(testEvent);
@@ -322,6 +333,87 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(resultOfTransmission).to.have.property('details');
         const parsedError = JSON.parse(resultOfTransmission.details);
         expect(parsedError).to.have.deep.equal({ errors: [{ description: 'Account is inactive', code: 'AccountInactiveError' }]});
+        expect(getObjectStub).to.have.been.calledTwice;
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+    });
+
+    it('Directs save transaction correctly', async () => {
+        const testAccountNumber = 'POL23';
+
+        const saveEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/investments`;
+
+        const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
+        const transactionDetails = { accountNumber: testAccountNumber, amount: parseInt(testAmount, 10), unit: testUnit, currency: testCurrency };        
+
+        const saveEvent = { operation: 'INVEST', transactionDetails };
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+
+        const expectedOptions = {
+            method: 'POST',
+            uri: saveEndpoint,
+            agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
+            json: true,
+            body: { amount: parseInt(testAmount, 10), unit: testUnit, currency: testCurrency }
+        };
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+        requestStub.resolves({ statusCode: 201, body: { } });
+
+        const resultOfHandler = await handler.addTransaction(saveEvent);
+        logger('Investment result from third party:', resultOfHandler);
+
+        expect(resultOfHandler).to.deep.equal({ });
+        expect(getObjectStub).to.have.been.calledTwice;
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+        
+    });
+
+    it('Directs withdraw transaction correctly', async () => {
+        const testAccountNumber = 'POL23';
+        const withdrawEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/withdrawals`;
+
+        const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
+        
+        const testBankDetails = {
+            holderName: 'John Doe',
+            accountNumber: '624563712',
+            branchCode: '222626',
+            accountType: 'Savings',
+            bankName: 'FNB'
+        };
+
+        const transactionDetails = { 
+            accountNumber: testAccountNumber, 
+            amount: parseInt(testAmount, 10), 
+            unit: testUnit, 
+            currency: testCurrency,
+            bankDetails: testBankDetails 
+        };
+
+        const withdrawEvent = { operation: 'WITHDRAW', transactionDetails };
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+
+        const expectedBankDetails = { ...testBankDetails, type: testBankDetails.accountType };
+        Reflect.deleteProperty(expectedBankDetails, 'accountType');
+        const expectedOptions = {
+            method: 'POST',
+            uri: withdrawEndpoint,
+            agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
+            json: true,
+            body: { amount: parseInt(testAmount, 10), unit: testUnit, currency: testCurrency, bankDetails: expectedBankDetails }
+        };
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+        requestStub.resolves({ statusCode: 201, body: { } });
+
+        const resultOfHandler = await handler.addTransaction(withdrawEvent);
+        logger('Investment result from third party:', resultOfHandler);
+
+        expect(resultOfHandler).to.deep.equal({ });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
