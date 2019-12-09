@@ -51,8 +51,7 @@ module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
 };
 
 // handy utility for summing over a set of rows that have different units
-module.exports.sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => 
-    rows.reduce((sum, row) => {
+module.exports.sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => rows.reduce((sum, row) => {
         const rowAmount = parseInt(row[amountKey], 10) * UNIT_MULTIPLIERS[row['unit']][targetUnit]; 
         return sum + rowAmount; 
     }, 0);
@@ -73,7 +72,7 @@ module.exports.assembleCurrencyTotals = (rows, targetUnit = 'HUNDREDTH_CENT', am
     const assembledResult = { };
     presentCurrencies.forEach((currency) => {
         assembledResult[currency] = {
-            amount: this.sumOverUnits(groupedRows[currency], targetUnit, amountKey),
+            amount: exports.sumOverUnits(groupedRows[currency], targetUnit, amountKey),
             unit: targetUnit
         };
     });
@@ -106,9 +105,7 @@ module.exports.extractQueryParams = (event) => {
     return { };
 };
 
-module.exports.isObjectEmpty = (object) => {
-    return !object || typeof object !== 'object' || Object.keys(object).length === 0;
-};
+module.exports.isObjectEmpty = (object) => !object || typeof object !== 'object' || Object.keys(object).length === 0;
 
 module.exports.isWarmup = (event) => exports.isObjectEmpty(event) || (Reflect.has(event, 'warmupCall') && event.warmupCall);
 
@@ -138,7 +135,7 @@ const normalizeExpectedBody = (event) => {
 };
 
 module.exports.extractParamsFromEvent = (event) => {
-    let params = normalizeExpectedBody(event);
+    const params = normalizeExpectedBody(event);
     if (!params || Object.keys(params).size === 0) {
         return event.queryStringParameters || event;
     }

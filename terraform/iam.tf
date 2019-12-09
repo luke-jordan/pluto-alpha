@@ -61,7 +61,7 @@ resource "aws_iam_policy" "migration_script_s3_access" {
             "Action": [
                 "s3:GetObject"
             ],
-            "Resource": "arn:aws:s3:::jupiter.db.migration.scripts/${terraform.workspace}/*"
+            "Resource": "arn:aws:s3:::jupiter.db.migration.scripts/${terraform.workspace}/ops/*"
         },
         {
             "Sid": "ListBucketAccess",
@@ -91,6 +91,27 @@ resource "aws_iam_policy" "templates_s3_access" {
                 "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "fworks_s3_access" {
+    name      = "${terraform.workspace}_fworks_s3_access"
+    path      = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "GenericFileAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.keys/finworks/*"
         }
     ]
 }
@@ -332,14 +353,16 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
     "Version": "2012-10-17",
     "Statement": [
         {
-            "Sid": "AllowInvokeBoostProcess",
+            "Sid": "AllowInvokeOpsLambdas",
             "Effect": "Allow",
             "Action": [
                 "lambda:InvokeFunction",
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.boost_event_process.arn}"
+                "${aws_lambda_function.boost_event_process.arn}",
+                "${aws_lambda_function.balance_sheet_acc_create.arn}",
+                "${aws_lambda_function.balance_sheet_acc_update.arn}"
             ]
         },
         {

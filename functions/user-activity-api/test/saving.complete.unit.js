@@ -277,6 +277,13 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(resultOfCheck).to.deep.equal({ result: 'PAYMENT_PENDING' });
     });
 
+    it('Handles warmup call', async () => {        
+        const warmupResult = await handler.checkPendingPayment({});
+        expect(warmupResult).to.exist;
+        expect(warmupResult).to.have.property('statusCode', 400);
+        expect(warmupResult).to.have.property('body', 'Empty invocation');
+    });
+
     it('Catches thrown errors', async () => {
         const paymentCheckErrorResult = await handler.checkPendingPayment(wrapTestParams({ transactionId: testPendingTxId }));
         

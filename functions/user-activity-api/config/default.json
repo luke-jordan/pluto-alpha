@@ -5,6 +5,9 @@
         },
         "region": "eu-west-1"
     },
+    "finworks": {
+        "sendInvestment": true
+    },
     "tables": {
         "accountTransactions": "transaction_data.core_transaction_ledger",
         "rewardTransactions": "transaction_data.core_transaction_ledger",
@@ -35,7 +38,9 @@
         "checkSavePayment": "save_payment_check",
         "fetchUserBalance": "balance_fetch",
         "userHistory": "user_log_reader",
-        "fetchProfile": "profile_fetch"
+        "fetchProfile": "profile_fetch",
+        "createBalanceSheetAccount": "balance_sheet_acc_create",
+        "addTxToBalanceSheet": "balance_sheet_acc_update"
     },
     "payment": {
         "test": false,
@@ -70,6 +75,11 @@
         "userHistory": {
             "eventTypes": ["PASSWORD_SET", "USER_REGISTERED"],
             "daysInHistory": 90
+        },
+        "balanceSheet": {
+            "enabled": true,
+            "accountPrefix": "FINWORKS",
+            "txFlag": "FINWORKS_RECORDED"
         }
     }
 }

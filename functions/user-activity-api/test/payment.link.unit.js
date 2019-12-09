@@ -108,8 +108,7 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
             amountDict: {
                 currency: 'ZAR',
                 unit: 'HUNDREDTH_CENT',
-                amount: testAmountBp,
-                isTest: true
+                amount: testAmountBp
             },
             accountInfo: {
                 bankRefStem: 'LJORDAN1',
@@ -126,7 +125,7 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
             amount: testAmountWhole,
             transactionId: testTxId,
             bankReference: expectedBankRef,
-            isTest: true
+            isTest: config.get('payment.test')
         };
 
         const mockLambdaPayload = {

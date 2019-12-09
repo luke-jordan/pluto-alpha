@@ -248,6 +248,49 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
 };
 
 
+/**
+ * This function updates a users account tags.
+ * @param {string} accountId The users account id.
+ * @param {string} tag A tag to be added to thr users account.
+ */
+module.exports.updateAccountTags = async (systemWideUserId, tag) => {
+    const userAccountTable = config.get('tables.accountLedger');
+    const updateTagQuery = `update ${userAccountTable} set tags = array_append(tags, $1) where owner_user_id = $2 returning updated_time`;
+
+    const updateTagResult = await rdsConnection.updateRecord(updateTagQuery, [tag, systemWideUserId]);
+    logger('Account tags update resulted in:', updateTagResult);
+
+    const updateMoment = moment(updateTagResult[0]['updated_time']);
+    logger('Extracted moment: ', updateMoment);
+    return { updatedTime: updateMoment };
+};
+
+
+module.exports.updateTxFlags = async (accountId, flag) => {
+    const accountTxTable = config.get('tables.accountTransactions');
+
+    const updateQuery = `update ${accountTxTable} set flags = array_append(flags, $1) where account_id = $2 returning updated_time`;
+
+    const updateResult = await rdsConnection.updateRecord(updateQuery, [flag, accountId]);
+    logger('Account flag update resulted in:', updateResult);
+
+    const updateMoment = moment(updateResult[0]['updated_time']);
+    logger('Extracted moment: ', updateMoment);
+    return { updatedTime: updateMoment };
+};
+
+
+module.exports.fetchAccountTagByPrefix = async (accountId, prefix) => {
+    const userAccountTable = config.get('tables.accountLedger');
+    const selectQuery = `select flags from ${userAccountTable} where account_id = $1`;
+
+    const flags = await rdsConnection.selectQuery(selectQuery, [accountId]);
+    logger('Got account flags:', flags);
+
+    return flags.filter((flag) => flag.includes(`${prefix}::`))[0].split(`${prefix}::`)[1];
+};
+
+
 const assembleAccountTxInsertion = (accountTxId, transactionDetails, floatTxIds) => {
     const accountTxTable = config.get('tables.accountTransactions');
     

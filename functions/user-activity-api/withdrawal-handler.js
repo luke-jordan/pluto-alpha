@@ -84,6 +84,7 @@ module.exports.setWithdrawalBankAccount = async (event) => {
 
         await cacheBankAccountDetails(authParams.systemWideUserId, withdrawalInformation.bankDetails);
 
+        // todo : actually calculate projection
         const responseObject = {
             availableBalance,
             cardTitle: 'Did you know?',

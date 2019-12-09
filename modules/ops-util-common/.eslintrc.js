@@ -43,7 +43,7 @@ module.exports = {
         'callback-return': 'error',
         'camelcase': 'error',
         'capitalized-comments': 'off',
-        'class-methods-use-this': 'error',
+        'class-methods-use-this': 'warn',
         'comma-dangle': 'error',
         'comma-spacing': [
             'error',
@@ -62,7 +62,10 @@ module.exports = {
             'never'
         ],
         'consistent-return': 'off',
-        'consistent-this': 'error',
+        'consistent-this': [
+            'error',
+            'self'
+        ],
         'curly': 'error',
         'default-case': 'error',
         'dot-location': 'error',
@@ -82,7 +85,7 @@ module.exports = {
         'id-length': [
             'error',
             {
-                'exceptions': ['e', 'i', 'o']
+                'exceptions': ['e']
             }
         ],
         'id-match': 'error',
@@ -107,18 +110,13 @@ module.exports = {
         'lines-around-comment': 'error',
         'lines-around-directive': 'error',
         'lines-between-class-members': 'error',
-        'max-classes-per-file': 'error',
+        'max-classes-per-file': 'warn',
         'max-depth': 'error',
         'max-len': 'off',
-        'max-lines': 'warn',
-        'max-lines-per-function': 'warn',
+        'max-lines': ['error', 600],
+        'max-lines-per-function': 'error',
         'max-nested-callbacks': 'error',
-        'max-params': [
-            'error',
-            {
-                'max': 4
-            }
-        ],
+        'max-params': ['error', 5],
         'max-statements': 'off',
         'max-statements-per-line': 'error',
         'multiline-comment-style': 'off',
@@ -129,17 +127,12 @@ module.exports = {
         'newline-per-chained-call': 'off',
         'no-alert': 'error',
         'no-array-constructor': 'error',
-        'no-await-in-loop': 'error',
+        'no-await-in-loop': 'warn',
         'no-bitwise': 'error',
         'no-buffer-constructor': 'error',
         'no-caller': 'error',
         'no-catch-shadow': 'error',
-        'no-confusing-arrow': [
-            'error',
-            {
-                'allowParens': true
-            }
-        ],
+        'no-confusing-arrow': 'error',
         'no-console': 'error',
         'no-continue': 'error',
         'no-div-regex': 'error',
@@ -156,7 +149,7 @@ module.exports = {
         'no-extend-native': 'error',
         'no-extra-bind': 'error',
         'no-extra-label': 'error',
-        'no-extra-parens': 'warn',
+        'no-extra-parens': 'error',
         'no-floating-decimal': 'error',
         'no-implicit-coercion': 'error',
         'no-implicit-globals': 'error',
@@ -172,7 +165,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 100, 200, 201, 400, 500, 365]
+                'ignore': [0, 1, 100, 200, 400, 500]
             }
         ],
         'no-mixed-operators': 'error',
@@ -194,7 +187,7 @@ module.exports = {
         'no-param-reassign': 'error',
         'no-path-concat': 'error',
         'no-plusplus': 'error',
-        'no-process-env': 'error',
+        'no-process-env': 'off',
         'no-process-exit': 'error',
         'no-proto': 'error',
         'no-restricted-globals': 'error',
@@ -217,7 +210,7 @@ module.exports = {
         'no-trailing-spaces': 'off',
         'no-undef-init': 'error',
         'no-undefined': 'error',
-        'no-underscore-dangle': 'error',
+        'no-underscore-dangle': 'off',
         'no-unmodified-loop-condition': 'error',
         'no-unneeded-ternary': 'error',
         'no-unused-expressions': 'off',
@@ -247,7 +240,7 @@ module.exports = {
         'prefer-arrow-callback': 'error',
         'prefer-const': 'error',
         'prefer-destructuring': 'off',
-        'prefer-named-capture-group': 'error',
+        'prefer-named-capture-group': 'off',
         'prefer-numeric-literals': 'error',
         'prefer-object-spread': 'error',
         'prefer-promise-reject-errors': 'error',
@@ -266,9 +259,9 @@ module.exports = {
         'radix': 'error',
         'require-await': 'off',
         'require-jsdoc': 'error',
-        'require-unicode-regexp': 'error',
+        'require-unicode-regexp': 'off',
         'rest-spread-spacing': 'error',
-        'semi': [ 
+        'semi': [
             'error',
             'always'
         ],
