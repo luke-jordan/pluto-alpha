@@ -21,7 +21,7 @@ const getQueueUrlStub = sinon.stub();
 
 const updateTagsStub = sinon.stub();
 const updateTxFlagsStub = sinon.stub();
-const fetchAccNumberStub = sinon.stub();
+const fetchBSheetAccStub = sinon.stub();
 
 const redisGetStub = sinon.stub();
 
@@ -67,7 +67,7 @@ const eventHandler = proxyquire('../event-handler', {
     './persistence/rds': {
         'updateAccountTags': updateTagsStub,
         'updateTxFlags': updateTxFlagsStub,
-        'fetchAccountTagByPrefix': fetchAccNumberStub
+        'fetchAccountTagByPrefix': fetchBSheetAccStub
     }
 });
 
@@ -84,7 +84,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
     const testId = uuid();
 
     beforeEach(() => {
-        helper.resetStubs(lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, sendEmailStub, updateTagsStub, updateTxFlagsStub, fetchAccNumberStub); // no redis use here at present
+        helper.resetStubs(lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, sendEmailStub, updateTagsStub, updateTxFlagsStub, fetchBSheetAccStub); // no redis use here at present
     });
 
     const commonAssertions = ({ resultOfHandle, investmentInvocation }) => {
@@ -94,10 +94,10 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         });
         expect(sendEmailStub).to.have.been.calledOnce;
         expectNoCalls(redisGetStub, sqsSendStub);
-        if (config.get('finworks.sendInvestment') === true) {
+        if (config.get('defaults.balanceSheet.enabled') === true) {
             expect(lamdbaInvokeStub).to.have.been.calledThrice; // for balance & for status & investment
             expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
-            expect(fetchAccNumberStub).to.have.been.calledOnce;
+            expect(fetchBSheetAccStub).to.have.been.calledOnce;
             expect(updateTxFlagsStub).to.have.been.calledOnce;
         }
     };
@@ -146,14 +146,14 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         };
 
         const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId });
-        const FWAccCreationInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createFinWorksAccount'), false, {
+        const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
             surname: testUserProfile.familyName,
             firstNames: testUserProfile.personalName
         });
 
-        lamdbaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testUserProfile)})})});
-        lamdbaInvokeStub.withArgs(FWAccCreationInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ accountNumber: 'POL1' })})})});
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testUserProfile)})})});
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ accountNumber: 'POL1' })})})});
         updateTagsStub.resolves({ updatedTime: testUpdateTime });
 
         const snsEvent = wrapEventSns({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT' });
@@ -163,7 +163,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(resultOfHandle).to.exist;
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
         expect(lamdbaInvokeStub).to.have.been.calledWith(userProfileInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(FWAccCreationInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
         expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::POL1');
         expect(getQueueUrlStub).to.have.not.been.called;
         expect(sqsSendStub).to.have.not.been.called;
@@ -203,7 +203,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         };
 
         const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId });
-        const FWAccCreationInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createFinWorksAccount'), false, {
+        const FWAccCreationInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
             surname: testUserProfile.familyName,
             firstNames: testUserProfile.personalName
@@ -228,31 +228,33 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(sqsSendStub).to.have.been.calledOnce;
     });
 
+    // extremely complicated. even for its author.
     it('Handles saving event happy path correctly', async () => {
         const testAccountId = uuid();
         const testAccountNumber = 'POL1';
         const timeNow = moment().valueOf();
         const testUpdateTime = moment();
-        const activeStubs = [lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, updateTxFlagsStub, fetchAccNumberStub];
+        const activeStubs = [lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, updateTxFlagsStub, fetchBSheetAccStub];
 
-        let investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createFinWorksInvestment'), false, {
-            accountNumber: testAccountNumber,
-            amount: '100',
-            unit: 'WHOLE_CURRENCY',
-            currency: 'USD'
-        });
-        
-        const configureStubs = (invocation) => {
+        const configureStubs = (bsheetInvocation) => {
             lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-            lamdbaInvokeStub.withArgs(invocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ })})})});
+            
+            const bsheetResult = { result: 'ADDED' };
+            lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify(bsheetResult)})});
+
             getObjectStub.returns({ promise: () => ({
                 Body: { toString: () => 'This is an email template' 
             }})});
             sendEmailStub.returns({ promise: () => 'Email sent' });
-            fetchAccNumberStub.resolves('POL1');
+            fetchBSheetAccStub.resolves('POL1');
             updateTxFlagsStub.resolves({ updatedTime: testUpdateTime });
         };
 
+        let investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
+            operation: 'INVEST',
+            transactionDetails: { accountNumber: testAccountNumber, amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' }
+        });
+        
         configureStubs(investmentInvocation);
         
         const savingEvent = {
@@ -289,8 +291,9 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
         savingEvent.context.saveCount = 3;
         savingEvent.context.savedAmount = '100::WHOLE_CURRENCY::ZAR';
-        investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createFinWorksInvestment'), false, {
-            accountNumber: testAccountNumber, amount: '100', unit: 'WHOLE_CURRENCY', currency: 'ZAR'
+        investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
+            operation: 'INVEST',
+            transactionDetails: { accountNumber: testAccountNumber, amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' }
         });
         configureStubs(investmentInvocation);
         snsEvent = wrapEventSns(savingEvent);
@@ -298,19 +301,23 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);
 
+        // todo : this should actually throw an error
         savingEvent.context.savedAmount = '::::';
-        investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createFinWorksInvestment'), false, {
-            accountNumber: testAccountNumber, amount: '', unit: '', currency: ''
+        investmentInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
+            operation: 'INVEST',
+            transactionDetails: { accountNumber: testAccountNumber, amount: null, unit: '', currency: '' }
         });
         configureStubs(investmentInvocation);
         snsEvent = wrapEventSns(savingEvent);
+        
         resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
         logger('Result:', resultOfHandle);
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
-        if (config.get('finworks.sendInvestment') === true) {
+
+        if (config.get('defaults.balanceSheet.enabled') === true) {
             expect(lamdbaInvokeStub).to.have.been.calledThrice;
             expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
-            expect(fetchAccNumberStub).to.have.been.calledOnce;
+            expect(fetchBSheetAccStub).to.have.been.calledOnce;
             expect(updateTxFlagsStub).to.have.been.calledOnce;
         }
         expect(getObjectStub).to.have.not.been.called;
@@ -324,10 +331,19 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         redisGetStub.resolves(JSON.stringify({ account: 'Hello' }));
         
         lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+                
         getObjectStub.returns({ promise: () => ({ 
             Body: { toString: () => 'This is an email template' }
         })});
         sendEmailStub.returns({ promise: () => 'Email sent' });
+
+        fetchBSheetAccStub.resolves('POL1');
+        const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
+            operation: 'WITHDRAW',
+            transactionDetails: { accountNumber: 'POL1', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' }
+        });
+        const bsheetResult = { result: 'WITHDRAWN' };
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify(bsheetResult)})});
         
         const withdrawalEvent = {
             userId: testId,
@@ -343,10 +359,10 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
         expect(redisGetStub).to.have.been.calledOnceWithExactly(`${testId}::BANK_DETAILS`);
-        // expect(lamdbaInvokeStub).to.have.been.calledOnce;
         expect(getObjectStub).to.have.been.
             calledOnceWithExactly({ Bucket: config.get('templates.bucket'), Key: config.get('templates.withdrawalEmail') });
         expect(sendEmailStub).to.have.been.calledOnce;
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(bsheetInvocation);
         expectNoCalls(sqsSendStub);
     });
 
@@ -384,7 +400,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnce;
         expect(getObjectStub).to.have.not.been.called;
         expect(sendEmailStub).to.have.not.been.called;
-        expect(fetchAccNumberStub).to.have.not.been.called;
+        expect(fetchBSheetAccStub).to.have.not.been.called;
         expect(updateTxFlagsStub).to.have.not.been.called;
         expect(getQueueUrlStub).to.have.been.calledOnce;
         expect(sqsSendStub).to.have.been.calledOnce;

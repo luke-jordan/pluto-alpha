@@ -39,8 +39,8 @@
         "fetchUserBalance": "balance_fetch",
         "userHistory": "user_log_reader",
         "fetchProfile": "profile_fetch",
-        "createFinWorksAccount": "create_fw_account",
-        "createFinWorksInvestment": "create_fw_investment"
+        "createBalanceSheetAccount": "balance_sheet_acc_create",
+        "addTxToBalanceSheet": "balance_sheet_acc_update"
     },
     "payment": {
         "test": false,
@@ -75,6 +75,11 @@
         "userHistory": {
             "eventTypes": ["PASSWORD_SET", "USER_REGISTERED"],
             "daysInHistory": 90
+        },
+        "balanceSheet": {
+            "enabled": true,
+            "accountPrefix": "FINWORKS",
+            "txFlag": "FINWORKS_RECORDED"
         }
     }
 }
