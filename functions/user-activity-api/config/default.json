@@ -1,7 +1,7 @@
 {
     "aws": {
         "endpoints": {
-            "dynamodb": "http://localhost:4569"
+            "dynamodb": null
         },
         "region": "eu-west-1"
     },

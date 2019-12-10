@@ -299,9 +299,9 @@ const dummyPaymentResult = async (systemWideUserId, params, transactionDetails) 
     logger('Result of save: ', resultOfSave);
     await publishSaveSucceeded(systemWideUserId, transactionId);
     return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
-  } 
+  }
 
-  return handlePaymentFailure(params.failureType);
+  return handlePaymentFailure(params.failureType, transactionDetails);
 };
 
 /**
