@@ -110,7 +110,7 @@ resource "aws_iam_role_policy_attachment" "user_event_process_achievements" {
   policy_arn = "${aws_iam_policy.lambda_invoke_user_event_processing.arn}"
 }
 
-resource "aws_iam_role_policy_attachment" "admin_user_fetch_profile_invoke_policy" {
+resource "aws_iam_role_policy_attachment" "user_event_fetch_profile_invoke_policy" {
   role = "${aws_iam_role.admin_user_find_role.name}"
   policy_arn = "${var.user_profile_admin_policy_arn[terraform.workspace]}"
 }
