@@ -37,11 +37,9 @@ const expectedFloatParameters = {
 describe('** UNIT TESTING DYNAMO FETCH **', () => {
 
     before(() => {
-        fetchStub.withArgs(config.get('tables.clientFloatVars'), { 
-            clientId: testClientId,
-            floatId: testFloatId
-        }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates']).
-        resolves(expectedFloatParameters);
+        const expectedColumns = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates', 'bankDetails']; 
+        fetchStub.withArgs(config.get('tables.clientFloatVars'), { clientId: testClientId, floatId: testFloatId }, expectedColumns).
+            resolves(expectedFloatParameters);
     });
 
     beforeEach(() => fetchStub.resetHistory());

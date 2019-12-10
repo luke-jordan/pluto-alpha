@@ -9,6 +9,7 @@ const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
 
 const persistence = require('./persistence/rds');
+const dynamo = require('./persistence/dynamodb');
 const payment = require('./payment-link');
 
 const warmupCheck = (event) => !event || typeof event !== 'object' || Object.keys(event).length === 0;
@@ -219,17 +220,6 @@ module.exports.completeSavingPaymentFlow = async (event) => {
 
 // /////////////////// FOR CHECKING THAT PAYMENT WENT THROUGH ///////////////////////////////////////////////////////////////////
 
-const handlePaymentFailure = (failureType) => {
-  logger('Payment failed, consider how and return which way');
-  if (failureType === 'PAYMENT_FAILED') {
-    return { 
-      result: 'PAYMENT_FAILED', 
-      messageToUser: 'Sorry the payment failed. Please contact your bank or contact support and quote reference ABC123' 
-    };
-  } 
-  return { result: 'PAYMENT_PENDING' };
-};
-
 // slightly redundant to fetch tx again, but doing so on a primary key is very fast, very efficient, and ensure we 
 // return everything (although could also be done via better use of updating clause in TX - in future)
 const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
@@ -277,13 +267,34 @@ module.exports.settle = async (settleInfo) => {
   return resultOfUpdate;
 };
 
+const handlePaymentFailure = async (failureType, transactionDetails) => {
+  logger('Payment failed, consider how and return which way, tx details: ', transactionDetails);
+  
+  const { clientId, floatId } = transactionDetails;
+  const clientFloatVars = await dynamo.fetchFloatVarsForBalanceCalc(clientId, floatId);
+  const humanRef = transactionDetails.humanReference;
+
+  const bankDetails = { ...clientFloatVars.bankDetails, useReference: humanRef };
+
+  if (failureType === 'PAYMENT_FAILED') {
+    return { 
+      result: 'PAYMENT_FAILED', 
+      messageToUser: `Sorry the payment failed. Please contact your bank or contact support and quote reference ${humanRef}`,
+      bankDetails
+    };
+  }
+
+  return { result: 'PAYMENT_PENDING', bankDetails };
+};
+
+
 // used quite a lot in testing
-const dummyPaymentResult = async (systemWideUserId, params) => {
+const dummyPaymentResult = async (systemWideUserId, params, transactionDetails) => {
   const paymentSuccessful = !params.failureType; // for now
   
   if (paymentSuccessful) {
     const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
-    const transactionId = params.transactionId;
+    const { transactionId } = transactionDetails;
     const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
     logger('Result of save: ', resultOfSave);
     await publishSaveSucceeded(systemWideUserId, transactionId);
@@ -334,7 +345,7 @@ module.exports.checkPendingPayment = async (event) => {
 
     const dummySuccess = config.has('dummy') && config.get('dummy') === 'ON';
     if (dummySuccess) {
-      const dummyResult = await dummyPaymentResult(systemWideUserId, params);
+      const dummyResult = await dummyPaymentResult(systemWideUserId, params, transactionRecord);
       return { statusCode: 200, body: JSON.stringify(dummyResult) };
     }
 
@@ -344,19 +355,14 @@ module.exports.checkPendingPayment = async (event) => {
     let responseBody = { };
 
     if (statusCheckResult.paymentStatus === 'SETTLED') {
-      const settlementInstruction = { 
-        transactionId
-      };
-
       // do these one after the other instead of parallel because don't want to fire if something goes wrong
-      const resultOfSave = await exports.settle(settlementInstruction);
+      const resultOfSave = await exports.settle({ transactionId });
       await publishSaveSucceeded(systemWideUserId, transactionId);
-      
       responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
     } else if (statusCheckResult.result === 'ERROR') {
-      responseBody = handlePaymentFailure('PAYMENT_FAILED');
+      responseBody = await handlePaymentFailure('PAYMENT_FAILED', transactionRecord);
     } else {
-      responseBody = handlePaymentFailure('Payment failed');
+      responseBody = await handlePaymentFailure('Payment failed', transactionRecord);
     }
     
 

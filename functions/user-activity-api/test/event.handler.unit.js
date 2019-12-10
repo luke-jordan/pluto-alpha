@@ -118,7 +118,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expectNoCalls(lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, redisGetStub);
     });
 
-    it('Registers account with third party, persists account id from third party', async () => {
+    it.only('Registers account with third party, persists account id from third party', async () => {
         const testUserId = uuid();
         const testClientId = uuid();
         const testFloatId = uuid();
@@ -153,7 +153,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         });
 
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testUserProfile)})})});
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ accountNumber: 'POL1' })})})});
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'POL1' }) })});
         updateTagsStub.resolves({ updatedTime: testUpdateTime });
 
         const snsEvent = wrapEventSns({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT' });

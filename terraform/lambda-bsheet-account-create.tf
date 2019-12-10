@@ -31,7 +31,7 @@ resource "aws_lambda_function" "balance_sheet_acc_create" {
                 },
                 "s3": {
                   "bucket": "${terraform.workspace}.jupiter.keys",
-                  "crt": "finworks/fwjupiter.csr",
+                  "crt": "finworks/fwjupiter.crt",
                   "pem": "finworks/fwjupiter.key"
                 }
               }

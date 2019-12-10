@@ -231,7 +231,7 @@ const createFinWorksAccount = async (userDetails) => {
     const accountCreationResult = await lambda.invoke(accountCreationInvoke).promise();
     logger('Result of FinWorks account creation:', accountCreationResult);
 
-    return extractLambdaBody(accountCreationResult);
+    return JSON.parse(accountCreationResult['Payload']);
 };
 
 const fetchBSheetNumber = async (accountId) => {
@@ -339,7 +339,7 @@ const handleAccountOpenedEvent = async (eventBody) => {
 
         logger('Finworks account creation resulted in:', bsheetAccountResult);
         const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
-        logger(`Result of user account update: ${accountUpdateResult}`);    
+        logger(`Result of user account update: ${accountUpdateResult}`);
     }
 };
 
