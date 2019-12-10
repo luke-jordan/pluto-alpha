@@ -1,3 +1,8 @@
+-- Fixing a wrongly named column, and adding the trigger
+
+alter table account_data.core_account_ledger rename column update_time to updated_time;
+create trigger update_account_time before update on account_data.core_account_ledger for each row execute procedure trigger_set_updated_timestamp();
+
 -- This is to allow for updating flags on accounts and transactions, which system admin or event processor needs
 
 grant update (tags, flags, updated_time) on account_data.core_account_ledger to admin_api_worker;

@@ -260,7 +260,7 @@ module.exports.updateAccountTags = async (systemWideUserId, tag) => {
     const updateTagResult = await rdsConnection.updateRecord(updateTagQuery, [tag, systemWideUserId]);
     logger('Account tags update resulted in:', updateTagResult);
 
-    const updateMoment = moment(updateTagResult[0]['updated_time']);
+    const updateMoment = moment(updateTagResult['rows'][0]['updated_time']);
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
 };
@@ -272,9 +272,9 @@ module.exports.updateTxFlags = async (accountId, flag) => {
     const updateQuery = `update ${accountTxTable} set flags = array_append(flags, $1) where account_id = $2 returning updated_time`;
 
     const updateResult = await rdsConnection.updateRecord(updateQuery, [flag, accountId]);
-    logger('Account flag update resulted in:', updateResult);
+    logger('Transaction flag update resulted in:', updateResult);
 
-    const updateMoment = moment(updateResult[0]['updated_time']);
+    const updateMoment = moment(updateResult['rows'][0]['updated_time']);
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
 };

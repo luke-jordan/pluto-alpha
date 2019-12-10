@@ -453,7 +453,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         const accountTxTable = config.get('tables.accountTransactions');
         const updateQuery = `update ${accountTxTable} set flags = array_append(flags, $1) where account_id = $2 returning updated_time`;
 
-        updateRecordStub.withArgs(updateQuery, [testFlag, testAccountId]).resolves([{ 'updated_time': updateTime.format() }]);
+        updateRecordStub.withArgs(updateQuery, [testFlag, testAccountId]).resolves({ rows: [{ 'updated_time': updateTime.format() }] });
 
         const updateResult = await rds.updateTxFlags(testAccountId, testFlag);
         logger('Result of flag update:', updateResult);
@@ -472,7 +472,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         const userAccountTable = config.get('tables.accountLedger');
         const updateTagQuery = `update ${userAccountTable} set tags = array_append(tags, $1) where owner_user_id = $2 returning updated_time`;
 
-        updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
+        updateRecordStub.resolves({ rows: [{ 'updated_time': updateTime.format() }] });
 
         const updateResult = await rds.updateAccountTags(testUserId, testTag);
         logger('Result of tag update:', updateResult);
