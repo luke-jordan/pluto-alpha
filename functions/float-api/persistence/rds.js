@@ -6,7 +6,7 @@ const logger = require('debug')('jupiter:float:rds');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
-const constants = require('../constants'); // todo : replace with config, or similar
+const constants = require('../constants'); // not using config as these are enum type entities
 const opsUtil = require('ops-util-common');
 
 const RdsConnection = require('rds-common');
@@ -107,8 +107,6 @@ module.exports.addOrSubtractFloat = async (request = {
         transactionId: queryTxId
     };
 };
-
-// todo : construct a generic version of the below, or at least one wrapping all in a single transaction
 
 /**
  * Simple allocation of the float, to either a bonus or company share (do not user this for user accruals)

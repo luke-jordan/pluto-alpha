@@ -218,8 +218,8 @@ const updateAccountTags = async (systemWideUserId, FWAccountNumber) => {
     return accountUpdateResult;
 };
 
-const updateTxFlags = async (accountId, flag) => {
-    const txUpdateResult = await persistence.updateTxFlags(accountId, flag);
+const updateTxTags = async (accountId, flag) => {
+    const txUpdateResult = await persistence.updateTxTags(accountId, flag);
     logger('Got this back from updating tx flags:', txUpdateResult);
     
     return txUpdateResult;
@@ -258,7 +258,7 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
         throw new Error(`Error sending investment to third party: ${parsedResult}`);
     }
 
-    const txUpdateResult = await updateTxFlags(accountId, config.get('defaults.balanceSheet.txFlag'));
+    const txUpdateResult = await updateTxTags(accountId, config.get('defaults.balanceSheet.txFlag'));
     logger('Result of transaction update:', txUpdateResult);
 };
 
@@ -267,29 +267,30 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// todo : parallelize, obviously
 const handleSavingEvent = async (eventBody) => {
     logger('Saving event triggered!: ', eventBody);
+
+    const promisesToInvoke = [];
         
     const boostProcessInvocation = assembleBoostProcessInvocation(eventBody);
-    const resultOfInvoke = await lambda.invoke(boostProcessInvocation).promise();
-    logger('Result of invoking boost process: ', resultOfInvoke);
-
+    promisesToInvoke.push(lambda.invoke(boostProcessInvocation).promise());
+    
     if (emailSendingEnabled) {
-        await safeEmailAttempt(eventBody);
+        promisesToInvoke.push(safeEmailAttempt(eventBody));
     }
 
     // todo : in time, make sure that this doesn't go backwards
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
-    const statusResult = await lambda.invoke(statusInvocation).promise();
-    logger('Result of lambda invoke: ', statusResult);
-
+    promisesToInvoke.push(lambda.invoke(statusInvocation).promise());
+    
     if (balanceSheetUpdateEnabled) {
         const accountId = eventBody.context.accountId;
         const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
-        await addInvestmentToBSheet({ operation: 'INVEST', accountId, amount, unit, currency });
+        promisesToInvoke.push(addInvestmentToBSheet({ operation: 'INVEST', accountId, amount, unit, currency }));
     }
+
+    await Promise.all(promisesToInvoke);
 };
 
 const handleWithdrawalEvent = async (eventBody) => {

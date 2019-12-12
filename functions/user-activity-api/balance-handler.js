@@ -114,8 +114,7 @@ module.exports.balance = async (event) => {
       return { statusCode: 400, body: 'Empty invocation' };
     }
 
-    // todo : look up property
-    const params = event.queryParams || event;
+    const params = opsUtil.extractQueryParams(event);
 
     if (!params.accountId && !params.userId) {
       return invalidRequestResponse('No account or user ID provided');

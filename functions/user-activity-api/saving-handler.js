@@ -59,7 +59,6 @@ const save = async (eventBody) => {
 };
 
 // can _definitely_parallelize this, also:
-// todo : will need to stash the bank ref
 const assemblePaymentInfo = async (saveInformation, transactionId) => {
   const accountStemAndCount = await persistence.fetchInfoForBankRef(saveInformation.accountId);
   const accountInfo = {

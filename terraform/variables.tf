@@ -47,8 +47,8 @@ variable user_profile_table_read_policy_arn {
 
 variable user_profile_table_update_policy_arn {
     default = {
-        "staging" = "arn:aws:iam::455943420663:policy/UpdateProfileTable_access_staging"
-        "master" = "arn:aws:iam::455943420663:policy/UpdateProfileTable_access_master"
+        "staging" = "arn:aws:iam::455943420663:policy/profile_status_update_access_staging"
+        "master" = "arn:aws:iam::455943420663:policy/profile_status_update_access_master"
     }
     type = "map"
 }

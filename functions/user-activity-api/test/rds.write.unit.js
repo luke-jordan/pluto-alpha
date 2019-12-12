@@ -446,22 +446,22 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(updateRecordsStub).to.have.been.calledOnceWithExactly(expectedUpdateDef);
     });
 
-    it('Updates transaction flags', async () => {
+    it('Updates transaction tags', async () => {
         const updateTime = moment();
-        const testFlag = 'FINWORKS_RECORDED';
+        const testTag = 'FINWORKS_RECORDED';
         
         const accountTxTable = config.get('tables.accountTransactions');
-        const updateQuery = `update ${accountTxTable} set flags = array_append(flags, $1) where account_id = $2 returning updated_time`;
+        const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where account_id = $2 returning updated_time`;
 
-        updateRecordStub.withArgs(updateQuery, [testFlag, testAccountId]).resolves({ rows: [{ 'updated_time': updateTime.format() }] });
+        updateRecordStub.withArgs(updateQuery, [testTag, testAccountId]).resolves({ rows: [{ 'updated_time': updateTime.format() }] });
 
-        const updateResult = await rds.updateTxFlags(testAccountId, testFlag);
-        logger('Result of flag update:', updateResult);
+        const updateResult = await rds.updateTxTags(testAccountId, testTag);
+        logger('Result of tag update:', updateResult);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('updatedTime');
         expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testFlag, testAccountId]);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testTag, testAccountId]);
     });
 
     it('Updates transaction tags', async () => {

@@ -294,7 +294,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
     it('Fetches Finworks account number', async () => {
         const userAccountTable = config.get('tables.accountLedger');
-        const selectQuery = `select flags from ${userAccountTable} where account_id = $1`;
+        const selectQuery = `select tags from ${userAccountTable} where account_id = $1`;
 
         queryStub.resolves(['TEST_TAG::1', 'TEST_TAG::2', 'FINWORKS::POL1']);
 

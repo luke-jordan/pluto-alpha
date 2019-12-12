@@ -66,8 +66,9 @@ const eventHandler = proxyquire('../event-handler', {
     'ioredis': MockRedis,
     './persistence/rds': {
         'updateAccountTags': updateTagsStub,
-        'updateTxFlags': updateTxFlagsStub,
-        'fetchAccountTagByPrefix': fetchBSheetAccStub
+        'updateTxTags': updateTxFlagsStub,
+        'fetchAccountTagByPrefix': fetchBSheetAccStub,
+        '@noCallThru': true
     }
 });
 
