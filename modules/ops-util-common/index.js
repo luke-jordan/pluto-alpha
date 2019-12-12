@@ -107,7 +107,17 @@ module.exports.extractQueryParams = (event) => {
 
 module.exports.isObjectEmpty = (object) => !object || typeof object !== 'object' || Object.keys(object).length === 0;
 
-module.exports.isWarmup = (event) => exports.isObjectEmpty(event) || (Reflect.has(event, 'warmupCall') && event.warmupCall);
+module.exports.isWarmup = (event) => {
+    if (exports.isObjectEmpty(event)) {
+        return true;
+    }
+
+    if (Reflect.has(event, 'warmupCall') && event.warmupCall) {
+        return true;
+    }
+
+    return false;
+};
 
 module.exports.extractUserDetails = (event) => {
     if (typeof event.requestContext !== 'object') {
