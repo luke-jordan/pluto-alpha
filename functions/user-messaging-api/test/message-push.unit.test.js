@@ -212,6 +212,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
 
 describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
     const mockUserId = uuid();
+    const mockProvider = uuid();
     const persistedToken = uuid();
     const testMsgId = uuid();
 
@@ -221,14 +222,16 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         resetStubs();
     });
 
-    // todo : expectations on chunk and other expo stubs
     it('Sends push notifications', async () => {
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
         chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
         sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
+        const mockMessage = { to: persistedToken, title: 'TEST_TITLE', body: 'TEST_BODY' };
+    
         const mockParams = {
             systemWideUserIds: [mockUserId, mockUserId],
+            provider: mockProvider,
             title: 'TEST_TITLE',
             body: 'TEST_BODY'
         };
@@ -238,9 +241,13 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 2 });
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId, mockUserId], mockProvider);
+        expect(chunkPushNotificationsStub).to.have.been.calledOnceWithExactly([mockMessage, mockMessage]);
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
     });
 
-    // todo: chunking, expected stub args
     it('Sends pending messages where no user ids are provided', async () => {
         getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
         bulkUpdateStatusStub.resolves([]);
@@ -249,14 +256,25 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
         sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
+        // const mockMessage = { to: persistedToken, title: undefined, body: undefined };
+
         const result = await handler.sendPushNotifications();
-        logger('Result of push notification sending:', result);  
+        logger('Result of push notification sending:', result);
+        logger('args:', chunkPushNotificationsStub.getCall(0).args);
+        logger('test:', persistedToken, mockProvider, mockUserId, testMsgId);
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 2 });
-        expect(getPendingPushMessagesStub).to.have.been.calledOnce;
-        expect(getPushTokenStub).to.have.been.calledOnce;
+        expect(getPendingPushMessagesStub).to.have.been.calledOnceWithExactly();
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId, mockUserId]);
         expect(bulkUpdateStatusStub).to.have.been.calledTwice;
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([testMsgId, testMsgId], 'SENDING');
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([testMsgId, testMsgId], 'SENT');
+        expect(chunkPushNotificationsStub).to.have.been.calledOnce;
+        // expect(chunkPushNotificationsStub).to.have.been.calledOnceWithExactly([mockMessage, mockMessage]);
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
     });
     
     it('Fails on push token extraction failure', async () => {

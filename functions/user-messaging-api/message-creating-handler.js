@@ -8,8 +8,6 @@ const uuid = require('uuid/v4');
 const rdsUtil = require('./persistence/rds.notifications');
 const msgUtil = require('./msg.util');
 
-// todo : stick in a common file
-const paramRegex = /#{(?<param>[^}]*)}/g;
 const STANDARD_PARAMS = [
     'user_first_name',
     'user_full_name',
@@ -31,7 +29,7 @@ const placeParamsInTemplate = (template, passedParameters) => {
         return template;
     }
 
-    let match = paramRegex.exec(template);
+    let match = msgUtil.paramRegex.exec(template);
 
     let returnTemplate = template;
     while (match !== null) {
@@ -39,7 +37,7 @@ const placeParamsInTemplate = (template, passedParameters) => {
         if (Reflect.has(passedParameters, param) && STANDARD_PARAMS.indexOf(param) < 0) {
             returnTemplate = returnTemplate.replace(`#{${param}}`, passedParameters[param]);
         }
-        match = paramRegex.exec(returnTemplate);
+        match = msgUtil.paramRegex.exec(returnTemplate);
     }
 
     return returnTemplate;

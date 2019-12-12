@@ -41,6 +41,8 @@ const equalizeAmounts = (amountString) => {
     return parseInt(amountArray[0], 10) * unitMultipliers[amountArray[1]];
 };
 
+const currency = (amountString) => amountString.split('::')[2];
+
 const testCondition = (event, statusCondition) => {
     logger('Status condition: ', statusCondition);
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
@@ -54,7 +56,8 @@ const testCondition = (event, statusCondition) => {
             // todo : check for same currency ...
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue));
             logger('And amount from event: ', equalizeAmounts(event.eventContext.savedAmount));
-            return equalizeAmounts(event.eventContext.savedAmount) >= equalizeAmounts(parameterValue);
+            logger(`Also asserting if currency ${currency(event.eventContext.savedAmount)} === ${currency(parameterValue)}`);
+            return equalizeAmounts(event.eventContext.savedAmount) >= equalizeAmounts(parameterValue) && currency(event.eventContext.savedAmount) === currency(parameterValue);
         case 'save_completed_by':
             logger(`Checking if save completed by ${event.accountId} === ${parameterValue}, result: ${event.accountId === parameterValue}`);
             return event.accountId === parameterValue;

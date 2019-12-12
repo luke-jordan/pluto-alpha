@@ -12,6 +12,7 @@ const sinon = require('sinon');
 const chai = require('chai');
 const expect = chai.expect;
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -361,6 +362,21 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         expect(findUserAccountMap).to.deep.equal(expectedResult);
     });
 
+
+    it('Throws error if the account ID to which to limit does not exist', async () => {
+        const expectedError = 'Account id not found';
+        
+        const retrieveAccountsQuery = `select boost_id, ${accountTable}.account_id, owner_user_id, boost_status from ` +
+            `${boostUserTable} inner join ${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id ` +
+            `where boost_id in ($1) and ${accountTable}.account_id in ($2) order by boost_id, account_id`;
+        
+        const testInput = { boostIds: [testBoostId], accountIds: [testAccountId] };
+
+        queryStub.withArgs(retrieveAccountsQuery, [testBoostId, testAccountId]).resolves([]);
+        await expect(rds.findAccountsForBoost(testInput)).to.be.rejectedWith(expectedError);
+        expect(queryStub).to.have.been.calledOnceWithExactly(retrieveAccountsQuery, [testBoostId, testAccountId]);
+    });
+
     it('Updates boosts, including multiple accounts at a time, and also updates the status', async () => {
         const testAccountId2 = uuid();
         const testLogContext = { newStatus: 'REDEEMED', transactionId: uuid() };
@@ -438,6 +454,62 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         
         expect(updateBoostResult).to.exist;
         expect(updateBoostResult).to.deep.equal(expectedResult);
+    });
+
+    it('Updates multiple boosts at a time, handles errors', async () => {
+        const testAccountId2 = uuid();
+        const testLogContext = { newStatus: 'REDEEMED', transactionId: uuid() };
+
+        const mockUpdatedTime = moment().add(1, 'second');
+        const secondTime = moment();
+        const expectedError = 'Query error';
+        const expectedResult = [
+            { boostId: testBoostId, updatedTime: moment(mockUpdatedTime.format()) },
+            { boostId: testBoostId, error: expectedError },
+            { boostId: testBoostId, updatedTime: moment(mockUpdatedTime.format()) }
+        ];
+        
+        const updateAccount1 = updateAccountStatusDef(testBoostId, testAccountId, 'REDEEMED');
+        const updateAccount2 = updateAccountStatusDef(testBoostId, testAccountId2, 'REDEEMED');
+
+        const updateBoost = { table: boostTable, key: { boostId: testBoostId }, value: { active: false }, returnClause: 'updated_time' };
+        
+        // also log the boost being deactivated
+        const logRowStatus = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId, logContext: testLogContext };
+        const logRowStatus2 = { boostId: testBoostId, logType: 'USER_STATUS_CHANGE', accountId: testAccountId2, logContext: testLogContext };
+        const logRowBoost = { boostId: testBoostId, logType: 'BOOST_DEACTIVATED' };
+
+        const logStatusDef = assembleLogInsertDef([logRowStatus, logRowStatus2], true);
+        const logBoostDef = { 
+            query: `insert into ${boostLogTable} (boost_id, log_type) values %L returning log_id, creation_time`,
+            columnTemplate: '${boostId}, ${logType}',
+            rows: [logRowBoost]
+        };
+
+        const testInput = {
+            boostId: testBoostId,
+            accountIds: [testAccountId, testAccountId2],
+            newStatus: 'REDEEMED',
+            stillActive: false,
+            logType: 'USER_STATUS_CHANGE',
+            logContext: testLogContext
+        };
+
+        // format is : list of query def responses, each such response being a list of rows with return values
+        const mockResponseFromPersistence = [
+            [{ 'updated_time': secondTime.format()}], [{ 'updated_time': moment().format() }], [{ 'updated_time': mockUpdatedTime.format() }],
+            [{ 'creation_time': moment().format() }]
+        ];
+        multiOpStub.onFirstCall().resolves(mockResponseFromPersistence);
+        multiOpStub.onSecondCall().throws(new Error(expectedError));
+        multiOpStub.onThirdCall().resolves(mockResponseFromPersistence);
+
+        const updateBoostResult = await rds.updateBoostAccountStatus([testInput, testInput, testInput]);
+    
+        expect(updateBoostResult).to.exist;
+        expect(updateBoostResult).to.deep.equal(expectedResult);
+        expect(multiOpStub).to.have.been.calledThrice;
+        expect(multiOpStub).to.have.been.calledWith([updateAccount1, updateAccount2, updateBoost], [logStatusDef, logBoostDef]);
     });
 
     // note: although top-level arrays are part of JSON spec, somewhere between Postgres and Node-PG they tend to get
