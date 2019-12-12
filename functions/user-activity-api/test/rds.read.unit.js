@@ -296,7 +296,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         const userAccountTable = config.get('tables.accountLedger');
         const selectQuery = `select tags from ${userAccountTable} where account_id = $1`;
 
-        queryStub.resolves(['TEST_TAG::1', 'TEST_TAG::2', 'FINWORKS::POL1']);
+        queryStub.resolves([{ tags: ['TEST_TAG::1', 'TEST_TAG::2', 'FINWORKS::POL1'] }]);
 
         const result = await rds.fetchAccountTagByPrefix(testAccountId, 'FINWORKS');
         logger('Result of FinWorks account number extraction:', result);

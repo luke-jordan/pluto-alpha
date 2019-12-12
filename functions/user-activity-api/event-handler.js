@@ -234,14 +234,15 @@ const createFinWorksAccount = async (userDetails) => {
     return JSON.parse(accountCreationResult['Payload']);
 };
 
-const fetchBSheetNumber = async (accountId) => {
+const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency }) => {
     const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
     logger('Got third party account number:', accountNumber);
-    return accountNumber;
-};
 
-const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency }) => {
-    const accountNumber = await fetchBSheetNumber(accountId);
+    if (!accountNumber) {
+        // we don't actually throw this, but do log it, because admin needs to know
+        logger('FATAL_ERROR: No FinWorks account number for user!');
+        return;
+    }
     
     const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
 

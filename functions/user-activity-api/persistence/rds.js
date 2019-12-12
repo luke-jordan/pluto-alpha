@@ -284,9 +284,14 @@ module.exports.fetchAccountTagByPrefix = async (accountId, prefix) => {
     const userAccountTable = config.get('tables.accountLedger');
     const selectQuery = `select tags from ${userAccountTable} where account_id = $1`;
 
-    const tags = await rdsConnection.selectQuery(selectQuery, [accountId]);
-    logger('Got account flags:', tags);
+    const selectResult = await rdsConnection.selectQuery(selectQuery, [accountId]);
+    logger('Got account tags result:', selectResult);
 
+    if (!selectResult || selectResult.length === 0 || !Array.isArray(selectResult[0]['tags']) || selectResult[0]['tags'].length === 0) {
+        return null;
+    }
+
+    const tags = selectResult[0]['tags'];
     return tags.filter((flag) => flag.includes(`${prefix}::`))[0].split(`${prefix}::`)[1];
 };
 
