@@ -95,7 +95,7 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
         reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
 };
 
-// note: this is only called for redeemed boosts, by definition
+// note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition.
 const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
     const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
@@ -110,6 +110,7 @@ const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
         unit: boost.boostUnit,
         identifier: boost.boostId,
         relatedEntityType: 'BOOST_REDEMPTION',
+        settlementStatus: 'SETTLED',
         recipients
     };
 };

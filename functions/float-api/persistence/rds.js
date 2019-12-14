@@ -214,7 +214,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
             'transaction_id': request.accountTxId || uuid(),
             'account_id': request.accountId,
             'transaction_type': request.allocType || 'FLOAT_ALLOCATION',
-            'settlement_status': 'ACCRUED',
+            'settlement_status': request.settlementStatus || 'ACCRUED',
             'amount': request.amount,
             'currency': request.currency,
             'unit': request.unit,
