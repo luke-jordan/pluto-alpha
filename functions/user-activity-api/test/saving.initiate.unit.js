@@ -207,6 +207,46 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(expectedWarmupResponse).to.have.property('body', 'Empty invocation');
     });
 
+    it('Handles test request, configures request to third party sandbox', async () => {
+        const minimalPendingRequestToRds = {
+            accountId: testAccountId,
+            initiationTime: testHelper.momentMatcher(testTimeInitiated),
+            settlementStatus: 'INITIATED',
+            amount: sinon.match.number,
+            currency: 'USD',
+            unit: 'HUNDREDTH_CENT',
+            dummy: 'ON',
+            clientId: testClientId,
+            floatId: testFloatId
+        };
+
+        const expectedPaymentInfoTest = {
+            transactionId: testTransactionId,
+            accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10 },
+            amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
+        };
+
+        const saveEventToWrapper = testSavePendingBase();
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        saveEventToWrapper.dummy = 'ON';
+        momentStub.returns(testTimeInitiated);
+
+        fetchBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
+        addSavingsRdsStub.withArgs(minimalPendingRequestToRds).resolves(responseToTxPending);
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        logger('Received: ', resultOfWrapperCall);
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        expect(saveBody).to.deep.equal(responseToTxPending);
+
+        expect(fetchBankRefStub).to.have.been.calledWithExactly(testAccountId);
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfoTest);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
+    });
+
     it('Wrapper fails if no auth context', async () => {
         const noAuthEvent = { body: JSON.stringify(testSavePendingBase()), requestContext: { }};
         const resultOfCallWithNoContext = await handler.initiatePendingSave(noAuthEvent);

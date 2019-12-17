@@ -37,7 +37,7 @@ resource "aws_lambda_function" "user_event_process" {
               "secrets": {
                 "enabled": true,
                 "names": {
-                    "message_api_worker": "${terraform.workspace}/ops/psql/message"
+                    "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
               },
               "publishing": {
@@ -105,15 +105,21 @@ resource "aws_iam_role_policy_attachment" "user_event_process_vpc_execution_poli
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "user_event_process_secret_get" {
-  role = "${aws_iam_role.user_event_process_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
-}
-
 resource "aws_iam_role_policy_attachment" "user_event_process_achievements" {
   role = "${aws_iam_role.user_event_process_role.name}"
   policy_arn = "${aws_iam_policy.lambda_invoke_user_event_processing.arn}"
 }
+
+resource "aws_iam_role_policy_attachment" "user_event_fetch_profile_invoke_policy" {
+  role = "${aws_iam_role.admin_user_find_role.name}"
+  policy_arn = "${var.user_profile_admin_policy_arn[terraform.workspace]}"
+}
+
+resource "aws_iam_role_policy_attachment" "user_event_process_secret_get" {
+  role = "${aws_iam_role.user_event_process_role.name}"
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
+}
+
 
 ////////////////// SUBSCRIPTION TO TOPIC //////////////////////////////////////////////////////////////
 

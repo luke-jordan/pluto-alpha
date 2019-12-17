@@ -37,11 +37,9 @@ const expectedFloatParameters = {
 describe('** UNIT TESTING DYNAMO FETCH **', () => {
 
     before(() => {
-        fetchStub.withArgs(config.get('tables.clientFloatVars'), { 
-            clientId: testClientId,
-            floatId: testFloatId
-        }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates']).
-        resolves(expectedFloatParameters);
+        const expectedColumns = ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates', 'bankDetails']; 
+        fetchStub.withArgs(config.get('tables.clientFloatVars'), { clientId: testClientId, floatId: testFloatId }, expectedColumns).
+            resolves(expectedFloatParameters);
     });
 
     beforeEach(() => fetchStub.resetHistory());
@@ -61,6 +59,13 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
     it('Throws an error when missing one of the two needed IDs', async () => {
         const errorMsg = 'Error! One of client ID or float ID missing';
         await expect(dynamo.fetchFloatVarsForBalanceCalc(testClientId)).to.be.rejectedWith(errorMsg);
+    });
+
+    it('Handles warm up call', async () => {
+        fetchStub.withArgs(config.get('tables.clientFloatVars'), { clientId: 'non', floatId: 'existent' }).resolves({});
+        const warmupResult = await dynamo.warmupCall();
+        expect(warmupResult).to.deep.equal({});
+        expect(fetchStub).to.have.been.calledOnceWithExactly(config.get('tables.clientFloatVars'), { clientId: 'non', floatId: 'existent' });
     });
 
 });

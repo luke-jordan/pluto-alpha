@@ -43,6 +43,7 @@ const getAccountBalanceStub = sinon.stub();
 
 const triggerTxStatusStub = sinon.stub();
 const getPaymentStatusStub = sinon.stub();
+const fetchClientFloatStub = sinon.stub();
 
 const publishStub = sinon.stub();
 const templateStub = sinon.stub();
@@ -57,6 +58,9 @@ const handler = proxyquire('../saving-handler', {
         'fetchTransaction': fetchTransactionStub,
         'countSettledSaves': countSettledSavesStub,
         'sumAccountBalance': getAccountBalanceStub
+    },
+    './persistence/dynamodb': {
+        'fetchFloatVarsForBalanceCalc': fetchClientFloatStub
     },
     './payment-link': {
         'triggerTxStatusCheck': triggerTxStatusStub,
@@ -190,7 +194,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
 
     const wrapTestParams = (queryParams) => ({ httpMethod: 'GET', queryStringParameters: queryParams, requestContext: testAuthContext });
 
-    beforeEach(() => testHelper.resetStubs(getPaymentStatusStub, updateSaveRdsStub, publishStub, fetchTransactionStub, countSettledSavesStub, momentStub));
+    beforeEach(() => testHelper.resetStubs(getPaymentStatusStub, updateSaveRdsStub, publishStub, fetchTransactionStub, countSettledSavesStub, fetchClientFloatStub, momentStub));
 
     it('Returns immediately if payment status is settled', async () => {
         fetchTransactionStub.withArgs(testPendingTxId).resolves(testTransaction);
@@ -242,16 +246,27 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(result.message).to.deep.equal('User ID not found in context');
     });
 
-    it('Handles failed payments properly', async () => {
-        const expectedResult = { 
-            messageToUser: 'Sorry the payment failed. Please contact your bank or contact support and quote reference ABC123',
-            result: 'PAYMENT_FAILED'
+    it('Handles failed payments properly, with inclusion of bank details', async () => {
+        const expectedBankDetails = {
+            bankName: 'JPM',
+            accountType: 'Cheque',
+            accountNumber: '123456',
+            branchCode: '343677',
+            beneficiaryName: 'Jupiter Savings'
         };
+
+        const expectedResult = { 
+            result: 'PAYMENT_FAILED',
+            messageToUser: 'Sorry the payment failed. Please contact your bank or contact support and quote reference TUSER170001',
+            bankDetails: { ...expectedBankDetails, useReference: 'TUSER170001' }
+        };
+
         const testEvent = { transactionId: testPendingTxId };
-        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING' };
+        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING', humanReference: 'TUSER170001' };
         
         fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
         getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ result: 'ERROR' });
+        fetchClientFloatStub.resolves({ bankDetails: expectedBankDetails });
 
         const paymentCheckFailureResult = await handler.checkPendingPayment(wrapTestParams(testEvent));
         
@@ -260,21 +275,44 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(paymentCheckFailureResult).to.have.property('body');
         const resultOfCheck = JSON.parse(paymentCheckFailureResult.body);
         expect(resultOfCheck).to.deep.equal(expectedResult);
+
+        expect(fetchClientFloatStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
     });
 
     it('Handles pending payments properly', async () => {
+        const expectedBankDetails = {
+            bankName: 'JPM',
+            accountType: 'Cheque',
+            accountNumber: '123456',
+            branchCode: '343677',
+            beneficiaryName: 'Jupiter Savings'
+        };
+
         const expectedEvent = { transactionId: testPendingTxId };
-        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING' };        
+        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING', humanReference: 'TUSER170001' };        
 
         fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
         getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ result: 'PENDING' });
+        fetchClientFloatStub.resolves({ bankDetails: expectedBankDetails });
         
         const paymentCheckPendingResult = await handler.checkPendingPayment(wrapTestParams(expectedEvent));
         expect(paymentCheckPendingResult).to.exist;
         expect(paymentCheckPendingResult).to.have.property('statusCode', 200);
         expect(paymentCheckPendingResult).to.have.property('body');
         const resultOfCheck = JSON.parse(paymentCheckPendingResult.body);
-        expect(resultOfCheck).to.deep.equal({ result: 'PAYMENT_PENDING' });
+        expect(resultOfCheck).to.deep.equal({ 
+            result: 'PAYMENT_PENDING', 
+            bankDetails: { ...expectedBankDetails, useReference: 'TUSER170001' } 
+        });
+
+        expect(fetchClientFloatStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+    });
+
+    it('Handles warmup call', async () => {        
+        const warmupResult = await handler.checkPendingPayment({});
+        expect(warmupResult).to.exist;
+        expect(warmupResult).to.have.property('statusCode', 400);
+        expect(warmupResult).to.have.property('body', 'Empty invocation');
     });
 
     it('Catches thrown errors', async () => {

@@ -100,7 +100,7 @@ module.exports.runMigrations = (dbConfig, resolve, reject) => {
             })
         });
       }).catch((error) => {
-        logger(`Error occurred while running migrations. Error: ${JSON.stringify(error)}`);
+        logger('Error occurred while running migrations. Error: ', error);
         reject(error);
       });
 };
@@ -158,7 +158,7 @@ module.exports.migrate = async () => {
       const dbConfig = await exports.fetchDBConnectionDetails(SECRET_NAME);
       return await exports.downloadFilesFromS3AndRunMigrations(dbConfig);
   } catch (error) {
-    logger(`Error occurred while handling request to run migrations. Error: ${JSON.stringify(error)}`);
+    logger('Error occurred while handling request to run migrations. Error: ', error);
       return {
           statusCode: httpStatus.INTERNAL_SERVER_ERROR,
           body: JSON.stringify({

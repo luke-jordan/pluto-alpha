@@ -138,6 +138,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
                 relatedEntityType: 'BOOST_REDEMPTION',
+                settlementStatus: 'SETTLED',
                 recipients: [
                     { recipientId: testReferredUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' },
                     { recipientId: testReferringUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
@@ -281,6 +282,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 relatedEntityType: 'BOOST_REDEMPTION',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
+                settlementStatus: 'SETTLED',
                 recipients: [
                     { recipientId: testAccountId, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
                 ]

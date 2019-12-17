@@ -248,6 +248,54 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
 };
 
 
+/**
+ * This function updates a users account tags.
+ * @param {string} accountId The users account id.
+ * @param {string} tag A tag to be added to thr users account.
+ */
+module.exports.updateAccountTags = async (systemWideUserId, tag) => {
+    const userAccountTable = config.get('tables.accountLedger');
+    const updateTagQuery = `update ${userAccountTable} set tags = array_append(tags, $1) where owner_user_id = $2 returning updated_time`;
+
+    const updateTagResult = await rdsConnection.updateRecord(updateTagQuery, [tag, systemWideUserId]);
+    logger('Account tags update resulted in:', updateTagResult);
+
+    const updateMoment = moment(updateTagResult['rows'][0]['updated_time']);
+    logger('Extracted moment: ', updateMoment);
+    return { updatedTime: updateMoment };
+};
+
+
+module.exports.updateTxTags = async (accountId, tag) => {
+    const accountTxTable = config.get('tables.accountTransactions');
+
+    const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where account_id = $2 returning updated_time`;
+
+    const updateResult = await rdsConnection.updateRecord(updateQuery, [tag, accountId]);
+    logger('Transaction tag update resulted in:', updateResult);
+
+    const updateMoment = moment(updateResult['rows'][0]['updated_time']);
+    logger('Extracted moment: ', updateMoment);
+    return { updatedTime: updateMoment };
+};
+
+
+module.exports.fetchAccountTagByPrefix = async (accountId, prefix) => {
+    const userAccountTable = config.get('tables.accountLedger');
+    const selectQuery = `select tags from ${userAccountTable} where account_id = $1`;
+
+    const selectResult = await rdsConnection.selectQuery(selectQuery, [accountId]);
+    logger('Got account tags result:', selectResult);
+
+    if (!selectResult || selectResult.length === 0 || !Array.isArray(selectResult[0]['tags']) || selectResult[0]['tags'].length === 0) {
+        return null;
+    }
+
+    const tags = selectResult[0]['tags'];
+    return tags.filter((flag) => flag.includes(`${prefix}::`))[0].split(`${prefix}::`)[1];
+};
+
+
 const assembleAccountTxInsertion = (accountTxId, transactionDetails, floatTxIds) => {
     const accountTxTable = config.get('tables.accountTransactions');
     
@@ -367,7 +415,7 @@ const extractTxDetails = (keyForTransactionId, row) => {
  * @param {list(string)} flags (Optional) Any flags to add to the event (e.g., if the saving is restricted in withdrawals)
  */
 module.exports.addTransactionToAccount = async (transactionDetails) => {
-    // todo : add in validation, lots of it
+    // todo : validate: settlementTime > initiationTime, settlementStatus = initiated or settled
     const responseEntity = { };
     
     const accountTxId = uuid();
@@ -430,8 +478,9 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
     const txDetails = camelizeKeys(pendingTxResult[0]);
     logger('Retrieved pending save: ', txDetails);
 
-    // todo : also check it has float tx IDs
-    if (txDetails.settlementStatus === 'SETTLED') {
+    // just in case we get a repeat
+    const txAlreadySettled = txDetails.settlementStatus === 'SETTLED' && txDetails.floatAdjustTxId && txDetails.floatAllocTxId;
+    if (txAlreadySettled) {
         logger('Already settled, must be direct invoke repeated, return');
         const currBalance = await exports.sumAccountBalance(txDetails['accountId'], txDetails['currency'], moment());
         const existingTxs = { floatAdditionTransactionId: txDetails.floatAdjustTxId, floatAllocationTransactionId: txDetails.floatAllocTxId };

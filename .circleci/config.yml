@@ -54,7 +54,7 @@ jobs:
             mv .circleci/execute_test_lint.sh ./
             /bin/sh execute_test_lint.sh modules/rds-common
             /bin/sh execute_test_lint.sh modules/dynamo-common
-            /bin/sh execute_test_lint.sh modules/publish-common
+            /bin/sh execute_test_lint.sh modules/publish-common      
 
       # Note: we do this _after_ the cache steps, so the cache includes all the modules needed for tests
       - run:

@@ -5,6 +5,16 @@ const logger = require('debug')('pluto:activity:dynamo');
 
 const dynamoCommon = require('dynamo-common');
 
+const relevantFloatColumns = ['accrualRateAnnualBps', 
+    'bonusPoolShareOfAccrual', 
+    'clientShareOfAccrual', 
+    'prudentialFactor', 
+    'defaultTimezone', 
+    'currency', 
+    'comparatorRates', 
+    'bankDetails'
+];
+
 /**
  * This function fetches float variables for balance calculation.
  * @param {string} clientId The persisted client id.
@@ -16,10 +26,7 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     }
     
     logger(`Fetching needed variables for clientId-floatId: ${clientId}-${floatId} from table: ${config.get('tables.clientFloatVars')}`);
-    const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.clientFloatVars'), {
-        clientId,
-        floatId
-    }, ['accrualRateAnnualBps', 'bonusPoolShareOfAccrual', 'clientShareOfAccrual', 'prudentialFactor', 'defaultTimezone', 'currency', 'comparatorRates']);
+    const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.clientFloatVars'), { clientId, floatId }, relevantFloatColumns);
     
     logger('Result from DynamoDB: ', rowFromDynamo);
     

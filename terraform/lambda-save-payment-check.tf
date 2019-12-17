@@ -109,6 +109,11 @@ resource "aws_iam_role_policy_attachment" "save_payment_check_status_get" {
   policy_arn = aws_iam_policy.lambda_invoke_payment_access.arn
 }
 
+resource "aws_iam_role_policy_attachment" "save_payment_check_float_details" {
+  role = aws_iam_role.save_payment_check_role.name
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_save_payment_check" {
