@@ -168,17 +168,24 @@ module.exports.createAccount = async (creationRequest = {
   'defaultFloatId': 'zar_cash_float',
   'ownerUserId': '2c957aca-47f9-4b4d-857f-a3205bfc6a78'}) => {
   
+  const { ownerUserId } = creationRequest;
+
+  const existingAccountId = await persistence.getAccountIdForUser(ownerUserId);
+  if (existingAccountId && typeof existingAccountId === 'string' && existingAccountId.length > 0) {
+    return { accountId: existingAccountId };
+  }
+
   const accountId = uuid();
   logger('Creating an account with ID: ', accountId);
 
   const humanRef = await generateHumanRef(creationRequest);
   
   const persistenceResult = await persistence.insertAccountRecord({ 
+    ownerUserId,
     accountId,
     humanRef,
     clientId: creationRequest.clientId,
-    defaultFloatId: creationRequest.defaultFloatId,
-    ownerUserId: creationRequest.ownerUserId
+    defaultFloatId: creationRequest.defaultFloatId
   });
   
   logger('Received from persistence: ', persistenceResult);
@@ -199,7 +206,7 @@ module.exports.createAccount = async (creationRequest = {
  */
 module.exports.create = async (event) => {
   try {
-    if (!event || typeof event !== 'object' || Object.keys(event).length === 0) {
+    if (!event || typeof event !== 'object' || Object.keys(event).length === 0 || event.warmupCall) {
       logger('Warmup, just keep alive for now, with a lambda gateway open');
       await lambda.invoke({ FunctionName: config.get('lambda.createBoost'), InvocationType: 'Event', Payload: JSON.stringify({}) }).promise();
       logger('Done keeping gateway open, exiting');
