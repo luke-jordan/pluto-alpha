@@ -5,6 +5,7 @@ const logger = require('debug')('jupiter:migration:handler');
 const fs = require('fs');
 
 const { migrate } = require('postgres-migrations');
+const { Client } = require('pg');
 
 const AWS = require('aws-sdk');
 const s3 = require('s3');
@@ -105,6 +106,25 @@ module.exports.runMigrations = (dbConfig, resolve, reject) => {
       });
 };
 
+module.exports.runPatch = (dbConfig, bufferFromS3, resolve, reject) => {
+    logger('Fetching from S3: ', bufferFromS3);
+    
+    const sqlToExecute = bufferFromS3.toString('ascii');
+
+    logger('sqlBody: ', sqlToExecute);
+
+    const client = new Client(dbConfig);
+    client.connect();
+
+    client.query(sqlToExecute, (err, res) => {
+        logger(err, res);
+        if (err) {
+            reject(err);
+        }
+        resolve(res);
+    });
+};
+
 module.exports.handleFailureResponseOfDownloader = (error, reject) => {
     logger('Error while downloading files from s3 bucket. Error stack:', error.stack);
     reject(error);
@@ -152,10 +172,23 @@ module.exports.downloadFilesFromS3AndRunMigrations = async (dbConfig) => {
     });
 };
 
-module.exports.migrate = async () => {
+module.exports.downloadPatchFromS3AndExecute = async (dbConfig, s3Params) => {
+    logger('Executing a quick patch to allow continued walling off of prod DB');
+    const downloader = customS3Client.downloadBuffer(s3Params);
+
+    return new Promise((resolve, reject) => {
+        downloader.on('error', (err) => exports.handleFailureResponseOfDownloader(err, reject));
+        downloader.on('end', (buffer) => exports.runPatch(dbConfig, buffer, resolve, reject));
+    });
+};
+
+module.exports.migrate = async (event) => {
   logger('Handling request to run migrations');
   try {
       const dbConfig = await exports.fetchDBConnectionDetails(SECRET_NAME);
+      if (event && typeof event === 'object' && event.type === 'PATCH') {
+          return exports.downloadPatchFromS3AndExecute(dbConfig, event.s3Params);
+      }
       return await exports.downloadFilesFromS3AndRunMigrations(dbConfig);
   } catch (error) {
     logger('Error occurred while handling request to run migrations. Error: ', error);

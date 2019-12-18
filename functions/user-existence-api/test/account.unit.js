@@ -116,6 +116,9 @@ describe('createAccountMethod and wrapper', () => {
 
     const testHumanRefTime = moment();
     const testRefTimeDigit = String(testHumanRefTime.valueOf()).substr(-1);
+
+    const testReferringUserId = uuid();
+    const testReferringAccId = uuid();
     
     const testCreationRequest = {
         ownerUserId: testUserId,
@@ -124,7 +127,7 @@ describe('createAccountMethod and wrapper', () => {
         clientId: 'some_country_client',
         defaultFloatId: 'usd_primary_mmkt',
         referralCodeDetails: {
-            creatingUserId: testUserId,
+            creatingUserId: testReferringUserId,
             codeType: 'USER',
             context: {
                 boostAmountOffered: '20::WHOLE_CURRENCY::ZAR',
@@ -177,9 +180,11 @@ describe('createAccountMethod and wrapper', () => {
     });
 
     it('Basic defaults work', async () => {
+        getAccountIdForUserStub.withArgs(testUserId).resolves(null);
         countRefStemStub.resolves(1);
-        getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
         insertRecordStub.resolves(testAccountOpeningResult);
+        
+        getAccountIdForUserStub.withArgs(testReferringUserId).resolves(testReferringAccId);
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         
         const response = await accountHandler.createAccount(testCreationRequest);
@@ -189,15 +194,18 @@ describe('createAccountMethod and wrapper', () => {
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
         
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
-        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(getAccountIdForUserStub).to.have.been.calledTwice;
+        expect(getAccountIdForUserStub).to.have.been.calledWithExactly(testUserId);
+        expect(getAccountIdForUserStub).to.have.been.calledWithExactly(testReferringUserId);
         expect(lambdaInvokeStub).to.have.been.calledOnce;
         
         testInsertArgs();
     });
 
+    // todo : should not fail but should just not invoke the boost
     it('Fails where referring user has no account id', async () => {
         countRefStemStub.resolves(1);
-        getAccountIdForUserStub.withArgs(testUserId).resolves(null);
+        getAccountIdForUserStub.withArgs(testReferringUserId).resolves(null);
         insertRecordStub.resolves(testAccountOpeningResult);
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         
@@ -208,7 +216,9 @@ describe('createAccountMethod and wrapper', () => {
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
-        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(getAccountIdForUserStub).to.have.been.calledTwice;
+        expect(getAccountIdForUserStub).to.have.been.calledWith(testUserId);
+        expect(getAccountIdForUserStub).to.have.been.calledWith(testReferringUserId);
         expect(lambdaInvokeStub).to.have.not.been.called;
         
         testInsertArgs();
@@ -216,7 +226,6 @@ describe('createAccountMethod and wrapper', () => {
 
     it('Handles non-USER referral type', async () => {
         countRefStemStub.resolves(1);
-        getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
         insertRecordStub.resolves(testAccountOpeningResult);
         lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
         testCreationRequest.referralCodeDetails.codeType = 'OTHER';
@@ -229,7 +238,7 @@ describe('createAccountMethod and wrapper', () => {
         expect(response.persistedTimeMillis).to.equal(expectedMillis);
 
         expect(countRefStemStub).to.have.been.calledOnceWithExactly('LJORDAN');
-        expect(getAccountIdForUserStub).to.have.not.been.called;
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWith(testUserId);
         expect(lambdaInvokeStub).to.have.been.calledOnce;
         
         testInsertArgs();
