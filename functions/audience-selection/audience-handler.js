@@ -138,13 +138,17 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
 const constructColumnConditions = async (params) => {
     const passedPropertyConditions = params.conditions;
     
-    const { clientId, creatingUserId, isDynamic } = params;
+    const { clientId, creatingUserId, isDynamic, sample } = params;
     const persistenceParams = { 
         clientId,
         creatingUserId,
         isDynamic,
         propertyConditions: passedPropertyConditions
     };
+
+    if (sample) {
+        persistenceParams.sample = sample;
+    }
 
     const columnConversions = passedPropertyConditions.map((condition) => convertPropertyCondition(condition, persistenceParams));
     const columnConditions = await Promise.all(columnConversions);

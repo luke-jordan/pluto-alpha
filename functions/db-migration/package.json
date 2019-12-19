@@ -4,7 +4,7 @@
   "description": "Handles the migration scripts and process",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:db-migration:* nyc mocha",
+    "test": "DEBUG=jupiter:* nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"

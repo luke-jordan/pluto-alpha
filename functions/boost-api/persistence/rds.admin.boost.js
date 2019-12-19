@@ -31,21 +31,21 @@ const knitBoostsAndCounts = (boostList, statusCounts) => {
     });
 };
 
-module.exports.listBoosts = async (excludedTypeCategories, includeStatusCounts = false, includeInactive = false) => {
+module.exports.listBoosts = async (excludedTypeCategories, excludeUserCounts = false, excludeExpired = false) => {
     const boostMainTable = config.get('tables.boostTable');
     const boostAccountTable = config.get('tables.boostAccountJoinTable');
 
     const hasTypeExclusions = Array.isArray(excludedTypeCategories) && excludedTypeCategories.length > 0;
     const typeExclusionClause = hasTypeExclusions 
         ? `(boost_type || '::' || boost_category) not in (${extractArrayIndices(excludedTypeCategories)})` : '';
-    const activeClause = includeInactive ? '' : 'active = true and end_time > current_timestamp';
+    const activeClause = excludeExpired ? 'active = true and end_time > current_timestamp' : '';
     
     let whereClause = '';
-    if (hasTypeExclusions && !includeInactive) {
+    if (hasTypeExclusions && excludeExpired) {
         whereClause = `where ${activeClause} and ${typeExclusionClause}`;
     } else if (hasTypeExclusions) {
         whereClause = `where ${typeExclusionClause}`;
-    } else if (!includeInactive) {
+    } else if (excludeExpired) {
         whereClause = `where ${activeClause}`;
     }
 
@@ -58,7 +58,7 @@ module.exports.listBoosts = async (excludedTypeCategories, includeStatusCounts =
     
     let boostList = boostsResult.map((boost) => camelizeKeys(boost));
 
-    if (includeStatusCounts) {
+    if (!excludeUserCounts) {
         const selectStatusCounts = `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`;
         const selectStatusCountResults = await rdsConnection.selectQuery(selectStatusCounts, []);
         boostList = knitBoostsAndCounts(boostList, selectStatusCountResults);

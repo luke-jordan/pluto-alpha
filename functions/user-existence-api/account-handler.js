@@ -60,6 +60,19 @@ const referralHasZeroRedemption = (referralContext) => {
     }
 };
 
+const safeBoostAmountExtract = (referralContext) => {
+  if (!referralContext || typeof referralContext.boostAmountOffered !== 'string') {
+    return 0;
+  }
+
+  const amountArray = referralContext.boostAmountOffered.split('::');
+  if (!amountArray || amountArray.length === 0) {
+    return 0;
+  }
+
+  return amountArray[0];
+};
+
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) => {
@@ -85,6 +98,8 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
   const boostAccounts = [newAccountId];
   const redemptionMsgInstructions = [{ accountId: newAccountId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
 
+  const boostAmountPerUser = safeBoostAmountExtract(referralContext);
+  
   if (referralType === 'USER') {
     const referringUserId = referralCodeDetails.creatingUserId;
     const referringAccountId = await persistence.getAccountIdForUser(referringUserId);
@@ -107,6 +122,7 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
     label: `User referral code`,
     boostTypeCategory: `REFERRAL::${boostCategory}`,
     boostAmountOffered: referralContext.boostAmountOffered,
+    boostBudget: boostAmountPerUser * boostAccounts.length,
     boostSource: referralContext.boostSource,
     endTimeMillis: bonusExpiryTime.valueOf(),
     boostAudience: 'INDIVIDUAL',

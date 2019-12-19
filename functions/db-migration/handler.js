@@ -13,9 +13,7 @@ const s3 = require('s3');
 const httpStatus = require('http-status');
 
 const awsRegion = config.get('aws.region');
-AWS.config.update({
-  'region': awsRegion
-});
+AWS.config.update({ 'region': awsRegion });
 
 const migrationScriptsLocation = config.get('scripts.location');
 const SECRET_NAME = config.has('secrets.names.master') ? config.get(`secrets.names.master`) : null;
@@ -115,14 +113,17 @@ module.exports.runPatch = (dbConfig, bufferFromS3, resolve, reject) => {
 
     const client = new Client(dbConfig);
     client.connect();
-
+    
+    logger('Client connected, executing query');
     client.query(sqlToExecute, (err, res) => {
+        logger('Callback initiated');
         logger(err, res);
         if (err) {
             reject(err);
         }
         resolve(res);
     });
+    logger('Completed query');
 };
 
 module.exports.handleFailureResponseOfDownloader = (error, reject) => {
