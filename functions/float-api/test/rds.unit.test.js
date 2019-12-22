@@ -344,8 +344,9 @@ describe('User account allocation', () => {
 
     const baseAccountAllocationQueryDef = {
         query: `insert into ${config.get('tables.accountTransactions')} (transaction_id, account_id, transaction_type, settlement_status, ` +
-            `amount, currency, unit, float_id, client_id, tags) values %L returning transaction_id, amount`,
-        columnTemplate: '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ${float_id}, ${client_id}, ${tags}'
+            `settlement_time, amount, currency, unit, float_id, client_id, float_alloc_tx_id, tags) values %L returning transaction_id, amount`,
+        columnTemplate: '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${settlement_time}, ' + 
+            '${amount}, ${currency}, ${unit}, ${float_id}, ${client_id}, ${float_alloc_tx_id}, ${tags}'
     };
 
     it('Persists a large number of allocations correctly', async () => {
@@ -372,11 +373,13 @@ describe('User account allocation', () => {
             'account_id': request.accountId,
             'transaction_type': 'FLOAT_ALLOCATION',
             'settlement_status': 'ACCRUED',
+            'settlement_time': null,
             'amount': request.amount,
             'currency': request.currency,
             'unit': request.unit,
             'float_id': common.testValidFloatId,
             'client_id': common.testValidClientId,
+            'float_alloc_tx_id': request.floatTxId,
             'tags': `ARRAY ['ACCRUAL_EVENT::${common.testValidAccrualId}']`
         }));
 
@@ -384,7 +387,7 @@ describe('User account allocation', () => {
         const accountTxArray = allocRequests.map((request) => ({ 'transaction_id': request.accountTxId, 'amount': request.amount }));
 
         multiTableStub.reset();
-        multiTableStub.withArgs(sinon.match([floatQueryDef, accountQueryDef])).resolves([floatTxArray, accountTxArray]);
+        multiTableStub.resolves([floatTxArray, accountTxArray]);
 
         const insertionResult = await rds.allocateToUsers(common.testValidClientId, common.testValidFloatId, allocRequests);
         

@@ -105,19 +105,16 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
     });
 
     it('Retrieves boosts (with status counts)', async () => {
-        const firstQueryArgs = [
-            `select * from ${boostMainTable} where active = true and end_time > current_timestamp order by creation_time desc`,
-            []
-        ];
+        const firstQueryArgs = [`select * from ${boostMainTable}  order by creation_time desc`, []];
         const secondQueryArgs = [
             `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`,
             []
         ];
-        queryStub.withArgs(...firstQueryArgs).resolves([boostFromPersistence, boostFromPersistence]);
-        queryStub.withArgs(...secondQueryArgs).resolves([boostStatusCount, boostStatusCount]);
+        queryStub.onFirstCall().resolves([boostFromPersistence, boostFromPersistence]);
+        queryStub.onSecondCall().resolves([boostStatusCount, boostStatusCount]);
         const excludedTypeCategories = [];
 
-        const resultOfListing = await rds.listBoosts(excludedTypeCategories, true);
+        const resultOfListing = await rds.listBoosts(excludedTypeCategories, false, false);
 
         expect(resultOfListing).to.exist;
         expect(resultOfListing).to.deep.equal([expectedBoostResult, expectedBoostResult]);
@@ -127,18 +124,15 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 
     it('Handles excluded type categories', async () => {
         const firstQueryArgs = [
-            `select * from ${boostMainTable} where active = true and end_time > current_timestamp and (boost_type || '::' || boost_category) not in ($1) order by creation_time desc`,
+            `select * from ${boostMainTable} where (boost_type || '::' || boost_category) not in ($1) order by creation_time desc`,
             ['REFERRAL::USER_CODE_USED']
         ];
-        const secondQueryArgs = [
-            `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`,
-            []
-        ];
+        const secondQueryArgs = [`select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`, []];
         queryStub.withArgs(...firstQueryArgs).resolves([boostFromPersistence, boostFromPersistence]);
         queryStub.withArgs(...secondQueryArgs).resolves([boostStatusCount, boostStatusCount]);
         const excludedTypeCategories = ['REFERRAL::USER_CODE_USED'];
 
-        const resultOfListing = await rds.listBoosts(excludedTypeCategories, true);
+        const resultOfListing = await rds.listBoosts(excludedTypeCategories, false, false);
 
         expect(resultOfListing).to.exist;
         expect(resultOfListing).to.deep.equal([expectedBoostResult, expectedBoostResult]);
@@ -146,20 +140,19 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         expect(queryStub).to.have.been.calledWith(...secondQueryArgs);
     });
 
-    it('Includes inactive boosts', async () => {
-        const firstQueryArgs = [
-            `select * from ${boostMainTable} where (boost_type || '::' || boost_category) not in ($1) order by creation_time desc`,
-            ['REFERRAL::USER_CODE_USED']
-        ];
+    it('Excludes inactive boosts', async () => {
+        const expectedQuery = `select * from ${boostMainTable} where active = true and end_time > current_timestamp ` + 
+            `and (boost_type || '::' || boost_category) not in ($1) order by creation_time desc`; 
+        const firstQueryArgs = [expectedQuery, ['REFERRAL::USER_CODE_USED']];
         const secondQueryArgs = [
             `select boost_id, boost_status, count(account_id) from ${boostAccountTable} group by boost_id, boost_status`,
             []
         ];
-        queryStub.withArgs(...firstQueryArgs).resolves([boostFromPersistence, boostFromPersistence]);
-        queryStub.withArgs(...secondQueryArgs).resolves([boostStatusCount, boostStatusCount]);
+        queryStub.onFirstCall().resolves([boostFromPersistence, boostFromPersistence]);
+        queryStub.onSecondCall().resolves([boostStatusCount, boostStatusCount]);
         const excludedTypeCategories = ['REFERRAL::USER_CODE_USED'];
 
-        const resultOfListing = await rds.listBoosts(excludedTypeCategories, true, true);
+        const resultOfListing = await rds.listBoosts(excludedTypeCategories, false, true);
         logger('select args:', queryStub.getCall(0).args);
 
         expect(resultOfListing).to.exist;

@@ -4,7 +4,7 @@
   "description": "Handles the migration scripts and process",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:db-migration:* nyc mocha",
+    "test": "DEBUG=jupiter:* nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix"
@@ -16,6 +16,7 @@
     "debug": "^4.1.1",
     "http-status": "^1.4.1",
     "postgres-migrations": "^3.0.2",
+    "pg": "^7.15.0",
     "s3": "^4.4.0"
   },
   "devDependencies": {

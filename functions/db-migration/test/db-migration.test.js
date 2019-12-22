@@ -16,17 +16,32 @@ const FOLDER_CONTAINING_MIGRATION_SCRIPTS = config.get('s3.folder');
 
 const actualMigrationStub = sinon.stub();
 const downloadDirStub = sinon.stub();
+
+const actualQueryStub = sinon.stub();
+const actualConnectStub = sinon.stub();
+const downloadFileStub = sinon.stub();
+
 const MockPostgresMigrations = {
     migrate: actualMigrationStub
 };
 const MockCustomS3Client = {
     createClient: () => ({
-        'downloadDir': downloadDirStub
+        'downloadDir': downloadDirStub,
+        'downloadBuffer': downloadFileStub
     })
 };
+class MockPostgresClient {
+    constructor () {
+        this.connect = actualConnectStub;
+        this.query = actualQueryStub;
+    }
+}
+
 const migrationScript = proxyquire('../handler', {
     'postgres-migrations': MockPostgresMigrations,
-    's3': MockCustomS3Client
+    's3': MockCustomS3Client,
+    'pg': { Client: MockPostgresClient, '@noCallThru': true },
+    '@noCallThru': true
 });
 
 const fs = require('fs');
@@ -41,12 +56,16 @@ const {
     updateDBConfigUserAndPassword,
     downloadFilesFromS3AndRunMigrations,
     fetchDBUserAndPasswordFromSecrets,
-    runMigrations
+    runMigrations,
+    downloadPatchFromS3AndExecute,
+    runPatch
 } = migrationScript;
 
 const fetchDBConnectionDetailsStub = sinon.stub(migrationScript, 'fetchDBConnectionDetails');
 const downloadFilesFromS3AndRunMigrationsStub = sinon.stub(migrationScript, 'downloadFilesFromS3AndRunMigrations');
 const fetchDBUserAndPasswordFromSecretsStub = sinon.stub(migrationScript, 'fetchDBUserAndPasswordFromSecrets');
+
+const downloadPatchAndExecuteStub = sinon.stub(migrationScript, 'downloadPatchFromS3AndExecute');
 
 const sampleSecretName = 'staging/test/psql/hello';
 const sampleDbConfig = { ...config.get('db') };
@@ -81,6 +100,53 @@ const resetStubs = () => {
     fetchDBUserAndPasswordFromSecretsStub.reset();
 };
 
+describe('Patch application', () => {
+
+    const mockS3Params = { Bucket: BUCKET_NAME, Key: '/folder/patch/somefile.sql' };
+
+    beforeEach(() => resetStubs());
+
+    it('Should apply a patch properly', async () => {
+        fetchDBConnectionDetailsStub.withArgs().resolves(sampleDbConfig);
+        downloadPatchAndExecuteStub.withArgs(sampleDbConfig, mockS3Params).resolves(sampleSuccessResponse);
+
+        const result = await migrate({ type: 'PATCH', s3Params: mockS3Params });
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(sampleSuccessResponse);
+
+        expect(fetchDBConnectionDetailsStub).to.have.been.calledWith();
+        expect(downloadPatchAndExecuteStub).to.have.been.calledWith(sampleDbConfig);
+
+        sinon.assert.callOrder(fetchDBConnectionDetailsStub, downloadPatchAndExecuteStub);
+    });
+
+    it('Download patch from s3 when called with appropriate parameters involves an event emitter', async () => {
+        const emitter = new EventEmitter();
+
+        downloadFileStub.withArgs(mockS3Params).returns(emitter);
+        const result = downloadPatchFromS3AndExecute(sampleDbConfig, mockS3Params);
+        expect(result).to.exist;
+        expect(downloadFileStub).to.have.been.calledWith(mockS3Params);
+    });
+
+    it('Executes patch correctly once downloaded', async () => {
+        const sqlQuery = 'select * from some table';
+        const mockBuffer = Buffer.from(sqlQuery, 'utf-8');
+
+        actualQueryStub.callsArgWith(1, null, { 'COMMAND': 'SELECT' });
+        const result = await new Promise((resolve, reject) => runPatch(sampleDbConfig, mockBuffer, resolve, reject));
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ 'COMMAND': 'SELECT' });
+        expect(actualConnectStub).to.have.been.calledOnceWithExactly();
+        expect(actualQueryStub).to.have.been.calledOnce;
+        expect(actualQueryStub.getCall(0).args[0]).to.equal(sqlQuery);
+        sinon.assert.callOrder(actualConnectStub, actualQueryStub);
+    });
+
+});
+
 describe('DB Migration', () => {
     beforeEach(() => {
         resetStubs();
@@ -89,6 +155,8 @@ describe('DB Migration', () => {
     it('should handle migrations request successfully', async () => {
         fetchDBConnectionDetailsStub.withArgs().resolves(sampleDbConfig);
         downloadFilesFromS3AndRunMigrationsStub.withArgs(sampleDbConfig).resolves(sampleSuccessResponse);
+        
+        actualQueryStub.yields(null, 'success');
 
         const result = await migrate();
 

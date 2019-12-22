@@ -169,7 +169,7 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
  * @param {string} relatedEntityType A related entity type (e.g., if recording based on an external accrual tx)
  * @param {string} relatedEntityId The id of the related entity type (if present)
  */
-module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'cashFloat', allocationRequests = [{
+module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'cashFloat', rawAllocationRequests = [{
     accountId: 'uid-of-account',
     amount: 10000,
     currency: 'ZAR',
@@ -179,8 +179,10 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
 
     logger(`Running allocation on clientId: ${clientId}, floatId: ${floatId}`);
 
+    const allocationRequests = rawAllocationRequests.map((request) => ({ ...request, floatTxId: request.floatTxId || uuid() }));
+
     const allocationRows = allocationRequests.map((request) => ({
-        'transaction_id': request.floatTxId || uuid(),
+        'transaction_id': request.floatTxId,
         'client_id': clientId,
         'float_id': floatId,
         't_type': request.allocType || constants.floatTransTypes.ALLOCATION,
@@ -200,26 +202,31 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     };
 
     const accountQuery = `insert into ${config.get('tables.accountTransactions')} ` +
-        `(transaction_id, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, client_id, tags) values %L ` +
+        `(transaction_id, account_id, transaction_type, settlement_status, settlement_time, ` + 
+        `amount, currency, unit, float_id, client_id, float_alloc_tx_id, tags) values %L ` +
         `returning transaction_id, amount`;
 
-    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${amount}, ${currency}, ${unit}, ' + 
-        '${float_id}, ${client_id}, ${tags}';
+    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${settlement_time}, ' + 
+        '${amount}, ${currency}, ${unit}, ${float_id}, ${client_id}, ${float_alloc_tx_id}, ${tags}';
 
     // logger('Allocation request, account IDs: ', allocationRequests.map((request) => request.accountId));
 
     const accountRows = allocationRequests.map((request) => {
         const tags = request.relatedEntityId ? `ARRAY ['${request.relatedEntityType}::${request.relatedEntityId}']` : '{}';
+        const settlementStatus = request.settlementStatus || 'ACCRUED';
+        const settlementTime = settlementStatus === 'SETTLED' ? moment().format() : null;
         return {
             'transaction_id': request.accountTxId || uuid(),
             'account_id': request.accountId,
             'transaction_type': request.allocType || 'FLOAT_ALLOCATION',
-            'settlement_status': 'ACCRUED',
+            'settlement_status': settlementStatus,
+            'settlement_time': settlementTime,
             'amount': request.amount,
             'currency': request.currency,
             'unit': request.unit,
             'float_id': floatId,
             'client_id': clientId,
+            'float_alloc_tx_id': request.floatTxId,
             'tags': tags
         };
     });

@@ -86,6 +86,8 @@ describe('Converts standard properties into column conditions', () => {
         
         const mockWholeAudienceId = uuid();
         const mockNumberAccounts = Math.floor(Math.random() * 1000);
+
+        const mockStart = moment().subtract(30, 'days');
         
         // note 'dynamic' is a reserved word in SQL, hence using explicit 'is' prefix
         const mockSelectionJSON = {
@@ -95,7 +97,7 @@ describe('Converts standard properties into column conditions', () => {
             conditions: [
                 { op: 'or', children: [
                     { op: 'greater_than', prop: 'lastSaveTime', type: 'match', value: oneWeekAgo.valueOf() },
-                    { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3 }
+                    { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3, startTime: mockStart.valueOf() }
                 ]}
             ]
         };
@@ -105,6 +107,7 @@ describe('Converts standard properties into column conditions', () => {
                 { op: 'and', children: [
                     { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                     { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'greater_than', prop: 'creation_time', value: mockStart.format() },
                     { op: 'is', prop: 'client_id', value: mockClientId }
                 ]}
             ],
@@ -203,6 +206,46 @@ describe('Converts standard properties into column conditions', () => {
         // direct invoke aspects are done aboe, here just make sure extracts creating user ID properly
         const executeParams = executeConditionsStub.getCall(0).args[2];
         expect(executeParams).to.have.property('creatingUserId', mockUserId);
+    });
+
+    it('Handles random sample case properly', async () => {
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            isDynamic: true,
+            sample: {
+                random: 50
+            },
+            conditions: []
+        };
+
+        const authorizedRequest = {
+            httpMethod: 'POST',
+            pathParameters: { proxy: 'create' },
+            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
+            body: JSON.stringify(mockSelectionJSON)
+        };
+
+        const mockAudienceId = uuid();
+
+        executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 500 });
+
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+        
+        expect(wrappedResult).to.have.property('statusCode', 200);
+        expect(wrappedResult).to.have.property('headers');
+        expect(wrappedResult).to.have.property('body');
+
+        const unWrappedResult = JSON.parse(wrappedResult.body);
+        expect(unWrappedResult).to.deep.equal({ audienceId: mockAudienceId, audienceCount: 500 });
+        
+        expect(executeConditionsStub).to.have.been.calledOnce;
+
+        const persistenceParams = executeConditionsStub.getCall(0).args[2];
+        expect(persistenceParams).to.have.property('creatingUserId', mockUserId);
+
+        const selectionJson = executeConditionsStub.getCall(0).args[0];
+        expect(selectionJson).to.have.property('sample');
+        expect(selectionJson.sample).to.deep.equal({ random: 50 });
     });
 
 });

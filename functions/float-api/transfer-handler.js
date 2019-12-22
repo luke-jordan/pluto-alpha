@@ -46,7 +46,8 @@ const allocationForUser = (recipient, instruction) => ({
     unit: instruction.unit,
     currency: instruction.currency,
     accountId: recipient.recipientId,
-    allocType: instruction.relatedEntityType
+    allocType: instruction.relatedEntityType,
+    settlementStatus: instruction.settlementStatus
 });
 
 const allUserAllocation = (instruction) => ({
@@ -56,7 +57,8 @@ const allUserAllocation = (instruction) => ({
     currency: instruction.currency,
     unit: instruction.unit,
     backingEntityType: instruction.relatedEntityType,
-    backingEntityIdentifer: instruction.identifider
+    backingEntityIdentifer: instruction.identifider,
+    settlementStatus: instruction.settlementStatus
 });
 
 const isBonusOrCompany = (type) => type === constants.entityTypes.BONUS_POOL || type === constants.entityTypes.COMPANY_SHARE;
@@ -70,7 +72,9 @@ const isBonusOrCompany = (type) => type === constants.entityTypes.BONUS_POOL || 
  * 
  * NOTE: does not allow for, e.g., doing a distribution to users directly from client account -- would get messy, and will be
  * extremely rare. Instead, admin user would do a negative allocation to company, which would free up spare float, and that 
- * would then be distributed to users
+ * would then be distributed to users.
+ * 
+ * NOTE 2: assumes (given the cases above, that this is 'settled', unless told otherwise)
  * 
  * @param {object} instruction An instruction about the transfer/allocation/reallocation to conduct 
  */

@@ -11,8 +11,8 @@ const util = require('./boost.util');
  * @param {object} event An event object containing the request context and request body.
  * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
  * @property {boolean} includeReferrals Includes referrals when set to true.
- * @property {boolean} includeUserCounts Includes a includeUserCounts property with each returned object.
- * @property {boolean} includeExpired When set to true the resulting listing includes boosts that have expired.
+ * @property {boolean} excludeUserCounts Includes a includeUserCounts property with each returned object.
+ * @property {boolean} excludeExpired When set to true the resulting listing excludes boosts that have expired.
  */
 module.exports.listBoosts = async (event) => {
     try {
@@ -25,10 +25,12 @@ module.exports.listBoosts = async (event) => {
         logger('Boost list params: ', params);
 
         const excludedTypeCategories = params.includeReferrals ? [] : ['REFERRAL::USER_CODE_USED', 'REFERRAL::BETA_CODE_USED'];
-        const includeStatusCounts = typeof params.includeUserCounts === 'boolean' && params.includeStatusCounts;
-        const includeExpired = typeof params.includeExpired === 'boolean' && params.includeExpired;
-        
-        const listBoosts = await persistence.listBoosts(excludedTypeCategories, includeStatusCounts, includeExpired);
+        const excludeUserCounts = Boolean(params.excludeUserCounts);
+        const excludeExpired = Boolean(params.excludeExpired);
+
+        logger('converted params: exclude user count = ', excludeUserCounts, ' and exclude expired = ', excludeExpired);
+     
+        const listBoosts = await persistence.listBoosts(excludedTypeCategories, excludeUserCounts, excludeExpired);
 
         return util.wrapHttpResponse(listBoosts);
     } catch (err) {
