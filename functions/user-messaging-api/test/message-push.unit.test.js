@@ -249,16 +249,24 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
     });
 
     it('Sends pending messages where no user ids are provided', async () => {
+        const mockMessageBase = {
+            messageId: testMsgId,
+            title: 'TEST',
+            body: 'TEST',
+            priority: 1
+        };
+
         getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
         bulkUpdateStatusStub.resolves([]);
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
 
+        assembleMessageStub.resolves(mockMessageBase);
         chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
         sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
-        // const mockMessage = { to: persistedToken, title: undefined, body: undefined };
+        const mockParams = { provider: mockProvider, title: 'TEST_TITLE', body: 'TEST_BODY' };
 
-        const result = await handler.sendPushNotifications();
+        const result = await handler.sendPushNotifications(mockParams);
         logger('Result of push notification sending:', result);
         logger('args:', chunkPushNotificationsStub.getCall(0).args);
         logger('test:', persistedToken, mockProvider, mockUserId, testMsgId);
@@ -271,7 +279,6 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMsgId, testMsgId], 'SENDING');
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMsgId, testMsgId], 'SENT');
         expect(chunkPushNotificationsStub).to.have.been.calledOnce;
-        // expect(chunkPushNotificationsStub).to.have.been.calledOnceWithExactly([mockMessage, mockMessage]);
         expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');

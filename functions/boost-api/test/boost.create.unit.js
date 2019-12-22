@@ -12,6 +12,7 @@ const sinon = require('sinon');
 const chai = require('chai');
 const expect = chai.expect;
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 
 const insertBoostStub = sinon.stub();
 const findBoostStub = sinon.stub();
@@ -353,7 +354,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
     const testBodyOfEvent = {
         label: 'Midweek Catch Arrow',
         creatingUserId: testCreatingUserId,
-        boostTypeCategory: 'GAME::TAP_SCREEN',
+        boostTypeCategory: 'GAME::CHASE_ARROW',
         boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
         boostBudget: '10000000::HUNDREDTH_CENT::USD',
         boostSource: {
@@ -372,7 +373,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         creatingUserId: testCreatingUserId,
         label: 'Midweek Catch Arrow',
         boostType: 'GAME',
-        boostCategory: 'TAP_SCREEN',
+        boostCategory: 'CHASE_ARROW',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
@@ -428,6 +429,12 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
     // logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
 
+    const commonAssertions = () => {
+        expect(insertBoostStub).to.have.not.been.called;
+        expect(alterBoostStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    };
+
     it('Happy path creates a game boost, including setting up the messages', async () => {
     
         const mockResultFromRds = {
@@ -466,9 +473,59 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const resultOfCreate = await handler.createBoost();
         expect(resultOfCreate).to.exist;
         expect(resultOfCreate).to.deep.equal({ statusCode: 400 });
-        expect(insertBoostStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
-        expect(alterBoostStub).to.have.not.been.called;
+        commonAssertions();
+    });
+
+    it('Fail on boost category-game type mismatch', async () => {
+        const expectedError = 'Boost category must match game type where boost type is GAME';
+
+        const eventBody = { ...testBodyOfEvent };
+
+        eventBody.boostTypeCategory = 'GAME::TAP_SCREEN';
+        await expect(handler.createBoost(eventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+    });
+
+    it('Fail on invalid boost category for boost type', async () => {
+        const expectedError = 'The boost type is not compatible with the boost category';
+
+        const testEventBody = { ...testBodyOfEvent };
+        
+        testEventBody.boostTypeCategory = 'GAME::TIME_LIMITED';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'GAME::USER_CODE_USED';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'SIMPLE::CHASE_ARROW';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'SIMPLE::TAP_SCREEN';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'SIMPLE::USER_CODE_USED';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'REFERRAL::CHASE_ARROW';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'REFERRAL::TAP_SCREEN';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'REFERRAL::TIME_LIMITED';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+
+        testEventBody.boostTypeCategory = 'GAME::TAP_SCREEN';
+        await expect(handler.createBoost(testEventBody)).to.be.rejectedWith('Boost category must match game type where boost type is GAME');
+        commonAssertions();
     });
 
 });

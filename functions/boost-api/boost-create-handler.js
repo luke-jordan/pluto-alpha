@@ -217,6 +217,24 @@ const splitBasicParams = (params) => ({
     boostCategory: params.boostTypeCategory.split('::')[1]
 });
 
+const validateParams = (boostType, boostCategory, params) => {
+    const typeCategoryMap = {
+        'GAME': ['CHASE_ARROW', 'TAP_SCREEN'],
+        'SIMPLE': ['TIME_LIMITED'],
+        'REFERRAL': ['USER_CODE_USED']
+    };
+
+    if (!typeCategoryMap[boostType].includes(boostCategory)) {
+        throw new Error('The boost type is not compatible with the boost category');
+    }
+    
+    if (boostType === 'GAME' && (boostCategory !== params.gameParams.gameType)) {
+        throw new Error('Boost category must match game type where boost type is GAME');
+    }
+
+    return true
+};
+
 const retrieveBoostAmounts = (params) => {
     const boostAmountDetails = params.boostAmountOffered.split('::');
     logger('Boost amount details: ', boostAmountDetails);
@@ -272,13 +290,16 @@ module.exports.createBoost = async (event) => {
 
     const params = event;
 
+    const { label, boostType, boostCategory } = splitBasicParams(params);
+    const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
+
     // todo : extensive validation
+    const validParams = validateParams(boostType, boostCategory, params);
+    logger('Are parameters valid:', validParams);
+
     if (typeof params.creatingUserId !== 'string') {
         throw new Error('Boost requires creating user ID');
     }
-
-    const { label, boostType, boostCategory } = splitBasicParams(params);
-    const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
 
     // start now if nothing provided
     const boostStartTime = params.startTimeMillis ? moment(params.startTimeMillis) : moment();
