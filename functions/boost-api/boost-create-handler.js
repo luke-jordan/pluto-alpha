@@ -232,7 +232,7 @@ const validateParams = (boostType, boostCategory, params) => {
         throw new Error('Boost category must match game type where boost type is GAME');
     }
 
-    return true
+    return true;
 };
 
 const retrieveBoostAmounts = (params) => {
