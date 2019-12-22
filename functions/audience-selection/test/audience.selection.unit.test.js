@@ -86,6 +86,8 @@ describe('Converts standard properties into column conditions', () => {
         
         const mockWholeAudienceId = uuid();
         const mockNumberAccounts = Math.floor(Math.random() * 1000);
+
+        const mockStart = moment().subtract(30, 'days');
         
         // note 'dynamic' is a reserved word in SQL, hence using explicit 'is' prefix
         const mockSelectionJSON = {
@@ -95,7 +97,7 @@ describe('Converts standard properties into column conditions', () => {
             conditions: [
                 { op: 'or', children: [
                     { op: 'greater_than', prop: 'lastSaveTime', type: 'match', value: oneWeekAgo.valueOf() },
-                    { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3 }
+                    { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3, startTime: mockStart.valueOf() }
                 ]}
             ]
         };
@@ -105,6 +107,7 @@ describe('Converts standard properties into column conditions', () => {
                 { op: 'and', children: [
                     { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                     { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'greater_than', prop: 'creation_time', value: mockStart.format() },
                     { op: 'is', prop: 'client_id', value: mockClientId }
                 ]}
             ],
@@ -237,10 +240,12 @@ describe('Converts standard properties into column conditions', () => {
         
         expect(executeConditionsStub).to.have.been.calledOnce;
 
-        const executeParams = executeConditionsStub.getCall(0).args[2];
-        expect(executeParams).to.have.property('creatingUserId', mockUserId);
-        expect(executeParams).to.have.property('sample');
-        expect(executeParams.sample).to.deep.equal({ random: 50 });
+        const persistenceParams = executeConditionsStub.getCall(0).args[2];
+        expect(persistenceParams).to.have.property('creatingUserId', mockUserId);
+
+        const selectionJson = executeConditionsStub.getCall(0).args[0];
+        expect(selectionJson).to.have.property('sample');
+        expect(selectionJson.sample).to.deep.equal({ random: 50 });
     });
 
 });

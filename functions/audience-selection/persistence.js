@@ -178,6 +178,7 @@ const getLimitForRandomSample = (filters, value) => {
     return `((${query}) * ${percentageAsFraction})`;
 };
 
+// todo : add end to end tests for this (i.e., if it comes in with 'sample', it goes out with the order by clause on the query)
 const addRandomExpectationToQuery = (query, filters, selectionJSON) => {
     if (checkRandomSampleExpectation(selectionJSON)) {
         const limitValue = getLimitForRandomSample(filters, selectionJSON.sample.random);
