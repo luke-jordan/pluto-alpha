@@ -33,19 +33,31 @@ module.exports.fetchAvailableProperties = () => {
 
 const convertEpochToFormat = (epochMilli) => moment(parseInt(epochMilli, 10)).format();
 
-const columnConverters = {
-    saveCount: (condition) => ({
-        conditions: [
-            { op: 'and', children: [
-                { prop: 'settlement_status', op: 'is', value: 'SETTLED' },
-                { prop: 'transaction_type', op: 'is', value: 'USER_SAVING_EVENT' }
-            ]
-        }],
+const convertSaveCountToColumns = (condition) => {
+    const columnConditions = [
+        { prop: 'settlement_status', op: 'is', value: 'SETTLED' },
+        { prop: 'transaction_type', op: 'is', value: 'USER_SAVING_EVENT' }
+    ];
+
+    if (Number.isInteger(condition.startTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'greater_than', value: convertEpochToFormat(condition.startTime) });
+    }
+
+    if (Number.isInteger(condition.endTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
+    }
+
+    return {
+        conditions: [{ op: 'and', children: columnConditions }],
         groupBy: ['account_id'],
         postConditions: [
             { op: condition.op, prop: 'count(transaction_id)', value: condition.value, valueType: 'int' }
         ]
-    }),
+    };
+};
+
+const columnConverters = {
+    saveCount: (condition) => convertSaveCountToColumns(condition),
     lastSaveTime: (condition) => ({
        conditions: [
             { op: 'and', children: [
@@ -136,6 +148,8 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
 };
 
 const constructColumnConditions = async (params) => {
+    logger('Passed parameters to construct column conditions: ', params);
+    
     const passedPropertyConditions = params.conditions;
     
     const { clientId, creatingUserId, isDynamic, sample } = params;
@@ -146,16 +160,17 @@ const constructColumnConditions = async (params) => {
         propertyConditions: passedPropertyConditions
     };
 
-    if (sample) {
-        persistenceParams.sample = sample;
-    }
-
     const columnConversions = passedPropertyConditions.map((condition) => convertPropertyCondition(condition, persistenceParams));
     const columnConditions = await Promise.all(columnConversions);
     
     const selectionObject = {
         conditions: columnConditions, creatingUserId
     };
+    
+    if (sample) {
+        selectionObject.sample = sample;
+    }
+
     const withClientId = addTableAndClientId(selectionObject, clientId, passedPropertyConditions.table);
     
     logger('Reassembled conditions: ', JSON.stringify(withClientId, null, 2));
@@ -166,6 +181,7 @@ module.exports.createAudience = async (params) => {
     const { columnConditions, persistenceParams } = await constructColumnConditions(params);
     persistenceParams.audienceType = 'PRIMARY';
     
+    logger('Column conditions: ', columnConditions);
     const persistedAudience = await persistence.executeColumnConditions(columnConditions, true, persistenceParams);
     logger('Received from RDS: ', persistedAudience);
     
