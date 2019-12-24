@@ -244,7 +244,7 @@ describe('Audience Selection - SQL Query Construction', () => {
         // (and strong likelihood psql just skips one of the two steps with the other present, or it happens in a millisec)
         const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')` +
             ` group by account_id order by random() limit ((select count(distinct(account_id)) from transactions` +
-            ` where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by account_id) * 0.5)`;
+            ` where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')) * 0.5)`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
