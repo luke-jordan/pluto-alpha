@@ -31,6 +31,20 @@ const supportedColumns = [
     'distinct(account_id)'
 ];
 
+const addDefaultColumnSpecifications = (selectionJSON) => {
+    if (!selectionJSON.columns) {
+        const revisedJSON = { ...selectionJSON };
+        revisedJSON.columns = ['account_id'];
+        if (!Array.isArray(revisedJSON.groupBy)) {
+            revisedJSON.groupBy = ['account_id'];
+        } else if (!revisedJSON.groupBy.includes('account_id')) {
+            revisedJSON.groupBy.push('account_id');
+        }
+        return revisedJSON;
+    }
+    return selectionJSON;
+};
+
 const baseCaseQueryBuilder = (unit, operatorTranslated) => {
     if (unit.valueType === 'int' || unit.valueType === 'boolean') {
         return `${unit.prop}${operatorTranslated}${unit.value}`;
@@ -103,8 +117,7 @@ const extractColumns = (selectionJSON) => {
         return validateAndParseColumns(selectionJSON.columns).join(', ');
     }
 
-    // columns filter not passed, therefore select only distinct `account_id`
-    return `distinct(account_id)`;
+    throw new Error('No column specified or added prior to processing');
 };
 
 const extractTable = (selectionJSON) => {
@@ -164,11 +177,17 @@ const getLimitForRandomSample = (filters, value) => {
     const {
         table,
         whereFilters,
-        groupByFilters,
         havingFilters
     } = filters;
 
-    let query = `select count(*) from ${table}`;
+    let query = `select count(distinct(account_id)) from ${table}`;
+    
+    // have to remove it otherwise returns counts per account id (and may either have come in via caller or in default wrapper method)
+    let { groupByFilters } = filters;  
+    if (typeof groupByFilters === 'string' && groupByFilters.length > 0 && groupByFilters.includes('account_id')) {
+        const groupBy = groupByFilters.split(', ').filter((column) => column !== 'account_id');
+        groupByFilters = extractGroupBy({ groupBy });
+    }
 
     query = addWhereFiltersToQuery(whereFilters, query);
     query = addGroupByFiltersToQuery(groupByFilters, query);
@@ -216,8 +235,11 @@ const constructFullQuery = (selectionJSON, parsedValues) => {
     return mainQuery;
 };
 
-module.exports.extractSQLQueryFromJSON = (selectionJSON) => {
-    logger('extracting sql query from JSON: ', selectionJSON);
+module.exports.extractSQLQueryFromJSON = (passedJSON) => {
+    logger('extracting sql query from passed JSON: ', passedJSON);
+
+    const selectionJSON = addDefaultColumnSpecifications(passedJSON);
+    logger('Added default columns etc, now: ', passedJSON);
 
     const columns = extractColumns(selectionJSON);
     const columnsToCount = extractColumnsToCount(selectionJSON);
@@ -225,6 +247,7 @@ module.exports.extractSQLQueryFromJSON = (selectionJSON) => {
     const whereFilters = extractWhereConditions(selectionJSON);
     const groupByFilters = extractGroupBy(selectionJSON);
     const havingFilters = extractHavingFilter(selectionJSON);
+
     logger('parsed columns:', columns);
     logger('parsed table:', table);
     logger('where filters:', whereFilters);
@@ -240,6 +263,7 @@ module.exports.extractSQLQueryFromJSON = (selectionJSON) => {
         groupByFilters,
         havingFilters
     };
+
     const fullQuery = constructFullQuery(selectionJSON, parsedValues);
     logger('full sql query:', fullQuery);
 
@@ -276,7 +300,7 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
 
     // rely on query construction engine to do the insertion query as we need it
     const insertionJSON = { ...selectionJSON };
-    insertionJSON.columns = ['distinct(account_id)', audienceId];
+    insertionJSON.columns = ['account_id', audienceId];
     const selectForInsert = exports.extractSQLQueryFromJSON(insertionJSON, persistenceParams);
 
     // use the compiled selection in the insert query, after converting ID to UUID

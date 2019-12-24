@@ -212,7 +212,7 @@ const assembleStatusUpdateInvocation = (systemWideUserId, statusInstruction) => 
 };
 
 const updateAccountTags = async (systemWideUserId, FWAccountNumber) => {
-    const tag = `FINWORKS::${FWAccountNumber}`;
+    const tag = `${config.get('defaults.balanceSheet.accountPrefix')}::${FWAccountNumber}`;
     const accountUpdateResult = await persistence.updateAccountTags(systemWideUserId, tag);
     logger('Updating account tags resulted in:', accountUpdateResult);
     return accountUpdateResult;
