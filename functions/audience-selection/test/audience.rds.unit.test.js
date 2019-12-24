@@ -47,7 +47,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             ]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where transaction_type='USER_SAVING_EVENT'`;
+        const expectedQuery = `select account_id from transactions where transaction_type='USER_SAVING_EVENT' group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -61,7 +61,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             ]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where creation_time>'2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time>'2019-08-07' group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -75,7 +75,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             ]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where creation_time>='2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time>='2019-08-07' group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -89,7 +89,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             ]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where creation_time<'2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time<'2019-08-07' group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -103,7 +103,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             ]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where creation_time<='2019-08-07'`;
+        const expectedQuery = `select account_id from transactions where creation_time<='2019-08-07' group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -139,7 +139,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             }]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')`;
+        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -155,7 +155,7 @@ describe('Audience Selection - SQL Query Construction', () => {
                 ]
             }]
         });
-        const expectedQuery = `select distinct(account_id) from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED')`;
+        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' or settlement_status='SETTLED') group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -175,7 +175,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             }]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27')`;
+        const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -199,7 +199,7 @@ describe('Audience Selection - SQL Query Construction', () => {
             }]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or (creation_time='2019-01-27' and responsible_client_id=1))`;
+        const expectedQuery = `select account_id from transactions where ((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or (creation_time='2019-01-27' and responsible_client_id=1)) group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -221,7 +221,7 @@ describe('Audience Selection - SQL Query Construction', () => {
                 ]
             }]
         });
-        const expectedQuery = `select distinct(account_id) from transactions where (((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') and responsible_client_id=1)`;
+        const expectedQuery = `select account_id from transactions where (((transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') or creation_time='2019-01-27') and responsible_client_id=1) group by account_id`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -239,8 +239,12 @@ describe('Audience Selection - SQL Query Construction', () => {
             }]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')` +
-            ` order by random() limit ((select count(*) from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')) * 0.5)`;
+        // note : random query sometimes ends up with both distinct and group by, which is theoretically inefficient, but alternative is 
+        // to strip account_id from group by columns in random sample subquery assembly, which is full of traps, so we live with it
+        // (and strong likelihood psql just skips one of the two steps with the other present, or it happens in a millisec)
+        const expectedQuery = `select account_id from transactions where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED')` +
+            ` group by account_id order by random() limit ((select count(distinct(account_id)) from transactions` +
+            ` where (transaction_type='USER_SAVING_EVENT' and settlement_status='SETTLED') group by account_id) * 0.5)`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
 
         expect(result).to.exist;
@@ -341,7 +345,7 @@ describe('Audience Selection - fetch users given JSON', () => {
             ]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where responsible_client_id=1`;
+        const expectedQuery = `select account_id from transactions where responsible_client_id=1 group by account_id`;
         const sqlQuery = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
@@ -355,7 +359,7 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, emptyArray);
     });
 
-    it('should get user ids based on sign_up intervals', async () => {
+    it('Should get user ids based on sign_up intervals', async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             'conditions': [{
                 'op': 'and', 'children': [
@@ -365,7 +369,7 @@ describe('Audience Selection - fetch users given JSON', () => {
             }]
         });
 
-        const expectedQuery = `select distinct(account_id) from transactions where (creation_time>='2018-07-01' and creation_time<='2019-11-23')`;
+        const expectedQuery = `select account_id from transactions where (creation_time>='2018-07-01' and creation_time<='2019-11-23') group by account_id`;
         const sqlQuery = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
         expect(sqlQuery).to.exist;
         expect(sqlQuery).to.deep.equal(expectedQuery);
@@ -378,7 +382,7 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, emptyArray);
     });
 
-    it('should get user ids based on activity counts', async () => {
+    it('Should get user ids based on activity counts, if they are specified', async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             'columns': ['account_id'],
             'columnsToCount': ['account_id'],
@@ -417,8 +421,8 @@ describe('Audience Selection - fetch users given JSON', () => {
         const mockClientId = 'test-client';
         const oneWeekAgo = moment().subtract(7, 'days');
 
-        const expectedSubAudienceQuery = `select distinct(account_id) from ${audienceJoinTable} ` + 
-            `where audience_id = '${uuid()}' and active = true`;
+        const expectedSubAudienceQuery = `select account_id from ${audienceJoinTable} ` + 
+            `where audience_id = '${uuid()}' and active = true group by account_id`;
 
         const mockAudienceSelection = Object.assign({}, rootJSON, {
             conditions: [
@@ -435,10 +439,10 @@ describe('Audience Selection - fetch users given JSON', () => {
             ]
         });
 
-        const expectedFullQuery = `select distinct(account_id) from transactions ` +
+        const expectedFullQuery = `select account_id from transactions ` +
             `where (client_id='${mockClientId}' and ` +
             `((creation_time>'${oneWeekAgo.format()}' and settlement_status='SETTLED') or account_id in (${expectedSubAudienceQuery}))` +
-            `)`;
+            `) group by account_id`;
 
         selectQueryStub.resolves(expectedRawQueryResult);
 
@@ -490,7 +494,7 @@ describe('Audience Selection - fetch users given JSON', () => {
         };
 
         const expectedJoinTemplate = `insert into ${audienceJoinTable} (account_id, audience_id) ` +
-            `select distinct(account_id), '${mockAudienceId}'::uuid from transactions where ` +
+            `select account_id, '${mockAudienceId}'::uuid from transactions where ` +
             `(client_id='${mockClientId}' and settlement_status='SETTLED') group by account_id ` +
             `having count(transaction_id)>3`;
 
