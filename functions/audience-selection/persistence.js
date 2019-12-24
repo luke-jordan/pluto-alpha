@@ -177,11 +177,17 @@ const getLimitForRandomSample = (filters, value) => {
     const {
         table,
         whereFilters,
-        groupByFilters,
         havingFilters
     } = filters;
 
     let query = `select count(distinct(account_id)) from ${table}`;
+    
+    // have to remove it otherwise returns counts per account id (and may either have come in via caller or in default wrapper method)
+    let { groupByFilters } = filters;  
+    if (typeof groupByFilters === 'string' && groupByFilters.length > 0 && groupByFilters.includes('account_id')) {
+        const groupBy = groupByFilters.split(', ').filter((column) => column !== 'account_id');
+        groupByFilters = extractGroupBy({ groupBy });
+    }
 
     query = addWhereFiltersToQuery(whereFilters, query);
     query = addGroupByFiltersToQuery(groupByFilters, query);
@@ -241,6 +247,7 @@ module.exports.extractSQLQueryFromJSON = (passedJSON) => {
     const whereFilters = extractWhereConditions(selectionJSON);
     const groupByFilters = extractGroupBy(selectionJSON);
     const havingFilters = extractHavingFilter(selectionJSON);
+
     logger('parsed columns:', columns);
     logger('parsed table:', table);
     logger('where filters:', whereFilters);
@@ -256,6 +263,7 @@ module.exports.extractSQLQueryFromJSON = (passedJSON) => {
         groupByFilters,
         havingFilters
     };
+
     const fullQuery = constructFullQuery(selectionJSON, parsedValues);
     logger('full sql query:', fullQuery);
 
