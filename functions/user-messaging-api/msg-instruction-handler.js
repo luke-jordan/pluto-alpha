@@ -12,6 +12,54 @@ const msgUtil = require('./msg.util');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+
+const validateMessageSequence = (template) => {
+    const messageSequence = template.sequence;
+    logger('Evaluating sequence:', messageSequence);
+
+    const standardSequenceProperties = ['title', 'body', 'display', 'actionToTake', 'followsPriorMessage', 'hasFollowingMessage'];
+
+    if (!Array.isArray(messageSequence)) {
+        throw new Error('Messages sequence must be contained within an array');
+    }
+
+    if (messageSequence.length === 0) {
+        throw new Error('Message sequence cannot be empty');
+    }
+
+    for (let index = 0; index < messageSequence.length; index++) {
+        standardSequenceProperties.forEach((property) => {
+            if (!Object.keys(messageSequence[index]).includes(property)) {
+                throw new Error(`Missing required property in message template definition: ${property}`);
+            }
+        });
+
+        if ((index === 0 && messageSequence[index].hasFollowingMessage === false) || (messageSequence.length === 1)) {
+            throw new Error('Invalid message sequence definition. Single templates messages cannot be disguised as message sequences.');
+        }
+
+        if (index > 0 && messageSequence[index].followsPriorMessage === false) {
+            throw new Error('Invalid message sequence definintion. Sequence is non-continuous.');
+        }
+    }
+
+    return true;
+};
+
+const validateMessageTemplate = (messageTemplate) => {
+    logger('Validating template:', messageTemplate);
+    const standardTemplateProperties = ['title', 'body', 'display', 'actionToTake'];
+    const receivedTemplateProperties = Object.keys(messageTemplate.template.DEFAULT);
+
+    standardTemplateProperties.forEach((property) => {
+        if (!receivedTemplateProperties.includes(property)) {
+            throw new Error(`Missing required property in message template definition: ${property}`);
+        }
+    });
+
+    return true;
+};
+
 /**
  * Enforces instruction rules and ensures the message instruction is valid before it is persisted.
  * First it asserts whether all required properties are present in the instruction object. If so, then
@@ -33,6 +81,17 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region') });
  * @property {number} messagePriority An integer describing the notifications priority level. O is the lowest priority (and the default where not provided by caller).
  */
 module.exports.validateMessageInstruction = (instruction) => {
+    logger('Evaluating instruction:', instruction);
+    if (!instruction.templates.sequence && !instruction.templates.template) {
+        throw new Error('Templates must define either a sequence or a single template.');
+    }
+    
+    const templateType = Object.keys(instruction.templates)[0] === 'template' ? 'template' : 'sequence';
+    logger('Processing template of type:', templateType);
+
+    const templateValidationResult = templateType === 'template' ? validateMessageTemplate(instruction.templates) : validateMessageSequence(instruction.templates); 
+    logger('Template validation result:', templateValidationResult);
+
     const requiredProperties = config.get('instruction.requiredProperties');
     for (let i = 0; i < requiredProperties.length; i += 1) {
         if (!instruction[requiredProperties[i]]) {
@@ -47,8 +106,6 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error('Audience ID required on indivdual notification.');
         case instruction.audienceType === 'GROUP' && !instruction.audienceId:
             throw new Error('Audience ID required on group notification.');
-        case !instruction.templates.sequence && !instruction.templates.template:
-            throw new Error('Templates must define either a sequence or a single template.');
         case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory:
             throw new Error('Instructions for event driven must specify the event type');
         default:
@@ -131,7 +188,7 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
 
 /**
  * This function accepts a new instruction, validates the instruction, then persists it. Depending on the instruction, either
- * the whole or a subset of properties described below may provided as input. 
+ * the whole or a subset of properties described below may be provided as input. 
  * 
  * Note on templates: They can construct linked series of messages for users, depending on the top-level key, which can be either
  * "template", or "sequence". If it template, then only one message is generated, if it is sequence, then multiple are, and are linked.

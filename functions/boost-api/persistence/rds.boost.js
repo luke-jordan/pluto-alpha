@@ -133,7 +133,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     logger('Received : ', resultOfQuery);
 
     if (resultOfQuery.length === 0) {
-        throw new Error('Account id not found.');
+        throw new Error('Account id not found');
     }
 
     // now with the rows back, we piece together the appropriate object

@@ -47,17 +47,6 @@ const handler = proxyquire('../msg-instruction-handler', {
 });
 
 
-const resetStubs = () => {
-    insertMessageInstructionStub.reset();
-    updateMessageInstructionStub.reset();
-    getMessageInstructionStub.reset();
-    getCurrentInstructionsStub.reset();
-    alterInstructionStatesStub.reset();
-    lamdbaInvokeStub.reset();
-    momentStub.reset();
-    uuidStub.reset();
-};
-
 describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     
     const mockUserId = uuid();
@@ -111,7 +100,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     };
 
     beforeEach(() => {
-        resetStubs(); // use test helper
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
         resetEvent();
         uuidStub.returns(mockInstructionId);
         momentStub.returns({
@@ -283,6 +273,45 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(lamdbaInvokeStub).to.have.not.been.called;
     });
 
+    it('Handles message sequences', async () => {
+        const anchorMessage = { ...testRecurringTemplate };
+        anchorMessage.followsPriorMessage = false;
+        anchorMessage.hasFollowingMessage = true;
+        const subsequentMessage = { ...anchorMessage };
+        subsequentMessage.followsPriorMessage = true;
+
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { sequence: [anchorMessage, subsequentMessage, subsequentMessage] },
+                audienceId: mockAudienceId,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 200);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('processResult', 'INSTRUCT_STORED');
+        expect(body).to.have.property('message');
+        expect(body.message).to.have.property('instructionId', mockInstructionId);
+        expect(body.message).to.have.property('creationTime', mockCreationTime);
+        expect(insertMessageInstructionStub).to.have.been.calledOnce;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
     it('Fails on unauthorized instruction insertion', async () => {
         const mockApiInstruction = { ...mockInstruction };
         Reflect.deleteProperty(mockApiInstruction, 'requestContext');
@@ -345,6 +374,224 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(insertMessageInstructionStub).to.have.not.been.called;
     });
 
+    it('Fail on missing property in single template', async () => {
+        const invalidTemplate = {
+            title: 'Watch your savings grow',
+            body: 'Since July 2019 you have earned R40.57 in #{total_interest}! Keep adding cash to your Pluto account to earn more each month for nothing. ',
+            actionToTake: 'VIEW_HISTORY'
+        };
+
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { template: { 'DEFAULT': invalidTemplate }},
+                audienceId: mockAudienceId,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 500);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('message', 'Missing required property in message template definition: display');
+        expect(insertMessageInstructionStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Fails where message sequence is not in array', async () => {
+        const anchorMessage = { ...testRecurringTemplate };
+        anchorMessage.followsPriorMessage = false;
+        anchorMessage.hasFollowingMessage = true;
+        const subsequentMessage = { ...anchorMessage };
+        subsequentMessage.followsPriorMessage = true;
+
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { sequence: { anchorMessage, subsequentMessage } },
+                audienceId: mockAudienceId,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 500);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('message', 'Messages sequence must be contained within an array');
+        expect(insertMessageInstructionStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Fails where message sequence array is empty', async () => {
+        const anchorMessage = { ...testRecurringTemplate };
+        anchorMessage.followsPriorMessage = false;
+        anchorMessage.hasFollowingMessage = true;
+        const subsequentMessage = { ...anchorMessage };
+        subsequentMessage.followsPriorMessage = true;
+
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { sequence: [] },
+                audienceId: mockAudienceId,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 500);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('message', 'Message sequence cannot be empty');
+        expect(insertMessageInstructionStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Fails on missing properties in messages within sequence', async () => {
+        const anchorMessage = { ...testRecurringTemplate };
+        anchorMessage.followsPriorMessage = false;
+        anchorMessage.hasFollowingMessage = true;
+        const subsequentMessage = { ...anchorMessage };
+        subsequentMessage.followsPriorMessage = true;
+        const invalidMessage = { ...subsequentMessage };
+        Reflect.deleteProperty(invalidMessage, 'display');
+
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { sequence: [anchorMessage, subsequentMessage, invalidMessage] },
+                audienceId: mockAudienceId,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 500);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('message', 'Missing required property in message template definition: display');
+        expect(insertMessageInstructionStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Fails where initial message in sequence has no subsequent messages', async () => {
+        const anchorMessage = { ...testRecurringTemplate };
+        anchorMessage.followsPriorMessage = false;
+        anchorMessage.hasFollowingMessage = false;
+
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { sequence: [anchorMessage] },
+                audienceId: mockAudienceId,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+       
+        const expectedError = 'Invalid message sequence definition. Single templates messages cannot be disguised as message sequences.';
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 500);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('message', expectedError);
+        expect(insertMessageInstructionStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Fails on non continuous message sequence', async () => {
+        const anchorMessage = { ...testRecurringTemplate };
+        anchorMessage.followsPriorMessage = false;
+        anchorMessage.hasFollowingMessage = true;
+        const subsequentMessage = { ...anchorMessage };
+        subsequentMessage.followsPriorMessage = false;
+
+        const mockEvent = {
+            body: JSON.stringify({
+                presentationType: 'ONCE_OFF',
+                audienceType: 'ALL_USERS',
+                templates: { sequence: [anchorMessage, subsequentMessage, subsequentMessage] },
+                audienceId: mockAudienceId,
+                recurrenceParameters: null,
+                messagePriority: 0,
+                holdFire: true
+            }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
+
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
+        logger('Result of message instruction creation:', resultOfInsertion);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('statusCode', 500);
+        expect(resultOfInsertion).to.have.property('headers');
+        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion).to.have.property('body');
+        const body = JSON.parse(resultOfInsertion.body);
+        expect(body).to.have.property('message', 'Invalid message sequence definintion. Sequence is non-continuous.');
+        expect(insertMessageInstructionStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
     it('should throw an error on missing templates', async () => {
         mockInstruction.templates = { };
 
@@ -394,7 +641,8 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
     });
 
     beforeEach(() => {
-        resetStubs();
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
         uuidStub.returns(mockInstructionId);
     });
 
@@ -440,7 +688,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
     const mockUpdateTime = '2049-06-22T07:38:30.016Z';
 
     beforeEach(() => {
-        resetStubs();
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
     });
 
     it('Updates message instruction', async () => {
@@ -563,7 +812,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
     };
 
     beforeEach(() => {
-        resetStubs();
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
     });
 
     it('should read message instruction from database', async () => {
@@ -615,7 +865,8 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
     };
 
     beforeEach(() => {
-        resetStubs();
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
     });
 
     it('Returns list of active user messages', async () => {

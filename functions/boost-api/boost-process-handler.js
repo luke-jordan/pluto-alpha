@@ -89,7 +89,12 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
             findAccountsParams.accountIds = [initiatingAccountId];
         }
         logger('Assembled params: ', findAccountsParams);
-        return persistence.findAccountsForBoost(findAccountsParams);
+        try {
+            return persistence.findAccountsForBoost(findAccountsParams);
+        } catch (err) {
+            logger('FATAL_ERROR:', err);
+            return { };
+        }
     });
 
     const affectedAccountArray = await Promise.all(selectPromises);

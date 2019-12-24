@@ -476,12 +476,32 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         commonAssertions();
     });
 
-    it('Fail on boost category-game type mismatch', async () => {
+    it('Fail on boost category-game param mismatch', async () => {
         const expectedError = 'Boost category must match game type where boost type is GAME';
 
         const eventBody = { ...testBodyOfEvent };
 
         eventBody.boostTypeCategory = 'GAME::TAP_SCREEN';
+        await expect(handler.createBoost(eventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+    });
+
+    it('Fail on missing game parameters where boost tyoe is GAME', async () => {
+        const expectedError = 'Boost games require game parameters';
+
+        const eventBody = { ...testBodyOfEvent };
+
+        Reflect.deleteProperty(eventBody, 'gameParams');
+        await expect(handler.createBoost(eventBody)).to.be.rejectedWith(expectedError);
+        commonAssertions();
+    });
+
+    it('Fail where boost reward is greater than boost budget', async () => {
+        const expectedError = 'Boost reward cannot be greater than boost budget';
+
+        const eventBody = { ...testBodyOfEvent };
+        
+        eventBody.boostAmountOffered = '10000001::HUNDREDTH_CENT::USD';
         await expect(handler.createBoost(eventBody)).to.be.rejectedWith(expectedError);
         commonAssertions();
     });
