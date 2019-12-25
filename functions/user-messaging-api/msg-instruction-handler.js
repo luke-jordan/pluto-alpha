@@ -82,22 +82,21 @@ const validateMessageTemplate = (messageTemplate) => {
  */
 module.exports.validateMessageInstruction = (instruction) => {
     logger('Evaluating instruction:', instruction);
-    if (!instruction.templates.sequence && !instruction.templates.template) {
-        throw new Error('Templates must define either a sequence or a single template.');
-    }
-    
-    const templateType = Object.keys(instruction.templates)[0] === 'template' ? 'template' : 'sequence';
-    logger('Processing template of type:', templateType);
-
-    const templateValidationResult = templateType === 'template' ? validateMessageTemplate(instruction.templates) : validateMessageSequence(instruction.templates); 
-    logger('Template validation result:', templateValidationResult);
-
     const requiredProperties = config.get('instruction.requiredProperties');
     for (let i = 0; i < requiredProperties.length; i += 1) {
         if (!instruction[requiredProperties[i]]) {
             throw new Error(`Missing required property value: ${requiredProperties[i]}`);
         }
     }
+
+    if (!instruction.templates.sequence && !instruction.templates.template) {
+        throw new Error('Templates must define either a sequence or a single template.');
+    }
+    
+    const templateType = Object.keys(instruction.templates)[0] === 'template' ? 'template' : 'sequence';
+    logger('Processing template of type:', templateType);
+    const templateValidationResult = templateType === 'template' ? validateMessageTemplate(instruction.templates) : validateMessageSequence(instruction.templates); 
+    logger('Template validation result:', templateValidationResult);
 
     switch (true) {
         case instruction.presentationType === 'RECURRING' && !instruction.recurrenceParameters:
