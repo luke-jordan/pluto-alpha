@@ -35,7 +35,7 @@ const validateMessageSequence = (template) => {
         });
 
         if ((index === 0 && messageSequence[index].hasFollowingMessage === false) || (messageSequence.length === 1)) {
-            throw new Error('Invalid message sequence definition. Single templates messages cannot be disguised as message sequences.');
+            throw new Error('Invalid message sequence definition. Single template messages cannot be disguised as message sequences.');
         }
 
         if (index > 0 && messageSequence[index].followsPriorMessage === false) {
