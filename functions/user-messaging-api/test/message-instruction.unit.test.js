@@ -540,7 +540,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
 
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
        
-        const expectedError = 'Invalid message sequence definition. Single templates messages cannot be disguised as message sequences.';
+        const expectedError = 'Invalid message sequence definition. Single template messages cannot be disguised as message sequences.';
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
         logger('Result of message instruction creation:', resultOfInsertion);
