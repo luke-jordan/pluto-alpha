@@ -188,7 +188,7 @@ module.exports = {
         'no-octal-escape': 'error',
         'no-param-reassign': 'error',
         'no-path-concat': 'error',
-        'no-plusplus': 'error',
+        'no-plusplus': 1,
         'no-process-env': 'error',
         'no-process-exit': 'error',
         'no-proto': 'error',

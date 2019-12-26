@@ -1,6 +1,8 @@
 'use strict';
 
 const logger = require('debug')('jupiter:third-parties:bank-verify-test');
+const config = require('config');
+const util = require('util');
 
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -13,7 +15,7 @@ const getObjectStub = sinon.stub();
 
 class MockS3Client {
     constructor () { 
-        this.getObject = getObjectStub; 
+        this.getObject = getObjectStub;
     }
 }
 
@@ -36,7 +38,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const testNationalId = '1234566789';
         const testFirstName = 'Han';
         const testLastName = 'Fei';
-        const testEndpoint = 'https://fwtest.jupitersave.com/api/accounts/createPersonAndAccount';
+        const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${config.get('finworks.endpoints.accountCreation')}`;
 
         const expectedOptions = {
             method: 'POST',
@@ -65,7 +67,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const testNationalId = '1234566789';
         const testFirstName = 'Han';
         const testLastName = 'Fei Zi';
-        const testEndpoint = 'https://fwtest.jupitersave.com/api/accounts/createPersonAndAccount';
+        const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${config.get('finworks.endpoints.accountCreation')}`;
 
         const expectedOptions = {
             method: 'POST',
@@ -104,7 +106,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
     it('Sends investment details', async () => {
         const testAccountNumber = 'POL23';
         const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
-        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/investments`;
+        const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.addCash'), testAccountNumber)}`;
 
         const expectedOptions = {
             method: 'POST',
@@ -132,7 +134,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
     it('Cathes add cash error', async () => {
         const testAccountNumber = 'POL23';
         const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
-        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/investments`;
+        const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.addCash'), testAccountNumber)}`;
         
         const expectedOptions = {
             method: 'POST',
@@ -170,7 +172,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
 
     it('Fetches user market value', async () => {
         const testAccountNumber = 'POL122';
-        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/marketValue`;
+        const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.marketValue'), testAccountNumber)}`;
 
         const expectedOptions = {
             method: 'GET',
@@ -196,7 +198,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
 
     it('Catches market value errors', async () => {
         const testAccountNumber = 'POL122';
-        const testEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/marketValue`;
+        const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.marketValue'), testAccountNumber)}`;
 
         const expectedOptions = {
             method: 'GET',
@@ -232,9 +234,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
     });
 
     it('Sends user withdrawal to third party', async () => {
+        const testAccountNumber = 'POL122';
         const expectedOptions = {
             method: 'POST',
-            uri: 'https://fwtest.jupitersave.com/api/accounts/POL122/withdrawals',
+            uri: `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.withdrawals'), testAccountNumber)}`,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
             resolveWithFullResponse: true,
             json: true,
@@ -279,9 +282,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
     });
 
     it('Catches withdrawal transmission errors', async () => {
+        const testAccountNumber = 'POL122';
         const expectedOptions = {
             method: 'POST',
-            uri: 'https://fwtest.jupitersave.com/api/accounts/POL122/withdrawals',
+            uri: `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.withdrawals'), testAccountNumber)}`,
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
             resolveWithFullResponse: true,
             json: true,

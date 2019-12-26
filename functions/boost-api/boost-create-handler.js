@@ -21,6 +21,12 @@ const STANDARD_GAME_ACTIONS = {
     'FAILURE': { action: 'DONE' }
 };
 
+const STANDARD_BOOST_TYPES = {
+    'GAME': ['CHASE_ARROW', 'TAP_SCREEN'],
+    'SIMPLE': ['TIME_LIMITED'],
+    'REFERRAL': ['USER_CODE_USED']
+};
+
 const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
@@ -217,6 +223,26 @@ const splitBasicParams = (params) => ({
     boostCategory: params.boostTypeCategory.split('::')[1]
 });
 
+const validateBoostParams = (boostType, boostCategory, boostBudget, params) => {
+    if (!STANDARD_BOOST_TYPES[boostType].includes(boostCategory)) {
+        throw new Error('The boost type is not compatible with the boost category');
+    }
+
+    if (boostType === 'GAME' && !Reflect.has(params, 'gameParams')) {
+        throw new Error('Boost games require game parameters');
+    }
+
+    if (boostType === 'GAME' && boostCategory !== params.gameParams.gameType) {
+        throw new Error('Boost category must match game type where boost type is GAME');
+    }
+
+    if (params.boostAmountOffered.split('::')[0] > boostBudget) {
+        throw new Error('Boost reward cannot be greater than boost budget');
+    }
+
+    return true;
+};
+
 const retrieveBoostAmounts = (params) => {
     const boostAmountDetails = params.boostAmountOffered.split('::');
     logger('Boost amount details: ', boostAmountDetails);
@@ -272,13 +298,16 @@ module.exports.createBoost = async (event) => {
 
     const params = event;
 
+    const { label, boostType, boostCategory } = splitBasicParams(params);
+    const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
+
     // todo : extensive validation
+    const paramValidationResult = validateBoostParams(boostType, boostCategory, boostBudget, params);
+    logger('Are parameters valid:', paramValidationResult);
+
     if (typeof params.creatingUserId !== 'string') {
         throw new Error('Boost requires creating user ID');
     }
-
-    const { label, boostType, boostCategory } = splitBasicParams(params);
-    const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
 
     // start now if nothing provided
     const boostStartTime = params.startTimeMillis ? moment(params.startTimeMillis) : moment();

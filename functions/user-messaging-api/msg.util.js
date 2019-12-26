@@ -3,6 +3,8 @@
 const config = require('config');
 const logger = require('debug')('jupiter:message:util');
 
+module.exports.paramRegex = /#{(?<param>[^}]*)}/g;
+
 const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
 const corsHeaders = {
     'Content-Type': 'application/json',
