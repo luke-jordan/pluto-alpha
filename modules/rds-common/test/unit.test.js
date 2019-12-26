@@ -380,13 +380,15 @@ describe('Error handling, including connection release, non-parameterized querie
     });
 
     it('Update transaction calls rollback and release if commit fails', async () => {
+        const expectedError = 'Error! Update template must be a string and include value placeholders';
         const badUpdateQuery = 'UPDATE THINGS INTO bad syntax who knows what this person is doing';
         const mockValues = [1500, 1];
         queryStub.withArgs(badUpdateQuery, mockValues).throws('Bad query'); // as above
 
-        await expect(rdsClient.updateRecord(badUpdateQuery, mockValues)).to.be.rejected.
-            and.to.eventually.be.a('CommitError');
-        standardExpectations(badUpdateQuery, mockValues, false, false, 'ROLLBACK');
+        await expect(rdsClient.updateRecord(badUpdateQuery, mockValues)).to.be.rejectedWith(expectedError);
+
+        expect(connectStub).to.have.not.been.called;
+        expect(queryStub).to.have.not.been.called;
     });
 
     it('Insert calls throw error if badly templated', async () => {

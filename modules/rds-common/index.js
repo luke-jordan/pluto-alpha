@@ -145,6 +145,10 @@ class RdsConnection {
             throw new NoValuesError();
         }
 
+        if (!queryTemplate.toLowerCase().startsWith('insert')) {
+            throw new QueryError('Error! No insert command found in template');
+        }
+
         if (typeof queryTemplate !== 'string' || !queryTemplate.includes('%L')) {
             throw new QueryError('Error! Query template must be a string and must include value placeholder (and must be %L, not $1)');
         }
@@ -155,6 +159,50 @@ class RdsConnection {
 
         if (!Array.isArray(objectArray) || objectArray.length === 0) {
             throw new QueryError('Error! Object array must be an array and have length greater than zero');
+        }
+    }
+
+    static _validateUpdateParams (updateTemplate, updateValues) {
+        if (!updateTemplate || !updateValues) {
+            throw new NoValuesError();
+        }
+
+        if (!updateTemplate.toLowerCase().startsWith('update')) {
+            throw new QueryError('Error! No update command found in template');
+        }
+
+        if (typeof updateTemplate !== 'string' || !updateTemplate.includes('$')) {
+            throw new QueryError('Error! Update template must be a string and include value placeholders');
+        }
+
+        if (!Array.isArray(updateValues) || updateValues.length === 0) {
+            throw new QueryError('Error! Update values must be an array and have length greater than zero');
+        }
+    }
+
+    static _validateUpdateQueryDefinition (updateQueryDef) {
+        if (!updateQueryDef || Object.keys(updateQueryDef).length === 0) {
+            throw new NoValuesError();
+        }
+
+        const updateDefinitionProperties = ['table', 'key', 'value', 'returnClause'];
+
+        updateDefinitionProperties.forEach((property) => {
+            if (!updateDefinitionProperties.includes(property)) {
+                throw new QueryError(`Error! Missing required property in update definition: ${property}`);
+            }
+        });
+
+        if (typeof updateQueryDef.table !== 'string' || updateQueryDef.table.length === 0) {
+            throw new QueryError('Error: Missing value for update definition table');
+        }
+
+        if (typeof updateQueryDef.key !== 'object' || Object.keys(updateQueryDef.key).length === 0) {
+            throw new QueryError('Error! Missing update key in update defintion');
+        }
+
+        if (typeof updateQueryDef.value !== 'object' || Object.keys(updateQueryDef.value).length === 0) {
+            throw new QueryError('Error! No update values found');
         }
     }
 
@@ -235,6 +283,8 @@ class RdsConnection {
         if (!Array.isArray(values) || values.length === 0) {
             throw new NoValuesError(query);
         }
+
+        RdsConnection._validateUpdateParams(query, values);
         
         let results = null;
         const client = await this._getConnection();
@@ -258,6 +308,8 @@ class RdsConnection {
     async updateRecordObject (updateQueryDef) {
         const { query, values } = RdsConnection.compileUpdateQueryAndArray(updateQueryDef);
         
+        RdsConnection._validateUpdateParams(query, values);
+
         let result = null;
         const client = await this._getConnection();
         
@@ -289,7 +341,7 @@ class RdsConnection {
             throw new NoValuesError('No update queries provided, use large multi table insert instead');
         }
 
-        // todo : same for updates
+        updateQueryDefs.forEach((queryDef) => RdsConnection._validateUpdateQueryDefinition(queryDef));
         insertQueryDefs.forEach((insert) => RdsConnection._validateInsertParams(insert.query, insert.columnTemplate, insert.rows));
 
         const client = await this._getConnection();
