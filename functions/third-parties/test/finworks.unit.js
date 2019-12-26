@@ -50,7 +50,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ statusCode: 200, body: { accountNumber: 'POL23' }});
+        requestStub.resolves({ statusCode: 200, body: { accountNumber: 'POL23' }, toJSON: () => 'log-output' });
 
         const testEvent = { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName };
 
@@ -86,7 +86,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
                     description: 'A person matching the idNumber already exists',
                     code: 'ExistingPersonWithIDNumberFound'
                 }]
-            }
+            },
+            toJSON: () => 'log-output'
         });
 
         const testEvent = { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName };
@@ -118,7 +119,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ statusCode: 201, body: { } });
+        requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
 
         const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
 
@@ -153,7 +154,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
                     description: 'Account is inactive',
                     code: 'AccountInactiveError'
                 }]
-            }
+            },
+            toJSON: () => 'log-output'
         });
 
         const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
@@ -183,7 +185,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ statusCode: 200, body: { amount: '599.9900', currency: 'ZAR' }});
+        requestStub.resolves({ statusCode: 200, body: { amount: '599.9900', currency: 'ZAR' }, toJSON: () => 'log-output' });
 
         const testEvent = { accountNumber: 'POL122' };
 
@@ -216,7 +218,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
                     description: 'Account is inactive',
                     code: 'AccountInactiveError'
                 }]
-            }
+            },
+            toJSON: () => 'log-output'
         });
 
         const testEvent = { accountNumber: testAccountNumber };
@@ -256,7 +259,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ statusCode: 201, body: { } });
+        requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
 
         const testEvent = {
             amount: 1234.56,
@@ -311,7 +314,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
                     description: 'Account is inactive',
                     code: 'AccountInactiveError'
                 }]
-            }
+            },
+            toJSON: () => 'log-output'
         });
 
         const testEvent = {
@@ -363,7 +367,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ statusCode: 201, body: { } });
+        requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
 
         const resultOfHandler = await handler.addTransaction(saveEvent);
         logger('Investment result from third party:', resultOfHandler);
@@ -412,7 +416,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
-        requestStub.resolves({ statusCode: 201, body: { } });
+        requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
 
         const resultOfHandler = await handler.addTransaction(withdrawEvent);
         logger('Investment result from third party:', resultOfHandler);

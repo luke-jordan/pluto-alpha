@@ -43,7 +43,7 @@ module.exports.createAccount = async (event) => {
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
 
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
@@ -69,7 +69,7 @@ module.exports.addCash = async (event) => {
 
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
@@ -106,7 +106,7 @@ module.exports.sendWithdrawal = async (event) => {
 
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
@@ -144,7 +144,7 @@ module.exports.getMarketValue = async (event) => {
 
         const options = assembleRequest('GET', endpoint, { crt, pem });
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
