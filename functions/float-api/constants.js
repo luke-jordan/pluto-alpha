@@ -27,6 +27,7 @@ module.exports.floatTransTypes = {
 
 module.exports.entityTypes = {
     ACCRUAL_EVENT: 'ACCRUAL_EVENT', // so that we can track and audit these
+    CAPITALIZATION_EVENT: 'CAPITALIZATION_EVENT', // and the same
     BONUS_POOL: 'BONUS_POOL',
     COMPANY_SHARE: 'COMPANY_SHARE',
     END_USER_ACCOUNT: 'END_USER_ACCOUNT',

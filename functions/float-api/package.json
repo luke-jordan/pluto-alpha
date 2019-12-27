@@ -4,7 +4,7 @@
   "description": "The API for managing the primary cash float",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:float:test nyc mocha './test/*.unit.test.js'",
+    "test": "DEBUG=jupiter:* nyc mocha './test/*.unit.test.js'",
     "test-all": "DEBUG=jupiter:float:* nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."

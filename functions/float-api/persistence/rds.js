@@ -186,6 +186,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
         'client_id': clientId,
         'float_id': floatId,
         't_type': request.allocType || constants.floatTransTypes.ALLOCATION,
+        't_state': request.allocState || 'SETTLED', // accounts default to pending, here to settled, because used very differently
         'amount': request.amount,
         'currency': request.currency,
         'unit': request.unit,
