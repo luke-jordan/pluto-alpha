@@ -349,3 +349,11 @@ module.exports.calculateFloatBalance = async (floatId = 'zar_mmkt_co', currency 
         mostCommonUnit: mostCommonUnit
     };  
 };
+
+module.exports.fetchLastLog = async ({ floatId, clientId, logType, endTime }) => {
+
+};
+
+module.exports.fetchAccrualsInPeriod = async ({ floatId, clientId, startTime, endTime, unit, currency }) => {
+
+};

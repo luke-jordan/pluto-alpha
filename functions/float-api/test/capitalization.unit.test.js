@@ -71,7 +71,7 @@ const generateEntityResponse = (entityId, entityType) => ({
 });
 
 const divideDistribution = (accrualMap, distributionPaid, bonusPoolId) => {
-    const totalAccrued = Array.from(accrualMap.values()).reduce((entry, sum) => entry.amount + sum, 0);
+    const totalAccrued = Array.from(accrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
     const remainderUnaccrued = distributionPaid - totalAccrued;
     
     const distributionMap = new Map();
@@ -79,43 +79,46 @@ const divideDistribution = (accrualMap, distributionPaid, bonusPoolId) => {
     const accruedBn = new BigNumber(totalAccrued); // used below
     const remainderBn = new BigNumber(remainderUnaccrued);
 
-    accrualMap.forEach((entityId, entityDetails) => {
+    accrualMap.forEach((entityDetails, entityId) => {
         let amountToCredit = entityDetails.amountAccrued;
         if (remainderUnaccrued > 0) { // comes out of the bonus pool, which is the excess/overflow absorber
             const shareOfAllAccrual = new BigNumber(entityDetails.amountAccrued).dividedBy(accruedBn);
             const amountToAdd = remainderBn.times(shareOfAllAccrual);
-            amountToCredit += amountToAdd.integerValue();
+            amountToCredit += amountToAdd.integerValue(BigNumber.ROUND_HALF_CEIL).toNumber();
         } else if (remainderUnaccrued < 0 && entityDetails.entityType === 'BONUS_POOL' && entityId === bonusPoolId) {
-            amountToCredit -= remainderUnaccrued;
+            amountToCredit += remainderUnaccrued;
         }
-        distributionMap.set(entityId, amountToCredit);
+        const entityWithAmount = { ...entityDetails, amountToCredit };
+        distributionMap.set(entityId, entityWithAmount);
     });
 
     // juuuuust in case one or two hundredths of a cent left over due to rounding
-    const whollyAllocatedAmount = Array.from(distributionMap.values()).reduce((value, sum) => value + sum, 0);
+    const whollyAllocatedAmount = Array.from(distributionMap.values()).reduce((sum, value) => value.amountToCredit + sum, 0);
     if (whollyAllocatedAmount !== distributionPaid) {
         logger(`MATH ERROR : check : after division, still mismatch, distribution paid: ${distributionPaid}, wholly allocated: ${whollyAllocatedAmount}`);
-        const currentBonusAmount = distributionMap.get(bonusPoolId);
-        const adjustedBonusAmount = currentBonusAmount + distributionPaid - whollyAllocatedAmount;
-        distributionMap.set(bonusPoolId, adjustedBonusAmount);
+        const currentBonusEntity = distributionMap.get(bonusPoolId);
+        const adjustedBonusAmount = currentBonusEntity.amountToCredit + (distributionPaid - whollyAllocatedAmount);
+        const revisedBonusEntry = { ...currentBonusEntity, amountToCredit: adjustedBonusAmount };
+        distributionMap.set(bonusPoolId, revisedBonusEntry);
     }
 
+    // logger('Test distribution map: ', distributionMap);
     return distributionMap;
 };
 
-describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
+describe.only('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
 
-    const testNumberAccounts = 1;
+    const testNumberAccounts = 2;
     const numberAccountsSampled = config.get('capitalization.preview.accountsToSample');
     
-    const convertToPreview = (account, amountToCredit) => ({
+    const convertToPreview = (account, allocationEntity) => ({
         accountId: account.accountId,
         accountName: account.humanRef,
         unit: account.unit,
         currency: account.currency,
         priorBalance: account.priorSettledBalance,
         priorAccrued: account.amountAccrued,
-        amountToCredit
+        amountToCredit: allocationEntity.amountToCredit
     });
 
     beforeEach(() => helper.resetStubs(fetchLastLogStub, fetchAccrualsStub, fetchFloatConfigVarsStub));
@@ -132,16 +135,19 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
         mockAccrualMap.set(helper.commonFloatConfig.clientCoShareTracker, mockClientAccrued);
         mockAccrualMap.set(helper.commonFloatConfig.bonusPoolTracker, mockBonusAccrued);
 
-        fetchLastLogStub.resolves({ clientId: testClientId, floatId: testFloatId, creationTime: testLastLogTime, logType: 'CAPITALIZATION_EVENT' });
+        fetchLastLogStub.resolves({ clientId: testClientId, floatId: testFloatId, referenceTime: testLastLogTime, logType: 'CAPITALIZATION_EVENT' });
         fetchFloatConfigVarsStub.resolves(helper.commonFloatConfig);
         fetchAccrualsStub.resolves(mockAccrualMap);
 
-        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((entry, sum) => entry.amount + sum, 0);
+        // logger('Accrual map: ', Array.from(mockAccrualMap.values()));
+        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
+        logger('Total amount accrued: ', totalAccrued);
         const mockInterestPaid = Math.round(totalAccrued * (Math.random() * 0.2 + 1) / 100); // i.e., in the range of 20%, in cents
+        logger('Constructing preview, interest paid: ', mockInterestPaid);
         const testEvent = {
             clientId: testClientId,
             floatId: testFloatId,
-            interestPaid: mockInterestPaid,
+            yieldPaid: mockInterestPaid,
             dateTimePaid: testInterestTime.valueOf(),
             unit: 'WHOLE_CENT',
             currency: 'USD'
@@ -151,25 +157,31 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
         expect(resultOfPreview).to.exist;
         
         const expectedDistributionMap = divideDistribution(mockAccrualMap, mockInterestPaid * 100, helper.commonFloatConfig.bonusPoolTracker);
-        const expectedPreviewAccounts = mockAccountsFromDb.map((account) => convertToPreview(account, distributionMap.get(account.accountId)));
+        const expectedPreviewAccounts = mockAccountsFromDb.map((account) => convertToPreview(account, expectedDistributionMap.get(account.accountId)));
 
         expect(resultOfPreview).to.have.property('numberAccountsToBeCredited', testNumberAccounts);
-        expect(resultOfPreview).to.have.property('amountToCreditClient', expectedDistributionMap.get(helper.commonFloatConfig.clientCoShareTracker));
-        expect(resultOfPreview).to.have.property('amountToCreditBonusPool', expectedDistributionMap.get(helper.commonFloatConfig.bonusPoolTracker));
-        expect(resultOfPreview).to.have.property('excessOverPastAccrual', mockInterestPaid - totalAccrued);
-        expect(resultOfPreview).to.have.property('unit', 'HUNDREDTH_CENT');
+
+        const expectedAmountToClient = expectedDistributionMap.get(helper.commonFloatConfig.clientCoShareTracker).amountToCredit;
+        expect(resultOfPreview).to.have.property('amountToCreditClient', expectedAmountToClient);
+        const expectedAmountToBonusPool = expectedDistributionMap.get(helper.commonFloatConfig.bonusPoolTracker).amountToCredit;
+        expect(resultOfPreview).to.have.property('amountToCreditBonusPool', expectedAmountToBonusPool);
+        expect(resultOfPreview).to.have.property('excessOverPastAccrual', mockInterestPaid * 100 - totalAccrued);
+        expect(resultOfPreview).to.have.property('unit', 'HUNDREDTH_CENT'); // i.e., our default
         expect(resultOfPreview).to.have.property('currency', 'USD');
 
         expect(resultOfPreview).to.have.property('sampleOfTransactions');
         const returnedSample = resultOfPreview.sampleOfTransactions;
-        expect(returnedSample).to.be.an('array').of.length(numberAccountsSampled);
+        expect(returnedSample).to.be.an('array').of.length(Math.min(numberAccountsSampled, testNumberAccounts));
         returnedSample.forEach((sample) => {
             expect(expectedPreviewAccounts).to.deep.include(sample); // may be possible via a single contains call?
         });
 
-        expect(fetchLastLogStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, logType: 'CAPITALIZATION_EVENT', endTime: testInterestTime });
+        const expectedMoment = moment(testInterestTime.valueOf()); // otherwise Sinon fails on some irrelevant internals
+        expect(fetchLastLogStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, logType: 'CAPITALIZATION_EVENT', endTime: expectedMoment });
         expect(fetchFloatConfigVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
-        expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, startTime: testLastLogTime, endTime: testInterestTime });
+
+        const expectedAccrualParams = { ...expectedFetchParams, currency: 'USD', unit: 'HUNDREDTH_CENT', startTime: testLastLogTime, endTime: expectedMoment };
+        expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly(expectedAccrualParams);
 
     });
 
