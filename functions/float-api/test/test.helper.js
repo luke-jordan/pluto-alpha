@@ -15,7 +15,7 @@ module.exports.commonFloatConfig = {
     bonusPoolTracker: 'zar_cash_bonus_pool',
     clientCoShare: 0.25 / 7.25,
     clientCoShareTracker: 'pluto_za_share'
-}
+};
 
 module.exports.momentMatcher = (testMoment) => sinon.match((value) => moment.isMoment(value) && testMoment.isSame(value));
 

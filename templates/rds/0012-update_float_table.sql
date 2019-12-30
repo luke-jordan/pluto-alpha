@@ -18,9 +18,6 @@ grant update (t_state, updated_time, settlement_time) on float_data.float_transa
 
 grant select (account_id, owner_user_id, human_ref, frozen) on account_data.core_account_ledger to float_api_worker;
 
-grant update (settlement_status, updated_time) on transaction_data.core_transaction_ledger to float_api_worker; 
-grant select (transaction_id, creation_time, account_id, transaction_type, settlement_status, amount, currency, unit, float_id, client_id, tags) on transaction_data.core_transaction_ledger to float_api_worker;
-
 -- May put these in a patch instead, but this is the sequence to get rid of a bad mistake
 
 update float_data.float_transaction_ledger set t_type = 'WITHDRAWAL' where t_type = 'ALLOCATION' and related_entity_id in 

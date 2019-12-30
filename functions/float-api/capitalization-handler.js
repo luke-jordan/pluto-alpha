@@ -93,7 +93,7 @@ const assembleSummaryData = (allocations, floatConfigVars, metadata) => {
         excessOverPastAccrual,
         unit: metadata.unit,
         currency: metadata.currency
-    }
+    };
 };
 
 const turnAllocationIntoPreview = (allocation) => ({
@@ -106,9 +106,8 @@ const turnAllocationIntoPreview = (allocation) => ({
     amountToCredit: allocation.amountToCredit
 });
 
-const turnAllocationIntoPersistenceInstruction = (allocation) => {
-
-};
+// const turnAllocationIntoPersistenceInstruction = (allocation) => {
+// };
 
 /**
  * Allows admin to review the operation before committing it. Conducts all the calculations and then returns the top level
@@ -137,9 +136,9 @@ module.exports.preview = async (params) => {
     const numberToSample = config.get('capitalization.preview.accountsToSample');
     // note: as per lots discussion on SO, this is not truly random (will bias towards early in list), but we don't need truly random
     // what it does is to pseudo-randomly (as per caveat) shuffle the array and then take a slice from it
-    const randomSample = Array.from(allocations.values())
-        .filter((entity) => entity.entityType === constants.entityTypes.END_USER_ACCOUNT)
-        .sort(() => 0.5 - Math.random()).slice(0, numberToSample);
+    const randomSample = Array.from(allocations.values()).
+        filter((entity) => entity.entityType === constants.entityTypes.END_USER_ACCOUNT).
+        sort(() => 0.5 - Math.random()).slice(0, numberToSample);
 
     logger('Random sample: ', randomSample);
     const previewAccounts = randomSample.map((allocation) => turnAllocationIntoPreview(allocation));
@@ -150,9 +149,18 @@ module.exports.preview = async (params) => {
 };
 
 module.exports.confirm = async (params) => {
-
+    logger('Confirming capitalization, with parameters: ', params);
 };
 
 module.exports.handle = async (event) => {
 
+    const { operation, parameters } = event;
+    if (operation === 'PREVIEW') {
+        return exports.preview(parameters);
+    } else if (operation === 'CONFIRM') {
+        return exports.confirm(parameters);
+    }
+
+    logger('FATAL_ERROR: Unsupported operation: event: ', event);
+    return { statusCode: 500, body: 'ERROR: Unsupported operation' };
 };

@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:float:handler');
+const logger = require('debug')('jupiter:float:accrual');
 const opsUtil = require('ops-util-common');
 
 const dynamo = require('./persistence/dynamodb');
@@ -96,15 +96,17 @@ module.exports.accrue = async (event) => {
     };
 
     const remainingAmount = accrualAmount - bonusAllocation.amount - clientAllocation.amount;
-    const userAllocEvent = { clientId, floatId, 
+    const userAllocationParams = { clientId, floatId, 
       totalAmount: remainingAmount, 
-      currency: accrualCurrency, 
+      currency: accrualCurrency,
+      transactionType: constants.floatTransTypes.ACCRUAL,
+      transactionState: constants.floatTxStates.SETTLED,
       backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
       backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
       bonusPoolIdForExcess: floatConfig.bonusPoolTracker 
     };
     
-    const userAllocations = await exports.allocate(userAllocEvent);
+    const userAllocations = await exports.allocate(userAllocationParams);
 
     const returnBody = {
       newBalance: newFloatBalance.currentBalance,
@@ -138,6 +140,8 @@ module.exports.accrue = async (event) => {
  * @property {string} currency The currency of the allocation
  * @property {string} unit The units of the amount
  * @property {number} totalAmount The total amount being allocated
+ * @property {string} transactionType The type of transaction (in here, almost always ACCRUAL, which is also default)
+ * @property {string} transactionState The state of the transaction, defaults to SETTLED
  * @property {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
  * @property {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
  * @property {string} bonusPoolIdForExcess (Optional) Where to put any fractional leftovers (or from where to take deficits)
@@ -150,17 +154,10 @@ module.exports.allocate = async (event) => {
   );
 
   const unitsToAllocate = constants.floatUnits.DEFAULT;
-
-  let amountToAllocate = 0;
-  if (constants.isKnownUnit(params.unit)) {
-    amountToAllocate = opsUtil.convertToUnit(params.totalAmount, params.unit, constants.floatUnits.DEFAULT);
-  } else {
-    amountToAllocate = params.totalAmount; // should possibly throw an error instead
-  }
-
-  logger(`Unit: ${params.unit}, is it known? : ${constants.isKnownUnit(params.unit)}, and converted amount: ${amountToAllocate}`);
+  const amountToAllocate = opsUtil.convertToUnit(params.totalAmount, params.unit, constants.floatUnits.DEFAULT);
+  
   const shareMap = exports.apportion(amountToAllocate, currentAllocatedBalanceMap, true);
-  logger('Allocated shares, map = ', shareMap);
+  // logger('Allocated shares, map = ', shareMap);
 
   let bonusAllocationResult = { };
   const allocateRemainsToBonus = shareMap.has(constants.EXCESSS_KEY) && event.bonusPoolIdForExcess;
@@ -168,38 +165,44 @@ module.exports.allocate = async (event) => {
   if (allocateRemainsToBonus) {
     const excessAmount = shareMap.get(constants.EXCESSS_KEY);
     // store the allocation, store in bonus allocation Tx id
-    const bonusAlloc = { 
+    const bonusAllocation = { 
       label: 'BONUS', 
       amount: excessAmount, 
       currency: params.currency, 
-      unit: unitsToAllocate, 
+      unit: unitsToAllocate,
+      transactionType: params.transactionType || 'ACCRUAL',
+      transactionState: params.transactionState || 'SETTLED',
       allocatedToType: constants.entityTypes.BONUS_POOL, 
       allocatedToId: event.bonusPoolIdForExcess 
     };
 
     if (params.backingEntityIdentifier && params.backingEntityType) {
-      bonusAlloc.relatedEntityType = params.backingEntityType;
-      bonusAlloc.relatedEntityId = params.backingEntityIdentifier;
+      bonusAllocation.relatedEntityType = params.backingEntityType;
+      bonusAllocation.relatedEntityId = params.backingEntityIdentifier;
     }
 
-    bonusAllocationResult = await rds.allocateFloat(params.clientId, params.floatId, [bonusAlloc]);
+    bonusAllocationResult = await rds.allocateFloat(params.clientId, params.floatId, [bonusAllocation]);
     bonusAllocationResult.amount = excessAmount;
   }
 
   shareMap.delete(constants.EXCESSS_KEY);
 
-  const allocRequests = [];
+  const userAllocationInstructions = [];
   // todo : add in the backing entity for audits
   for (const accountId of shareMap.keys()) {
-    allocRequests.push({
+    userAllocationInstructions.push({
       accountId,
       amount: shareMap.get(accountId),
       currency: params.currency,
-      unit: unitsToAllocate
+      unit: unitsToAllocate,
+      allocType: params.transactionType || 'ACCRUAL',
+      allocState: params.transactionState || 'SETTLED',
+      relatedEntityType: params.backingEntityType,
+      relatedEntityId: params.backingEntityIdentifier
     });
   }
 
-  const resultOfAllocations = await rds.allocateToUsers(params.clientId, params.floatId, allocRequests);
+  const resultOfAllocations = await rds.allocateToUsers(params.clientId, params.floatId, userAllocationInstructions);
   // logger('Result of allocations: ', resultOfAllocations);
   
   return {
@@ -219,11 +222,11 @@ module.exports.allocate = async (event) => {
  * @param {boolean} roundEvenUp Whether to round 0.5 to 1 or to 0
  */
 module.exports.calculateShare = (totalPool = 100, shareInPercent = 0.1, roundEvenUp = true) => {
-  logger(`Calculating an apportionment, total pool : ${totalPool}, and share: ${shareInPercent}`);
+  // logger(`Calculating an apportionment, total pool : ${totalPool}, and share: ${shareInPercent}`);
   // we do not want to introduce floating points, because that is bad, so first we check to make sure total pool is effectively an int
   // note: basic logic is that total pool should be expressed in hundredths of a cent, if it is not, this is an error
   // note: bignumber can handle non-integer of course, but that would allow greater laxity than we want in something this important
-  logger('Total pool: ', totalPool);
+  // logger('Total pool: ', totalPool);
   if (!Number.isInteger(totalPool)) {
     throw new TypeError('Error! Passed a non-integer pool');
   } else if (typeof shareInPercent !== 'number') {
@@ -240,7 +243,7 @@ module.exports.calculateShare = (totalPool = 100, shareInPercent = 0.1, roundEve
   const roundingMode = roundEvenUp ? BigNumber.ROUND_HALF_UP : BigNumber.ROUND_FLOOR; // for users, we round even up, for us, floow
   const resultAsNumber = result.integerValue(roundingMode).toNumber();
 
-  logger(`Result of calculation: ${resultAsNumber}`);
+  // logger(`Result of calculation: ${resultAsNumber}`);
   return resultAsNumber;
 };
 

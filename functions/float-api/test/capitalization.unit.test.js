@@ -59,7 +59,7 @@ const generateAccountResponse = () => {
         currency: 'USD',
         amountAccrued, 
         priorSettledBalance
-    }
+    };
 };
 
 const generateEntityResponse = (entityId, entityType) => ({
@@ -229,7 +229,7 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
 });
 
 // note : will also need to expire the prior ones
-describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
+describe.skip('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
 
     const testNumberAccounts = 1;
 
@@ -287,7 +287,7 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         expect(addOrSubtractStub).to.have.been.calledOnceWithExactly();
         expect(allocateNonUserStub).to.have.been.calledOnceWithExactly();
         expect(allocateToUsersStub).to.have.been.calledOnceWithExactly();
-        expect(supercedeAccruals).to.have.been.calledOnceWithExactly('date', 'date', testClientId, testFloatId);
+        expect(supercedeAccrualsStub).to.have.been.calledOnceWithExactly('date', 'date', testClientId, testFloatId);
     });
 
     // it('Handles case where no prior capitalization', async () => {

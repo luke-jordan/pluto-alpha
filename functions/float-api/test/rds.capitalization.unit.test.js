@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:capitalization:rds-test');
+// const logger = require('debug')('jupiter:capitalization:rds-test');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
@@ -43,23 +43,25 @@ describe('*** FETCH LAST LOG ***', () => {
     const mockEndTime = moment().subtract(1, 'day').startOf('day');
 
     it('Happy path, retrieves and transforms appropriately', async () => {
-        const expectedQuery = 'select * from float_data.float_log where log_type = $1 and float_id = $2 and client_id = $3 and reference_time < $4';
+        const expectedQuery = 'select * from float_data.float_log where log_type = $1 and float_id = $2 and client_id = $3 and ' +
+            'reference_time < $4 order by reference_time desc limit 1';
         const expectedValues = ['CAPITALIZATION_EVENT', testFloatId, testClientId, mockEndTime.format()];
 
         const mockLogTime = moment().subtract(1, 'week');
         const mockLog = { 'client_id': testClientId, 'float_id': testFloatId, 'creation_time': mockLogTime.format(), 'reference_time': mockLogTime.format(), 'log_type': 'CAPITALIZATION_EVENT' };
-        queryStub.resolves(mockLog);
+        queryStub.resolves([mockLog]);
 
         const resultOfRetrieval = await rds.fetchLastLog({ clientId: testClientId, floatId: testFloatId, endTime: mockEndTime, logType: 'CAPITALIZATION_EVENT' });
         
-        const expectedLog = { ...camelizeKeys(mockLog), creationTime: moment(mockLogTime.format()), referenceTime: (mockLogTime.format()) };
+        const expectedLog = { ...camelizeKeys(mockLog), creationTime: moment(mockLogTime.format()), referenceTime: moment(mockLogTime.format()) };
         expect(resultOfRetrieval).to.deep.equal(expectedLog);
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
     });
 
     it('Returns null if nothing found', async () => {
-        const expectedQuery = 'select * from float_data.float_log where log_type = $1 and float_id = $2 and client_id = $3 and reference_time < $4';
+        const expectedQuery = 'select * from float_data.float_log where log_type = $1 and float_id = $2 and client_id = $3 and ' +
+            'reference_time < $4 order by reference_time desc limit 1';
         const expectedValues = ['CAPITALIZATION_EVENT', testFloatId, testClientId, mockEndTime.format()];
 
         queryStub.resolves([]);
@@ -81,12 +83,12 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
 
     beforeEach(() => helper.resetStubs(queryStub));
 
-    const generateRowsForAccountId = (entityId, baseAmount = 100, entityType = 'END_USER_ACCOUNT') => Array(helper.randomInteger(3) + 1)
-        .fill().map(() => ({
+    const generateRowsForAccountId = (entityId, baseAmount = 100, entityType = 'END_USER_ACCOUNT') => Array(helper.randomInteger(3) + 1).
+        fill().map(() => ({
             'allocated_to_id': entityId,
             'allocated_to_type': entityType,
             'unit': Object.values(constants.floatUnits)[helper.randomInteger(3)],
-            'amount': helper.randomInteger(baseAmount)
+            'amount': String(helper.randomInteger(baseAmount))
         }));
     
     const generateAccountBalanceRows = (accountId, baseAmount = 1000) => {
@@ -97,15 +99,15 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
             'owner_user_id': ownerId,
             'human_ref': humanRef,
             'unit': Object.values(constants.floatUnits)[helper.randomInteger(3)],
-            'amount': helper.randomInteger(baseAmount)
+            'amount': String(helper.randomInteger(baseAmount))
         }));
     };
 
-    const sumAmountsForEntity = (entityId, rows, entityKey = 'allocated_to_id') => rows.filter((row) => row[entityKey] === entityId)
-        .reduce((sum, row) => sum + row['amount'] * constants.floatUnitTransforms[row['unit']], 0);
+    const sumAmountsForEntity = (entityId, rows, entityKey = 'allocated_to_id') => rows.filter((row) => row[entityKey] === entityId).
+        reduce((sum, row) => sum + (row['amount'] * constants.floatUnitTransforms[row['unit']]), 0);
 
-    it.only('Happy path, retrieves, and compiles map, appropriately', async () => {
-        const testNumberAccounts = 2;
+    it('Happy path, retrieves, and compiles map, appropriately', async () => {
+        const testNumberAccounts = 200;
 
         const mockArgs = {
             clientId: testClientId,
@@ -131,25 +133,24 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
             `and float_tx.currency = $5 group by account_id, owner_user_id, human_ref, unit`;
         const accountValues = [testClientId, testFloatId, mockEndTime.format(), 'SETTLED', 'USD'];
         
-
         const generatedAccountIds = Array(testNumberAccounts).fill().map(() => uuid());
-        const generatedRows = generatedAccountIds.map((accountId) => generateRowsForAccountId(accountId, 100))
-            .reduce((cum, rows) => [...cum, ...rows], []);
+        const generatedRows = generatedAccountIds.map((accountId) => generateRowsForAccountId(accountId, 100)).
+            reduce((cum, rows) => [...cum, ...rows], []);
         generatedRows.push(...generateRowsForAccountId(mockBonusPoolId, 10, 'BONUS_POOL'));
         generatedRows.push(...generateRowsForAccountId(mockClientShare, 10, 'COMPANY_SHARE'));
         // logger('Generated rows: ', generatedRows);
 
-        const generatedAccountRows = generatedAccountIds.map((accountId) => generateAccountBalanceRows(accountId, 1000))
-            .reduce((cum, rows) => [...cum, ...rows], []);
-        logger('Generated account rows: ', generatedAccountRows);
+        const generatedAccountRows = generatedAccountIds.map((accountId) => generateAccountBalanceRows(accountId, 1000)).
+            reduce((cum, rows) => [...cum, ...rows], []);
+        // logger('Generated account rows: ', generatedAccountRows);
 
         const mapOfAccrualSums = new Map(generatedAccountIds.map((accountId) => [accountId, sumAmountsForEntity(accountId, generatedRows)]));
         mapOfAccrualSums.set(mockBonusPoolId, sumAmountsForEntity(mockBonusPoolId, generatedRows));
         mapOfAccrualSums.set(mockClientShare, sumAmountsForEntity(mockClientShare, generatedRows));
-        logger('Created map of sums: ', mapOfAccrualSums);
+        // logger('Created map of sums: ', mapOfAccrualSums);
 
         const mapOfBalances = new Map(generatedAccountIds.map((accountId) => [accountId, sumAmountsForEntity(accountId, generatedAccountRows, 'account_id')]));
-        logger('And map of balance sums: ', mapOfBalances);
+        // logger('And map of balance sums: ', mapOfBalances);
 
         const entityIds = [...generatedAccountIds, mockBonusPoolId, mockClientShare];
         const expectedFullMap = new Map(entityIds.map((entityId) => {
@@ -165,6 +166,7 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
             } else {
                 const accountRow = generatedAccountRows.find((row) => row['account_id'] === entityId);
                 assembledEntity = {
+                    entityId, // redundant with account ID, but handy to have both keys present for consumer
                     entityType: 'END_USER_ACCOUNT',
                     accountId: entityId,
                     ownerUserId: accountRow['owner_user_id'],
@@ -177,16 +179,25 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
             }
             return [entityId, assembledEntity];
         }));
-        logger('And full map: ', expectedFullMap);
 
-        queryStub.onFirstCall().resolves(generatedRows);
-        queryStub.onSecondCall().resolves(generatedAccountRows);
+        // logger('And full map: ', expectedFullMap);
+
+        queryStub.withArgs(expectedMainQuery, expectedValues).resolves(generatedRows);
+        queryStub.withArgs(expectedAccountQuery, accountValues).resolves(generatedAccountRows);
 
         const resultOfQuery = await rds.fetchAccrualsInPeriod(mockArgs);
+        // logger('Resulting map: ', resultOfQuery);
 
         expect(resultOfQuery).to.exist;
         expect(resultOfQuery).to.be.a('map');
+        expect(resultOfQuery.keys()).to.deep.equal(expectedFullMap.keys());
         expect(resultOfQuery).to.deep.equal(expectedFullMap);
+
+        // leaving this here as expect deep equal's output is less than helpful when debugging a mismatch
+        // Array.from(resultOfQuery.keys()).forEach((key) => {
+        //     logger('Testing key: ', key);
+        //     expect(resultOfQuery.get(key)).to.deep.equal(expectedFullMap.get(key));
+        // });
 
         expect(queryStub).to.have.been.calledTwice;
         expect(queryStub).to.have.been.calledWithExactly(expectedMainQuery, expectedValues);
@@ -195,6 +206,5 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
 
 });
 
-describe('*** SUPERCEDE PRIOR ACCRUALS ***', () => {
-
-});
+// describe('*** SUPERCEDE PRIOR ACCRUALS ***', () => {
+// });

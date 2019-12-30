@@ -5,6 +5,7 @@ const config = require('config');
 const logger = require('debug')('jupiter:float:rds');
 const uuid = require('uuid/v4');
 const moment = require('moment');
+const camelizeKeys = require('camelize-keys');
 
 const constants = require('../constants'); // not using config as these are enum type entities
 const opsUtil = require('ops-util-common');
@@ -130,7 +131,7 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
         'client_id': clientId,
         'float_id': floatId,
         't_type': request.transactionType,
-        't_state': request.transactionState || constants.transactionState.SETTLED,
+        't_state': request.transactionState || constants.floatTxStates.SETTLED,
         'amount': request.amount,
         'currency': request.currency,
         'unit': request.unit,
@@ -346,10 +347,87 @@ module.exports.calculateFloatBalance = async (floatId = 'zar_mmkt_co', currency 
     };  
 };
 
+/**
+ * Returns the log most recent in time to the end time, of the given type, for the specified client-float
+ */
 module.exports.fetchLastLog = async ({ floatId, clientId, logType, endTime }) => {
+    const query = 'select * from float_data.float_log where log_type = $1 and float_id = $2 and client_id = $3 and reference_time < $4 ' +
+        `order by reference_time desc limit 1`;
+    const values = [logType, floatId, clientId, endTime.format()];
 
+    const result = await rdsConnection.selectQuery(query, values);
+    logger('Result from RDS for float selection: ', result);
+
+    if (!Array.isArray(result) || result.length === 0) {
+        return null;
+    }
+
+    const rawLogResult = camelizeKeys(result[0]);
+    const transformedResult = { ...rawLogResult, creationTime: moment(rawLogResult.creationTime), referenceTime: moment(rawLogResult.referenceTime) };
+    logger('Returning log: ', transformedResult);
+
+    return transformedResult;
 };
 
-module.exports.fetchAccrualsInPeriod = async ({ floatId, clientId, startTime, endTime, unit, currency }) => {
+/**
+ * Obtains all the accruals in the period in question, for the relevant float and client ID, and sums them up,
+ * returning a map with the entity (account or client/bonus pool) IDs as keys and values as objects with the
+ * relevant information (for accounts, including prior balances)
+ */
+module.exports.fetchAccrualsInPeriod = async (params) => {
+    logger('Conducting persistence accrual summation, parameters: ', params);
+    const { floatId, clientId, startTime, endTime, unit, currency } = params;
+    
+    const allEntityAccrualQuery = `select allocated_to_id, allocated_to_type, unit, sum(amount) from float_data.float_transaction_ledger ` +
+    `where client_id = $1 and float_id = $2 and creation_time > $3 and creation_time < $4 ` +
+    `and t_type = $5 and t_state in ($6, $7) and currency = $8 and ` +
+    `group by allocated_to_id, allocated_to_type, unit`;
 
+    const allEntityValues = [clientId, floatId, startTime.format(), endTime.format(), 'ACCRUAL', 'SETTLED', 'PENDING', currency];
+
+    logger('Running query for accrual sums: ', allEntityAccrualQuery);
+    logger('Passing in values for accrual sums: ', allEntityValues);
+
+    const accountInfoQuery = `select account_id, owner_user_id, human_ref, unit, sum(amount) from ` +
+        `float_data.float_transaction_ledger as float_tx inner join account_data.core_account_ledger as account_info on ` +
+        `allocated_to_id = account_id::text where float_tx.client_id = $1 and ` +
+        `float_tx.float_id = $2 and float_tx.creation_time < $3 and float_tx.t_state = $4 ` +
+        `and float_tx.currency = $5 group by account_id, owner_user_id, human_ref, unit`;
+    const accountInfoValues = [clientId, floatId, endTime.format(), 'SETTLED', currency];
+
+    const [resultOfAccrualQuery, resultOfAccountInfoQuery] = await Promise.all([
+        rdsConnection.selectQuery(allEntityAccrualQuery, allEntityValues),
+        rdsConnection.selectQuery(accountInfoQuery, accountInfoValues)
+    ]);
+
+    // logger('Result of account info query: ', resultOfAccountInfoQuery);
+
+    const resultMap = new Map();
+    const entityIds = new Set(resultOfAccrualQuery.map((row) => row['allocated_to_id']));
+
+    entityIds.forEach((entityId) => {
+        const entityAccrualRows = resultOfAccrualQuery.filter((row) => row['allocated_to_id'] === entityId);
+        const entityAccrualSum = opsUtil.sumOverUnits(entityAccrualRows, unit, 'amount');
+        const entityType = entityAccrualRows[0]['allocated_to_type'];
+        // logger('Seeking account info for entity ID: ', entityId, ' of type: ', entityType);
+        if (entityType === constants.entityTypes.BONUS_POOL || entityType === constants.entityTypes.COMPANY_SHARE) {
+            resultMap.set(entityId, {
+                entityId, entityType, unit, currency, amountAccrued: entityAccrualSum
+            });
+        } else if (entityType === constants.entityTypes.END_USER_ACCOUNT) {
+            const accountResult = { entityId, entityType, unit, currency, amountAccrued: entityAccrualSum };
+            const rowsForThisAccount = resultOfAccountInfoQuery.filter((row) => row['account_id'] === entityId);
+            const balance = opsUtil.sumOverUnits(rowsForThisAccount, unit, 'amount');
+            
+            accountResult.accountId = rowsForThisAccount[0]['account_id'];
+            accountResult.ownerUserId = rowsForThisAccount[0]['owner_user_id'];
+            accountResult.humanRef = rowsForThisAccount[0]['human_ref'];
+            accountResult.priorSettledBalance = balance;
+            resultMap.set(entityId, accountResult);
+        } else {
+            logger('ALERT! :: picked up curious entity type: ', entityType, ' for entity Id: ', entityId);
+        }
+    });
+
+    return resultMap;
 };

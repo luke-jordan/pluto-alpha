@@ -41,7 +41,7 @@ module.exports.floatTxStates = {
     PENDING: 'PENDING',
     EXPIRED: 'EXPIRED',
     SUPERCEDED: 'SUPERCEDED'
-}
+};
 
 module.exports.EXCESSS_KEY = 'excess';
 
