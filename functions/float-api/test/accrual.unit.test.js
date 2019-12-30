@@ -422,7 +422,7 @@ describe('Primary allocation of unallocated float lamdba', () => {
         expect(allocationResult).to.deep.equal(expectedBody);
         
         expect(apportionStub).to.have.been.calledOnceWithExactly(amountToAllocate, existingBalances, true);
-        expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false);
+        expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT);
         expect(allocateFloatStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, [bonuxTxAlloc]);
         
         expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, expectedUserAllocsToRds);

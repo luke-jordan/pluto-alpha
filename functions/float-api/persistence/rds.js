@@ -250,7 +250,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
  * @param {string} currency The relevant currency
  * @param {constants.entityType} entityType The type of entities to collect (defaults to end user accounts) 
  */
-module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency, entityType = constants.entityTypes.END_USER_ACCOUNT, logResult = false) => {
+module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency, entityType = constants.entityTypes.END_USER_ACCOUNT) => {
     const floatTable = config.get('tables.floatTransactions');
     const accountTable = config.get('tables.openAccounts');
     
@@ -278,10 +278,6 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     });
     
     // logger('Completed calculations of account sums, result: ', selectResults);
-
-    if (logResult) {
-        logger(selectResults);
-    }
 
     return selectResults;
 };

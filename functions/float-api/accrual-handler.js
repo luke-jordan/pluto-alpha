@@ -150,7 +150,7 @@ module.exports.allocate = async (event) => {
   
   const params = event.body || event;
   const currentAllocatedBalanceMap = await rds.obtainAllAccountsWithPriorAllocations(
-    params.floatId, params.currency, constants.entityTypes.END_USER_ACCOUNT, false
+    params.floatId, params.currency, constants.entityTypes.END_USER_ACCOUNT
   );
 
   const unitsToAllocate = constants.floatUnits.DEFAULT;

@@ -185,7 +185,7 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
 
     });
 
-    it('Handles case where no prior capitalization', async () => {
+    it('Handles case where no prior capitalization, and directs from handler accordingly', async () => {
         const expectedFetchParams = { clientId: testClientId, floatId: testFloatId };
 
         const mockAccrualMap = new Map();
@@ -213,7 +213,7 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
         };
 
         // we check the detailed results on things above, then just check the accrual stub is called correctly
-        const resultOfPreview = await handler.preview(testEvent);
+        const resultOfPreview = await handler.handle({ operation: 'PREVIEW', parameters: testEvent });
         expect(resultOfPreview).to.exist;
 
         const expectedEndMoment = moment(testInterestTime.valueOf());
