@@ -32,6 +32,7 @@ const divideCapitalizationPerAccruals = async ({ clientId, floatId, startTime, e
     const bonusPoolId = floatConfigVars.bonusPoolTracker;
     
     const accrualMap = await rds.fetchAccrualsInPeriod({ floatId, clientId, startTime, endTime, unit, currency });
+    logger('Received this accrual map from persistence: ', accrualMap);
 
     const totalAccrued = Array.from(accrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
     
@@ -60,7 +61,7 @@ const divideCapitalizationPerAccruals = async ({ clientId, floatId, startTime, e
         const entityWithAmount = { ...entityDetails, amountToCredit };
         allocations.set(entityId, entityWithAmount);
     });
-    logger('Allocations so far, saple: ', Array.from(allocations.values()).slice(0, 2));
+    logger('Allocations so far, sample: ', Array.from(allocations.values()).slice(0, 2));
 
     // then we do a last check just in case one or two hundredths of a cent left over due to rounding
     const whollyAllocatedAmount = Array.from(allocations.values()).reduce((sum, entry) => entry.amountToCredit + sum, 0);
@@ -153,14 +154,33 @@ module.exports.confirm = async (params) => {
 };
 
 module.exports.handle = async (event) => {
+    try {
+        let operation = '';
+        let parameters = {};
 
-    const { operation, parameters } = event;
-    if (operation === 'PREVIEW') {
-        return exports.preview(parameters);
-    } else if (operation === 'CONFIRM') {
-        return exports.confirm(parameters);
+        if (opsUtil.isApiCall(event)) {
+            const userDetails = opsUtil.extractUserDetails(event);
+            if (userDetails.role !== 'SYSTEM_ADMIN') {
+                return opsUtil.wrapResponse('Unauthorized', 403);
+            }
+            operation = event.pathParameters.proxy;
+            parameters = JSON.parse(event.body);
+        } else {
+            operation = event.operation;
+            parameters = event.parameters;
+        }
+
+        if (operation === 'PREVIEW') {
+            const previewResult = await exports.preview(parameters);
+            return opsUtil.wrapResponse(previewResult);
+        } else if (operation === 'CONFIRM') {
+            const confirmResult = await exports.confirm(parameters);
+            return opsUtil.wrapResponse(confirmResult);
+        }
+
+        throw new Error('Unsupported operation: event: ', JSON.stringify(event));
+    } catch (err) {
+        logger('FATAL_ERROR: ', event);
+        return opsUtil.wrapResponse(err.message, 500);
     }
-
-    logger('FATAL_ERROR: Unsupported operation: event: ', event);
-    return { statusCode: 500, body: 'ERROR: Unsupported operation' };
 };

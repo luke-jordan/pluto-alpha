@@ -213,7 +213,11 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
         };
 
         // we check the detailed results on things above, then just check the accrual stub is called correctly
-        const resultOfPreview = await handler.handle({ operation: 'PREVIEW', parameters: testEvent });
+        const rawResult = await handler.handle({ operation: 'PREVIEW', parameters: testEvent });
+        expect(rawResult).to.exist;
+        expect(rawResult).to.have.property('statusCode', 200);
+
+        const resultOfPreview = JSON.parse(rawResult.body);
         expect(resultOfPreview).to.exist;
 
         const expectedEndMoment = moment(testInterestTime.valueOf());
@@ -284,6 +288,7 @@ describe.skip('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         expect(fetchFloatConfigVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
         expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, startTime: testLastLogTime, endTime: testInterestTime });
 
+        // TODO : DEFINITELY ADD A LOG
         expect(addOrSubtractStub).to.have.been.calledOnceWithExactly();
         expect(allocateNonUserStub).to.have.been.calledOnceWithExactly();
         expect(allocateToUsersStub).to.have.been.calledOnceWithExactly();

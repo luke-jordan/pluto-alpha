@@ -7,7 +7,7 @@ resource "aws_lambda_function" "float_capitalize" {
 
   function_name                  = "${var.float_capitalize_lambda_function_name}"
   role                           = "${aws_iam_role.float_capitalize_role.arn}"
-  handler                        = "accrual-handler.accrue"
+  handler                        = "capitalization-handler.handle"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 900

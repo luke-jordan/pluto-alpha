@@ -152,8 +152,10 @@ module.exports.extractParamsFromEvent = (event) => {
     return params;
 };
 
+module.exports.isApiCall = (event) => Reflect.has(event, 'httpMethod'); // todo : tighten this in time
+
 module.exports.isDirectInvokeAdminOrSelf = (event) => {
-    const isHttpRequest = Reflect.has(event, 'httpMethod'); // todo : tighten this in time
+    const isHttpRequest = Reflect.has(event, 'httpMethod'); 
     if (!isHttpRequest) {
         return true; // by definition -- means it must be via lambda direct invoke, hence allowed by IAM
     }

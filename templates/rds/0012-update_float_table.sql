@@ -14,7 +14,7 @@ create index if not exists id_client_float_id on float_data.float_transaction_le
 create trigger update_float_modtime before update on float_data.float_transaction_ledger 
     for each row execute procedure trigger_set_updated_timestamp();
 
-grant update (t_state, updated_time, settlement_time) on float_data.float_transaction_ledger to float_api_worker;
+grant update (t_state, updated_time) on float_data.float_transaction_ledger to float_api_worker;
 
 grant select (account_id, owner_user_id, human_ref, frozen) on account_data.core_account_ledger to float_api_worker;
 
@@ -30,7 +30,7 @@ update float_data.float_transaction_ledger set t_type = 'BOOST_REDEMPTION' where
     (select boost_id::text from  boost_data.boost);
 
 -- the remainder are accruals, or admin results
-update float_data.float_transaction_ledger set t_type = 'ACCRUAL' where t_type = 'ALLOCATION' and allocated_to_type in 'END_USER_ACCOUNT';
+update float_data.float_transaction_ledger set t_type = 'ACCRUAL' where t_type = 'ALLOCATION' and allocated_to_type = 'END_USER_ACCOUNT';
 update float_data.float_transaction_ledger set t_type = 'ACCRUAL' where t_type = 'ALLOCATION' and related_entity_id like 'SYSTEM_CALC_DAILY_%';
 
 alter table float_data.float_transaction_ledger drop constraint if exists float_transaction_type_check;
@@ -40,4 +40,4 @@ alter table float_data.float_transaction_ledger add constraint float_transaction
 );
 
 update float_data.float_transaction_ledger set t_type = 'ADMIN_ALLOCATION' where t_type = 'ALLOCATION' and related_entity_id in 
-    (select log_id::test from float_data.float_log);
+    (select log_id::text from float_data.float_log);

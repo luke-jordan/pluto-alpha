@@ -1,6 +1,6 @@
 'use strict';
 
-// const logger = require('debug')('jupiter:capitalization:rds-test');
+const logger = require('debug')('jupiter:capitalization:rds-test');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
@@ -88,7 +88,7 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
             'allocated_to_id': entityId,
             'allocated_to_type': entityType,
             'unit': Object.values(constants.floatUnits)[helper.randomInteger(3)],
-            'amount': String(helper.randomInteger(baseAmount))
+            'sum': String(helper.randomInteger(baseAmount))
         }));
     
     const generateAccountBalanceRows = (accountId, baseAmount = 1000) => {
@@ -99,12 +99,12 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
             'owner_user_id': ownerId,
             'human_ref': humanRef,
             'unit': Object.values(constants.floatUnits)[helper.randomInteger(3)],
-            'amount': String(helper.randomInteger(baseAmount))
+            'sum': String(helper.randomInteger(baseAmount))
         }));
     };
 
     const sumAmountsForEntity = (entityId, rows, entityKey = 'allocated_to_id') => rows.filter((row) => row[entityKey] === entityId).
-        reduce((sum, row) => sum + (row['amount'] * constants.floatUnitTransforms[row['unit']]), 0);
+        reduce((sum, row) => sum + (row['sum'] * constants.floatUnitTransforms[row['unit']]), 0);
 
     it('Happy path, retrieves, and compiles map, appropriately', async () => {
         const testNumberAccounts = 200;
@@ -121,7 +121,7 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
         // first we get the accrual entries, that are either settled or pending (ie not expired or superceded)
         const expectedMainQuery = `select allocated_to_id, allocated_to_type, unit, sum(amount) from float_data.float_transaction_ledger ` +
             `where client_id = $1 and float_id = $2 and creation_time > $3 and creation_time < $4 ` +
-            `and t_type = $5 and t_state in ($6, $7) and currency = $8 and ` +
+            `and t_type = $5 and t_state in ($6, $7) and currency = $8 ` +
             `group by allocated_to_id, allocated_to_type, unit`;
         const expectedValues = [testClientId, testFloatId, mockStartTime.format(), mockEndTime.format(), 'ACCRUAL', 'SETTLED', 'PENDING', 'USD'];
 
@@ -190,14 +190,16 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
 
         expect(resultOfQuery).to.exist;
         expect(resultOfQuery).to.be.a('map');
-        expect(resultOfQuery.keys()).to.deep.equal(expectedFullMap.keys());
-        expect(resultOfQuery).to.deep.equal(expectedFullMap);
 
         // leaving this here as expect deep equal's output is less than helpful when debugging a mismatch
+        // expect(resultOfQuery.keys()).to.deep.equal(expectedFullMap.keys());
         // Array.from(resultOfQuery.keys()).forEach((key) => {
         //     logger('Testing key: ', key);
         //     expect(resultOfQuery.get(key)).to.deep.equal(expectedFullMap.get(key));
         // });
+
+        logger('Testing map equivalence ...');
+        expect(resultOfQuery).to.deep.equal(expectedFullMap);
 
         expect(queryStub).to.have.been.calledTwice;
         expect(queryStub).to.have.been.calledWithExactly(expectedMainQuery, expectedValues);

@@ -376,7 +376,7 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
     
     const allEntityAccrualQuery = `select allocated_to_id, allocated_to_type, unit, sum(amount) from float_data.float_transaction_ledger ` +
     `where client_id = $1 and float_id = $2 and creation_time > $3 and creation_time < $4 ` +
-    `and t_type = $5 and t_state in ($6, $7) and currency = $8 and ` +
+    `and t_type = $5 and t_state in ($6, $7) and currency = $8 ` +
     `group by allocated_to_id, allocated_to_type, unit`;
 
     const allEntityValues = [clientId, floatId, startTime.format(), endTime.format(), 'ACCRUAL', 'SETTLED', 'PENDING', currency];
@@ -396,14 +396,16 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
         rdsConnection.selectQuery(accountInfoQuery, accountInfoValues)
     ]);
 
+    logger('Sample of accrual result rows: ', resultOfAccrualQuery.slice(0, 5));
     // logger('Result of account info query: ', resultOfAccountInfoQuery);
 
     const resultMap = new Map();
     const entityIds = new Set(resultOfAccrualQuery.map((row) => row['allocated_to_id']));
+    logger('About to divide up among this many entities: ', entityIds.size);
 
     entityIds.forEach((entityId) => {
         const entityAccrualRows = resultOfAccrualQuery.filter((row) => row['allocated_to_id'] === entityId);
-        const entityAccrualSum = opsUtil.sumOverUnits(entityAccrualRows, unit, 'amount');
+        const entityAccrualSum = opsUtil.sumOverUnits(entityAccrualRows, unit, 'sum');
         const entityType = entityAccrualRows[0]['allocated_to_type'];
         // logger('Seeking account info for entity ID: ', entityId, ' of type: ', entityType);
         if (entityType === constants.entityTypes.BONUS_POOL || entityType === constants.entityTypes.COMPANY_SHARE) {
@@ -413,7 +415,13 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
         } else if (entityType === constants.entityTypes.END_USER_ACCOUNT) {
             const accountResult = { entityId, entityType, unit, currency, amountAccrued: entityAccrualSum };
             const rowsForThisAccount = resultOfAccountInfoQuery.filter((row) => row['account_id'] === entityId);
-            const balance = opsUtil.sumOverUnits(rowsForThisAccount, unit, 'amount');
+
+            if (!Array.isArray(rowsForThisAccount) || rowsForThisAccount.length === 0) {
+                logger('ALERT! :: account in float, not in main table (legacy if on staging)');
+                return;
+            }
+
+            const balance = opsUtil.sumOverUnits(rowsForThisAccount, unit, 'sum');
             
             accountResult.accountId = rowsForThisAccount[0]['account_id'];
             accountResult.ownerUserId = rowsForThisAccount[0]['owner_user_id'];

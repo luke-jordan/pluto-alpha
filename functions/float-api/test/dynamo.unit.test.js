@@ -27,7 +27,7 @@ describe('** UNIT TESTING DYNAMODB ***', () => {
 
     before(() => {
         const validKey = { clientId: common.testValidClientId, floatId: common.testValidFloatId };
-        const projection = ['bonusPoolShareOfAccrual', 'bonusPoolSystemWideId', 'clientShareOfAccrual', 'clientShareOfSystemWideId'];
+        const projection = ['bonusPoolShareOfAccrual', 'bonusPoolSystemWideId', 'clientShareOfAccrual', 'clientShareSystemWideId'];
         fetchStub.withArgs(config.get('tables.clientFloatVars'), validKey, projection).returns({
             bonusPoolShareOfAccrual: common.testValueBonusPoolShare,
             bonusPoolSystemWideId: common.testValueBonusPoolTracker,
