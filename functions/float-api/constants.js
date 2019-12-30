@@ -13,24 +13,34 @@ module.exports.isKnownUnit = (unit) => typeof unit === 'string' && typeof export
 module.exports.floatUnitTransforms = {
     DEFAULT: 1,
     HUNDREDTH_CENT: 1,
-    WHOLE_CENT: 100
+    WHOLE_CENT: 100,
+    WHOLE_CURRENCY: 10000
 };
 
 module.exports.floatTransTypes = {
     ACCRUAL: 'ACCRUAL',
-    ALLOCATION: 'ALLOCATION',
     SAVING: 'USER_SAVING_EVENT',
     WITHDRAWAL: 'WITHDRAWAL',
     CAPITALIZATION: 'CAPITALIZATION',
-    BOOST_REDEMPTION: 'BOOST_REDEMPTION'
+    BOOST_REDEMPTION: 'BOOST_REDEMPTION',
+    BOOST_REVERSAL: 'BOOST_REVERSAL',
+    ADMIN_ALLOCATION: 'ADMIN_ALLOCATION'
 };
 
 module.exports.entityTypes = {
     ACCRUAL_EVENT: 'ACCRUAL_EVENT', // so that we can track and audit these
+    CAPITALIZATION_EVENT: 'CAPITALIZATION_EVENT', // and the same
     BONUS_POOL: 'BONUS_POOL',
     COMPANY_SHARE: 'COMPANY_SHARE',
     END_USER_ACCOUNT: 'END_USER_ACCOUNT',
     FLOAT_ITSELF: 'FLOAT_ITSELF'
+};
+
+module.exports.floatTxStates = {
+    SETTLED: 'SETTLED',
+    PENDING: 'PENDING',
+    EXPIRED: 'EXPIRED',
+    SUPERCEDED: 'SUPERCEDED'
 };
 
 module.exports.EXCESSS_KEY = 'excess';

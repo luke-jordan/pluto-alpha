@@ -1,9 +1,11 @@
 'use strict';
 
-process.env.NODE_ENV = 'test';
+// process.env.NODE_ENV = 'test';
 
 const logger = require('debug')('jupiter:float:test');
+// const helper = require('./test.helper');
 
+// todo get rid of lodash
 const _ = require('lodash');
 const uuid = require('uuid/v4');
 const moment = require('moment');
@@ -256,6 +258,8 @@ describe('Primary allocation of inbound accrual lambda', () => {
             clientId: common.testValidClientId, floatId: common.testValidFloatId, 
             totalAmount: expectedUserAmount,
             currency: 'ZAR',
+            transactionType: 'ACCRUAL',
+            transactionState: 'SETTLED',
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
             backingEntityIdentifier: accrualEvent.backingEntityIdentifier,
             bonusPoolIdForExcess: common.testValueBonusPoolTracker
@@ -342,11 +346,13 @@ describe('Primary allocation of unallocated float lamdba', () => {
     });
 
     it('Happy path, when passed a balance to divide', async () => {
-        const numberAccounts = 10000;
+        const numberAccounts = 10;
         logger('Initiated, testing with ', numberAccounts, ' accounts');
 
         const amountToAllocate = 1000 * 100 * 100; // allocating R1k in interest
-        const userAllocEvent = {
+
+        // comes in from scheduled job
+        const incomingEvent = {
             clientId: common.testValidClientId, 
             floatId: common.testValidFloatId, 
             totalAmount: amountToAllocate,
@@ -370,57 +376,57 @@ describe('Primary allocation of unallocated float lamdba', () => {
             apportionedBalances.set(accountId, Math.round((Math.random() + 0.5) * averagePortion));
         }
         apportionedBalances.set(constants.EXCESSS_KEY, -75);
-        apportionStub.withArgs(amountToAllocate, existingBalances, true).returns(apportionedBalances);
 
         fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves({ bonusPoolTracker: common.testValueBonusPoolTracker });
         const bonuxTxAlloc = {
             label: 'BONUS',
             amount: -75,
-            currency: userAllocEvent.currency,
-            unit: userAllocEvent.unit,
+            currency: incomingEvent.currency,
+            unit: incomingEvent.unit,
+            transactionType: 'ACCRUAL',
+            transactionState: 'SETTLED',
             allocatedToType: constants.entityTypes.BONUS_POOL,
             allocatedToId: common.testValueBonusPoolTracker,
-            relatedEntityType: userAllocEvent.backingEntityType,
-            relatedEntityId: userAllocEvent.backingEntityIdentifier
+            relatedEntityType: incomingEvent.backingEntityType,
+            relatedEntityId: incomingEvent.backingEntityIdentifier
         };
         const bonusTxId = uuid();
 
         const expectedUserAllocsToRds = [];
         const mockResultFromRds = [];
         for (const accountId of existingBalances.keys()) {
-            const rdsAlloc = {
+            const userAllocInstruction = {
                 accountId: accountId,
                 amount: apportionedBalances.get(accountId),
                 currency: 'ZAR',
-                unit: userAllocEvent.unit
+                unit: incomingEvent.unit,
+                allocType: 'ACCRUAL',
+                allocState: 'SETTLED',
+                relatedEntityType: incomingEvent.backingEntityType,
+                relatedEntityId: incomingEvent.backingEntityIdentifier
             };
-            expectedUserAllocsToRds.push(rdsAlloc);
+            expectedUserAllocsToRds.push(userAllocInstruction);
             mockResultFromRds.push({ floatTxId: uuid(), accountTxId: uuid(), amount: apportionedBalances.get(accountId) });
         }
-
-        const rdsMatcher = sinon.match(expectedUserAllocsToRds);
         
-        obtainAccountBalancesStub.withArgs(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false).
-            resolves(existingBalances);
-
-        allocateFloatStub.withArgs(common.testValidClientId, common.testValidFloatId, sinon.match([bonuxTxAlloc])).
-            resolves({ 'BONUS': bonusTxId });
+        // only one call to each and arguments are more efficiently (for debugging) tested below
+        apportionStub.returns(apportionedBalances);
+        obtainAccountBalancesStub.resolves(existingBalances);
+        allocateFloatStub.resolves({ 'BONUS': bonusTxId });
+        allocateToUsersStub.resolves(mockResultFromRds);
         
-        allocateToUsersStub.withArgs(common.testValidClientId, common.testValidFloatId, rdsMatcher).
-            resolves(mockResultFromRds);
-        
+        const allocationResult = await handler.allocate(incomingEvent, { });
+        expect(allocationResult).to.exist;
         
         const expectedBody = { allocationRecords: mockResultFromRds, bonusAllocation: { 'BONUS': bonusTxId, amount: -75 } };
-        
-        const allocationResult = await handler.allocate(userAllocEvent, { });
-        expect(allocationResult).to.exist;
-
-        // logger('Actual: ', allocateFloatStub.getCall(0).args);
-        // logger('Expected: ', [common.testValidClientId, common.testValidFloatId, bonuxTxAlloc]);
-        
         expect(allocationResult).to.deep.equal(expectedBody);
-        expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, false);
-        expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, rdsMatcher);
+        
+        expect(apportionStub).to.have.been.calledOnceWithExactly(amountToAllocate, existingBalances, true);
+        expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT);
+        expect(allocateFloatStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, [bonuxTxAlloc]);
+        
+        expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, expectedUserAllocsToRds);
+    
     }).timeout(3000);
 
 });

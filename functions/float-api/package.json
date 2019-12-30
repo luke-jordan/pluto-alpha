@@ -4,7 +4,7 @@
   "description": "The API for managing the primary cash float",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:float:test nyc mocha './test/*.unit.test.js'",
+    "test": "DEBUG=jupiter:* nyc mocha './test/*.unit.test.js'",
     "test-all": "DEBUG=jupiter:float:* nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
@@ -13,6 +13,7 @@
   "license": "ISC",
   "dependencies": {
     "bignumber.js": "^8.1.1",
+    "camelize-keys": "^1.0.0",
     "config": "^3.1.0",
     "debug": "^4.1.1",
     "moment": "^2.24.0",

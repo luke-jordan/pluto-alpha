@@ -149,6 +149,7 @@ describe('Accrual happy paths', () => {
         amount: common.testValueAccrualSize,
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
+        transactionType: constants.floatTransTypes.ACCRUAL,
         allocatedToType: constants.entityTypes.BONUS_POOL,
         allocatedToId: common.testValueBonusPoolTracker,
         relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
@@ -163,7 +164,8 @@ describe('Accrual happy paths', () => {
         'transaction_id': stubTransactionId, 
         'client_id': common.testValidClientId, 
         'float_id': common.testValidFloatId, 
-        't_type': constants.floatTransTypes.ALLOCATION,
+        't_type': constants.floatTransTypes.ACCRUAL,
+        't_state': constants.floatTxStates.SETTLED,
         'amount': testAccrualInstruction.amount,
         'currency': testAccrualInstruction.currency, 
         'unit': testAccrualInstruction.unit, 
@@ -236,6 +238,7 @@ describe('Company and bonus share allocations', () => {
         'client_id': common.testValidClientId, 
         'float_id': common.testValidFloatId, 
         't_type': constants.floatTransTypes.ALLOCATION,
+        't_state': constants.floatTxStates.SETTLED,
         'amount': testBonusAllocation.amount,
         'currency': testBonusAllocation.currency, 
         'unit': testBonusAllocation.unit, 
@@ -250,6 +253,7 @@ describe('Company and bonus share allocations', () => {
         'client_id': common.testValidClientId, 
         'float_id': common.testValidFloatId, 
         't_type': constants.floatTransTypes.ALLOCATION,
+        't_state': constants.floatTxStates.SETTLED,
         'amount': testCompanyAllocation.amount,
         'currency': testCompanyAllocation.currency, 
         'unit': testCompanyAllocation.unit, 
@@ -350,7 +354,7 @@ describe('User account allocation', () => {
     };
 
     it('Persists a large number of allocations correctly', async () => {
-        const floatQueryDef = JSON.parse(JSON.stringify(baseFloatAllocationQueryDef));
+        const floatQueryDef = { ...baseFloatAllocationQueryDef };
         const allocRequests = generateAllocations(1, 100 * 100 * 100); // a hundred rand in hundredth cents (as daily interest, equals ind account of R1m roughly)
         
         floatQueryDef.rows = allocRequests.map((request) => ({
@@ -358,6 +362,7 @@ describe('User account allocation', () => {
             'client_id': common.testValidClientId,
             'float_id': common.testValidFloatId,
             't_type': constants.floatTransTypes.ALLOCATION,
+            't_state': constants.floatTxStates.SETTLED,
             'amount': request.amount,
             'currency': request.currency,
             'unit': request.unit,
@@ -565,11 +570,4 @@ describe('Test account summation and float balances', () => {
 
     // });
 
-});
-
-describe('Test integrity check', () => {
-    it('Will fail if stub is not properly reset somewhere else in tests', async () => {
-        const queryResult = await rds.debugConnection();
-        expect(queryResult).to.be.undefined;
-    });
 });
