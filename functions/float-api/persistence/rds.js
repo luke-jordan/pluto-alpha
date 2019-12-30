@@ -19,12 +19,6 @@ const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` 
 const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type}, ${currency}, ${unit}, ${amount}, ' + 
         '${allocated_to_type}, ${allocated_to_id}, ${related_entity_type}, ${related_entity_id}';
 
-// small utility method to check we're connected, in time expand to print things like pool stats etc
-module.exports.debugConnection = async () => {
-    const simpleQueryResult = await rdsConnection.selectQuery('select 1', []);
-    return simpleQueryResult;
-};
-
 /**
  * Adds or removes amounts from the float. Transaction types cannot be allocations. Request dict keys:
  * @param {string} clientId ID for the client company holding the float
@@ -113,6 +107,7 @@ module.exports.addOrSubtractFloat = async (request = {
  * @param {string} clientId The global system ID of the client that intermediates this float 
  * @param {string} floatId The global ID of the float itself
  * @param {number} amount The amount to allocate
+ * @param {string} transactionType What type of transaction led to this allocation (e.g., accrual, saving event)
  * @param {string} currency The currency of the allocation (for audit purposes)
  * @param {string} unit The unit that the allocation is expressed in (see constants for quasi-enum)
  * @param {string} allocatedToType The type of entity that the allocation is being made to (see constants)
@@ -134,7 +129,8 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
         'transaction_id': request.transactionId || uuid(),
         'client_id': clientId,
         'float_id': floatId,
-        't_type': constants.floatTransTypes.ALLOCATION,
+        't_type': request.transactionType,
+        't_state': request.transactionState || constants.transactionState.SETTLED,
         'amount': request.amount,
         'currency': request.currency,
         'unit': request.unit,

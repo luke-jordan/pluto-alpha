@@ -60,12 +60,12 @@ const divideCapitalizationPerAccruals = async ({ clientId, floatId, startTime, e
         const entityWithAmount = { ...entityDetails, amountToCredit };
         allocations.set(entityId, entityWithAmount);
     });
-    logger('Allocations so far: ', allocations);
+    logger('Allocations so far, saple: ', Array.from(allocations.values()).slice(0, 2));
 
     // then we do a last check just in case one or two hundredths of a cent left over due to rounding
     const whollyAllocatedAmount = Array.from(allocations.values()).reduce((sum, entry) => entry.amountToCredit + sum, 0);
     if (whollyAllocatedAmount !== distributionPaid) {
-        logger(`MATH ERROR : check : after division, still mismatch, distribution paid: ${distributionPaid}, wholly allocated: ${whollyAllocatedAmount}`);
+        logger(`Rounding : check : after division, still mismatch, distribution paid: ${distributionPaid}, wholly allocated: ${whollyAllocatedAmount}`);
         const currentBonusEntity = allocations.get(bonusPoolId);
         const adjustedBonusAmount = currentBonusEntity.amountToCredit + (distributionPaid - whollyAllocatedAmount);
         const revisedBonusEntry = { ...currentBonusEntity, amountToCredit: adjustedBonusAmount };

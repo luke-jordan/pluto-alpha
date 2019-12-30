@@ -48,13 +48,13 @@ const testInterestTime = moment().subtract(1, 'day');
 
 // some helper methods
 const generateAccountResponse = () => {
-    const amountAccrued = Math.floor(Math.random() * 1e7); // so each account accrued in range $0-1,000 (extra 4 for hundredth cent);
+    const amountAccrued = helper.randomInteger(1e7); // so each account accrued in range $0-1,000 (extra 4 for hundredth cent);
     const priorSettledBalance = amountAccrued * 100; // i.e., accruing 1% a month, just for now
     return {
         entityType: 'END_USER_ACCOUNT',
         accountId: uuid(),
         ownerUserId: uuid(),
-        humanRef: `CDOE${Math.floor(Math.random() * 1000)}`, // so of the same rough form as human ref generally
+        humanRef: `CDOE${helper.randomInteger(1000)}`, // so of the same rough form as human ref generally
         unit: 'HUNDREDTH_CENT',
         currency: 'USD',
         amountAccrued, 
@@ -67,7 +67,7 @@ const generateEntityResponse = (entityId, entityType) => ({
     entityId,
     unit: 'HUNDREDTH_CENT',
     currency: 'USD',
-    amountAccrued: Math.floor(Math.random() * 1e7)
+    amountAccrued: helper.randomInteger(1e7)
 });
 
 const divideDistribution = (accrualMap, distributionPaid, bonusPoolId) => {
@@ -106,9 +106,9 @@ const divideDistribution = (accrualMap, distributionPaid, bonusPoolId) => {
     return distributionMap;
 };
 
-describe.only('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
+describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
 
-    const testNumberAccounts = 2;
+    const testNumberAccounts = 100;
     const numberAccountsSampled = config.get('capitalization.preview.accountsToSample');
     
     const convertToPreview = (account, allocationEntity) => ({
@@ -185,17 +185,42 @@ describe.only('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
 
     });
 
-    // it('Handles case where no prior capitalization', async () => {
-    //     const expectedFetchParams = { clientId: testClientId, floatId: testFloatId };
+    it('Handles case where no prior capitalization', async () => {
+        const expectedFetchParams = { clientId: testClientId, floatId: testFloatId };
 
-    //     fetchLastLogStub.resolves(null);
-    //     fetchFloatConfigVarsStub.resolves(helper.commonFloatConfig);
-    //     fetchAccrualsStub.resolves([]);
+        const mockAccrualMap = new Map();
+        const mockAccountsFromDb = Array(testNumberAccounts).fill().map(() => generateAccountResponse());
+        const mockClientAccrued = generateEntityResponse(helper.commonFloatConfig.clientCoShareTracker, 'COMPANY_SHARE');
+        const mockBonusAccrued = generateEntityResponse(helper.commonFloatConfig.bonusPoolTracker, 'BONUS_POOL');
 
-    //     expect(fetchLastLogStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, logType: 'CAPITALIZATION_EVENT', endTime: testInterestTime });
-    //     expect(fetchFloatConfigVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
-    //     expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, startTime: testLastLogTime, endTime: testInterestTime });
-    // });
+        mockAccountsFromDb.forEach((account) => mockAccrualMap.set(account.accountId, account));
+        mockAccrualMap.set(helper.commonFloatConfig.clientCoShareTracker, mockClientAccrued);
+        mockAccrualMap.set(helper.commonFloatConfig.bonusPoolTracker, mockBonusAccrued);
+
+        fetchLastLogStub.resolves(null);
+        fetchFloatConfigVarsStub.resolves(helper.commonFloatConfig);
+        fetchAccrualsStub.resolves(mockAccrualMap);
+
+        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
+        const mockInterestPaid = Math.round(totalAccrued * (Math.random() * 0.2 + 1) / 100); // i.e., in the range of 20%, in cents
+        const testEvent = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            yieldPaid: mockInterestPaid,
+            dateTimePaid: testInterestTime.valueOf(),
+            unit: 'WHOLE_CENT',
+            currency: 'USD'
+        };
+
+        // we check the detailed results on things above, then just check the accrual stub is called correctly
+        const resultOfPreview = await handler.preview(testEvent);
+        expect(resultOfPreview).to.exist;
+
+        const expectedEndMoment = moment(testInterestTime.valueOf());
+        expect(fetchLastLogStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, logType: 'CAPITALIZATION_EVENT', endTime: expectedEndMoment });
+        expect(fetchFloatConfigVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, startTime: moment(0), endTime: expectedEndMoment, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+    });
 
     // it('Validations throw required errors', async () => {
 

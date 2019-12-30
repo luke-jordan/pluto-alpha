@@ -8,6 +8,8 @@ const expect = chai.expect;
 
 const logger = require('debug')('jupiter:float:test');
 
+module.exports.randomInteger = (base = 1) => Math.floor(Math.random() * base);
+
 module.exports.commonFloatConfig = {
     bonusPoolShare: 1 / 7.25,
     bonusPoolTracker: 'zar_cash_bonus_pool',

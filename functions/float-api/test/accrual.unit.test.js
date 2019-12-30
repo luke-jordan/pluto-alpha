@@ -392,7 +392,9 @@ describe('Primary allocation of unallocated float lamdba', () => {
                 accountId: accountId,
                 amount: apportionedBalances.get(accountId),
                 currency: 'ZAR',
-                unit: userAllocEvent.unit
+                unit: userAllocEvent.unit,
+                relatedEntityType: userAllocEvent.backingEntityType,
+                relatedEntityId: userAllocEvent.backingEntityIdentifier
             };
             expectedUserAllocsToRds.push(rdsAlloc);
             mockResultFromRds.push({ floatTxId: uuid(), accountTxId: uuid(), amount: apportionedBalances.get(accountId) });
