@@ -14,10 +14,10 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` +
-        `(transaction_id, client_id, float_id, t_type, currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) ` +
-        `values %L returning transaction_id`;
+        `(transaction_id, client_id, float_id, t_type, t_state, currency, unit, amount, allocated_to_type, allocated_to_id, ` +
+        `related_entity_type, related_entity_id) values %L returning transaction_id`;
 
-const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type}, ${currency}, ${unit}, ${amount}, ' + 
+const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type}, ${t_state}, ${currency}, ${unit}, ${amount}, ' + 
         '${allocated_to_type}, ${allocated_to_id}, ${related_entity_type}, ${related_entity_id}';
 
 /**
@@ -51,6 +51,7 @@ module.exports.addOrSubtractFloat = async (request = {
         'client_id': request.clientId,
         'float_id': request.floatId,
         't_type': request.transactionType,
+        't_state': 'SETTLED',
         'currency': request.currency,
         'unit': request.unit,
         'amount': request.amount,
@@ -84,8 +85,8 @@ module.exports.addOrSubtractFloat = async (request = {
     };
     
     // this is not really large but that is the right method for bundled inserts
-    logger('Insert query def: ', logInsertDef);
-    logger('And tx def: ', txInsertDef);
+    logger('Float allocation, insert log query definition: ', logInsertDef);
+    logger('Float transaction def: ', txInsertDef);
 
     const queryResult = await rdsConnection.largeMultiTableInsert([txInsertDef, logInsertDef]);
     logger('Addition result: ', queryResult);
@@ -210,7 +211,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     // logger('Allocation request, account IDs: ', allocationRequests.map((request) => request.accountId));
 
     const accountRows = allocationRequests.map((request) => {
-        const tags = request.relatedEntityId ? `ARRAY ['${request.relatedEntityType}::${request.relatedEntityId}']` : '{}';
+        const tags = request.relatedEntityId ? [`${request.relatedEntityType}::${request.relatedEntityId}`] : '{}';
         const settlementStatus = request.settlementStatus || 'ACCRUED';
         const settlementTime = settlementStatus === 'SETTLED' ? moment().format() : null;
         return {

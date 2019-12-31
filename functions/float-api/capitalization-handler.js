@@ -163,7 +163,7 @@ module.exports.handle = async (event) => {
             if (userDetails.role !== 'SYSTEM_ADMIN') {
                 return opsUtil.wrapResponse('Unauthorized', 403);
             }
-            operation = event.pathParameters.proxy;
+            operation = event.pathParameters.proxy.toUpperCase().trim();
             parameters = JSON.parse(event.body);
         } else {
             operation = event.operation;

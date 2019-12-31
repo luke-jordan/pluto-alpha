@@ -77,7 +77,7 @@ describe('Float balance add or subtract', () => {
             referenceTimeMillis: refTime.valueOf()
         };
 
-        const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, currency, unit, ` +
+        const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, t_state, currency, unit, ` +
             `amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id`;
         const columns = common.allocationExpectedColumns;
         const expectedRow = {
@@ -85,6 +85,7 @@ describe('Float balance add or subtract', () => {
             'client_id': common.testValidClientId,
             'float_id': common.testValidFloatId,
             't_type': constants.floatTransTypes.ACCRUAL,
+            't_state': 'SETTLED',
             'currency': 'ZAR',
             'unit': floatBalanceAdjustment.unit,
             'amount': floatBalanceAdjustment.amount,
@@ -385,7 +386,7 @@ describe('User account allocation', () => {
             'float_id': common.testValidFloatId,
             'client_id': common.testValidClientId,
             'float_alloc_tx_id': request.floatTxId,
-            'tags': `ARRAY ['ACCRUAL_EVENT::${common.testValidAccrualId}']`
+            'tags': [`ACCRUAL_EVENT::${common.testValidAccrualId}`]
         }));
 
         const floatTxArray = allocRequests.map((request) => ({ 'transaction_id': request.floatTxId }));

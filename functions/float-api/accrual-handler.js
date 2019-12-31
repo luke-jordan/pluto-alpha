@@ -53,6 +53,8 @@ module.exports.accrue = async (event) => {
     const allocationCommon = {
       currency: accrualCurrency,
       unit: accrualUnit,
+      transactionType: constants.floatTransTypes.ACCRUAL,
+      transactionState: constants.floatTxStates.SETTLED,
       relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
       relatedEntityId: accrualParameters.backingEntityIdentifier
     };
@@ -70,6 +72,7 @@ module.exports.accrue = async (event) => {
     clientAllocation.allocatedToId = floatConfig.clientCoShareTracker;
 
     logger('Company allocation: ', clientAllocation);
+    logger('Bonus allocation: ', bonusAllocation);
 
     const newFloatBalance = await rds.addOrSubtractFloat({ 
       clientId, 
@@ -79,6 +82,7 @@ module.exports.accrue = async (event) => {
       transactionType: constants.floatTransTypes.ACCRUAL, 
       unit: accrualUnit, 
       backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
+      backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
       logType: 'WHOLE_FLOAT_ACCRUAL',
       referenceTimeMillis: accrualParameters.referenceTimeMillis 
     });
@@ -99,6 +103,7 @@ module.exports.accrue = async (event) => {
     const userAllocationParams = { clientId, floatId, 
       totalAmount: remainingAmount, 
       currency: accrualCurrency,
+      unit: accrualUnit,
       transactionType: constants.floatTransTypes.ACCRUAL,
       transactionState: constants.floatTxStates.SETTLED,
       backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
@@ -109,7 +114,7 @@ module.exports.accrue = async (event) => {
     const userAllocations = await exports.allocate(userAllocationParams);
 
     const returnBody = {
-      newBalance: newFloatBalance.currentBalance,
+      newBalance: newFloatBalance.updatedBalance,
       entityAllocations: entityAllocations,
       userAllocationTransactions: userAllocations
     };
@@ -202,8 +207,9 @@ module.exports.allocate = async (event) => {
     });
   }
 
+  logger('Running user allocations of accrual, number instructions: ', userAllocationInstructions.length, 'first one: ', userAllocationInstructions[0]);
   const resultOfAllocations = await rds.allocateToUsers(params.clientId, params.floatId, userAllocationInstructions);
-  // logger('Result of allocations: ', resultOfAllocations);
+  logger('Result of allocations, first one: ', resultOfAllocations.result);
   
   return {
       allocationRecords: resultOfAllocations,

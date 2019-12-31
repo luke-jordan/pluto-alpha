@@ -373,7 +373,7 @@ const assembleFloatTxInsertions = (accountTxId, transactionDetails, floatTxIds) 
     floatAdjustmentRow.allocatedToId = transactionDetails.floatId;
 
     const floatAllocationRow = JSON.parse(JSON.stringify(rowValuesBase));
-    floatAllocationRow.transactionType = 'ALLOCATION';
+    floatAllocationRow.transactionType = transactionDetails.transactionType || 'USER_SAVING_EVENT';
     floatAllocationRow.floatTransactionId = floatTxIds.floatAllocationTxId;
     floatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
     floatAllocationRow.allocatedToId = transactionDetails.accountId;
