@@ -17,14 +17,12 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire');
 
 const queryStub = sinon.stub();
-const insertStub = sinon.stub();
-const multiTableStub = sinon.stub();
+const updateStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
-        this.insertRecords = insertStub;
-        this.largeMultiTableInsert = multiTableStub;
+        this.updateRecord = updateStub;
     }
 }
 
@@ -208,5 +206,50 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
 
 });
 
-// describe('*** SUPERCEDE PRIOR ACCRUALS ***', () => {
-// });
+describe('*** SUPERCEDE PRIOR ACCRUALS ***', () => {
+
+    const mockStartTime = moment().subtract(1, 'month').startOf('day');
+    const mockEndTime = moment().subtract(1, 'day').startOf('day');
+
+    beforeEach(() => helper.resetStubs(queryStub));
+
+    it('Formulates supercession update properly, and executes', async () => {
+        const expectedArgs = { 
+            startTime: mockStartTime,
+            endTime: mockEndTime,
+            clientId: testClientId, 
+            floatId: testFloatId, 
+            currency: 'USD' 
+        };
+
+        // since rows remain, this is always reversible, and comes at the end, plus is pretty tightly defined, so 
+        // instead of selecting, modifying, and doing a big update one by one, we do it all at once, first in float,
+        // then in account
+
+        const expectedFloatQuery = `update float_data.float_transaction_ledger set t_state = $1 where ` +
+            `client_id = $2 and float_id = $3 and t_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
+            `returning updated_time`;
+
+        const expectedAccQuery = `update transaction_data.core_transaction_ledger set settlement_status = $1 where ` +
+            `client_id = $2 and float_id = $3 and transaction_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
+            `returning updated_time`;
+
+        const values = ['SUPERCEDED', testClientId, testFloatId, 'ACCRUAL', 'USD', mockStartTime.format(), mockEndTime.format()];
+
+        // todo : need some way to put these in a TX
+        updateStub.withArgs(expectedFloatQuery, values).resolves({ rows: [{ 'updated_time': moment().format() }] });
+        updateStub.withArgs(expectedAccQuery, values).resolves({ rows: [{ 'updated_time': moment().format() }] });
+
+        const resultOfSupercession = await rds.supercedeAccruals(expectedArgs);
+
+        expect(resultOfSupercession).to.deep.equal({ result: 'SUCCESS', floatRowsUpdated: 1, accountRowsUpdated: 1 });
+        expect(updateStub).to.have.been.calledTwice;
+        expect(updateStub).to.have.been.calledWithExactly(expectedFloatQuery, values);
+        expect(updateStub).to.have.been.calledWithExactly(expectedAccQuery, values);
+
+    });
+
+    // it('Rejects calls without the write params', async () => {
+
+    // });
+});

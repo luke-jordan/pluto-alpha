@@ -49,13 +49,14 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
     });
 
     it('Gets float balance', async () => {
-        const expectedQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where float_id ` + 
-           `in ($1) and allocated_to_type = $2 and creation_time between $3 and $4 group by float_id, currency, unit`;
+        const expectedQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} where ` + 
+           `allocated_to_type = $1 and t_state = $2 and creation_time between $3 and $4 and float_id in ($5) group by float_id, currency, unit`;
         const expectedValues = [
-            testFloatId,
             'FLOAT_ITSELF',
+            'SETTLED',
             testStartTime.format(),
-            testEndTime.format()
+            testEndTime.format(),
+            testFloatId
         ];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'float_id': testFloatId, 'currency': 'USD', 'unit': 'HUNDREDTH_CENT', 'sum': 100 }]);
@@ -72,8 +73,9 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
 
     it('Gets float allocated total', async () => {
         const expectedQuery = `select float_id, currency, unit, sum(amount) from ${floatTxTable} ` + 
-            `where allocated_to_type != $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 group by float_id, currency, unit`;
-        const expectedValues = ['FLOAT_ITSELF', testStartTime.format(), testEndTime.format(), testClientId, testFloatId];
+            `where allocated_to_type != $1 and t_state = $2 and creation_time between $3 and $4 and client_id = $5 and float_id = $6 ` + 
+            `group by float_id, currency, unit`;
+        const expectedValues = ['FLOAT_ITSELF', 'SETTLED', testStartTime.format(), testEndTime.format(), testClientId, testFloatId];
 
         queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'float_id': testFloatId, 'currency': 'USD', 'unit': 'HUNDREDTH_CENT', 'sum': 100 }]);
 
@@ -89,8 +91,8 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
 
     it('Gets user allocation and accounts transactions', async () => {
         const expectedQuery = `select currency, unit, sum(amount) from ${floatTxTable} where ` + 
-            `allocated_to_type = $1 and creation_time between $2 and $3 and client_id = $4 and float_id = $5 group by currency, unit`;
-        const expectedValues = ['END_USER_ACCOUNT', testStartTime.format(), testEndTime.format(), testClientId, testFloatId];
+            `allocated_to_type = $1 and t_state = $2 and creation_time between $3 and $4 and client_id = $5 and float_id = $6 group by currency, unit`;
+        const expectedValues = ['END_USER_ACCOUNT', 'SETTLED', testStartTime.format(), testEndTime.format(), testClientId, testFloatId];
 
         const expectedSettlementQuery = `select currency, unit, sum(amount) from ${accountTxTable} where ` +
             `settlement_status = $1 and settlement_time between $2 and $3 and client_id = $4 and float_id = $5 ` +
@@ -118,11 +120,11 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
 
     it('Gets float bonus balance', async () => {
         const expectedQuery = `select float_id, currency, unit, allocated_to_id, sum(amount) from ` + 
-            `${floatTxTable} where float_id in ($1) and allocated_to_type = $2 and creation_time between $3 ` + 
-            `and $4 and amount > 0 group by float_id, currency, unit, allocated_to_id`;
-        const expectedValues = [testFloatId, 'BONUS_POOL', testStartTime.format(), testEndTime.format()];
+            `${floatTxTable} where allocated_to_type = $1 and t_state = $2 and creation_time between $3 ` + 
+            `and $4 and amount > 0 and float_id in ($5) group by float_id, currency, unit, allocated_to_id`;
+        const expectedValues = ['BONUS_POOL', 'SETTLED', testStartTime.format(), testEndTime.format(), testFloatId];
 
-        queryStub.withArgs(expectedQuery, expectedValues).resolves([{ 'float_id': testFloatId, 'currency': 'USD', 'unit': 'HUNDREDTH_CENT', 'allocated_to_id': testUserId, 'sum': 100 }]);
+        queryStub.resolves([{ 'float_id': testFloatId, 'currency': 'USD', 'unit': 'HUNDREDTH_CENT', 'allocated_to_id': testUserId, 'sum': 100 }]);
 
         const expectedResult = new Map([[testFloatId, { [testUserId]: { USD: { amount: 100, unit: 'HUNDREDTH_CENT' }}}]]);
 

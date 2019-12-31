@@ -93,6 +93,8 @@ module.exports.addOrSubtractFloat = async (request = {
 
     // first row of first operation
     const queryTxId = queryResult[0][0]['transaction_id'];
+    // first row of second operation
+    const logId = queryResult[1][0]['log_id'];
     
     const newBalance = await exports.calculateFloatBalance(request.floatId, request.currency);
     logger('New float balance: ', newBalance);
@@ -100,7 +102,8 @@ module.exports.addOrSubtractFloat = async (request = {
     return {
         updatedBalance: newBalance.balance,
         unit: newBalance.unit,
-        transactionId: queryTxId
+        transactionId: queryTxId,
+        logId
     };
 };
 
@@ -295,8 +298,8 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
 module.exports.calculateFloatBalance = async (floatId = 'zar_mmkt_co', currency = 'ZAR', startDate = new Date(0), endDate = new Date()) => {
     const floatTable = config.get('tables.floatTransactions');
     const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 ` +
-        `and allocated_to_type = $3`;
-    const unitColumns = [floatId, currency, constants.entityTypes.FLOAT_ITSELF];
+        `and allocated_to_type = $3 and t_state = $4`;
+    const unitColumns = [floatId, currency, constants.entityTypes.FLOAT_ITSELF, constants.floatTxStates.SETTLED];
     const unitResult = await rdsConnection.selectQuery(unitQuery, unitColumns);
 
     const usedUnits = unitResult.map((row) => row.unit);
@@ -304,13 +307,14 @@ module.exports.calculateFloatBalance = async (floatId = 'zar_mmkt_co', currency 
 
     const unitQueries = usedUnits.map((unit) => {
         logger('Finding balance for unit: ', unit);
-        const sumQuery = `select unit, sum(amount) from ${floatTable} where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 ` +
-            `and creation_time between $5 and $6 group by unit`;
-        const sumParams = [floatId, currency, unit, constants.entityTypes.FLOAT_ITSELF, startDate, endDate];
+        const sumQuery = `select unit, sum(amount) from ${floatTable} where float_id = $1 and currency = $2 and unit = $3 and ` +
+            `allocated_to_type = $4 and t_state = $5 and creation_time between $6 and $7 group by unit`;
+        const sumParams = [floatId, currency, unit, constants.entityTypes.FLOAT_ITSELF, constants.floatTxStates.SETTLED, startDate, endDate];
         return rdsConnection.selectQuery(sumQuery, sumParams);
     });
 
     const unitResults = await Promise.all(unitQueries);
+    logger('Unit results: ', unitResults);
     const unitsWithSums = { };
     unitResults.forEach((result) => { 
         unitsWithSums[result[0]['unit']] = result[0]['sum'];
@@ -435,4 +439,27 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
     });
 
     return resultMap;
+};
+
+module.exports.supercedeAccruals = async (searchParams) => {
+    const { clientId, floatId, startTime, endTime, currency } = searchParams;
+
+    const floatQuery = `update float_data.float_transaction_ledger set t_state = $1 where ` +
+        `client_id = $2 and float_id = $3 and t_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
+        `returning updated_time`;
+
+    const accountQuery = `update transaction_data.core_transaction_ledger set settlement_status = $1 where ` +
+        `client_id = $2 and float_id = $3 and transaction_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
+        `returning updated_time`;
+
+    const values = ['SUPERCEDED', clientId, floatId, 'ACCRUAL', currency, startTime.format(), endTime.format()];
+    
+    // todo : wrap in a TX
+    const floatResult = await rdsConnection.updateRecord(floatQuery, values);
+    logger('Result of float update: ', floatResult);
+
+    const accountResult = await rdsConnection.updateRecord(accountQuery, values);
+    logger('Result of account update: ', accountResult);
+
+    return { result: 'SUCCESS', floatRowsUpdated: floatResult.rows.length, accountRowsUpdated: accountResult.rows.length };
 };
