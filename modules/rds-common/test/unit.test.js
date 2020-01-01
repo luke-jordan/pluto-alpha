@@ -178,12 +178,64 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
         standardExpectations(expectedQuery, null, false, false, 'COMMIT');
     });
 
+    it('Handles constants', async () => {
+        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES %L returning insertion_id';
+        const columnTemplate = '${column1}, *{TEST_CONSTANT}';
+        const queryValues = [{ column1: 'Hello', column2: 'World' }, { column1: 'Something', column2: 'Else' }];
+
+        const expectedValue = '(\'Hello\', \'TEST_CONSTANT\'), (\'Something\', \'TEST_CONSTANT\')';
+        const expectedQuery = `INSERT INTO some_schema.some_table (column_1, column_2) VALUES ${expectedValue} returning insertion_id`;
+
+        const expectedResult = { rows: [{'insertion_id': 1 }, { 'insertion_id': 2 }]};
+        queryStub.withArgs(expectedQuery).returns(expectedResult);
+
+        const insertResult = await rdsClient.insertRecords(queryTemplate, columnTemplate, queryValues);
+        expect(insertResult).to.exist;
+        expect(insertResult).to.deep.equal(expectedResult);
+
+        standardExpectations(expectedQuery, null, false, false, 'COMMIT');
+    });
+
+    it('Converts array column values to pg string', async () => {
+        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES %L returning insertion_id';
+        const columnTemplate = '${column1}, ${column2}';
+        const queryValues = [{ column1: 'Hello', column2: 'World' }, { column1: ['Evaluating', 'All', 4, ['Supported'], { data: 'types' }], column2: 'Simultaneously' }];
+
+        const expectedValue = '(\'Hello\', \'World\'), (\'{Evaluating, All, 4, {Supported}, {"data":"types"}}\', \'Simultaneously\')';
+        const expectedQuery = `INSERT INTO some_schema.some_table (column_1, column_2) VALUES ${expectedValue} returning insertion_id`;
+
+        const expectedResult = { rows: [{'insertion_id': 1 }, { 'insertion_id': 2 }]};
+        queryStub.withArgs(expectedQuery).returns(expectedResult);
+
+        const insertResult = await rdsClient.insertRecords(queryTemplate, columnTemplate, queryValues);
+        expect(insertResult).to.exist;
+        expect(insertResult).to.deep.equal(expectedResult);
+        
+        standardExpectations(expectedQuery, null, false, false, 'COMMIT');
+    });
+
+    it('Fails on invalid column template', async () => {
+        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES %L returning insertion_id';
+        const columnTemplate = '${column1}, +{TEST_CONSTANT}';
+        const queryValues = [{ column1: 'Hello', column2: 'World' }, { column1: 'Something', column2: 'Else' }];
+
+        const expectedValue = '(\'Hello\', \'World\'), (\'Something\', \'Else\')';
+        const expectedQuery = `INSERT INTO some_schema.some_table (column_1, column_2) VALUES ${expectedValue} returning insertion_id`;
+
+        const expectedResult = { rows: [{'insertion_id': 1 }, { 'insertion_id': 2 }]};
+        queryStub.withArgs(expectedQuery).returns(expectedResult);
+
+        const expectedError = 'Bad element in column template';
+
+        await expect(rdsClient.insertRecords(queryTemplate, columnTemplate, queryValues)).to.be.rejectedWith(expectedError);
+    });
+
     it('Sanitizes values properly to prevent injection', async () => {
-        const queryTemplate = 'INSERT INTO some_scema.some_table (column_1, column_2) VALUES %L';
+        const queryTemplate = 'INSERT INTO some_schema.some_table (column_1, column_2) VALUES %L';
         const columnTemplate = '${column1}, ${column2}';
         const maliciousValue = [{ column1: 'Watch this', column2: `'End'); DROP TABLE Users`}];
 
-        const expectedSanitized = `INSERT INTO some_scema.some_table (column_1, column_2) VALUES ('Watch this', '''End''); DROP TABLE Users')`;
+        const expectedSanitized = `INSERT INTO some_schema.some_table (column_1, column_2) VALUES ('Watch this', '''End''); DROP TABLE Users')`;
 
         queryStub.withArgs(expectedSanitized).throws('Well that should really trigger an insert error, but worst case some strange values');
 

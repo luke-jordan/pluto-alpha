@@ -44,7 +44,7 @@ const createLedgerTable = async (ledgerName, client) => {
     } else {
         connToUse = await pool.connect();
     }
-    // todo maybe have an option to drop and recreate if exists
+    // todo: maybe have an option to drop and recreate if exists
     await connToUse.query(`create table if not exists ${ledgerName} (id serial not null primary key, creation_time timestamp not null default current_timestamp, account_id integer references account(id), amount bigint)`); 
 };
 
@@ -72,7 +72,7 @@ const endPools = (rdsClient, done) => {
     });
 };
 
-describe.only('*** INTEGRATION TEST HAPPY PATHS ***', () => {
+describe('*** INTEGRATION TEST HAPPY PATHS ***', () => {
 
     // this.timeout(5000);
 

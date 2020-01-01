@@ -10,6 +10,7 @@ const chai = require('chai');
 const sinonChai = require('sinon-chai');
 const expect = chai.expect;
 chai.use(sinonChai);
+chai.use(require('chai-as-promised'));
 
 // const testHelper = require('./test.helper');
 
@@ -54,6 +55,11 @@ describe('Float balance add or subtract', () => {
     before(() => {
         resetStubs();
         balanceStub = sinon.stub(rds, 'calculateFloatBalance');
+    });
+
+    beforeEach(() => {
+        resetStubs();
+        balanceStub.reset();
     });
 
     after(() => {
@@ -136,6 +142,31 @@ describe('Float balance add or subtract', () => {
         expect(tableArgs[0]).to.be.an('array').of.length(2);
         expect(tableArgs[0][0]).to.deep.equal(expectedTxDef);        
         expect(sinon.match(logInsertDef).test(tableArgs[0][1])).to.be.true;
+    });
+
+    it('Fails on invalid or missing parameters', async () => {
+        const refTime = moment();
+
+        const floatBalanceAdjustment = {
+            transactionId: uuid(),
+            clientId: common.testValidClientId,
+            floatId: common.testValidFloatId,
+            transactionType: constants.floatTransTypes.ACCRUAL,
+            amount: Math.floor(1000 * 100 * 100 * Math.random()),
+            currency: 'ZAR',
+            unit: constants.floatUnits.HUNDREDTH_CENT,
+            backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
+            backingEntityIdentifier: '',
+            logType: 'WHOLE_FLOAT_ACCRUAL',
+            referenceTimeMillis: refTime.valueOf()
+        }; 
+        
+        const expectedError = 'Invalid or missing value for property: backingEntityIdentifier';
+
+        await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith(expectedError);
+        
+        expect(multiTableStub).to.have.not.been.called;
+        expect(balanceStub).to.have.not.been.called;
     });
 
 });

@@ -13,6 +13,7 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 
 const uuid = require('uuid/v4');
 
@@ -247,6 +248,26 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(multiTableStub).to.have.been.calledOnce; // todo: add args
         expect(queryStub).to.have.been.calledThrice; // because also fetches timestamp
         expectNoCalls([insertStub]);
+    });
+
+    it('Fail on invalid transaction details', async () => { 
+
+        const testNotSettledArgs = { 
+            accountId: testAccountId,
+            currency: 'ZAR',
+            unit: 'HUNDREDTH_CENT',
+            amount: testSaveAmount, 
+            initiationTime: '2027-10-28T15:45:45+02:00',
+            settlementStatus: 'INITIATED',
+            floatId: testFloatId,
+            clientId: testClientId
+        };
+
+        const expectedError = 'Unexpected initiation time format';
+
+        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith(expectedError);
+
+        expectNoCalls([queryStub, insertStub, multiTableStub]);
     });
 
     it('Updates a pending save to settled and ties up all parts of float, etc.', async () => {

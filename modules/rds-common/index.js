@@ -461,7 +461,6 @@ class RdsConnection {
             }
             return paramOrConstant['value'];
         }));
-        
         return nestedArray;
     }
 

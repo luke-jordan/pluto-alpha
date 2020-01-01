@@ -395,6 +395,40 @@ const extractTxDetails = (keyForTransactionId, row) => {
     return obj;
 };
 
+const validateTxDetails = (txDetails) => {
+    const minimalTxProperties = ['accountId', 'currency', 'unit', 'amount', 'initiationTime', 'settlementStatus', 'floatId', 'clientId'];
+    minimalTxProperties.forEach((property) => {
+        if (!Object.keys(txDetails).includes(property) || !txDetails[property]) {
+            throw new Error(`Missing required property: ${property}`);
+        }
+    });
+
+    if (txDetails.settlementStatus !== 'INITIATED' && txDetails.settlementStatus !== 'SETTLED') {
+        throw new Error(`Invalid settlement status: ${txDetails.settlementStatus}`);
+    }
+
+    if (!moment.isMoment(txDetails.initiationTime)) {
+        throw new Error('Unexpected initiation time format');
+    }
+
+    if (txDetails.settlementStatus === 'SETTLED') {
+        const settledTxProperties = ['settlementTime', 'paymentRef', 'paymentProvider'];
+        settledTxProperties.forEach((property) => {
+            if (!Object.keys(txDetails).includes(property) || !txDetails[property]) {
+                throw new Error(`Missing required property: ${property}`);
+            }
+        });
+
+        if (!moment.isMoment(txDetails.settlementTime)) {
+            throw new Error('Unexpected settlemt time format');
+        }
+
+        if (txDetails.settlementTime.valueOf() < txDetails.initiationTime.valueOf()) {
+            throw new Error('Settlement cannot occur before initiation');
+        }
+    }
+};
+
 /**
  * Core method. Records a user's saving event, or withdrawal, with three inserts: one, in the accounts table, records the saving event 
  * on the user's account; the second adds the amount of the save to the float; the third allocates a correspdonding amount of the float 
@@ -415,7 +449,9 @@ const extractTxDetails = (keyForTransactionId, row) => {
  * @param {list(string)} flags (Optional) Any flags to add to the event (e.g., if the saving is restricted in withdrawals)
  */
 module.exports.addTransactionToAccount = async (transactionDetails) => {
-    // todo : validate: settlementTime > initiationTime, settlementStatus = initiated or settled
+    
+    validateTxDetails(transactionDetails);
+
     const responseEntity = { };
     
     const accountTxId = uuid();
