@@ -39,11 +39,11 @@ module.exports.createAccount = async (event) => {
         const params = opsUtil.extractParamsFromEvent(event);
         const body = { idNumber: params.idNumber, surname: params.surname, firstNames: params.firstNames };
         const [crt, pem] = await fetchAccessCreds();
-        const endpoint = config.get('finworks.endpoints.rootUrl') + config.get('finworks.endpoints.accountCreation');
+        const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${config.get('finworks.endpoints.accountCreation')}`;
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
 
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
@@ -59,15 +59,17 @@ module.exports.createAccount = async (event) => {
 
 module.exports.addCash = async (event) => {
     try {
-        const params = opsUtil.extractParamsFromEvent(event);
-        const body = { amount: params.amount, unit: params.unit, currency: params.currency };
+        const { accountNumber, amount, currency, unit } = opsUtil.extractParamsFromEvent(event);
+
+        const body = { amount, unit, currency };
+
         const [crt, pem] = await fetchAccessCreds();
-        const endpoint = config.get('finworks.endpoints.rootUrl') + util.format(config.get('finworks.endpoints.addCash'), params.accountNumber);
+        const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.addCash'), accountNumber)}`;
         logger('Assembled endpoint:', endpoint);
 
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
@@ -99,12 +101,12 @@ module.exports.sendWithdrawal = async (event) => {
         };
 
         const [crt, pem] = await fetchAccessCreds();
-        const endpoint = config.get('finworks.endpoints.rootUrl') + util.format(config.get('finworks.endpoints.withdrawals'), accountNumber);
+        const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.withdrawals'), accountNumber)}`;
         logger('Assembled endpoint:', endpoint);
 
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
@@ -134,14 +136,15 @@ module.exports.addTransaction = async (event) => {
 
 module.exports.getMarketValue = async (event) => {
     try {
-        const params = opsUtil.extractParamsFromEvent(event);
+        const { accountNumber } = opsUtil.extractParamsFromEvent(event);
+        
         const [crt, pem] = await fetchAccessCreds();
-        const endpoint = config.get('finworks.endpoints.rootUrl') + util.format(config.get('finworks.endpoints.marketValue'), params.accountNumber);
+        const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.marketValue'), accountNumber)}`;
         logger('Assembled endpoint:', endpoint);
 
         const options = assembleRequest('GET', endpoint, { crt, pem });
         const response = await request(options);
-        logger('Got response:', response);
+        logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));

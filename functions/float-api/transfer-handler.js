@@ -47,7 +47,9 @@ const allocationForUser = (recipient, instruction) => ({
     currency: instruction.currency,
     accountId: recipient.recipientId,
     allocType: instruction.relatedEntityType,
-    settlementStatus: instruction.settlementStatus
+    allocState: instruction.settlementStatus,
+    relatedEntityType: instruction.relatedEntityType,
+    relatedEntityId: instruction.identifier
 });
 
 const allUserAllocation = (instruction) => ({
@@ -56,9 +58,10 @@ const allUserAllocation = (instruction) => ({
     totalAmount: instruction.recipients[0].amount,
     currency: instruction.currency,
     unit: instruction.unit,
+    allocType: instruction.relatedEntityType,
     backingEntityType: instruction.relatedEntityType,
     backingEntityIdentifer: instruction.identifider,
-    settlementStatus: instruction.settlementStatus
+    allocState: instruction.settlementStatus
 });
 
 const isBonusOrCompany = (type) => type === constants.entityTypes.BONUS_POOL || type === constants.entityTypes.COMPANY_SHARE;

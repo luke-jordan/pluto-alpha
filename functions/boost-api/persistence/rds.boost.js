@@ -132,6 +132,10 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     const resultOfQuery = await rdsConnection.selectQuery(assembledQuery, runningValues);
     logger('Received : ', resultOfQuery);
 
+    if (resultOfQuery.length === 0) {
+        throw new Error('Account id not found');
+    }
+
     // now with the rows back, we piece together the appropriate object
     let rowIndex = 0;
     const resultObject = boostIds.map((boostId) => {
@@ -200,8 +204,14 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, s
         logInsertDefinitions.push(constructLogDefinition(Object.keys(logRow), [logRow]));
     }
 
-    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefinitions, logInsertDefinitions);
-    logger('Result from RDS: ', resultOfOperations);
+    let resultOfOperations = [];
+    try {
+        resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefinitions, logInsertDefinitions);
+        logger('Result from RDS: ', resultOfOperations);
+    } catch (error) {
+        logger(`Error updating boost ${boostId}: ${error.message}`);
+        return { boostId, error: error.message };
+    }
 
     const timesOfOperations = [];
     resultOfOperations.forEach((queryResult) => {

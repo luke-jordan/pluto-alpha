@@ -167,7 +167,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 0.1, 1, 100, 200, 400, 500, 365]
+                'ignore': [0, 0.1, 0.5, 1, 2, 5, 100, 200, 400, 403, 500, 365]
             }
         ],
         'no-mixed-operators': 'error',

@@ -40,11 +40,11 @@ module.exports.wrapResponse = (body, statusCode = 200) => {
 
 module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
     if (!isUnitValid(fromUnit)) {
-        throw new Error('Invalid from unit in conversion');
+        throw new Error(`Invalid from unit in conversion: ${JSON.stringify(fromUnit)}`);
     }
 
     if (!isUnitValid(toUnit)) {
-        throw new Error('Invalid to unit in conversion');
+        throw new Error(`Invalid to unit in conversion: ${JSON.stringify(toUnit)}`);
     }
 
     return amount * UNIT_MULTIPLIERS[fromUnit][toUnit];
@@ -107,7 +107,17 @@ module.exports.extractQueryParams = (event) => {
 
 module.exports.isObjectEmpty = (object) => !object || typeof object !== 'object' || Object.keys(object).length === 0;
 
-module.exports.isWarmup = (event) => exports.isObjectEmpty(event) || (Reflect.has(event, 'warmupCall') && event.warmupCall);
+module.exports.isWarmup = (event) => {
+    if (exports.isObjectEmpty(event)) {
+        return true;
+    }
+
+    if (Reflect.has(event, 'warmupCall') && event.warmupCall) {
+        return true;
+    }
+
+    return false;
+};
 
 module.exports.extractUserDetails = (event) => {
     if (typeof event.requestContext !== 'object') {
@@ -142,8 +152,10 @@ module.exports.extractParamsFromEvent = (event) => {
     return params;
 };
 
+module.exports.isApiCall = (event) => Reflect.has(event, 'httpMethod'); // todo : tighten this in time
+
 module.exports.isDirectInvokeAdminOrSelf = (event) => {
-    const isHttpRequest = Reflect.has(event, 'httpMethod'); // todo : tighten this in time
+    const isHttpRequest = Reflect.has(event, 'httpMethod'); 
     if (!isHttpRequest) {
         return true; // by definition -- means it must be via lambda direct invoke, hence allowed by IAM
     }

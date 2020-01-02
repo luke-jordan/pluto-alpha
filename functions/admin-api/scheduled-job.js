@@ -78,6 +78,7 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
         unit: 'HUNDREDTH_CENT',
         referenceTimeMillis: calculationTimeMillis,
         backingEntityIdentifier: identifierToUse,
+        backingEntityType: 'ACCRUAL_EVENT',
         calculationBasis
     };
 };

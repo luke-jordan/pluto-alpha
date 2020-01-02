@@ -6,7 +6,16 @@ const moment = require('moment');
 
 const expect = chai.expect;
 
-const logger = require('debug')('pluto:float:test');
+const logger = require('debug')('jupiter:float:test');
+
+module.exports.randomInteger = (base = 1) => Math.floor(Math.random() * base);
+
+module.exports.commonFloatConfig = {
+    bonusPoolShare: 1 / 7.25,
+    bonusPoolTracker: 'zar_cash_bonus_pool',
+    clientCoShare: 0.25 / 7.25,
+    clientCoShareTracker: 'pluto_za_share'
+};
 
 module.exports.momentMatcher = (testMoment) => sinon.match((value) => moment.isMoment(value) && testMoment.isSame(value));
 
@@ -27,3 +36,5 @@ module.exports.checkErrorResultForMsg = (errorResult, expectedErrorMsg) => {
     expect(errorResult).to.have.property('statusCode', 400);
     expect(errorResult.body).to.equal(expectedErrorMsg);
 };
+
+module.exports.resetStubs = (...stubs) => stubs.forEach((stub) => stub.reset());

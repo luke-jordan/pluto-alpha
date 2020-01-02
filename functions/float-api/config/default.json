@@ -1,10 +1,6 @@
 {
     "aws": {
-        "region": "eu-west-1",
-        "apiVersion": "2012-08-10",
-        "endpoints": {
-            "dynamodb": "http://localhost:4569"
-        }
+        "region": "us-east-1"
     },
     "tables": {
         "clientFloatVars": "ClientFloatTable",
@@ -23,5 +19,10 @@
         "database": "jupiter",
         "password": "pwd_for_float_api",
         "port" :"5430"
+    },
+    "capitalization": {
+        "preview": {
+            "accountsToSample": 10
+        }
     }
 }
