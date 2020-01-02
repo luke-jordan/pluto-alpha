@@ -119,9 +119,10 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
         // first we get the accrual entries, that are either settled or pending (ie not expired or superceded)
         const expectedMainQuery = `select allocated_to_id, allocated_to_type, unit, sum(amount) from float_data.float_transaction_ledger ` +
             `where client_id = $1 and float_id = $2 and creation_time > $3 and creation_time < $4 ` +
-            `and t_type = $5 and t_state in ($6, $7) and currency = $8 ` +
+            `and t_type = $5 and t_state in ($6, $7) and currency = $8 and allocated_to_type != $9 ` +
             `group by allocated_to_id, allocated_to_type, unit`;
-        const expectedValues = [testClientId, testFloatId, mockStartTime.format(), mockEndTime.format(), 'ACCRUAL', 'SETTLED', 'PENDING', 'USD'];
+        const expectedValues = [testClientId, testFloatId, mockStartTime.format(), mockEndTime.format(), 
+            'ACCRUAL', 'SETTLED', 'PENDING', 'USD', 'FLOAT_ITSELF'];
 
         // then for the accounts, we get the prior balances, human references, etc. -- worth the extra query
         const expectedAccountQuery = `select account_id, owner_user_id, human_ref, unit, sum(amount) from ` +

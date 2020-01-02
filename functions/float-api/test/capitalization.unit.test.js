@@ -245,6 +245,7 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         currency: 'USD',
         allocType: 'CAPITALIZATION',
         allocState: 'SETTLED',
+        settlementStatus: 'SETTLED',
         relatedEntityType: 'CAPITALIZATION_EVENT',
         relatedEntityId: mockFloatLogId
     });
@@ -285,7 +286,8 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
             currency: 'USD',
             unit: 'HUNDREDTH_CENT',
             backingEntityType: 'CAPITALIZATION_EVENT',
-            logType: 'CAPITALIZATION_EVENT'
+            logType: 'CAPITALIZATION_EVENT',
+            referenceTimeMillis: testInterestTime.valueOf()
         };
 
         const clientShareId = helper.commonFloatConfig.clientCoShareTracker;

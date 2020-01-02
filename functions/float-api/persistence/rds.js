@@ -167,6 +167,7 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
  * @param {number} amount The amount that will be allocated
  * @param {string} currency The currency involved
  * @param {string} unit The units involved
+ * @param {string} allocType The type of the allocation (e.g., accrual), recorded as transaction type
  * @param {string} relatedEntityType A related entity type (e.g., if recording based on an external accrual tx)
  * @param {string} relatedEntityId The id of the related entity type (if present)
  */
@@ -187,7 +188,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
         'client_id': clientId,
         'float_id': floatId,
         't_type': request.allocType || constants.floatTransTypes.ALLOCATION,
-        't_state': request.allocState || 'SETTLED', // accounts default to pending, here to settled, because used very differently
+        't_state': request.allocState || 'SETTLED',
         'amount': request.amount,
         'currency': request.currency,
         'unit': request.unit,
@@ -381,10 +382,10 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
     
     const allEntityAccrualQuery = `select allocated_to_id, allocated_to_type, unit, sum(amount) from float_data.float_transaction_ledger ` +
     `where client_id = $1 and float_id = $2 and creation_time > $3 and creation_time < $4 ` +
-    `and t_type = $5 and t_state in ($6, $7) and currency = $8 ` +
+    `and t_type = $5 and t_state in ($6, $7) and currency = $8 and allocated_to_type != $9 ` +
     `group by allocated_to_id, allocated_to_type, unit`;
 
-    const allEntityValues = [clientId, floatId, startTime.format(), endTime.format(), 'ACCRUAL', 'SETTLED', 'PENDING', currency];
+    const allEntityValues = [clientId, floatId, startTime.format(), endTime.format(), 'ACCRUAL', 'SETTLED', 'PENDING', currency, 'FLOAT_ITSELF'];
 
     logger('Running query for accrual sums: ', allEntityAccrualQuery);
     logger('Passing in values for accrual sums: ', allEntityValues);

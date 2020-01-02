@@ -114,6 +114,7 @@ const turnAllocationIntoPersistenceInstruction = (allocation, floatLogId) => ({
     amount: allocation.amountToCredit,
     allocType: 'CAPITALIZATION',
     allocState: 'SETTLED',
+    settlementStatus: 'SETTLED', // for account table
     relatedEntityType: 'CAPITALIZATION_EVENT',
     relatedEntityId: floatLogId
 });
@@ -181,7 +182,8 @@ module.exports.confirm = async (params) => {
         currency: params.currency,
         unit: DEFAULT_UNIT,
         backingEntityType,
-        logType: 'CAPITALIZATION_EVENT'
+        logType: 'CAPITALIZATION_EVENT',
+        referenceTimeMillis: metadata.endTime.valueOf()
     };
 
     logger('Sending in float addition request: ', floatAddRequest);
