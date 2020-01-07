@@ -265,6 +265,30 @@ describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
         expect(releaseStub).to.have.been.calledOnce;
     });
 
+    it('Malformed multi table update and insert parameters throw errors', async () => {
+        const testTime = new Date();
+
+        const updateQueryKeyObject = { someId: 101, someTime: testTime };
+        const updateQueryValueObject = { someStatus: 'SETTLED', someText: 'something_else', someBoolean: false };
+        const updateDef = { table: 'schema1.tableX', key: updateQueryKeyObject, value: updateQueryValueObject, returnClause: 'updated_time' };
+
+        const insertQueryTemplate = 'INSERT INTO schema2.table1 (column_1, column_2) VALUES %L RETURNING insertion_id';
+        const insertQueryColumns = '${column1}, ${column2}';
+        const insertQueryValues = [{ column1: 'Hello', column2: 'X' }, { column1: 'What', column2: 'Y' }];
+        const insertDef = { query: insertQueryTemplate, columnTemplate: insertQueryColumns, rows: insertQueryValues };
+        Reflect.deleteProperty(updateDef, 'table');
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef])).to.be.rejectedWith('Query with template Error: Missing value for update definition table and values undefined caused an error.');
+        updateDef.table = 3.14159;
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef])).to.be.rejectedWith('Error: Missing value for update definition table');
+        updateDef.table = 'schema1.tableX';
+        updateDef.key = { };
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef])).to.be.rejectedWith('Error! Missing update key in update defintion');
+        updateDef.key = updateQueryKeyObject;
+        updateDef.value = { };
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef])).to.be.rejectedWith('Error! No update values found');
+    });
+
+
 });
 
 describe('*** UNIT TEST RESTRICTED FREE FORM INSERT ***', () => {
@@ -511,6 +535,9 @@ describe('Error handling, including connection release, non-parameterized querie
         await expect(rdsClient.selectQuery('SELECT 1')).to.be.rejected.and.to.eventually.be.a('NoValuesError');
         await expect(rdsClient.updateRecord('UPDATE SOMETHING')).to.be.rejected.and.to.eventually.be.a('NoValuesError');
         await expect(rdsClient.updateRecord('UPDATE ANOTHER', [])).to.be.rejected.and.to.eventually.be.a('NoValuesError');
+        await expect(rdsClient.updateRecord('INSERT SOMETHING', ['something'])).to.be.rejectedWith('Error! No update command found in template');
+        await expect(rdsClient.updateRecord('UPDATE SOMETHING', ['something'])).to.be.rejectedWith('Query with template Error! Update template must be a string and include value placeholders and values undefined caused an error.');
+        // await expect(rdsClient.updateRecordObject({ query: 'UPDATE SOMETHING %L', values: []})).to.be.rejectedWith('Error! Update values must be an array and have length greater than zero');
         await expect(rdsClient.insertRecords('INSERT SOMETHING')).to.be.rejected.and.to.eventually.be.a('NoValuesError');
         await expect(rdsClient.insertRecords('INSERT SOMETHING', [])).to.be.rejected.and.to.eventually.be.a('NoValuesError');
 
