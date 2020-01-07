@@ -5,7 +5,7 @@ resource "aws_api_gateway_rest_api" "admin_api_gateway" {
 }
 
 resource "aws_api_gateway_deployment" "admin_api_deployment" {
-    rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+    rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
     stage_name = "${terraform.workspace}"
 
     depends_on = [
@@ -390,6 +390,51 @@ module "client_comparators_edit_cors" {
   source = "./modules/cors"
   api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
   api_resource_id = "${aws_api_gateway_resource.admin_comparator_rates_edit.id}"
+}
+
+// ANOTHER HEAVY DUTY OPERATION - CAPITALIZE INTEREST ON FLOAT, HAS PREVIEW AND CONFIRM BRANCHES
+
+resource "aws_api_gateway_resource" "admin_capitalize_path_root" {
+  rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
+  parent_id   = aws_api_gateway_resource.admin_client_path_root.id
+  path_part   = "capitalize"
+}
+
+resource "aws_api_gateway_resource" "admin_float_capitalize_handle" {
+  rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
+  parent_id   = aws_api_gateway_resource.admin_capitalize_path_root.id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "admin_float_capitalize_handle" {
+  rest_api_id   = aws_api_gateway_rest_api.admin_api_gateway.id
+  resource_id   = aws_api_gateway_resource.admin_float_capitalize_handle.id
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.admin_jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "admin_float_capitalize_handle" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.float_capitalize.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.admin_api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "admin_float_capitalize_handle" {
+  rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
+  resource_id = aws_api_gateway_method.admin_float_capitalize_handle.resource_id
+  http_method = aws_api_gateway_method.admin_float_capitalize_handle.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.float_capitalize.invoke_arn
+}
+
+module "admin_float_capitalize_cors" {
+  source = "./modules/cors"
+  api_id          = aws_api_gateway_rest_api.admin_api_gateway.id
+  api_resource_id = aws_api_gateway_resource.admin_float_capitalize_handle.id
 }
 
 /////////////////////// MESSAGING /////////////////////////////////////////////////////////////////////

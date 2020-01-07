@@ -95,7 +95,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         const expectedFloatAllocationRow = JSON.parse(JSON.stringify(expectedRowItem));
         expectedFloatAllocationRow.accountTransactionId = txIds[0];
         expectedFloatAllocationRow.floatTransactionId = txIds[2];
-        expectedFloatAllocationRow.transactionType = 'ALLOCATION';
+        expectedFloatAllocationRow.transactionType = 'USER_SAVING_EVENT';
         expectedFloatAllocationRow.allocatedToType = 'END_USER_ACCOUNT';
         expectedFloatAllocationRow.allocatedToId = testAccountId;
 
