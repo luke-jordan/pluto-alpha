@@ -129,8 +129,8 @@ describe('*** FETCH PRIOR ACCRUALS ****', () => {
             `float_data.float_transaction_ledger as float_tx inner join account_data.core_account_ledger as account_info on ` +
             `allocated_to_id = account_id::text where float_tx.client_id = $1 and ` +
             `float_tx.float_id = $2 and float_tx.creation_time < $3 and float_tx.t_state = $4 ` +
-            `and float_tx.currency = $5 group by account_id, owner_user_id, human_ref, unit`;
-        const accountValues = [testClientId, testFloatId, mockEndTime.format(), 'SETTLED', 'USD'];
+            `and float_tx.t_type != $5 and float_tx.currency = $6 group by account_id, owner_user_id, human_ref, unit`;
+        const accountValues = [testClientId, testFloatId, mockEndTime.format(), 'SETTLED', 'ACCRUAL', 'USD'];
         
         const generatedAccountIds = Array(testNumberAccounts).fill().map(() => uuid());
         const generatedRows = generatedAccountIds.map((accountId) => generateRowsForAccountId(accountId, 100)).

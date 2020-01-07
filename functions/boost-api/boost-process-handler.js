@@ -2,7 +2,8 @@
 
 const logger = require('debug')('jupiter:boosts:handler');
 const config = require('config');
-// const moment = require('moment');
+const moment = require('moment');
+
 const stringify = require('json-stable-stringify');
 const status = require('statuses');
 
@@ -53,7 +54,6 @@ const testCondition = (event, statusCondition) => {
     const eventHasContext = typeof event.eventContext === 'object';
     switch (conditionType) {
         case 'save_event_greater_than':
-            // todo : check for same currency ...
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue));
             logger('And amount from event: ', equalizeAmounts(event.eventContext.savedAmount));
             logger(`Also asserting if currency ${currency(event.eventContext.savedAmount)} === ${currency(parameterValue)}`);
@@ -63,6 +63,14 @@ const testCondition = (event, statusCondition) => {
             return event.accountId === parameterValue;
         case 'first_save_by':
             return event.accountId === parameterValue && eventHasContext && event.eventContext.firstSave;
+        case 'balance_below':
+            logger('Checking balance below: ', equalizeAmounts(parameterValue), ' event context: ', equalizeAmounts(event.eventContext.newBalance));
+            return equalizeAmounts(event.eventContext.newBalance) < equalizeAmounts(parameterValue);
+        case 'withdrawal_before':
+            const timeThreshold = moment(parseInt(parameterValue, 10));
+            const timeSettled = moment(parseInt(event.eventContext.timeInMillis), 10);
+            logger('Checking if withdrawal is occurring before: ', timeThreshold, ' vs withdrawal time: ', timeSettled);
+            return timeSettled.isBefore(timeThreshold);
         default:
             return false;
     }

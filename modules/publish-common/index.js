@@ -32,10 +32,11 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             TopicArn: config.get('publishing.userEvents.topicArn')
         };
 
-        logger('Sending to queue: ', messageForQueue);
+        // logger('Sending to queue: ', messageForQueue);
 
+        logger(`Logging ${eventType} for user ID ${userId}`);
         const resultOfPublish = await sns.publish(messageForQueue).promise();
-        logger('Result from queue: ', resultOfPublish);
+        // logger('Result from queue: ', resultOfPublish);
 
         if (typeof resultOfPublish === 'object' && Reflect.has(resultOfPublish, 'MessageId')) {
             return { result: 'SUCCESS' };
@@ -45,6 +46,22 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         return { result: 'FAILURE' };
     } catch (err) {
         logger('PUBLISHING_ERROR: ', err);
+        return { result: 'FAILURE' };
+    }
+};
+
+module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) => {
+    try {
+        // note: SNS does not have a batch publish method, so we do this -- do not ever call this in user facing method
+        const publishPromises = userIds.map((userId) => exports.publishUserEvent(userId, eventType, options));
+        logger('Sending ', publishPromises.length, ' events to the user log topic');
+        const resultOfAll = await Promise.all(publishPromises);
+        const successCount = resultOfAll.filter((returned) => returned.result === 'SUCCESS').length;
+        logger(`Of promises, ${successCount} were successful`);
+        return { successCount, failureCount: userIds.length - successCount };
+    } catch (err) {
+        // means was not caught in interior (i.e., above)
+        logger('PUBLISHING_ERROR: Bulk error: ', err);
         return { result: 'FAILURE' };
     }
 };

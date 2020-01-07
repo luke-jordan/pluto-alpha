@@ -4,9 +4,10 @@ const logger = require('debug')('jupiter:history:main');
 const config = require('config');
 const moment = require('moment');
 
-const persistence = require('./persistence/rds');
+const persistence = require('./persistence/account.calculations');
 const util = require('./history-util');
-const opsCommonUtil = require('ops-util-common');
+
+const opsUtil = require('ops-util-common');
 
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
@@ -18,6 +19,8 @@ const UNIT_DIVISORS = {
     'WHOLE_CENT': 100,
     'WHOLE_CURRENCY': 1 
 };
+
+const unauthorizedResponse = { statusCode: 403 };
 
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
 
@@ -154,11 +157,11 @@ module.exports.fetchUserHistory = async (event) => {
         }
 
         if (!util.isUserAuthorized(event)) {
-            return util.unauthorizedResponse;
+            return unauthorizedResponse;
         }
 
         // extract user details will only come back null if authorized check has failed
-        const { systemWideUserId } = opsCommonUtil.extractUserDetails(event);
+        const { systemWideUserId } = opsUtil.extractUserDetails(event);
         logger(`Looking up system ID: ${systemWideUserId}`);
 
         const [userProfile, priorEvents] = await Promise.all([
@@ -170,7 +173,7 @@ module.exports.fetchUserHistory = async (event) => {
 
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
-        const priorTransactions = await persistence.fetchPriorTransactions(accountId);
+        const priorTransactions = await persistence.fetchTransactionsForHistory(accountId);
         logger('Got prior transactions:', priorTransactions);
 
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
@@ -183,10 +186,22 @@ module.exports.fetchUserHistory = async (event) => {
         };
         
         logger('Returning: ', resultObject);
-        return opsCommonUtil.wrapResponse(resultObject);
+        return opsUtil.wrapResponse(resultObject);
 
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return opsCommonUtil.wrapResponse(err.message, 500);
+        return opsUtil.wrapResponse(err.message, 500);
     }
+};
+
+module.exports.calculateUserAmount = async (event) => {
+    if (opsUtil.isApiCall(event)) {
+        return unauthorizedResponse;
+    }
+
+    const { aggregates, systemWideUserId } = event;
+
+    const resultsOfOperations = await Promise.all(aggregates.map((aggregate) => persistence.getUserAccountFigure(systemWideUserId, aggregate)));
+    
+    return { results: resultsOfOperations };
 };

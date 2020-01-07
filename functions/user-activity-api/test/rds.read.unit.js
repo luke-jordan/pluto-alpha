@@ -69,51 +69,6 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
         expectNoCalls([insertStub, multiTableStub]);
     });
 
-    it('Find a prior matching transaction, by account ID and amount', async () => {
-        const testAmount = 100;
-        // cut off time should be a configurable thing
-        const cutOffTime = moment.tz('America/New_York').subtract(30, 'minutes'); 
-        const queryString = 'select transaction_id from account_data.core_account_ledger where account_id = $1 and amount = $2 and ' + 
-            'currency = $3 and unit = $4 and creation_time < to_timestamp($5) order by creation_time ascending';
-        const queryParams = sinon.match([testAccountId, testAmount, 'ZAR', 'HUNDREDTH_CENT', cutOffTime.valueOf()]);
-        
-        const testMatchingTxId = uuid();
-        queryStub.withArgs(queryString, queryParams).resolves([{ 'transaction_id': testMatchingTxId }]);
-        
-        const findResult = await rds.findMatchingTransaction({ 
-            accountId: testAccountId, 
-            amount: testAmount, 
-            currency: 'ZAR', 
-            unit: 'HUNDREDTH_CENT', 
-            cutOffTime: cutOffTime
-        });
-        
-        expect(findResult).to.exist;
-        expect(findResult).to.deep.equal({ transactionId: testMatchingTxId });
-        expect(queryStub).to.have.been.calledOnceWithExactly(queryString, queryParams);
-        expectNoCalls([insertStub, multiTableStub]);
-    });
-
-    it('Fail to find a prior matching transaction', async () => {
-        const queryString = 'select transaction_id from account_data.core_account_ledger where account_id = $1 and amount = $2 and ' + 
-            'currency = $3 and unit = $4 and creation_time < to_timestamp($5) order by creation_time ascending';
-        const cutOffTime = moment.tz('America/New_York').subtract(1, 'minutes'); 
-        const queryParams = sinon.match([testAccountId, 101, 'ZAR', 'HUNDREDTH_CENT', cutOffTime.valueOf()]);
-        queryStub.withArgs(queryString, queryParams).resolves([{}]);
-
-        const findResult = await rds.findMatchingTransaction({ 
-            accountId: testAccountId,
-            amount: 101,
-            currency: 'ZAR',
-            unit: 'HUNDREDTH_CENT',
-            cutOffTime: cutOffTime
-        });
-        expect(findResult).to.exist;
-        expect(findResult).to.deep.equal({});
-        expect(queryStub).to.have.been.calledOnceWithExactly(queryString, queryParams);
-        expectNoCalls([insertStub, multiTableStub]);
-    });
-
     // it('Call up a transaction via payment ref', async () => { });
     
 });

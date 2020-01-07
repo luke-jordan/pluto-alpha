@@ -52,7 +52,6 @@ const momentStub = sinon.stub();
 
 const handler = proxyquire('../saving-handler', {
     './persistence/rds': { 
-        'findMatchingTransaction': findMatchingTxStub,
         'getOwnerInfoForAccount': findFloatOrIdStub, 
         'updateTxToSettled': updateSaveRdsStub,
         'fetchTransaction': fetchTransactionStub,

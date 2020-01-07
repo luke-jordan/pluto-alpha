@@ -38,6 +38,8 @@ module.exports.wrapResponse = (body, statusCode = 200) => {
     };
 };
 
+module.exports.extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
+
 module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
     if (!isUnitValid(fromUnit)) {
         throw new Error(`Invalid from unit in conversion: ${JSON.stringify(fromUnit)}`);

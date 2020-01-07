@@ -8,6 +8,8 @@ const uuid = require('uuid/v4');
 const rdsUtil = require('./persistence/rds.notifications');
 const msgUtil = require('./msg.util');
 
+const publisher = require('publish-common');
+
 const STANDARD_PARAMS = [
     'user_first_name',
     'user_full_name',
@@ -138,13 +140,26 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
     }
     
     logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
-    // if (!rows || rows.length === 0) {
-    //     logger('No user messages generated, exiting');
-    //     return { instructionId, result: 'NO_USERS' };
-    // }
+    
+    if (!rows || rows.length === 0) {
+        logger('No user messages generated, exiting');
+        return { instructionId, result: 'NO_USERS' };
+    }
 
     const rowKeys = Object.keys(rows[0]);
-    return rdsUtil.insertUserMessages(rows, rowKeys);
+    const resultOfPersistence = await rdsUtil.insertUserMessages(rows, rowKeys);
+
+    const userLogOptions = {
+        context: {
+            templates,
+            parameters
+        }
+    };
+
+    const resultOfLogPublishing = await publisher.publishMultiUserEvent(userId, 'MESSAGE_CREATED', userLogOptions);
+    logger('Result of publishing user log: ', resultOfLogPublishing);
+
+    return resultOfPersistence;
 };
 
 /**
