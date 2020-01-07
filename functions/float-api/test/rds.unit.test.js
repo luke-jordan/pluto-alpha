@@ -83,7 +83,7 @@ describe('Float balance add or subtract', () => {
             referenceTimeMillis: refTime.valueOf()
         };
 
-        const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, currency, unit, ` +
+        const query = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, t_state, currency, unit, ` +
             `amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id`;
         const columns = common.allocationExpectedColumns;
         const expectedRow = {
@@ -91,6 +91,7 @@ describe('Float balance add or subtract', () => {
             'client_id': common.testValidClientId,
             'float_id': common.testValidFloatId,
             't_type': constants.floatTransTypes.ACCRUAL,
+            't_state': 'SETTLED',
             'currency': 'ZAR',
             'unit': floatBalanceAdjustment.unit,
             'amount': floatBalanceAdjustment.amount,
@@ -120,8 +121,9 @@ describe('Float balance add or subtract', () => {
             columnTemplate: '${logId}, ${referenceTime}, ${clientId}, ${floatId}, ${logType}',
             rows: [logToInsert] 
         };
+        const mockLogId = uuid();
 
-        multiTableStub.resolves([[{ 'transaction_id': floatBalanceAdjustment.transactionId }], []]);
+        multiTableStub.resolves([[{ 'transaction_id': floatBalanceAdjustment.transactionId }], [{ 'log_id': mockLogId }]]);
         
         // tested extensively elsewhere
         balanceStub.withArgs(common.testValidFloatId, 'ZAR').resolves({ balance: floatBalanceAdjustment.amount + testOpeningBalance, 
@@ -133,7 +135,8 @@ describe('Float balance add or subtract', () => {
         expect(adjustmentResult).to.deep.equal({
             updatedBalance: testOpeningBalance + floatBalanceAdjustment.amount,
             unit: constants.floatUnits.HUNDREDTH_CENT,
-            transactionId: floatBalanceAdjustment.transactionId
+            transactionId: floatBalanceAdjustment.transactionId,
+            logId: mockLogId
         });
 
         // following is painful but necessary else need a lot of convolution stubbing uuid etc
@@ -416,7 +419,7 @@ describe('User account allocation', () => {
             'float_id': common.testValidFloatId,
             'client_id': common.testValidClientId,
             'float_alloc_tx_id': request.floatTxId,
-            'tags': `ARRAY ['ACCRUAL_EVENT::${common.testValidAccrualId}']`
+            'tags': [`ACCRUAL_EVENT::${common.testValidAccrualId}`]
         }));
 
         const floatTxArray = allocRequests.map((request) => ({ 'transaction_id': request.floatTxId }));
@@ -539,18 +542,18 @@ describe('Test account summation and float balances', () => {
         const negativeRowSum = negativeTxRows.map((row) => row.amount).reduce((cum, value) => cum + value, 0);
         // logger('Negative rows: ', negativeTxRows);
         
-        const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3`;
-        const unitColumns = [common.testValidFloatId, 'ZAR', constants.entityTypes.FLOAT_ITSELF];
+        const unitQuery = `select distinct(unit) from ${floatTable} where float_id = $1 and currency = $2 and allocated_to_type = $3 and t_state = $4`;
+        const unitColumns = [common.testValidFloatId, 'ZAR', constants.entityTypes.FLOAT_ITSELF, 'SETTLED'];
 
         queryStub.withArgs(unitQuery, sinon.match(unitColumns)).resolves([{ unit: constants.floatUnits.HUNDREDTH_CENT}, { unit: constants.floatUnits.WHOLE_CENT }]);
         
-        const sumQuery = `select unit, sum(amount) from ${floatTable} where float_id = $1 and currency = $2 and unit = $3 and allocated_to_type = $4 ` +
-            `and creation_time between $5 and $6 group by unit`;
+        const sumQuery = `select unit, sum(amount) from ${floatTable} where float_id = $1 and currency = $2 and unit = $3 and ` +
+            `allocated_to_type = $4 and t_state = $5 and creation_time between $6 and $7 group by unit`;
         const startOfTime = new Date(0);
         // const currentTime = new Date(); // not used, given matcher below, with rationale
         
         // use any date matcher on last param, as 'now' has ticked on a few millis, and alternate prevents testing of defaults
-        const sumParams = (unit) => [common.testValidFloatId, 'ZAR', unit, constants.entityTypes.FLOAT_ITSELF, startOfTime, sinon.match.date];
+        const sumParams = (unit) => [common.testValidFloatId, 'ZAR', unit, constants.entityTypes.FLOAT_ITSELF, 'SETTLED', startOfTime, sinon.match.date];
         queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.HUNDREDTH_CENT))).
             returns(Promise.resolve([{ 'unit': constants.floatUnits.HUNDREDTH_CENT, 'sum': positiveRowSum }]));
         queryStub.withArgs(sumQuery, sinon.match(sumParams(constants.floatUnits.WHOLE_CENT))).

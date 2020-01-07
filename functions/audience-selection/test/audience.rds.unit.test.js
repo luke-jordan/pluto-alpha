@@ -494,7 +494,7 @@ describe('Audience Selection - fetch users given JSON', () => {
         };
 
         const expectedJoinTemplate = `insert into ${audienceJoinTable} (account_id, audience_id) ` +
-            `select distinct(account_id), '${mockAudienceId}'::uuid from transactions where ` +
+            `select account_id, '${mockAudienceId}'::uuid from transactions where ` +
             `(client_id='${mockClientId}' and settlement_status='SETTLED') group by account_id ` +
             `having count(transaction_id)>3`;
 

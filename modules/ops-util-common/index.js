@@ -40,11 +40,11 @@ module.exports.wrapResponse = (body, statusCode = 200) => {
 
 module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
     if (!isUnitValid(fromUnit)) {
-        throw new Error('Invalid from unit in conversion');
+        throw new Error(`Invalid from unit in conversion: ${JSON.stringify(fromUnit)}`);
     }
 
     if (!isUnitValid(toUnit)) {
-        throw new Error('Invalid to unit in conversion');
+        throw new Error(`Invalid to unit in conversion: ${JSON.stringify(toUnit)}`);
     }
 
     return amount * UNIT_MULTIPLIERS[fromUnit][toUnit];

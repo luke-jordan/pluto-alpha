@@ -233,9 +233,22 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
 });
 
 // note : will also need to expire the prior ones
-describe.skip('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
+describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
 
     const testNumberAccounts = 1;
+    const mockFloatLogId = uuid();
+
+    const convertToExpectedUserAlloc = (account, allocationEntity) => ({
+        accountId: account.accountId,
+        amount: allocationEntity.amountToCredit,
+        unit: 'HUNDREDTH_CENT',
+        currency: 'USD',
+        allocType: 'CAPITALIZATION',
+        allocState: 'SETTLED',
+        settlementStatus: 'SETTLED',
+        relatedEntityType: 'CAPITALIZATION_EVENT',
+        relatedEntityId: mockFloatLogId
+    });
 
     beforeEach(() => helper.resetStubs(fetchLastLogStub, fetchAccrualsStub, addOrSubtractStub, allocateNonUserStub, allocateToUsersStub, fetchFloatConfigVarsStub));
 
@@ -251,48 +264,86 @@ describe.skip('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         mockAccrualMap.set(helper.commonFloatConfig.clientCoShareTracker, mockClientAccrued);
         mockAccrualMap.set(helper.commonFloatConfig.bonusPoolTracker, mockBonusAccrued);
 
-        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((entry, sum) => entry.amount + sum, 0);
-        const mockInterestPaid = Math.round(totalAccrued * (Math.random() * 0.2 + 1) / 100); // i.e., in the range of 20%, in cents
+        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
+        const mockYieldPaid = Math.round(totalAccrued * (Math.random() * 0.2 + 1) / 100); // i.e., in the range of 20%, in cents
 
-        const expectedDistributionMap = divideDistribution(mockAccrualMap, mockInterestPaid * 100, helper.commonFloatConfig.bonusPoolTracker);
-
-        fetchLastLogStub.resolves({ clientId: testClientId, floatId: testFloatId, creationTime: testLastLogTime, logType: 'CAPITALIZATION_EVENT' });
-        fetchFloatConfigVarsStub.resolves(helper.commonFloatConfig);
-        fetchAccrualsStub.resolves(mockAccrualMap);
-        
-        addOrSubtractStub.resolves({ currentBalance: 1e15 + mockInterestPaid });
-        allocateNonUserStub.resolves({ 'BONUS': uuid(), 'CLIENT': uuid() });
-        allocateToUsersStub.resolves([]); // needs float TX ID, account TX ID (will have to insert those), amounts
-        supercedeAccrualsStub.resolves();
+        const expectedDistributionMap = divideDistribution(mockAccrualMap, mockYieldPaid * 100, helper.commonFloatConfig.bonusPoolTracker);
 
         const testEvent = {
             clientId: testClientId,
             floatId: testFloatId,
-            interestPaid: mockInterestPaid,
+            yieldPaid: mockYieldPaid,
             dateTimePaid: testInterestTime.valueOf(),
             unit: 'WHOLE_CENT',
             currency: 'USD'
         };
 
+        const expectedFloatAddSubtract = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            transactionType: 'CAPITALIZATION',
+            amount: mockYieldPaid * 100,
+            currency: 'USD',
+            unit: 'HUNDREDTH_CENT',
+            backingEntityType: 'CAPITALIZATION_EVENT',
+            logType: 'CAPITALIZATION_EVENT',
+            referenceTimeMillis: testInterestTime.valueOf()
+        };
+
+        const clientShareId = helper.commonFloatConfig.clientCoShareTracker;
+        const clientAmount = expectedDistributionMap.get(clientShareId).amountToCredit;
+        
+        const bonusPoolId = helper.commonFloatConfig.bonusPoolTracker;
+        const bonusAmount = expectedDistributionMap.get(bonusPoolId).amountToCredit;
+
+        const expectedEntityAllocBase = { currency: 'USD', unit: 'HUNDREDTH_CENT', transactionType: 'CAPITALIZATION', transactionState: 'SETTLED' };
+        expectedEntityAllocBase.relatedEntityType = 'CAPITALIZATION_EVENT';
+        expectedEntityAllocBase.relatedEntityId = mockFloatLogId;
+
+        const clientAlloc = { ...expectedEntityAllocBase, amount: clientAmount, allocatedToId: clientShareId, allocatedToType: 'COMPANY_SHARE', label: 'CLIENT' };
+        const bonusAlloc = { ...expectedEntityAllocBase, amount: bonusAmount, allocatedToId: bonusPoolId, allocatedToType: 'BONUS_POOL', label: 'BONUS' };
+
+        const expectedUserAllocs = mockAccountsFromDb.map((account) => convertToExpectedUserAlloc(account, 
+                expectedDistributionMap.get(account.accountId)));
+        const mockUserPerstResult = expectedUserAllocs.map((alloc) => ({ floatTxId: uuid(), accountTxId: uuid(), amount: alloc.amount }));
+
+        fetchLastLogStub.resolves({ clientId: testClientId, floatId: testFloatId, referenceTime: testLastLogTime, logType: 'CAPITALIZATION_EVENT' });
+        fetchFloatConfigVarsStub.resolves(helper.commonFloatConfig);
+        fetchAccrualsStub.resolves(mockAccrualMap);
+        
+        addOrSubtractStub.resolves({ updatedBalance: 1e15 + mockYieldPaid, logId: mockFloatLogId });
+        allocateNonUserStub.resolves({ 'BONUS': uuid(), 'CLIENT': uuid() });
+        allocateToUsersStub.resolves(mockUserPerstResult);
+        supercedeAccrualsStub.resolves({ result: 'SUCCESS' });
+
         const resultOfCapitalization = await handler.confirm(testEvent);
         expect(resultOfCapitalization).to.exist;
         
+        // todo : probably want to send back all the records so can look at them
         expect(resultOfCapitalization).to.have.property('numberAccountsToBeCredited', testNumberAccounts);
-        expect(resultOfCapitalization).to.have.property('amountToCreditClient', expectedDistributionMap.get(helper.commonFloatConfig.clientCoShareTracker));
-        expect(resultOfCapitalization).to.have.property('amountToCreditBonusPool', expectedDistributionMap.get(helper.commonFloatConfig.bonusPoolTracker));
-        expect(resultOfCapitalization).to.have.property('excessOverPastAccrual', mockInterestPaid - totalAccrued);
+        expect(resultOfCapitalization).to.have.property('amountToCreditClient', clientAmount);
+        expect(resultOfCapitalization).to.have.property('amountToCreditBonusPool', bonusAmount);
+        expect(resultOfCapitalization).to.have.property('excessOverPastAccrual', (mockYieldPaid * 100) - totalAccrued);
         expect(resultOfCapitalization).to.have.property('unit', 'HUNDREDTH_CENT');
         expect(resultOfCapitalization).to.have.property('currency', 'USD');
 
-        expect(fetchLastLogStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, logType: 'CAPITALIZATION_EVENT', endTime: testInterestTime });
-        expect(fetchFloatConfigVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
-        expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, startTime: testLastLogTime, endTime: testInterestTime });
+        // these to handle matches failing on weird deep differences in moment entities
+        const expectedEndTime = moment(testInterestTime.valueOf());
+        const expectedStartTime = testLastLogTime;
 
-        // TODO : DEFINITELY ADD A LOG
-        expect(addOrSubtractStub).to.have.been.calledOnceWithExactly();
-        expect(allocateNonUserStub).to.have.been.calledOnceWithExactly();
-        expect(allocateToUsersStub).to.have.been.calledOnceWithExactly();
-        expect(supercedeAccrualsStub).to.have.been.calledOnceWithExactly('date', 'date', testClientId, testFloatId);
+        expect(fetchLastLogStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, logType: 'CAPITALIZATION_EVENT', endTime: expectedEndTime });
+        expect(fetchFloatConfigVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        
+        const accArgs = { ...expectedFetchParams, startTime: expectedStartTime, endTime: expectedEndTime, unit: 'HUNDREDTH_CENT', currency: 'USD' };
+        expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly(accArgs);
+
+        expect(addOrSubtractStub).to.have.been.calledOnceWithExactly(expectedFloatAddSubtract);
+
+        expect(allocateNonUserStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId, [bonusAlloc, clientAlloc]);
+        expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId, expectedUserAllocs);
+        
+        const expectedSupercedArgs = { startTime: expectedStartTime, endTime: expectedEndTime, clientId: testClientId, floatId: testFloatId, currency: 'USD' };
+        expect(supercedeAccrualsStub).to.have.been.calledOnceWithExactly(expectedSupercedArgs);
     });
 
     // it('Handles case where no prior capitalization', async () => {

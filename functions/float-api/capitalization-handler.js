@@ -73,7 +73,7 @@ const divideCapitalizationPerAccruals = async ({ clientId, floatId, startTime, e
         allocations.set(bonusPoolId, revisedBonusEntry);
     }
 
-    const metadata = { unit, currency, totalYield: capitalizedAmount.amount, totalAccrued };
+    const metadata = { unit, currency, startTime, endTime, totalYield: capitalizedAmount.amount, totalAccrued };
 
     return { allocations, metadata };
 };
@@ -107,15 +107,19 @@ const turnAllocationIntoPreview = (allocation) => ({
     amountToCredit: allocation.amountToCredit
 });
 
-// const turnAllocationIntoPersistenceInstruction = (allocation) => {
-// };
+const turnAllocationIntoPersistenceInstruction = (allocation, floatLogId) => ({
+    accountId: allocation.accountId,
+    unit: DEFAULT_UNIT,
+    currency: allocation.currency,
+    amount: allocation.amountToCredit,
+    allocType: 'CAPITALIZATION',
+    allocState: 'SETTLED',
+    settlementStatus: 'SETTLED', // for account table
+    relatedEntityType: 'CAPITALIZATION_EVENT',
+    relatedEntityId: floatLogId
+});
 
-/**
- * Allows admin to review the operation before committing it. Conducts all the calculations and then returns the top level
- * results plus a sample of the transactions
- */
-module.exports.preview = async (params) => {
-    logger('Processing capitalization preview, parameters: ', params);
+const assembleAllocationMap = async (params) => {
     const { clientId, floatId, dateTimePaid, yieldPaid, currency } = params;
     
     const endTime = moment(dateTimePaid);
@@ -130,6 +134,16 @@ module.exports.preview = async (params) => {
     const capitalizedAmount = { amount: convertedAmount, unit: DEFAULT_UNIT, currency };
     const { allocations, metadata } = await divideCapitalizationPerAccruals({ clientId, floatId, startTime, endTime, capitalizedAmount, floatConfigVars });
 
+    return { allocations, metadata, floatConfigVars };
+};
+
+/**
+ * Allows admin to review the operation before committing it. Conducts all the calculations and then returns the top level
+ * results plus a sample of the transactions
+ */
+module.exports.preview = async (params) => {
+    logger('Processing capitalization preview, parameters: ', params);
+    const { allocations, metadata, floatConfigVars } = await assembleAllocationMap(params);
     logger('Completed dividing up yield, meta results: ', metadata);
     const previewPackage = assembleSummaryData(allocations, floatConfigVars, metadata);
     logger('Presample, preview package: ', previewPackage);
@@ -151,6 +165,72 @@ module.exports.preview = async (params) => {
 
 module.exports.confirm = async (params) => {
     logger('Confirming capitalization, with parameters: ', params);
+    const { clientId, floatId } = params;
+    // do the standard divisions, etc.
+    const { allocations, metadata, floatConfigVars } = await assembleAllocationMap(params);
+    
+    // helpers
+    const transactionType = 'CAPITALIZATION';
+    const backingEntityType = 'CAPITALIZATION_EVENT';
+
+    // first, we add or subtract to the float
+    const floatAddRequest = {
+        clientId,
+        floatId,
+        transactionType,
+        amount: metadata.totalYield, // will be in default unit
+        currency: params.currency,
+        unit: DEFAULT_UNIT,
+        backingEntityType,
+        logType: 'CAPITALIZATION_EVENT',
+        referenceTimeMillis: metadata.endTime.valueOf()
+    };
+
+    logger('Sending in float addition request: ', floatAddRequest);
+    const resultOfFloatAdd = await rds.addOrSubtractFloat(floatAddRequest);
+    logger('Capitalization, result of float addition: ', resultOfFloatAdd);
+
+    const floatLogId = resultOfFloatAdd.logId;
+
+    const clientShareId = floatConfigVars.clientCoShareTracker;
+    const clientAmount = allocations.get(clientShareId).amountToCredit;
+    
+    const bonusPoolId = floatConfigVars.bonusPoolTracker;
+    const bonusAmount = allocations.get(bonusPoolId).amountToCredit;
+
+    const entityAllocBase = { 
+        currency: params.currency, 
+        unit: DEFAULT_UNIT, 
+        transactionType, 
+        transactionState: 'SETTLED',
+        relatedEntityType: backingEntityType,
+        relatedEntityId: floatLogId
+    };
+
+    const bonusAlloc = { ...entityAllocBase, amount: bonusAmount, allocatedToId: bonusPoolId, allocatedToType: 'BONUS_POOL', label: 'BONUS' };
+    const clientAlloc = { ...entityAllocBase, amount: clientAmount, allocatedToId: clientShareId, allocatedToType: 'COMPANY_SHARE', label: 'CLIENT' };
+
+    logger('Sending in entity allocations: ', [clientAlloc, bonusAlloc]);
+    const resultOfEntityAllocs = await rds.allocateFloat(clientId, floatId, [bonusAlloc, clientAlloc]);
+    logger('Result of entity allocations: ', resultOfEntityAllocs);
+
+    const userAllocInstructions = Array.from(allocations.values()).
+        filter((entity) => entity.entityType === constants.entityTypes.END_USER_ACCOUNT).
+        map((allocation) => turnAllocationIntoPersistenceInstruction(allocation, floatLogId));
+
+    logger('Sending in ', userAllocInstructions.length, ' allocations, first one: ', userAllocInstructions[0]);
+    const resultOfUserAllocation = await rds.allocateToUsers(clientId, floatId, userAllocInstructions);
+    logger('User allocations done, made ', resultOfUserAllocation.length, ' paired transactions, first : ', resultOfUserAllocation[0]);
+
+    const supercedeParams = { clientId, floatId, startTime: metadata.startTime, endTime: metadata.endTime, currency: params.currency };
+    const resultOfSupercession = await rds.supercedeAccruals(supercedeParams);
+    logger('Result of supercession: ', resultOfSupercession);
+
+    const resultPackage = assembleSummaryData(allocations, floatConfigVars, metadata);
+    logger('Final result: ', resultPackage);
+
+    // todo : add in 'done' rows
+    return resultPackage;
 };
 
 module.exports.handle = async (event) => {
@@ -163,7 +243,7 @@ module.exports.handle = async (event) => {
             if (userDetails.role !== 'SYSTEM_ADMIN') {
                 return opsUtil.wrapResponse('Unauthorized', 403);
             }
-            operation = event.pathParameters.proxy;
+            operation = event.pathParameters.proxy.toUpperCase().trim();
             parameters = JSON.parse(event.body);
         } else {
             operation = event.operation;
