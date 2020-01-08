@@ -328,15 +328,23 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
     it('Handles withdrawal event happy path correctly', async () => {
         const timeNow = moment().valueOf();
+        const testAccountId = uuid();
 
         redisGetStub.resolves(JSON.stringify({ account: 'Hello' }));
-        
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-                
+                        
         getObjectStub.returns({ promise: () => ({ 
             Body: { toString: () => 'This is an email template' }
         })});
         sendEmailStub.returns({ promise: () => 'Email sent' });
+
+        const boostProcessPayload = {
+            eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
+            timeInMillis: timeNow,
+            accountId: testAccountId,
+            eventContext: { accountId: testAccountId, withdrawalAmount: '100::WHOLE_CURRENCY::USD' }
+        };
+        const boostProcessInvocation = helper.wrapLambdaInvoc('boost_event_process', true, boostProcessPayload);
+        lamdbaInvokeStub.withArgs(boostProcessInvocation).returns({ promise: () => ({ StatusCode: 202 })});
 
         fetchBSheetAccStub.resolves('POL1');
         const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
@@ -344,13 +352,14 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             transactionDetails: { accountNumber: 'POL1', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' }
         });
         const bsheetResult = { result: 'WITHDRAWN' };
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify(bsheetResult)})});
+        lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify(bsheetResult)})});
         
         const withdrawalEvent = {
             userId: testId,
             eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
             timeInMillis: timeNow,
             context: {
+                accountId: testAccountId,
                 withdrawalAmount: '100::WHOLE_CURRENCY::USD'
             }
         };
@@ -363,7 +372,10 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(getObjectStub).to.have.been.
             calledOnceWithExactly({ Bucket: config.get('templates.bucket'), Key: config.get('templates.withdrawalEmail') });
         expect(sendEmailStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(bsheetInvocation);
+
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(boostProcessInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(bsheetInvocation);
         expectNoCalls(sqsSendStub);
     });
 

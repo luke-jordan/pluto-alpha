@@ -5,6 +5,7 @@ const config = require('config');
 const moment = require('moment');
 
 const util = require('util');
+const publisher = require('publish-common');
 
 const persistence = require('./persistence/rds.msgpicker');
 const dynamo = require('dynamo-common');
@@ -277,7 +278,7 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
 };
 
 // And last, we update. todo : update all of them?
-const fireOffMsgStatusUpdate = async (userMessages, requestContext) => {
+const fireOffMsgStatusUpdate = async (userMessages, requestContext, destinationUserId) => {
     const updateMsgPayload = {
         requestContext,
         body: JSON.stringify({ messageId: userMessages[0].messageId, userAction: 'FETCHED' })
@@ -289,9 +290,17 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext) => {
         Payload: JSON.stringify(updateMsgPayload) 
     };
 
-    logger('Invoking Lambda to update message status');
-    const invocationResult = await lambda.invoke(updateMsgLambdaParams).promise();
+    const logContext = {
+        requestContext,
+        messages: userMessages
+    };
+
+    logger('Invoking Lambda to update message status, and publishing user log');
+    const invocationPromise = lambda.invoke(updateMsgLambdaParams).promise();
+    const publishPromise = publisher.publishUserEvent(destinationUserId, 'MESSAGE_FETCHED', { context: logContext });
+    const [invocationResult, publishResult] = await Promise.all([invocationPromise, publishPromise]);
     logger('Completed invocation: ', invocationResult);
+    logger('And log publish result: ', publishResult);
 };
 
 // For now, for mobile test
