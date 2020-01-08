@@ -159,15 +159,31 @@ describe('Float balance add or subtract', () => {
             currency: 'ZAR',
             unit: constants.floatUnits.HUNDREDTH_CENT,
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-            backingEntityIdentifier: '',
+            backingEntityIdentifier: uuid(),
             logType: 'WHOLE_FLOAT_ACCRUAL',
             referenceTimeMillis: refTime.valueOf()
         }; 
         
+        Reflect.deleteProperty(floatBalanceAdjustment, 'backingEntityIdentifier');
         const expectedError = 'Invalid or missing value for property: backingEntityIdentifier';
-
         await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith(expectedError);
-        
+        floatBalanceAdjustment.backingEntityIdentifier = uuid();
+
+        Reflect.deleteProperty(floatBalanceAdjustment, 'amount');
+        await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith('Invalid or missing value for property: amount');
+        floatBalanceAdjustment.amount = Math.floor(1000 * 100 * 100 * Math.random());
+
+        floatBalanceAdjustment.unit = 'INVALID_UNIT';
+        await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith('Invalid float unit');
+        floatBalanceAdjustment.unit = constants.floatUnits.HUNDREDTH_CENT;
+
+        floatBalanceAdjustment.transactionType = 'INVALID_TRANSACTION_TYPE';
+        await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith('Invalid transaction type');
+        floatBalanceAdjustment.transactionType = constants.floatTransTypes.ACCRUAL;
+
+        floatBalanceAdjustment.backingEntityType = 'INVALID_ENTITY_TYPE';
+        await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith('Invalid backing entity type');
+
         expect(multiTableStub).to.have.not.been.called;
         expect(balanceStub).to.have.not.been.called;
     });

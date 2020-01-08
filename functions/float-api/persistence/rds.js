@@ -45,6 +45,10 @@ const validateFloatAdjustmentArgs = (floatAdjArgs) => {
     if (!Object.values(constants.floatUnits).includes(floatAdjArgs.unit)) {
         throw new Error('Invalid float unit');
     }
+
+    if (!Object.values(constants.entityTypes).includes(floatAdjArgs.backingEntityType)) {
+        throw new Error('Invalid backing entity type');
+    }
 };
 
 /**

@@ -420,7 +420,7 @@ const validateTxDetails = (txDetails) => {
         });
 
         if (!moment.isMoment(txDetails.settlementTime)) {
-            throw new Error('Unexpected settlemt time format');
+            throw new Error('Unexpected settlement time format');
         }
 
         if (txDetails.settlementTime.valueOf() < txDetails.initiationTime.valueOf()) {

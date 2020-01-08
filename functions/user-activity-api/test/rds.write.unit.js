@@ -250,22 +250,57 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectNoCalls([insertStub]);
     });
 
-    it('Fail on invalid transaction details', async () => { 
+    it('Fail on invalid transaction details', async () => {
+        const testInitiationTime = moment().subtract(5, 'minutes');
+        const testSettlementTime = moment();
 
         const testNotSettledArgs = { 
             accountId: testAccountId,
             currency: 'ZAR',
             unit: 'HUNDREDTH_CENT',
             amount: testSaveAmount, 
-            initiationTime: '2027-10-28T15:45:45+02:00',
+            initiationTime: testInitiationTime,
             settlementStatus: 'INITIATED',
             floatId: testFloatId,
             clientId: testClientId
         };
 
-        const expectedError = 'Unexpected initiation time format';
+        Reflect.deleteProperty(testNotSettledArgs, 'accountId');
+        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith('Missing required property: accountId');
+        testNotSettledArgs.accountId = testAccountId;
 
-        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith(expectedError);
+        testNotSettledArgs.settlementStatus = 'INVALID_SETTLEMENT_STATUS';
+        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith('Invalid settlement status: INVALID_SETTLEMENT_STATUS');
+        testNotSettledArgs.settlementStatus = 'INITIATED';
+
+        testNotSettledArgs.initiationTime = '2027-10-28T15:45:45+02:00'; // must be a moment instance
+        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith('Unexpected initiation time format');
+        testNotSettledArgs.initiationTime = testInitiationTime;
+
+        const testSettledArgs = { 
+            accountId: testAccountId,
+            currency: 'ZAR',
+            unit: 'HUNDREDTH_CENT',
+            amount: testSaveAmount, 
+            floatId: testFloatId,
+            clientId: testClientId,
+            initiationTime: testInitiationTime,
+            settlementTime: testSettlementTime,
+            paymentRef: testPaymentRef,
+            paymentProvider: 'STRIPE',
+            settlementStatus: 'SETTLED'
+        };
+
+        Reflect.deleteProperty(testSettledArgs, 'paymentRef');
+        await expect(rds.addTransactionToAccount(testSettledArgs)).to.be.rejectedWith('Missing required property: paymentRef');
+        testSettledArgs.paymentRef = testPaymentRef;
+
+        testSettledArgs.settlementTime = '2027-10-28T15:45:45+02:00'; // must be a moment instance
+        await expect(rds.addTransactionToAccount(testSettledArgs)).to.be.rejectedWith('Unexpected settlement time format');
+        testSettledArgs.settlementTime = testSettlementTime;
+
+        testSettledArgs.settlementTime = moment().subtract(6, 'minutes');
+        await expect(rds.addTransactionToAccount(testSettledArgs)).to.be.rejectedWith('Settlement cannot occur before initiation');
 
         expectNoCalls([queryStub, insertStub, multiTableStub]);
     });
