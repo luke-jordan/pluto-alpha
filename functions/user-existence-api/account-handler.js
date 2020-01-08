@@ -74,12 +74,13 @@ const safeReferralAmountExtract = (referralContext, key = 'boostAmountOffered') 
 };
 
 const getReferralRevocationConditions = (referralContext) => {
-  const referralRevokeDays = Reflect.has(referralContext, 'daysForRevocation') ? parseInt(referralContext.daysForRevocation) :
-  parseInt(config.get('referral.withdrawalTime'), 10);
+  const referralRevokeDays = Reflect.has(referralContext, 'daysForRevocation') ? parseInt(referralContext.daysForRevocation, 10) 
+    : parseInt(config.get('referral.withdrawalTime'), 10);
   const referralRevokeLimit = moment().subtract(referralRevokeDays, 'days').valueOf();
-  const balanceLimit = Reflect.has(referralContext, 'balanceLimitForRevocation') ? referralContext/balanceLimitForRevocation : config.get('referral.balanceBelow');
+  const balanceLimit = Reflect.has(referralContext, 'balanceLimitForRevocation') ? referralContext.balanceLimitForRevocation 
+    : config.get('referral.balanceBelow');
   return { referralRevokeLimit, balanceLimit };
-}
+};
 
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves

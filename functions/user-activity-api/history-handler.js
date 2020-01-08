@@ -4,7 +4,9 @@ const logger = require('debug')('jupiter:history:main');
 const config = require('config');
 const moment = require('moment');
 
-const persistence = require('./persistence/account.calculations');
+const accountCalculator = require('./persistence/account.calculations');
+const persistenceRead = require('./persistence/rds.js');
+
 const util = require('./history-util');
 
 const opsUtil = require('ops-util-common');
@@ -26,7 +28,7 @@ const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['
 
 const fetchUserDefaultAccount = async (systemWideUserId) => {
     logger('Fetching user accounts for user ID: ', systemWideUserId);
-    const userAccounts = await persistence.findAccountsForUser(systemWideUserId);
+    const userAccounts = await persistenceRead.findAccountsForUser(systemWideUserId);
     logger('Retrieved accounts: ', userAccounts);
     return Array.isArray(userAccounts) && userAccounts.length > 0 ? userAccounts[0] : null;
 };
@@ -84,9 +86,9 @@ const formatAmountResult = (amountResult) => {
     return numberFormat.format(wholeCurrencyAmount);
 };
 
-const fetchAccountInterest = async (systemWideUserId, currency, sinceTimeMillis) => {
-    const operation = `interest::WHOLE_CENT::${currency}::${sinceTimeMillis}`;
-    const amountResult = await persistence.getUserAccountFigure({ systemWideUserId, operation });
+const fecthAccountEarnings = async (systemWideUserId, currency) => {
+    const operation = `total_earnings::WHOLE_CENT::${currency}`;
+    const amountResult = await accountCalculator.getUserAccountFigure({ systemWideUserId, operation });
     logger('Retrieved from persistence: ', amountResult);
     return formatAmountResult(amountResult);
 };
@@ -169,11 +171,11 @@ module.exports.fetchUserHistory = async (event) => {
         ]);
 
         const userBalance = await obtainUserBalance(userProfile);
-        const accruedInterest = await fetchAccountInterest(systemWideUserId, userProfile.defaultCurrency, moment().startOf('month').valueOf());
+        const accruedInterest = await fecthAccountEarnings(systemWideUserId, userProfile.defaultCurrency);
 
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
-        const priorTransactions = await persistence.fetchTransactionsForHistory(accountId);
+        const priorTransactions = await persistenceRead.fetchTransactionsForHistory(accountId);
         logger('Got prior transactions:', priorTransactions);
 
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
@@ -201,7 +203,7 @@ module.exports.calculateUserAmount = async (event) => {
 
     const { aggregates, systemWideUserId } = event;
 
-    const resultsOfOperations = await Promise.all(aggregates.map((aggregate) => persistence.getUserAccountFigure(systemWideUserId, aggregate)));
+    const resultsOfOperations = await Promise.all(aggregates.map((aggregate) => accountCalculator.getUserAccountFigure(systemWideUserId, aggregate)));
     
     return { results: resultsOfOperations };
 };

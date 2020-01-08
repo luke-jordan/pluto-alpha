@@ -143,7 +143,7 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
     
     if (!rows || rows.length === 0) {
         logger('No user messages generated, exiting');
-        return { instructionId, result: 'NO_USERS' };
+        return { instructionId: instruction.instructionId, result: 'NO_USERS' };
     }
 
     const rowKeys = Object.keys(rows[0]);
@@ -156,8 +156,8 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
         }
     };
 
-    const resultOfLogPublishing = await publisher.publishMultiUserEvent(userId, 'MESSAGE_CREATED', userLogOptions);
-    logger('Result of publishing user log: ', resultOfLogPublishing);
+    const resultOfLogPublishing = await publisher.publishMultiUserEvent(userIds, 'MESSAGE_CREATED', userLogOptions);
+    logger('Result of publishing user logs: ', resultOfLogPublishing);
 
     return resultOfPersistence;
 };

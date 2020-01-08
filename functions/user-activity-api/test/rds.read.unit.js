@@ -206,11 +206,11 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
     it('Fetches prior transactions', async () => {
         const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
-        `and transaction_type in ($2, $3) order by creation_time desc`;
-        const selectValues = [testAccountId, 'USER_SAVING_EVENT', 'WITHDRAWAL'];
+        `and transaction_type in ($2, $3, $4, $5) order by creation_time desc`;
+        const selectValues = [testAccountId, 'USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION'];
 
         queryStub.resolves([expectedTxRow, expectedTxRow, expectedTxRow]);
-        const priorTxs = await rds.fetchPriorTransactions(testAccountId);
+        const priorTxs = await rds.fetchTransactionsForHistory(testAccountId);
         logger('Got prior txs:', priorTxs);
 
         expect(priorTxs).to.exist;

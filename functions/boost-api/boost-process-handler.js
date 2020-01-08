@@ -44,6 +44,13 @@ const equalizeAmounts = (amountString) => {
 
 const currency = (amountString) => amountString.split('::')[2];
 
+const evaluateWithdrawal = (parameterValue, eventContext) => {
+    const timeThreshold = moment(parseInt(parameterValue, 10));
+    const timeSettled = moment(parseInt(eventContext.timeInMillis, 10));
+    logger('Checking if withdrawal is occurring before: ', timeThreshold, ' vs withdrawal time: ', timeSettled);
+    return timeSettled.isBefore(timeThreshold);
+};
+
 const testCondition = (event, statusCondition) => {
     logger('Status condition: ', statusCondition);
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
@@ -67,10 +74,7 @@ const testCondition = (event, statusCondition) => {
             logger('Checking balance below: ', equalizeAmounts(parameterValue), ' event context: ', equalizeAmounts(event.eventContext.newBalance));
             return equalizeAmounts(event.eventContext.newBalance) < equalizeAmounts(parameterValue);
         case 'withdrawal_before':
-            const timeThreshold = moment(parseInt(parameterValue, 10));
-            const timeSettled = moment(parseInt(event.eventContext.timeInMillis), 10);
-            logger('Checking if withdrawal is occurring before: ', timeThreshold, ' vs withdrawal time: ', timeSettled);
-            return timeSettled.isBefore(timeThreshold);
+            return evaluateWithdrawal(parameterValue, event.eventContext);
         default:
             return false;
     }

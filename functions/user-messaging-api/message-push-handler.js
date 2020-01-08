@@ -78,7 +78,7 @@ module.exports.deletePushToken = async (event) => {
             return { statusCode: 403 };
         }
         const params = msgUtil.extractEventBody(event);
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'userId')) {
             return { statusCode: 403 };
         }
         const deletionResult = await rdsMainUtil.deletePushToken(params.provider, params.userId);
@@ -130,8 +130,9 @@ const chunkAndSendMessages = async (messages) => {
     };
 };
 
-const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, title, body }) => 
-    publisher.publishUserEvent(destinationUserId, 'MESSAGE_PUSH_NOTIFICATION_SENT', { context: { title, body, instructionId, messageId }});
+const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, title, body }) => (
+    publisher.publishUserEvent(destinationUserId, 'MESSAGE_PUSH_NOTIFICATION_SENT', { context: { title, body, instructionId, messageId }})
+);
 
 const sendPendingPushMsgs = async () => {
     const switchedOn = config.has('picker.push.running') && config.get('picker.push.running');

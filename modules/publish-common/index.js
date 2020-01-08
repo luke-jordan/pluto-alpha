@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+
 const logger = require('debug')('jupiter:logging-module:main');
 const config = require('config');
 const moment = require('moment');
@@ -13,6 +15,15 @@ const sns = new AWS.SNS({ region: config.get('aws.region') });
 const ses = new AWS.SES();
 const s3 = new AWS.S3();
 
+const generateHashForEvent = (eventType) => {
+    const hashingAlgo = config.get('crypto.algo');
+    const hashingSecret = config.get('crypto.secret');
+    const generatedHash = crypto.createHmac(hashingAlgo, hashingSecret).
+        update(`${hashingSecret}_${eventType}`).
+        digest(config.get('crypto.digest'));
+    return generatedHash;
+};
+
 module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
     try {
         logger('Publishing user event to topic');
@@ -23,7 +34,8 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             timestamp: eventTime,
             interface: options.interface,
             initiator: options.initiator,
-            context: options.context
+            context: options.context,
+            generatedHash: generateHashForEvent(eventType)
         };
 
         const messageForQueue = {

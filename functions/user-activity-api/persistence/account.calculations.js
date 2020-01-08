@@ -1,6 +1,8 @@
 'use strict';
 
 const logger = require('debug')('jupiter:activity:calculations');
+const config = require('config');
+const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
 
@@ -26,12 +28,14 @@ const accountSumQuery = async (params, systemWideUserId) => {
 
 const interestHistoryQuery = async (params, systemWideUserId) => {
     const transTypesToInclude = ['ACCRUAL', 'CAPITALIZATION'];
-    const cutOffMoment = moment(parseInt(params.startTimeMillis));
+    const cutOffMoment = moment(parseInt(params.startTimeMillis, 10));
     
+    /* eslint-disable no-magic-numbers */
     const query = `select sum(amount), unit from ${userAccountTable} inner join ${txTable} ` +
         `on ${userAccountTable}.account_id = ${txTable}.account_id ` + 
-        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and ${txTable}.creation_time > $5 ` +
-        `and transaction_type in ${extractArrayIndices(transTypesToInclude, 6)} group by unit`;
+        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and ${txTable}.creation_time > $4 ` +
+        `and transaction_type in (${opsUtil.extractArrayIndices(transTypesToInclude, 5)}) group by unit`;
+    /* eslint-enable no-magic-numbers */
     
     const values = [systemWideUserId, params.currency, 'SETTLED', cutOffMoment.format(), ...transTypesToInclude];
     const fetchRows = await rdsConnection.selectQuery(query, values);
@@ -55,7 +59,8 @@ const capitalizationQuery = async (params, systemWideUserId) => {
         const selectQuery = `select amount, unit from ${userAccountTable} inner join ${txTable} ` +
             `on ${userAccountTable}.account_id = ${txTable}.account_id where owner_user_id = $1 ` +
             `and transaction_type = $2 and settlement_status = $3 order by creation_time desc limit 1`;
-        const fetchRow = await rdsConnection.selectQuery(selectQuery, values);
+        const selectValues = [systemWideUserId, 'CAPITALIZATION', 'SETTLED']; 
+        const fetchRow = await rdsConnection.selectQuery(selectQuery, selectValues);
         logger('FInding last capitalization, result from RDS: ', fetchRow);
         result.amount = fetchRow.length === 0 ? 0 : opsUtil.convertToUnit(fetchRow[0]['amount'], fetchRow[0]['unit'], DEFAULT_UNIT);
     }
@@ -80,7 +85,7 @@ const sumOverSettledTransactionTypes = async (params, systemWideUserId, transTyp
     }
 
     const queryTimeSection = queryTimeParts.length > 0 ? queryTimeParts.join(' and ') : '';
-    const queryTypeIndices = extractArrayIndices(transTypesToInclude, queryParamCount);
+    const queryTypeIndices = opsUtil.extractArrayIndices(transTypesToInclude, queryParamCount);
     
     const query = `select sum(amount), unit from ${userAccountTable} inner join ${txTable} ` +
         `on ${userAccountTable}.account_id = ${txTable}.account_id ` + 
@@ -128,13 +133,13 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
             return capitalizationQuery({ currency, startTimeMillis, endTimeMillis }, systemWideUserId);
         }
         case 'total_earnings': {
-            const params = { unit: operationsParams[1], currency: operationParams[2] };
+            const params = { unit: operationParams[1], currency: operationParams[2] };
             params.startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
             params.endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
             return earningsQuery(params, systemWideUserId);
         }
         case 'net_saving': {
-            const params = { unit: operationsParams[1], currency: operationParams[2] };
+            const params = { unit: operationParams[1], currency: operationParams[2] };
             params.startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
             params.endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
             return netSavingQuery(params, systemWideUserId);

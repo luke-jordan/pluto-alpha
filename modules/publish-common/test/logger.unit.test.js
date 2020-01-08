@@ -1,9 +1,12 @@
 'use strict';
 
 const logger = require('debug')('jupiter:logging-module:test');
+
+const crypto = require('crypto');
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
+
 const stringify = require('json-stable-stringify');
 
 const chai = require('chai');
@@ -38,13 +41,18 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
     const testTime = moment();
     const testUserId = uuid();
 
+    const expectedHash = (eventType) => crypto.createHmac(config.get('crypto.algo'), config.get('crypto.secret')).
+        update(`${config.get('crypto.secret')}_${eventType}`).
+        digest(config.get('crypto.digest'));
+
     const wellFormedEvent = (userId, eventType, options = {}) => ({
         userId,
         eventType,
         timestamp: testTime.valueOf(),
         interface: options.interface,
         initiator: options.initiator,
-        context: options.initiator
+        context: options.initiator,
+        generatedHash: expectedHash(eventType)
     });
 
     const wellFormedSnsPublish = (userId, eventType, options) => ({
@@ -65,7 +73,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         logger('Initiating happy path test for logging, expecting: ', happyPublish);
 
         momentStub.withArgs().returns(testTime);
-        snsPublishStub.withArgs(sinon.match(happyPublish)).returns({ promise: () => dummySnsResult });
+        snsPublishStub.returns({ promise: () => dummySnsResult });
 
         const publishResult = await eventPublisher.publishUserEvent(testUserId, 'ADD_CASH_INITITIATED');
         logger('Result of publish: ', publishResult);

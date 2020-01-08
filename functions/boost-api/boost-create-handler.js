@@ -389,7 +389,7 @@ module.exports.createBoost = async (event) => {
         boostAmountDict: {
             boostAmount: parseInt(boostAmountDetails[0], 10),
             boostUnit: boostAmountDetails[1],
-            boostCurrency: boostAmountDetails[2],
+            boostCurrency: boostAmountDetails[2]
         },
         initiator: params.creatingUserId
     };
