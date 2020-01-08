@@ -97,7 +97,7 @@ const sumOverSettledTransactionTypes = async (params, systemWideUserId, transTyp
     const fetchRows = await rdsConnection.selectQuery(query, [...queryValues, ...transTypesToInclude]);
     logger('Fetched resuls for earnings query: ', fetchRows);
 
-    return { ...params, amount: opsUtil.sumOverUnits() };
+    return { ...params, amount: opsUtil.sumOverUnits(fetchRows, params.unit) };
 };
 
 const earningsQuery = async (params, systemWideUserId) => {
@@ -128,20 +128,20 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
         case 'capitalization': {
             logger('Returning the last capitalization event');
             const currency = operationParams[1];
-            const startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
-            const endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            const startTimeMillis = operationParams.length > 2 ? Number(operationParams[2]) : null;
+            const endTimeMillis = operationParams.length > 3 ? Number(operationParams[3]) : null;
             return capitalizationQuery({ currency, startTimeMillis, endTimeMillis }, systemWideUserId);
         }
         case 'total_earnings': {
             const params = { unit: operationParams[1], currency: operationParams[2] };
-            params.startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
-            params.endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            params.startTimeMillis = operationParams.length > 3 ? Number(operationParams[3]) : null;
+            params.endTimeMillis = operationParams.length > 4 ? Number(operationParams[4]) : null;
             return earningsQuery(params, systemWideUserId);
         }
         case 'net_saving': {
             const params = { unit: operationParams[1], currency: operationParams[2] };
-            params.startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
-            params.endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            params.startTimeMillis = operationParams.length > 3 ? Number(operationParams[3]) : null;
+            params.endTimeMillis = operationParams.length > 4 ? Number(operationParams[4]) : null;
             return netSavingQuery(params, systemWideUserId);
         }
         default:
