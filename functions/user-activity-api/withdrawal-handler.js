@@ -18,6 +18,8 @@ const handleError = (err) => {
     return { statusCode: 500, body: JSON.stringify(err.message) };
 };
 
+const collapseAmount = (amountDict) => `${amountDict.amount}::${amountDict.unit}::${amountDict.currency}`;
+
 // note: third use of this. probably want a common location before long. first key is "from", second key is "to"
 const UNIT_MULTIPLIERS = {
     'WHOLE_CURRENCY': {
@@ -201,7 +203,8 @@ module.exports.confirmWithdrawal = async (event) => {
             transactionId,
             accountId: txProperties.accountId,
             timeInMillis: txProperties.settlementTime,
-            withdrawalAmount: `${txProperties.amount}::${txProperties.unit}::${txProperties.currency}`
+            withdrawalAmount: collapseAmount(txProperties),
+            newBalance: collapseAmount(response.balance)
         };
         await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
 

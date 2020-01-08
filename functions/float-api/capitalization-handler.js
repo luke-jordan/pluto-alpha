@@ -82,8 +82,9 @@ const assembleSummaryData = (allocations, floatConfigVars, metadata) => {
     const nonAccountAllocations = 2; // bonus pool and company (may need to calculate in future)
     const numberAccountsToBeCredited = allocations.size - nonAccountAllocations;
     const { bonusPoolTracker, clientCoShareTracker } = floatConfigVars;
-    const amountToCreditClient = allocations.get(clientCoShareTracker).amountToCredit;
-    const amountToCreditBonusPool = allocations.get(bonusPoolTracker).amountToCredit;
+    logger(`Finding allocations for bonus pool: ${bonusPoolTracker} and client share: ${clientCoShareTracker}`);
+    const amountToCreditClient = allocations.get(clientCoShareTracker) ? allocations.get(clientCoShareTracker).amountToCredit : 0;
+    const amountToCreditBonusPool = allocations.get(bonusPoolTracker) ? allocations.get(bonusPoolTracker).amountToCredit : 0;
 
     const excessOverPastAccrual = metadata.totalYield - metadata.totalAccrued;
 
@@ -129,9 +130,10 @@ const assembleAllocationMap = async (params) => {
     const floatConfigVars = await dynamo.fetchConfigVarsForFloat(clientId, floatId);
 
     const passedUnit = params.unit;
-    const convertedAmount = opsUtil.convertToUnit(yieldPaid, passedUnit, DEFAULT_UNIT);
+    const rawConvertedAmount = opsUtil.convertToUnit(parseInt(yieldPaid, 10), passedUnit, DEFAULT_UNIT);
+    const safeConvertedAmount = (new BigNumber(rawConvertedAmount)).integerValue().toNumber(); // frontend sometimes sends in as .99999
 
-    const capitalizedAmount = { amount: convertedAmount, unit: DEFAULT_UNIT, currency };
+    const capitalizedAmount = { amount: safeConvertedAmount, unit: DEFAULT_UNIT, currency };
     const { allocations, metadata } = await divideCapitalizationPerAccruals({ clientId, floatId, startTime, endTime, capitalizedAmount, floatConfigVars });
 
     return { allocations, metadata, floatConfigVars };
@@ -260,7 +262,7 @@ module.exports.handle = async (event) => {
 
         throw new Error(`Unsupported operation: event: ${JSON.stringify(event)}`);
     } catch (err) {
-        logger('FATAL_ERROR: ', event);
+        logger('FATAL_ERROR: ', err);
         return opsUtil.wrapResponse(err.message, 500);
     }
 };

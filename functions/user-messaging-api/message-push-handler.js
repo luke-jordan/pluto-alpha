@@ -3,6 +3,9 @@
 const config = require('config');
 const logger = require('debug')('jupiter:messaging:push');
 
+const publisher = require('publish-common');
+const opsUtil = require('ops-util-common');
+
 const rdsMainUtil = require('./persistence/rds.notifications');
 const rdsPickerUtil = require('./persistence/rds.msgpicker');
 
@@ -69,13 +72,13 @@ module.exports.managePushToken = async (event) => {
 module.exports.deletePushToken = async (event) => {
     try {
         const userDetails = msgUtil.extractUserDetails(event);
-        logger('Event: ', event);
+        // logger('Event: ', event);
         logger('User details: ', userDetails);
         if (!userDetails) {
             return { statusCode: 403 };
         }
         const params = msgUtil.extractEventBody(event);
-        if (userDetails.systemWideUserId !== params.userId) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'userId')) {
             return { statusCode: 403 };
         }
         const deletionResult = await rdsMainUtil.deletePushToken(params.provider, params.userId);
@@ -127,6 +130,10 @@ const chunkAndSendMessages = async (messages) => {
     };
 };
 
+const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, title, body }) => (
+    publisher.publishUserEvent(destinationUserId, 'MESSAGE_PUSH_NOTIFICATION_SENT', { context: { title, body, instructionId, messageId }})
+);
+
 const sendPendingPushMsgs = async () => {
     const switchedOn = config.has('picker.push.running') && config.get('picker.push.running');
     if (!switchedOn) {
@@ -167,6 +174,10 @@ const sendPendingPushMsgs = async () => {
         const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENT');
         logger('Final update worked? : ', updateToProcessed);
 
+        const userLogPromises = assembledMessages.map((msg) => publishMessageSentLog(msg));
+        const resultOfLogPublish = await Promise.all(userLogPromises);
+        logger('Result of publishing message push logs: ', resultOfLogPublish);
+
         return resultOfSend;
     } catch (err) {
         // just in case, we revert, else messages never sent out
@@ -190,7 +201,6 @@ const generateFromSpecificMsgs = async (params) => {
 
     return chunkAndSendMessages(messages);
 };
-
 
 /**
  * This function is responsible for sending push notifications.

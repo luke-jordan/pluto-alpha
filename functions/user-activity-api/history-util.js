@@ -5,8 +5,6 @@ const uuid = require('uuid/v4');
 const MAX_AMOUNT = 6000000;
 const MIN_AMOUNT = 5000000;
 
-module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
-
 module.exports.isUserAuthorized = (event) => {
     const userDetails = event.requestContext ? event.requestContext.authorizer : null;
     
@@ -15,10 +13,6 @@ module.exports.isUserAuthorized = (event) => {
     }
 
     return true;
-};
-
-module.exports.unauthorizedResponse = {
-    statusCode: 403
 };
 
 module.exports.invokeLambda = (functionName, payload, sync = true) => ({

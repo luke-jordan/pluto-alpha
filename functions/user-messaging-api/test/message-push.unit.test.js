@@ -177,7 +177,8 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
         const mockEvent = {
             provider: expectedProvider,
             userId: uuid(),
-            requestContext: testHelper.requestContext(mockUserId)
+            requestContext: testHelper.requestContext(mockUserId),
+            httpMethod: 'DELETE'
         };
 
         const resultOfDeletion = await handler.deletePushToken(mockEvent);

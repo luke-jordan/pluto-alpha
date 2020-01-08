@@ -318,11 +318,17 @@ const handleWithdrawalEvent = async (eventBody) => {
     const emailResult = await ses.sendEmail(emailParams).promise();
     logger('Result of sending email: ', emailResult);
 
+    const processingPromises = [];
+    const boostProcessInvocation = assembleBoostProcessInvocation(eventBody);
+    processingPromises.push(lambda.invoke(boostProcessInvocation).promise());
+
     if (balanceSheetUpdateEnabled) {
             const accountId = eventBody.context.accountId;
             const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
-            await addInvestmentToBSheet({ operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency });
+            processingPromises.push(addInvestmentToBSheet({ operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency }));
     }
+
+    await Promise.all(processingPromises);
 
     // todo : as above, make sure doesn't alter status backwards
     // const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};

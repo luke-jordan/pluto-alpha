@@ -22,6 +22,9 @@ const deletePushTokenStub = sinon.stub();
 const insertPushTokenStub = sinon.stub();
 const updateInstructionStateStub = sinon.stub();
 const updateMessageInstructionStub = sinon.stub();
+
+const publishMultiLogStub = sinon.stub();
+
 const momentStub = sinon.stub();
 
 const handler = proxyquire('../message-creating-handler', {
@@ -37,6 +40,9 @@ const handler = proxyquire('../message-creating-handler', {
         'updateInstructionState': updateInstructionStateStub,
         'updateMessageInstruction': updateMessageInstructionStub,
         '@noCallThru': true
+    },
+    'publish-common': {
+        'publishMultiUserEvent': publishMultiLogStub
     },
     'moment': momentStub
 });
@@ -126,7 +132,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     });
 
     it('Should insert notification messages for all users in current universe', async () => {
-        const testNumberUsers = 1000;
+        const testNumberUsers = 5;
 
         const testUserIds = createMockUserIds(testNumberUsers);
         
@@ -156,6 +162,9 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(testMessage).to.have.property('messageId');
         Reflect.deleteProperty(testMessage, 'messageId');
         expect(testMessage).to.deep.equal(testUserMsgs[0]);
+
+        expect(publishMultiLogStub).to.have.been.calledOnce;
+        expect(publishMultiLogStub).to.have.been.calledWith(testUserIds, 'MESSAGE_CREATED', sinon.match.any);
     });
 
     it('should use other templates over default where provided', async () => {

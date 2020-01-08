@@ -156,6 +156,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(resultOfInsertion).to.have.property('persistedTimeMillis', expectedMillis);
         expect(resultOfInsertion).to.have.property('numberOfUsersEligible', relevantUsers.length);
 
+        const expectedAccountIds = [testReferringAccountId, testReferredUserAccountId]; // property match fails spuriously 
+        expect(resultOfInsertion.accountIds).to.deep.equal(expectedAccountIds);
+
         const expectedSelectQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedSelectQuery, [testAudienceId, true]);
 

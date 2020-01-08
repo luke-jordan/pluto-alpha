@@ -83,7 +83,7 @@ module.exports = {
         'handle-callback-err': 'error',
         'id-blacklist': 'error',
         'id-length': [
-            'error',
+            1,
             {
                 'exceptions': ['e']
             }

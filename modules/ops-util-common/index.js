@@ -38,6 +38,8 @@ module.exports.wrapResponse = (body, statusCode = 200) => {
     };
 };
 
+module.exports.extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
+
 module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
     if (!isUnitValid(fromUnit)) {
         throw new Error(`Invalid from unit in conversion: ${JSON.stringify(fromUnit)}`);
@@ -154,20 +156,22 @@ module.exports.extractParamsFromEvent = (event) => {
 
 module.exports.isApiCall = (event) => Reflect.has(event, 'httpMethod'); // todo : tighten this in time
 
-module.exports.isDirectInvokeAdminOrSelf = (event) => {
+module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId') => {
     const isHttpRequest = Reflect.has(event, 'httpMethod'); 
     if (!isHttpRequest) {
         return true; // by definition -- means it must be via lambda direct invoke, hence allowed by IAM
     }
 
     const userDetails = exports.extractUserDetails(event);
-    logger('User details: ', userDetails);
+    logger('User details for call: ', userDetails);
     if (!userDetails) {
         return false;
     }
 
     const params = exports.extractParamsFromEvent(event);
-    const needAdminRole = params.systemWideUserId && userDetails.systemWideUserId !== params.systemWideUserId;
+    const needAdminRole = params[userIdKey] && userDetails.systemWideUserId !== params[userIdKey];
+    logger('Call requires admin role ? : ', needAdminRole, ' and user role: ', userDetails.role);
+    
     if (needAdminRole && ['SYSTEM_ADMIN', 'SYSTEM_WORKER'].indexOf(userDetails.role) < 0) {
         return false;
     }

@@ -423,12 +423,13 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
     logger('Running query for accrual sums: ', allEntityAccrualQuery);
     logger('Passing in values for accrual sums: ', allEntityValues);
 
+    // we exclude accruals here because that will exclude accruals in this latest period (and thus provide true 'prior balance')
     const accountInfoQuery = `select account_id, owner_user_id, human_ref, unit, sum(amount) from ` +
         `float_data.float_transaction_ledger as float_tx inner join account_data.core_account_ledger as account_info on ` +
         `allocated_to_id = account_id::text where float_tx.client_id = $1 and ` +
         `float_tx.float_id = $2 and float_tx.creation_time < $3 and float_tx.t_state = $4 ` +
-        `and float_tx.currency = $5 group by account_id, owner_user_id, human_ref, unit`;
-    const accountInfoValues = [clientId, floatId, endTime.format(), 'SETTLED', currency];
+        `and float_tx.t_type != $5 and float_tx.currency = $6 group by account_id, owner_user_id, human_ref, unit`;
+    const accountInfoValues = [clientId, floatId, endTime.format(), 'SETTLED', 'ACCRUAL', currency];
 
     const [resultOfAccrualQuery, resultOfAccountInfoQuery] = await Promise.all([
         rdsConnection.selectQuery(allEntityAccrualQuery, allEntityValues),

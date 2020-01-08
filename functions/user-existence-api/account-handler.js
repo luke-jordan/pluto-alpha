@@ -60,17 +60,26 @@ const referralHasZeroRedemption = (referralContext) => {
     }
 };
 
-const safeBoostAmountExtract = (referralContext) => {
-  if (!referralContext || typeof referralContext.boostAmountOffered !== 'string') {
+const safeReferralAmountExtract = (referralContext, key = 'boostAmountOffered') => {
+  if (!referralContext || typeof referralContext[key] !== 'string') {
     return 0;
   }
 
-  const amountArray = referralContext.boostAmountOffered.split('::');
+  const amountArray = referralContext[key].split('::');
   if (!amountArray || amountArray.length === 0) {
     return 0;
   }
 
   return amountArray[0];
+};
+
+const getReferralRevocationConditions = (referralContext) => {
+  const referralRevokeDays = Reflect.has(referralContext, 'daysForRevocation') ? parseInt(referralContext.daysForRevocation, 10) 
+    : parseInt(config.get('referral.withdrawalTime'), 10);
+  const referralRevokeLimit = moment().subtract(referralRevokeDays, 'days').valueOf();
+  const balanceLimit = Reflect.has(referralContext, 'balanceLimitForRevocation') ? referralContext.balanceLimitForRevocation 
+    : config.get('referral.balanceBelow');
+  return { referralRevokeLimit, balanceLimit };
 };
 
 // this handles redeeming a referral code, if it is present and includes an amount
@@ -98,14 +107,14 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
   const boostAccounts = [newAccountId];
   const redemptionMsgInstructions = [{ accountId: newAccountId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRED' }];
 
-  const boostAmountPerUser = safeBoostAmountExtract(referralContext);
+  const boostAmountPerUser = safeReferralAmountExtract(referralContext);
   
   if (referralType === 'USER') {
     const referringUserId = referralCodeDetails.creatingUserId;
     const referringAccountId = await persistence.getAccountIdForUser(referringUserId);
     if (!referringAccountId) {
       logger('INCONSISTENCY_ERROR: referring user has no account ID');
-      return; 
+      return;
     }
 
     redemptionMsgInstructions.push({ accountId: referringAccountId, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' });
@@ -113,7 +122,10 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
   }
 
   const boostAudienceSelection = createAudienceConditions(boostAccounts);
+  // time within which the new user has to save in order to claim the bonus
   const bonusExpiryTime = moment().add(config.get('referral.expiryTimeDays'), 'days');
+
+  const { balanceLimit, referralRevokeLimit } = getReferralRevocationConditions(referralContext);
 
   // note : we may at some point want a "system" flag on creating user ID instead of the account opener, but for
   // now this will allow sufficient tracking, and a simple migration will fix it in the future
@@ -129,7 +141,8 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
     boostAudienceSelection,
     initialStatus: 'PENDING',
     statusConditions: {
-      'REDEEMED': [`save_completed_by #{${newAccountId}}`, `first_save_by #{${newAccountId}}`]
+      'REDEEMED': [`save_completed_by #{${newAccountId}}`, `first_save_by #{${newAccountId}}`],
+      'REVOKED': [`balance_below #{${balanceLimit}}`, `withdrawal_before #{${referralRevokeLimit}}`]
     },
     messageInstructionFlags: {
       'REDEEMED': redemptionMsgInstructions
