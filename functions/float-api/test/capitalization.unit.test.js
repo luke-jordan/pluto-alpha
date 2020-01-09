@@ -226,9 +226,129 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
         expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, startTime: moment(0), endTime: expectedEndMoment, unit: 'HUNDREDTH_CENT', currency: 'USD' });
     });
 
-    // it('Validations throw required errors', async () => {
+    it('Handles http events properly', async () => {
+        const testUserId = uuid();
+        const expectedFetchParams = { clientId: testClientId, floatId: testFloatId };
 
-    // });
+        const mockAccrualMap = new Map();
+        const mockAccountsFromDb = Array(testNumberAccounts).fill().map(() => generateAccountResponse());
+        const mockClientAccrued = generateEntityResponse(helper.commonFloatConfig.clientCoShareTracker, 'COMPANY_SHARE');
+        const mockBonusAccrued = generateEntityResponse(helper.commonFloatConfig.bonusPoolTracker, 'BONUS_POOL');
+
+        mockAccountsFromDb.forEach((account) => mockAccrualMap.set(account.accountId, account));
+        mockAccrualMap.set(helper.commonFloatConfig.clientCoShareTracker, mockClientAccrued);
+        mockAccrualMap.set(helper.commonFloatConfig.bonusPoolTracker, mockBonusAccrued);
+
+        fetchLastLogStub.resolves(null);
+        fetchFloatConfigVarsStub.resolves(helper.commonFloatConfig);
+        fetchAccrualsStub.resolves(mockAccrualMap);
+
+        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
+        const mockInterestPaid = Math.round(totalAccrued * (Math.random() * 0.2 + 1) / 100); // i.e., in the range of 20%, in cents
+        
+        const testEvent = {
+            httpMethod: 'POST',
+            requestContext: { authorizer: { systemWideUserId: testUserId, role: 'SYSTEM_ADMIN' }},
+            pathParameters: { proxy: 'preview' },
+            body: JSON.stringify({
+                clientId: testClientId,
+                floatId: testFloatId,
+                yieldPaid: mockInterestPaid,
+                dateTimePaid: testInterestTime.valueOf(),
+                unit: 'WHOLE_CENT',
+                currency: 'USD'
+            })
+        };
+
+        // we check the detailed results on things above, then just check the accrual stub is called correctly
+        const rawResult = await handler.handle(testEvent);
+        expect(rawResult).to.exist;
+        expect(rawResult).to.have.property('statusCode', 200);
+
+        const resultOfPreview = JSON.parse(rawResult.body);
+        expect(resultOfPreview).to.exist;
+
+        const expectedEndMoment = moment(testInterestTime.valueOf());
+        expect(fetchLastLogStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, logType: 'CAPITALIZATION_EVENT', endTime: expectedEndMoment });
+        expect(fetchFloatConfigVarsStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        expect(fetchAccrualsStub).to.have.been.calledOnceWithExactly({ ...expectedFetchParams, startTime: moment(0), endTime: expectedEndMoment, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+    });
+
+    it('Fails on unauthorised access over http', async () => {
+        const testUserId = uuid();
+
+        const mockAccrualMap = new Map();
+        const mockAccountsFromDb = Array(testNumberAccounts).fill().map(() => generateAccountResponse());
+        const mockClientAccrued = generateEntityResponse(helper.commonFloatConfig.clientCoShareTracker, 'COMPANY_SHARE');
+        const mockBonusAccrued = generateEntityResponse(helper.commonFloatConfig.bonusPoolTracker, 'BONUS_POOL');
+
+        mockAccountsFromDb.forEach((account) => mockAccrualMap.set(account.accountId, account));
+        mockAccrualMap.set(helper.commonFloatConfig.clientCoShareTracker, mockClientAccrued);
+        mockAccrualMap.set(helper.commonFloatConfig.bonusPoolTracker, mockBonusAccrued);
+
+        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
+        const mockInterestPaid = Math.round(totalAccrued * (Math.random() * 0.2 + 1) / 100);
+        
+        const testEvent = {
+            httpMethod: 'POST',
+            requestContext: { authorizer: { systemWideUserId: testUserId, role: 'ORDINARY_USER' }},
+            pathParameters: { proxy: 'preview' },
+            body: JSON.stringify({
+                clientId: testClientId,
+                floatId: testFloatId,
+                yieldPaid: mockInterestPaid,
+                dateTimePaid: testInterestTime.valueOf(),
+                unit: 'WHOLE_CENT',
+                currency: 'USD'
+            })
+        };
+
+        const rawResult = await handler.handle(testEvent);
+        expect(rawResult).to.exist;
+        expect(rawResult).to.have.property('statusCode', 403);
+        expect(rawResult).to.have.property('body', JSON.stringify('Unauthorized'));
+
+        expect(fetchLastLogStub).to.have.not.been.called;
+        expect(fetchFloatConfigVarsStub).to.have.not.been.called;
+        expect(fetchAccrualsStub).to.have.not.been.called;
+    });
+
+    it('Fails on unsupperted operation', async () => {
+        const mockAccrualMap = new Map();
+        const mockAccountsFromDb = Array(testNumberAccounts).fill().map(() => generateAccountResponse());
+        const mockClientAccrued = generateEntityResponse(helper.commonFloatConfig.clientCoShareTracker, 'COMPANY_SHARE');
+        const mockBonusAccrued = generateEntityResponse(helper.commonFloatConfig.bonusPoolTracker, 'BONUS_POOL');
+
+        mockAccountsFromDb.forEach((account) => mockAccrualMap.set(account.accountId, account));
+        mockAccrualMap.set(helper.commonFloatConfig.clientCoShareTracker, mockClientAccrued);
+        mockAccrualMap.set(helper.commonFloatConfig.bonusPoolTracker, mockBonusAccrued);
+
+        const totalAccrued = Array.from(mockAccrualMap.values()).reduce((sum, entry) => entry.amountAccrued + sum, 0);
+        const mockInterestPaid = Math.round(totalAccrued * (Math.random() * 0.2 + 1) / 100);
+        const testEvent = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            yieldPaid: mockInterestPaid,
+            dateTimePaid: testInterestTime.valueOf(),
+            unit: 'WHOLE_CENT',
+            currency: 'USD'
+        };
+
+        const rawResult = await handler.handle({ operation: 'UNSUPPORTED', parameters: testEvent });
+        logger('Result of capitalization:', rawResult);
+
+        expect(rawResult).to.exist;
+        expect(rawResult).to.have.property('statusCode', 500);
+
+        const resultOfPreview = JSON.parse(rawResult.body);
+        expect(resultOfPreview).to.exist;
+        const expectedError = `Unsupported operation: event: ${JSON.stringify({ operation: 'UNSUPPORTED', parameters: testEvent })}`;
+        expect(resultOfPreview).to.deep.equal(expectedError);
+
+        expect(fetchLastLogStub).to.have.not.been.called;
+        expect(fetchFloatConfigVarsStub).to.have.not.been.called;
+        expect(fetchAccrualsStub).to.have.not.been.called;
+    });
 
 });
 

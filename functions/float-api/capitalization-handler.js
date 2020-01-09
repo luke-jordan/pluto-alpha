@@ -260,7 +260,7 @@ module.exports.handle = async (event) => {
             return opsUtil.wrapResponse(confirmResult);
         }
 
-        throw new Error('Unsupported operation: event: ', JSON.stringify(event));
+        throw new Error(`Unsupported operation: event: ${JSON.stringify(event)}`);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return opsUtil.wrapResponse(err.message, 500);
