@@ -240,17 +240,22 @@ const adjustFloatVariables = async ({ clientId, floatId, logReason, newParams })
 // if it's to / from bonus pool or client share, just use transfer lambda
 // it it's to the users, issue an appropriate instruction (bleeds into capitalization)
 const allocateFloatFunds = async ({ clientId, floatId, amountDef, allocatedToDef, adminUserId, logReason }) => {
-
-    logger('Starting off an allocation ...');
+    logger('Starting off an allocation, to: ', allocatedToDef);
     const logContext = { adminUserId, amountAllocated: amountDef, logReason };
     const logId = await persistence.insertFloatLog({ clientId, floatId, logType: 'ADMIN_ALLOCATE_FUNDS', logContext });
     logger('Log inserted, carry on');
 
-    const recipients = [{
-        recipientId: allocatedToDef.id,
-        amount: amountDef.amount,
-        recipientType: allocatedToDef.type
-    }];
+    const recipientDef = { amount: amountDef.amount, recipientType: allocatedToDef };
+    if (allocatedToDef === 'BONUS_POOL') {
+        const { bonusPoolSystemWideId } = await dynamo.fetchClientFloatVars(clientId, floatId);
+        recipientDef.recipientId = bonusPoolSystemWideId;
+    } else if (allocatedToDef === 'COMPANY_SHARE') {
+        const { clientCoShareTracker } = await dynamo.fetchClientFloatVars(clientId, floatId);
+        recipientDef.recipientId = clientCoShareTracker;
+    }
+
+    const recipients = [recipientDef];
+    logger('Recipient for allocations: ', recipients[0]);
 
     const payload = {
         instructions: [{
@@ -260,6 +265,7 @@ const allocateFloatFunds = async ({ clientId, floatId, amountDef, allocatedToDef
             unit: amountDef.unit,
             amount: amountDef.amount,
             identifier: logId,
+            transactionType: 'ADMIN_BALANCE_RECON',
             relatedEntityType: 'ADMIN_INSTRUCTION',
             recipients
         }]

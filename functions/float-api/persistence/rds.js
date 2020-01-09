@@ -20,6 +20,37 @@ const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` 
 const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type}, ${t_state}, ${currency}, ${unit}, ${amount}, ' + 
         '${allocated_to_type}, ${allocated_to_id}, ${related_entity_type}, ${related_entity_id}';
 
+const validateFloatAdjustmentArgs = (floatAdjArgs) => {
+    const requiredProperties = {
+        strings: ['clientId', 'floatId', 'transactionType', 'currency', 'unit', 'backingEntityType', 'backingEntityIdentifier', 'logType'],
+        integers: ['amount', 'referenceTimeMillis']
+    };
+
+    requiredProperties.strings.forEach((property) => {
+        if (!floatAdjArgs[property] || typeof floatAdjArgs[property] !== 'string') {
+            throw new Error(`Invalid or missing value for property: ${property}`);
+        }
+    });
+
+    requiredProperties.integers.forEach((property) => {
+        if (!floatAdjArgs[property] || typeof floatAdjArgs[property] !== 'number') {
+            throw new Error(`Invalid or missing value for property: ${property}`);
+        }
+    });
+
+    if (!Object.values(constants.floatTransTypes).includes(floatAdjArgs.transactionType)) {
+        throw new Error('Invalid transaction type');
+    }
+
+    if (!Object.values(constants.floatUnits).includes(floatAdjArgs.unit)) {
+        throw new Error('Invalid float unit');
+    }
+
+    if (!Object.values(constants.entityTypes).includes(floatAdjArgs.backingEntityType)) {
+        throw new Error('Invalid backing entity type');
+    }
+};
+
 /**
  * Adds or removes amounts from the float. Transaction types cannot be allocations. Request dict keys:
  * @param {string} clientId ID for the client company holding the float
@@ -29,7 +60,7 @@ const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type
  * @param {string} currency The currency of the amount
  * @param {string} unit The unit of the amount
  * @param {string} backingEntityType If there is a related backing entity, e.g., an accrual event/transaction, what type is it
- * @param {string} backingEntityIdentifer What is the identifier of the backing endity
+ * @param {string} backingEntityIdentifier What is the identifier of the backing endity
  * @param {string} logType The type of float log to record for this
  * @param {number} referenceTimeMillis Optional parameter recording the time the accrual fetch/calc was made, for the log
  */
@@ -41,11 +72,13 @@ module.exports.addOrSubtractFloat = async (request = {
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
         backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-        backingEntityIdentifer: 'uid-on-wholesale', 
+        backingEntityIdentifier: 'uid-on-wholesale', 
         logType: 'ACCRUAL_EVENT',
         referenceTimeMillis: 0 }) => {
     
-    // todo : validation on transaction types, units, log type & reference time, etc.    
+    // todo : validation on transaction types, units, log type & reference time, etc.  
+    validateFloatAdjustmentArgs(request);
+    
     const rowToInsert = {
         'transaction_id': request.transactionId || uuid(),
         'client_id': request.clientId,
@@ -127,6 +160,7 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
     unit: constants.floatUnits.DEFAULT,
     allocatedToType: constants.entityTypes.BONUS_POOL,
     allocatedToId: 'someSavingCoBonusPool',
+    transactionType: 'ALLOCATION',
     relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
     relatedEntityId: 'timestampOfAccrualEvent' }]) => {
     
@@ -390,12 +424,13 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
     logger('Running query for accrual sums: ', allEntityAccrualQuery);
     logger('Passing in values for accrual sums: ', allEntityValues);
 
+    // we exclude accruals here because that will exclude accruals in this latest period (and thus provide true 'prior balance')
     const accountInfoQuery = `select account_id, owner_user_id, human_ref, unit, sum(amount) from ` +
         `float_data.float_transaction_ledger as float_tx inner join account_data.core_account_ledger as account_info on ` +
         `allocated_to_id = account_id::text where float_tx.client_id = $1 and ` +
         `float_tx.float_id = $2 and float_tx.creation_time < $3 and float_tx.t_state = $4 ` +
-        `and float_tx.currency = $5 group by account_id, owner_user_id, human_ref, unit`;
-    const accountInfoValues = [clientId, floatId, endTime.format(), 'SETTLED', currency];
+        `and float_tx.t_type != $5 and float_tx.currency = $6 group by account_id, owner_user_id, human_ref, unit`;
+    const accountInfoValues = [clientId, floatId, endTime.format(), 'SETTLED', 'ACCRUAL', currency];
 
     const [resultOfAccrualQuery, resultOfAccountInfoQuery] = await Promise.all([
         rdsConnection.selectQuery(allEntityAccrualQuery, allEntityValues),

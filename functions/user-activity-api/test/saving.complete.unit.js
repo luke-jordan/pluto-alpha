@@ -34,7 +34,6 @@ const testBaseAmount = 1000000;
 const testAmounts = Array(testNumberOfSaves).fill().map(() => Math.floor(Math.random() * testBaseAmount));
 const sumOfTestAmounts = testAmounts.reduce((cum, value) => cum + value, 0);
 
-const findMatchingTxStub = sinon.stub();
 const findFloatOrIdStub = sinon.stub();
 const updateSaveRdsStub = sinon.stub();
 const fetchTransactionStub = sinon.stub();
@@ -52,7 +51,6 @@ const momentStub = sinon.stub();
 
 const handler = proxyquire('../saving-handler', {
     './persistence/rds': { 
-        'findMatchingTransaction': findMatchingTxStub,
         'getOwnerInfoForAccount': findFloatOrIdStub, 
         'updateTxToSettled': updateSaveRdsStub,
         'fetchTransaction': fetchTransactionStub,

@@ -418,13 +418,15 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                 unit: 'HUNDREDTH_CENT',
                 amount: 100,
                 identifier: testLogId,
+                transactionType: 'ADMIN_BALANCE_RECON',
                 relatedEntityType: 'ADMIN_INSTRUCTION',
-                recipients: [{ recipientId: testUserId, amount: 100, recipientType: '' }]
+                recipients: [{ recipientId: 'float-bonus-pool', amount: 100, recipientType: 'BONUS_POOL' }]
             }]
         };
 
         insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
+        fetchClientFloatVarsStub.withArgs(testClientId, testFloatId).resolves({ bonusPoolSystemWideId: 'float-bonus-pool' });
+        lamdbaInvokeStub.returns({
             promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [uuid()]}})
         });
 
@@ -432,7 +434,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
             requestContext: { authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }},
             body: JSON.stringify({
                 operation: 'ALLOCATE_FUNDS',
-                allocateTo: { id: testUserId, type: '' },
+                allocateTo: 'BONUS_POOL',
                 clientId: testClientId,
                 floatId: testFloatId,
                 logId: testLogId,

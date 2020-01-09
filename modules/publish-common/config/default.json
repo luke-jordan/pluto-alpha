@@ -5,6 +5,12 @@
     "publishing": {
         "userEvents": {
             "topicArn": "<insert arn here>"
-        }
+        },
+        "eventsEmailAddress": "insert_default_email"
+    },
+    "crypto": {
+        "algo": "sha256",
+        "secret": "abcdefg",
+        "digest": "hex"
     }
 }

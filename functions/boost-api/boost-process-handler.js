@@ -2,7 +2,8 @@
 
 const logger = require('debug')('jupiter:boosts:handler');
 const config = require('config');
-// const moment = require('moment');
+const moment = require('moment');
+
 const stringify = require('json-stable-stringify');
 const status = require('statuses');
 
@@ -43,6 +44,13 @@ const equalizeAmounts = (amountString) => {
 
 const currency = (amountString) => amountString.split('::')[2];
 
+const evaluateWithdrawal = (parameterValue, eventContext) => {
+    const timeThreshold = moment(parseInt(parameterValue, 10));
+    const timeSettled = moment(parseInt(eventContext.timeInMillis, 10));
+    logger('Checking if withdrawal is occurring before: ', timeThreshold, ' vs withdrawal time: ', timeSettled);
+    return timeSettled.isBefore(timeThreshold);
+};
+
 const testCondition = (event, statusCondition) => {
     logger('Status condition: ', statusCondition);
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
@@ -53,7 +61,6 @@ const testCondition = (event, statusCondition) => {
     const eventHasContext = typeof event.eventContext === 'object';
     switch (conditionType) {
         case 'save_event_greater_than':
-            // todo : check for same currency ...
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue));
             logger('And amount from event: ', equalizeAmounts(event.eventContext.savedAmount));
             logger(`Also asserting if currency ${currency(event.eventContext.savedAmount)} === ${currency(parameterValue)}`);
@@ -63,6 +70,11 @@ const testCondition = (event, statusCondition) => {
             return event.accountId === parameterValue;
         case 'first_save_by':
             return event.accountId === parameterValue && eventHasContext && event.eventContext.firstSave;
+        case 'balance_below':
+            logger('Checking balance below: ', equalizeAmounts(parameterValue), ' event context: ', equalizeAmounts(event.eventContext.newBalance));
+            return equalizeAmounts(event.eventContext.newBalance) < equalizeAmounts(parameterValue);
+        case 'withdrawal_before':
+            return evaluateWithdrawal(parameterValue, event.eventContext);
         default:
             return false;
     }

@@ -23,7 +23,9 @@
         "port" :"5430"
     },
     "referral": {
-        "expiryTimeDays": 7
+        "expiryTimeDays": 7,
+        "withdrawalTime": 30,
+        "balanceBelow": "10::WHOLE_CURRENCY::ZAR"  
     },
     "lambda": {
         "createBoost": "boost_create"

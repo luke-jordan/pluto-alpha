@@ -20,10 +20,13 @@ const findAccountsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const alterBoostStub = sinon.stub();
 const findMsgInstructStub = sinon.stub();
+const findUserIdsStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
 const publishStub = sinon.stub();
+const publishMultiStub = sinon.stub();
+
 const lamdbaInvokeStub = sinon.stub();
 class MockLambdaClient {
     constructor () {
@@ -40,13 +43,15 @@ const handler = proxyquire('../boost-create-handler', {
         'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
         'setBoostMessages': alterBoostStub,
-        'findMsgInstructionByFlag': findMsgInstructStub
+        'findMsgInstructionByFlag': findMsgInstructStub,
+        'findUserIdsForAccounts': findUserIdsStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
     },
     'publish-common': {
-        'publishUserEvent': publishStub
+        'publishUserEvent': publishStub,
+        'publishMultiUserEvent': publishMultiStub
     },
     'moment': momentStub,
     '@noCallThru': true
@@ -140,7 +145,8 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         const expectedFromRds = {
             boostId: uuid(),
             persistedTimeMillis: testPersistedTime.valueOf(),
-            numberOfUsersEligible: 2
+            numberOfUsersEligible: 2,
+            accountIds: [testReferringUser, testReferredUser]
         };
 
         insertBoostStub.resolves(expectedFromRds);
@@ -172,6 +178,8 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             }
         };
 
+        findUserIdsStub.resolves(['user-id-1', 'user-id-2']);
+
         const resultOfInstruction = await handler.createBoost(testBodyOfEvent);
         expect(resultOfInstruction).to.deep.equal(expectedFromRds);
 
@@ -192,6 +200,16 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         const expectedBoost = { ...mockBoostToFromPersistence };
         expectedBoost.audienceId = testCreatedAudienceId;
         expect(insertBoostStub).to.have.been.calledWithExactly(expectedBoost);
+
+        expect(findUserIdsStub).to.have.been.calledWithExactly([testReferringUser, testReferredUser]);
+        const expectedBoostAmount = { boostAmount: 100000, boostUnit: 'HUNDREDTH_CENT', boostCurrency: 'USD' };
+        const expectedUserLogOptions = {
+            initiator: testCreatingUserId,
+            context: {
+                boostType: 'REFERRAL', boostCategory: 'USER_CODE_USED', boostId: expectedFromRds.boostId, ...expectedBoostAmount
+            }
+        };
+        expect(publishMultiStub).to.have.been.calledOnceWithExactly(['user-id-1', 'user-id-2'], 'BOOST_REFERRAL_CREATED', expectedUserLogOptions);
     });
 
 });

@@ -37,6 +37,7 @@ const allocationToNonUser = (recipient, instruction) => ({
     allocatedToId: recipient.recipientId,
     unit: instruction.unit,
     currency: instruction.currency,
+    transactionType: instruction.transactionType,
     relatedEntityType: instruction.relatedEntityType,
     relatedEntityId: instruction.identifier
 });
@@ -82,6 +83,8 @@ const isBonusOrCompany = (type) => type === constants.entityTypes.BONUS_POOL || 
  * @param {object} instruction An instruction about the transfer/allocation/reallocation to conduct 
  */
 const handleInstruction = async (instruction) => {
+    logger('Received transfer instruction, recipients: ', instruction.recipients);
+
     const nonUserAllocRequests = []; // for bonus pool and client share
     const userAllocRequests = [];
 
@@ -109,6 +112,7 @@ const handleInstruction = async (instruction) => {
     }
 
     instruction.recipients.forEach((recipient) => {
+        logger('Processing instruction recipients: ', recipient.recipientType);
         if (recipient.recipientType === 'END_USER_ACCOUNT') {
             userAllocRequests.push(allocationForUser(recipient, instruction, false));
         } else if (isBonusOrCompany(recipient.recipientType)) {

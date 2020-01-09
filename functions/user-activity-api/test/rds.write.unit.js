@@ -13,6 +13,7 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 
 const uuid = require('uuid/v4');
 
@@ -249,6 +250,61 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectNoCalls([insertStub]);
     });
 
+    it('Fail on invalid transaction details', async () => {
+        const testInitiationTime = moment().subtract(5, 'minutes');
+        const testSettlementTime = moment();
+
+        const testNotSettledArgs = { 
+            accountId: testAccountId,
+            currency: 'ZAR',
+            unit: 'HUNDREDTH_CENT',
+            amount: testSaveAmount, 
+            initiationTime: testInitiationTime,
+            settlementStatus: 'INITIATED',
+            floatId: testFloatId,
+            clientId: testClientId
+        };
+
+        Reflect.deleteProperty(testNotSettledArgs, 'accountId');
+        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith('Missing required property: accountId');
+        testNotSettledArgs.accountId = testAccountId;
+
+        testNotSettledArgs.settlementStatus = 'INVALID_SETTLEMENT_STATUS';
+        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith('Invalid settlement status: INVALID_SETTLEMENT_STATUS');
+        testNotSettledArgs.settlementStatus = 'INITIATED';
+
+        testNotSettledArgs.initiationTime = '2027-10-28T15:45:45+02:00'; // must be a moment instance
+        await expect(rds.addTransactionToAccount(testNotSettledArgs)).to.be.rejectedWith('Unexpected initiation time format');
+        testNotSettledArgs.initiationTime = testInitiationTime;
+
+        const testSettledArgs = { 
+            accountId: testAccountId,
+            currency: 'ZAR',
+            unit: 'HUNDREDTH_CENT',
+            amount: testSaveAmount, 
+            floatId: testFloatId,
+            clientId: testClientId,
+            initiationTime: testInitiationTime,
+            settlementTime: testSettlementTime,
+            paymentRef: testPaymentRef,
+            paymentProvider: 'STRIPE',
+            settlementStatus: 'SETTLED'
+        };
+
+        Reflect.deleteProperty(testSettledArgs, 'paymentRef');
+        await expect(rds.addTransactionToAccount(testSettledArgs)).to.be.rejectedWith('Missing required property: paymentRef');
+        testSettledArgs.paymentRef = testPaymentRef;
+
+        testSettledArgs.settlementTime = '2027-10-28T15:45:45+02:00'; // must be a moment instance
+        await expect(rds.addTransactionToAccount(testSettledArgs)).to.be.rejectedWith('Unexpected settlement time format');
+        testSettledArgs.settlementTime = testSettlementTime;
+
+        testSettledArgs.settlementTime = moment().subtract(6, 'minutes');
+        await expect(rds.addTransactionToAccount(testSettledArgs)).to.be.rejectedWith('Settlement cannot occur before initiation');
+
+        expectNoCalls([queryStub, insertStub, multiTableStub]);
+    });
+
     it('Updates a pending save to settled and ties up all parts of float, etc.', async () => {
         const testAcTxId = uuid();
         const testFlTxAddId = uuid();
@@ -481,55 +537,5 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(updateResult).to.have.property('updatedTime');
         expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateTagQuery, [testTag, testUserId]);
-    });
-});
-
-describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
-
-    const testUserId = uuid();
-
-    it('Retrieves and sums user interest correctly', async () => {
-        const userAccountTable = config.get('tables.accountLedger');
-        const txTable = config.get('tables.accountTransactions');
-
-        const expectedInterestQuery = `select sum(amount), unit from ${userAccountTable} inner join ${txTable} ` +
-            `on ${userAccountTable}.account_id = ${config.get('tables.accountTransactions')}.account_id ` + 
-            `where owner_user_id = $1 and currency = $2 and settlement_status = $3 and transaction_type in ($4) ` +
-            `and ${txTable}.creation_time > $5 group by unit`;
-        const expectedTxTypes = [`'ACCRUAL'`, `'CAPITALIZATION'`];
-        const expectedValues = [testUserId, 'USD', 'SETTLED', expectedTxTypes.join(','), moment(0).format()];
-
-        queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
-        const resultOfInterest = await rds.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CURRENCY::USD::0'});
-        logger('Result of interest calc: ', resultOfInterest);
-        logger('args    :', queryStub.getCall(0).args);
-        logger('expected:', [expectedInterestQuery, expectedValues]);
-
-        expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
-        expect(queryStub).to.have.been.calledWith(expectedInterestQuery, expectedValues);
-    });
-
-    it('Retrieves and sums user balance correctly', async () => {
-        const userAccountTable = config.get('tables.accountLedger');
-
-        const expectedBalanceQuery = `select sum(amount), unit from ${userAccountTable} inner join ${config.get('tables.accountTransactions')} ` +
-            `on ${userAccountTable}.account_id = ${config.get('tables.accountTransactions')}.account_id ` +
-            `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
-        const expectedValues = [testUserId, 'USD', 'SETTLED'];
-
-        queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
-        const resultOfInterest = await rds.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CURRENCY::USD::100'});
-        logger('Result of interest calc: ', resultOfInterest);
-        logger('args    :', queryStub.getCall(0).args);
-        logger('expected:', [expectedBalanceQuery, expectedValues]);
-
-        expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
-        expect(queryStub).to.have.been.calledWith(expectedBalanceQuery, expectedValues);
-    });
-
-    it('Gracefully handles unknown parameter', async () => {
-        const resultOfBadQuery = await rds.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
-        logger('Result of bad query: ', resultOfBadQuery);
-        expect(resultOfBadQuery).to.be.null;
     });
 });

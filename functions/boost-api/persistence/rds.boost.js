@@ -358,7 +358,8 @@ module.exports.insertBoost = async (boostDetails) => {
     const resultObject = {
         boostId: resultOfInsertion[0][0]['boost_id'],
         persistedTimeMillis: persistedTime.valueOf(),
-        numberOfUsersEligible: resultOfInsertion[1].length
+        numberOfUsersEligible: resultOfInsertion[1].length,
+        accountIds
     };
 
     logger('Returning: ', resultObject);
@@ -413,4 +414,19 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
     }
 
     return null;
+};
+
+// ///////////////////////////////////////////////////////////////
+// ////// ANOTHER SIMPLE AUX METHODS TO FIND OWNER IDS ///////////
+// ///////////////////////////////////////////////////////////////
+
+module.exports.findUserIdsForAccounts = async (accountIds) => {
+    const query = `select distinct(owner_user_id) from ${config.get('tables.accountLedger')} where ` +
+        `account_id in (${extractArrayIndices(accountIds)})`;
+    const result = await rdsConnection.selectQuery(query, accountIds);
+    if (Array.isArray(result) && result.length > 0) {
+        return result.map((row) => row['owner_user_id']);
+    }
+
+    throw Error('Given non-existent or bad account IDs');
 };

@@ -6,6 +6,7 @@ const moment = require('moment');
 const status = require('statuses');
 const stringify = require('json-stable-stringify');
 
+const publisher = require('publish-common');
 const util = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
@@ -263,6 +264,20 @@ const retrieveBoostAmounts = (params) => {
     return { boostAmountDetails, boostBudget };
 };
 
+const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boostId, boostAmountDict, initiator }) => {
+    const eventType = `BOOST_${boostType}_CREATED`;
+    const options = {
+        initiator,
+        context: {
+            boostType, boostCategory, boostId, ...boostAmountDict
+        }
+    };
+    const userIds = await persistence.findUserIdsForAccounts(accountIds);
+    logger('Triggering user logs for boost ...');
+    const resultOfLogPublish = await publisher.publishMultiUserEvent(userIds, eventType, options);
+    logger('Result of log publishing: ', resultOfLogPublish);
+};
+
 /**
  * The primary method here. Creates a boost and sets various other methods into action
  * Note, there are three ways boosts can have their messages assigned:
@@ -366,6 +381,21 @@ module.exports.createBoost = async (event) => {
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
 
+    const logParams = {
+        accountIds: persistedBoost.accountIds,
+        boostId: persistedBoost.boostId,
+        boostType,
+        boostCategory,
+        boostAmountDict: {
+            boostAmount: parseInt(boostAmountDetails[0], 10),
+            boostUnit: boostAmountDetails[1],
+            boostCurrency: boostAmountDetails[2]
+        },
+        initiator: params.creatingUserId
+    };
+    logger('Publishing user logs with params: ', logParams);
+    await publishBoostUserLogs(logParams);
+
     // logger('Do we have messages ? :', params.messagesToCreate);
     if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
         const boostParams = {
@@ -376,7 +406,7 @@ module.exports.createBoost = async (event) => {
             boostEndTime
         };
 
-        logger('Passing boost params: ', boostParams);
+        logger('Passing boost params to message create: ', boostParams);
 
         const messagePayloads = params.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
         logger('Assembled message payloads: ', messagePayloads);

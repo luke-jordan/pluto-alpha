@@ -1,5 +1,7 @@
 'use strict';
 
+const crypto = require('crypto');
+
 const logger = require('debug')('jupiter:logging-module:main');
 const config = require('config');
 const moment = require('moment');
@@ -13,6 +15,18 @@ const sns = new AWS.SNS({ region: config.get('aws.region') });
 const ses = new AWS.SES();
 const s3 = new AWS.S3();
 
+// config's biggest weakness is its handling of modules, which blows. there is a complex way
+// to set defaults but it requires a constructor pattern, so far as I can tell. hence, doing this. 
+const getCryptoConfigOrDefault = (key, defaultValue) => (config.has(`crypto.${key}`) ? config.get(`crypto.${key}`) : defaultValue);
+
+const generateHashForEvent = (eventType) => {
+    const hashingSecret = getCryptoConfigOrDefault('key', 'abcdefg');
+    const generatedHash = crypto.createHmac(getCryptoConfigOrDefault('algo', 'sha256'), hashingSecret).
+        update(`${hashingSecret}_${eventType}`).
+        digest(getCryptoConfigOrDefault('digest', 'hex'));
+    return generatedHash;
+};
+
 module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
     try {
         logger('Publishing user event to topic');
@@ -23,7 +37,8 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             timestamp: eventTime,
             interface: options.interface,
             initiator: options.initiator,
-            context: options.context
+            context: options.context,
+            generatedHash: generateHashForEvent(eventType)
         };
 
         const messageForQueue = {
@@ -32,10 +47,11 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             TopicArn: config.get('publishing.userEvents.topicArn')
         };
 
-        logger('Sending to queue: ', messageForQueue);
+        // logger('Sending to queue: ', messageForQueue);
 
+        logger(`Logging ${eventType} for user ID ${userId}`);
         const resultOfPublish = await sns.publish(messageForQueue).promise();
-        logger('Result from queue: ', resultOfPublish);
+        // logger('Result from queue: ', resultOfPublish);
 
         if (typeof resultOfPublish === 'object' && Reflect.has(resultOfPublish, 'MessageId')) {
             return { result: 'SUCCESS' };
@@ -45,6 +61,22 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         return { result: 'FAILURE' };
     } catch (err) {
         logger('PUBLISHING_ERROR: ', err);
+        return { result: 'FAILURE' };
+    }
+};
+
+module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) => {
+    try {
+        // note: SNS does not have a batch publish method, so we do this -- do not ever call this in user facing method
+        const publishPromises = userIds.map((userId) => exports.publishUserEvent(userId, eventType, options));
+        logger('Sending ', publishPromises.length, ' events to the user log topic');
+        const resultOfAll = await Promise.all(publishPromises);
+        const successCount = resultOfAll.filter((returned) => returned.result === 'SUCCESS').length;
+        logger(`Of promises, ${successCount} were successful`);
+        return { successCount, failureCount: userIds.length - successCount };
+    } catch (err) {
+        // means was not caught in interior (i.e., above)
+        logger('PUBLISHING_ERROR: Bulk error: ', err);
         return { result: 'FAILURE' };
     }
 };
