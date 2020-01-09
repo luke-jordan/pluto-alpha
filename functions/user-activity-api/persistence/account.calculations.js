@@ -129,8 +129,8 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
         case 'capitalization': {
             logger('Returning the last capitalization event (or sum over them in a period)');
             const currency = operationParams[1];
-            const startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
-            const endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            const startTimeMillis = operationParams.length > 2 ? Number(operationParams[2]) : null;
+            const endTimeMillis = operationParams.length > 3 ? Number(operationParams[3]) : null;
             return capitalizationQuery({ currency, startTimeMillis, endTimeMillis }, systemWideUserId);
         }
         case 'total_earnings': {
