@@ -68,6 +68,66 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
         expect(queryStub).to.have.been.calledWith(expectedBalanceQuery, expectedValues);
     });
 
+    it('Retrieves last capitalization event correctly', async () => {
+        const userAccountTable = config.get('tables.accountLedger');
+        const txTable = config.get('tables.accountTransactions');
+
+        const testStartTimeMillis = moment().subtract(5, 'days').valueOf();
+        const testEndTimeMillis = moment().valueOf();
+
+        const expectedCapitalizationQuery = `select sum(amount), unit from account_data.core_account_ledger ` +
+            `inner join transaction_data.core_transaction_ledger on ${userAccountTable}.account_id = ${txTable}.account_id ` +
+            `where owner_user_id = $1 and transaction_type = $2 and settlement_status = $3 ` +
+            `and currency = $4 and creation_time between $5 and $6 group by unit`;
+        const expectedValues = [testUserId, 'CAPITALIZATION', 'SETTLED', 'WHOLE_CURRENCY', moment(testStartTimeMillis).format(), moment(testEndTimeMillis).format()];
+
+        queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
+        const resultOfCapitalization = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `capitalization::WHOLE_CURRENCY::${testStartTimeMillis}::${testEndTimeMillis}`});
+        logger('Result of capitalization: ', resultOfCapitalization);
+        expect(resultOfCapitalization).to.deep.equal({ amount: 200000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
+        expect(queryStub).to.have.been.calledWith(expectedCapitalizationQuery, expectedValues);
+    });
+
+    it('Retrieves and sums user earnings correctly', async () => {
+        const userAccountTable = config.get('tables.accountLedger');
+        const txTable = config.get('tables.accountTransactions');
+
+        const testStartTimeMillis = moment().subtract(5, 'days').valueOf();
+        const testEndTimeMillis = moment().valueOf();
+
+        const expectedEarningsQuery = `select sum(amount), unit from ${userAccountTable} ` +
+            `inner join ${txTable} on ${userAccountTable}.account_id = ${txTable}.account_id ` +
+            `where owner_user_id = $1 and currency = $2 and settlement_status = $3 creation_time > $4 and ` +
+            `creation_time < 5 and transaction_type in $6, $7, $8 group by unit`;
+        const expectedValues = [testUserId, 'WHOLE_CURRENCY', 'SETTLED', moment(testStartTimeMillis).format(), moment(testEndTimeMillis).format(), 'ACCRUAL', 'CAPITALIZATION', 'BOOST_REDEMPTION'];
+
+        queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
+        const resultOfEarnings = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `total_earnings::HUNDREDTH_CENT::WHOLE_CURRENCY::${testStartTimeMillis}::${testEndTimeMillis}`});
+        logger('Result of capitalization: ', resultOfEarnings);
+        expect(resultOfEarnings).to.deep.equal({ amount: 200000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
+        expect(queryStub).to.have.been.calledWith(expectedEarningsQuery, expectedValues);
+    });
+
+    it('Retrieves and sums user net savings correctly', async () => {
+        const userAccountTable = config.get('tables.accountLedger');
+        const txTable = config.get('tables.accountTransactions');
+
+        const testStartTimeMillis = moment().subtract(5, 'days').valueOf();
+        const testEndTimeMillis = moment().valueOf();
+
+        const expectedSavingsQuery = `select sum(amount), unit from ${userAccountTable} inner ` +
+            `join ${txTable} on account_data.core_account_ledger.account_id = transaction_data.core_transaction_ledger.account_id ` +
+            `where owner_user_id = $1 and currency = $2 and settlement_status = $3 creation_time > $4 and ` +
+            `creation_time < 5 and transaction_type in $6, $7 group by unit`;
+        const expectedValues = [testUserId, 'WHOLE_CURRENCY', 'SETTLED', moment(testStartTimeMillis).format(), moment(testEndTimeMillis).format(), 'USER_SAVING_EVENT', 'WITHDRAWAL'];
+
+        queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
+        const resultOfSavings = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `net_saving::HUNDREDTH_CENT::WHOLE_CURRENCY::${testStartTimeMillis}::${testEndTimeMillis}`});
+        logger('Result of savings: ', resultOfSavings);
+        expect(resultOfSavings).to.deep.equal({ amount: 200000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
+        expect(queryStub).to.have.been.calledWith(expectedSavingsQuery, expectedValues);
+    });
+
     it('Gracefully handles unknown parameter', async () => {
         const resultOfBadQuery = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
         logger('Result of bad query: ', resultOfBadQuery);
