@@ -127,6 +127,7 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
     unit: constants.floatUnits.DEFAULT,
     allocatedToType: constants.entityTypes.BONUS_POOL,
     allocatedToId: 'someSavingCoBonusPool',
+    transactionType: 'ALLOCATION',
     relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
     relatedEntityId: 'timestampOfAccrualEvent' }]) => {
     

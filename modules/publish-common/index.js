@@ -15,12 +15,15 @@ const sns = new AWS.SNS({ region: config.get('aws.region') });
 const ses = new AWS.SES();
 const s3 = new AWS.S3();
 
+// config's biggest weakness is its handling of modules, which blows. there is a complex way
+// to set defaults but it requires a constructor pattern, so far as I can tell. hence, doing this. 
+const getCryptoConfigOrDefault = (key, defaultValue) => (config.has(`crypto.${key}`) ? config.get(`crypto.${key}`) : defaultValue);
+
 const generateHashForEvent = (eventType) => {
-    const hashingAlgo = config.get('crypto.algo');
-    const hashingSecret = config.get('crypto.secret');
-    const generatedHash = crypto.createHmac(hashingAlgo, hashingSecret).
+    const hashingSecret = getCryptoConfigOrDefault('key', 'abcdefg');
+    const generatedHash = crypto.createHmac(getCryptoConfigOrDefault('algo', 'sha256'), hashingSecret).
         update(`${hashingSecret}_${eventType}`).
-        digest(config.get('crypto.digest'));
+        digest(getCryptoConfigOrDefault('digest', 'hex'));
     return generatedHash;
 };
 

@@ -58,7 +58,7 @@ const capitalizationQuery = async (params, systemWideUserId) => {
     } else {
         const selectQuery = `select amount, unit from ${userAccountTable} inner join ${txTable} ` +
             `on ${userAccountTable}.account_id = ${txTable}.account_id where owner_user_id = $1 ` +
-            `and transaction_type = $2 and settlement_status = $3 order by creation_time desc limit 1`;
+            `and transaction_type = $2 and settlement_status = $3 order by ${txTable}.creation_time desc limit 1`;
         const selectValues = [systemWideUserId, 'CAPITALIZATION', 'SETTLED']; 
         const fetchRow = await rdsConnection.selectQuery(selectQuery, selectValues);
         logger('FInding last capitalization, result from RDS: ', fetchRow);
@@ -84,20 +84,20 @@ const sumOverSettledTransactionTypes = async (params, systemWideUserId, transTyp
         queryParamCount += 1;
     }
 
-    const queryTimeSection = queryTimeParts.length > 0 ? queryTimeParts.join(' and ') : '';
+    const queryTimeSection = queryTimeParts.length > 0 ? `and ${queryTimeParts.join(' and ')}` : '';
     const queryTypeIndices = opsUtil.extractArrayIndices(transTypesToInclude, queryParamCount);
     
     const query = `select sum(amount), unit from ${userAccountTable} inner join ${txTable} ` +
         `on ${userAccountTable}.account_id = ${txTable}.account_id ` + 
         `where owner_user_id = $1 and currency = $2 and settlement_status = $3 ${queryTimeSection} ` +
-        `and transaction_type in ${queryTypeIndices} group by unit`;
+        `and transaction_type in (${queryTypeIndices}) group by unit`;
     
     logger('For summing over settled tx query, assembled: ', query);
     logger('And sending in values: ', [...queryValues, ...transTypesToInclude]);
     const fetchRows = await rdsConnection.selectQuery(query, [...queryValues, ...transTypesToInclude]);
     logger('Fetched resuls for earnings query: ', fetchRows);
 
-    return { ...params, amount: opsUtil.sumOverUnits() };
+    return { ...params, amount: opsUtil.sumOverUnits(fetchRows, params.unit) };
 };
 
 const earningsQuery = async (params, systemWideUserId) => {
@@ -112,6 +112,7 @@ const netSavingQuery = async (params, systemWideUserId) => {
     return sumOverSettledTransactionTypes(params, systemWideUserId, transTypesToInclude);
 };
 
+/* eslint-disable no-magic-numbers */
 const executeAggregateOperation = (operationParams, systemWideUserId) => {
     const operation = operationParams[0];
     switch (operation) {
@@ -126,7 +127,7 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
             return interestHistoryQuery(paramsForPersistence, systemWideUserId);
         }
         case 'capitalization': {
-            logger('Returning the last capitalization event');
+            logger('Returning the last capitalization event (or sum over them in a period)');
             const currency = operationParams[1];
             const startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
             const endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
@@ -134,20 +135,21 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
         }
         case 'total_earnings': {
             const params = { unit: operationParams[1], currency: operationParams[2] };
-            params.startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
-            params.endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            params.startTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            params.endTimeMillis = operationParams.length > 4 ? operationParams[4] : null;
             return earningsQuery(params, systemWideUserId);
         }
         case 'net_saving': {
             const params = { unit: operationParams[1], currency: operationParams[2] };
-            params.startTimeMillis = operationParams.length > 2 ? operationParams[2] : null;
-            params.endTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            params.startTimeMillis = operationParams.length > 3 ? operationParams[3] : null;
+            params.endTimeMillis = operationParams.length > 4 ? operationParams[4] : null;
             return netSavingQuery(params, systemWideUserId);
         }
         default:
             return null;
     }
 };
+/* eslint-enable no-magic-numbers */
 
 /**
  * Retrieves figures for the user according to a simple set of instructions, of the form:

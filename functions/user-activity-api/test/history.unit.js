@@ -182,7 +182,10 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             promise: () => mockLambdaResponse(expectedBalance)
         });
 
-        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'}).resolves({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'}).
+            resolves({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'net_saving::WHOLE_CENT::USD'}).
+            resolves({ amount: 1000, unit: 'WHOLE_CURRENCY', currency: 'USD' });
 
         findAccountStub.withArgs(testUserId).resolves([testAccountId]);
 
@@ -212,7 +215,11 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         // expect(result.body).to.deep.equal(JSON.stringify(expectedResult)); // momentStub isn't stubbing out a specific instance. to be seen to. all else is as expected. 
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
-        expect(getAccountFigureStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'});
+        
+        expect(getAccountFigureStub).to.have.been.calledTwice;
+        expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'});
+        expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'net_saving::WHOLE_CENT::USD'});
+        
         expect(findAccountStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(fetchPriorTxStub).to.have.been.calledOnceWithExactly(testAccountId);
     });

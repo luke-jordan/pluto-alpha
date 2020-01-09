@@ -86,10 +86,17 @@ const formatAmountResult = (amountResult) => {
     return numberFormat.format(wholeCurrencyAmount);
 };
 
-const fecthAccountEarnings = async (systemWideUserId, currency) => {
+const fetchAccountEarnings = async (systemWideUserId, currency) => {
     const operation = `total_earnings::WHOLE_CENT::${currency}`;
     const amountResult = await accountCalculator.getUserAccountFigure({ systemWideUserId, operation });
-    logger('Retrieved from persistence: ', amountResult);
+    logger('Retrieved earnings from persistence: ', amountResult);
+    return formatAmountResult(amountResult);
+};
+
+const fetchNetSavings = async (systemWideUserId, currency) => {
+    const operation = `net_saving::WHOLE_CENT::${currency}`;
+    const amountResult = await accountCalculator.getUserAccountFigure({ systemWideUserId, operation });
+    logger('Retrieved savings from persistence: ', amountResult);
     return formatAmountResult(amountResult);
 };
 
@@ -98,7 +105,7 @@ const obtainUserBalance = async (userProfile) => {
         userId: userProfile.systemWideUserId,
         currency: userProfile.defaultCurrency,
         atEpochMillis: moment().valueOf(),
-        timezone: userProfile.defaultTimezone, 
+        timezone: userProfile.defaultTimezone,
         clientId: userProfile.clientId,
         daysToProject: 0
     };
@@ -169,9 +176,11 @@ module.exports.fetchUserHistory = async (event) => {
         const [userProfile, priorEvents] = await Promise.all([
             fetchUserProfile(systemWideUserId), obtainUserHistory(systemWideUserId)
         ]);
-
-        const userBalance = await obtainUserBalance(userProfile);
-        const accruedInterest = await fecthAccountEarnings(systemWideUserId, userProfile.defaultCurrency);
+        
+        const currency = userProfile.defaultCurrency;
+        const [userBalance, totalEarnings, netSavings] = await Promise.all([
+            obtainUserBalance(userProfile), fetchAccountEarnings(systemWideUserId, currency), fetchNetSavings(systemWideUserId, currency)
+        ]);
 
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
@@ -181,9 +190,11 @@ module.exports.fetchUserHistory = async (event) => {
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
         logger('Created formatted array:', userHistory);
 
-        const resultObject = { 
+        const resultObject = {
             userBalance,
-            accruedInterest, 
+            accruedInterest: totalEarnings, // legacy to avoid mobile crashes, remove soon
+            totalEarnings,
+            netSavings,
             userHistory
         };
         
@@ -201,9 +212,13 @@ module.exports.calculateUserAmount = async (event) => {
         return unauthorizedResponse;
     }
 
+    logger('Processing event: ', event);
     const { aggregates, systemWideUserId } = event;
 
-    const resultsOfOperations = await Promise.all(aggregates.map((aggregate) => accountCalculator.getUserAccountFigure(systemWideUserId, aggregate)));
+    const opsPromises = aggregates.map((aggregate) => accountCalculator.getUserAccountFigure({ systemWideUserId, operation: aggregate }));
+    const resultsOfOperations = await Promise.all(opsPromises);
     
+    logger('Result: ', resultsOfOperations);
+
     return { results: resultsOfOperations };
 };
