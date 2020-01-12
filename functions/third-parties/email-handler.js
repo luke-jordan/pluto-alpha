@@ -1,8 +1,9 @@
 'use strict';
 
 const logger = require('debug')('jupiter:third-parties:sendgrid');
-const uuid = require('uuid/v4');
 const config = require('config');
+
+const uuid = require('uuid/v4');
 const validator = require('validator');
 const sgMail = require('@sendgrid/mail');
 const AWS = require('aws-sdk');
@@ -112,7 +113,7 @@ const publishEmails = async (email) => {
  * @property {subject} subject The emails subject.
  * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
  */
-module.exports.publishFromSource = async ({templateSource, textTemplate, subject, destinationArray}) => {
+module.exports.publishFromSource = async ({ templateSource, textTemplate, subject, destinationArray }) => {
     validatePublishEvent({ subject, templateSource, textTemplate, destinationArray });
 
     const templateId = uuid();
@@ -148,7 +149,7 @@ module.exports.publishFromSource = async ({templateSource, textTemplate, subject
  * @property {subject} subject The emails subject.
  * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
  */
-module.exports.publishFromTemplate = async ({htmlTemplate, textTemplate, subject, destinationArray}) => {
+module.exports.publishFromTemplate = async ({ htmlTemplate, textTemplate, subject, destinationArray }) => {
     validatePublishEvent({ subject, htmlTemplate, textTemplate, destinationArray });
 
     const templateId = uuid();
