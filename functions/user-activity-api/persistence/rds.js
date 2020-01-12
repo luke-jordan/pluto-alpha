@@ -30,8 +30,8 @@ module.exports.fetchTransaction = async (transactionId) => {
 module.exports.fetchTransactionsForHistory = async (accountId) => {
     const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION'];
     const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
-        `and transaction_type in ($2, $3, $4, $5) order by creation_time desc`;
-    const rows = await rdsConnection.selectQuery(query, [accountId, ...txTypes]);
+        `and settlement_status = $2 and transaction_type in ($3, $4, $5, $6) order by creation_time desc`;
+    const rows = await rdsConnection.selectQuery(query, [accountId, 'SETTLED', ...txTypes]);
     return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : null;
 };
 

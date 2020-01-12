@@ -159,16 +159,10 @@ describe('Float balance add or subtract', () => {
             currency: 'ZAR',
             unit: constants.floatUnits.HUNDREDTH_CENT,
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-            backingEntityIdentifier: uuid(),
             logType: 'WHOLE_FLOAT_ACCRUAL',
             referenceTimeMillis: refTime.valueOf()
         }; 
         
-        Reflect.deleteProperty(floatBalanceAdjustment, 'backingEntityIdentifier');
-        const expectedError = 'Invalid or missing value for property: backingEntityIdentifier';
-        await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith(expectedError);
-        floatBalanceAdjustment.backingEntityIdentifier = uuid();
-
         Reflect.deleteProperty(floatBalanceAdjustment, 'amount');
         await expect(rds.addOrSubtractFloat(floatBalanceAdjustment)).to.be.rejectedWith('Invalid or missing value for property: amount');
         floatBalanceAdjustment.amount = Math.floor(1000 * 100 * 100 * Math.random());

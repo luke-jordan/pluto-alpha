@@ -22,7 +22,7 @@ const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type
 
 const validateFloatAdjustmentArgs = (floatAdjArgs) => {
     const requiredProperties = {
-        strings: ['clientId', 'floatId', 'transactionType', 'currency', 'unit', 'backingEntityType', 'backingEntityIdentifier', 'logType'],
+        strings: ['clientId', 'floatId', 'transactionType', 'currency', 'unit', 'backingEntityType', 'logType'],
         integers: ['amount', 'referenceTimeMillis']
     };
 
