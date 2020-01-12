@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:third-parties:bank-verify-test');
+// const logger = require('debug')('jupiter:third-parties:sendgrid-unit-test');
 const config = require('config');
 const uuid = require('uuid/v4');
 
@@ -49,28 +49,27 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
     const testTemplateKey = 'templateKey';
 
     const testDestinationDetails = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-
+    
+    const validAssembledEmail = {
+        'dynamic_template_data': { user: testUserName },
+        'from': config.get('sendgrid.sourceAddress'),
+        'html': validHtmlTemplate,
+        'mail_settings': {
+            'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
+        },
+        'subject': validSubject,
+        'template_id': testTemplateId,
+        'text': validTextTemplate,
+        'to': testEmailAddress
+    };
+    
     beforeEach(() => {
         setApiKeyStub.resolves();
         uuidStub.returns(testTemplateId);
         resetStubs(sendgridStub, getObjectStub);
     });
     
-    it('Sends email to user', async () => {
-
-        const expectedEmail = {
-            'dynamic_template_data': { user: testUserName },
-            'from': config.get('sendgrid.sourceAddress'),
-            'html': validHtmlTemplate,
-            'mail_settings': {
-                'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
-            },
-            'subject': validSubject,
-            'template_id': testTemplateId,
-            'text': validTextTemplate,
-            'to': testEmailAddress
-        };
-
+    it('Handles single email', async () => {
         const testDestinationArray = [testDestinationDetails];
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
@@ -84,28 +83,13 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         };
 
         const resultOfEmail = await handler.publishFromSource(testEvent);
-        logger('Result of email:', resultOfEmail);
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
-        expect(sendgridStub).to.have.been.calledOnceWithExactly(expectedEmail);
+        expect(sendgridStub).to.have.been.calledOnceWithExactly(validAssembledEmail);
     });
 
     it('Handles multiple emails', async () => {
-
-        const expectedEmail = {
-            'dynamic_template_data': { user: testUserName },
-            'from': config.get('sendgrid.sourceAddress'),
-            'html': validHtmlTemplate,
-            'mail_settings': {
-                'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
-            },
-            'subject': validSubject,
-            'template_id': testTemplateId,
-            'text': validTextTemplate,
-            'to': testEmailAddress
-        };
-
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
@@ -119,29 +103,14 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         };
 
         const resultOfEmail = await handler.publishFromSource(testEvent);
-        logger('Result of email:', resultOfEmail);
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
         expect(sendgridStub).to.have.been.calledThrice;
-        expect(sendgridStub).to.have.been.calledWith(expectedEmail);
+        expect(sendgridStub).to.have.been.calledWith(validAssembledEmail);
     });
 
     it('Failure of one email does not domino onto others', async () => {
-
-        const expectedEmail = {
-            'dynamic_template_data': { user: testUserName },
-            'from': config.get('sendgrid.sourceAddress'),
-            'html': validHtmlTemplate,
-            'mail_settings': {
-                'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
-            },
-            subject: validSubject,
-            'template_id': testTemplateId,
-            'text': validTextTemplate,
-            'to': testEmailAddress
-        };
-
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
@@ -156,15 +125,14 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         };
 
         const resultOfEmail = await handler.publishFromSource(testEvent);
-        logger('Result of email:', resultOfEmail);
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
         expect(sendgridStub).to.have.been.calledThrice;
-        expect(sendgridStub).to.have.been.calledWith(expectedEmail);
+        expect(sendgridStub).to.have.been.calledWith(validAssembledEmail);
     });
 
-    it('Fails on invalid parameters', async () => {
+    it('Fails on invalid method parameters', async () => {
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         const testEvent = {
@@ -178,29 +146,36 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('Missing email subject');
 
         testEvent.subject = validSubject;
+
         Reflect.deleteProperty(testEvent, 'templateSource');
         Reflect.deleteProperty(testEvent, 'textTemplate');
+
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('At least one template is required');
 
         testEvent.textTemplate = validTextTemplate;
         testEvent.templateSource = { bucket: testTemplateBucket };
+
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('Missing valid template key-bucket pair');
 
         testEvent.templateSource = { key: testTemplateKey, bucket: testTemplateBucket };
+
         Reflect.deleteProperty(testEvent, 'destinationArray');
+
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('Missing destination array');
 
         testEvent.destinationArray = [{}, {}];
+
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('Invalid destination object: {}');
 
         testEvent.destinationArray = [{ someOtherKey: 'that should not exist' }];
+
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith(`Invalid destination object: ${JSON.stringify({someOtherKey: 'that should not exist'})}`);
  
         expect(getObjectStub).to.have.not.been.called;
         expect(sendgridStub).to.have.not.been.called;
     });
 
-    it('Fails on malformed email', async () => {
+    it('Fails on malformed assembled email', async () => {
         const testDestinationArray = [testDestinationDetails];
     
         const testEvent = {
@@ -251,27 +226,26 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
 
     const testDestinationDetails = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
 
+    const validAssembledEmail = {
+        'dynamic_template_data': { user: testUserName },
+        'from': config.get('sendgrid.sourceAddress'),
+        'html': validHtmlTemplate,
+        'mail_settings': {
+            'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
+        },
+        'subject': validSubject,
+        'template_id': testTemplateId,
+        'text': validTextTemplate,
+        'to': testEmailAddress
+    };
+
     beforeEach(() => {
         setApiKeyStub.resolves();
         uuidStub.returns(testTemplateId);
         resetStubs(sendgridStub, getObjectStub);
     });
     
-    it('Sends email to user', async () => {
-
-        const expectedEmail = {
-            'dynamic_template_data': { user: testUserName },
-            'from': config.get('sendgrid.sourceAddress'),
-            'html': validHtmlTemplate,
-            'mail_settings': {
-                'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
-            },
-            'subject': validSubject,
-            'template_id': testTemplateId,
-            'text': validTextTemplate,
-            'to': testEmailAddress
-        };
-
+    it('Sends single email', async () => {
         const testDestinationArray = [testDestinationDetails];
 
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
@@ -284,28 +258,13 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         };
 
         const resultOfEmail = await handler.publishFromTemplate(testEvent);
-        logger('Result of email:', resultOfEmail);
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.not.been.called;
-        expect(sendgridStub).to.have.been.calledOnceWithExactly(expectedEmail);
+        expect(sendgridStub).to.have.been.calledOnceWithExactly(validAssembledEmail);
     });
 
     it('Handles multiple emails', async () => {
-
-        const expectedEmail = {
-            'dynamic_template_data': { user: testUserName },
-            'from': config.get('sendgrid.sourceAddress'),
-            'html': validHtmlTemplate,
-            'mail_settings': {
-                'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
-            },
-            'subject': validSubject,
-            'template_id': testTemplateId,
-            'text': validTextTemplate,
-            'to': testEmailAddress
-        };
-
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
@@ -318,29 +277,14 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         };
 
         const resultOfEmail = await handler.publishFromTemplate(testEvent);
-        logger('Result of email:', resultOfEmail);
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.not.been.called;
         expect(sendgridStub).to.have.been.calledThrice;
-        expect(sendgridStub).to.have.been.calledWith(expectedEmail);
+        expect(sendgridStub).to.have.been.calledWith(validAssembledEmail);
     });
 
     it('Failure of one email does not domino onto others', async () => {
-
-        const expectedEmail = {
-            'dynamic_template_data': { user: testUserName },
-            'from': config.get('sendgrid.sourceAddress'),
-            'html': validHtmlTemplate,
-            'mail_settings': {
-                'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
-            },
-            'subject': validSubject,
-            'template_id': testTemplateId,
-            'text': validTextTemplate,
-            'to': testEmailAddress
-        };
-
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
@@ -354,15 +298,14 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         };
 
         const resultOfEmail = await handler.publishFromTemplate(testEvent);
-        logger('Result of email:', resultOfEmail);
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.not.been.called;
         expect(sendgridStub).to.have.been.calledThrice;
-        expect(sendgridStub).to.have.been.calledWith(expectedEmail);
+        expect(sendgridStub).to.have.been.calledWith(validAssembledEmail);
     });
 
-    it('Fails on invalid parameters', async () => {
+    it('Fails on invalid method parameters', async () => {
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         const testEvent = {
@@ -373,28 +316,35 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         };
 
         Reflect.deleteProperty(testEvent, 'subject');
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('Missing email subject');
 
         testEvent.subject = validSubject;
+
         Reflect.deleteProperty(testEvent, 'htmlTemplate');
         Reflect.deleteProperty(testEvent, 'textTemplate');
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('At least one template is required');
 
         testEvent.htmlTemplate = validHtmlTemplate;
+
         Reflect.deleteProperty(testEvent, 'destinationArray');
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('Missing destination array');
 
         testEvent.destinationArray = [{}, {}];
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('Invalid destination object: {}');
 
         testEvent.destinationArray = [{ someOtherKey: 'that should not exist' }];
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith(`Invalid destination object: ${JSON.stringify({someOtherKey: 'that should not exist'})}`);
  
         expect(getObjectStub).to.have.not.been.called;
         expect(sendgridStub).to.have.not.been.called;
     });
 
-    it('Fails on malformed email', async () => {
+    it('Fails on malformed assembled email', async () => {
         const testDestinationArray = [testDestinationDetails];
     
         const testEvent = {
@@ -405,16 +355,21 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         };
 
         uuidStub.returns();
+
         testEvent.textTemplate = validTextTemplate;
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('Missing or invalid template id');
 
         uuidStub.returns(testTemplateId);
+
         testEvent.htmlTemplate = { invalid: 'html template' };
         testEvent.textTemplate = validTextTemplate;
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith(`Invalid HTML template: ${JSON.stringify({ invalid: 'html template'})}`);
 
         testEvent.htmlTemplate = validHtmlTemplate;
         testEvent.textTemplate = { invalid: 'text template'};
+
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith(`Invalid text template: ${JSON.stringify({ invalid: 'text template'})}`);
 
         expect(getObjectStub).to.have.not.been.called;
