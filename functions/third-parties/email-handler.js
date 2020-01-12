@@ -111,7 +111,8 @@ const publishEmails = async (email) => {
  * @property {object} templateSource An object whose properties are the s3 key and bucket containing the emails html template.
  * @property {string} textTemplate The emails text template.
  * @property {subject} subject The emails subject.
- * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
+ * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property.
+ * These contain target email and template variables respectively.
  */
 module.exports.publishFromSource = async ({ templateSource, textTemplate, subject, destinationArray }) => {
     validatePublishEvent({ subject, templateSource, textTemplate, destinationArray });
@@ -133,13 +134,11 @@ module.exports.publishFromSource = async ({ templateSource, textTemplate, subjec
     validateTemplate(templateDetails);
 
     const resultOfPublish = await Promise.all(destinationArray.map((destinationDetails) => publishEmails(assembleEmail(templateDetails, destinationDetails))));
-    // DLQ failed emails?
 
     logger('Result of email send: ', resultOfPublish);
     
     return { result: 'SUCCESS' };
 };
-
 
 /**
  * This function sends emails to provided addresses.
@@ -147,7 +146,8 @@ module.exports.publishFromSource = async ({ templateSource, textTemplate, subjec
  * @property {object} htmlTemplate The emails html template.
  * @property {string} textTemplate The emails text template.
  * @property {subject} subject The emails subject.
- * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
+ * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property.
+ * These contain target email and template variables respectively.
  */
 module.exports.publishFromTemplate = async ({ htmlTemplate, textTemplate, subject, destinationArray }) => {
     validatePublishEvent({ subject, htmlTemplate, textTemplate, destinationArray });

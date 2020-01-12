@@ -40,13 +40,15 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
     const testUserName = 'Yesugei';
     const testEmailAddress = 'yesugei@khans.com';
-    const testSubject = 'Welcome to Jupiter';
+    const validSubject = 'Welcome to Jupiter';
 
-    const testHtmlTemplate = '<p>Greetings {{ user }}, \nWelcome to Jupiter.</p>';
-    const testTextTemplate = 'Greetings {{ user }}. \nWelcome to Jupiter.';
+    const validHtmlTemplate = '<p>Greetings {{ user }}, \nWelcome to Jupiter.</p>';
+    const validTextTemplate = 'Greetings {{ user }}. \nWelcome to Jupiter.';
 
     const testTemplateBucket = 'templateBucket';
     const testTemplateKey = 'templateKey';
+
+    const testDestinationDetails = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
 
     beforeEach(() => {
         setApiKeyStub.resolves();
@@ -59,26 +61,25 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         const expectedEmail = {
             'dynamic_template_data': { user: testUserName },
             'from': config.get('sendgrid.sourceAddress'),
-            'html': testHtmlTemplate,
+            'html': validHtmlTemplate,
             'mail_settings': {
                 'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
             },
-            'subject': testSubject,
+            'subject': validSubject,
             'template_id': testTemplateId,
-            'text': testTextTemplate,
+            'text': validTextTemplate,
             'to': testEmailAddress
         };
 
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData];
+        const testDestinationArray = [testDestinationDetails];
 
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => testHtmlTemplate }})});
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
 
         const testEvent = {
             templateSource: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
@@ -95,26 +96,25 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         const expectedEmail = {
             'dynamic_template_data': { user: testUserName },
             'from': config.get('sendgrid.sourceAddress'),
-            'html': testHtmlTemplate,
+            'html': validHtmlTemplate,
             'mail_settings': {
                 'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
             },
-            'subject': testSubject,
+            'subject': validSubject,
             'template_id': testTemplateId,
-            'text': testTextTemplate,
+            'text': validTextTemplate,
             'to': testEmailAddress
         };
 
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData, testDestinationData, testDestinationData];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => testHtmlTemplate }})});
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
 
         const testEvent = {
             templateSource: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
@@ -132,27 +132,26 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         const expectedEmail = {
             'dynamic_template_data': { user: testUserName },
             'from': config.get('sendgrid.sourceAddress'),
-            'html': testHtmlTemplate,
+            'html': validHtmlTemplate,
             'mail_settings': {
                 'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
             },
-            subject: testSubject,
+            subject: validSubject,
             'template_id': testTemplateId,
-            'text': testTextTemplate,
+            'text': validTextTemplate,
             'to': testEmailAddress
         };
 
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData, testDestinationData, testDestinationData];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => testHtmlTemplate }})});
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
         sendgridStub.onSecondCall().throws(new Error('Bad Request'));
 
         const testEvent = {
             templateSource: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
@@ -166,25 +165,24 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
     });
 
     it('Fails on invalid parameters', async () => {
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData, testDestinationData, testDestinationData];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         const testEvent = {
             templateSource: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         Reflect.deleteProperty(testEvent, 'subject');
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('Missing email subject');
 
-        testEvent.subject = testSubject;
+        testEvent.subject = validSubject;
         Reflect.deleteProperty(testEvent, 'templateSource');
         Reflect.deleteProperty(testEvent, 'textTemplate');
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('At least one template is required');
 
-        testEvent.textTemplate = testTextTemplate;
+        testEvent.textTemplate = validTextTemplate;
         testEvent.templateSource = { bucket: testTemplateBucket };
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('Missing valid template key-bucket pair');
 
@@ -203,32 +201,37 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
     });
 
     it('Fails on malformed email', async () => {
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData];
+        const testDestinationArray = [testDestinationDetails];
     
         const testEvent = {
             templateSource: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => testHtmlTemplate }})});
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
         uuidStub.returns();
-        testEvent.textTemplate = testTextTemplate;
+
+        testEvent.textTemplate = validTextTemplate;
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith();
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => '' }})});
         uuidStub.returns(testTemplateId);
+
         Reflect.deleteProperty(testEvent, 'textTemplate');
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith('You must provide either a text or html template or both');
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => ({ invalid: 'html template'}) }})});
-        testEvent.textTemplate = testTextTemplate;
+
+        testEvent.textTemplate = validTextTemplate;
+
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith(`Invalid HTML template: ${JSON.stringify({ invalid: 'html template'})}`);
 
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => testHtmlTemplate }})});
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
+
         testEvent.textTemplate = { invalid: 'text template'};
+
         await expect(handler.publishFromSource(testEvent)).to.be.rejectedWith(`Invalid text template: ${JSON.stringify({ invalid: 'text template'})}`);
 
         expect(getObjectStub).to.have.been.calledWith({ Bucket: testTemplateBucket, Key: testTemplateKey });
@@ -241,10 +244,12 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
 
     const testUserName = 'Temujin';
     const testEmailAddress = 'yesugei@khans.com';
-    const testSubject = 'Welcome to Jupiter';
+    const validSubject = 'Welcome to Jupiter';
 
-    const testHtmlTemplate = '<p>Greetings {{ user }}, \nWelcome to Jupiter.</p>';
-    const testTextTemplate = 'Greetings {{ user }}. \nWelcome to Jupiter.';
+    const validHtmlTemplate = '<p>Greetings {{ user }}, \nWelcome to Jupiter.</p>';
+    const validTextTemplate = 'Greetings {{ user }}. \nWelcome to Jupiter.';
+
+    const testDestinationDetails = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
 
     beforeEach(() => {
         setApiKeyStub.resolves();
@@ -257,25 +262,24 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         const expectedEmail = {
             'dynamic_template_data': { user: testUserName },
             'from': config.get('sendgrid.sourceAddress'),
-            'html': testHtmlTemplate,
+            'html': validHtmlTemplate,
             'mail_settings': {
                 'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
             },
-            'subject': testSubject,
+            'subject': validSubject,
             'template_id': testTemplateId,
-            'text': testTextTemplate,
+            'text': validTextTemplate,
             'to': testEmailAddress
         };
 
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData];
+        const testDestinationArray = [testDestinationDetails];
 
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
 
         const testEvent = {
-            htmlTemplate: testHtmlTemplate,
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            htmlTemplate: validHtmlTemplate,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
@@ -292,25 +296,24 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         const expectedEmail = {
             'dynamic_template_data': { user: testUserName },
             'from': config.get('sendgrid.sourceAddress'),
-            'html': testHtmlTemplate,
+            'html': validHtmlTemplate,
             'mail_settings': {
                 'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
             },
-            'subject': testSubject,
+            'subject': validSubject,
             'template_id': testTemplateId,
-            'text': testTextTemplate,
+            'text': validTextTemplate,
             'to': testEmailAddress
         };
 
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData, testDestinationData, testDestinationData];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
 
         const testEvent = {
-            htmlTemplate: testHtmlTemplate,
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            htmlTemplate: validHtmlTemplate,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
@@ -328,26 +331,25 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         const expectedEmail = {
             'dynamic_template_data': { user: testUserName },
             'from': config.get('sendgrid.sourceAddress'),
-            'html': testHtmlTemplate,
+            'html': validHtmlTemplate,
             'mail_settings': {
                 'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
             },
-            'subject': testSubject,
+            'subject': validSubject,
             'template_id': testTemplateId,
-            'text': testTextTemplate,
+            'text': validTextTemplate,
             'to': testEmailAddress
         };
 
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData, testDestinationData, testDestinationData];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         sendgridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
         sendgridStub.onSecondCall().throws(new Error('Bad Request'));
 
         const testEvent = {
-            htmlTemplate: testHtmlTemplate,
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            htmlTemplate: validHtmlTemplate,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
@@ -361,25 +363,24 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
     });
 
     it('Fails on invalid parameters', async () => {
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData, testDestinationData, testDestinationData];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         const testEvent = {
-            htmlTemplate: testHtmlTemplate,
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            htmlTemplate: validHtmlTemplate,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         Reflect.deleteProperty(testEvent, 'subject');
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('Missing email subject');
 
-        testEvent.subject = testSubject;
+        testEvent.subject = validSubject;
         Reflect.deleteProperty(testEvent, 'htmlTemplate');
         Reflect.deleteProperty(testEvent, 'textTemplate');
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('At least one template is required');
 
-        testEvent.htmlTemplate = testHtmlTemplate;
+        testEvent.htmlTemplate = validHtmlTemplate;
         Reflect.deleteProperty(testEvent, 'destinationArray');
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('Missing destination array');
 
@@ -394,26 +395,25 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
     });
 
     it('Fails on malformed email', async () => {
-        const testDestinationData = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
-        const testDestinationArray = [testDestinationData];
+        const testDestinationArray = [testDestinationDetails];
     
         const testEvent = {
-            htmlTemplate: testHtmlTemplate,
-            textTemplate: testTextTemplate,
-            subject: testSubject,
+            htmlTemplate: validHtmlTemplate,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         uuidStub.returns();
-        testEvent.textTemplate = testTextTemplate;
+        testEvent.textTemplate = validTextTemplate;
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith('Missing or invalid template id');
 
         uuidStub.returns(testTemplateId);
         testEvent.htmlTemplate = { invalid: 'html template' };
-        testEvent.textTemplate = testTextTemplate;
+        testEvent.textTemplate = validTextTemplate;
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith(`Invalid HTML template: ${JSON.stringify({ invalid: 'html template'})}`);
 
-        testEvent.htmlTemplate = testHtmlTemplate;
+        testEvent.htmlTemplate = validHtmlTemplate;
         testEvent.textTemplate = { invalid: 'text template'};
         await expect(handler.publishFromTemplate(testEvent)).to.be.rejectedWith(`Invalid text template: ${JSON.stringify({ invalid: 'text template'})}`);
 
