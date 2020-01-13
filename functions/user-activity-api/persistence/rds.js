@@ -325,7 +325,7 @@ const validateTxDetails = (txDetails) => {
     });
 
     const validSettlementStates = ['INITIATED', 'PENDING', 'SETTLED'];
-    if (validSettlementStates.indexOf(txDetails) < 0) {
+    if (validSettlementStates.indexOf(txDetails.settlementStatus) < 0) {
         throw new Error(`Invalid settlement status: ${txDetails.settlementStatus}`);
     }
 
@@ -486,7 +486,7 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
 
     const insertLogQueryDef = assembleSettlementLog({ txDetails, paymentDetails, settlementTime, settlingUserId });
 
-    const updateAndInsertResult = await rdsConnection.multiTableUpdateAndInsert([updateQueryDef], [floatQueryDef]);
+    const updateAndInsertResult = await rdsConnection.multiTableUpdateAndInsert([updateQueryDef], [floatQueryDef, insertLogQueryDef]);
     logger('Result of update and insert: ', updateAndInsertResult);
 
     const transactionDetails = [];

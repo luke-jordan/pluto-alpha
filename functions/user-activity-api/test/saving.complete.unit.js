@@ -230,7 +230,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(resultOfCheck).to.deep.equal(expectedResult);
         
         expect(publishStub).to.have.been.calledTwice;
-        expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testPendingTxId, settlementTime: testSettlementTime });
+        expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testPendingTxId, settlementTime: testSettlementTime, settlingUserId: testUserId });
         expect(fetchTransactionStub).to.have.been.calledTwice;
         expect(fetchTransactionStub).to.have.been.calledWith(testPendingTxId);
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
