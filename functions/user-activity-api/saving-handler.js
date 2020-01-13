@@ -253,6 +253,10 @@ module.exports.settle = async (settleInfo) => {
     return invalidRequestResponse('Error! No transaction ID provided');
   }
 
+  if (!settleInfo.settlingUserId) {
+    return invalidRequestResponse('Error! No settling user ID provided');
+  }
+
   if (Reflect.has(settleInfo, 'settlementTimeEpochMillis')) {
     settleInfo.settlementTime = moment(settleInfo.settlementTimeEpochMillis);
     Reflect.deleteProperty(settleInfo, 'settlementTimeEpochMillis');
@@ -294,7 +298,7 @@ const dummyPaymentResult = async (systemWideUserId, params, transactionDetails) 
   if (paymentSuccessful) {
     const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
     const { transactionId } = transactionDetails;
-    const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
+    const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef, settlingUserId: systemWideUserId });
     logger('Result of save: ', resultOfSave);
     await publishSaveSucceeded(systemWideUserId, transactionId);
     return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
@@ -355,7 +359,7 @@ module.exports.checkPendingPayment = async (event) => {
 
     if (statusCheckResult.paymentStatus === 'SETTLED') {
       // do these one after the other instead of parallel because don't want to fire if something goes wrong
-      const resultOfSave = await exports.settle({ transactionId });
+      const resultOfSave = await exports.settle({ transactionId, settlingUserId: systemWideUserId });
       await publishSaveSucceeded(systemWideUserId, transactionId);
       responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
     } else if (statusCheckResult.result === 'ERROR') {

@@ -206,7 +206,8 @@ module.exports.confirm = async (params) => {
         transactionType, 
         transactionState: 'SETTLED',
         relatedEntityType: backingEntityType,
-        relatedEntityId: floatLogId
+        relatedEntityId: floatLogId,
+        logId: floatLogId
     };
 
     const bonusAlloc = { ...entityAllocBase, amount: bonusAmount, allocatedToId: bonusPoolId, allocatedToType: 'BONUS_POOL', label: 'BONUS' };
@@ -225,7 +226,7 @@ module.exports.confirm = async (params) => {
     logger('User allocations done, made ', resultOfUserAllocation.length, ' paired transactions, first : ', resultOfUserAllocation[0]);
 
     const supercedeParams = { clientId, floatId, startTime: metadata.startTime, endTime: metadata.endTime, currency: params.currency };
-    const resultOfSupercession = await rds.supercedeAccruals(supercedeParams);
+    const resultOfSupercession = await rds.supercedeAccruals(supercedeParams, floatLogId);
     logger('Result of supercession: ', resultOfSupercession);
 
     const resultPackage = assembleSummaryData(allocations, floatConfigVars, metadata);

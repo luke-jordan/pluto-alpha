@@ -44,6 +44,14 @@ const equalizeAmounts = (amountString) => {
 
 const currency = (amountString) => amountString.split('::')[2];
 
+const safeEvaluateAbove = (eventContext, amountKey, thresholdAmount) => {
+    if (typeof eventContext[amountKey] !== 'string') {
+        return false;
+    };
+
+    return equalizeAmounts(eventContext[amountKey]) >= equalizeAmounts(thresholdAmount);
+}
+
 const evaluateWithdrawal = (parameterValue, eventContext) => {
     const timeThreshold = moment(parseInt(parameterValue, 10));
     const timeSettled = moment(parseInt(eventContext.timeInMillis, 10));
@@ -59,22 +67,23 @@ const testCondition = (event, statusCondition) => {
     const parameterValue = parameterMatch ? parameterMatch[1] : null;
     logger('Parameter value: ', parameterValue);
     const eventHasContext = typeof event.eventContext === 'object';
+    const { eventContext } = event;
     switch (conditionType) {
         case 'save_event_greater_than':
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue));
-            logger('And amount from event: ', equalizeAmounts(event.eventContext.savedAmount));
-            logger(`Also asserting if currency ${currency(event.eventContext.savedAmount)} === ${currency(parameterValue)}`);
-            return equalizeAmounts(event.eventContext.savedAmount) >= equalizeAmounts(parameterValue) && currency(event.eventContext.savedAmount) === currency(parameterValue);
+            logger('And amount from event: ', equalizeAmounts(eventContext.savedAmount));
+            logger(`Also asserting if currency ${currency(eventContext.savedAmount)} === ${currency(parameterValue)}`);
+            return safeEvaluateAbove(eventContext, 'savedAmount', parameterValue) && currency(eventContext.savedAmount) === currency(parameterValue);
         case 'save_completed_by':
             logger(`Checking if save completed by ${event.accountId} === ${parameterValue}, result: ${event.accountId === parameterValue}`);
             return event.accountId === parameterValue;
         case 'first_save_by':
-            return event.accountId === parameterValue && eventHasContext && event.eventContext.firstSave;
+            return event.accountId === parameterValue && eventHasContext && eventContext.firstSave;
         case 'balance_below':
-            logger('Checking balance below: ', equalizeAmounts(parameterValue), ' event context: ', equalizeAmounts(event.eventContext.newBalance));
-            return equalizeAmounts(event.eventContext.newBalance) < equalizeAmounts(parameterValue);
+            logger('Checking balance below: ', equalizeAmounts(parameterValue), ' event context: ', equalizeAmounts(eventContext.newBalance));
+            return equalizeAmounts(eventContext.newBalance) < equalizeAmounts(parameterValue);
         case 'withdrawal_before':
-            return evaluateWithdrawal(parameterValue, event.eventContext);
+            return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
         default:
             return false;
     }

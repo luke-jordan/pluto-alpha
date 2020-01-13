@@ -15,10 +15,10 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 const insertionQuery = `insert into ${config.get('tables.floatTransactions')} ` +
         `(transaction_id, client_id, float_id, t_type, t_state, currency, unit, amount, allocated_to_type, allocated_to_id, ` +
-        `related_entity_type, related_entity_id) values %L returning transaction_id`;
+        `related_entity_type, related_entity_id, log_id) values %L returning transaction_id`;
 
 const insertionColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type}, ${t_state}, ${currency}, ${unit}, ${amount}, ' + 
-        '${allocated_to_type}, ${allocated_to_id}, ${related_entity_type}, ${related_entity_id}';
+        '${allocated_to_type}, ${allocated_to_id}, ${related_entity_type}, ${related_entity_id}, ${log_id}';
 
 const validateFloatAdjustmentArgs = (floatAdjArgs) => {
     const requiredProperties = {
@@ -140,6 +140,16 @@ module.exports.addOrSubtractFloat = async (request = {
     };
 };
 
+const safelyGetLogIdArray = (request) => {
+    if (typeof request.logId === 'string' && request.logId.length > 0) {
+        return [request.logId];
+    }
+    if (Array.isArray(request.logId) && request.logId.length > 0) {
+        return request.logId;
+    }
+    return [];
+}
+
 /**
  * Simple allocation of the float, to either a bonus or company share (do not user this for user accruals)
  * @param {string} clientId The global system ID of the client that intermediates this float 
@@ -176,7 +186,8 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
         'allocated_to_type': request.allocatedToType,
         'allocated_to_id': request.allocatedToId,
         'related_entity_type': request.relatedEntityType || null,
-        'related_entity_id': request.relatedEntityId || null
+        'related_entity_id': request.relatedEntityId || null,
+        'log_id': safelyGetLogIdArray(request)
     }));
 
     // logger('Calling with values: ', mappedArray);
@@ -229,7 +240,8 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
         'allocated_to_type': constants.entityTypes.END_USER_ACCOUNT,
         'allocated_to_id': request.accountId,
         'related_entity_type': request.relatedEntityType || null,
-        'related_entity_id': request.relatedEntityId || null
+        'related_entity_id': request.relatedEntityId || null,
+        'log_id': safelyGetLogIdArray(request)
     }));
 
     const allocationQueryDef = {
@@ -249,7 +261,14 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     // logger('Allocation request, account IDs: ', allocationRequests.map((request) => request.accountId));
 
     const accountRows = allocationRequests.map((request) => {
-        const tags = request.relatedEntityId ? [`${request.relatedEntityType}::${request.relatedEntityId}`] : '{}';
+        const tags = [];
+        if (typeof request.relatedEntityId === 'string' && request.relatedEntityId.length > 0) {
+            tags.push(`${request.relatedEntityType}::${request.relatedEntityId}`);
+        }
+        if (typeof request.logId === 'string' && request.logId.length > 0) {
+            tags.push(`FLOAT_LOG_ID::${request.logId}`);
+        }
+
         const settlementStatus = request.settlementStatus || 'ACCRUED';
         const settlementTime = settlementStatus === 'SETTLED' ? moment().format() : null;
         return {
@@ -477,23 +496,26 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
     return resultMap;
 };
 
-module.exports.supercedeAccruals = async (searchParams) => {
+module.exports.supercedeAccruals = async (searchParams, floatLogId) => {
     const { clientId, floatId, startTime, endTime, currency } = searchParams;
 
-    const floatQuery = `update float_data.float_transaction_ledger set t_state = $1 where ` +
-        `client_id = $2 and float_id = $3 and t_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
+    const floatQuery = `update float_data.float_transaction_ledger set t_state = $1, log_id = array_append(log_id, $2) where ` +
+        `client_id = $3 and float_id = $4 and t_type = $5 and currency = $6 and creation_time between $7 and $8 ` +
         `returning updated_time`;
-
-    const accountQuery = `update transaction_data.core_transaction_ledger set settlement_status = $1 where ` +
-        `client_id = $2 and float_id = $3 and transaction_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
-        `returning updated_time`;
-
-    const values = ['SUPERCEDED', clientId, floatId, 'ACCRUAL', currency, startTime.format(), endTime.format()];
+    const values = ['SUPERCEDED', floatLogId, clientId, floatId, 'ACCRUAL', currency, startTime.format(), endTime.format()];
     
     // todo : wrap in a TX
     const floatResult = await rdsConnection.updateRecord(floatQuery, values);
     logger('Result of float update: ', floatResult);
 
+    const accountQuery = `update transaction_data.core_transaction_ledger set settlement_status = $1, tags = array_append(tags, $2) where ` +
+        `client_id = $3 and float_id = $4 and transaction_type = $5 and currency = $6 and creation_time between $7 and $8 ` +
+        `returning updated_time`;
+
+    const accValues = [...values];
+    accValues[1] = `SUPERCEDE_FLOAT_LOG_ID::${floatLogId}`;
+
+    logger('Updating account transactions with query: ', accountQuery, 'and values: ', accValues);
     const accountResult = await rdsConnection.updateRecord(accountQuery, values);
     logger('Result of account update: ', accountResult);
 

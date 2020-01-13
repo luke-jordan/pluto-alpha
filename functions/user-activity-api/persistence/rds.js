@@ -85,6 +85,23 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
     return resultOfQuery.map((row) => row['account_id']);
 };
 
+module.exports.countAvailableBoosts = async (accountId) => {
+    const boostAccountTable = config.get('tables.boostJoin');
+    const boostMasterTable = config.get('tables.boostMaster');
+
+    const query = `select count(*) from ${boostAccountTable} inner join ${boostMasterTable} on ` + 
+        `${boostMasterTable}.boost_id = ${boostAccountTable}.boost_id where account_id = $1 and ` +
+        `${boostMasterTable}.active = true and ${boostMasterTable}.end_time > current_timestamp and ` +
+        `${boostAccountTable}.boost_status in ($2, $3, $4)`;
+    const values = [accountId, 'CREATED', 'OFFERED', 'PENDING'];        
+
+    logger('Counting pending boosts, query: ', query);
+    logger('And values for boost count query: ', values);
+    const resultOfQuery = await rdsConnection.selectQuery(query, values);
+
+    return resultOfQuery && resultOfQuery.length > 0 ? resultOfQuery[0]['count'] : 0;
+};
+
 // todo : modernize this (see account figures)
 module.exports.sumAccountBalance = async (accountId, currency, time = moment()) => {
     const tableToQuery = config.get('tables.accountTransactions');
@@ -296,7 +313,8 @@ const validateTxDetails = (txDetails) => {
         }
     });
 
-    if (txDetails.settlementStatus !== 'INITIATED' && txDetails.settlementStatus !== 'SETTLED') {
+    const validSettlementStates = ['INITIATED', 'PENDING', 'SETTLED'];
+    if (validSettlementStates.indexOf(txDetails) < 0) {
         throw new Error(`Invalid settlement status: ${txDetails.settlementStatus}`);
     }
 
@@ -387,6 +405,23 @@ module.exports.addTransactionToAccount = async (transactionDetails) => {
     return responseEntity;
 };
 
+const assembleSettlementLog = ({ txDetails, paymentDetails, settlementTime, settlingUserId }) => {
+    const logObject = {
+        logId: uuid(),
+        accountId: txDetails.accountId,
+        transactionId: txDetails.transactionId,
+        referenceTime: settlementTime.format(),
+        settlingUserId,
+        logContext: paymentDetails
+    };
+    
+    const query = 'insert into account_data.account_log (log_id, account_id, transaction_id, reference_time, creating_user_id, log_type, log_context) values %L';
+    const columnTemplate = '${logId}, ${accountId}, ${transactionId}, ${referenceTime}, ${settlingUserId}, *{TRANSACTION_SETTLED}, ${logContext}';
+
+    return { query, columnTemplate, rows: [logObject] };
+};
+
+
 /**
  * Second core method. Records that a saving / withdrawal event settled (via any payment intermediary). Payment details includes 
  * provider and reference.
@@ -395,7 +430,7 @@ module.exports.addTransactionToAccount = async (transactionDetails) => {
  * @param {string} paymentReference The reference for the payment provided by the payment intermediary
  * @param {moment} settlementTime When the payment settled
  */
-module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settlementTime }) => {
+module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settlementTime, settlingUserId }) => {
     const responseEntity = { };
 
     const accountTxTable = config.get('tables.accountTransactions');
@@ -438,11 +473,14 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
     const floatQueryDef = assembleFloatTxInsertions(transactionId, txDetails, { floatAdjustmentTxId, floatAllocationTxId });
     logger('Assembled float query def: ', floatQueryDef);
 
+    const insertLogQueryDef = assembleSettlementLog({ txDetails, paymentDetails, settlementTime, settlingUserId });
+
     const updateAndInsertResult = await rdsConnection.multiTableUpdateAndInsert([updateQueryDef], [floatQueryDef]);
     logger('Result of update and insert: ', updateAndInsertResult);
 
     const transactionDetails = [];
     transactionDetails.push({ 
+        accountTransactionType: txDetails.transactionType,
         accountTransactionId: updateAndInsertResult[0][0]['transaction_id'], 
         updatedTimeEpochMillis: moment(updateAndInsertResult[0][0]['updated_time']).valueOf()
     });

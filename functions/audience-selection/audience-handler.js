@@ -21,6 +21,11 @@ const stdProperties = {
         type: 'match',
         description: 'Last save date',
         expects: 'epochMillis'
+    },
+    lastCapitalization: {
+        type: 'match',
+        description: 'Last capitalization',
+        expects: 'epochMillis'
     }
 };
 
@@ -65,6 +70,15 @@ const columnConverters = {
                 { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
             ]}
        ]
+    }),
+    lastCapitalization: (condition) => ({
+        conditions: [
+            { op: 'and', children: [
+                { op: condition.op, prop: 'creation_time', value: convertEpochToFormat(condition.value) },
+                { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
+                { op: 'is', prop: 'transaction_type', value: 'CAPITALIZATION' }
+            ]}
+        ]
     })
 };
 

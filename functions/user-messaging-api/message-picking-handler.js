@@ -70,21 +70,6 @@ const fetchAccountOpenDates = (userProfile, dateFormat) => {
     return openMoment.format(dateFormat);
 };
 
-const fetchAccountInterest = async (systemWideUserId, currency, sinceTimeMillis) => {
-    const operation = `interest::WHOLE_CENT::${currency}::${sinceTimeMillis}`;
-    const amountResult = await persistence.getUserAccountFigure({ systemWideUserId, operation });
-    logger('Retrieved from persistence: ', amountResult);
-    return formatAmountResult(amountResult);
-};
-
-const fetchCurrentBalance = async (systemWideUserId, currency) => {
-    const amountResult = await persistence.getUserAccountFigure({
-        systemWideUserId, operation: `balance::WHOLE_CENT::${currency}`
-    });
-    logger('For balance, from persistence: ', amountResult);
-    return formatAmountResult(amountResult);
-};
-
 const extractParamsFromTemplate = (template) => {
     const extractedParams = [];
     let match = paramRegex.exec(template);
@@ -95,6 +80,20 @@ const extractParamsFromTemplate = (template) => {
     // do not include any that are non-standard
     return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) >= 0);
 };
+
+// todo : all at once if multiple params
+// todo : warmup (esp for agg figure)
+const fetchAccountAggFigure = (aggregateOperation, systemWideUserId) => {
+    const invocation = {
+        FunctionName: config.get('lambdas.fetchAccountAggregate'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify({ aggregates: [aggregateOperation], systemWideUserId });
+    }
+    const resultOfInvoke = await lambda.invoke(invocation).promise();
+    logger('Aggregate response: ', resultOfInvoke);
+    const resultBody = JSON.parse(resultOfInvoke['Payload']);
+    return formatAmountResult(resultBody.results[0]);
+}
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramSplit = param.split('::');
@@ -112,13 +111,21 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     } else if (paramName === 'opened_date') {
         const specifiedDateFormat = getSubParamOrDefault(paramSplit, config.get('picker.defaults.dateFormat'));
         return fetchAccountOpenDates(userProfile, specifiedDateFormat);
-    } else if (paramName === 'total_interest') {
+    } else {if (paramName === 'total_interest') {
         const sinceMillis = getSubParamOrDefault(paramSplit, 0); // i.e., beginning of time
-        return fetchAccountInterest(destinationUserId, userProfile.defaultCurrency, sinceMillis);
+        const aggregateOperation = `interest::HUNDREDTH_CENT::${userProfile.defaultCurrency}::${sinceMillis}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     } else if (paramName === 'current_balance') {
-        const defaultCurrency = getSubParamOrDefault(paramSplit, userProfile.defaultCurrency);
-        logger('Have currency: ', defaultCurrency);
-        return fetchCurrentBalance(destinationUserId, defaultCurrency, userProfile);
+        const aggregateOperation = `balance::HUNDREDTH_CENT::${userProfile.defaultCurrency}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
+    } else if (paramName === 'last_capitalization') {
+        const aggregateOperation = `capitalization::${userProfile.defaultCurrency}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
+    } else if (paramName === 'total_earnings') {
+        const thisMonthOnly = getSubParamOrDefault(paramSplit, false);
+        const opSuffix = `HUNDREDTH_CENT::${userProfile.defaultCurrency}${thisMonthOnly ? moment().startOf('month').valueOf() : ''}`;
+        const aggregateOperation = `total_earnings::${opSuffix}`;
+        return fetchAccountAggFigure(aggregateOperation);
     }
 };
 

@@ -8,6 +8,7 @@ const status = require('statuses');
 const persistence = require('./persistence/rds.account');
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
+const publisher = require('publish-common');
 
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
@@ -86,7 +87,6 @@ const obtainUserHistory = async (systemWideUserId) => {
 };
 
 const obtainUserPendingTx = async (systemWideUserId) => {
-    // todo : make sure includes withdrawals
     logger('Also fetching pending transactions for user ...');
     const startMoment = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days');
     return persistence.fetchUserPendingTransactions(systemWideUserId, startMoment);
@@ -200,27 +200,55 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
     return updateResult;
 };
 
+const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
+    const logPayload = { userId: systemWideUserId, eventType, initiator: adminUserId, options: { context }};
+    return publisher.publishUserEvent(logPayload);
+};
+
+const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reasonToLog }) => {
+    const settlePayload = { transactionId, paymentRef: reasonToLog, paymentProvider: 'ADMIN_OVERRIDE', settlingUserId: adminUserId };
+    logger('Invoking settle lambda, payload: ', settlePayload);
+    const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
+    logger('Transaction settle, result: ', settleResponse);
+
+    const resultPayload = JSON.parse(settleResponse['Payload']);
+    if (settleResponse['StatusCode'] === 200) {
+        const logContext = { settleInstruction: settlePayload, resultPayload };
+        const transactionType = resultPayload.transactionDetails[0].transactionType;
+        const eventType = transactionType === 'USER_SAVING_EVENT' ? 'ADMIN_SETTLED_SAVE' : `ADMIN_SETTLED_${transactionType}`;
+        const loggingPromises = [
+            publishUserLog({ adminUserId, systemWideUserId, eventType, context: logContext }),
+            persistence.insertAccountLog({ transactionId, adminUserId, logType: eventType, logContext })
+        ];
+        if (transactionType === 'USER_SAVING_EVENT') {
+            loggingPromises.push(publishUserLog({ adminUserId, systemWideUserId, 'SAVING_PAYMENT_SUCCESSFUL', context: logContext }));
+        }
+        await Promise.all(loggingPromises);
+        return { result: 'SUCCESS', updateLog: resultPayload };
+    } else {
+        return { result: 'ERROR', message: resultPayload };
+    }
+};
+
+const updateTxStatus = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
+    const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, reason: reasonToLog, newStatus: newTxStatus };
+    const resultOfRdsUpdate = await persistence.adjustTxStatus({ transactionId, newTxStatus, logContext });
+    logger('Result of straight persistence adjustment: ', resultOfRdsUpdate);
+    await Promise.all([
+        publishUserLog({ adminUserId, systemWideUserId, eventType: 'ADMIN_UPDATED_TX', context: { ...logContext, transactionId }}),
+        persistence.insertAccountLog({ transactionId, adminUserId, logType: 'ADMIN_UPDATED_TX', logContext })
+    ]);
+    return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
+};
+
 const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
-    // todo : definitely need audit tables to do something with the logs
     logger(`Updating transaction, for user ${systemWideUserId}, transaction ${transactionId}, new status ${newTxStatus}, should log: ${reasonToLog}`);
 
     let resultBody = { };
     if (newTxStatus === 'SETTLED') {
-        const settlePayload = { transactionId, paymentRef: reasonToLog, paymentProvider: 'ADMIN_OVERRIDE' };
-        logger('Invoking settle lambda ...');
-        const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
-        logger('Transaction settle, result: ', settleResponse);
-        const resultPayload = JSON.parse(settleResponse['Payload']);
-        if (settleResponse['StatusCode'] === 200) {
-            resultBody = { result: 'SUCCESS', updateLog: resultPayload };
-        } else {
-            resultBody = { result: 'ERROR', message: resultPayload };
-        }
+        resultBody = await settleUserTx({ adminUserId, systemWideUserId, transactionId, reasonToLog });
     } else {
-        const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, reasong: reasonToLog };
-        const resultOfRdsUpdate = await persistence.adjustTxStatus({ transactionId, newTxStatus, logContext });
-        logger('Result of straight persistence adjustment: ', resultOfRdsUpdate);
-        resultBody = { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
+        resultBody = await updateTxStatus({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog });
     }
 
     logger('Completed transaction update, result: ', resultBody);
