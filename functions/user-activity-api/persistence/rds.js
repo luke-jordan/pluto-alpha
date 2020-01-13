@@ -480,7 +480,7 @@ module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, pay
     logger('Adding payment info to TX before returning');
 
     const updateQuery = `update ${config.get('tables.accountTransactions')} set payment_provider = $1, ` +
-        `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning update_time`;
+        `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning updated_time`;
     const updateValues = [paymentProvider, paymentRef, bankRef, `PAYMENT_URL::${paymentUrl}`, transactionId];
 
     logger('Updating tx via query: ', updateQuery);

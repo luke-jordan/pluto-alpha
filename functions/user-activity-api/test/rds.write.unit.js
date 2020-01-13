@@ -481,7 +481,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         const updateTime = moment();
         
         const expectedQuery = `update transaction_data.core_transaction_ledger set payment_provider = $1, ` +
-        `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning update_time`;
+        `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning updated_time`;
         const expectedValues = ['PROVIDER', 'test-reference', 'JUPSAVER31-0001', `PAYMENT_URL::https://someurl`, testTxId];
 
         updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
