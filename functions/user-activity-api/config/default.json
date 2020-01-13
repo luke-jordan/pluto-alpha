@@ -80,6 +80,9 @@
             "enabled": true,
             "accountPrefix": "FINWORKS",
             "txFlag": "FINWORKS_RECORDED"
+        },
+        "duplicate": {
+            "minuteCutOff": 15
         }
     }
 }

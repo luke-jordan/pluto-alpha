@@ -479,19 +479,14 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
 
     it('Updates transaction with payment info', async () => {
         const updateTime = moment();
-        const expectedUpdateDef = {
-            table: config.get('tables.accountTransactions'),
-            key: { transactionId: testTxId },
-            value: { 
-                paymentProvider: 'PROVIDER',
-                paymentReference: 'test-reference',
-                humanReference: 'JUPSAVER31-0001'
-            },
-            returnClause: 'updated_time'
-        };
-        updateRecordsStub.resolves([{ 'updated_time': updateTime.format() }]);
+        
+        const expectedQuery = `update transaction_data.core_transaction_ledger set payment_provider = $1, ` +
+        `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning update_time`;
+        const expectedValues = ['PROVIDER', 'test-reference', 'JUPSAVER31-0001', `PAYMENT_URL::https://someurl`, testTxId];
 
-        const passedParams = { transactionId: testTxId, paymentProvider: 'PROVIDER', paymentRef: 'test-reference', bankRef: 'JUPSAVER31-0001' };
+        updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
+
+        const passedParams = { transactionId: testTxId, paymentUrl: 'https://someurl', paymentProvider: 'PROVIDER', paymentRef: 'test-reference', bankRef: 'JUPSAVER31-0001' };
         
         const resultOfUpdate = await rds.addPaymentInfoToTx(passedParams);
         
@@ -499,7 +494,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(resultOfUpdate).to.have.property('updatedTime');
         expect(resultOfUpdate.updatedTime).to.deep.equal(moment(updateTime.format()));
         
-        expect(updateRecordsStub).to.have.been.calledOnceWithExactly(expectedUpdateDef);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
     });
 
     it('Updates transaction tags', async () => {
