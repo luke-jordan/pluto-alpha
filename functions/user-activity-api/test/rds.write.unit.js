@@ -484,7 +484,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning updated_time`;
         const expectedValues = ['PROVIDER', 'test-reference', 'JUPSAVER31-0001', `PAYMENT_URL::https://someurl`, testTxId];
 
-        updateRecordStub.resolves([{ 'updated_time': updateTime.format() }]);
+        updateRecordStub.resolves({ 'rows': [{ 'updated_time': updateTime.format() }] });
 
         const passedParams = { transactionId: testTxId, paymentUrl: 'https://someurl', paymentProvider: 'PROVIDER', paymentRef: 'test-reference', bankRef: 'JUPSAVER31-0001' };
         

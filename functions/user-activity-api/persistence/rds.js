@@ -488,7 +488,7 @@ module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, pay
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
     logger('Payment info result from RDS: ', resultOfUpdate);
 
-    const updateMoment = moment(resultOfUpdate[0]['updated_time']);
+    const updateMoment = moment(resultOfUpdate['rows'][0]['updated_time']);
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
 };
