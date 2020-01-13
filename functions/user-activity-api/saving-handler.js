@@ -22,6 +22,14 @@ const handleError = (err) => {
   return { statusCode: 500, body: JSON.stringify(err.message) };
 };
 
+const extractTxTagIfExists = (txDetails, desiredTag) => {
+  if (Array.isArray(txDetails.tags) && txDetails.tags.some((tag) => tag.startsWith(desiredTag))) {
+    const foundTag = txDetails.tags.find((tag) => tag.startsWith(desiredTag));
+    return foundTag.substring(foundTag.indexOf('::') + '::'.length); 
+  }
+  return '';
+};
+
 // todo : remove need for this in app soon
 const legacyKeyFix = (passedSaveDetails) => {
   const saveDetails = { ...passedSaveDetails };
@@ -33,29 +41,29 @@ const legacyKeyFix = (passedSaveDetails) => {
 };
 
 const save = async (eventBody) => {
-    const saveInformation = eventBody;
-    logger('Have a saving request inbound: ', saveInformation);
+  const saveInformation = eventBody;
+  logger('Have a saving request inbound: ', saveInformation);
 
-    if (!eventBody.floatId && !eventBody.clientId) {
-      const floatAndClient = await persistence.getOwnerInfoForAccount(saveInformation.accountId);
-      saveInformation.floatId = eventBody.floatId || floatAndClient.floatId;
-      saveInformation.clientId = eventBody.clientId || floatAndClient.clientId;
-    }
+  if (!eventBody.floatId && !eventBody.clientId) {
+    const floatAndClient = await persistence.getOwnerInfoForAccount(saveInformation.accountId);
+    saveInformation.floatId = eventBody.floatId || floatAndClient.floatId;
+    saveInformation.clientId = eventBody.clientId || floatAndClient.clientId;
+  }
 
-    saveInformation.initiationTime = moment(saveInformation.initiationTimeEpochMillis);
-    Reflect.deleteProperty(saveInformation, 'initiationTimeEpochMillis');
+  saveInformation.initiationTime = moment(saveInformation.initiationTimeEpochMillis);
+  Reflect.deleteProperty(saveInformation, 'initiationTimeEpochMillis');
 
-    if (Reflect.has(saveInformation, 'settlementTimeEpochMillis')) {
-      saveInformation.settlementTime = moment(saveInformation.settlementTimeEpochMillis);
-      Reflect.deleteProperty(saveInformation, 'settlementTimeEpochMillis');
-    }
-    
-    logger('Sending to persistence: ', saveInformation);
-    const savingResult = await persistence.addTransactionToAccount(saveInformation);
+  if (Reflect.has(saveInformation, 'settlementTimeEpochMillis')) {
+    saveInformation.settlementTime = moment(saveInformation.settlementTimeEpochMillis);
+    Reflect.deleteProperty(saveInformation, 'settlementTimeEpochMillis');
+  }
+  
+  logger('Sending to persistence: ', saveInformation);
+  const savingResult = await persistence.addTransactionToAccount(saveInformation);
 
-    logger('Completed the save, result: ', savingResult);
+  logger('Completed the save, result: ', savingResult);
 
-    return savingResult;
+  return savingResult;
 };
 
 // can _definitely_parallelize this, also:
@@ -89,7 +97,6 @@ module.exports.initiatePendingSave = async (event) => {
     if (warmupCheck(event)) {
       logger('Warming up; tell payment link to stay warm, else fine');
       await payment.warmUpPayment({ type: 'INITIATE' });
-      logger('Warmed payment, return');
       return warmupResponse;
     }
 
@@ -98,10 +105,6 @@ module.exports.initiatePendingSave = async (event) => {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
     
-    logger('Verified user system ID, publishing event');
-    await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_INITIATED');
-    logger('Finished publishing event');
-
     const saveInformation = legacyKeyFix(JSON.parse(event.body));
 
     if (!saveInformation.accountId) {
@@ -113,6 +116,25 @@ module.exports.initiatePendingSave = async (event) => {
     } else if (!saveInformation.unit) {
       return invalidRequestResponse('Error! No unit specified for the saving event');
     }
+
+    // todo : also use cache to check for duplicate requests
+    const duplicateSave = await persistence.checkForDuplicateSave(saveInformation);
+    if (duplicateSave) {
+      logger('Duplicate transaction found, was created at: ', duplicateSave.creationTime);
+      logger('Full details to return: ', duplicateSave);
+      const returnResult = {
+        transactionDetails: [{
+          accountTransactionId: duplicateSave.transactionId,
+          persistedTimeEpochMillis: moment(duplicateSave.creationTime).valueOf()
+        }],
+        humanReference: duplicateSave.humanReference,
+        paymentRedirectDetails: { urlToCompletePayment: extractTxTagIfExists(duplicateSave, 'PAYMENT_URL') }
+      };
+      return { statusCode: 200, body: JSON.stringify(returnResult) };
+    }
+
+    logger('Validated request, publishing user event');
+    await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_INITIATED');
     
     saveInformation.settlementStatus = 'INITIATED';
 

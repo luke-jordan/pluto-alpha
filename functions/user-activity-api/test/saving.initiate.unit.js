@@ -47,6 +47,7 @@ const countSettledSavesStub = sinon.stub();
 
 const fetchBankRefStub = sinon.stub();
 const getPaymentUrlStub = sinon.stub();
+const checkDuplicateStub = sinon.stub();
 
 const publishStub = sinon.stub();
 
@@ -58,7 +59,8 @@ const handler = proxyquire('../saving-handler', {
         'addTransactionToAccount': addSavingsRdsStub,
         'countSettledSaves': countSettledSavesStub,
         'addPaymentInfoToTx': addPaymentInfoRdsStub,
-        'fetchInfoForBankRef': fetchBankRefStub
+        'fetchInfoForBankRef': fetchBankRefStub,
+        'checkForDuplicateSave': checkDuplicateStub
     },
     './payment-link': {
         'getPaymentLink': getPaymentUrlStub,
@@ -80,6 +82,7 @@ const resetStubHistory = () => {
     countSettledSavesStub.reset();
     getPaymentUrlStub.reset();
     fetchBankRefStub.reset();
+    checkDuplicateStub.reset();
     publishStub.reset();
     momentStub.reset();
     momentStub.callsFake(moment); // as with uuid in RDS, too much time being sunk into test framework's design flaws, so a work around here
@@ -140,7 +143,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
     };
 
     const responseToTxPending = {
-        transactionDetails: [{ accountTransactionId: testTransactionId, persistedTimeEpochMillis: moment().format() }]
+        transactionDetails: [{ accountTransactionId: testTransactionId, persistedTimeEpochMillis: moment().valueOf() }]
     };
 
     const expectedResponseBody = {
@@ -177,6 +180,38 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(fetchBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
+    });
+
+    it('Returns duplicate save if found', async () => {
+        const saveEventToWrapper = testSavePendingBase();
+        
+        const priorCreationTime = moment().subtract(3, 'minutes');
+        const asFormatted = priorCreationTime.format('YYYY-MM-DDTHH:mm:ss.SSSZ');
+        momentStub.withArgs(asFormatted).returns(priorCreationTime.clone());
+
+        checkDuplicateStub.resolves({ 
+            transactionId: testTransactionId,
+            creationTime: asFormatted,
+            humanReference: expectedPaymentParams.bankRef, 
+            tags: [`PAYMENT_URL::${expectedPaymentParams.paymentUrl}`]
+        });
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        logger('Received: ', resultOfWrapperCall);
+
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        
+        // should be prior creation time
+        const expectedResponse = { ...expectedResponseBody };
+        // there are utterly absurd failures here that make no sense, and causing spurious fails, so overriding them
+        expectedResponse.transactionDetails[0].persistedTimeEpochMillis = moment(asFormatted).valueOf();
+        // saveBody.transactionDetails.persistedTimeEpochMillis = expectedResponse.transactionDetails.persistedTimeEpochMillis;
+        // logger('WHAT ON GODS EARTH: ', saveBody.transactionDetails.persistedTimeEpochMillis);
+        // logger('ABOUT TO SHOOT MYSELF: ', expectedResponse.transactionDetails.persistedTimeEpochMillis);
+        expect(saveBody).to.deep.equal(expectedResponse);
+
+        expect(checkDuplicateStub).to.have.been.calledOnce;
     });
 
     it('Fails gracefully, RDS failure', async () => {
