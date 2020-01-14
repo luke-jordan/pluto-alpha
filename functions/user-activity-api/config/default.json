@@ -13,6 +13,8 @@
         "rewardTransactions": "transaction_data.core_transaction_ledger",
         "floatTransactions": "float_data.float_transaction_ledger",
         "accountLedger": "account_data.core_account_ledger",
+        "boostMaster": "boost_data.boost",
+        "boostJoin": "boost_data.boost_account_status",
         "clientFloatVars": "ClientFloatTable"
     },
     "db": {

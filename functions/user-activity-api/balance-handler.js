@@ -46,12 +46,14 @@ const createBalanceDict = (amount, unit, currency, timeMoment) => ({
 });
 
 const assembleBalanceForUser = async (accountId, currency, timeForBalance, floatProjectionVars, daysToProject) => {
-    // in future we might send multiple back, if user has multiple
-    const resultObject = { accountId: [accountId] }; 
-
     // logger('Retrieving balance at time: ', timeForBalance.unix());
-    const startingBalance = await persistence.sumAccountBalance(accountId, currency, timeForBalance);
+    const [startingBalance, availableBoostCount] = await Promise.all([
+      persistence.sumAccountBalance(accountId, currency, timeForBalance), persistence.countAvailableBoosts(accountId)
+    ]);
     logger('Starting balance calculated as: ', startingBalance);
+
+    // in future we might send multiple back, if user has multiple
+    const resultObject = { accountId: [accountId], availableBoostCount }; 
     
     const unit = startingBalance.unit;
     

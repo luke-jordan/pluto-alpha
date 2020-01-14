@@ -300,7 +300,7 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
 
     // rely on query construction engine to do the insertion query as we need it
     const insertionJSON = { ...selectionJSON };
-    insertionJSON.columns = ['account_id', audienceId];
+    insertionJSON.columns = ['distinct(account_id)', audienceId];
     const selectForInsert = exports.extractSQLQueryFromJSON(insertionJSON, persistenceParams);
 
     // use the compiled selection in the insert query, after converting ID to UUID

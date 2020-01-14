@@ -26,6 +26,29 @@ const expireHangingTransactions = async () => {
     return resultOfExpiration.length;
 };
 
+const expireBoosts = async () => {
+    const expiredBoosts = await rdsAccount.expireBoosts();
+    
+    const accountIds = expiredBoosts.map((row) => row.accountId);
+    const userIdsExpired = await rdsAccount.fetchUserIdsForAccounts(accountIds);
+    
+    const boostExpireUserIds = { };
+    expiredBoosts.forEach((row) => {
+        if (!Object.keys(boostExpireUserIds).includes(row.boostId)) {
+            boostExpireUserIds[row.boostId] = [];
+        }
+        const userId = userIdsExpired[row.accountId];
+        boostExpireUserIds[row.boostId].push(userId);
+    });
+
+    const boostIds = Object.keys(boostExpireUserIds);
+    const logPublishPromises = boostIds.map((boostId) => (
+        publisher.publishMultiUserEvent(boostExpireUserIds(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }}))
+    ));
+
+    await Promise.all(logPublishPromises);
+};
+
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
     const floatBalanceMap = await rdsFloat.getFloatBalanceAndFlows([floatId]);
     const floatBalanceCurr = floatBalanceMap.get(floatId);
@@ -188,6 +211,7 @@ const operationMap = {
     'SYSTEM_STATS': sendSystemStats,
     'ACRRUE_FLOAT': initiateFloatAccruals,
     'EXPIRE_HANGING': expireHangingTransactions,
+    'EXPIRE_BOOSTS': expireBoosts, 
     'CHECK_FLOATS': floatConsistency.checkAllFloats
 };
 

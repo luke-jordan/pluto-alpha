@@ -330,8 +330,13 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const timeNow = moment().valueOf();
         const testAccountId = uuid();
 
+        // we just need the names
+        const testProfile = { personalName: 'John', familyName: 'Nkomo' };
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId });
+
         redisGetStub.resolves(JSON.stringify({ account: 'Hello' }));
-                        
+        lamdbaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
+
         getObjectStub.returns({ promise: () => ({ 
             Body: { toString: () => 'This is an email template' }
         })});
@@ -373,7 +378,8 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             calledOnceWithExactly({ Bucket: config.get('templates.bucket'), Key: config.get('templates.withdrawalEmail') });
         expect(sendEmailStub).to.have.been.calledOnce;
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(userProfileInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(boostProcessInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(bsheetInvocation);
         expectNoCalls(sqsSendStub);

@@ -10,27 +10,6 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const userMessageTable = config.get('tables.userMessagesTable');
-const userAccountTable = config.get('tables.accountLedger');
-const userTransactionTable = config.get('tables.transactionLedger');
-
-// format: from key into values, e.g., UNIT_MULTIPLIERS[WHOLE_CURRENCY][WHOLE_CENT] = 100;
-const UNIT_MULTIPLIERS = {
-    'WHOLE_CURRENCY': {
-        'HUNDREDTH_CENT': 10000,
-        'WHOLE_CENT': 100,
-        'WHOLE_CURRENCY': 1
-    },
-    'WHOLE_CENT': {
-        'WHOLE_CURRENCY': 0.01,
-        'WHOLE_CENT': 1,
-        'HUNDREDTH_CENT': 100
-    },
-    'HUNDREDTH_CENT': {
-        'WHOLE_CURRENCY': 0.0001,
-        'WHOLE_CENT': 0.01,
-        'HUNDREDTH_CENT': 1
-    }
-};
 
 const transformMsg = (msgRawFromRds) => {
     const msgObject = camelcaseKeys(msgRawFromRds);
@@ -67,72 +46,6 @@ module.exports.getPendingPushMessages = async () => {
     const values = ['READY_FOR_SENDING', 'PUSH'];
     const resultOfQuery = await rdsConnection.selectQuery(query, values);
     return resultOfQuery.map((msg) => transformMsg(msg));
-};
-
-// Possibly over-concise, but allows us to sum these on a single query
-const sumOverUnits = (rows, targetUnit = 'HUNDREDTH_CENT', amountKey = 'sum') => rows.
-    reduce((sum, row) => {
-        const rowAmount = parseInt(row[amountKey], 10) * UNIT_MULTIPLIERS[row['unit']][targetUnit]; 
-        return sum + rowAmount; 
-    }, 0);
-
-// to reinclude later, possibly: and transaction_type in ($4) 
-const accountSumQuery = async (params, systemWideUserId) => {
-    // const transTypesToInclude = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`].join(',')
-    const query = `select sum(amount), unit from ${userAccountTable} inner join ${userTransactionTable} ` +
-        `on ${userAccountTable}.account_id = ${userTransactionTable}.account_id ` +
-        `where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
-    const fetchRows = await rdsConnection.selectQuery(query, [systemWideUserId, params.currency, 'SETTLED']);
-    logger('Result from select: ', fetchRows);
-    return { ...params, amount: sumOverUnits(fetchRows, params.unit) };
-};
-
-const interestHistoryQuery = async (params, systemWideUserId) => {
-    const transTypesToInclude = [`'ACCRUAL'`, `'CAPITALIZATION'`].join(',');
-    const cutOffMoment = moment(params.startTimeMillis, 'x');
-    const query = `select sum(amount), unit from ${userTransactionTable} where owner_user_id = $1 and ` +
-        `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
-    const values = [systemWideUserId, params.currency, 'SETTLED', transTypesToInclude, cutOffMoment.format()];
-    const fetchRows = await rdsConnection.selectQuery(query, values);
-    return { ...params, amount: sumOverUnits(fetchRows, params.unit) };
-};
-
-const executeAggregateOperation = (operationParams, systemWideUserId) => {
-    const operation = operationParams[0];
-    switch (operation) {
-        case 'balance': {
-            logger('Calculation a balance of account');
-            const paramsForPersistence = { unit: operationParams[1], currency: operationParams[2] }; 
-            return accountSumQuery(paramsForPersistence, systemWideUserId);
-        }
-        case 'interest': {
-            logger('Calculating interest earned');
-            const paramsForPersistence = { unit: operationParams[1], currency: operationParams[2], startTimeMillis: operationParams[3] };
-            return interestHistoryQuery(paramsForPersistence, systemWideUserId);
-        }
-        default:
-            return null;
-    }
-};
-
-// todo :validation, etc.
-/**
- * Retrieves figures for the user according to a simple set of instructions, of the form:
- * <variable_of_interest>::<unit>::<currency>(optionally::anything_else_relevant)
- * Currently supported:
- * balance::<unit>::<currency>> : gets the user's balance according to the specified currency
- * interest::<unit>::<currency>>::<sinceEpochMillis>> : adds up the interest capitalized and accrued since the given instant (in millis)
- */
-module.exports.getUserAccountFigure = async ({ systemWideUserId, operation }) => {
-    logger('User ID: ', systemWideUserId);
-    const operationParams = operation.split('::');
-    logger('Params for operation: ', operationParams);
-    const resultOfOperation = await executeAggregateOperation(operationParams, systemWideUserId);
-    logger('Result of operation: ', resultOfOperation);
-    if (resultOfOperation) {
-        return { amount: resultOfOperation.amount, unit: resultOfOperation.unit, currency: resultOfOperation.currency };
-    }
-    return null;
 };
 
 // ////////////////////////////////////////////////////////////////////////////////

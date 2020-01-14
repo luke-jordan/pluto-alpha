@@ -2,9 +2,13 @@
 
 const logger = require('debug')('jupiter:admin:expiration');
 const config = require('config');
+const uuid = require('uuid/v4');
 const moment = require('moment');
 
+const opsUtil = require('ops-util-common');
+
 const camelCaseKeys = require('camelcase-keys');
+const decamelize = require('decamelize');
 
 // note : this will probably create two pools, but that can be managed as this will rarely/ever be called concurrently
 const RdsConnection = require('rds-common');
@@ -83,6 +87,35 @@ module.exports.expireHangingTransactions = async () => {
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
 };
 
+module.exports.expireBoosts = async () => {
+    const boostMasterTable = config.get('tables.boostMasterTable');
+    const boostJoinTable = config.get('tables.boostJoinTable');
+    
+    const updateBoostQuery = `update ${boostMasterTable} set active = $1 where active = true and ` + 
+        `end_time < current_timestamp returning boost_id`;
+    const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
+    logger('Result of straight update boosts: ', updateBoostResult);
+
+    // note : could do boost_id in above query, but would rather go for a bit of redundancy and slight inneficiency in the
+    // query and ensure a bit of robustness, especially in night time batch job. can evaluate again in future
+    const updateAccountBoosts = `update ${boostJoinTable} set boost_status = $1 where boost_status not in ($2, $3, $4) and ` +
+        `boost_id in (select boost_id from ${boostMasterTable} where active = $5) returning boost_id, account_id`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateAccountBoosts, ['EXPIRED', 'REDEEMED', 'REVOKED', 'EXPIRED', false]);
+    logger('Result of updating boost account status: ', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
+        ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
+};
+
+module.exports.fetchUserIdsForAccounts = async (accountIds) => {
+    const accountTable = config.get('tables.accountTable');
+
+    const query = `select account_id, owner_user_id from ${accountTable} where account_id in ${opsUtil.extractArrayIndices(accountIds)}`;
+    const fetchResult = await rdsConnection.selectQuery(query, accountIds);
+
+    return fetchResult.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['owner_user_id'] }), {});
+};
+
 module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext }) => {
     logger('Would be logging this context: ', logContext);
 
@@ -96,4 +129,36 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
 
     return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
         ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
+};
+
+module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId, logType, logContext }) => {
+    let relevantAccountId = accountId;
+    if (!relevantAccountId) {
+        const getIdQuery = `select account_id from ${config.get('tables.transactionTable')} where transaction_id = $1`;
+        const accountIdFetchRow = await rdsConnection.selectQuery(getIdQuery, [relevantAccountId]);
+        relevantAccountId = accountIdFetchRow[0]['account_id'];
+    }
+
+    const logObject = {
+        logId: uuid(),
+        creatingUserId: adminUserId,
+        accountId: relevantAccountId,
+        transactionId,
+        logType,
+        logContext
+    };
+
+    const objectKeys = Object.keys(logObject);
+    const columnNames = objectKeys.map((key) => decamelize(key)).join(', ');
+    const columnTemplate = objectKeys.map((key) => `\${${key}}`).join(', ');
+
+    const insertQuery = `insert into ${config.get('tables.accountLogTable')} (${columnNames}) values %L returning creation_time`;
+    
+    logger('Inserting log object: ', logObject);
+    logger('Sending in insertion query: ', insertQuery, ' with column template: ', columnTemplate);
+    
+    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [logObject]);
+    logger('Result of insertion: ', resultOfInsert);
+
+    return resultOfInsert;
 };

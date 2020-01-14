@@ -54,6 +54,7 @@ const testFloatId = 'zar_cash_float';
 const testClientId = 'pluto_savings_za';
 const testAccountId = uuid();
 const testPaymentRef = uuid();
+const testUserId = uuid();
 
 describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and with float', () => {
 
@@ -341,12 +342,27 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             [{ 'transaction_id': testFlTxAddId, 'creation_time': moment().format()}, { 'transaction_id': testFlTxAllocId, 'creation_time': moment().format() }]
         ];
 
+        const testLogId = uuid();
+        const expectedLogQueryDef = { 
+            query: 'insert into account_data.account_log (log_id, account_id, transaction_id, reference_time, creating_user_id, log_type, log_context) values %L',
+            columnTemplate: '${logId}, ${accountId}, ${transactionId}, ${referenceTime}, ${settlingUserId}, *{TRANSACTION_SETTLED}, ${logContext}',
+            rows: [{
+                logId: testLogId,
+                accountId: testAccountId,
+                transactionId: testAcTxId,
+                referenceTime: testSettlementTime.format(),
+                settlingUserId: testUserId,
+                logContext: testPaymentDetails
+            }]
+        };
+
         // and, now, set up the stubs at last
         uuidStub.onFirstCall().returns(testFlTxAddId);
         uuidStub.onSecondCall().returns(testFlTxAllocId);
+        uuidStub.onThirdCall().returns(testLogId);
 
         queryStub.withArgs(expectedRetrieveTxQuery, [testAcTxId]).resolves(txDetailsFromRdsOnFetch);
-        multiOpStub.withArgs([expectedUpdateDef], [expectedFloatQueryDef]).resolves(txDetailsFromRdsPostUpdate);
+        multiOpStub.resolves(txDetailsFromRdsPostUpdate);
 
         // as above: this is tested elsewhere and is quite complex so no point repeating here
         queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
@@ -363,7 +379,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             'creationTimeEpochMillis': sinon.match.number
         }];
 
-        const testEvent = { transactionId: testAcTxId, paymentDetails: testPaymentDetails, settlementTime: testSettlementTime };
+        const testEvent = { transactionId: testAcTxId, paymentDetails: testPaymentDetails, settlementTime: testSettlementTime, settlingUserId: testUserId };
         const resultOfSaveUpdate = await rds.updateTxToSettled(testEvent);
 
         logger('Query stub called with: ', queryStub.getCall(0).args);
@@ -380,6 +396,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
         expect(resultOfSaveUpdate).to.have.property('newBalance');
         expect(resultOfSaveUpdate.newBalance).to.deep.equal({ amount: testSaveAmount, currency: 'ZAR', unit: 'HUNDREDTH_CENT' });
+
+        expect(multiOpStub).to.have.been.calledOnceWithExactly([expectedUpdateDef], [expectedFloatQueryDef, expectedLogQueryDef]);
     });
 
     it('If a transaction is already settled, skip update step', async () => {
@@ -424,6 +442,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
     const expectedRowItem = {
         'account_transaction_id': testTxId,
         'account_id': testAccountId,
+        'transaction_type': 'USER_SAVING_EVENT',
         'currency': 'ZAR',
         'unit': 'HUNDREDTH_CENT',
         'amount': testSaveAmount,
@@ -466,12 +485,16 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.have.property('transactionDetails');
-        expect(resultOfUpdate.transactionDetails[0]).to.have.keys(['accountTransactionId', 'updatedTimeEpochMillis']);
+        
+        expect(resultOfUpdate.transactionDetails[0]).to.have.keys(['accountTransactionId', 'accountTransactionType', 'updatedTimeEpochMillis']);
         expect(resultOfUpdate.transactionDetails[1]).to.have.keys(['floatAdditionTransactionId', 'creationTimeEpochMillis']);
         expect(resultOfUpdate.transactionDetails[2]).to.have.keys(['floatAllocationTransactionId', 'creationTimeEpochMillis']);
+        
         expect(resultOfUpdate).to.have.property('newBalance');
         expect(resultOfUpdate.newBalance).to.deep.equal({ amount: 1000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
-        expect(uuidStub).to.have.been.calledTwice;
+        
+        // arguments on stub are checked above (this test is slightly duplicative)
+        expect(uuidStub).to.have.been.calledThrice;
         expect(queryStub).to.have.been.calledWith(pendingTxQuery, [testTxId]);
         expect(queryStub).to.have.been.calledWith(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]);
         expect(multiOpStub).to.have.been.calledOnce;
@@ -517,7 +540,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
 
     it('Updates transaction tags', async () => {
         const updateTime = moment();
-        const testUserId = uuid();
         const testTag = 'FINWORKS::POL1';
         
         const userAccountTable = config.get('tables.accountLedger');
