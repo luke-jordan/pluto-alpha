@@ -125,11 +125,13 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
 };
 
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition.
-const generateFloatTransferInstructions = (affectedAccountDict, boost) => {
+// further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
+const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = false) => {
     const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
+    const amount = revoke ? -boost.boostAmount : boost.boostAmount;
     const recipients = recipientAccounts.map((recipientId) => ({ 
-        recipientId, amount: boost.boostAmount, recipientType: 'END_USER_ACCOUNT'
+        recipientId, amount, recipientType: 'END_USER_ACCOUNT'
     }));
     return {
         floatId: boost.fromFloatId,
@@ -324,9 +326,15 @@ module.exports.processEvent = async (event) => {
     // todo : definitely need a DLQ for this guy
     const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
     logger('Boosts to redeem: ', boostsToRedeem);
-    const transferInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
-    logger('***** Transfer instructions: ', JSON.stringify(transferInstructions));
-    
+    const redeemInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
+    logger('***** Transfer instructions: ', redeemInstructions);
+
+    // then we also check for withdrawal boosts
+    const boostsToRevoke = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REVOKED') >= 0);
+    const revokeInstructions = boostsToRevoke.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, true));
+    logger('***** Revoke instructions: ', revokeInstructions);
+
+    const transferInstructions = redeemInstructions.concat(revokeInstructions);
     const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
     logger('Result of transfers: ', resultOfTransfers);
 

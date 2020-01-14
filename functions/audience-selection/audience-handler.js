@@ -161,9 +161,16 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
     return columnCondition.conditions[0];
 };
 
-const constructColumnConditions = async (params) => {
+const logParams = (params) => {
     logger('Passed parameters to construct column conditions: ', params);
-    
+    if (params.conditions && params.conditions.length > 0 && (params.conditions[0].op === 'and' || params.conditions[0].op === 'or')) {
+        logger('First level conditions: ', params.conditions[0].children);
+    }
+};
+
+const constructColumnConditions = async (params) => {
+    logParams(params);
+
     const passedPropertyConditions = params.conditions;
     
     const { clientId, creatingUserId, isDynamic, sample } = params;

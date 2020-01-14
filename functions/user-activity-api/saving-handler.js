@@ -209,10 +209,12 @@ module.exports.completeSavingPaymentFlow = async (event) => {
 
     // for security reasons, we obviously don't trust the incoming path variables for payment status, but trigger a background check
     // to payment provider to make sure of it -- that then stores the result for when the user resumes
-    if (resultType === 'SUCCESS') {
-      logger('Payment result is a success, fire off lambda invocation in the background');
-      await payment.triggerTxStatusCheck({ transactionId, paymentProvider });
-    }
+    
+    // removing this because the payment provider has lousy infra which makes this fail. restore when have exponential back up in place.
+    // if (resultType === 'SUCCESS') {
+    //   logger('Payment result is a success, fire off lambda invocation in the background');
+    //   await payment.triggerTxStatusCheck({ transactionId, paymentProvider });
+    // }
 
     const response = {
       statusCode: 200,
