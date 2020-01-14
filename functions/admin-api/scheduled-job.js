@@ -35,8 +35,8 @@ const expireBoosts = async () => {
     const boostExpireUserIds = { };
     expiredBoosts.forEach((row) => {
         if (!Object.keys(boostExpireUserIds).includes(row.boostId)) {
-            boostExpireUserIds[row.boostId] = []
-        };
+            boostExpireUserIds[row.boostId] = [];
+        }
         const userId = userIdsExpired[row.accountId];
         boostExpireUserIds[row.boostId].push(userId);
     });

@@ -83,17 +83,17 @@ const extractParamsFromTemplate = (template) => {
 
 // todo : all at once if multiple params
 // todo : warmup (esp for agg figure)
-const fetchAccountAggFigure = (aggregateOperation, systemWideUserId) => {
+const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId) => {
     const invocation = {
         FunctionName: config.get('lambdas.fetchAccountAggregate'),
-        InvocationType: 'Event',
-        Payload: JSON.stringify({ aggregates: [aggregateOperation], systemWideUserId });
-    }
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify({ aggregates: [aggregateOperation], systemWideUserId })
+    };
     const resultOfInvoke = await lambda.invoke(invocation).promise();
     logger('Aggregate response: ', resultOfInvoke);
     const resultBody = JSON.parse(resultOfInvoke['Payload']);
     return formatAmountResult(resultBody.results[0]);
-}
+};
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramSplit = param.split('::');
@@ -111,7 +111,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     } else if (paramName === 'opened_date') {
         const specifiedDateFormat = getSubParamOrDefault(paramSplit, config.get('picker.defaults.dateFormat'));
         return fetchAccountOpenDates(userProfile, specifiedDateFormat);
-    } else {if (paramName === 'total_interest') {
+    } else if (paramName === 'total_interest') {
         const sinceMillis = getSubParamOrDefault(paramSplit, 0); // i.e., beginning of time
         const aggregateOperation = `interest::HUNDREDTH_CENT::${userProfile.defaultCurrency}::${sinceMillis}`;
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);

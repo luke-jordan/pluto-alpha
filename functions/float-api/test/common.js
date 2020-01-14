@@ -20,11 +20,3 @@ module.exports.testValueClientCo = {
     share: exports.testValueClientCompanyShare,
     tracker: exports.testValueClientCompanyTracker
 };
-
-module.exports.allocationExpectedColumns = '${transaction_id}, ${client_id}, ${float_id}, ${t_type}, ${t_state}, ${currency}, ${unit}, ${amount}, ' + 
-    '${allocated_to_type}, ${allocated_to_id}, ${related_entity_type}, ${related_entity_id}';
-
-module.exports.allocationExpectedQuery = (tableName) => `insert into ${tableName} ` +
-    `(transaction_id, client_id, float_id, t_type, t_state, currency, unit, amount, ` +
-    `allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) ` +
-    `values %L returning transaction_id`;

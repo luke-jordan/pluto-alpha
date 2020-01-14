@@ -47,10 +47,10 @@ const currency = (amountString) => amountString.split('::')[2];
 const safeEvaluateAbove = (eventContext, amountKey, thresholdAmount) => {
     if (typeof eventContext[amountKey] !== 'string') {
         return false;
-    };
+    }
 
     return equalizeAmounts(eventContext[amountKey]) >= equalizeAmounts(thresholdAmount);
-}
+};
 
 const evaluateWithdrawal = (parameterValue, eventContext) => {
     const timeThreshold = moment(parseInt(parameterValue, 10));

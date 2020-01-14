@@ -91,7 +91,8 @@ module.exports.addOrSubtractFloat = async (request = {
         'allocated_to_type': constants.entityTypes.FLOAT_ITSELF,
         'allocated_to_id': request.floatId,
         'related_entity_type': request.backingEntityType,
-        'related_entity_id': request.backingEntityIdentifier
+        'related_entity_id': request.backingEntityIdentifier,
+        'log_id': []
     };
 
     const txInsertDef = {
@@ -128,6 +129,11 @@ module.exports.addOrSubtractFloat = async (request = {
     const queryTxId = queryResult[0][0]['transaction_id'];
     // first row of second operation
     const logId = queryResult[1][0]['log_id'];
+
+    // then update the above transaction with the log ID
+    const addLogIdQuery = `update ${config.get('tables.floatTransactions')} set log_id = array_append(log_id, $1) where transaction_id = $2`;
+    const addLogIdResult = await rdsConnection.updateRecord(addLogIdQuery, [logId, queryTxId]);
+    logger('Result of adding log ID: ', addLogIdResult);
     
     const newBalance = await exports.calculateFloatBalance(request.floatId, request.currency);
     logger('New float balance: ', newBalance);
@@ -148,7 +154,7 @@ const safelyGetLogIdArray = (request) => {
         return request.logId;
     }
     return [];
-}
+};
 
 /**
  * Simple allocation of the float, to either a bonus or company share (do not user this for user accruals)
@@ -190,7 +196,7 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
         'log_id': safelyGetLogIdArray(request)
     }));
 
-    // logger('Calling with values: ', mappedArray);
+    logger('Calling float allocation with values: ', mappedArray);
     const resultOfInsertion = await rdsConnection.insertRecords(insertionQuery, insertionColumns, mappedArray);
     // logger('INSERTION RESULT: ', resultOfInsertion);
 
@@ -516,7 +522,7 @@ module.exports.supercedeAccruals = async (searchParams, floatLogId) => {
     accValues[1] = `SUPERCEDE_FLOAT_LOG_ID::${floatLogId}`;
 
     logger('Updating account transactions with query: ', accountQuery, 'and values: ', accValues);
-    const accountResult = await rdsConnection.updateRecord(accountQuery, values);
+    const accountResult = await rdsConnection.updateRecord(accountQuery, accValues);
     logger('Result of account update: ', accountResult);
 
     return { result: 'SUCCESS', floatRowsUpdated: floatResult.rows.length, accountRowsUpdated: accountResult.rows.length };

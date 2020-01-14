@@ -540,7 +540,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
 
     it('Updates transaction tags', async () => {
         const updateTime = moment();
-        const testUserId = uuid();
         const testTag = 'FINWORKS::POL1';
         
         const userAccountTable = config.get('tables.accountLedger');

@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:admin:expiration');
 const config = require('config');
+const uuid = require('uuid/v4');
 const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
@@ -100,7 +101,7 @@ module.exports.expireBoosts = async () => {
     const updateAccountBoosts = `update ${boostJoinTable} set boost_status = $1 where boost_status not in ($2, $3, $4) and ` +
         `boost_id in (select boost_id from ${boostMasterTable} where active = $5) returning boost_id, account_id`;
     const resultOfUpdate = await rdsConnection.updateRecord(updateAccountBoosts, ['EXPIRED', 'REDEEMED', 'REVOKED', 'EXPIRED', false]);
-    logger('Result of updating boost account status: ', resultOfUpdate)
+    logger('Result of updating boost account status: ', resultOfUpdate);
 
     return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
@@ -133,9 +134,8 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
 module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId, logType, logContext }) => {
     let relevantAccountId = accountId;
     if (!relevantAccountId) {
-        const accountIdFetchRow = await rdsConnection.selectQuery(
-            `select account_id from ${config.get('tables.transactionTable')} where transaction_id = $1`, [relevantAccountId]
-        );
+        const getIdQuery = `select account_id from ${config.get('tables.transactionTable')} where transaction_id = $1`;
+        const accountIdFetchRow = await rdsConnection.selectQuery(getIdQuery, [relevantAccountId]);
         relevantAccountId = accountIdFetchRow[0]['account_id'];
     }
 
@@ -150,7 +150,7 @@ module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId
 
     const objectKeys = Object.keys(logObject);
     const columnNames = objectKeys.map((key) => decamelize(key)).join(', ');
-    const columnTemplate = objectKeys.map((key) => `$\{${key}\}`).join(', ');
+    const columnTemplate = objectKeys.map((key) => `\${${key}}`).join(', ');
 
     const insertQuery = `insert into ${config.get('tables.accountLogTable')} (${columnNames}) values %L returning creation_time`;
     

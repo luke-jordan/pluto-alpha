@@ -54,7 +54,7 @@ const resetStubs = () => {
     sendEmailStub.reset();
 };
 
-describe.only('*** UNIT TEST PUBLISHING MODULE ***', () => {
+describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
     const testTime = moment();
     const testUserId = uuid();

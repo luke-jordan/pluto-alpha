@@ -209,6 +209,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         const amountAccrued = Math.floor(Math.random() * 1000 * 10000);  
         const testTxIds = Array(10).fill().map(() => uuid());
         const referenceTimeMillis = moment().valueOf();
+        const testLogId = uuid();
 
         const accrualEvent = {
             clientId: common.testValidClientId,
@@ -225,7 +226,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expectedFloatAdjustment.amount = amountAccrued;
         expectedFloatAdjustment.logType = 'WHOLE_FLOAT_ACCRUAL';
 
-        adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ updatedBalance: 100 + amountAccrued });
+        adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ updatedBalance: 100 + amountAccrued, logId: testLogId });
 
         const expectedBonusAllocationAmount = Math.round(amountAccrued * common.testValueBonusPoolShare);
         const expectedClientCoAmount = Math.round(amountAccrued * common.testValueClientShare);
@@ -235,7 +236,8 @@ describe('Primary allocation of inbound accrual lambda', () => {
             currency: accrualEvent.currency, 
             unit: accrualEvent.unit, 
             transactionType: 'ACCRUAL', 
-            transactionState: 'SETTLED' 
+            transactionState: 'SETTLED',
+            logId: testLogId
         };
         
         expectedBonusAllocation.label = 'BONUS';
@@ -262,7 +264,8 @@ describe('Primary allocation of inbound accrual lambda', () => {
             transactionState: 'SETTLED',
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
             backingEntityIdentifier: accrualEvent.backingEntityIdentifier,
-            bonusPoolIdForExcess: common.testValueBonusPoolTracker
+            bonusPoolIdForExcess: common.testValueBonusPoolTracker,
+            logId: testLogId
         };
 
         // we test bonus allocation of any fractional amount in the tests below, so here just set to none

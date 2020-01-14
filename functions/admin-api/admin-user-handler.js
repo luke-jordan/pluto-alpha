@@ -221,13 +221,13 @@ const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reas
             persistence.insertAccountLog({ transactionId, adminUserId, logType: eventType, logContext })
         ];
         if (transactionType === 'USER_SAVING_EVENT') {
-            loggingPromises.push(publishUserLog({ adminUserId, systemWideUserId, 'SAVING_PAYMENT_SUCCESSFUL', context: logContext }));
+            loggingPromises.push(publishUserLog({ adminUserId, systemWideUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL', context: logContext }));
         }
         await Promise.all(loggingPromises);
         return { result: 'SUCCESS', updateLog: resultPayload };
-    } else {
-        return { result: 'ERROR', message: resultPayload };
-    }
+    } 
+    
+    return { result: 'ERROR', message: resultPayload };
 };
 
 const updateTxStatus = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
