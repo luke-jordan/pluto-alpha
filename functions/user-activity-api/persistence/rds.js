@@ -27,6 +27,17 @@ module.exports.fetchTransaction = async (transactionId) => {
     return row.length > 0 ? camelizeKeys(row[0]) : null;
 };
 
+// todo : we need to make sure units don't get in way here (e.g., transform all or transform none). also, test it
+module.exports.checkForDuplicateSave = async ({ accountId, amount, currency, unit }) => {
+    const cuttOffTime = moment().subtract(config.get('defaults.duplicate.minuteCutOff'), 'minutes');
+    const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+        `amount = $2 and currency = $3 and unit = $4 and settlement_status = $5 and ` +
+        `creation_time > $6 order by creation_time desc limit 1`;
+    const dupValues = [accountId, amount, currency, unit, 'INITIATED', cuttOffTime.format()];
+    const rows = await rdsConnection.selectQuery(query, dupValues);
+    return rows.length > 0 ? camelizeKeys(rows[0]) : null;
+};
+
 module.exports.fetchTransactionsForHistory = async (accountId) => {
     const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL', 'BOOST_REDEMPTION', 'CAPITALIZATION'];
     const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
@@ -335,7 +346,7 @@ const validateTxDetails = (txDetails) => {
  * @param {unit} unit The unit of the amount saved
  * @param {string} settlementStatus The status of the saving event (initiated or settled)
  * @param {string} floatId The float to which this amount of saving is allocated
- * @param {string} offerId (Optional) Include if the saving event is clearly linked to a specific inducement/reward
+ * @param {string} boostId (Optional) Include if the saving event is clearly linked to a specific inducement/reward
  * @param {string} paymentRef The reference at the payment provider for the transaction
  * @param {string} paymentProvider If settled: who the payment provider was
  * @param {list(string)} tags (Optional) Any tags to include in the event
@@ -462,29 +473,22 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
  * @param {string} transactionId The ID of the transaction
  * @param {string} paymentProvider The third party used for the payment
  * @param {string} paymentRef The machine readable reference from the provider
- * @param {string} bankReference The human readable short bank reference for the payment 
+ * @param {string} bankReference The human readable short bank reference for the payment
+ * @param {string} paymentUrl The URL for this payment
  */
-module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, paymentRef, bankRef }) => {
+module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, paymentRef, bankRef, paymentUrl }) => {
     logger('Adding payment info to TX before returning');
 
-    // persistence stores in more general form, hence key conversion
-    const value = {
-        paymentProvider,
-        paymentReference: paymentRef,
-        humanReference: bankRef
-    };
+    const updateQuery = `update ${config.get('tables.accountTransactions')} set payment_provider = $1, ` +
+        `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning updated_time`;
+    const updateValues = [paymentProvider, paymentRef, bankRef, `PAYMENT_URL::${paymentUrl}`, transactionId];
 
-    const updateQueryDef = {
-        table: config.get('tables.accountTransactions'),
-        key: { transactionId },
-        value,
-        returnClause: 'updated_time'
-    };
-
-    const resultOfUpdate = await rdsConnection.updateRecordObject(updateQueryDef);
+    logger('Updating tx via query: ', updateQuery);
+    logger('And with update values: ', updateValues);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
     logger('Payment info result from RDS: ', resultOfUpdate);
 
-    const updateMoment = moment(resultOfUpdate[0]['updated_time']);
+    const updateMoment = moment(resultOfUpdate['rows'][0]['updated_time']);
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
 };
