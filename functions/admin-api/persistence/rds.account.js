@@ -110,7 +110,7 @@ module.exports.expireBoosts = async () => {
 module.exports.fetchUserIdsForAccounts = async (accountIds) => {
     const accountTable = config.get('tables.accountTable');
 
-    const query = `select account_id, owner_user_id from ${accountTable} where account_id in ${opsUtil.extractArrayIndices(accountIds)}`;
+    const query = `select account_id, owner_user_id from ${accountTable} where account_id in (${opsUtil.extractArrayIndices(accountIds)})`;
     const fetchResult = await rdsConnection.selectQuery(query, accountIds);
 
     return fetchResult.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['owner_user_id'] }), {});
