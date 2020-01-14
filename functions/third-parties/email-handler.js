@@ -2,15 +2,13 @@
 
 const logger = require('debug')('jupiter:third-parties:sendgrid');
 const config = require('config');
-
-const uuid = require('uuid/v4');
-const validator = require('validator');
-const sgMail = require('@sendgrid/mail');
+const sendGridMail = require('@sendgrid/mail');
 const AWS = require('aws-sdk');
 
 const s3 = new AWS.S3();
 
-sgMail.setApiKey(config.get('sendgrid.apiKey'));
+sendGridMail.setApiKey(config.get('sendgrid.apiKey'));
+sendGridMail.setSubstitutionWrappers('{{', '}}');
 
 const obtainHtmlTemplate = async (Bucket, Key) => {
     const template = await s3.getObject({ Bucket, Key }).promise();
@@ -32,6 +30,10 @@ const validatePublishEvent = ({ subject, templateSource, htmlTemplate, textTempl
         throw new Error('Missing destination array');
     }
 
+    if (destinationArray.length > 1000) {
+        throw new Error('Cannot send to more than 1000 recipients at a time');
+    }
+
     destinationArray.forEach((destination) => {
         if (typeof destination !== 'object' || Object.keys(destination).length === 0) {
             throw new Error(`Invalid destination object: ${JSON.stringify(destination)}`);
@@ -47,62 +49,61 @@ const validatePublishEvent = ({ subject, templateSource, htmlTemplate, textTempl
     }
 };
 
-const validateTemplate = (templateDetails) => {
-    if (!templateDetails.templateId || !validator.isUUID(templateDetails.templateId, 4)) {
-        throw new Error('Missing or invalid template id');
-    }
-
-    if (!templateDetails.htmlTemplate && !templateDetails.textTemplate) {
+const validateTemplate = (dispatchDetails) => {
+    if (!dispatchDetails.htmlTemplate && !dispatchDetails.textTemplate) {
         throw new Error('You must provide either a text or html template or both');
     }
 
-    if (templateDetails.htmlTemplate && typeof templateDetails.htmlTemplate !== 'string') {
-        throw new Error(`Invalid HTML template: ${JSON.stringify(templateDetails.htmlTemplate)}`);
+    if (dispatchDetails.htmlTemplate && typeof dispatchDetails.htmlTemplate !== 'string') {
+        throw new Error(`Invalid HTML template: ${JSON.stringify(dispatchDetails.htmlTemplate)}`);
     }
 
-    if (templateDetails.textTemplate && typeof templateDetails.textTemplate !== 'string') {
-        throw new Error(`Invalid text template: ${JSON.stringify(templateDetails.textTemplate)}`);
+    if (dispatchDetails.textTemplate && typeof dispatchDetails.textTemplate !== 'string') {
+        throw new Error(`Invalid text template: ${JSON.stringify(dispatchDetails.textTemplate)}`);
     }
 };
 
-const assembleEmail = (templateDetails, destinationDetails) => {
-    const { templateId, subject, htmlTemplate, textTemplate } = templateDetails;
-    const { emailAddress, templateVariables } = destinationDetails;
+const assembleEmails = (dispatchDetails) => {
+    const { subject, htmlTemplate, textTemplate, destinationArray } = dispatchDetails;
 
-    const body = {
-        'to': emailAddress,
-        'from': config.get('sendgrid.sourceAddress'),
-        'subject': subject,
-        'template_id': templateId,
-        'dynamic_template_data': templateVariables,
+    const email = {
+        'from': {
+            'email': config.get('sendgrid.fromAddress'),
+            'name': 'Jupiter'
+        },
+        'reply_to': {
+            'email': config.get('sendgrid.replyToAddress'),
+            'name': 'Jupiter'
+        },
+        'subject': '{{subject}}',
+        'content': [],
         'mail_settings': {
             'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
         }
     };
 
+    const personalizationsArray = [];
+    destinationArray.forEach((destination) => {
+        const substitutions = destination.templateVariables;
+        substitutions.subject = subject;
+        personalizationsArray.push({
+            to: [{ email: destination.emailAddress }],
+            substitutions
+        });
+    });
+
+    email.personalizations = personalizationsArray;
+
     if (textTemplate) {
-        body.text = textTemplate;
+        email.content.push({ 'type': 'text/plain', 'value': textTemplate });
     }
 
     if (htmlTemplate) {
-        body.html = htmlTemplate;
+        email.content.push({ 'type': 'text/html', 'value': htmlTemplate });
     }
 
-    logger('Assembled body:', body);
-    return body;
-};
-
-const publishEmails = async (email) => {
-    try {
-        const result = await sgMail.send(email);
-        // logger('Result of email dispatch:', result);
-        const formattedResult = { statusCode: result[0].statusCode, statusMessage: result[0].statusMessage, templateId: email.template_id, toAdrress: email.to };
-
-        return formattedResult;
-    } catch (err) {
-        logger(`Error sending email: ${err}`);
-        return { error: err.message, templateId: email.template_id, toAdrress: email.to };
-    }
+    logger('Assembled body:', JSON.stringify(email));
+    return email;
 };
 
 /**
@@ -117,25 +118,25 @@ const publishEmails = async (email) => {
 module.exports.publishFromSource = async ({ templateSource, textTemplate, subject, destinationArray }) => {
     validatePublishEvent({ subject, templateSource, textTemplate, destinationArray });
 
-    const templateId = uuid();
-
-    const templateDetails = { subject, destinationArray };
-    templateDetails.templateId = templateId;
+    const dispatchDetails = { subject, destinationArray };
 
     if (templateSource) {
         const { bucket, key } = templateSource;
-        templateDetails.htmlTemplate = await obtainHtmlTemplate(bucket, key);
+        dispatchDetails.htmlTemplate = await obtainHtmlTemplate(bucket, key);
     }
 
     if (textTemplate) {
-        templateDetails.textTemplate = textTemplate;
+        dispatchDetails.textTemplate = textTemplate;
     }
 
-    validateTemplate(templateDetails);
+    validateTemplate(dispatchDetails);
 
-    const resultOfPublish = await Promise.all(destinationArray.map((destinationDetails) => publishEmails(assembleEmail(templateDetails, destinationDetails))));
+    const assembledEmails = assembleEmails(dispatchDetails, destinationArray);
 
-    logger('Result of email send: ', resultOfPublish);
+    const resultOfEmails = await sendGridMail.send(assembledEmails);
+
+    const formattedResult = { statusCode: resultOfEmails[0].statusCode, statusMessage: resultOfEmails[0].statusMessage };
+    logger('Result of email send: ', formattedResult);
     
     return { result: 'SUCCESS' };
 };
@@ -152,20 +153,20 @@ module.exports.publishFromSource = async ({ templateSource, textTemplate, subjec
 module.exports.publishFromTemplate = async ({ htmlTemplate, textTemplate, subject, destinationArray }) => {
     validatePublishEvent({ subject, htmlTemplate, textTemplate, destinationArray });
 
-    const templateId = uuid();
-
-    const templateDetails = { subject, htmlTemplate, destinationArray };
-    templateDetails.templateId = templateId;
+    const dispatchDetails = { subject, htmlTemplate, destinationArray };
 
     if (textTemplate) {
-        templateDetails.textTemplate = textTemplate;
+        dispatchDetails.textTemplate = textTemplate;
     }
 
-    validateTemplate(templateDetails);
+    validateTemplate(dispatchDetails);
 
-    const resultOfPublish = await Promise.all(destinationArray.map((destinationDetails) => publishEmails(assembleEmail(templateDetails, destinationDetails))));
+    const assembledEmails = assembleEmails(dispatchDetails, destinationArray);
 
-    logger('Result of email send: ', resultOfPublish);
+    const resultOfEmails = await sendGridMail.send(assembledEmails);
+
+    const formattedResult = { statusCode: resultOfEmails[0].statusCode, statusMessage: resultOfEmails[0].statusMessage };
+    logger('Result of email send: ', formattedResult);
     
     return { result: 'SUCCESS' };
 };

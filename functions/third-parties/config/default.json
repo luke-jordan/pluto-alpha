@@ -75,7 +75,8 @@
     },
     "sendgrid": {
         "apiKey": "",
-        "sourceAddress": "",
+        "fromAddress": "",
+        "replyToAddress": "",
         "sandbox": true
     }
 }
