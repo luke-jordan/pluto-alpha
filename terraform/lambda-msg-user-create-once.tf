@@ -35,6 +35,11 @@ resource "aws_lambda_function" "message_user_create_once" {
                 "names": {
                     "message_api_worker": "${terraform.workspace}/ops/psql/message"
                 }
+              },
+              "publishing": {
+                "userEvents": {
+                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                }
               }
           }
       )}"
@@ -77,17 +82,22 @@ resource "aws_cloudwatch_log_group" "message_user_create_once" {
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_create_once_basic_execution_policy" {
-  role = "${aws_iam_role.message_user_create_once_role.name}"
+  role = aws_iam_role.message_user_create_once_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_create_once_vpc_execution_policy" {
-  role = "${aws_iam_role.message_user_create_once_role.name}"
+  role = aws_iam_role.message_user_create_once_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "message_create_user_event_publish_policy" {
+  role = aws_iam_role.message_user_create_once_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
+}
+
 resource "aws_iam_role_policy_attachment" "message_user_create_once_secret_get" {
-  role = "${aws_iam_role.message_user_create_once_role.name}"
+  role = aws_iam_role.message_user_create_once_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
 }
 

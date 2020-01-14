@@ -14,6 +14,8 @@
         "floatTxTable": "float_data.float_transaction_ledger",
         "floatLogTable": "float_data.float_log",
         "transactionTable": "transaction_data.core_transaction_ledger",
+        "boostMasterTable": "boost_data.boost",
+        "boostJoinTable": "boost_data.boost_account_status",
         "clientFloatTable": "ClientFloatTable",
         "countryClientTable": "CountryClientTable",
         "authCacheTable": "AuthSucceededEvents",
