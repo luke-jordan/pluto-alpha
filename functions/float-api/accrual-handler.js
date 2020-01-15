@@ -49,6 +49,22 @@ module.exports.accrue = async (event) => {
     const accrualAmount = parseInt(accrualParameters.accrualAmount, 10); // just in case it is formatted as string
     const accrualCurrency = accrualParameters.currency || floatConfig.currency;
     const accrualUnit = accrualParameters.unit || floatConfig.unit;
+
+    const newFloatBalance = await rds.addOrSubtractFloat({ 
+      clientId, 
+      floatId, 
+      amount: accrualAmount, 
+      currency: accrualCurrency,
+      transactionType: constants.floatTransTypes.ACCRUAL, 
+      unit: accrualUnit, 
+      backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
+      backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
+      logType: 'WHOLE_FLOAT_ACCRUAL',
+      referenceTimeMillis: accrualParameters.referenceTimeMillis 
+    });
+    
+    logger('New float balance: ', newFloatBalance);
+    const { logId } = newFloatBalance;
     
     const allocationCommon = {
       currency: accrualCurrency,
@@ -56,7 +72,8 @@ module.exports.accrue = async (event) => {
       transactionType: constants.floatTransTypes.ACCRUAL,
       transactionState: constants.floatTxStates.SETTLED,
       relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
-      relatedEntityId: accrualParameters.backingEntityIdentifier
+      relatedEntityId: accrualParameters.backingEntityIdentifier,
+      logId 
     };
 
     const bonusAllocation = JSON.parse(JSON.stringify(allocationCommon));
@@ -73,21 +90,6 @@ module.exports.accrue = async (event) => {
 
     logger('Company allocation: ', clientAllocation);
     logger('Bonus allocation: ', bonusAllocation);
-
-    const newFloatBalance = await rds.addOrSubtractFloat({ 
-      clientId, 
-      floatId, 
-      amount: accrualAmount, 
-      currency: accrualCurrency,
-      transactionType: constants.floatTransTypes.ACCRUAL, 
-      unit: accrualUnit, 
-      backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
-      backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
-      logType: 'WHOLE_FLOAT_ACCRUAL',
-      referenceTimeMillis: accrualParameters.referenceTimeMillis 
-    });
-    
-    logger('New float balance: ', newFloatBalance);
       
     const entityAllocationIds = await rds.allocateFloat(clientId, floatId, [bonusAllocation, clientAllocation]);
     logger('Allocation IDs: ', entityAllocationIds);
@@ -108,7 +110,8 @@ module.exports.accrue = async (event) => {
       transactionState: constants.floatTxStates.SETTLED,
       backingEntityType: constants.entityTypes.ACCRUAL_EVENT, 
       backingEntityIdentifier: accrualParameters.backingEntityIdentifier,
-      bonusPoolIdForExcess: floatConfig.bonusPoolTracker 
+      bonusPoolIdForExcess: floatConfig.bonusPoolTracker,
+      logId
     };
     
     const userAllocations = await exports.allocate(userAllocationParams);

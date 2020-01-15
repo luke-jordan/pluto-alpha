@@ -87,13 +87,15 @@ const expectedBalanceSubsequentDays = Array.from(Array(expectedNumberOfDays).key
 const accountBalanceQueryStub = sinon.stub();
 const accountClientFloatStub = sinon.stub();
 const findAccountsForUserStub = sinon.stub();
+const countAvailableBoostStub = sinon.stub();
 const floatPrincipalVarsStub = sinon.stub();
 
 const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
         'getOwnerInfoForAccount': accountClientFloatStub,
-        'findAccountsForUser': findAccountsForUserStub
+        'findAccountsForUser': findAccountsForUserStub,
+        'countAvailableBoosts': countAvailableBoostStub
     },
     './persistence/dynamodb': {
         'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub,
@@ -108,15 +110,19 @@ const resetStubs = (historyOnly = true) => {
         accountClientFloatStub.resetHistory();
         findAccountsForUserStub.resetHistory();
         floatPrincipalVarsStub.resetHistory();
+        countAvailableBoostStub.resetHistory();
     } else {
         accountBalanceQueryStub.reset();
         accountClientFloatStub.reset();
         findAccountsForUserStub.reset();
         floatPrincipalVarsStub.reset();
+        countAvailableBoostStub.resetHistory();
     }
 };
 
 describe('Fetches user balance and makes projections', () => {
+
+    const testNumberBoosts = 3;
 
     const createUserIdEvent = (userId) => ({ 
         userId, 
@@ -154,6 +160,7 @@ describe('Fetches user balance and makes projections', () => {
             'timezone': testTimeZone
         },
         balanceSubsequentDays: expectedBalanceSubsequentDays,
+        availableBoostCount: testNumberBoosts, 
         comparatorRates: testComparatorRates
     };
 
@@ -201,6 +208,8 @@ describe('Fetches user balance and makes projections', () => {
             currency: 'USD',
             comparatorRates: testComparatorRates
         });
+
+        countAvailableBoostStub.withArgs(testAccountId).resolves(testNumberBoosts);
     });
 
     beforeEach(() => resetStubs(true));

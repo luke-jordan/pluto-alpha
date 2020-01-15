@@ -111,8 +111,8 @@ resource "aws_iam_role_policy_attachment" "user_event_process_achievements" {
 }
 
 resource "aws_iam_role_policy_attachment" "user_event_fetch_profile_invoke_policy" {
-  role = "${aws_iam_role.admin_user_find_role.name}"
-  policy_arn = "${var.user_profile_admin_policy_arn[terraform.workspace]}"
+  role = aws_iam_role.user_event_process_role.name
+  policy_arn = var.user_profile_admin_policy_arn[terraform.workspace]
 }
 
 resource "aws_iam_role_policy_attachment" "user_event_process_secret_get" {

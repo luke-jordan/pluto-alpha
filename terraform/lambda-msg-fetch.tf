@@ -38,6 +38,11 @@ resource "aws_lambda_function" "message_user_fetch" {
                 "names": {
                     "message_api_worker": "${terraform.workspace}/ops/psql/message"
                 }
+            },
+            "publishing": {
+              "userEvents": {
+                  "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+              }
             }
         }
       )}"
@@ -73,7 +78,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "message_user_fetch" {
   name = "/aws/lambda/${var.message_user_fetch_function_name}"
-  retention_in_days = 3
+  retention_in_days = 1
 
   tags = {
     environment = "${terraform.workspace}"
@@ -81,27 +86,37 @@ resource "aws_cloudwatch_log_group" "message_user_fetch" {
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_fetch_basic_execution_policy" {
-  role = "${aws_iam_role.message_user_fetch_role.name}"
+  role = aws_iam_role.message_user_fetch_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_fetch_vpc_execution_policy" {
-  role = "${aws_iam_role.message_user_fetch_role.name}"
+  role = aws_iam_role.message_user_fetch_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_fetch_msg_process_policy" {
-  role = "${aws_iam_role.message_user_fetch_role.name}"
+  role = aws_iam_role.message_user_fetch_role.name
   policy_arn = "${aws_iam_policy.lambda_invoke_message_process_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_fetch_profile_table_policy" {
-  role = "${aws_iam_role.message_user_fetch_role.name}"
+  role = aws_iam_role.message_user_fetch_role.name
   policy_arn = "${var.user_profile_table_read_policy_arn[terraform.workspace]}"
 }
 
+resource "aws_iam_role_policy_attachment" "message_user_fetch_aggregate_invoke" {
+  role = aws_iam_role.message_user_fetch_role.name
+  policy_arn = aws_iam_policy.lambda_invoke_history_aggregate_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "message_fetch_user_event_publish_policy" {
+  role = aws_iam_role.message_user_fetch_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
+}
+
 resource "aws_iam_role_policy_attachment" "message_user_fetch_transaction_secret_get" {
-  role = "${aws_iam_role.message_user_fetch_role.name}"
+  role = aws_iam_role.message_user_fetch_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
 }
 

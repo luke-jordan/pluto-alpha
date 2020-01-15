@@ -67,7 +67,12 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         messageBody: template
     });
 
+    const assembleLambdaInvoke = (operation) => (
+        testHelper.wrapLambdaInvoc('user_history_aggregate', false, { aggregates: [operation], systemWideUserId: testUserId })
+    );
+
     beforeEach(() => {
+        resetStubs();
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
             systemWideUserId: testUserId, 
             personalName: 'Luke', 
@@ -87,10 +92,15 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             'Hello #{user_full_name}. Did you know you have earned #{total_interest} in interest since you opened your account in #{opened_date}?' 
         )]);
 
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
+
         const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
         logger('Filled message: ', filledMessage);
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('interest::HUNDREDTH_CENT::USD::0'));
     });
 
     it('Fills in account balances properly', async () => {
@@ -99,9 +109,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
         )]);
 
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 80000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
+
         const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
     });
 
     it('Handles currencies not supported by JS i18n', async () => {
@@ -109,8 +124,10 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
         )]);
-        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::ZAR' }).
-            resolves({ currency: 'ZAR', unit: 'WHOLE_CENT', amount: 800000 });
+
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'ZAR' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
+    
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
             systemWideUserId: testUserId, 
             personalName: 'Luke', 
@@ -122,12 +139,17 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::ZAR'));
     });
 
     it('Sorts messages by priority properly', async () => {
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
         const temlpate = 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.';
         getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(temlpate, 10), minimalMsgFromTemplate(temlpate, 5)]);
+
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
 
         const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
         logger('Filled message:', filledMessage);
@@ -190,8 +212,8 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
         )]);
-        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' }).
-            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 800000 });
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
             systemWideUserId: mockUserId, 
             personalName: 'Luke', 
@@ -206,6 +228,8 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
     });
 });
 

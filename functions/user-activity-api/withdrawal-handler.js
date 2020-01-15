@@ -192,7 +192,8 @@ module.exports.confirmWithdrawal = async (event) => {
         }
 
         // user wants to go through with it, so (1) send an email about it, (2) update the transaction, (3) update 3rd-party
-        const resultOfUpdate = await persistence.updateTxToSettled({ transactionId, settlementTime: moment() });
+        const { systemWideUserId } = authParams;
+        const resultOfUpdate = await persistence.updateTxToSettled({ transactionId, settlementTime: moment(), settlingUserId: systemWideUserId });
 
         // then, return the balance
         const response = { balance: resultOfUpdate.newBalance };
@@ -206,6 +207,7 @@ module.exports.confirmWithdrawal = async (event) => {
             withdrawalAmount: collapseAmount(txProperties),
             newBalance: collapseAmount(response.balance)
         };
+        
         await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
 
         return { statusCode: 200, body: JSON.stringify(response) };

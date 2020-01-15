@@ -227,6 +227,30 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(currencyQuery, [testAccountId]);
     });
 
+    it('Checks if a boost is available', async () => {
+        const testBoostCount = 10;
+
+        const boostQuery = `select count(*) from boost_data.boost_account_status inner join boost_data.boost on ` + 
+            `boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` +
+            `boost_data.boost.active = true and boost_data.boost.end_time > current_timestamp and ` +
+            `boost_data.boost_account_status.boost_status in ($2, $3, $4)`;
+        const boostValues = [testAccountId, 'CREATED', 'OFFERED', 'PENDING'];        
+        
+        queryStub.resolves([{ 'count': testBoostCount }]);
+
+        const result = await rds.countAvailableBoosts(testAccountId);
+        expect(result).to.equal(10);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(boostQuery, boostValues);
+    });
+
+    // just being careful; other stuff is handled above, so
+    it('Returns 0 if no count', async () => {
+        queryStub.resolves([]);
+        const result = await rds.countAvailableBoosts(testAccountId);
+        expect(result).to.equal(0);
+    });
+
     it('Counts settled saves', async () => {
         const countQuery = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
             `transaction_type = $2 and settlement_status = $3`;

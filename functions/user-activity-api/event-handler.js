@@ -297,10 +297,11 @@ const handleSavingEvent = async (eventBody) => {
 const handleWithdrawalEvent = async (eventBody) => {
     const userId = eventBody.userId;
     const key = `${userId}::BANK_DETAILS`;
-    const cachedDetails = await redis.get(key);
+    const [cachedDetails, userProfile] = await Promise.all([redis.get(key), fetchUserProfile(userId)]);
     const bankAccountDetails = JSON.parse(cachedDetails);
 
     const templateVariables = { ...bankAccountDetails };
+    templateVariables.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
     templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount);
     templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
 

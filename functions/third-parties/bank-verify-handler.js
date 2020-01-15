@@ -137,3 +137,14 @@ module.exports.checkStatus = async (event) => {
         return { Status: 'Error', details: err.message };
     }
 };
+
+// what we use to direct the check; doing it this way for the moment to avoid proliferation
+module.exports.handle = async (event) => {
+    // try catch will happen inside block
+    const { operation, parameters } = event;
+    if (operation === 'statusCheck') {
+        return exports.checkStatus(parameters);
+    } 
+    
+    return exports.initialize(parameters);
+};
