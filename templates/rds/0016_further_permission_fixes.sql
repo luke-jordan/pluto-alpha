@@ -1,6 +1,6 @@
 -- Should have added into prior but now in here
 
-grant update (log_id) on transaction_data.core_transaction_ledger to float_api_worker;
+grant update (log_id) on float_data.float_transaction_ledger to float_api_worker;
 
 grant usage on schema boost_data to save_tx_api_worker;
 grant select (boost_id, start_time, end_time, active) on boost_data.boost to save_tx_api_worker;
