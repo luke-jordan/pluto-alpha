@@ -121,6 +121,27 @@ resource "aws_iam_policy" "fworks_s3_access" {
 EOF
 }
 
+resource "aws_iam_policy" "float_record_s3_access" {
+    name      = "${terraform.workspace}_float_record_s3_access"
+    path      = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PutObjectAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": ${aws_s3_bucket.float_record_bucket.arn}
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
     name = "warmup_ops_lambda_invoke_access_${terraform.workspace}"
     path = "/"

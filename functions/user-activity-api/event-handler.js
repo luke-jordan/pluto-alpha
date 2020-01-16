@@ -234,7 +234,7 @@ const createFinWorksAccount = async (userDetails) => {
     return JSON.parse(accountCreationResult['Payload']);
 };
 
-const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency }) => {
+const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency, transactionId }) => {
     const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
     logger('Got third party account number:', accountNumber);
 
