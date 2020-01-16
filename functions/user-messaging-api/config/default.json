@@ -15,7 +15,8 @@
     },
     "lambdas": {
         "generateUserMessages": "message_user_create_once",
-        "updateMessageStatus": "message_user_process"
+        "updateMessageStatus": "message_user_process",
+        "sendSystemEmail": "sendgrid_dispatch_emails"
     },
     "db": {
         "host": "localhost",

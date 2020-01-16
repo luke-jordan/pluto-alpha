@@ -75,7 +75,7 @@
     },
     "sendgrid": {
         "apiKey": "",
-        "fromAddress": "",
+        "fromAddress": "noreply@jupitersave.com",
         "replyToAddress": "",
         "sandbox": true
     }

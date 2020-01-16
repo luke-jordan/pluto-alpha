@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler-test');
+const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
@@ -22,11 +23,18 @@ const getPushTokenStub = sinon.stub();
 const insertPushTokenStub = sinon.stub();
 const deletePushTokenStub = sinon.stub();
 const assembleMessageStub = sinon.stub();
+const lamdbaInvokeStub = sinon.stub();
 
 class MockExpo {
     constructor () {
         this.chunkPushNotifications = chunkPushNotificationsStub;
         this.sendPushNotificationsAsync = sendPushNotificationsAsyncStub;
+    }
+}
+
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
     }
 }
 
@@ -43,11 +51,14 @@ const handler = proxyquire('../message-push-handler', {
     './message-picking-handler': {
         'assembleMessage': assembleMessageStub
     },
-    'expo-server-sdk': { Expo: MockExpo }
+    'expo-server-sdk': { Expo: MockExpo },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient  
+    }
 });
 
 const resetStubs = () => testHelper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingPushMessagesStub,
-    bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub);
+    bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub, lamdbaInvokeStub);
 
 describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
     const mockCreationTime = moment().format();
@@ -309,6 +320,76 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         expect(getPendingPushMessagesStub).to.have.been.calledOnce;
         expect(bulkUpdateStatusStub).to.have.not.been.called;
         expect(getPushTokenStub).to.have.not.been.called;
+    });
+
+});
+
+describe('*** UNIT TEST SYSTEM EMAIL ROUTE ***', () => {
+
+    const testUserName = 'Hoelun';
+    const testEmailAddress = 'hoelun@khanate.com';
+    const validSubject = 'Welcome to Jupiter';
+
+    const validHtmlTemplate = '<p>Greetings {{user}}, \nWelcome to Jupiter.</p>';
+    const validTextTemplate = 'Greetings {{user}}. \nWelcome to Jupiter.';
+
+    const testDestinationDetails = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
+
+    const mockLambdaResponse = (body, statusCode = 200) => ({
+        Payload: JSON.stringify({
+            statusCode,
+            body: JSON.stringify(body)
+        })
+    });
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('Assembles email payload and invokes send email lambda', async () => {
+        const testEmailEvent = {
+            htmlTemplate: validHtmlTemplate,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
+            destinationArray: [testDestinationDetails, testDestinationDetails]
+        };
+
+        const expectedInvocation = {
+            FunctionName: config.get('lambdas.sendSystemEmail'),
+            InvocationType: 'Event',
+            LogType: 'None',
+            Payload: JSON.stringify(testEmailEvent)
+        };
+
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+
+        const resultOfInvoke = await handler.sendSystemEmails(testEmailEvent);
+        expect(resultOfInvoke).to.exist;
+        expect(resultOfInvoke).to.deep.equal({ result: 'SUCCESS' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+    });
+
+    it('Returns error on failure', async () => {
+        const testEmailEvent = {
+            htmlTemplate: validHtmlTemplate,
+            textTemplate: validTextTemplate,
+            subject: validSubject,
+            destinationArray: [testDestinationDetails, testDestinationDetails]
+        };
+
+        const expectedInvocation = {
+            FunctionName: config.get('lambdas.sendSystemEmail'),
+            InvocationType: 'Event',
+            LogType: 'None',
+            Payload: JSON.stringify(testEmailEvent)
+        };
+
+        lamdbaInvokeStub.throws(new Error('Invocation error'));
+
+        const resultOfInvoke = await handler.sendSystemEmails(testEmailEvent);
+        expect(resultOfInvoke).to.exist;
+        expect(resultOfInvoke).to.deep.equal({ result: 'ERR', message: 'Invocation error' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
 });

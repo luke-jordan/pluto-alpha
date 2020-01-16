@@ -2,6 +2,8 @@
 
 const logger = require('debug')('jupiter:third-parties:sendgrid');
 const config = require('config');
+const opsUtil = require('ops-util-common');
+
 const sendGridMail = require('@sendgrid/mail');
 const AWS = require('aws-sdk');
 
@@ -15,13 +17,13 @@ const obtainHtmlTemplate = async (Bucket, Key) => {
     return template.Body.toString('ascii');
 };
 
-const validatePublishEvent = ({ subject, templateSource, htmlTemplate, textTemplate, destinationArray }) => {
-    if (!templateSource && !htmlTemplate && !textTemplate) {
+const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, textTemplate, destinationArray }) => {
+    if (!templateKeyBucket && !htmlTemplate && !textTemplate) {
         throw new Error('At least one template is required');
     }
      
-    if (templateSource) {
-        if (!Reflect.has(templateSource, 'bucket') || !Reflect.has(templateSource, 'key')) {
+    if (templateKeyBucket) {
+        if (!Reflect.has(templateKeyBucket, 'bucket') || !Reflect.has(templateKeyBucket, 'key')) {
             throw new Error('Missing valid template key-bucket pair');
         }
     }
@@ -49,24 +51,44 @@ const validatePublishEvent = ({ subject, templateSource, htmlTemplate, textTempl
     }
 };
 
-const validateTemplate = (dispatchDetails) => {
-    if (!dispatchDetails.htmlTemplate && !dispatchDetails.textTemplate) {
+const validateDispatchParams = (dispatchParams) => {
+    if (!dispatchParams.htmlTemplate && !dispatchParams.textTemplate) {
         throw new Error('You must provide either a text or html template or both');
     }
 
-    if (dispatchDetails.htmlTemplate && typeof dispatchDetails.htmlTemplate !== 'string') {
-        throw new Error(`Invalid HTML template: ${JSON.stringify(dispatchDetails.htmlTemplate)}`);
+    if (dispatchParams.htmlTemplate && typeof dispatchParams.htmlTemplate !== 'string') {
+        throw new Error(`Invalid HTML template: ${JSON.stringify(dispatchParams.htmlTemplate)}`);
     }
 
-    if (dispatchDetails.textTemplate && typeof dispatchDetails.textTemplate !== 'string') {
-        throw new Error(`Invalid text template: ${JSON.stringify(dispatchDetails.textTemplate)}`);
+    if (dispatchParams.textTemplate && typeof dispatchParams.textTemplate !== 'string') {
+        throw new Error(`Invalid text template: ${JSON.stringify(dispatchParams.textTemplate)}`);
     }
 };
 
-const assembleEmails = (dispatchDetails) => {
-    const { subject, htmlTemplate, textTemplate, destinationArray } = dispatchDetails;
+const validateDispatchPayload = (payload) => {
+    const standardProperties = ['from', 'reply_to', 'subject', 'content', 'mail_settings', 'personalizations'];
 
-    const email = {
+    standardProperties.forEach((property) => {
+        if (!standardProperties.includes(property)) {
+            throw new Error(`Malformed email dispatch payload. Missing required property: ${property}`);
+        }
+
+        if (Array.isArray(payload[property])) {
+            if (payload[property].length === 0) {
+                throw new Error('No values found for property: ${property}');
+            }
+        }
+    });
+
+    if (!payload.from.email) {
+        throw new Error('Configuration error. Missing payload source email address');
+    }
+};
+
+const assembleDispatchPayload = (dispatchParams) => {
+    const { subject, htmlTemplate, textTemplate, destinationArray } = dispatchParams;
+
+    const payload = {
         'from': {
             'email': config.get('sendgrid.fromAddress'),
             'name': 'Jupiter'
@@ -92,53 +114,64 @@ const assembleEmails = (dispatchDetails) => {
         });
     });
 
-    email.personalizations = personalizationsArray;
+    payload.personalizations = personalizationsArray;
 
     if (textTemplate) {
-        email.content.push({ 'type': 'text/plain', 'value': textTemplate });
+        payload.content.push({ 'type': 'text/plain', 'value': textTemplate });
     }
 
     if (htmlTemplate) {
-        email.content.push({ 'type': 'text/html', 'value': htmlTemplate });
+        payload.content.push({ 'type': 'text/html', 'value': htmlTemplate });
     }
 
-    logger('Assembled body:', JSON.stringify(email));
-    return email;
+    logger('Assembled body:', JSON.stringify(payload));
+    return payload;
 };
 
 /**
  * This function sends emails to provided addresses. The email template is stored remotely and a locator key-bucket pair is required.
  * @param {object} event 
- * @property {object} templateSource An object whose properties are the s3 key and bucket containing the emails html template.
+ * @property {object} templateKeyBucket An object whose properties are the s3 key and bucket containing the emails html template.
  * @property {string} textTemplate The emails text template.
  * @property {subject} subject The emails subject.
- * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property.
- * These contain target email and template variables respectively.
+ * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
  */
-module.exports.publishFromSource = async ({ templateSource, textTemplate, subject, destinationArray }) => {
-    validatePublishEvent({ subject, templateSource, textTemplate, destinationArray });
+module.exports.sendEmailsFromSource = async (event) => {
+    try {
+        if (opsUtil.isWarmup(event)) {
+            return { result: 'Empty invocation' };
+        }
 
-    const dispatchDetails = { subject, destinationArray };
+        const { subject, templateKeyBucket, textTemplate, destinationArray } = opsUtil.extractParamsFromEvent(event);
+        validateDispatchEvent({ subject, templateKeyBucket, textTemplate, destinationArray });
 
-    if (templateSource) {
-        const { bucket, key } = templateSource;
-        dispatchDetails.htmlTemplate = await obtainHtmlTemplate(bucket, key);
+        const dispatchParams = { subject, destinationArray };
+
+        if (templateKeyBucket) {
+            const { bucket, key } = templateKeyBucket;
+            dispatchParams.htmlTemplate = await obtainHtmlTemplate(bucket, key);
+        }
+
+        if (textTemplate) {
+            dispatchParams.textTemplate = textTemplate;
+        }
+
+        validateDispatchParams(dispatchParams);
+
+        const dispatchPayload = assembleDispatchPayload(dispatchParams, destinationArray);
+
+        validateDispatchPayload(dispatchPayload);
+
+        const resultOfDispatch = await sendGridMail.send(dispatchPayload);
+
+        const formattedResult = { statusCode: resultOfDispatch[0].statusCode, statusMessage: resultOfDispatch[0].statusMessage };
+        logger('Result of email send: ', formattedResult);
+        
+        return { result: 'SUCCESS' };
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { result: 'ERR', message: err.message };
     }
-
-    if (textTemplate) {
-        dispatchDetails.textTemplate = textTemplate;
-    }
-
-    validateTemplate(dispatchDetails);
-
-    const assembledEmails = assembleEmails(dispatchDetails, destinationArray);
-
-    const resultOfEmails = await sendGridMail.send(assembledEmails);
-
-    const formattedResult = { statusCode: resultOfEmails[0].statusCode, statusMessage: resultOfEmails[0].statusMessage };
-    logger('Result of email send: ', formattedResult);
-    
-    return { result: 'SUCCESS' };
 };
 
 /**
@@ -147,26 +180,37 @@ module.exports.publishFromSource = async ({ templateSource, textTemplate, subjec
  * @property {object} htmlTemplate The emails html template.
  * @property {string} textTemplate The emails text template.
  * @property {subject} subject The emails subject.
- * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property.
- * These contain target email and template variables respectively.
+ * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
  */
-module.exports.publishFromTemplate = async ({ htmlTemplate, textTemplate, subject, destinationArray }) => {
-    validatePublishEvent({ subject, htmlTemplate, textTemplate, destinationArray });
+module.exports.sendEmails = async (event) => {
+    try {
+        if (opsUtil.isWarmup(event)) {
+            return { result: 'Empty invocation' };
+        }
 
-    const dispatchDetails = { subject, htmlTemplate, destinationArray };
+        const { subject, htmlTemplate, textTemplate, destinationArray } = opsUtil.extractParamsFromEvent(event);
+        validateDispatchEvent({ subject, htmlTemplate, textTemplate, destinationArray });
 
-    if (textTemplate) {
-        dispatchDetails.textTemplate = textTemplate;
+        const dispatchParams = { subject, htmlTemplate, destinationArray };
+
+        if (textTemplate) {
+            dispatchParams.textTemplate = textTemplate;
+        }
+
+        validateDispatchParams(dispatchParams);
+
+        const dispatchPayload = assembleDispatchPayload(dispatchParams, destinationArray);
+
+        validateDispatchPayload(dispatchPayload);
+
+        const resultOfDispatch = await sendGridMail.send(dispatchPayload);
+
+        const formattedResult = { statusCode: resultOfDispatch[0].statusCode, statusMessage: resultOfDispatch[0].statusMessage };
+        logger('Result of email send: ', formattedResult);
+        
+        return { result: 'SUCCESS' };
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { result: 'ERR', message: err.message };
     }
-
-    validateTemplate(dispatchDetails);
-
-    const assembledEmails = assembleEmails(dispatchDetails, destinationArray);
-
-    const resultOfEmails = await sendGridMail.send(assembledEmails);
-
-    const formattedResult = { statusCode: resultOfEmails[0].statusCode, statusMessage: resultOfEmails[0].statusMessage };
-    logger('Result of email send: ', formattedResult);
-    
-    return { result: 'SUCCESS' };
 };

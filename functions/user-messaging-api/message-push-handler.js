@@ -15,6 +15,9 @@ const msgPicker = require('./message-picking-handler');
 const { Expo } = require('expo-server-sdk');
 const expo = new Expo();
 
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
+
 /**
  * This function inserts a push token object into RDS. It requires that the user calling this function also owns the token.
  * An evaluation of the requestContext is run prior to token manipulation. If request context evaluation fails access is forbidden.
@@ -224,6 +227,31 @@ module.exports.sendPushNotifications = async (params) => {
         logger('Completed sending messages, result: ', result);
         return result;
         
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { result: 'ERR', message: err.message };
+    }
+};
+
+/**
+ * This function sends system emails. No more than a thousand emails can be sent at a time.
+ * @param {object} params
+ * @property {object} htmlTemplate The emails html template.
+ * @property {string} textTemplate The emails text template.
+ * @property {subject} subject The emails subject.
+ * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' string and 'templateVariables' object property.
+ */
+module.exports.sendSystemEmails = async (params) => {
+    try {
+        const lambdaPayload = msgUtil.extractEventBody(params);
+
+        const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendSystemEmail'), lambdaPayload);
+        const resultOfSend = lambda.invoke(emailInvocation).promise();
+        logger('Result of email invocation:', resultOfSend);
+
+        const parsedResult = JSON.parse(JSON.parse(resultOfSend.Payload).body);
+
+        return parsedResult;
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { result: 'ERR', message: err.message };

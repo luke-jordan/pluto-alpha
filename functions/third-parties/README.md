@@ -107,9 +107,9 @@ All properties (including those not returned to the caller) are listed below.
 | createdDate | <code>datetime</code> | Transaction created date and time. |
 | paymentDate | <code>datetime</code> | Transaction payment date and time. |
 
-<a name="publishFromSource"></a>
+<a name="sendEmailsFromSource"></a>
 
-## publishFromSource(event)
+## sendEmailsFromSource(event)
 This function sends emails to provided addresses. The email template is stored remotely and a locator key-bucket pair is required.
 
 **Kind**: global function  
@@ -130,9 +130,9 @@ This function sends emails to provided addresses. The email template is stored r
 ## Email Dispatch Functions
 ___
 
-<a name="publishFromTemplate"></a>
+<a name="sendEmails"></a>
 
-## publishFromTemplate(event)
+## sendEmails(event)
 This function sends emails to provided addresses.
 
 **Kind**: global function  

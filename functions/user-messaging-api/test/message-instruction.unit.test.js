@@ -441,7 +441,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);
-        expect(body).to.have.property('message', 'Messages sequence must be contained within an array');
+        expect(body).to.have.property('message', 'Message sequence must be contained within an array');
         expect(insertMessageInstructionStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;
     });
