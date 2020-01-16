@@ -5,8 +5,6 @@
 const logger = require('debug')('jupiter:float:test');
 const helper = require('./test.helper');
 
-// todo get rid of lodash
-const _ = require('lodash');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
@@ -23,9 +21,9 @@ const BigNumber = require('bignumber.js');
 const rdsPath = './persistence/rds';
 const dynamoPath = './persistence/dynamodb';
 
-const createStubs = (customStubs) => _.defaults({}, customStubs, {
-    [rdsPath]: { },
-    [dynamoPath]: { }
+const createStubs = (customStubs) => ({
+    [rdsPath]: customStubs[rdsPath],
+    [dynamoPath]: customStubs[dynamoPath]
 });
 
 const common = require('./common');
@@ -150,44 +148,36 @@ describe('Primary allocation of inbound accrual lambda', () => {
     const adjustFloatBalanceStub = sinon.stub();
     const allocateFloatBalanceStub = sinon.stub();
     const calculateFloatBalanceStub = sinon.stub();
+    const obtainEntityBalanceStub = sinon.stub();
+    const fetchRecordsRelatedToLog = sinon.stub();
+    const writeCsvFileStub = sinon.stub();
 
     let allocationStub = sinon.stub();
 
-    before(() => {
-        fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves({
-            bonusPoolShare: common.testValueBonusPoolShare,
-            bonusPoolTracker: common.testValueBonusPoolTracker,
-            clientCoShare: common.testValueClientShare,
-            clientCoShareTracker: common.testValueClientCompanyTracker
-        });
-
-        calculateFloatBalanceStub.withArgs(common.testValidFloatId, 'ZAR').resolves({ balance: 1000 });
-        
-        handler = proxyquire('../accrual-handler', createStubs({
+    before(() => {        
+        handler = proxyquire('../accrual-handler', {
             [dynamoPath]: { 
                 fetchConfigVarsForFloat: fetchFloatConfigVarsStub 
             },
             [rdsPath]: { 
                 addOrSubtractFloat: adjustFloatBalanceStub,
                 allocateFloat: allocateFloatBalanceStub,
-                calculateFloatBalance: calculateFloatBalanceStub
+                calculateFloatBalance: calculateFloatBalanceStub,
+                obtainPriorAllocationBalances: obtainEntityBalanceStub,
+                fetchRecordsRelatedToLog: fetchRecordsRelatedToLog
+            },
+            './persistence/csvfile': {
+                writeAndUploadCsv: writeCsvFileStub,
+                '@noCallThru': true
             }
-        }));
+        });
 
         // withArgs(common.testValidClientId, common.testValidFloatId).
         allocationStub = sinon.stub(handler, 'allocate');
     });
 
-    after(() => {
-        helper.resetStubs(fetchFloatConfigVarsStub, adjustFloatBalanceStub, allocateFloatBalanceStub, calculateFloatBalanceStub, allocationStub);
-    });
-
     beforeEach(() => {
-        fetchFloatConfigVarsStub.resetHistory();
-        adjustFloatBalanceStub.resetHistory();
-        allocateFloatBalanceStub.resetHistory();
-        calculateFloatBalanceStub.resetHistory();
-        allocationStub.resetHistory();
+        helper.resetStubs(fetchFloatConfigVarsStub, adjustFloatBalanceStub, allocateFloatBalanceStub, calculateFloatBalanceStub, allocationStub);
     });
 
     it('Handles errors correctly (ie still exits)', async () => {
@@ -197,14 +187,10 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expect(expectedErrorReturn).to.have.property('statusCode', 500);
     });
 
-    it('Gets float balance properly', async () => {
-        const balanceFetch = await handler.balanceCheck({ floatId: common.testValidFloatId, currency: 'ZAR' });
-        logger('Result: ', balanceFetch);
-        expect(balanceFetch).to.exist;
-        expect(balanceFetch).to.deep.equal({ statusCode: 200, body: JSON.stringify({ balance: 1000 })});
-    });
-
     it('Check initial accrual', async () => {
+        const testBonusPoolId = helper.commonFloatConfig.bonusPoolTracker;
+        const testClientCoId = helper.commonFloatConfig.clientCoShareTracker;
+
         // thousands of rand, in hundredths of a cent
         const amountAccrued = Math.floor(Math.random() * 1000 * 10000);  
         const testTxIds = Array(10).fill().map(() => uuid());
@@ -226,34 +212,42 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expectedFloatAdjustment.amount = amountAccrued;
         expectedFloatAdjustment.logType = 'WHOLE_FLOAT_ACCRUAL';
 
+        fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves(helper.commonFloatConfig);
+        calculateFloatBalanceStub.resolves({ balance: 100, unit: constants.floatUnits.HUNDREDTH_CENT });
+        
         adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ updatedBalance: 100 + amountAccrued, logId: testLogId });
+
+        obtainEntityBalanceStub.resolves(new Map([[testBonusPoolId, 10], [testClientCoId, 10]]));
 
         const expectedBonusAllocationAmount = Math.round(amountAccrued * common.testValueBonusPoolShare);
         const expectedClientCoAmount = Math.round(amountAccrued * common.testValueClientShare);
-        const expectedUserAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount;
 
-        const expectedBonusAllocation = { 
+        const expectedGrossAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount;
+        const expectedBonusShare = Math.round(0.1 * expectedGrossAmount);
+        const expectedClientShare = Math.round(0.1 * expectedGrossAmount); 
+
+        const expectedUserAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount - expectedBonusShare - expectedClientShare;
+
+        const entityAllocation = (entityType, entityId, amount, label) => ({ 
+            label,
+            amount,
             currency: accrualEvent.currency, 
-            unit: accrualEvent.unit, 
+            unit: accrualEvent.unit,
             transactionType: 'ACCRUAL', 
             transactionState: 'SETTLED',
+            allocatedToId: entityId,
+            allocatedToType: entityType,
+            relatedEntityId: accrualEvent.backingEntityIdentifier,
+            relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,    
             logId: testLogId
-        };
+        });
         
-        expectedBonusAllocation.label = 'BONUS';
-        expectedBonusAllocation.amount = expectedBonusAllocationAmount;
-        expectedBonusAllocation.allocatedToId = common.testValueBonusPoolTracker;
-        expectedBonusAllocation.allocatedToType = constants.entityTypes.BONUS_POOL;
-        expectedBonusAllocation.relatedEntityId = accrualEvent.backingEntityIdentifier;
-        expectedBonusAllocation.relatedEntityType = constants.entityTypes.ACCRUAL_EVENT;
+        const expectedBonusFeeAllocation = entityAllocation('BONUS_POOL', testBonusPoolId, expectedBonusAllocationAmount, 'BONUS_FEE');
+        const expectedBonusShareAlloc = entityAllocation('BONUS_POOL', testBonusPoolId, expectedBonusShare, 'BONUS_SHARE');
+        const expectedClientCoAllocation = entityAllocation('COMPANY_SHARE', testClientCoId, expectedClientCoAmount, 'CLIENT_FEE');
+        const expectedClientShareAlloc = entityAllocation('COMPANY_SHARE', testClientCoId, expectedClientShare, 'CLIENT_SHARE');
 
-        const expectedClientCoAllocation = { ...expectedBonusAllocation };
-        expectedClientCoAllocation.label = 'CLIENT';
-        expectedClientCoAllocation.amount = expectedClientCoAmount;
-        expectedClientCoAllocation.allocatedToId = common.testValueClientCompanyTracker;
-        expectedClientCoAllocation.allocatedToType = constants.entityTypes.COMPANY_SHARE;
-
-        allocateFloatBalanceStub.resolves([{ 'BONUS': uuid() }, { 'CLIENT': uuid() }]);
+        allocateFloatBalanceStub.resolves([{ 'BONUS_FEE': uuid() }, { 'CLIENT_FEE': uuid() }, { 'BONUS_SHARE': uuid() }, { 'CLIENT_SHARE': uuid() }]);
 
         const userAllocEvent = {
             clientId: common.testValidClientId, floatId: common.testValidFloatId, 
@@ -270,6 +264,12 @@ describe('Primary allocation of inbound accrual lambda', () => {
 
         // we test bonus allocation of any fractional amount in the tests below, so here just set to none
         allocationStub.withArgs(userAllocEvent).resolves({ allocationRecords: testTxIds, bonusAllocation: { } });
+        
+        // and last we test the record keeping
+        const mockRecords = [{ 'first_column': 'some-id', 'second_column': 60 }, { 'first_column': 'another-id', 'second_column': 80 }];
+        fetchRecordsRelatedToLog.resolves(mockRecords);
+        writeCsvFileStub.resolves('s3://bucket/somekey');
+        
         const response = await handler.accrue(accrualEvent, { });
 
         // expect the config variables to be fetched
@@ -283,7 +283,7 @@ describe('Primary allocation of inbound accrual lambda', () => {
         expect(allocateFloatBalanceStub).to.have.been.calledOnce;
         // helper.logNestedMatches(expectedClientCoAllocation, allocateFloatBalanceStub.getCall(0).args[2][1]);
         expect(allocateFloatBalanceStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, 
-                [expectedBonusAllocation, expectedClientCoAllocation]);
+                [expectedBonusFeeAllocation, expectedClientCoAllocation, expectedBonusShareAlloc, expectedClientShareAlloc]);
 
         // for now we are going to call this method directly; in future will be easy to change it into a queue or async lambda invocation
         expect(allocationStub).to.have.been.calledOnce;
@@ -294,13 +294,13 @@ describe('Primary allocation of inbound accrual lambda', () => {
         
         const responseEntity = JSON.parse(response.body);
         expect(responseEntity.entityAllocations).to.exist;
-        expect(responseEntity.entityAllocations).to.have.keys(['clientShare', 'clientTxId', 'bonusShare', 'bonusTxId']);
-        const clientShare = responseEntity.entityAllocations.clientShare;
+        expect(responseEntity.entityAllocations).to.have.keys(['BONUS_FEE', 'CLIENT_FEE', 'BONUS_SHARE', 'CLIENT_SHARE']);
+        const clientShare = responseEntity.entityAllocations['CLIENT_FEE']['amount'];
         expect(clientShare).to.be.lessThan(amountAccrued);
 
         logger('New balance : ', responseEntity);
         expect(responseEntity.newBalance).to.be.at.least(amountAccrued);
-        expect(responseEntity.entityAllocations.bonusShare).to.be.lessThan(amountAccrued - clientShare);
+        expect(responseEntity.entityAllocations['BONUS_FEE']['amount']).to.be.lessThan(amountAccrued - clientShare);
 
         expect(responseEntity.userAllocationTransactions).to.deep.equal({ allocationRecords: testTxIds, bonusAllocation: { } });
     });

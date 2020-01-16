@@ -307,6 +307,19 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     return { result: 'SUCCESS', floatTxIds, accountTxIds };
 };
 
+const turnAccountUnitGroupingsIntoMap = (rdsRows, entityIdColumn, amountColumn, targetUnit = constants.floatUnits.DEFAULT) => {
+    const resultMap = new Map();
+
+    rdsRows.forEach((row) => {
+        const thisEntityId = row[entityIdColumn];
+        const thisAmountInDefault = opsUtil.convertToUnit(parseInt(row[amountColumn], 10), row['unit'], targetUnit);
+        const priorSum = resultMap.get(thisEntityId) || 0;
+        resultMap.set(thisEntityId, priorSum + thisAmountInDefault);
+    });
+
+    return resultMap;
+};
+
 /**
  * Sums up all prior allocations to accounts linked to this float and returns them in in object. Will sum over possible units
  * and will then transform to common base of default unit
@@ -327,23 +340,26 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     
     logger('Assembled sum query: ', sumQuery);
     logger('And values: ', queryParams);
-    
-    // this could get _very_ big, so using Map for it instead of a simple variable
-    const selectResults = new Map();
-    
+        
     // each row in this will have the sum in a particular unit for a particular account
     const accountTotalResults = await rdsConnection.selectQuery(sumQuery, queryParams);
     
-    accountTotalResults.forEach((row) => {
-        const thisAccountId = row['account_id'];
-        const thisAmountInDefault = opsUtil.convertToUnit(parseInt(row['sum'], 10), row['unit'], constants.floatUnits.DEFAULT);
-        const priorSum = selectResults.get(thisAccountId) || 0;
-        selectResults.set(thisAccountId, priorSum + thisAmountInDefault);
-    });
-    
-    // logger('Completed calculations of account sums, result: ', selectResults);
+    // this could get _very_ big, so using Map for it instead of a simple variable
+    return turnAccountUnitGroupingsIntoMap(accountTotalResults, 'account_id', 'sum');
+};
 
-    return selectResults;
+module.exports.obtainPriorAllocationBalances = async ({ floatId, clientId, currency, unit, allocationIds }) => {
+    const floatTable = config.get('tables.floatTransactions');
+
+    // note : the inner join is necessary just in case something gets into the allocated to IDs that is not an account ID,
+    // to prevent later issues with foreign key constraints
+    const sumQuery = `select allocated_to_id, unit, sum(amount) from ${floatTable} ` +
+        `where float_id = $1 and client_id = $2 and currency = $2 and allocated_to_type = $3 group by allocated_to_id, unit`;
+    const queryParams = [floatId, clientId, currency, ...allocationIds];
+
+    const resultOfQuery = await rdsConnection.selectQuery(sumQuery, queryParams);
+    logger('Result of getting prior allocation balances: ', resultOfQuery);
+    return turnAccountUnitGroupingsIntoMap(resultOfQuery, 'allocated_to_id', 'sum', unit);
 };
 
 /**
@@ -440,9 +456,9 @@ module.exports.fetchAccrualsInPeriod = async (params) => {
     const { floatId, clientId, startTime, endTime, unit, currency } = params;
     
     const allEntityAccrualQuery = `select allocated_to_id, allocated_to_type, unit, sum(amount) from float_data.float_transaction_ledger ` +
-    `where client_id = $1 and float_id = $2 and creation_time > $3 and creation_time < $4 ` +
-    `and t_type = $5 and t_state in ($6, $7) and currency = $8 and allocated_to_type != $9 ` +
-    `group by allocated_to_id, allocated_to_type, unit`;
+        `where client_id = $1 and float_id = $2 and creation_time > $3 and creation_time < $4 ` +
+        `and t_type = $5 and t_state in ($6, $7) and currency = $8 and allocated_to_type != $9 ` +
+        `group by allocated_to_id, allocated_to_type, unit`;
 
     const allEntityValues = [clientId, floatId, startTime.format(), endTime.format(), 'ACCRUAL', 'SETTLED', 'PENDING', currency, 'FLOAT_ITSELF'];
 
@@ -526,4 +542,17 @@ module.exports.supercedeAccruals = async (searchParams, floatLogId) => {
     logger('Result of account update: ', accountResult);
 
     return { result: 'SUCCESS', floatRowsUpdated: floatResult.rows.length, accountRowsUpdated: accountResult.rows.length };
+};
+
+module.exports.fetchRecordsRelatedToLog = async (logId) => {
+    const floatTable = config.get('tables.floatTransactions');
+    const accountTable = config.get('tables.openAccounts');
+
+    const query = `select transaction_id, float_id, t_type, allocated_to_type, allocated_to_id, human_ref, t_state, ` +
+        `amount, unit, currency, ${floatTable}.creation_time, owner_user_id, related_entity_type, related_entity_id from ` +
+        `${floatTable} left join ${accountTable} on ${floatTable}.allocated_to_id = ${accountTable}.account_id::text ` + 
+        `where $1 = any(${floatTable}.log_id)`;
+    
+    logger('Getting records for loq - query : ', query);
+    return rdsConnection.selectQuery(query, [logId]);
 };

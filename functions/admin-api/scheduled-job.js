@@ -44,7 +44,7 @@ const expireBoosts = async () => {
 
     const boostIds = Object.keys(boostExpireUserIds);
     const logPublishPromises = boostIds.map((boostId) => (
-        publisher.publishMultiUserEvent(boostExpireUserIds(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }}))
+        publisher.publishMultiUserEvent(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }})
     ));
 
     await Promise.all(logPublishPromises);
@@ -129,8 +129,11 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
     const unit = accrualInstruction.unit;
     const currency = accrualInstruction.currency;
     
-    const bonusAmountRaw = resultBody.entityAllocations.bonusShare;
-    const companyShareRaw = resultBody.entityAllocations.clientShare;
+    const bonusFeeRaw = resultBody.entityAllocations['BONUS_FEE'];
+    const companyFeeRaw = resultBody.entityAllocations['COMPANY_FEE'];
+
+    const bonusShareRaw = resultBody.entityAllocations['BONUS_SHARE'];
+    const companyShareRaw = resultBody.entityAllocations['COMPANY_SHARE'];
 
     const simpleFormat = (amount) => `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
 
@@ -143,8 +146,10 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
         baseAccrualRate: `${accrualInstruction.calculationBasis.accrualRateAnnualBps} bps`,
         dailyRate: `${accrualInstruction.calculationBasis.accrualRateApplied} %`,
         accrualAmount: simpleFormat(accrualInstruction.accrualAmount),
-        bonusAmount: simpleFormat(bonusAmountRaw),
-        companyAmount: simpleFormat(companyShareRaw),
+        bonusAmount: simpleFormat(bonusFeeRaw),
+        companyAmount: simpleFormat(companyFeeRaw),
+        bonusShare: simpleFormat(bonusShareRaw),
+        companyShare: simpleFormat(companyShareRaw),
         numberUserAllocations,
         bonusAllocation: JSON.stringify(bonusAllocation)
     };

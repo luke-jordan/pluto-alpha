@@ -9,6 +9,7 @@ const constants = require('./constants');
 
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
+const csvFile = require('./persistence/csvfile');
 
 const BigNumber = require('bignumber.js');
 
@@ -232,7 +233,13 @@ module.exports.confirm = async (params) => {
     const resultPackage = assembleSummaryData(allocations, floatConfigVars, metadata);
     logger('Final result: ', resultPackage);
 
-    // todo : add in 'done' rows
+    // then we upload the results
+    const allTransactionRecords = await rds.fetchRecordsRelatedToLog(floatLogId);
+    const resultOfUpload = await csvFile.writeAndUploadCsv({ filePrefix: 'capitalization', rowsFromRds: allTransactionRecords, logId: floatLogId });
+    logger('Result of upload: ', resultOfUpload);
+
+    resultPackage.s3record = resultOfUpload;
+
     return resultPackage;
 };
 

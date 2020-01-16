@@ -19,6 +19,9 @@ const allocateNonUserStub = sinon.stub();
 const allocateToUsersStub = sinon.stub();
 const supercedeAccrualsStub = sinon.stub();
 
+const fetchRecordsStub = sinon.stub();
+const writeCsvFileStub = sinon.stub();
+
 const fetchFloatConfigVarsStub = sinon.stub();
 
 const BigNumber = require('bignumber.js');
@@ -32,10 +35,14 @@ const handler = proxyquire('../capitalization-handler', {
         'addOrSubtractFloat': addOrSubtractStub, 
         'allocateFloat': allocateNonUserStub,
         'allocateToUsers': allocateToUsersStub,
-        'supercedeAccruals': supercedeAccrualsStub
+        'supercedeAccruals': supercedeAccrualsStub,
+        'fetchRecordsRelatedToLog': fetchRecordsStub
     },
     './persistence/dynamodb': {
         'fetchConfigVarsForFloat': fetchFloatConfigVarsStub
+    },
+    './persistence/csvfile': {
+        'writeAndUploadCsv': writeCsvFileStub
     },
     '@noCallThru': true
 });

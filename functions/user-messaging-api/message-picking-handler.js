@@ -21,7 +21,9 @@ const STANDARD_PARAMS = [
     'user_full_name',
     'current_balance',
     'opened_date',
-    'total_interest'
+    'total_interest',
+    'last_capitalization',
+    'total_earnings'
 ];
 
 const UNIT_DIVISORS = {
