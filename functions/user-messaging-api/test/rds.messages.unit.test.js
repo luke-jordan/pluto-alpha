@@ -343,7 +343,7 @@ describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {
         ];
 
         const queueSizeSelectArgs = [
-            `select destination_user_id from ${config.get('tables.userMessagesTable')} where processed_status = $1 group by destination_user_id having count(*) > $2`,
+            `select destination_user_id from ${config.get('tables.userMessagesTable')} where processed_status = $1 and end_time > current_timestamp group by destination_user_id having count(*) > $2`,
             ['READY_FOR_SENDING', mockMaxInQueue]
         ];
 
