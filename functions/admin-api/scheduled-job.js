@@ -121,6 +121,19 @@ const assembleAccrualInvocation = async (clientFloatInfo) => {
     return accrualInvocation;
 };
 
+const safeSimpleFormat = (objectWithAmount, unit, currency) => {
+    if (!objectWithAmount) {
+        return 'Unknown : Error, consult logs';
+    }
+
+    if (typeof objectWithAmount.amount !== 'number' && typeof objectWithAmount.amount !== 'string') {
+        return 'Unknown : bad number parameter';
+    }
+
+    const amount = typeof objectWithAmount.amount === 'number' ? objectWithAmount.amount : parseInt(objectWithAmount.amount, 10);
+    return `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
+};
+
 const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
     const resultPayload = JSON.parse(accrualInvocationResult['Payload']);
     const resultBody = JSON.parse(resultPayload.body);
@@ -130,26 +143,24 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
     const currency = accrualInstruction.currency;
     
     const bonusFeeRaw = resultBody.entityAllocations['BONUS_FEE'];
-    const companyFeeRaw = resultBody.entityAllocations['COMPANY_FEE'];
+    const companyFeeRaw = resultBody.entityAllocations['CLIENT_FEE'];
 
     const bonusShareRaw = resultBody.entityAllocations['BONUS_SHARE'];
-    const companyShareRaw = resultBody.entityAllocations['COMPANY_SHARE'];
-
-    const simpleFormat = (amount) => `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
+    const companyShareRaw = resultBody.entityAllocations['CLIENT_SHARE'];
 
     const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.accountTxIds.length;
     const bonusAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation') 
         ? 'None' : '(yes : insert excess)';
 
     return {
-        floatAmount: simpleFormat(accrualInstruction.calculationBasis.floatAmountHunCent),
+        floatAmount: safeSimpleFormat({ amount: accrualInstruction.calculationBasis.floatAmountHunCent }, unit, currency),
         baseAccrualRate: `${accrualInstruction.calculationBasis.accrualRateAnnualBps} bps`,
         dailyRate: `${accrualInstruction.calculationBasis.accrualRateApplied} %`,
-        accrualAmount: simpleFormat(accrualInstruction.accrualAmount),
-        bonusAmount: simpleFormat(bonusFeeRaw.amount),
-        companyAmount: simpleFormat(companyFeeRaw.amount),
-        bonusShare: simpleFormat(bonusShareRaw.amount),
-        companyShare: simpleFormat(companyShareRaw.amount),
+        accrualAmount: safeSimpleFormat({ amount: accrualInstruction.accrualAmount }, unit, currency),
+        bonusAmount: safeSimpleFormat(bonusFeeRaw, unit, currency),
+        companyAmount: safeSimpleFormat(companyFeeRaw, unit, currency),
+        bonusShare: safeSimpleFormat(bonusShareRaw, unit, currency),
+        companyShare: safeSimpleFormat(companyShareRaw, unit, currency),
         numberUserAllocations,
         bonusAllocation: JSON.stringify(bonusAllocation)
     };
