@@ -351,10 +351,11 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
 module.exports.obtainPriorAllocationBalances = async ({ floatId, clientId, currency, unit, allocationIds }) => {
     const floatTable = config.get('tables.floatTransactions');
 
-    // note : the inner join is necessary just in case something gets into the allocated to IDs that is not an account ID,
-    // to prevent later issues with foreign key constraints
-    const sumQuery = `select allocated_to_id, unit, sum(amount) from ${floatTable} ` +
-        `where float_id = $1 and client_id = $2 and currency = $2 and allocated_to_type = $3 group by allocated_to_id, unit`;
+    const idStartIndex = 4;
+    const idIndices = opsUtil.extractArrayIndices(allocationIds, idStartIndex);
+    
+    const sumQuery = `select allocated_to_id, unit, sum(amount) from ${floatTable} where float_id = $1 and ` +
+        `client_id = $2 and currency = $3 and allocated_to_id in (${idIndices}) group by allocated_to_id, unit`;
     const queryParams = [floatId, clientId, currency, ...allocationIds];
 
     const resultOfQuery = await rdsConnection.selectQuery(sumQuery, queryParams);
