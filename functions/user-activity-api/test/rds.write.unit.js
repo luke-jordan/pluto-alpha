@@ -525,17 +525,17 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         const testTag = 'FINWORKS_RECORDED';
         
         const accountTxTable = config.get('tables.accountTransactions');
-        const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where account_id = $2 returning updated_time`;
+        const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where transaction_id = $2 returning updated_time`;
 
-        updateRecordStub.withArgs(updateQuery, [testTag, testAccountId]).resolves({ rows: [{ 'updated_time': updateTime.format() }] });
+        updateRecordStub.withArgs(updateQuery, [testTag, testTxId]).resolves({ rows: [{ 'updated_time': updateTime.format() }] });
 
-        const updateResult = await rds.updateTxTags(testAccountId, testTag);
+        const updateResult = await rds.updateTxTags(testTxId, testTag);
         logger('Result of tag update:', updateResult);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('updatedTime');
         expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testTag, testAccountId]);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testTag, testTxId]);
     });
 
     it('Updates transaction tags', async () => {

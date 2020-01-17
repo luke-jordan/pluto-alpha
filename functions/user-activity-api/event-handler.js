@@ -218,8 +218,8 @@ const updateAccountTags = async (systemWideUserId, FWAccountNumber) => {
     return accountUpdateResult;
 };
 
-const updateTxTags = async (accountId, flag) => {
-    const txUpdateResult = await persistence.updateTxTags(accountId, flag);
+const updateTxTags = async (transactionId, flag) => {
+    const txUpdateResult = await persistence.updateTxTags(transactionId, flag);
     logger('Got this back from updating tx flags:', txUpdateResult);
     
     return txUpdateResult;
@@ -234,7 +234,7 @@ const createFinWorksAccount = async (userDetails) => {
     return JSON.parse(accountCreationResult['Payload']);
 };
 
-const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency }) => {
+const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency, transactionId }) => {
     const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
     logger('Got third party account number:', accountNumber);
 
@@ -259,7 +259,7 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
         throw new Error(`Error sending investment to third party: ${parsedResult}`);
     }
 
-    const txUpdateResult = await updateTxTags(accountId, config.get('defaults.balanceSheet.txFlag'));
+    const txUpdateResult = await updateTxTags(transactionId, config.get('defaults.balanceSheet.txFlag'));
     logger('Result of transaction update:', txUpdateResult);
 };
 
@@ -287,8 +287,9 @@ const handleSavingEvent = async (eventBody) => {
     
     if (balanceSheetUpdateEnabled) {
         const accountId = eventBody.context.accountId;
+        const transactionId = eventBody.context.transactionId;
         const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
-        promisesToInvoke.push(addInvestmentToBSheet({ operation: 'INVEST', accountId, amount, unit, currency }));
+        promisesToInvoke.push(addInvestmentToBSheet({ operation: 'INVEST', accountId, transactionId, amount, unit, currency }));
     }
 
     await Promise.all(promisesToInvoke);

@@ -119,6 +119,23 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
     });
 
+    it('Handles last capitalization properly', async () => {
+        const expectedMessage = 'Hello Luke. This week you got paid $100 in interest';
+        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+            'Hello #{user_first_name}. This week you got paid #{last_capitalization} in interest'
+        )]);
+
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
+
+        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        // this gets the last capitalization event so by definition it doesn't need a unit to convert into
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('capitalization::USD'));
+    });
+
     it('Handles currencies not supported by JS i18n', async () => {
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is R8,000.';
         getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(

@@ -187,12 +187,12 @@ module.exports.updateAccountTags = async (systemWideUserId, tag) => {
 };
 
 
-module.exports.updateTxTags = async (accountId, tag) => {
+module.exports.updateTxTags = async (transactionId, tag) => {
     const accountTxTable = config.get('tables.accountTransactions');
 
-    const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where account_id = $2 returning updated_time`;
+    const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where transaction_id = $2 returning updated_time`;
 
-    const updateResult = await rdsConnection.updateRecord(updateQuery, [tag, accountId]);
+    const updateResult = await rdsConnection.updateRecord(updateQuery, [tag, transactionId]);
     logger('Transaction tag update resulted in:', updateResult);
 
     const updateMoment = moment(updateResult['rows'][0]['updated_time']);
