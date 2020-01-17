@@ -217,14 +217,14 @@ describe('Primary allocation of inbound accrual lambda', () => {
         
         adjustFloatBalanceStub.withArgs(expectedFloatAdjustment).resolves({ updatedBalance: 100 + amountAccrued, logId: testLogId });
 
-        obtainEntityBalanceStub.resolves(new Map([[testBonusPoolId, 10], [testClientCoId, 10]]));
+        obtainEntityBalanceStub.resolves(new Map([[testBonusPoolId, 10], [testClientCoId, 5]]));
 
         const expectedBonusAllocationAmount = Math.round(amountAccrued * common.testValueBonusPoolShare);
         const expectedClientCoAmount = Math.round(amountAccrued * common.testValueClientShare);
 
         const expectedGrossAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount;
         const expectedBonusShare = Math.round(0.1 * expectedGrossAmount);
-        const expectedClientShare = Math.round(0.1 * expectedGrossAmount); 
+        const expectedClientShare = Math.round(0.05 * expectedGrossAmount); 
 
         const expectedUserAmount = amountAccrued - expectedBonusAllocationAmount - expectedClientCoAmount - expectedBonusShare - expectedClientShare;
 

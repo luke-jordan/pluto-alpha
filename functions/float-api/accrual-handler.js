@@ -110,7 +110,7 @@ module.exports.accrue = async (event) => {
     const clientShareAllocation = { ...clientFeeAllocation };
     clientShareAllocation.label = 'CLIENT_SHARE';
     const priorClientPercent = calculatePercent(priorBalanceInUnit, priorEntityBalances.get(clientCoShareTracker));
-    clientShareAllocation.amount = exports.calculateShare(grossAccrual, priorBonusPercent.toNumber());
+    clientShareAllocation.amount = exports.calculateShare(grossAccrual, priorClientPercent.toNumber());
     logger(`From gross accrual of ${grossAccrual}, client share of ${priorClientPercent}, hence bonus accrual of ${bonusShareAllocation.amount}`);
     entityAllocations.push(clientShareAllocation);
 
