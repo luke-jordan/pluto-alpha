@@ -183,6 +183,7 @@ module.exports.accrue = async (event) => {
  * @property {string} backingEntityIdentifier (Optional) If this allocation relates to some other entity, what is its identifier
  * @property {string} backingEntityType (Optional) If there is a backing / related entity, what is it (e.g., accrual transaction)
  * @property {string} bonusPoolIdForExcess (Optional) Where to put any fractional leftovers (or from where to take deficits)
+ * @property {string} logId The log backing up this allocation
  */
 module.exports.allocate = async (event) => {
   
@@ -211,7 +212,8 @@ module.exports.allocate = async (event) => {
       transactionType: params.transactionType || 'ACCRUAL',
       transactionState: params.transactionState || 'SETTLED',
       allocatedToType: constants.entityTypes.BONUS_POOL, 
-      allocatedToId: event.bonusPoolIdForExcess 
+      allocatedToId: event.bonusPoolIdForExcess,
+      logId: params.logId
     };
 
     if (params.backingEntityIdentifier && params.backingEntityType) {
@@ -236,7 +238,8 @@ module.exports.allocate = async (event) => {
       allocType: params.transactionType || 'ACCRUAL',
       allocState: params.transactionState || 'SETTLED',
       relatedEntityType: params.backingEntityType,
-      relatedEntityId: params.backingEntityIdentifier
+      relatedEntityId: params.backingEntityIdentifier,
+      logId: params.logId
     });
   }
 

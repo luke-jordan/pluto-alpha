@@ -10,6 +10,17 @@ resource "aws_s3_bucket" "float_record_bucket" {
             }
         }
     }
+
+    object_lock_configuration {
+        object_lock_enabled = "Enabled"
+    }
     
     tags = {"environment"  = "${terraform.workspace}"}
+}
+
+resource "aws_s3_bucket_public_access_block" "float_record_block" {
+  bucket = aws_s3_bucket.float_record_bucket.id
+
+  block_public_acls   = true
+  block_public_policy = true
 }

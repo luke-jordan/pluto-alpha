@@ -135,7 +135,7 @@ resource "aws_iam_policy" "float_record_s3_access" {
             "Action": [
                 "s3:PutObject"
             ],
-            "Resource": "${aws_s3_bucket.float_record_bucket.arn}"
+            "Resource": "${aws_s3_bucket.float_record_bucket.arn}/*"
         }
     ]
 }

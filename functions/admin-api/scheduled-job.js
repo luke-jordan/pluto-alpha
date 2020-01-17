@@ -146,10 +146,10 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
         baseAccrualRate: `${accrualInstruction.calculationBasis.accrualRateAnnualBps} bps`,
         dailyRate: `${accrualInstruction.calculationBasis.accrualRateApplied} %`,
         accrualAmount: simpleFormat(accrualInstruction.accrualAmount),
-        bonusAmount: simpleFormat(bonusFeeRaw),
-        companyAmount: simpleFormat(companyFeeRaw),
-        bonusShare: simpleFormat(bonusShareRaw),
-        companyShare: simpleFormat(companyShareRaw),
+        bonusAmount: simpleFormat(bonusFeeRaw.amount),
+        companyAmount: simpleFormat(companyFeeRaw.amount),
+        bonusShare: simpleFormat(bonusShareRaw.amount),
+        companyShare: simpleFormat(companyShareRaw.amount),
         numberUserAllocations,
         bonusAllocation: JSON.stringify(bonusAllocation)
     };

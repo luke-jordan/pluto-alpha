@@ -349,9 +349,9 @@ describe('Primary allocation of unallocated float lamdba', () => {
 
     it('Happy path, when passed a balance to divide', async () => {
         const numberAccounts = 10;
-        logger('Initiated, testing with ', numberAccounts, ' accounts');
-
         const amountToAllocate = 1000 * 100 * 100; // allocating R1k in interest
+
+        const mockLogId = uuid();
 
         // comes in from scheduled job
         const incomingEvent = {
@@ -362,7 +362,8 @@ describe('Primary allocation of unallocated float lamdba', () => {
             unit: constants.floatUnits.HUNDREDTH_CENT,
             backingEntityType: constants.entityTypes.ACCRUAL_EVENT,
             backingEntityIdentifier: uuid(),
-            bonusPoolIdForExcess: common.testValueBonusPoolTracker
+            bonusPoolIdForExcess: common.testValueBonusPoolTracker,
+            logId: mockLogId
         };
 
 
@@ -380,6 +381,7 @@ describe('Primary allocation of unallocated float lamdba', () => {
         apportionedBalances.set(constants.EXCESSS_KEY, -75);
 
         fetchFloatConfigVarsStub.withArgs(common.testValidClientId, common.testValidFloatId).resolves({ bonusPoolTracker: common.testValueBonusPoolTracker });
+        
         const bonuxTxAlloc = {
             label: 'BONUS',
             amount: -75,
@@ -390,7 +392,8 @@ describe('Primary allocation of unallocated float lamdba', () => {
             allocatedToType: constants.entityTypes.BONUS_POOL,
             allocatedToId: common.testValueBonusPoolTracker,
             relatedEntityType: incomingEvent.backingEntityType,
-            relatedEntityId: incomingEvent.backingEntityIdentifier
+            relatedEntityId: incomingEvent.backingEntityIdentifier,
+            logId: mockLogId
         };
         const bonusTxId = uuid();
 
@@ -405,7 +408,8 @@ describe('Primary allocation of unallocated float lamdba', () => {
                 allocType: 'ACCRUAL',
                 allocState: 'SETTLED',
                 relatedEntityType: incomingEvent.backingEntityType,
-                relatedEntityId: incomingEvent.backingEntityIdentifier
+                relatedEntityId: incomingEvent.backingEntityIdentifier,
+                logId: mockLogId
             };
             expectedUserAllocsToRds.push(userAllocInstruction);
             mockResultFromRds.push({ floatTxId: uuid(), accountTxId: uuid(), amount: apportionedBalances.get(accountId) });
