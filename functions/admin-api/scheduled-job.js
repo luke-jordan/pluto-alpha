@@ -31,7 +31,7 @@ const expireBoosts = async () => {
     logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
     if (expiredBoosts.length === 0) {
         logger('No boosts to expire, returning');
-        return;
+        return { result: 'NO_BOOSTS' };
     }
 
     const accountIds = expiredBoosts.map((row) => row.accountId);
@@ -52,6 +52,7 @@ const expireBoosts = async () => {
     ));
 
     await Promise.all(logPublishPromises);
+    return { result: 'EXPIRED_BOOSTS', boostsExpired: expireBoosts.length };
 };
 
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {

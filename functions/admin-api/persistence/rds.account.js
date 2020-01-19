@@ -221,11 +221,11 @@ module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier })
 
     if (oldIdentifier) {
         logger('Account has prior identifier, ', oldIdentifier, ' will be just inserting for first time');
-        arrayOperation = `array_replace(tags, $2, $3) where account_id = $4`;
+        arrayOperation = `array_replace(tags, $1, $2) where account_id = $3`;
         updateValues = [`${tagPrefix}::${oldIdentifier}`, `${tagPrefix}::${newIdentifier}`, accountId];
     } else {
         logger('Account has no prior identifier, will be just inserting for first time');
-        arrayOperation = `array_append(tags, $2) where account_id = $3`;
+        arrayOperation = `array_append(tags, $1) where account_id = $2`;
         updateValues = [`${tagPrefix}::${newIdentifier}`, accountId];
     }
     
