@@ -28,7 +28,11 @@ const expireHangingTransactions = async () => {
 
 const expireBoosts = async () => {
     const expiredBoosts = await rdsAccount.expireBoosts();
-    logger('Expired boosts for ', expireBoosts.length, ' account-boost pairs');
+    logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
+    if (expiredBoosts.length === 0) {
+        logger('No boosts to expire, returning');
+        return;
+    }
 
     const accountIds = expiredBoosts.map((row) => row.accountId);
     const userIdsExpired = await rdsAccount.fetchUserIdsForAccounts(accountIds);

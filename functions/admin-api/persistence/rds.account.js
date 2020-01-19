@@ -95,6 +95,10 @@ module.exports.expireBoosts = async () => {
         `end_time < current_timestamp returning boost_id`;
     const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
     logger('Result of straight update boosts: ', updateBoostResult);
+    if (updateBoostResult.rowCount === 0) {
+        logger('No boosts expired, can exit');
+        return [];
+    }
 
     // note : could do boost_id in above query, but would rather go for a bit of redundancy and slight inneficiency in the
     // query and ensure a bit of robustness, especially in night time batch job. can evaluate again in future
@@ -201,13 +205,31 @@ module.exports.fetchBsheetTag = async ({ accountId, tagPrefix }) => {
         return null;
     }
 
-    return selectResult[0]['tags'].filter((flag) => flag.includes(`${tagPrefix}::`))[0].split(`${tagPrefix}::`)[1];
+    const prefixedTags = selectResult[0]['tags'].filter((tag) => tag.startsWith(`${tagPrefix}::`)); 
+    if (prefixedTags.length === 0) {
+        return null;
+    }
+
+    return prefixedTags[0].split(`${tagPrefix}::`)[1];
 };
 
-module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier, oldIdentifier }) => {
-    const updateQuery = `update ${config.get('tables.accountTable')} set tags = array_replace(tags, $2, $3) where account_id = $4 ` +
-        `returning owning_user_id, tags`;
-    const updateValues = [`${tagPrefix}::${oldIdentifier}`, `${tagPrefix}::${newIdentifier}`, accountId];
+module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier }) => {
+    const oldIdentifier = await exports.fetchBsheetTag({ accountId, tagPrefix });
+
+    let arrayOperation = '';
+    let updateValues = [];
+
+    if (oldIdentifier) {
+        logger('Account has no prior identifier, will be just inserting for first time');
+        arrayOperation = `array_replace(tags, $2, $3) where account_id = $4`;
+        updateValues = [`${tagPrefix}::${oldIdentifier}`, `${tagPrefix}::${newIdentifier}`, accountId];
+    } else {
+        logger('Account has no prior identifier, will be just inserting for first time');
+        arrayOperation = `array_append(tags, $2) where account_id = $3`;
+        updateValues = [`${tagPrefix}::${newIdentifier}`, accountId];
+    }
+    
+    const updateQuery = `update ${config.get('tables.accountTable')} ${arrayOperation} returning owner_user_id, tags`;
     
     logger('Updating balance sheet tag, query: ', updateQuery);
     logger('Updating balance sheet tag, values: ', updateValues);
@@ -216,5 +238,12 @@ module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier, o
 
     logger('Result of transaction update: ', resultOfUpdate);
 
-    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
+    if (typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows)) {
+        const returnedValues = camelCaseKeys(resultOfUpdate.rows[0]);
+        return { ...returnedValues, oldIdentifier };
+    }
+
+    logger('FATAL_ERROR: User admin balance sheet tag update failed');
+
+    return null;
 };

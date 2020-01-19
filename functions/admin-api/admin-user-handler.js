@@ -79,7 +79,7 @@ const obtainUserHistory = async (systemWideUserId) => {
     logger('Result of history fetch: ', historyFetchResult);
 
     // this one is not wrapped because it is only ever used on direct invocation
-    if (historyFetchResult['StatusCode'] !== 200 || JSON.parse(historyFetchResult['Payload']).result !== 'success') {
+    if (historyFetchResult['StatusCode'] !== 200 || JSON.parse(historyFetchResult['Payload']).result !== 'SUCCESS') {
         logger('ERROR! Something went wrong fetching history');
     }
 
@@ -283,9 +283,11 @@ const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, ne
 const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId, newIdentifier }) => {
     logger(`Updating balance sheet account for ${systemWideUserId}, setting it to ${newIdentifier}`);
     const bsheetPrefix = config.get('bsheet.prefix');
-    const oldIdentifier = await persistence.fetchBsheetTag({ accountId, tagPrefix: bsheetPrefix });
+    // happens inside to prevent accidental duplication etc
+    const resultOfRdsUpdate = await persistence.updateBsheetTag({ accountId, tagPrefix: bsheetPrefix, newIdentifier });
+    const oldIdentifier = resultOfRdsUpdate.oldIdentifier;
+
     const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, newIdentifier, oldIdentifier };
-    const resultOfRdsUpdate = await persistence.updateBsheetTag({ accountId, tagPrefix: bsheetPrefix, oldIdentifier, newIdentifier });
     logger('Result of RDS update: ', resultOfRdsUpdate);
     if (!resultOfRdsUpdate) {
         return { result: 'ERROR', message: 'Failed on persistence update' };
