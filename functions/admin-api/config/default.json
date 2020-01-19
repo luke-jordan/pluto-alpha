@@ -50,6 +50,9 @@
     "verification": {
         "otpEnabled": true
     },
+    "bsheet": {
+        "prefix": "FINWORKS"
+    },
     "defaults": {
         "userCounts": {
             "daysBack": 180

@@ -162,3 +162,59 @@ module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId
 
     return resultOfInsert;
 };
+
+// we use this to find accounts by either bank reference or balance sheet (FinWorks) reference
+module.exports.findUserFromRef = async ({ searchValue, bsheetPrefix }) => {
+    // first search
+    const normalizedValue = searchValue.trim().toUpperCase();
+    const firstQuery = `select owner_user_id from ${config.get('tables.accountTable')} where human_ref = $1`;
+    const firstSearch = await rdsConnection.selectQuery(firstQuery, [normalizedValue]);
+    logger('Result of first account ref search: ', firstSearch);
+    if (firstSearch.length > 0) {
+        return firstSearch[0]['owner_user_id'];
+    }
+
+    const secondQuery = `select owner_user_id from ${config.get('tables.accountTable')} where $1 = any(tags)`;
+    const secondSearch = await rdsConnection.selectQuery(secondQuery, [`${bsheetPrefix}::${normalizedValue}`]);
+    logger('Result of second account ref search: ', secondSearch);
+    if (secondSearch.length > 0) {
+        return secondSearch[0]['owner_user_id'];
+    }
+
+    const thirdQuery = `select owner_user_id from ${config.get('tables.accountTable')} inner join ${config.get('tables.transactionTable')} ` +
+        `on ${config.get('tables.accountTable')}.account_id = ${config.get('tables.transactionTable')}.account_id ` +
+        `where ${config.get('tables.transactionTable')}.human_reference = $1`;
+    const thirdSearch = await rdsConnection.selectQuery(thirdQuery, [normalizedValue]);
+    logger('Result of final search: ', thirdSearch);
+    if (thirdSearch.length > 0) {
+        return thirdSearch[0]['owner_user_id'];
+    }
+
+    return null;
+};
+
+module.exports.fetchBsheetTag = async ({ accountId, tagPrefix }) => {
+    const selectResult = await rdsConnection.selectQuery(`select tags from ${config.get('tables.accountTable')} where account_id = $1`, [accountId]);
+    logger('Got account tags result:', selectResult);
+
+    if (!selectResult || selectResult.length === 0 || !Array.isArray(selectResult[0]['tags']) || selectResult[0]['tags'].length === 0) {
+        return null;
+    }
+
+    return selectResult[0]['tags'].filter((flag) => flag.includes(`${tagPrefix}::`))[0].split(`${tagPrefix}::`)[1];
+};
+
+module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier, oldIdentifier }) => {
+    const updateQuery = `update ${config.get('tables.accountTable')} set tags = array_replace(tags, $2, $3) where account_id = $4 ` +
+        `returning owning_user_id, tags`;
+    const updateValues = [`${tagPrefix}::${oldIdentifier}`, `${tagPrefix}::${newIdentifier}`, accountId];
+    
+    logger('Updating balance sheet tag, query: ', updateQuery);
+    logger('Updating balance sheet tag, values: ', updateValues);
+
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
+
+    logger('Result of transaction update: ', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
+};

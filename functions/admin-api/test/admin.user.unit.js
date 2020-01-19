@@ -20,6 +20,7 @@ const momentStub = sinon.stub();
 const pendingTxStub = sinon.stub();
 const countUsersStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const fetchBsheetTagStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -29,7 +30,9 @@ class MockLambdaClient {
 
 const handler = proxyquire('../admin-user-handler', {
     './persistence/rds.account': {
-        'fetchUserPendingTransactions': pendingTxStub
+        'fetchUserPendingTransactions': pendingTxStub,
+        'fetchBsheetTag': fetchBsheetTagStub,
+        '@noCallThru': true
     },
     './admin.util': {},
     'moment': momentStub,
@@ -177,10 +180,11 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         });
 
         pendingTxStub.withArgs(testUserId, sinon.match.any).resolves(expectedTxResponse);
+        fetchBsheetTagStub.resolves('TUSER1234');
 
         const expectedResult = {
             ...expectedProfile,
-            userBalance: expectedBalance,
+            userBalance: { ...expectedBalance, bsheetIdentifier: 'TUSER1234' },
             pendingTransactions: expectedTxResponse,
             userHistory: JSON.parse(expectedHistory.Payload).userEvents
         };

@@ -108,6 +108,28 @@ const obtainUserBalance = async (userProfile) => {
     return extractLambdaBody(userBalanceResult);
 };
 
+const obtainSystemWideIdFromProfile = async (lookUpPayload) => {
+    const lookUpInvoke = adminUtil.invokeLambda(config.get('lambdas.systemWideIdLookup'), lookUpPayload);
+
+    logger('Invoking system wide user ID lookup with params: ', lookUpInvoke);
+    const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
+    const systemIdPayload = JSON.parse(systemWideIdResult['Payload']);
+
+    if (systemIdPayload.statusCode !== 200) {
+        return null;
+    }
+
+    const { systemWideUserId } = JSON.parse(systemIdPayload.body);
+    logger(`From query params: ${JSON.stringify(lookUpPayload)}, got system ID: ${systemWideUserId}`);
+    
+    return systemWideUserId;
+};
+
+const obtainSystemWideIdFromBankRef = async (lookUpPayload) => {
+    logger('Trying to find user from bank reference or account name');
+    return persistence.findUserFromRef({ searchValue: lookUpPayload.bankReference, bsheetPrefix: config.get('bsheet.prefix') });
+};
+
 /**
  * Function for looking up a user and returning basic data about them
  * @param {object} event An event object containing the request context and query paramaters specifying the search to make
@@ -121,31 +143,34 @@ module.exports.lookUpUser = async (event) => {
         }
 
         const lookUpPayload = opsCommonUtil.extractQueryParams(event);
-        const lookUpInvoke = adminUtil.invokeLambda(config.get('lambdas.systemWideIdLookup'), lookUpPayload);
+        logger('Looking up user, with payload: ', lookUpPayload);
 
-        logger('Invoking system wide user ID lookup with params: ', lookUpInvoke);
-        const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
-        const systemIdPayload = JSON.parse(systemWideIdResult['Payload']);
+        let systemWideUserId = null;
+        if (Reflect.has(lookUpPayload, 'bankReference')) {
+            systemWideUserId = await obtainSystemWideIdFromBankRef(lookUpPayload);
+        } else {
+            systemWideUserId = await obtainSystemWideIdFromProfile(lookUpPayload);
+        }
 
-        if (systemIdPayload.statusCode !== 200) {
+        if (!systemWideUserId) {
             return opsCommonUtil.wrapResponse({ result: 'USER_NOT_FOUND' }, status('Not Found'));
         }
 
-        const { systemWideUserId } = JSON.parse(systemIdPayload.body);
-        logger(`From query params: ${JSON.stringify(lookUpPayload)}, got system ID: ${systemWideUserId}`);
 
         const [userProfile, pendingTransactions, userHistory] = await Promise.all([
             fetchUserProfile(systemWideUserId), obtainUserPendingTx(systemWideUserId), obtainUserHistory(systemWideUserId)
         ]);
 
         // need profile currency etc for this one, so can't parallel process with above
-        const userBalance = await obtainUserBalance(userProfile);
+        const balanceResult = await obtainUserBalance(userProfile);
+        const bsheetIdentifier = await persistence.fetchBsheetTag({ accountId: balanceResult.accountId[0], tagPrefix: config.get('bsheet.prefix') });
+        const userBalance = { ...balanceResult, bsheetIdentifier };
 
         const resultObject = { 
             ...userProfile,
             userBalance,
             pendingTransactions,
-            userHistory 
+            userHistory
         };
         
         logger('Returning: ', resultObject);
@@ -255,6 +280,24 @@ const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, ne
     return resultBody;
 };
 
+const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId, newIdentifier }) => {
+    logger(`Updating balance sheet account for ${systemWideUserId}, setting it to ${newIdentifier}`);
+    const bsheetPrefix = config.get('bsheet.prefix');
+    const oldIdentifier = await persistence.fetchBsheetTag({ accountId, tagPrefix: bsheetPrefix });
+    const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, newIdentifier, oldIdentifier };
+    const resultOfRdsUpdate = await persistence.updateBsheetTag({ accountId, tagPrefix: bsheetPrefix, oldIdentifier, newIdentifier });
+    logger('Result of RDS update: ', resultOfRdsUpdate);
+    if (!resultOfRdsUpdate) {
+        return { result: 'ERROR', message: 'Failed on persistence update' };
+    }
+
+    await Promise.all([
+        publishUserLog({ adminUserId, systemWideUserId, eventType: 'ADMIN_UPDATED_BSHEET_TAG', context: { ...logContext, accountId } }),
+        persistence.insertAccountLog({ accountId, adminUserId, logType: 'ADMIN_UPDATED_BSHEET_TAG', logContext })
+    ]);
+    return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
+};
+
 /**
  * @property {string} systemWideUserId The ID of the user to adjust
  * @property {string} fieldToUpdate One of: KYC, STATUS, TRANSACTION 
@@ -265,7 +308,9 @@ module.exports.manageUser = async (event) => {
             return adminUtil.unauthorizedResponse;
         }
 
-        const params = opsCommonUtil.extractParamsFromEvent(event);
+        const adminUserId = opsCommonUtil.extractUserDetails(event).systemWideUserId;
+
+        const params = { ...opsCommonUtil.extractParamsFromEvent(event), adminUserId };
         logger('Params for user management: ', event);
 
         if (!params.systemWideUserId || !params.fieldToUpdate || !params.reasonToLog) {
@@ -288,6 +333,14 @@ module.exports.manageUser = async (event) => {
                 return opsCommonUtil.wrapResponse('Error, bad field or type for user update', 400);
             }
             resultOfUpdate = await handleStatusUpdate(params);
+        }
+        
+        if (params.fieldToUpdate === 'BSHEET') {
+            logger('Updating the FinWorks (balance sheet management) identifier for the user');
+            if (!params.accountId) {
+                return opsCommonUtil.wrapResponse('Error, must pass in account ID');
+            }
+            resultOfUpdate = await handleBsheetAccUpdate(params);
         }
 
         if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {
