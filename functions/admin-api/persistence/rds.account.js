@@ -220,7 +220,7 @@ module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier })
     let updateValues = [];
 
     if (oldIdentifier) {
-        logger('Account has no prior identifier, will be just inserting for first time');
+        logger('Account has prior identifier, ', oldIdentifier, ' will be just inserting for first time');
         arrayOperation = `array_replace(tags, $2, $3) where account_id = $4`;
         updateValues = [`${tagPrefix}::${oldIdentifier}`, `${tagPrefix}::${newIdentifier}`, accountId];
     } else {
@@ -229,7 +229,7 @@ module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier })
         updateValues = [`${tagPrefix}::${newIdentifier}`, accountId];
     }
     
-    const updateQuery = `update ${config.get('tables.accountTable')} ${arrayOperation} returning owner_user_id, tags`;
+    const updateQuery = `update ${config.get('tables.accountTable')} set tags = ${arrayOperation} returning owner_user_id, tags`;
     
     logger('Updating balance sheet tag, query: ', updateQuery);
     logger('Updating balance sheet tag, values: ', updateValues);
