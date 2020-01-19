@@ -249,14 +249,15 @@ module.exports.filterUserIdsForRecurrence = async (userIds, { instructionId, rec
 
     // here consciously allowing this to be everything -- could do an 'in' clause with user IDs but very complex and probably 
     // has little gain, esp as might create enourmous query when have 100k + users and evaluating a generic recurrence
-    const minQueueQuery = `select destination_user_id from ${messageTable} where processed_status = $1 ` + 
+    const minQueueQuery = `select destination_user_id from ${messageTable} where processed_status = $1 and end_time > current_timestamp ` + 
         `group by destination_user_id having count(*) > $2`;
     const queueSizePromise = executeQueryAndGetIds(minQueueQuery, ['READY_FOR_SENDING', recurrenceParameters.maxInQueue]);
 
     const [usersWithinInterval, usersWithQueue] = await Promise.all([intervalPromise, queueSizePromise]);
     // this will mean redundancy but removing overlap would serve little purpose, hence leaving it
     const idsToFilter = usersWithinInterval.concat(usersWithQueue);
-    logger('And have these IDs to remove: ', idsToFilter);
+    logger('Removing these IDs for interval: ', usersWithinInterval);
+    logger('Removing these IDs for queue: ', usersWithQueue);
 
     return userIds.filter((id) => !idsToFilter.includes(id));
 };

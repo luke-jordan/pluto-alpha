@@ -249,7 +249,7 @@ const generateRecurringMessages = async (recurringInstruction) => {
         logger('Result of updating status: ', updateStatusResult);
     }
 
-    const updateProcessedTime = await rdsUtil.updateMessageInstruction(instructionId, 'last_processed_time', moment().format());
+    const updateProcessedTime = await rdsUtil.updateMessageInstruction(instructionId, { lastProcessedTime: moment().format() });
 
     return {
         instructionId: recurringInstruction.instructionId,

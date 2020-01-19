@@ -235,32 +235,37 @@ const createFinWorksAccount = async (userDetails) => {
 };
 
 const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency, transactionId }) => {
-    const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
-    logger('Got third party account number:', accountNumber);
+    // still some stuff to work out here, e.g., in syncing up the account number, so rather catch & log, and let other actions pass
+    try {
+        const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
+        logger('Got third party account number:', accountNumber);
 
-    if (!accountNumber) {
-        // we don't actually throw this, but do log it, because admin needs to know
-        logger('FATAL_ERROR: No FinWorks account number for user!');
-        return;
+        if (!accountNumber) {
+            // we don't actually throw this, but do log it, because admin needs to know
+            logger('FATAL_ERROR: No FinWorks account number for user!');
+            return;
+        }
+        
+        const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
+
+        const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
+        const investmentInvocation = invokeLambda(config.get('lambdas.addTxToBalanceSheet'), { operation, transactionDetails });
+        
+        logger('lambda args:', investmentInvocation);
+        const investmentResult = await lambda.invoke(investmentInvocation).promise();
+        logger('Investment result from third party:', investmentResult);
+
+        const parsedResult = JSON.parse(investmentResult['Payload']);
+        logger('Got response body', parsedResult);
+        if (Object.keys(parsedResult).includes('result') && parsedResult.result === 'ERROR') {
+            throw new Error(`Error sending investment to third party: ${parsedResult}`);
+        }
+
+        const txUpdateResult = await updateTxTags(transactionId, config.get('defaults.balanceSheet.txFlag'));
+        logger('Result of transaction update:', txUpdateResult);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
     }
-    
-    const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
-
-    const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
-    const investmentInvocation = invokeLambda(config.get('lambdas.addTxToBalanceSheet'), { operation, transactionDetails });
-    
-    logger('lambda args:', investmentInvocation);
-    const investmentResult = await lambda.invoke(investmentInvocation).promise();
-    logger('Investment result from third party:', investmentResult);
-
-    const parsedResult = JSON.parse(investmentResult['Payload']);
-    logger('Got response body', parsedResult);
-    if (Object.keys(parsedResult).includes('result') && parsedResult.result === 'ERROR') {
-        throw new Error(`Error sending investment to third party: ${parsedResult}`);
-    }
-
-    const txUpdateResult = await updateTxTags(transactionId, config.get('defaults.balanceSheet.txFlag'));
-    logger('Result of transaction update:', txUpdateResult);
 };
 
 

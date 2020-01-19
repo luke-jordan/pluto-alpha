@@ -28,7 +28,11 @@ const expireHangingTransactions = async () => {
 
 const expireBoosts = async () => {
     const expiredBoosts = await rdsAccount.expireBoosts();
-    logger('Expired boosts for ', expireBoosts.length, ' account-boost pairs');
+    logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
+    if (expiredBoosts.length === 0) {
+        logger('No boosts to expire, returning');
+        return { result: 'NO_BOOSTS' };
+    }
 
     const accountIds = expiredBoosts.map((row) => row.accountId);
     const userIdsExpired = await rdsAccount.fetchUserIdsForAccounts(accountIds);
@@ -48,6 +52,7 @@ const expireBoosts = async () => {
     ));
 
     await Promise.all(logPublishPromises);
+    return { result: 'EXPIRED_BOOSTS', boostsExpired: expireBoosts.length };
 };
 
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
@@ -242,7 +247,7 @@ module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
 
     const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : config.get('defaults.scheduledJobs');
-    const promises = tasksToRun.map((operation) => operationMap[operation]());
+    const promises = tasksToRun.filter((operation) => Reflect.has(operationMap, operation)).map((operation) => operationMap[operation]());
     const results = await Promise.all(promises);
 
     logger('Results of tasks: ', results);
