@@ -247,7 +247,7 @@ module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
 
     const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : config.get('defaults.scheduledJobs');
-    const promises = tasksToRun.map((operation) => operationMap[operation]());
+    const promises = tasksToRun.filter((operation) => Reflect.has(operationMap, operation)).map((operation) => operationMap[operation]());
     const results = await Promise.all(promises);
 
     logger('Results of tasks: ', results);
