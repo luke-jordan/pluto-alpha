@@ -234,7 +234,7 @@ module.exports.sendPushNotifications = async (params) => {
 };
 
 /**
- * This function sends system emails. No more than a thousand emails can be sent at a time.
+ * This function sends system emails.
  * @param {object} params
  * @property {object} htmlTemplate The emails html template.
  * @property {string} textTemplate The emails text template.

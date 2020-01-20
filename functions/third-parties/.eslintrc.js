@@ -172,7 +172,7 @@ module.exports = {
         'no-magic-numbers': [
             'error',
             {
-                'ignore': [0, 1, 4, 100, 200, 201, 400, 500, 365, 1000, 1001]
+                'ignore': [0, 1, 2, 4, 100, 200, 201, 400, 500, 365, 1000, 1001, 2500]
             }
         ],
         'no-mixed-operators': 'error',
@@ -193,7 +193,7 @@ module.exports = {
         'no-octal-escape': 'error',
         'no-param-reassign': 'error',
         'no-path-concat': 'error',
-        'no-plusplus': 1,
+        'no-plusplus': 'error',
         'no-process-env': 'error',
         'no-process-exit': 'error',
         'no-proto': 'error',

@@ -36,8 +36,8 @@ const resetStubs = (...stubs) => {
 
 describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', () => {
 
-    const testUserName = 'Yesugei';
-    const testEmailAddress = 'yesugei@khans.com';
+    const testUserName = 'Jane';
+    const testEmailAddress = 'jane@email.com';
     const validSubject = 'Welcome to Jupiter';
 
     const validHtmlTemplate = '<p>Greetings {{user}}, \nWelcome to Jupiter.</p>';
@@ -88,15 +88,19 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         sendGridStub.resolves([{ statusCode: 202, statusMessage: 'Accepted' }]);
 
         const testEvent = {
-            templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: validTextTemplate,
+            templates: {
+                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
         expect(resultOfEmail).to.exist;
-        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
         expect(sendGridStub).to.have.been.calledOnceWithExactly(validAssembledEmail);
     });
@@ -110,25 +114,75 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
 
         const testEvent = {
-            templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: validTextTemplate,
+            templates: {
+                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
         expect(resultOfEmail).to.exist;
-        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
         expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
     });
+
+    it('Handles chunking of payloads where target email addresses exceed third party rate limit', async () => {
+        const testDestinationArray = [];
+        while (testDestinationArray.length < 2500) {
+            testDestinationArray.push(testDestinationDetails);
+        }
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const testEvent = {
+            templates: {
+                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray
+        };
+
+        const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
+        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
+        expect(sendGridStub).to.have.been.calledThrice;
+
+        const firstCall = sendGridStub.getCall(0).args[0];
+        expect(firstCall.personalizations.length).to.equal(1000);
+
+        const secondCall = sendGridStub.getCall(1).args[0];
+        expect(secondCall.personalizations.length).to.equal(1000);
+
+        const thirdCall = sendGridStub.getCall(2).args[0];
+        expect(thirdCall.personalizations.length).to.equal(500);
+    });
+
+    // it('Handles attachments', async () => {
+
+    // });
+
+    // it('Fails on unsupported or invalid attachment', async () => {
+
+    // });
 
     it('Fails on invalid method parameters', async () => {
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         const testEvent = {
-            templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: validTextTemplate,
+            templates: {
+                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
@@ -138,36 +192,29 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
         testEvent.subject = validSubject;
 
-        Reflect.deleteProperty(testEvent, 'templateKeyBucket');
-        Reflect.deleteProperty(testEvent, 'textTemplate');
+        Reflect.deleteProperty(testEvent.templates, 'templateKeyBucket');
+        Reflect.deleteProperty(testEvent.templates, 'textTemplate');
 
-        await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('At least one template is required'));
+        await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('Missing required html template'));
 
-        testEvent.textTemplate = validTextTemplate;
-        testEvent.templateKeyBucket = { bucket: testTemplateBucket };
+        testEvent.templates.templateKeyBucket = { bucket: testTemplateBucket };
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('Missing valid template key-bucket pair'));
 
-        testEvent.templateKeyBucket = { key: testTemplateKey, bucket: testTemplateBucket };
+        testEvent.templates.templateKeyBucket = { key: testTemplateKey, bucket: testTemplateBucket };
 
         Reflect.deleteProperty(testEvent, 'destinationArray');
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('Missing destination array'));
 
-        testEvent.destinationArray = [];
-        for (let i = 0; i < 1001; i++) {
-            testEvent.destinationArray.push(testDestinationDetails);
-        }
-
-        await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('Cannot send to more than 1000 recipients at a time'));
-
         testEvent.destinationArray = [{}, {}];
 
-        await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('Invalid destination object: {}'));
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+        await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('No valid destinations found'));
 
         testEvent.destinationArray = [{ someOtherKey: 'that should not exist' }];
-
-        await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError(`Invalid destination object: ${JSON.stringify({someOtherKey: 'that should not exist'})}`));
+        await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('No valid destinations found'));
  
         expect(getObjectStub).to.have.not.been.called;
         expect(sendGridStub).to.have.not.been.called;
@@ -177,27 +224,29 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         const testDestinationArray = [testDestinationDetails];
     
         const testEvent = {
-            templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
-            textTemplate: validTextTemplate,
+            templates: {
+                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => '' }})});
 
-        Reflect.deleteProperty(testEvent, 'textTemplate');
+        Reflect.deleteProperty(testEvent.templates, 'textTemplate');
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('You must provide either a text or html template or both'));
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => ({ invalid: 'html template'}) }})});
 
-        testEvent.textTemplate = validTextTemplate;
+        testEvent.templates.textTemplate = validTextTemplate;
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError(`Invalid HTML template: ${JSON.stringify({ invalid: 'html template'})}`));
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
 
-        testEvent.textTemplate = { invalid: 'text template'};
+        testEvent.templates.textTemplate = { invalid: 'text template'};
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError(`Invalid text template: ${JSON.stringify({ invalid: 'text template'})}`));
 
@@ -208,8 +257,8 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
 describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => {
 
-    const testUserName = 'Temujin';
-    const testEmailAddress = 'temujin@khans.com';
+    const testUserName = 'John';
+    const testEmailAddress = 'john@email.com';
     const validSubject = 'Welcome to Jupiter';
 
     const validHtmlTemplate = '<p>Greetings {{user}}, \nWelcome to Jupiter.</p>';
@@ -256,15 +305,19 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
 
         const testEvent = {
-            htmlTemplate: validHtmlTemplate,
-            textTemplate: validTextTemplate,
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         const resultOfEmail = await handler.sendEmails(testEvent);
+
         expect(resultOfEmail).to.exist;
-        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
         expect(getObjectStub).to.have.not.been.called;
         expect(sendGridStub).to.have.been.calledOnceWithExactly(validAssembledEmail);
     });
@@ -277,25 +330,74 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
 
         const testEvent = {
-            htmlTemplate: validHtmlTemplate,
-            textTemplate: validTextTemplate,
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
 
         const resultOfEmail = await handler.sendEmails(testEvent);
+
         expect(resultOfEmail).to.exist;
-        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS' });
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
         expect(getObjectStub).to.have.not.been.called;
         expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
     });
+
+    it('Handles chunking of payloads where target email addresses exceed third party rate limit', async () => {
+        const testDestinationArray = [];
+        while (testDestinationArray.length < 2500) {
+            testDestinationArray.push(testDestinationDetails);
+        }
+
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const testEvent = {
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray
+        };
+
+        const resultOfEmail = await handler.sendEmails(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.been.calledThrice;
+
+        const firstCall = sendGridStub.getCall(0).args[0];
+        expect(firstCall.personalizations.length).to.equal(1000);
+
+        const secondCall = sendGridStub.getCall(1).args[0];
+        expect(secondCall.personalizations.length).to.equal(1000);
+
+        const thirdCall = sendGridStub.getCall(2).args[0];
+        expect(thirdCall.personalizations.length).to.equal(500);
+    });
+
+    // it('Handles attachments', async () => {
+
+    // });
+
+    // it('Fails on unsupported or invalid attachment', async () => {
+
+    // });
 
     it('Fails on invalid method parameters', async () => {
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         const testEvent = {
-            htmlTemplate: validHtmlTemplate,
-            textTemplate: validTextTemplate,
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
@@ -306,31 +408,24 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
 
         testEvent.subject = validSubject;
 
-        Reflect.deleteProperty(testEvent, 'htmlTemplate');
-        Reflect.deleteProperty(testEvent, 'textTemplate');
+        Reflect.deleteProperty(testEvent.templates, 'htmlTemplate');
+        Reflect.deleteProperty(testEvent.templates, 'textTemplate');
 
-        await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError('At least one template is required'));
+        await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError('Missing required html template'));
 
-        testEvent.htmlTemplate = validHtmlTemplate;
+        testEvent.templates.htmlTemplate = validHtmlTemplate;
 
         Reflect.deleteProperty(testEvent, 'destinationArray');
 
         await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError('Missing destination array'));
 
-        testEvent.destinationArray = [];
-        for (let i = 0; i < 1001; i++) {
-            testEvent.destinationArray.push(testDestinationDetails);
-        }
-        
-        await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError('Cannot send to more than 1000 recipients at a time'));
-
         testEvent.destinationArray = [{}, {}];
 
-        await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError('Invalid destination object: {}'));
+        await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError('No valid destinations found'));
 
         testEvent.destinationArray = [{ someOtherKey: 'that should not exist' }];
 
-        await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError(`Invalid destination object: ${JSON.stringify({someOtherKey: 'that should not exist'})}`));
+        await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError('No valid destinations found'));
  
         expect(getObjectStub).to.have.not.been.called;
         expect(sendGridStub).to.have.not.been.called;
@@ -340,19 +435,21 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         const testDestinationArray = [testDestinationDetails];
     
         const testEvent = {
-            htmlTemplate: validHtmlTemplate,
-            textTemplate: validTextTemplate,
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: testDestinationArray
         };
 
-        testEvent.htmlTemplate = { invalid: 'html template' };
-        testEvent.textTemplate = validTextTemplate;
+        testEvent.templates.htmlTemplate = { invalid: 'html template' };
+        testEvent.templates.textTemplate = validTextTemplate;
 
         await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError(`Invalid HTML template: ${JSON.stringify({ invalid: 'html template'})}`));
 
-        testEvent.htmlTemplate = validHtmlTemplate;
-        testEvent.textTemplate = { invalid: 'text template'};
+        testEvent.templates.htmlTemplate = validHtmlTemplate;
+        testEvent.templates.textTemplate = { invalid: 'text template'};
 
         await expect(handler.sendEmails(testEvent)).to.eventually.deep.equal(formatError(`Invalid text template: ${JSON.stringify({ invalid: 'text template'})}`));
 

@@ -75,8 +75,25 @@
     },
     "sendgrid": {
         "apiKey": "",
+        "chunkSize": 1000,
+        "fromName": "Jupiter",
         "fromAddress": "noreply@jupitersave.com",
         "replyToAddress": "",
-        "sandbox": true
+        "replyToName": "Jupiter",
+        "sandbox": true,
+        "supportedAttachments": {
+            ".pdf": "application/pdf",
+            ".json": "application/json",
+            ".zip": "application/zip",
+            ".doc": "application/msword",
+            ".docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".ppt": "application/vnd.ms-powerpoint",
+            ".odt": "application/vnd.oasis.opendocument.text",
+            ".png": "image/png",
+            ".txt": "text/plain",
+            ".csv": "text/csv",
+            ".jpeg": "image/jpeg",
+            ".gif": "image/gif"
+        }
     }
 }

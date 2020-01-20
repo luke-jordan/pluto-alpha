@@ -4,6 +4,8 @@ const logger = require('debug')('jupiter:third-parties:sendgrid');
 const config = require('config');
 const opsUtil = require('ops-util-common');
 
+const path = require('path');
+const htmlToText = require('html-to-text');
 const sendGridMail = require('@sendgrid/mail');
 const AWS = require('aws-sdk');
 
@@ -12,14 +14,23 @@ const s3 = new AWS.S3();
 sendGridMail.setApiKey(config.get('sendgrid.apiKey'));
 sendGridMail.setSubstitutionWrappers('{{', '}}');
 
-const obtainHtmlTemplate = async (Bucket, Key) => {
+const fetchHtmlTemplate = async (Bucket, Key) => {
     const template = await s3.getObject({ Bucket, Key }).promise();
     return template.Body.toString('ascii');
 };
 
-const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, textTemplate, destinationArray }) => {
-    if (!templateKeyBucket && !htmlTemplate && !textTemplate) {
-        throw new Error('At least one template is required');
+const fetchAttachment = async (filename, Bucket, Key) => {
+    const attachment = await s3.getObject({ Bucket, Key }).promise();
+    if (path.extname(filename) === '.pdf') {
+        return attachment.Body.toString('base64');
+    }
+
+    return attachment.Body.toString('ascii');
+};
+
+const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, destinationArray, attachments }) => {
+    if (!templateKeyBucket && !htmlTemplate) {
+        throw new Error('Missing required html template');
     }
      
     if (templateKeyBucket) {
@@ -32,23 +43,42 @@ const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, textT
         throw new Error('Missing destination array');
     }
 
-    if (destinationArray.length > 1000) {
-        throw new Error('Cannot send to more than 1000 recipients at a time');
-    }
-
-    destinationArray.forEach((destination) => {
-        if (typeof destination !== 'object' || Object.keys(destination).length === 0) {
-            throw new Error(`Invalid destination object: ${JSON.stringify(destination)}`);
-        }
-
-        if (!destination.emailAddress || !destination.templateVariables) {
-            throw new Error(`Invalid destination object: ${JSON.stringify(destination)}`);
-        }
-    });
-
     if (!subject) {
         throw new Error('Missing email subject');
     }
+
+    if (attachments) {
+        attachments.forEach((attachment) => {
+            if (!Reflect.has(attachment, 'filename') || !attachment.filename) {
+                throw new Error('Invalid attachment. Missing attachment filename');
+            }
+
+            if (!Reflect.has(attachment, 'source') || !Reflect.has(attachment.source, 'bucket') || !Reflect.has(attachment.source, 'bucket')) {
+                throw new Error('Invalid attachment source');
+            }
+            
+            if (!Object.keys(config.get('sendgrid.supportedAttachments')).includes(path.extname(attachment.filename))) {
+                throw new Error(`Unsupported attachment type: ${attachment.filename}`);
+            }
+        });
+    }
+
+    // validate source details
+
+    const failedAddresses = [];
+    destinationArray.forEach((destination) => {
+        if (typeof destination !== 'object' || Object.keys(destination).length === 0) {
+            logger(`Invalid email destination object: ${JSON.stringify(destination)}`);
+            failedAddresses.push(destination);
+        }
+
+        if (!destination.emailAddress || !destination.templateVariables) {
+            logger(`Invalid email destination object: ${JSON.stringify(destination)}`);
+            failedAddresses.push(destination);
+        }
+    });
+
+    return failedAddresses.map((address) => JSON.stringify(address));
 };
 
 const validateDispatchParams = (dispatchParams) => {
@@ -75,7 +105,7 @@ const validateDispatchPayload = (payload) => {
 
         if (Array.isArray(payload[property])) {
             if (payload[property].length === 0) {
-                throw new Error('No values found for property: ${property}');
+                throw new Error(`No values found for property: ${property}`);
             }
         }
     });
@@ -85,17 +115,26 @@ const validateDispatchPayload = (payload) => {
     }
 };
 
-const assembleDispatchPayload = (dispatchParams) => {
-    const { subject, htmlTemplate, textTemplate, destinationArray } = dispatchParams;
+const chunkDispatchRecipients = (destinationArray) => {
+    const chunkSize = config.get('sendgrid.chunkSize');
+    /* eslint-disable id-length */
+    return Array(Math.ceil(destinationArray.length / chunkSize)).fill().map((_, i) => destinationArray.slice(i * chunkSize, (i * chunkSize) + chunkSize));
+};
+
+const assembleDispatchPayload = (dispatchParams, destinationArray) => {
+    const fromName = dispatchParams.sourceDetails ? dispatchParams.sourceDetails.source : config.get('sendgrid.fromName');
+    const replyToName = dispatchParams.sourceDetails ? dispatchParams.sourceDetails.replyTo : config.get('sendgrid.replyToName');
+
+    const { subject, htmlTemplate, textTemplate, attachments } = dispatchParams;
 
     const payload = {
         'from': {
             'email': config.get('sendgrid.fromAddress'),
-            'name': 'Jupiter'
+            'name': fromName
         },
         'reply_to': {
             'email': config.get('sendgrid.replyToAddress'),
-            'name': 'Jupiter'
+            'name': replyToName
         },
         'subject': '{{subject}}',
         'content': [],
@@ -124,17 +163,75 @@ const assembleDispatchPayload = (dispatchParams) => {
         payload.content.push({ 'type': 'text/html', 'value': htmlTemplate });
     }
 
-    logger('Assembled body:', JSON.stringify(payload));
+    if (attachments) {
+        payload.attachments = attachments;
+    }
+
     return payload;
 };
 
+const fetchAttachmentType = (fileExtension) => config.get('sendgrid.supportedAttachments')[fileExtension];
+
+const assembleAttachments = async (attachments) => {
+    const formattedAttachments = [];
+    for (const attachment in attachments) {
+        if (attachments.hasOwnProperty(attachment)) {
+            const attachmentType = fetchAttachmentType(path.extname(attachment.filename));
+            const { key, bucket } = attachment.source;
+            /* eslint-disable no-await-in-loop */
+            const file = await fetchAttachment(bucket, key);
+            /* eslint-enable no-await-in-loop */
+            formattedAttachments.push({
+                content: file,
+                filename: attachment.filename,
+                type: attachmentType,
+                disposition: 'attachment'
+            });
+        }
+    }
+
+    return formattedAttachments;
+};
+
+const assembleDispatchParams = async ({ subject, templateKeyBucket, htmlTemplate, textTemplate, attachments, sourceDetails }) => {
+    const dispatchParams = { subject };
+
+    if (templateKeyBucket) {
+        const { bucket, key } = templateKeyBucket;
+        dispatchParams.htmlTemplate = await fetchHtmlTemplate(bucket, key);
+    }
+
+    if (htmlTemplate) {
+        dispatchParams.htmlTemplate = htmlTemplate;
+    }
+
+    if (textTemplate) {
+        dispatchParams.textTemplate = textTemplate;
+    } else {
+        dispatchParams.textTemplate = htmlToText.fromString(dispatchParams.htmlTemplate, { wordwrap: false });
+    }
+
+    if (attachments && attachments.length > 0) {
+        dispatchParams.attachments = await assembleAttachments(attachments);
+    }
+
+    if (sourceDetails) {
+        dispatchParams.sourceDetails = sourceDetails;
+    }
+
+    return dispatchParams;
+};
+
+const formatResult = (result) => ({ statusCode: result[0].statusCode, statusMessage: result[0].statusMessage });
+
 /**
  * This function sends emails to provided addresses. The email template is stored remotely and a locator key-bucket pair is required.
- * @param {object} event 
- * @property {object} templateKeyBucket An object whose properties are the s3 key and bucket containing the emails html template.
- * @property {string} textTemplate The emails text template.
- * @property {subject} subject The emails subject.
- * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
+ * @param    {object}  event 
+ * @property {object}  templateKeyBucket An object whose properties are the s3 key and bucket containing the emails html template.
+ * @property {string}  textTemplate The emails text template. String formatting requires the name of the varriable enclosed in double braces i.e {{variableName}}. This also applies to the html template on S3.
+ * @property {subject} subject The emails subject. Required.
+ * @property {array}   destinationArray An array containing destination objects. Each destination object is of the form { emailAddress: 'user@email.com, templateVariables: { username: 'Jane', etc...} }.
+ * @property {array}   attachments An array containing objects of the form { source: { key, bucket }, filename: 'file.pdf' }, describing the attachment's name and location in s3.
  */
 module.exports.sendEmailsFromSource = async (event) => {
     try {
@@ -142,32 +239,35 @@ module.exports.sendEmailsFromSource = async (event) => {
             return { result: 'Empty invocation' };
         }
 
-        const { subject, templateKeyBucket, textTemplate, destinationArray } = opsUtil.extractParamsFromEvent(event);
-        validateDispatchEvent({ subject, templateKeyBucket, textTemplate, destinationArray });
+        const { subject, templates, destinationArray, attachments, sourceDetails } = opsUtil.extractParamsFromEvent(event);
+        const { templateKeyBucket, textTemplate } = templates;
+        const invalidDestinationArray = validateDispatchEvent({ subject, templateKeyBucket, destinationArray, attachments });
 
-        const dispatchParams = { subject, destinationArray };
-
-        if (templateKeyBucket) {
-            const { bucket, key } = templateKeyBucket;
-            dispatchParams.htmlTemplate = await obtainHtmlTemplate(bucket, key);
+        const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(JSON.stringify(destination)));
+        if (sanitizedDestinationArray.length === 0) {
+            throw new Error('No valid destinations found');
         }
 
-        if (textTemplate) {
-            dispatchParams.textTemplate = textTemplate;
-        }
-
-        validateDispatchParams(dispatchParams);
-
-        const dispatchPayload = assembleDispatchPayload(dispatchParams, destinationArray);
-
-        validateDispatchPayload(dispatchPayload);
-
-        const resultOfDispatch = await sendGridMail.send(dispatchPayload);
-
-        const formattedResult = { statusCode: resultOfDispatch[0].statusCode, statusMessage: resultOfDispatch[0].statusMessage };
-        logger('Result of email send: ', formattedResult);
+        const assembledDispatchParams = await assembleDispatchParams({ subject, templateKeyBucket, textTemplate, attachments, sourceDetails });
         
-        return { result: 'SUCCESS' };
+        validateDispatchParams(assembledDispatchParams);
+
+        const dispatchChunks = chunkDispatchRecipients(sanitizedDestinationArray);
+        /* eslint-enable id-length */
+
+        for (const chunk of dispatchChunks) {
+            const dispatchPayload = assembleDispatchPayload(assembledDispatchParams, chunk);
+            validateDispatchPayload(dispatchPayload);
+            /* eslint-disable no-await-in-loop */
+            const resultOfDispatch = await sendGridMail.send(dispatchPayload);
+            /* eslint-enable no-await-in-loop */
+            const formattedResult = formatResult(resultOfDispatch);
+            logger('Result of email send: ', formattedResult);
+        }
+        
+        const failedAddresses = invalidDestinationArray.map((destinationDetails) => destinationDetails.emailAddress);
+
+        return { result: 'SUCCESS', failedAddresses };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERR', message: err.message };
@@ -176,39 +276,47 @@ module.exports.sendEmailsFromSource = async (event) => {
 
 /**
  * This function sends emails to provided addresses.
- * @param {object} event 
- * @property {object} htmlTemplate The emails html template.
- * @property {string} textTemplate The emails text template.
- * @property {subject} subject The emails subject.
- * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively.
+ * @param    {object}  event 
+ * @property {object}  htmlTemplate The emails html template.
+ * @property {string}  textTemplate The emails text template. String formatting requires the name of the varriable enclosed in double braces i.e {{variableName}}. This also applies to the html template on S3.
+ * @property {subject} subject Required property. The emails subject.
+ * @property {array}   destinationArray An array containing destination objects. Each destination object is of the form { emailAddress: 'user@email.com, templateVariables: { username: 'John', etc...} }.
+ * @property {array}   attachments An array containing objects of the form { source: { key, bucket }, filename: 'file.pdf' }, describing the attachment's name and location in s3.
  */
 module.exports.sendEmails = async (event) => {
     try {
         if (opsUtil.isWarmup(event)) {
             return { result: 'Empty invocation' };
         }
+        const { subject, templates, destinationArray, attachments, sourceDetails } = opsUtil.extractParamsFromEvent(event);
+        const { htmlTemplate, textTemplate } = templates;
+        const invalidDestinationArray = validateDispatchEvent({ subject, htmlTemplate, destinationArray, attachments });
 
-        const { subject, htmlTemplate, textTemplate, destinationArray } = opsUtil.extractParamsFromEvent(event);
-        validateDispatchEvent({ subject, htmlTemplate, textTemplate, destinationArray });
-
-        const dispatchParams = { subject, htmlTemplate, destinationArray };
-
-        if (textTemplate) {
-            dispatchParams.textTemplate = textTemplate;
+        const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(JSON.stringify(destination)));
+        if (sanitizedDestinationArray.length === 0) {
+            throw new Error('No valid destinations found');
         }
 
-        validateDispatchParams(dispatchParams);
-
-        const dispatchPayload = assembleDispatchPayload(dispatchParams, destinationArray);
-
-        validateDispatchPayload(dispatchPayload);
-
-        const resultOfDispatch = await sendGridMail.send(dispatchPayload);
-
-        const formattedResult = { statusCode: resultOfDispatch[0].statusCode, statusMessage: resultOfDispatch[0].statusMessage };
-        logger('Result of email send: ', formattedResult);
+        const assembledDispatchParams = await assembleDispatchParams({ subject, htmlTemplate, textTemplate, attachments, sourceDetails });
         
-        return { result: 'SUCCESS' };
+        validateDispatchParams(assembledDispatchParams);
+
+        const dispatchChunks = chunkDispatchRecipients(destinationArray);
+        /* eslint-enable id-length */
+
+        for (const chunk of dispatchChunks) {
+            const dispatchPayload = assembleDispatchPayload(assembledDispatchParams, chunk);
+            validateDispatchPayload(dispatchPayload);
+            /* eslint-disable no-await-in-loop */
+            const resultOfDispatch = await sendGridMail.send(dispatchPayload);
+            /* eslint-enable no-await-in-loop */
+            const formattedResult = formatResult(resultOfDispatch);
+            logger('Result of email send: ', formattedResult);
+        }
+
+        const failedAddresses = invalidDestinationArray.map((destinationDetails) => destinationDetails.emailAddress);
+
+        return { result: 'SUCCESS', failedAddresses };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERR', message: err.message };

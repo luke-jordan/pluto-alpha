@@ -326,8 +326,8 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
 describe('*** UNIT TEST SYSTEM EMAIL ROUTE ***', () => {
 
-    const testUserName = 'Hoelun';
-    const testEmailAddress = 'hoelun@khanate.com';
+    const testUserName = 'James';
+    const testEmailAddress = 'james@email.com';
     const validSubject = 'Welcome to Jupiter';
 
     const validHtmlTemplate = '<p>Greetings {{user}}, \nWelcome to Jupiter.</p>';
@@ -348,8 +348,10 @@ describe('*** UNIT TEST SYSTEM EMAIL ROUTE ***', () => {
 
     it('Assembles email payload and invokes send email lambda', async () => {
         const testEmailEvent = {
-            htmlTemplate: validHtmlTemplate,
-            textTemplate: validTextTemplate,
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: [testDestinationDetails, testDestinationDetails]
         };
@@ -371,8 +373,10 @@ describe('*** UNIT TEST SYSTEM EMAIL ROUTE ***', () => {
 
     it('Returns error on failure', async () => {
         const testEmailEvent = {
-            htmlTemplate: validHtmlTemplate,
-            textTemplate: validTextTemplate,
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
             subject: validSubject,
             destinationArray: [testDestinationDetails, testDestinationDetails]
         };
