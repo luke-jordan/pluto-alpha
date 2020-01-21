@@ -22,7 +22,10 @@ const resetStubs = (...stubs) => {
 describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
     
     const testAccountNumber = '3243463245';
-    const testAccountType = 'SAVINGSACCOUNT';
+    
+    const testAccountTypeInput = 'CURRENT';
+    const testAccountTypeRequest = 'CURRENTCHEQUEACCOUNT';
+
     const testIdNumber = '8307065125487';
     const testReference = 'TEST_REF';
 
@@ -40,7 +43,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
                 'bvs_details[verificationType]': 'Individual',
                 'bvs_details[bank_name]': 'NEDBANK',
                 'bvs_details[acc_number]': testAccountNumber,
-                'bvs_details[acc_type]': testAccountType,
+                'bvs_details[acc_type]': testAccountTypeRequest,
                 'bvs_details[yourReference]': testReference,
                 'bvs_details[id_number]': testIdNumber,
                 'bvs_details[initials]': 'JF',
@@ -49,20 +52,25 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
             json: true
         };
 
-        const expectedResponse = {
+        const mockRequestResponse = {
             'Status': 'Success',
             'XDSBVS': {
               'JobStatus': 'Enquiry Submitted Successfully',
               'JobID': '72828608'
             }
-          };
+        };
+
+        const expectedResponse = {
+            status: 'SUCCESS',
+            jobId: '72828608'
+        };
         
-        requestStub.withArgs(expectedRequestArgs).resolves(expectedResponse);
+        requestStub.withArgs(expectedRequestArgs).resolves(mockRequestResponse);
 
         const testEvent = {
             bankName: 'NEDBANK',
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             initials: 'JF',
             surname: 'Kennedy',
@@ -87,7 +95,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
                 'bvs_details[verificationType]': 'Individual',
                 'bvs_details[bank_name]': 'ABSA',
                 'bvs_details[acc_number]': testAccountNumber,
-                'bvs_details[acc_type]': testAccountType,
+                'bvs_details[acc_type]': testAccountTypeRequest,
                 'bvs_details[yourReference]': testReference,
                 'bvs_details[id_number]': testIdNumber,
                 'bvs_details[initials]': 'JF',
@@ -101,7 +109,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         const testEvent = {
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             initials: 'JF',
             surname: 'Kennedy',
@@ -112,14 +120,14 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Balderdash' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'Balderdash' });
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
     });
 
     it('Fails on missing bank name', async () => {
         const testEvent = {
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             initials: 'JF',
             surname: 'Kennedy',
@@ -130,7 +138,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing bank name' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_BANK_NAME' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -138,7 +146,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         const testEvent = {
             bankName: 'JP MORGAN',
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             initials: 'JF',
             surname: 'Kennedy',
@@ -149,14 +157,14 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The bank you have entered is currently not supported' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'BANK_NOT_SUPPORTED' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on missing account number', async () => {
         const testEvent = {
             bankName: 'ABSA',
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             initials: 'JF',
             surname: 'Kennedy',
@@ -167,7 +175,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing account number' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_ACCOUNT_NUMBER' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -185,7 +193,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing account type' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_ACCOUNT_TYPE' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -204,7 +212,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Invalid account type' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'INVALID_ACCOUNT_TYPE' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -212,7 +220,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         const testEvent = {
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             initials: 'JF',
             surname: 'Kennedy',
             nationalId: testIdNumber
@@ -222,7 +230,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing reference' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_REFERENCE' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -230,7 +238,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         const testEvent = {
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             initials: 'JF',
             surname: 'Kennedy'
@@ -240,7 +248,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The individuals national id is required for individual account verification' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_NATIONAL_ID' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -248,7 +256,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         const testEvent = {
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             surname: 'Kennedy',
             nationalId: testIdNumber
@@ -258,7 +266,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The individuals initials are required for individual account verification' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_INITIALS' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -266,7 +274,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         const testEvent = {
             bankName: 'ABSA',
             accountNumber: testAccountNumber,
-            accountType: testAccountType,
+            accountType: testAccountTypeInput,
             reference: testReference,
             initials: 'JF',
             nationalId: testIdNumber
@@ -276,7 +284,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The individuals surname is required for individual account verification' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_SURNAME' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -316,6 +324,8 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         }
     };
 
+    const expectedTransformedOkay = { result: 'VERIFIED' };
+
     beforeEach(() => {
         resetStubs(requestStub);
     });
@@ -339,8 +349,61 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         logger('Result of account verification check:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal(testResponse);
+        expect(result).to.deep.equal(expectedTransformedOkay);
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
+    });
+
+    it('Reports failure if bank account ID number does not match', async () => {
+        const expectedRequestArgs = {
+            method: 'POST',
+            url: config.get('pbVerify.endpoint'),
+            formData: {
+                'memberkey': config.get('pbVerify.memberKey'),
+                'password': config.get('pbVerify.password'),
+                'jobId': testJobId
+            },
+            json: true
+        };
+
+        const failureResponse = JSON.parse(JSON.stringify(testResponse));
+        failureResponse['Results']['IDNUMBERMATCH'] = 'No';
+        requestStub.withArgs(expectedRequestArgs).resolves(failureResponse);
+        const testEvent = { jobId: testJobId };
+
+        const result = await handler.checkStatus(testEvent);
+        logger('Result of account verification check:', result);
+
+        expect(result).to.deep.equal({ result: 'FAILED', cause: 'ID number does not match' });
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
+    });
+
+    it('Reports failure if account is not open or does not accept credits', async () => {
+        const testEvent = { jobId: testJobId };
+
+        const expectedRequestArgs = {
+            method: 'POST',
+            url: config.get('pbVerify.endpoint'),
+            formData: {
+                'memberkey': config.get('pbVerify.memberKey'),
+                'password': config.get('pbVerify.password'),
+                'jobId': testJobId
+            },
+            json: true
+        };
+
+        const failureResponse = JSON.parse(JSON.stringify(testResponse));
+        failureResponse['Results']['ACCOUNT-OPEN'] = 'No';
+        requestStub.withArgs(expectedRequestArgs).resolves(failureResponse);
+
+        const result = await handler.checkStatus(testEvent);
+        expect(result).to.deep.equal({ result: 'FAILED', cause: 'Account not open' });
+
+        const secondFailureReponse = JSON.parse(JSON.stringify(testResponse));
+        secondFailureReponse['Results']['ACCOUNTACCEPTSCREDITS'] = 'No';
+        requestStub.withArgs(expectedRequestArgs).resolves(secondFailureReponse);
+        
+        const secondResult = await handler.checkStatus(testEvent);
+        expect(secondResult).to.deep.equal({ result: 'FAILED', cause: 'Account does not accept credits' });
     });
 
     it('Fails on unexpected response from third party', async () => {
@@ -363,7 +426,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         logger('Result of account verification check:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: { Status: 'Failure' }});
+        expect(result).to.deep.equal({ status: 'ERROR', details: { Status: 'Failure' }});
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
     });
 
@@ -374,7 +437,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         logger('Result of account verification check on error:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing job id' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'Missing job id' });
         expect(requestStub).to.have.not.been.called;
     });
 

@@ -27,7 +27,8 @@
     "cache": {
         "port": 6739,
         "detailsTTL": 900,
-        "host": "localhost"
+        "host": "localhost",
+        "withdrawalKeyPrefix": "WITHDRAWAL_DETAILS"
     },
     "projection": {
         "defaultDays": 3,

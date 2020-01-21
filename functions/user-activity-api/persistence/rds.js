@@ -530,3 +530,28 @@ module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, pay
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
 };
+
+/**
+ * SImple utility method to adjust a settlement status, when not settling (e.g., move from initiated to pending)
+ */
+module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStatus }) => {
+    if (!settlementStatus) {
+        throw new Error('Must supply settlement status');
+    }
+
+    if (settlementStatus === 'SETTLED') {
+        throw new Error('Use settle TX for this operation');
+    }
+
+    const updateDef = { 
+        key: { transactionId },
+        value: { settlementStatus },
+        table: config.get('tables.accountTranscations'),
+        returning: 'updated_time'
+    };
+
+    const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);
+    logger('Result of update: ', resultOfUpdate);
+
+    return Array.isArray(resultOfUpdate) && resultOfUpdate.length > 0 ? moment(resultOfUpdate[0]['updated_time']) : null; 
+};
