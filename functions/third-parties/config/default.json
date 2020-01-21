@@ -67,8 +67,8 @@
             "CAPITEC"
         ],
         "accountTypes": [
-            "CURRENTCHEQUEACCOUNT",
-            "SAVINGSACCOUNT",
+            "CURRENT",
+            "SAVINGS",
             "TRANSMISSION",
             "BOND"
         ]

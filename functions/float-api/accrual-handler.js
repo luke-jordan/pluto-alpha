@@ -17,6 +17,18 @@ BigNumber.prototype.valueOf = () => {
 
 const calculatePercent = (total, account) => (new BigNumber(account)).dividedBy(total);
 
+const consolidateCsvRows = (priorBalanceMap, priorEntityBalances, rowsFromRds) => rowsFromRds.map((row) => {
+  const allocType = row['allocated_to_type'];
+  if (allocType === 'END_USER_ACCOUNT') {
+    row['prior_balance'] = priorBalanceMap.get(row['allocated_to_id']);
+  } else if (allocType === 'COMPANY_SHARE' || allocType === 'BONUS_POOL') {
+    row['prior_balance'] = priorEntityBalances.get(row['allocated_to_id']);
+  } else {
+    row['prior_balance'] = priorEntityBalances.get('FLOAT_ITSELF');
+  }
+  return row;
+});
+
 /**
  * The core function. Receives an instruction that interest (or other return) has been accrued, increases the balance recorded,
  * and then allocates the amounts to the client's bonus and company shares, and thereafter allocates to all accounts with 
@@ -143,8 +155,13 @@ module.exports.accrue = async (event) => {
 
     // finally, we read back all the transactions with this log ID, stick them in a CSV, and stash them in S3
     const resultOfTxs = await rds.fetchRecordsRelatedToLog(logId);
-    const resultOfStash = await csvFile.writeAndUploadCsv({ filePrefix: 'accrual', logId, rowsFromRds: resultOfTxs });
+    priorEntityBalances.set('FLOAT_ITSELF', priorBalanceInUnit);
+    const recordsForCsv = consolidateCsvRows(userAllocations.priorAllocationMap, priorEntityBalances, resultOfTxs);
+    const resultOfStash = await csvFile.writeAndUploadCsv({ filePrefix: 'accrual', logId, rowsFromRds: recordsForCsv });
     logger('And result of stashing: ', resultOfStash);
+    
+    // sending the prior balance map will be heavy, so remove it
+    Reflect.deleteProperty(userAllocations, 'priorAllocationMap');
 
     const returnBody = {
       newBalance: newFloatBalance.updatedBalance,
@@ -249,6 +266,7 @@ module.exports.allocate = async (event) => {
   
   return {
       allocationRecords: resultOfAllocations,
+      priorAllocationMap: currentAllocatedBalanceMap,
       bonusAllocation: bonusAllocationResult || { }
   };
 };

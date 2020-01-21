@@ -114,6 +114,7 @@ const obtainSystemWideIdFromProfile = async (lookUpPayload) => {
     logger('Invoking system wide user ID lookup with params: ', lookUpInvoke);
     const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
     const systemIdPayload = JSON.parse(systemWideIdResult['Payload']);
+    logger('Result of system wide user ID lookup: ', systemIdPayload);
 
     if (systemIdPayload.statusCode !== 200) {
         return null;
@@ -313,7 +314,7 @@ module.exports.manageUser = async (event) => {
         const adminUserId = opsCommonUtil.extractUserDetails(event).systemWideUserId;
 
         const params = { ...opsCommonUtil.extractParamsFromEvent(event), adminUserId };
-        logger('Params for user management: ', event);
+        logger('Params for user management: ', params);
 
         if (!params.systemWideUserId || !params.fieldToUpdate || !params.reasonToLog) {
             const message = 'Requests must include a user ID to update, a field, and a reason to log';
@@ -341,6 +342,9 @@ module.exports.manageUser = async (event) => {
             logger('Updating the FinWorks (balance sheet management) identifier for the user');
             if (!params.accountId) {
                 return opsCommonUtil.wrapResponse('Error, must pass in account ID');
+            }
+            if (!params.newIdentifier) {
+                return opsCommonUtil.wrapResponse('Error, must pass in newIdentifier');
             }
             resultOfUpdate = await handleBsheetAccUpdate(params);
         }

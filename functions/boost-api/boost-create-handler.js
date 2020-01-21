@@ -265,7 +265,7 @@ const retrieveBoostAmounts = (params) => {
 };
 
 const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boostId, boostAmountDict, initiator }) => {
-    const eventType = `BOOST_${boostType}_CREATED`;
+    const eventType = `BOOST_CREATED_${boostType}`;
     const options = {
         initiator,
         context: {

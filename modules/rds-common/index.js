@@ -4,7 +4,7 @@ process.env.SUPPRESS_NO_CONFIG_WARNING = 'y';
 
 const logger = require('debug')('jupiter:rds-common:main');
 const config = require('config');
-const decamelizeKeys = require('decamelize-keys');
+const decamelize = require('decamelize');
 
 const sleep = require('util').promisify(setTimeout);
 const secretsWaitInterval = 100;
@@ -15,6 +15,8 @@ const format = require('pg-format');
 const AWS = require('aws-sdk');
 
 const { QueryError, CommitError, NoValuesError } = require('./errors');
+
+const decamelizeKeys = (object, separator) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, separator)]: object[key] }), {});
 
 /**
  * This provides wrapping, abstraction, and simplification for interacting with 

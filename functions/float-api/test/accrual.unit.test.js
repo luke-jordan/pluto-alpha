@@ -424,7 +424,11 @@ describe('Primary allocation of unallocated float lamdba', () => {
         const allocationResult = await handler.allocate(incomingEvent, { });
         expect(allocationResult).to.exist;
         
-        const expectedBody = { allocationRecords: mockResultFromRds, bonusAllocation: { 'BONUS': bonusTxId, amount: -75 } };
+        const expectedBody = { 
+            allocationRecords: mockResultFromRds, 
+            bonusAllocation: { 'BONUS': bonusTxId, amount: -75 },
+            priorAllocationMap: existingBalances 
+        };
         expect(allocationResult).to.deep.equal(expectedBody);
         
         expect(apportionStub).to.have.been.calledOnceWithExactly(amountToAllocate, existingBalances, true);

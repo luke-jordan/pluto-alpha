@@ -30,16 +30,6 @@ const extractTxTagIfExists = (txDetails, desiredTag) => {
   return '';
 };
 
-// todo : remove need for this in app soon
-const legacyKeyFix = (passedSaveDetails) => {
-  const saveDetails = { ...passedSaveDetails };
-  saveDetails.amount = saveDetails.amount || saveDetails.savedAmount;
-  saveDetails.unit = saveDetails.unit || saveDetails.savedUnit;
-  saveDetails.currency = saveDetails.currency || saveDetails.savedCurrency;
-  ['savedAmount', 'savedUnit', 'savedCurrency'].forEach((key) => Reflect.deleteProperty(saveDetails, key));
-  return saveDetails;
-};
-
 const save = async (eventBody) => {
   const saveInformation = eventBody;
   logger('Have a saving request inbound: ', saveInformation);
@@ -105,7 +95,7 @@ module.exports.initiatePendingSave = async (event) => {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
     
-    const saveInformation = legacyKeyFix(JSON.parse(event.body));
+    const saveInformation = JSON.parse(event.body);
 
     if (!saveInformation.accountId) {
       return invalidRequestResponse('Error! No account ID provided for the save');
