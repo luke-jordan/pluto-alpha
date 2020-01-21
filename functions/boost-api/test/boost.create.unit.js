@@ -209,7 +209,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 boostType: 'REFERRAL', boostCategory: 'USER_CODE_USED', boostId: expectedFromRds.boostId, ...expectedBoostAmount
             }
         };
-        expect(publishMultiStub).to.have.been.calledOnceWithExactly(['user-id-1', 'user-id-2'], 'BOOST_REFERRAL_CREATED', expectedUserLogOptions);
+        expect(publishMultiStub).to.have.been.calledOnceWithExactly(['user-id-1', 'user-id-2'], 'BOOST_CREATED_REFERRAL', expectedUserLogOptions);
     });
 
 });

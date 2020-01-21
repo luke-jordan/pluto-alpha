@@ -35,6 +35,11 @@ resource "aws_lambda_function" "admin_user_manage" {
                   "names": {
                       "admin_api_worker": "${terraform.workspace}/ops/psql/admin"
                   }
+              },
+              "publishing": {
+                "userEvents": {
+                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                }
               }
           }
       )}"
@@ -95,6 +100,11 @@ resource "aws_iam_role_policy_attachment" "admin_user_manage_profile_invoke_poli
 resource "aws_iam_role_policy_attachment" "admin_user_manage_tx_settle" {
   role = aws_iam_role.admin_user_manage_role.name
   policy_arn = aws_iam_policy.admin_save_settle_lambda_invoke_policy.arn 
+}
+
+resource "aws_iam_role_policy_attachment" "admin_user_manage_event_publish" {
+  role = aws_iam_role.admin_user_manage_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
 resource "aws_iam_role_policy_attachment" "admin_user_manage_secret_get" {
