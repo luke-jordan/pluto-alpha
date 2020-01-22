@@ -332,11 +332,11 @@ module.exports.obtainAllAccountsWithPriorAllocations = async (floatId, currency,
     const accountTable = config.get('tables.openAccounts');
     
     // note : the inner join is necessary just in case something gets into the allocated to IDs that is not an account ID,
-    // to prevent later issues with foreign key constraints
+    // to prevent later issues with foreign key constraints; also need to make sure of t_state
     const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
         `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
-        `where float_id = $1 and currency = $2 and allocated_to_type = $3 group by account_id, unit`;
-    const queryParams = [floatId, currency, entityType];
+        `where float_id = $1 and currency = $2 and allocated_to_type = $3 and t_state = $4 group by account_id, unit`;
+    const queryParams = [floatId, currency, entityType, 'SETTLED'];
     
     logger('Assembled sum query: ', sumQuery);
     logger('And values: ', queryParams);

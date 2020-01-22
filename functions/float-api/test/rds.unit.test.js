@@ -438,8 +438,8 @@ describe('Test account summation and float balances', () => {
         // NB : todo : filter on transaction_type (i.e., accruals vs others)
         const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
             `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
-            `where float_id = $1 and currency = $2 and allocated_to_type = $3 group by account_id, unit`;
-        const valuesArray = [common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT];
+            `where float_id = $1 and currency = $2 and allocated_to_type = $3 and t_state = $4 group by account_id, unit`;
+        const valuesArray = [common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT, 'SETTLED'];
 
         queryStub.withArgs(sumQuery, valuesArray).resolves(consolidatedRows);
         
@@ -463,9 +463,9 @@ describe('Test account summation and float balances', () => {
     it('Should handle case where no accounts found for float', async () => {
         const sumQuery = `select account_id, unit, sum(amount) from ${floatTable} inner join ${accountTable} ` +
             `on ${floatTable}.allocated_to_id = ${accountTable}.account_id::varchar ` + 
-            `where float_id = $1 and currency = $2 and allocated_to_type = $3 group by account_id, unit`;
+            `where float_id = $1 and currency = $2 and allocated_to_type = $3 and t_state = $4 group by account_id, unit`;
 
-        queryStub.withArgs(sumQuery, ['bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT]).returns([]);
+        queryStub.withArgs(sumQuery, ['bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT, 'SETTLED']).returns([]);
         const queryResult = await rds.obtainAllAccountsWithPriorAllocations('bad_float', 'USD', constants.entityTypes.END_USER_ACCOUNT);
         logger('Result: ', queryResult);
         expect(queryResult).to.exist;

@@ -85,11 +85,10 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
 
     const txTable = config.get('tables.accountTransactions');
         const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
-        const txIndices = '$5, $6, $7, $8, $9';
-        const unitQuery = `select distinct(unit) from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
-            `and creation_time < to_timestamp($3)`;
-        const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` +
-            `and creation_time < to_timestamp($4) and transaction_type in (${txIndices}) group by unit`;
+        const txIndices = '$6, $7, $8, $9, $10';
+        const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
+            `settlement_status in ($3, $4) and creation_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
+        // on this one we leave out the accrued
         const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
             `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
 
@@ -98,17 +97,15 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     it('Obtain the balance of an account at a point in time correctly', async () => {
         const testTime = moment();
         const testLastTxTime = moment().subtract(5, 'hours');
-        const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
+        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...transTypes];
         
         logger('Test time value of: ', testTime.valueOf());
         
-        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([{ 'unit': 'HUNDREDTH_CENT' }, { 'unit': 'WHOLE_CENT' }]);
-        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'HUNDREDTH_CENT', testTime.unix(), ...transTypes]).
-            returns(Promise.resolve([{ 'sum': testBalance, 'unit': 'HUNDREDTH_CENT' }]));
-        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'WHOLE_CENT', testTime.unix(), ...transTypes]).
-            returns(Promise.resolve([{ 'sum': testBalanceCents, 'unit': 'WHOLE_CENT' }]));
-        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).
-            returns(Promise.resolve([{ 'creation_time': testLastTxTime._d }]));
+        queryStub.withArgs(sumQuery, queryArgs).resolves([
+            { 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }
+        ]);
+        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([{ 'creation_time': testLastTxTime.format() }]);
+
         const expectedBalance = testBalance + (100 * testBalanceCents);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
@@ -116,18 +113,14 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         expect(balanceResult).to.exist;
         expect(balanceResult).to.have.property('amount', expectedBalance);
         expect(balanceResult).to.have.property('unit', 'HUNDREDTH_CENT');
-        expect(balanceResult).to.have.property('lastTxTime');
-        // result of sinon hatred
-        const balanceLastTxTime = balanceResult.lastTxTime;
-        expect(testLastTxTime.isSame(balanceLastTxTime)).to.be.true;
-        // expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', lastTxTime: testHelper.momentMatchertestLastTxTime });
+        expect(balanceResult.lastTxTime.format()).to.equal(testLastTxTime.format());
     });
 
     it('Handle case of no prior transactions properly', async () => {
         const testTime = moment();
-        const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
+        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...transTypes];
 
-        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([]);
+        queryStub.withArgs(sumQuery, queryArgs).resolves([]);
         queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([]);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);

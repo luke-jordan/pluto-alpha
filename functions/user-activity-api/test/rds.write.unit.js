@@ -215,8 +215,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         multiTableStub.resolves(txDetailsFromRds);
 
         // note: this is test elsewhere and is quite complex so no point repeating here
-        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.onSecondCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onFirstCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onSecondCall().resolves([]);
         
         const testSettledArgs = { 
             accountId: testAccountId,
@@ -247,7 +247,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(resultOfSaveInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
 
         expect(multiTableStub).to.have.been.calledOnce; // todo: add args
-        expect(queryStub).to.have.been.calledThrice; // because also fetches timestamp
+        expect(queryStub).to.have.been.calledTwice; // because also fetches timestamp
         expectNoCalls([insertStub]);
     });
 
@@ -364,9 +364,9 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         queryStub.withArgs(expectedRetrieveTxQuery, [testAcTxId]).resolves(txDetailsFromRdsOnFetch);
         multiOpStub.resolves(txDetailsFromRdsPostUpdate);
 
-        // as above: this is tested elsewhere and is quite complex so no point repeating here
-        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.onThirdCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);        
+        // note: this is test elsewhere and is quite complex so no point repeating here
+        queryStub.onSecondCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onThirdCall().resolves([]);
 
         const expectedTxDetails = [{ 
             'accountTransactionId': testAcTxId,
@@ -416,9 +416,11 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         }];
 
         queryStub.withArgs(expectedRetrieveTxQuery, [transactionId]).resolves(txDetailsFromRdsOnFetch);
-        queryStub.withArgs(sinon.match.any, [testAccountId, 'ZAR', sinon.match.any]).resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.onThirdCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);        
-        
+
+        // note: this is test elsewhere and is quite complex so no point repeating here
+        queryStub.onSecondCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onThirdCall().resolves([]);
+                        
         const resultOfUpdate = await rds.updateTxToSettled({ transactionId, paymentDetails, settlementTime });
         logger('Result of settlement of already settled transaction:', resultOfUpdate);
         
@@ -459,15 +461,15 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
 
     it('Updates transaction to settled', async () => {
         const pendingTxQuery = `select * from ${config.get('tables.accountTransactions')} where transaction_id = $1`;
-        const findMomentOfLastSettlementQuery = `select creation_time from transaction_data.core_transaction_ledger where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
         
         uuidStub.onFirstCall().returns(testFlTxAdjustId);
         uuidStub.onSecondCall().returns(testFlTxAllocId);
         
         queryStub.withArgs(pendingTxQuery, [testTxId]).resolves([expectedRowItem]);
-        queryStub.onSecondCall().resolves([{ 'unit': 'HUNDREDTH_CENT' }]);
-        queryStub.onThirdCall().resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': 1000 }]);
-        queryStub.withArgs(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]).resolves([{ 'creation_time': testCreationTime }]);
+        
+        // note: this is test elsewhere and is quite complex so no point repeating here
+        queryStub.onSecondCall().resolves([{ 'sum': testSaveAmount, 'unit': 'HUNDREDTH_CENT' }]);
+        queryStub.onThirdCall().resolves([{ 'creation_time': testCreationTime }]);
         
         multiOpStub.resolves([
             [{ 'transaction_id': testTxId, 'account_id': testAccountId, 'updated_time': testUpdatedTime }],
@@ -496,7 +498,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         // arguments on stub are checked above (this test is slightly duplicative)
         expect(uuidStub).to.have.been.calledThrice;
         expect(queryStub).to.have.been.calledWith(pendingTxQuery, [testTxId]);
-        expect(queryStub).to.have.been.calledWith(findMomentOfLastSettlementQuery, [testAccountId, 'ZAR', sinon.match.number]);
         expect(multiOpStub).to.have.been.calledOnce;
     });
 
