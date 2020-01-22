@@ -39,19 +39,24 @@ module.exports.generateBankRef = (accountInfo) => {
     const countPart = String(accountInfo.priorSaveCount);
     const refStem = accountInfo.bankRefStem;
 
-    const charsLeft = MAX_LENGTH_REF - refStem.length - countPart.length;
+    const numberCharsRemaining = MAX_LENGTH_REF - refStem.length - countPart.length;
     const preferredPad = PREF_COUNT_LENGTH - countPart.length;
 
-    logger(`Characters left: ${charsLeft}, and preferred pad length: ${preferredPad}`);
+    logger(`Characters left: ${numberCharsRemaining}, and preferred pad length: ${preferredPad}`);
 
     let expectedBankRef = refStem;
-    if (preferredPad <= charsLeft) {
+    if (preferredPad <= numberCharsRemaining) {
         expectedBankRef = `${refStem}-${countPart.padStart(PREF_COUNT_LENGTH, '0')}`;
-    } else if (charsLeft >= 0) {
-        const countLength = countPart.length + charsLeft;
+    } else if (numberCharsRemaining >= 0) {
+        const countLength = countPart.length + numberCharsRemaining;
         expectedBankRef = `${refStem}-${countPart.padStart(countLength, '0')}`;
     } else {
-        logger('Well this is a problem. Remove the first non-digit character?');
+        // worst case : means we have to remove chars from the reference just before the reference counter
+        const refNumMatch = (/\d{2,3}$/u).exec(refStem);
+        const charsToTrim = -(numberCharsRemaining) + 1; // i.e., to get us back to zero
+        const trimmedStem = `${refStem.substring(0, refNumMatch.index - charsToTrim)}${refNumMatch[0]}`;
+        expectedBankRef = `${trimmedStem}-${countPart}`;
+        logger('For extra long name, reference length: ', expectedBankRef.length);
     }
 
     return expectedBankRef;

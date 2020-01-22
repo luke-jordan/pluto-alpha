@@ -436,7 +436,7 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
 
     it('should delete push token if no token given', async () => {
         // we restrict multi-row deletes so first get the insertion IDs, then delete them
-        const selectIds = `select insertion_id where push_provider = $1 and user_id = $2`;
+        const selectIds = `select insertion_id from ${config.get('tables.pushTokenTable')} where push_provider = $1 and user_id = $2`;
         selectQueryStub.withArgs(selectIds, [mockProvider, mockUserId]).resolves([{ 'insertion_id': 111 }, { 'insertion_id': 118 }]);
 
         const mockDeleteRowArgs = (insertionId) => [config.get('tables.pushTokenTable'), ['insertion_id'], [insertionId]];

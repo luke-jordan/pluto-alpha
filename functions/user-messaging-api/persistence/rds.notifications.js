@@ -321,7 +321,7 @@ module.exports.deletePushToken = async ({ token, provider, userId }) => {
         logger('Push token deletion resulted in:', rdsResult);
         deleteCount = rdsResult.rowCount;
     } else if (provider) {
-        const insertionQuery = 'select insertion_id where push_provider = $1 and user_id = $2';
+        const insertionQuery = `select insertion_id from ${tokenTable} where push_provider = $1 and user_id = $2`;
         const fetchedRows = await rdsConnection.selectQuery(insertionQuery, [provider, userId]);
         logger('About to delete token with insertion IDs: ', fetchedRows);
         const deletePromises = fetchedRows.map((row) => rdsConnection.deleteRow(tokenTable, ['insertion_id'], [row['insertion_id']]));
