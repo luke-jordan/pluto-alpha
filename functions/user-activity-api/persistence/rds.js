@@ -5,19 +5,14 @@ const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment-timezone');
 
+const opsUtil = require('ops-util-common');
+
 const camelcase = require('camelcase');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-// NOTE: these are expressed in multiples of the DEFAULT unit, which is hundredth cent (basis point equivalent of currency)
 const DEFAULT_UNIT = 'HUNDREDTH_CENT';
-const floatUnitTransforms = {
-    DEFAULT: 1,
-    HUNDREDTH_CENT: 1,
-    WHOLE_CENT: 100,
-    WHOLE_CURRENCY: 100 * 100
-};
 
 const camelizeKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [camelcase(key)]: object[key] }), {});
 
@@ -113,47 +108,24 @@ module.exports.countAvailableBoosts = async (accountId) => {
     return resultOfQuery && resultOfQuery.length > 0 ? resultOfQuery[0]['count'] : 0;
 };
 
-// todo : modernize this (see account figures)
 module.exports.sumAccountBalance = async (accountId, currency, time = moment()) => {
     const tableToQuery = config.get('tables.accountTransactions');
     
-    const findUnitsQuery = `select distinct(unit) from ${tableToQuery} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
-        `and creation_time < to_timestamp($3)`;
-
     const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
     const preTransParamCount = 5;
-    const transTypeIdxs = transTypesToInclude.map((_, idx) => `$${idx + preTransParamCount}`).join(', ');
-
-    const sumQueryForUnit = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and unit = $3 and ` +
-        `settlement_status = 'SETTLED' and creation_time < to_timestamp($4) and transaction_type in (${transTypeIdxs}) group by unit`;
-
-    // logger('Finding units prior to : ', time.format(), ' which is unix timestamp: ', time.unix());
-    const params = [accountId, currency, time.unix()];
-    logger('Seeking balance with query: ', sumQueryForUnit, ' and params: ', params);
-
-    const unitQueryResult = await rdsConnection.selectQuery(findUnitsQuery, params);
-    logger('Result of unit query: ', unitQueryResult);
-    const usedUnits = unitQueryResult.map((row) => row.unit);
-
-    const unitQueries = [];
     
-    for (let i = 0; i < usedUnits.length; i += 1) {
-        const unit = usedUnits[i];
-        const sumParams = [accountId, currency, unit, time.unix(), ...transTypesToInclude]; 
-        const thisQuery = rdsConnection.selectQuery(sumQueryForUnit, sumParams);
-        // logger('Retrieved query: ', thisQuery);
-        unitQueries.push(thisQuery);
-    }
+    const transTypeIdxs = opsUtil.extractArrayIndices(transTypesToInclude, preTransParamCount + 1);
 
-    const queryResults = await Promise.all(unitQueries);
-    logger('Unit query results: ', queryResults);
-    // const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['allocated_to_id']]: row['sum']}), {}); 
-    const unitsWithSums = queryResults.reduce((obj, queryResult) => ({ ...obj, [queryResult[0]['unit']]: queryResult[0]['sum']}), {});
+    const sumQuery = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and ` +
+        `settlement_status in ($3, $4) and creation_time < to_timestamp($5) and transaction_type in (${transTypeIdxs}) group by unit`;
 
-    logger('For units : ', usedUnits, ' result of sums: ', unitsWithSums);
+    const params = [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude];
+    logger('Summing with query: ', sumQuery, ' and params: ', params);
 
-    const totalBalanceInDefaultUnit = Object.keys(unitsWithSums).map((unit) => unitsWithSums[unit] * floatUnitTransforms[unit]).
-        reduce((cum, value) => cum + value, 0);
+    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
+    logger('Result of unit query: ', summedRows);
+    
+    const totalBalanceInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
     logger('For account ID, RDS calculation yields result: ', totalBalanceInDefaultUnit);
 
     // note: try combine with earlier, and/or optimize when these get big
