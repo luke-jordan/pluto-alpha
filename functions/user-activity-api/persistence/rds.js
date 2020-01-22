@@ -518,7 +518,7 @@ module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStat
     const updateDef = { 
         key: { transactionId },
         value: { settlementStatus },
-        table: config.get('tables.accountTranscations'),
+        table: config.get('tables.accountTransactions'),
         returning: 'updated_time'
     };
 

@@ -295,4 +295,28 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId]);
     });
 
+    it('Checks for duplicate saves', async () => {
+        const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+            `amount = $2 and currency = $3 and unit = $4 and settlement_status = $5 and ` +
+            `creation_time > $6 order by creation_time desc limit 1`;
+
+        const selectValues = [testAccountId, testSaveAmount, 'ZAR', 'HUNDREDTH_CENT', 'INITIATED', sinon.match.string];
+
+        queryStub.resolves([expectedTxRow]);
+
+        const params = {
+            accountId: testAccountId,
+            amount: testSaveAmount,
+            currency: 'ZAR',
+            unit: 'HUNDREDTH_CENT'
+        };
+
+        const resultOfCheck = await rds.checkForDuplicateSave(params);
+        logger('Duplicates:', resultOfCheck);
+
+        expect(resultOfCheck).to.exist;
+        expect(resultOfCheck).to.deep.equal(camelizeKeys(expectedTxRow));
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, selectValues);
+    });
+
 });

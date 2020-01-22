@@ -139,9 +139,7 @@ module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId
     let relevantAccountId = accountId;
     if (!relevantAccountId) {
         const getIdQuery = `select account_id from ${config.get('tables.transactionTable')} where transaction_id = $1`;
-        logger('Finding account ID with query: ', getIdQuery);
-        const accountIdFetchRow = await rdsConnection.selectQuery(getIdQuery, [transactionId]);
-        logger('Result of finding account ID: ', accountIdFetchRow);
+        const accountIdFetchRow = await rdsConnection.selectQuery(getIdQuery, [relevantAccountId]);
         relevantAccountId = accountIdFetchRow[0]['account_id'];
     }
 
