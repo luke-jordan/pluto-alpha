@@ -434,29 +434,37 @@ describe('*** UNIT TESTING PUSH TOKEN RDS FUNCTIONS ***', () => {
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(...mockUpdateArgs);
     });
 
-    it('should delete push token', async () => {
+    it('should delete push token if no token given', async () => {
+        // we restrict multi-row deletes so first get the insertion IDs, then delete them
+        const selectIds = `select insertion_id where push_provider = $1 and user_id = $2`;
+        selectQueryStub.withArgs(selectIds, [mockProvider, mockUserId]).resolves([{ 'insertion_id': 111 }, { 'insertion_id': 118 }]);
 
-        // observe during integration tests
-        const mockDeleteRowArgs = [
-            config.get('tables.pushTokenTable'),
-            ['push_provider', 'user_id'],
-            [mockProvider, mockUserId]
-        ];
+        const mockDeleteRowArgs = (insertionId) => [config.get('tables.pushTokenTable'), ['insertion_id'], [insertionId]];
 
-        deleteRowStub.resolves({
-            command: 'DELETE',
-            rowCount: 1,
-            oid: null,
-            rows: []
-        });
+        deleteRowStub.resolves({ command: 'DELETE', rowCount: 1, rows: [] });
 
-        const expectedResult = [];
+        const expectedResult = { deleteCount: 2 };
 
-        const result = await rdsUtil.deletePushToken(mockProvider, mockUserId);
+        const result = await rdsUtil.deletePushToken({ provider: mockProvider, userId: mockUserId });
         logger('Result of push token deletion:', result);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(selectIds, [mockProvider, mockUserId]);    
+        expect(deleteRowStub).to.have.been.calledTwice;
+        expect(deleteRowStub).to.have.been.calledWithExactly(...mockDeleteRowArgs(111));
+        expect(deleteRowStub).to.have.been.calledWithExactly(...mockDeleteRowArgs(118));
+    });
+
+    // use the user ID as well to effectively prevent someone deleting another user's ID
+    it('Should delete push token if token itself given', async () => {
+        const testToken = 'THISTOKEN';
+        const mockDeleteRowArgs = [config.get('tables.pushTokenTable'), ['push_token', 'user_id'], [testToken, mockUserId]];
+        
+        deleteRowStub.resolves({ command: 'DELETE', rowCount: 1 });
+
+        const result = await rdsUtil.deletePushToken({ token: testToken, userId: mockUserId });
+        expect(result).to.deep.equal({ deleteCount: 1 });
         expect(deleteRowStub).to.have.been.calledOnceWithExactly(...mockDeleteRowArgs);
     });
 });

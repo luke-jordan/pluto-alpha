@@ -63,7 +63,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
         const persistedToken = uuid();
 
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
-        deletePushTokenStub.resolves([]);
+        deletePushTokenStub.resolves({ deleteCount: 1 });
         insertPushTokenStub.resolves([{ 'insertionId': 1, 'creationTime': mockCreationTime }]);
 
         const mockEvent = {
@@ -134,14 +134,13 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
     });
 
 
-    it('Deletes push token', async () => {
+    it('Deletes push token when given provider in body', async () => {
         const mockUserId = uuid();
         const expectedProvider = uuid();
-        deletePushTokenStub.resolves([]);
+        deletePushTokenStub.resolves({ deleteCount: 2 });
 
         const mockEvent = {
-            provider: expectedProvider,
-            userId: mockUserId,
+            body: JSON.stringify({ provider: expectedProvider }),
             requestContext: testHelper.requestContext(mockUserId)
         };
 
@@ -150,16 +149,29 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
 
         expect(resultOfDeletion).to.exist;
         expect(resultOfDeletion.statusCode).to.equal(200);
-        expect(resultOfDeletion.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS', details: [] }));
-        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(expectedProvider, mockUserId);
+        expect(resultOfDeletion.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS', details: { deleteCount: 2 } }));
+        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly({ provider: expectedProvider, userId: mockUserId });
+    });
+
+    it('Deletes push token when given token in body', async () => {
+        const mockToken = 'THISTOKEN';
+        const mockUserId = uuid();
+        
+        const mockEvent = {
+            body: JSON.stringify({ token: mockToken }),
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        deletePushTokenStub.resolves({ deleteCount: 1 });
+        const resultOfDeletion = await handler.deletePushToken(mockEvent);
+        expect(resultOfDeletion).to.exist;
+        expect(deletePushTokenStub).have.been.calledOnceWithExactly({ token: mockToken, userId: mockUserId });
     });
 
     it('Fails on missing authorization', async () => {
         const mockUserId = uuid();
         const expectedProvider = uuid();
         const mockEvent = { provider: expectedProvider, userId: mockUserId };
-
-        deletePushTokenStub.resolves([]);
 
         const resultOfDeletion = await handler.deletePushToken(mockEvent);
         logger('Result of unauthorized token deletion:', resultOfDeletion);
@@ -172,7 +184,6 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
     it('Fails on authorization-event user mismatch', async () => {
         const mockUserId = uuid();
         const expectedProvider = uuid();
-        deletePushTokenStub.resolves([]);
 
         const mockEvent = {
             provider: expectedProvider,
@@ -195,8 +206,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
         deletePushTokenStub.throws(new Error('PersistenceError'));
 
         const mockEvent = {
-            provider: expectedProvider,
-            userId: mockUserId,
+            body: JSON.stringify({ provider: expectedProvider, userId: mockUserId }),
             requestContext: testHelper.requestContext(mockUserId)
         };
 
@@ -207,7 +217,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
         expect(resultOfDeletion.statusCode).to.equal(500);
         expect(resultOfDeletion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfDeletion.body).to.deep.equal(JSON.stringify('PersistenceError'));
-        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly(expectedProvider, mockUserId);
+        expect(deletePushTokenStub).to.have.been.calledOnceWithExactly({ provider: expectedProvider, userId: mockUserId });
     });
 });
 
