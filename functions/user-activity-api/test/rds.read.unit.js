@@ -283,7 +283,8 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         const txTable = config.get('tables.accountTransactions');
 
         const selectQuery = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
-            `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 group by human_ref`;
+            `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 ` + 
+            `and transaction_type = $2 group by human_ref`;
 
         queryStub.resolves([{ 'human_ref': 'BUS123', 'count': 2 }]);
 
@@ -292,7 +293,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
         expect(bankRefInfo).to.exist;
         expect(bankRefInfo).to.deep.equal({ humanRef: 'BUS123', count: 2 });
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId, 'USER_SAVING_EVENT']);
     });
 
 });

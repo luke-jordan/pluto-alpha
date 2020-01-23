@@ -49,7 +49,7 @@ const UNIT_MULTIPLIERS = {
 const fetchUserProfile = async (systemWideUserId) => {
     const profileFetchLambdaInvoke = {
         FunctionName: config.get('lambdas.fetchProfile'),
-        InvocationType: 'RequestResponse', 
+        InvocationType: 'RequestResponse',
         Payload: JSON.stringify({ systemWideUserId })
     };
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
@@ -78,7 +78,7 @@ const getBankVerificationJobId = async (bankDetails, userProfile) => {
     };
 
     const lambdaInvocation = {
-        FunctionName: '',
+        FunctionName: config.get('lambdas.userBankVerify'),
         InvocationType: 'RequestResponse',
         Payload: JSON.stringify({ operation: 'initialize', parameters })
     };
@@ -113,7 +113,7 @@ const checkBankVerification = async (systemWideUserId) => {
 
     const parameters = { jobId: bankDetails.verificationJobId };
     const lambdaInvocation = {
-        FunctionName: '',
+        FunctionName: config.get('lambdas.userBankVerify'),
         InvocationType: 'RequestResponse',
         Payload: JSON.stringify({ operation: 'statusCheck', parameters })
     };

@@ -227,8 +227,9 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
 };
 
 const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
-    const logPayload = { userId: systemWideUserId, eventType, initiator: adminUserId, options: { context }};
-    return publisher.publishUserEvent(logPayload);
+    const logPayload = { initiator: adminUserId, options: { context }};
+    logger('Dispatching user log: ', logPayload);
+    return publisher.publishUserEvent(systemWideUserId, eventType, logPayload);
 };
 
 const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reasonToLog }) => {
