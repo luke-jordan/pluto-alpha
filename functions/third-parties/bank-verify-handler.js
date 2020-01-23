@@ -100,7 +100,7 @@ module.exports.initialize = async (event) => {
         if (mockVerifyOn) {
             const mockResult = Boolean(config.get('mock.result'));
             logger('Mock result: ', mockResult);
-            return { statusCode: 200, verified: mockResult };
+            return { status: 'SUCCESS', verified: 'mock-job-id' };
         }
 
         const params = extractEventBody(event);
@@ -153,6 +153,13 @@ const doesResponseVerify = (response) => {
  */
 module.exports.checkStatus = async (event) => {
     try {
+        const mockVerifyOn = config.has('mock.enabled') && typeof config.get('mock.enabled') === 'boolean' && config.get('mock.enabled');
+        if (mockVerifyOn) {
+            const mockResult = Boolean(config.get('mock.result'));
+            logger('Mock result: ', mockResult);
+            return { result: mockResult };
+        }
+
         const params = extractEventBody(event);
         if (!params.jobId) {
             throw new Error('Missing job id');

@@ -96,6 +96,11 @@ resource "aws_iam_role_policy_attachment" "withdraw_update_vpc_execution_policy"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "withdraw_update_bank_verify_invoke_policy" {
+  role = aws_iam_role.withdraw_update_role.name
+  policy_arn = aws_iam_policy.lamdba_invoke_bank_verify_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "withdraw_update_user_event_publish_policy" {
   role = "${aws_iam_role.withdraw_update_role.name}"
   policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"

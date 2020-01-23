@@ -29,6 +29,10 @@ resource "aws_lambda_function" "bank_account_verify" {
                 "endpoint": "${var.pbverify_endpoint[terraform.workspace]}",
                 "memberKey": "${var.pbverify_member_key[terraform.workspace]}",
                 "password": "${var.pbverify_password[terraform.workspace]}"
+              },
+              "mock": {
+                "enabled": "true",
+                "result": "VERIFIED"
               }
           }
       )}"

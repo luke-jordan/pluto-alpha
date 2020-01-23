@@ -391,6 +391,30 @@ resource "aws_iam_policy" "lambda_invoke_history_aggregate_access" {
 EOF
 }
 
+resource "aws_iam_policy" "lamdba_invoke_bank_verify_access" {
+    name = "lambda_bank_verify_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "InvokeBankVerify",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.bank_account_verify.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 
 /////////////// COMPOSITE POLICIES FOR PROCESSING/ADMIN LAMBDAS THAT DO A LOT ///////////////////
 

@@ -96,13 +96,18 @@ resource "aws_iam_role_policy_attachment" "withdraw_initiate_vpc_execution_polic
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "withdraw_initiate_bank_verify_invoke_policy" {
+  role = aws_iam_role.withdraw_initiate_role.name
+  policy_arn = aws_iam_policy.lamdba_invoke_bank_verify_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "withdraw_initiate_user_event_publish_policy" {
-  role = "${aws_iam_role.withdraw_initiate_role.name}"
-  policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
+  role = aws_iam_role.withdraw_initiate_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
 resource "aws_iam_role_policy_attachment" "withdraw_initiate_secret_get" {
-  role = "${aws_iam_role.withdraw_initiate_role.name}"
+  role = aws_iam_role.withdraw_initiate_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
