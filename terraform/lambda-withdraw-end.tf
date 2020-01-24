@@ -30,6 +30,10 @@ resource "aws_lambda_function" "withdraw_end" {
                 "database": "${local.database_config.database}",
                 "port" :"${local.database_config.port}"
               },
+              "cache": {
+                "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+                "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+              },
               "secrets": {
                 "enabled": true,
                 "names": {

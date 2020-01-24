@@ -101,6 +101,11 @@ resource "aws_iam_role_policy_attachment" "withdraw_initiate_bank_verify_invoke_
   policy_arn = aws_iam_policy.lamdba_invoke_bank_verify_access.arn
 }
 
+resource "aws_iam_role_policy_attachment" "withdraw_initiate_profile_fetch" {
+  role = aws_iam_role.withdraw_initiate_role.name
+  policy_arn = var.user_profile_admin_policy_arn[terraform.workspace]
+}
+
 resource "aws_iam_role_policy_attachment" "withdraw_initiate_user_event_publish_policy" {
   role = aws_iam_role.withdraw_initiate_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn

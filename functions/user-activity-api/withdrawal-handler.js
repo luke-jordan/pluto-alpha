@@ -61,6 +61,7 @@ const fetchUserProfile = async (systemWideUserId) => {
 // note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
 const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails, verificationJobId) => {
     const accountTimeOut = config.get('cache.detailsTTL');
+    logger('Logging, passed job ID: ', verificationJobId);
     await redis.set(systemWideUserId, JSON.stringify({ ...bankAccountDetails, verificationJobId }), 'EX', accountTimeOut);
     logger('Done! Can move along');
 };
@@ -85,6 +86,7 @@ const getBankVerificationJobId = async (bankDetails, userProfile) => {
 
     logger('Invoking bank verification initialize, with invocation: ', lambdaInvocation);
     const resultOfLambda = await lambda.invoke(lambdaInvocation).promise();
+    logger('Received response from bank verification lambda: ', resultOfLambda);
     if (resultOfLambda['StatusCode'] !== 200) {
         throw new Error(resultOfLambda['Payload']);
     }
@@ -99,6 +101,7 @@ const getBankVerificationJobId = async (bankDetails, userProfile) => {
 
 const checkBankVerification = async (systemWideUserId) => {
     const bankDetailsRaw = await redis.get(systemWideUserId);
+    logger('Bank details from Redis: ', bankDetailsRaw);
     const bankDetails = JSON.parse(bankDetailsRaw);
     
     if (Reflect.has(bankDetails, 'verificationStatus')) {

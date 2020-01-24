@@ -100,7 +100,7 @@ module.exports.initialize = async (event) => {
         if (mockVerifyOn) {
             const mockResult = Boolean(config.get('mock.result'));
             logger('Mock result: ', mockResult);
-            return { status: 'SUCCESS', verified: 'mock-job-id' };
+            return { status: 'SUCCESS', jobId: 'mock-job-id' };
         }
 
         const params = extractEventBody(event);

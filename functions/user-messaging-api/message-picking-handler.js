@@ -260,9 +260,13 @@ const determineAnchorMsg = (openingMessages) => {
  * @param {string} destinationUserId The messages destination user id.
  * @param {string} withinFlowFromMsgId The messageId of the last message in the sequence to be processed prior to the current one.
  */
-module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowFromMsgId = null) => {
-    logger('Initiating message retrieval, excluding push notifications');
-    const retrievedMessages = await persistence.getNextMessage(destinationUserId, true);
+module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructionId, withinFlowFromMsgId }) => {
+    logger('Initiating message retrieval, of just card notifications, for user: ', destinationUserId);
+    const retrievedMessages = await (instructionId 
+        ? persistence.getInstructionMessage(destinationUserId, instructionId)
+        : persistence.getNextMessage(destinationUserId, ['CARD']) 
+    );
+    logger('Retrieved from RDS: ', retrievedMessages);
     // first, check it's not empty. if so, return empty.
     if (!Array.isArray(retrievedMessages) || retrievedMessages.length === 0) {
         return [];
@@ -312,10 +316,6 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext, destinationU
     logger('And log publish result: ', publishResult);
 };
 
-// For now, for mobile test
-const dryRunGameResponseOpening = require('./dry-run-messages');
-const dryRunGameChaseArrows = require('./dry-run-arrow');
-
 /**
  * Wrapper for the above, based on token, i.e., direct fetch
  * @param {object} event An object containing the request context, with request body being passed as query string parameters.
@@ -334,20 +334,17 @@ module.exports.getNextMessageForUser = async (event) => {
         if (!userDetails) {
             return { statusCode: 403 };
         }
-
-        const queryParams = event.queryStringParameters;
-        if (queryParams && queryParams.gameDryRun) {
-            const relevantGame = queryParams.gameType || 'TAP_SCREEN';
-            const messagesToReturn = relevantGame === 'CHASE_ARROW' ? dryRunGameChaseArrows : dryRunGameResponseOpening;
-            return { statusCode: 200, body: JSON.stringify(messagesToReturn)};
-        }
-
-        const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : null;
-        const userMessages = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId, withinFlowFromMsgId);
+        const destinationUserId = userDetails.systemWideUserId;
+        
+        // here we have multiple flow options: either we have an 'anchor message' that starts the sequence, or we have
+        // a message instruction ID, which then produces all the messages for the user that follow that message, or
+        // we have an instruction ID, in which case we pull the messages for that instruction
+        const queryParams = event.queryStringParameters || {};
+        const { withinFlowFromMsgId, instructionId } = queryParams;
+        
+        const userMessages = await exports.fetchAndFillInNextMessage({ destinationUserId, withinFlowFromMsgId, instructionId });
         logger('Retrieved user messages: ', userMessages);
-        const resultBody = {
-            messagesToDisplay: userMessages
-        };
+        const resultBody = { messagesToDisplay: userMessages };
 
         if (Array.isArray(userMessages) && userMessages.length > 0) {
             await fireOffMsgStatusUpdate(userMessages, event.requestContext);

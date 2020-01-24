@@ -4,6 +4,7 @@ const logger = require('debug')('jupiter:message:picker-rds');
 const config = require('config');
 const moment = require('moment');
 
+const opsUtil = require('ops-util-common');
 const camelcaseKeys = require('camelcase-keys');
 
 const RdsConnection = require('rds-common');
@@ -23,17 +24,12 @@ const transformMsg = (msgRawFromRds) => {
         reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
 };
 
-module.exports.getNextMessage = async (destinationUserId, excludePushNotifications = true) => {
-    const values = [destinationUserId, 'READY_FOR_SENDING'];
-    
-    let pushSuffix = '';
-    if (excludePushNotifications) {
-        pushSuffix = `and display ->> 'type' != $3`;
-        values.push('PUSH');
-    }
+module.exports.getNextMessage = async (destinationUserId, messageTypes) => {
+    const values = [destinationUserId, 'READY_FOR_SENDING', ...messageTypes];
+    const typeIndices = opsUtil.extractArrayIndices(messageTypes, 3);
 
     const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status = $2 ` + 
-        `and end_time > current_timestamp and deliveries_done < deliveries_max ${pushSuffix}`;
+        `and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' in (${typeIndices})`;
     
     const result = await rdsConnection.selectQuery(query, values);
     logger('Retrieved next message from RDS: ', result);
@@ -46,6 +42,12 @@ module.exports.getPendingPushMessages = async () => {
     const values = ['READY_FOR_SENDING', 'PUSH'];
     const resultOfQuery = await rdsConnection.selectQuery(query, values);
     return resultOfQuery.map((msg) => transformMsg(msg));
+};
+
+module.exports.getInstructionMessage = async (destinationUserId, instructionId) => {
+    const query = `select * from ${userMessageTable} where destination_user_id = $1 and instruction_id = $2`;
+    const result = await rdsConnection.selectQuery(query, [destinationUserId, instructionId]);
+    return result.map((msg) => transformMsg(msg));
 };
 
 // ////////////////////////////////////////////////////////////////////////////////
