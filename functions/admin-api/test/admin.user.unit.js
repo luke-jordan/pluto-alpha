@@ -309,9 +309,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         insertAccountLogStub.resolves({ creationTime: testCreationTime });
 
-        const expectedUserEvent = {
-            userId: testUserId,
-            eventType: 'ADMIN_SETTLED_SAVE',
+        const expectedPublishArgs = {
             initiator: testUserId,
             options: {
                 context: {
@@ -380,13 +378,12 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         expect(resultOfUpdate).to.deep.equal(expectedResult);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
         expect(publishEventStub).to.have.been.calledTwice;
-        expect(publishEventStub).to.have.been.calledWith(expectedUserEvent);
-        expectedUserEvent.eventType = 'SAVING_PAYMENT_SUCCESSFUL';
-        expect(publishEventStub).to.have.been.calledWith(expectedUserEvent);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_SETTLED_SAVE', expectedPublishArgs);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'SAVING_PAYMENT_SUCCESSFUL', expectedPublishArgs);
         expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
     });
 
-    it('Handles non settled user transaction status', async () => {
+    it('Handles pending transactions', async () => {
 
         const mockLambdaResponse = {
             StatusCode: 200,
@@ -401,9 +398,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         adjustTxStatusStub.resolves({ settlementStatus: 'PENDING', updatedTime: testUpdatedTime });
 
-        const expectedUserEvent = {
-            userId: testUserId,
-            eventType: 'ADMIN_UPDATED_TX',
+        const expectedPublishArgs = {
             initiator: testUserId,
             options: {
                 context: {
@@ -450,7 +445,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(expectedResult);
-        expect(publishEventStub).to.have.been.calledWith(expectedUserEvent);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_UPDATED_TX', expectedPublishArgs);
         expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
         expect(lamdbaInvokeStub).to.have.not.been.called;
     });
@@ -571,8 +566,6 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         };
 
         const expectedPublishArgs = {
-            userId: testUserId,
-            eventType: 'ADMIN_UPDATED_BSHEET_TAG',
             initiator: testUserId,
             options: {
                 context: {
@@ -606,7 +599,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
             tagPrefix: 'FINWORKS',
             newIdentifier: 'NEW_IDENTIFIER'
         });
-        expect(publishEventStub).to.have.been.calledOnceWithExactly(expectedPublishArgs);
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'ADMIN_UPDATED_BSHEET_TAG', expectedPublishArgs);
         expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
         expect(lamdbaInvokeStub).to.have.not.been.called;
     });
