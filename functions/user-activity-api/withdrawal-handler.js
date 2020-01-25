@@ -336,12 +336,16 @@ module.exports.confirmWithdrawal = async (event) => {
         
         // last, publish this (i.e., so instruction goes out)
         const txProperties = await persistence.fetchTransaction(transactionId);
+        logger('Withdrawal TX properties: ', txProperties);
+        const newBalance = await persistence.sumAccountBalance(txProperties.accountId, txProperties.currency);
+        logger('New account balance: ', newBalance);
+        
         const context = {
             transactionId,
             accountId: txProperties.accountId,
             timeInMillis: txProperties.settlementTime,
             withdrawalAmount: collapseAmount(txProperties),
-            newBalance: collapseAmount(response.balance)
+            newBalance: collapseAmount(newBalance)
         };
         
         await publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
