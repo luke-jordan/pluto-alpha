@@ -567,7 +567,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
             key: { transactionId: testTransactionId},
             value: { settlementStatus: testSettlementStatus },
             table: config.get('tables.accountTransactions'),
-            returning: 'updated_time'
+            returnClause: 'updated_time'
         };
 
         const params = {

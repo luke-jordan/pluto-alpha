@@ -45,12 +45,15 @@ describe('*** UNIT TEST FLOAT CSV WRITE AND UPLOAD ***', async () => {
             ContentType: 'text/csv',
             Bucket: config.get('records.bucket'),
             Key: `test_prefix/test_prefix.${testCurrentTime.format('YYYY-MM-DD')}.${testLogId}.csv`,
-            Body: Buffer.from('test\nvalue\n', 'utf-8')
+            Body: Buffer.from('name,surname\nJohn,Doe\nJane,Doe\n', 'utf-8')
         };
 
         const params = {
             filePrefix: 'test_prefix',
-            rowsFromRds: [{ test: 'value' }],
+            rowsFromRds: [
+                { name: 'John', surname: 'Doe' },
+                { name: 'Jane', surname: 'Doe' }
+            ],
             logId: testLogId
         };
 
@@ -73,12 +76,15 @@ describe('*** UNIT TEST FLOAT CSV WRITE AND UPLOAD ***', async () => {
             ContentType: 'text/csv',
             Bucket: config.get('records.bucket'),
             Key: `test_prefix/test_prefix.${testCurrentTime.format('YYYY-MM-DD')}.${testLogId}.csv`,
-            Body: Buffer.from('test\nvalue\n', 'utf-8')
+            Body: Buffer.from('name,surname\nJohn,Doe\nJane,Doe\n', 'utf-8')
         };
 
         const params = {
             filePrefix: 'test_prefix',
-            rowsFromRds: [{ test: 'value' }],
+            rowsFromRds: [
+                { name: 'John', surname: 'Doe' },
+                { name: 'Jane', surname: 'Doe' }
+            ],
             logId: testLogId
         };
 
