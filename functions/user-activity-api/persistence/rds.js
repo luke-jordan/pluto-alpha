@@ -519,8 +519,8 @@ module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStat
     const updateDef = { 
         key: { transactionId },
         value: { settlementStatus },
-        table: config.get('tables.accountTranscations'),
-        returning: 'updated_time'
+        table: config.get('tables.accountTransactions'),
+        returnClause: 'updated_time'
     };
 
     const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);

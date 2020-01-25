@@ -221,6 +221,7 @@ module.exports.setWithdrawalAmount = async (event) => {
 
         // do a check first, before proceeding onwards
         const { systemWideUserId } = authParams;
+        logger('Setting withdrawal amount for user: ', systemWideUserId);
 
         const bankVerificationStatus = await checkBankVerification(systemWideUserId);
         if (bankVerificationStatus.result === 'FAILED') {
@@ -235,6 +236,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         const withdrawalInformation = JSON.parse(event.body);
         
         if (!withdrawalInformation.amount || !withdrawalInformation.unit || !withdrawalInformation.currency) {
+            logger('Withdrawal amount failed validation, responding with failure');
             return invalidRequestResponse('Error, must send amount to withdraw, along with unit and currency');
         }
 
@@ -266,10 +268,13 @@ module.exports.setWithdrawalAmount = async (event) => {
         // for now, we are just stubbing this
         const delayTime = moment().add(1, 'week');
         const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
-        
+
+        const resultObject = { transactionId, delayOffer };
+        logger('Result object on withdrawal amount, to send back: ', resultObject);
+
         // then, assemble and send back
         return {
-            statusCode: 200, body: JSON.stringify({ transactionId, delayOffer })
+            statusCode: 200, body: JSON.stringify(resultObject)
         };
     } catch (err) {
         return handleError(err);
@@ -320,8 +325,13 @@ module.exports.confirmWithdrawal = async (event) => {
 
         // user wants to go through with it, so (1) send an email about it, (2) update the transaction to pending, (3) update 3rd-party
         const resultOfUpdate = await persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'PENDING' });
+        logger('Result of update: ', resultOfUpdate);
 
         // then, return the balance
+        if (!resultOfUpdate) {
+            throw new Error('Transaction update returned empty rows');
+        }
+
         const response = { balance: resultOfUpdate.newBalance };
         
         // last, publish this (i.e., so instruction goes out)
