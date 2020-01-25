@@ -35,6 +35,10 @@ resource "aws_lambda_function" "withdraw_update" {
                 "database": "${local.database_config.database}",
                 "port" :"${local.database_config.port}"
               },
+              "cache": {
+                "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+                "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+              },
               "secrets": {
                 "enabled": true,
                 "names": {
@@ -52,7 +56,8 @@ resource "aws_lambda_function" "withdraw_update" {
   }
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, 
+      aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_https_dns_egress.id]
   }
 
   depends_on = [aws_cloudwatch_log_group.withdraw_update]
@@ -94,6 +99,11 @@ resource "aws_iam_role_policy_attachment" "withdraw_update_basic_execution_polic
 resource "aws_iam_role_policy_attachment" "withdraw_update_vpc_execution_policy" {
   role = "${aws_iam_role.withdraw_update_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "withdraw_update_bank_verify_invoke_policy" {
+  role = aws_iam_role.withdraw_update_role.name
+  policy_arn = aws_iam_policy.lamdba_invoke_bank_verify_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "withdraw_update_user_event_publish_policy" {

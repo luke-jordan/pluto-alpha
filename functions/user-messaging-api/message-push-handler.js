@@ -72,7 +72,6 @@ module.exports.managePushToken = async (event) => {
 module.exports.deletePushToken = async (event) => {
     try {
         const userDetails = msgUtil.extractUserDetails(event);
-        // logger('Event: ', event);
         logger('User details: ', userDetails);
         if (!userDetails) {
             return { statusCode: 403 };
@@ -81,14 +80,16 @@ module.exports.deletePushToken = async (event) => {
         if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'userId')) {
             return { statusCode: 403 };
         }
-        const deletionResult = await rdsMainUtil.deletePushToken(params.provider, params.userId);
+        
+        const relevantUserId = params.userId || userDetails.systemWideUserId;
+        const deleteParams = Reflect.has(params, 'token') ? { token: params.token, userId: relevantUserId } 
+            : { provider: params.provider, userId: relevantUserId }; 
+        const deletionResult = await rdsMainUtil.deletePushToken(deleteParams);
         logger('Push token deletion resulted in:', deletionResult);
+        
         return {
             statusCode: 200,
-            body: JSON.stringify({
-                result: 'SUCCESS',
-                details: deletionResult
-            })
+            body: JSON.stringify({ result: 'SUCCESS', details: deletionResult })
         };
     } catch (err) {
         logger('FATAL_ERROR:', err);

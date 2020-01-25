@@ -36,7 +36,8 @@ const handler = proxyquire('../capitalization-handler', {
         'allocateFloat': allocateNonUserStub,
         'allocateToUsers': allocateToUsersStub,
         'supercedeAccruals': supercedeAccrualsStub,
-        'fetchRecordsRelatedToLog': fetchRecordsStub
+        'fetchRecordsRelatedToLog': fetchRecordsStub,
+        '@noCallThru': true
     },
     './persistence/dynamodb': {
         'fetchConfigVarsForFloat': fetchFloatConfigVarsStub

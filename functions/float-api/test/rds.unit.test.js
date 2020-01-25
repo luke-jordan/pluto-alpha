@@ -16,7 +16,7 @@ chai.use(require('chai-as-promised'));
 
 const uuid = require('uuid/v4');
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 // for the moment, these are all we need
 const queryStub = sinon.stub();

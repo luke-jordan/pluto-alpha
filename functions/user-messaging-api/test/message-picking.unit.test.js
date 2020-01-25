@@ -54,7 +54,7 @@ const handler = proxyquire('../message-picking-handler', {
     '@noCallThru': true
 });
 
-describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
+describe.only('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
 
@@ -87,15 +87,16 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Fills in message templates properly', async () => {
+        logger('HUUUUH MAT: ', testUserId);
         const expectedMessage = 'Hello Luke Jordan. Did you know you have earned $100 in interest since you opened your account in July 2019?';
-        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_full_name}. Did you know you have earned #{total_interest} in interest since you opened your account in #{opened_date}?' 
         )]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
 
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         logger('Filled message: ', filledMessage);
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
@@ -104,15 +105,16 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Fills in account balances properly', async () => {
+        logger('HUUUUH ABT: ', testUserId);
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
-        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
         )]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 80000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
 
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
@@ -120,15 +122,16 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Handles last capitalization properly', async () => {
+        logger('HUUUUH LCT: ', testUserId);
         const expectedMessage = 'Hello Luke. This week you got paid $100 in interest';
-        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. This week you got paid #{last_capitalization} in interest'
         )]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
 
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
@@ -138,7 +141,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     it('Handles currencies not supported by JS i18n', async () => {
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is R8,000.';
-        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
         )]);
 
@@ -153,7 +156,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             defaultCurrency: 'ZAR'
         });
 
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
@@ -163,12 +166,12 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     it('Sorts messages by priority properly', async () => {
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
         const temlpate = 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.';
-        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(temlpate, 10), minimalMsgFromTemplate(temlpate, 5)]);
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(temlpate, 10), minimalMsgFromTemplate(temlpate, 5)]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
 
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         logger('Filled message:', filledMessage);
 
         expect(filledMessage).to.exist;
@@ -179,30 +182,16 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         const temlpate = 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.';
         getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(temlpate, 10, true), minimalMsgFromTemplate(temlpate, 5, true)]);
 
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         logger('Filled message:', filledMessage);
 
         expect(filledMessage).to.exist;
         expect(filledMessage).to.deep.equal([]);
     });
 
-    it('Dry run triggers without touching RDS etc', async () => {
-        const authContext = { authorizer: { systemWideUserId: testUserId }};
-        const testEvent = { queryStringParameters: { gameDryRun: true }, requestContext: authContext };
-        const dryRunMessages = await handler.getNextMessageForUser(testEvent);
-        expect(dryRunMessages).to.exist;
-    });
-
-    it('Arrow chase dry run triggers without touching RDS and returns properly', async () => {
-        const authContext = { authorizer: { systemWideUserId: testUserId }};
-        const testEvent = { queryStringParameters: { gameDryRun: true, gameType: 'CHASE_ARROW' }, requestContext: authContext };
-        const dryRunMessages = await handler.getNextMessageForUser(testEvent);
-        expect(dryRunMessages).to.exist;
-    });
-
     it('Returns empty where no messages are found', async () => {
         getMessagesStub.withArgs(testUserId).resolves({});
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         logger('Filled message: ', filledMessage);
 
         expect(filledMessage).to.exist;
@@ -216,23 +205,22 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     it('Catches errors properly', async () => {
         const authContext = { authorizer: { systemWideUserId: 'this-is-a-bad-user' }};
-        getMessagesStub.withArgs('this-is-a-bad-user').rejects(new Error('Bad user caused error!'));
+        getMessagesStub.withArgs('this-is-a-bad-user', ['CARD']).rejects(new Error('Bad user caused error!'));
         const testEvent = { requestContext: authContext };
         const errorEvent = await handler.getNextMessageForUser(testEvent);
         expect(errorEvent).to.exist;
         expect(errorEvent).to.deep.equal({ statusCode: 500, body: JSON.stringify('Bad user caused error!') });
     });
 
-    it('Fills in account balances properly', async () => {
-        const mockUserId = uuid();
+    it('Fills in account with name', async () => {
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
-        getMessagesStub.withArgs(testUserId).resolves([minimalMsgFromTemplate(
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
         )]);
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
         fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testUserId }, relevantProfileCols).resolves({ 
-            systemWideUserId: mockUserId, 
+            systemWideUserId: testUserId, 
             personalName: 'Luke', 
             familyName: 'Jordan', 
             creationTimeEpochMillis: testOpenMoment.valueOf(), 
@@ -242,7 +230,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             familyName: 'Jordan'
         });
 
-        const filledMessage = await handler.fetchAndFillInNextMessage(testUserId);
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
 

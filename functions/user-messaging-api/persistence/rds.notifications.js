@@ -311,12 +311,24 @@ module.exports.deactivatePushToken = async (provider, userId) => {
     return response.map((deactivationResult) => camelCaseKeys(deactivationResult));
 };
 
-module.exports.deletePushToken = async (provider, userId) => {
-    const columns = ['push_provider', 'user_id'];
-    const values = [provider, userId];
+module.exports.deletePushToken = async ({ token, provider, userId }) => {
+    let deleteCount = 0;
+    
+    const tokenTable = config.get('tables.pushTokenTable');
+    if (token) {
+        logger('Have token, deleting it: ', token);
+        const rdsResult = await rdsConnection.deleteRow(tokenTable, ['push_token', 'user_id'], [token, userId]);
+        logger('Push token deletion resulted in:', rdsResult);
+        deleteCount = rdsResult.rowCount;
+    } else if (provider) {
+        const insertionQuery = `select insertion_id from ${tokenTable} where push_provider = $1 and user_id = $2`;
+        const fetchedRows = await rdsConnection.selectQuery(insertionQuery, [provider, userId]);
+        logger('About to delete token with insertion IDs: ', fetchedRows);
+        const deletePromises = fetchedRows.map((row) => rdsConnection.deleteRow(tokenTable, ['insertion_id'], [row['insertion_id']]));
+        const deleteResults = await Promise.all(deletePromises);
+        logger('Result of deletion: ', deleteResults);
+        deleteCount = deleteResults.reduce((val, result) => val + result.rowCount, 0);
+    }
 
-    const result = await rdsConnection.deleteRow(config.get('tables.pushTokenTable'), columns, values);
-    logger('Push token deletion resulted in:', result);
-
-    return result.rows;
+    return { deleteCount };
 };
