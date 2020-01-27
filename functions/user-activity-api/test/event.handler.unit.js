@@ -205,7 +205,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             updatedTimeEpochMillis: moment().valueOf()
         };
 
-        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactScan: false });
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: false });
         const FWAccCreationInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
             surname: testUserProfile.familyName,
@@ -332,7 +332,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         // we just need the names and contact method
         const testProfile = { personalName: 'John', familyName: 'Nkomo', contactMethod: 'someone@jupitersave.com' };
         redisGetStub.withArgs(`USER_PROFILE::${testId}`).resolves(null);
-        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId, includeContactScan: true });
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId, includeContactMethod: true });
 
         redisGetStub.withArgs(`WITHDRAWAL_DETAILS::${testId}`).resolves(JSON.stringify({ account: 'Hello' }));
         lamdbaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
