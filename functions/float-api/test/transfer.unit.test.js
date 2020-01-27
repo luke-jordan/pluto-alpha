@@ -24,7 +24,8 @@ const allocateUserStub = sinon.stub();
 const handler = proxyquire('../transfer-handler', {
     './persistence/rds': {
         'allocateFloat': allocatePoolStub,
-        'allocateToUsers': allocateUserStub
+        'allocateToUsers': allocateUserStub,
+        '@noCallThru': true
     },
     '@noCallThru': true
 });

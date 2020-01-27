@@ -200,11 +200,11 @@ module.exports.completeSavingPaymentFlow = async (event) => {
     // for security reasons, we obviously don't trust the incoming path variables for payment status, but trigger a background check
     // to payment provider to make sure of it -- that then stores the result for when the user resumes
     
-    // removing this because the payment provider has lousy infra which makes this fail. restore when have exponential back up in place.
-    // if (resultType === 'SUCCESS') {
-    //   logger('Payment result is a success, fire off lambda invocation in the background');
-    //   await payment.triggerTxStatusCheck({ transactionId, paymentProvider });
-    // }
+    // if this fails it will just fail; if it succeeds, it will allow checking to be quicker later
+    if (resultType === 'SUCCESS') {
+      logger('Payment result is a success, fire off lambda invocation in the background');
+      await payment.triggerTxStatusCheck({ transactionId, paymentProvider });
+    }
 
     const response = {
       statusCode: 200,
@@ -284,7 +284,7 @@ module.exports.settle = async (settleInfo) => {
   return resultOfUpdate;
 };
 
-const handlePaymentFailure = async (failureType, transactionDetails) => {
+const handlePaymentPendingOrFailed = async (statusType, transactionDetails) => {
   logger('Payment failed, consider how and return which way, tx details: ', transactionDetails);
   
   const { clientId, floatId } = transactionDetails;
@@ -293,7 +293,7 @@ const handlePaymentFailure = async (failureType, transactionDetails) => {
 
   const bankDetails = { ...clientFloatVars.bankDetails, useReference: humanRef };
 
-  if (failureType === 'PAYMENT_FAILED') {
+  if (statusType === 'PAYMENT_FAILED') {
     return { 
       result: 'PAYMENT_FAILED', 
       messageToUser: `Sorry the payment failed. Please contact your bank or contact support and quote reference ${humanRef}`,
@@ -318,7 +318,7 @@ const dummyPaymentResult = async (systemWideUserId, params, transactionDetails) 
     return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
   }
 
-  return handlePaymentFailure(params.failureType, transactionDetails);
+  return handlePaymentPendingOrFailed(params.failureType, transactionDetails);
 };
 
 /**
@@ -376,13 +376,14 @@ module.exports.checkPendingPayment = async (event) => {
       const resultOfSave = await exports.settle({ transactionId, settlingUserId: systemWideUserId });
       await publishSaveSucceeded(systemWideUserId, transactionId);
       responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
+    } else if (statusCheckResult.result === 'PENDING') {
+      responseBody = await handlePaymentPendingOrFailed('PAYMENT_PENDING', transactionRecord);
     } else if (statusCheckResult.result === 'ERROR') {
-      responseBody = await handlePaymentFailure('PAYMENT_FAILED', transactionRecord);
+      responseBody = await handlePaymentPendingOrFailed('PAYMENT_FAILED', transactionRecord);
     } else {
-      responseBody = await handlePaymentFailure('Payment failed', transactionRecord);
+      responseBody = await handlePaymentPendingOrFailed('Payment failed', transactionRecord);
     }
     
-
     return { statusCode: 200, body: JSON.stringify(responseBody) };
 
   } catch (err) {

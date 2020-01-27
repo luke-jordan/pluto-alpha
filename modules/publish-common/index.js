@@ -38,7 +38,7 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             interface: options.interface,
             initiator: options.initiator,
             context: options.context,
-            generatedHash: generateHashForEvent(eventType)
+            hash: generateHashForEvent(eventType)
         };
 
         const messageForQueue = {

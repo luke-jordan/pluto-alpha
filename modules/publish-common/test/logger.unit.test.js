@@ -70,7 +70,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         interface: options.interface,
         initiator: options.initiator,
         context: options.initiator,
-        generatedHash: expectedHash(eventType)
+        hash: expectedHash(eventType)
     });
 
     const wellFormedSnsPublish = (userId, eventType, options) => ({

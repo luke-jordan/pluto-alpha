@@ -59,8 +59,9 @@ module.exports.fetchInfoForBankRef = async (accountId) => {
     const txTable = config.get('tables.accountTransactions');
     // note: left join in case this is first save ...
     const query = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
-        `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 group by human_ref`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId]);
+        `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 and ` + 
+        `transaction_type = $2 group by human_ref`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT']); // so we don't count accruals
     logger('Result of bank info query: ', resultOfQuery);
     return camelizeKeys(resultOfQuery[0]);
 };
@@ -518,8 +519,8 @@ module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStat
     const updateDef = { 
         key: { transactionId },
         value: { settlementStatus },
-        table: config.get('tables.accountTranscations'),
-        returning: 'updated_time'
+        table: config.get('tables.accountTransactions'),
+        returnClause: 'updated_time'
     };
 
     const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);

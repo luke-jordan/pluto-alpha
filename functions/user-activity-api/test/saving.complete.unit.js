@@ -283,7 +283,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
             bankName: 'JPM',
             accountType: 'Cheque',
             accountNumber: '123456',
-            branchCode: '343677',
+            routingNumber: '343677',
             beneficiaryName: 'Jupiter Savings'
         };
 

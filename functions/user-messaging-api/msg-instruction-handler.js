@@ -17,7 +17,7 @@ const validateMessageSequence = (template) => {
     const messageSequence = template.sequence;
     logger('Evaluating sequence:', messageSequence);
 
-    const standardSequenceProperties = ['title', 'body', 'display', 'actionToTake', 'followsPriorMessage', 'hasFollowingMessage'];
+    const standardSequenceProperties = ['title', 'body', 'display', 'followsPriorMessage', 'hasFollowingMessage'];
 
     if (!Array.isArray(messageSequence)) {
         throw new Error('Messages sequence must be contained within an array');
@@ -48,7 +48,7 @@ const validateMessageSequence = (template) => {
 
 const validateMessageTemplate = (messageTemplate) => {
     logger('Validating template:', messageTemplate);
-    const standardTemplateProperties = ['title', 'body', 'display', 'actionToTake'];
+    const standardTemplateProperties = ['title', 'body', 'display'];
     const receivedTemplateProperties = Object.keys(messageTemplate.template.DEFAULT);
 
     standardTemplateProperties.forEach((property) => {

@@ -147,8 +147,8 @@ module.exports.checkPayment = async ({ transactionId }) => {
             paymentDate: payload.paymentDate ? moment(payload.paymentDate) : moment()
         };
     } else if (paymentStatusResult['StatusCode'] === 200) {
-        // todo : handle cancellation, etc
-        returnResult = { paymentStatus: 'PENDING' };
+        logger('Payment not complete, returning an alternate status');
+        returnResult = { paymentStatus: payload.result };
     }
 
     return returnResult;

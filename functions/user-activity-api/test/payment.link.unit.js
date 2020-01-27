@@ -187,7 +187,7 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
     });
 
     it('Check payment status, still pending', async () => {
-        lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse({ result: 'pending' })});
+        lambdaStub.returns({ promise: () => testHelper.mockLambdaResponse({ result: 'PENDING' })});
         const paymentResult = await paymentLinkHandler.checkPayment({ transactionId: testTxId });
         expect(paymentResult).to.deep.equal({ paymentStatus: 'PENDING' });
     });
