@@ -66,8 +66,9 @@ const addToDlq = async (event, err) => {
     logger('Result of sqs transmission:', sqsResult);
 };
 
-const invokeProfileLambda = async (systemWideUserId, includeContactScan) => {
-    const profileFetchLambdaInvoke = invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId, includeContactScan });
+const invokeProfileLambda = async (systemWideUserId, includeContactMethod) => {
+    const profileFetchLambdaInvoke = invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId, includeContactMethod });
+    logger('Invoke profile fetch with arguments: ', profileFetchLambdaInvoke);
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     logger('Result of profile fetch: ', profileFetchResult);
     const profileResult = extractLambdaBody(profileFetchResult);
@@ -80,6 +81,7 @@ const invokeProfileLambda = async (systemWideUserId, includeContactScan) => {
 
 const fetchUserProfile = async (systemWideUserId, includePrimaryContact) => {
     const requiresContactScan = typeof includePrimaryContact === 'boolean' && includePrimaryContact;
+    logger(`Fetching profile in event process, passed includePrimaryContact: ${includePrimaryContact} and sending on: ${requiresContactScan}`);
     const key = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
     const cachedProfile = await redis.get(key);
     if (!cachedProfile || typeof cachedProfile !== 'string' || cachedProfile.length === 0) {
@@ -87,7 +89,8 @@ const fetchUserProfile = async (systemWideUserId, includePrimaryContact) => {
     }
 
     const parsedProfile = JSON.parse(cachedProfile);
-    if (includePrimaryContact && !parsedProfile.contactMethod) {
+    if (requiresContactScan && !parsedProfile.contactMethod) {
+        logger('Required contact scan but not present in profile, so fetching');
         return invokeProfileLambda(systemWideUserId, true);
     }
 
@@ -203,7 +206,7 @@ const safeWithdrawalEmail = async (eventBody) => {
 
     const templateVariables = { ...bankAccountDetails };
     templateVariables.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
-    templateVariables.withdrawalAmount = formatAmountText(-eventBody.context.withdrawalAmount); // so that this is positive
+    templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount); // note: make positive in time
     templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
     templateVariables.contactMethod = userProfile.contactMethod;
 
@@ -360,7 +363,7 @@ const handleSavingEvent = async (eventBody) => {
 };
 
 const handleWithdrawalEvent = async (eventBody) => {
-    logger('Withdrawal event triggered!');
+    logger('Withdrawal event triggered! Event body: ', eventBody);
 
     await safeWithdrawalEmail(eventBody);
 
