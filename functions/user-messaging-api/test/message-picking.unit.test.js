@@ -54,7 +54,7 @@ const handler = proxyquire('../message-picking-handler', {
     '@noCallThru': true
 });
 
-describe.only('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
+describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
 
@@ -340,7 +340,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
             }) 
         };
 
-        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
@@ -350,7 +350,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(bodyOfFetch.messagesToDisplay).to.be.an('array');
         expect(bodyOfFetch.messagesToDisplay[0]).to.deep.equal(expectedFirstMessage);
         expect(bodyOfFetch.messagesToDisplay[1]).to.deep.equal(expectedSecondMsg);
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
@@ -367,7 +367,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
             }) 
         };
 
-        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
@@ -376,7 +376,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
@@ -392,14 +392,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
             }) 
         };
 
-        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
