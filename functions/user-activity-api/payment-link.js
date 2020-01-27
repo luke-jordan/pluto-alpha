@@ -115,7 +115,7 @@ module.exports.triggerTxStatusCheck = async ({ transactionId, paymentProvider })
         Payload: JSON.stringify({ transactionId, paymentProvider })
     };
 
-    logger('Background firing off event: ', lambdaInvocation);
+    logger('Background firing off lambda invocation to check payment: ', lambdaInvocation);
 
     const invocationResult = await lambda.invoke(lambdaInvocation).promise();
     logger('Result of invocation: ', invocationResult);

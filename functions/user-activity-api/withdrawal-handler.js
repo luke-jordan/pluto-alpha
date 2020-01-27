@@ -12,7 +12,7 @@ const Redis = require('ioredis');
 const redis = new Redis({ 
     port: config.get('cache.port'), 
     host: config.get('cache.host'), 
-    keyPrefix: `${config.get('cache.withdrawalKeyPrefix')}::` 
+    keyPrefix: `${config.get('cache.keyPrefixes.withdrawal')}::`
 });
 
 const AWS = require('aws-sdk');
@@ -60,7 +60,7 @@ const fetchUserProfile = async (systemWideUserId) => {
 
 // note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
 const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails, verificationJobId) => {
-    const accountTimeOut = config.get('cache.detailsTTL');
+    const accountTimeOut = config.get('cache.ttls.withdrawal');
     logger('Logging, passed job ID: ', verificationJobId);
     await redis.set(systemWideUserId, JSON.stringify({ ...bankAccountDetails, verificationJobId }), 'EX', accountTimeOut);
     logger('Done! Can move along');

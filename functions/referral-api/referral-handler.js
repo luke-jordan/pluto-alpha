@@ -100,8 +100,10 @@ module.exports.create = async (event) => {
     try {
         // todo : validation of e.g., only system admin can open non-user referral codes
         
-        logger('Referral creation event: ', event);
+        logger('Referral creation initiated');
         const params = opsUtil.extractParamsFromEvent(event);
+        logger('Referral parameters: ', params);
+        
         const { countryCode } = params;
         
         let codeToCreate = '';

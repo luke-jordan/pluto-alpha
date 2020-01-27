@@ -416,7 +416,7 @@ module.exports.adjustClientFloat = async (event) => {
                 tellPersistenceLogIsResolved = true;
                 break;
             default:
-                logger('Error, some unknown operation, event : ', event);
+                logger('Error, some unknown operation, parameters : ', params);
                 throw new Error('Missing or unknown operation: ', operation);
         }
 

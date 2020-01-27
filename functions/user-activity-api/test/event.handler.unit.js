@@ -24,6 +24,7 @@ const updateTxFlagsStub = sinon.stub();
 const fetchBSheetAccStub = sinon.stub();
 
 const redisGetStub = sinon.stub();
+const redisSetStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () { 
@@ -52,7 +53,8 @@ class MockSQSClient {
 
 class MockRedis {
     constructor () { 
-        this.get = redisGetStub; 
+        this.get = redisGetStub;
+        this.set = redisSetStub;
     }
 }
 
@@ -85,7 +87,10 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
     const testId = uuid();
 
     beforeEach(() => {
-        helper.resetStubs(lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, sendEmailStub, updateTagsStub, updateTxFlagsStub, fetchBSheetAccStub); // no redis use here at present
+        helper.resetStubs(
+            lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, sendEmailStub, updateTagsStub, updateTxFlagsStub, 
+            fetchBSheetAccStub, redisGetStub, redisSetStub
+        );
     });
 
     const commonAssertions = ({ resultOfHandle, investmentInvocation }) => {
@@ -94,13 +99,11 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             Bucket: config.get('templates.bucket'), Key: config.get('templates.saveEmail')
         });
         expect(sendEmailStub).to.have.been.calledOnce;
-        expectNoCalls(redisGetStub, sqsSendStub);
-        if (config.get('defaults.balanceSheet.enabled') === true) {
-            expect(lamdbaInvokeStub).to.have.been.calledThrice; // for balance & for status & investment
-            expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
-            expect(fetchBSheetAccStub).to.have.been.calledOnce;
-            expect(updateTxFlagsStub).to.have.been.calledOnce;
-        }
+        expect(lamdbaInvokeStub).to.have.been.calledThrice; // for balance & for status & investment
+        expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
+        expect(fetchBSheetAccStub).to.have.been.calledOnce;
+        expect(updateTxFlagsStub).to.have.been.calledOnce;
+        expectNoCalls(sqsSendStub);
     };
 
     it('Handles non-special (e.g., login) event properly', async () => {
@@ -146,15 +149,14 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             updatedTimeEpochMillis: moment().valueOf()
         };
 
-        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId });
         const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
             surname: testUserProfile.familyName,
             firstNames: testUserProfile.personalName
         });
 
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testUserProfile)})})});
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'POL1' }) })});
+        redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'POL1' }) })});
         updateTagsStub.resolves({ updatedTime: testUpdateTime });
 
         const snsEvent = wrapEventSns({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT' });
@@ -163,7 +165,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
         expect(resultOfHandle).to.exist;
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
-        expect(lamdbaInvokeStub).to.have.been.calledWith(userProfileInvocation);
+        expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
         expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::POL1');
         expect(getQueueUrlStub).to.have.not.been.called;
@@ -203,7 +205,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             updatedTimeEpochMillis: moment().valueOf()
         };
 
-        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId });
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: false });
         const FWAccCreationInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
             surname: testUserProfile.familyName,
@@ -315,26 +317,24 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         logger('Result:', resultOfHandle);
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
 
-        if (config.get('defaults.balanceSheet.enabled') === true) {
-            expect(lamdbaInvokeStub).to.have.been.calledThrice;
-            expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
-            expect(fetchBSheetAccStub).to.have.been.calledOnce;
-            expect(updateTxFlagsStub).to.have.been.calledOnce;
-        }
-        expect(getObjectStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
+        expect(fetchBSheetAccStub).to.have.been.calledOnce;
+        expect(updateTxFlagsStub).to.have.been.calledOnce;
         expect(sendEmailStub).to.have.not.been.called;
-        expectNoCalls(redisGetStub, sqsSendStub);
+        expectNoCalls(sqsSendStub);
     });
 
     it('Handles withdrawal event happy path correctly', async () => {
         const timeNow = moment().valueOf();
         const testAccountId = uuid();
 
-        // we just need the names
-        const testProfile = { personalName: 'John', familyName: 'Nkomo' };
-        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId });
+        // we just need the names and contact method
+        const testProfile = { personalName: 'John', familyName: 'Nkomo', contactMethod: 'someone@jupitersave.com' };
+        redisGetStub.withArgs(`USER_PROFILE::${testId}`).resolves(null);
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId, includeContactMethod: true });
 
-        redisGetStub.resolves(JSON.stringify({ account: 'Hello' }));
+        redisGetStub.withArgs(`WITHDRAWAL_DETAILS::${testId}`).resolves(JSON.stringify({ account: 'Hello' }));
         lamdbaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
 
         getObjectStub.returns({ promise: () => ({ 
@@ -358,6 +358,10 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         });
         const bsheetResult = { result: 'WITHDRAWN' };
         lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify(bsheetResult)})});
+
+        const statusInstruct = { systemWideUserId: testId, updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
+        const statusUpdateInvoke = helper.wrapLambdaInvoc('profile_status_update', true, statusInstruct);
+        lamdbaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
         
         const withdrawalEvent = {
             userId: testId,
@@ -373,15 +377,21 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
 
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
-        expect(redisGetStub).to.have.been.calledOnceWithExactly(`${testId}::BANK_DETAILS`);
+        
+        expect(redisGetStub).to.have.been.calledTwice;
+        expect(redisGetStub).to.have.been.calledWithExactly(`WITHDRAWAL_DETAILS::${testId}`);
+        expect(redisGetStub).to.have.been.calledWithExactly(`USER_PROFILE::${testId}`);
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testId}`, JSON.stringify(testProfile), 'EX', 25200);
+        
         expect(getObjectStub).to.have.been.
             calledOnceWithExactly({ Bucket: config.get('templates.bucket'), Key: config.get('templates.withdrawalEmail') });
         expect(sendEmailStub).to.have.been.calledOnce;
 
-        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+        expect(lamdbaInvokeStub).to.have.been.called;
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(userProfileInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(boostProcessInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(bsheetInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(statusUpdateInvoke);
         expectNoCalls(sqsSendStub);
     });
 

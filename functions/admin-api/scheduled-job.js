@@ -20,6 +20,7 @@ AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
 const MILLIS_IN_DAY = 86400000;
+const FORMAT_NUM_DIGITS = 4;
 
 const expireHangingTransactions = async () => {
     const resultOfExpiration = await rdsAccount.expireHangingTransactions();
@@ -136,10 +137,10 @@ const safeSimpleFormat = (objectWithAmount, unit, currency) => {
     }
 
     const amount = typeof objectWithAmount.amount === 'number' ? objectWithAmount.amount : parseInt(objectWithAmount.amount, 10);
-    return `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
+    return `${currency} ${parseFloat(opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')).toFixed(FORMAT_NUM_DIGITS)}`;
 };
 
-const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
+const extractParamsForFloatAccrualEmail = (accrualInvocation, accrualInvocationResult) => {
     const resultPayload = JSON.parse(accrualInvocationResult['Payload']);
     const resultBody = JSON.parse(resultPayload.body);
 
@@ -157,10 +158,14 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
     const bonusAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation') 
         ? 'None' : '(yes : insert excess)';
 
+    const bpsToPercentAndTrim = (rate) => parseFloat(rate * 100).toFixed(FORMAT_NUM_DIGITS);
+
     return {
+        clientId: accrualInstruction.clientId,
+        floatId: accrualInstruction.floatId,
         floatAmount: safeSimpleFormat({ amount: accrualInstruction.calculationBasis.floatAmountHunCent }, unit, currency),
         baseAccrualRate: `${accrualInstruction.calculationBasis.accrualRateAnnualBps} bps`,
-        dailyRate: `${accrualInstruction.calculationBasis.accrualRateApplied} %`,
+        dailyRate: `${bpsToPercentAndTrim(accrualInstruction.calculationBasis.accrualRateApplied)} %`,
         accrualAmount: safeSimpleFormat({ amount: accrualInstruction.accrualAmount }, unit, currency),
         bonusAmount: safeSimpleFormat(bonusFeeRaw, unit, currency),
         companyAmount: safeSimpleFormat(companyFeeRaw, unit, currency),
@@ -183,7 +188,7 @@ const initiateFloatAccruals = async () => {
     logger('Results of accruals: ', accrualInvocationResults);
 
     // todo: use more robust templatting so can handle indefinite length arrays, for now just do this one
-    const accrualEmailDetails = extractParamsForEmail(accrualInvocations[0], accrualInvocationResults[0]);
+    const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualInvocations[0], accrualInvocationResults[0]);
 
     const emailResult = await publisher.sendSystemEmail({
         subject: 'Daily float accrual results',
@@ -197,40 +202,10 @@ const initiateFloatAccruals = async () => {
     return accrualInvocations.length;
 };
 
-const sendSystemStats = async () => {
-    const endTime = moment();
-    const startOfTime = moment(0);
-    const startOfDay = moment().startOf('day');
-    const startOfWeek = moment().startOf('week');
-
-    logger(`Finding users with times: end = ${endTime.format()}, start of time: ${startOfTime.format()}, start of day: ${startOfDay.format()}, start of week: ${startOfWeek.format()}`);
-
-    // todo : obviously, want to add a lot into here
-    const [userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek] = 
-        await Promise.all([
-            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, false),
-            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, false),
-            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, false),
-            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, true),
-            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, true),
-            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, true)
-        ]);
-
-    const templateVariables = { userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek };
-
-    logger('Sending : ', templateVariables);
-
-    return publisher.sendSystemEmail({ 
-        subject: 'Daily system stats',
-        toList: config.get('email.systemStats.toList'),
-        bodyTemplateKey: config.get('email.systemStats.templateKey'),
-        templateVariables
-    });
-};
+// note : system stat email transferred to data pipeline, for various reasons
 
 // used to control what should execute
 const operationMap = {
-    'SYSTEM_STATS': sendSystemStats,
     'ACRRUE_FLOAT': initiateFloatAccruals,
     'EXPIRE_HANGING': expireHangingTransactions,
     'EXPIRE_BOOSTS': expireBoosts, 

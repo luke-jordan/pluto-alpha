@@ -337,8 +337,8 @@ module.exports.checkPendingPayment = async (event) => {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
     
-    logger('Checking for payment with inbound event: ', event);
     const params = event.queryStringParameters || event;
+    logger('Checking for payment with inbound paramaters: ', params);
     const transactionId = params.transactionId;
     
     const transactionRecord = await persistence.fetchTransaction(transactionId);
