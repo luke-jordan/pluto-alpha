@@ -212,7 +212,7 @@ module.exports.calculateUserAmount = async (event) => {
         return unauthorizedResponse;
     }
 
-    logger('Processing event: ', event);
+    logger('Processing user history direct invocation, event: ', event);
     const { aggregates, systemWideUserId } = event;
 
     const opsPromises = aggregates.map((aggregate) => accountCalculator.getUserAccountFigure({ systemWideUserId, operation: aggregate }));

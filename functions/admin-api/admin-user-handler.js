@@ -241,7 +241,7 @@ const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reas
     const resultPayload = JSON.parse(settleResponse['Payload']);
     if (settleResponse['StatusCode'] === 200) {
         const logContext = { settleInstruction: settlePayload, resultPayload };
-        const transactionType = resultPayload.transactionDetails[0].transactionType;
+        const transactionType = resultPayload.transactionDetails[0].accountTransactionType;
         const eventType = transactionType === 'USER_SAVING_EVENT' ? 'ADMIN_SETTLED_SAVE' : `ADMIN_SETTLED_${transactionType}`;
         const loggingPromises = [
             publishUserLog({ adminUserId, systemWideUserId, eventType, context: logContext }),
@@ -348,6 +348,11 @@ module.exports.manageUser = async (event) => {
                 return opsCommonUtil.wrapResponse('Error, must pass in newIdentifier');
             }
             resultOfUpdate = await handleBsheetAccUpdate(params);
+        }
+
+        if (params.fieldToUpdate === 'PWORD') {
+            logger('Resetting the user password, trigger and send back');
+            
         }
 
         if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {

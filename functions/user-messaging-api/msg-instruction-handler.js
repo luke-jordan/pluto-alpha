@@ -259,13 +259,14 @@ module.exports.insertMessageInstruction = async (event) => {
  */
 module.exports.updateInstruction = async (event) => {
     try {
-        logger('Instruction update recieved:', event);
+        logger('Update message instruction received');
         const userDetails = msgUtil.extractUserDetails(event);
         if (!msgUtil.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
             return msgUtil.unauthorizedResponse;
         }
 
         const params = msgUtil.extractEventBody(event);
+        logger('Instruction update received, with paramaters:', params);
         const instructionId = params.instructionId;
         const updateValues = params.updateValues;
         const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, updateValues);
@@ -287,8 +288,9 @@ module.exports.updateInstruction = async (event) => {
  */
 module.exports.getMessageInstruction = async (event) => {
     try {
-        logger('instruction retreiver recieved:', event);
+        logger('Fetching message instruction');
         const params = msgUtil.extractEventBody(event);
+        logger('Parameters for instruction fetch: ', params);
         const instructionId = params.instructionId;
         const databaseResponse = await rdsUtil.getMessageInstruction(instructionId);
         logger('Result of message instruction extraction:', databaseResponse);

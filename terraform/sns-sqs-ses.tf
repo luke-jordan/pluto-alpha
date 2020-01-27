@@ -17,6 +17,28 @@ resource "aws_sqs_queue" "user_event_dlq" {
   }
 }
 
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_user_event_dlq" {
+  alarm_name = "event_processor_dlq_alarm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods = 1
+  metric_name = "NumberOfMessagesSent"
+  namespace = "AWS/SQS"
+  period = 60
+  threshold = 0
+  statistic = "Sum"
+
+  dimensions = {
+    QueueName = aws_sqs_queue.user_event_dlq.name
+  }
+
+  alarm_actions = [aws_sns_topic.fatal_errors_topic.arn]
+}
+
+resource "aws_sns_topic" "withdrawal_backup_topic" {
+  name = "${terraform.workspace}_withdrawal_backup_topic"
+  display_name = "${terraform.workspace}_withdrawal_backup_topic"
+}
+
 //////////////// FOR EMAIL BOUNCES, ETC /////////////////////////////
 
 # resource "aws_sns_topic" "sns_bounces_topic" {

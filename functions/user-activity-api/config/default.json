@@ -28,7 +28,16 @@
         "port": 6739,
         "detailsTTL": 900,
         "host": "localhost",
-        "withdrawalKeyPrefix": "WITHDRAWAL_DETAILS"
+        "keyPrefixes": {
+            "withdrawal": "WITHDRAWAL_DETAILS",
+            "profile": "USER_PROFILE",
+            "account": "ACCOUNT_DETAILS"
+        },
+        "ttls": {
+            "withdrawal": 900,
+            "profile": 25200,
+            "account": 25200
+        }
     },
     "projection": {
         "defaultDays": 3,
@@ -53,7 +62,8 @@
     "publishing": {
         "userEvents": {
             "topicArn": "<<override here>>",
-            "processingDlq": "<<insert_here>>"
+            "processingDlq": "<<insert_here>>",
+            "withdrawalTopic": "<<insert_here>>"
         },
         "processingLambdas": {
             "boosts": "boost_event_process",
