@@ -28,6 +28,7 @@ const profileTable = config.get('tables.dynamoProfileTable');
 
 const testUserId = uuid();
 const testBoostId = uuid();
+const testMessageId = uuid();
 
 const testOpenMoment = moment('2019-07-01');
 const testExpiryMoment = moment().add(6, 'hours');
@@ -235,6 +236,23 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(filledMessage[0].body).to.equal(expectedMessage);
 
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
+    });
+
+    it('Handles messages within flow (non-anchor)', async () => {
+        const expectedMessage = 'Hello Luke Jordan. Did you know you have made $100 in earnings since you opened your account in July 2019?';
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
+            'Hello #{user_full_name}. Did you know you have made #{total_earnings} in earnings since you opened your account in #{opened_date}?' 
+        )]);
+
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
+
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId, withinFlowFromMsgId: testMessageId });
+        logger('Filled message: ', filledMessage);
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('total_earnings::HUNDREDTH_CENT::USD'));
     });
 });
 

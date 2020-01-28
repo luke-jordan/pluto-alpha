@@ -58,13 +58,6 @@ const handler = proxyquire('../withdrawal-handler', {
     'moment': momentStub
 });
 
-const mockLambdaResponse = (body, statusCode = 200) => ({
-    Payload: JSON.stringify({
-        statusCode,
-        body: JSON.stringify(body)
-    })
-});
-
 describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
     const testUserId = uuid();
     const testAccountId = uuid();
@@ -97,6 +90,13 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         securedStatus: 'PASSWORD_SET',
         updatedTimeEpochMillis: moment().valueOf()
     };
+
+    const mockLambdaResponse = (body, statusCode = 200) => ({
+        Payload: JSON.stringify({
+            statusCode,
+            body: JSON.stringify(body)
+        })
+    });
 
     beforeEach(() => {
         helper.resetStubs(publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, updateTxSettlementStatusStub, fetchTransactionStub, countSettledSavesStub, findMostCommonCurrencyStub);
@@ -232,6 +232,121 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(countSettledSavesStub).to.have.not.been.called;
         expect(findMostCommonCurrencyStub).to.have.not.been.called;
         expect(sumAccountBalanceStub).to.have.not.been.called;
+        expect(redisSetStub).to.have.not.been.called;
+    });
+
+    it('Returns error from unsuccessful job id invocation', async () => {
+        const event = {
+            requestContext: {
+                authorizer: {
+                    role: 'ORDINARY_USER',
+                    systemWideUserId: testUserId
+                }
+            },
+            body: JSON.stringify({
+                accountId: testAccountId,
+                bankDetails: testBankDetails
+            })
+        };
+
+        const mockJobIdPayload = {
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: '928392739187391',
+                accountType: 'SAVINGS',
+                reference: testUserId,
+                initials: 'J',
+                surname: 'Doe',
+                nationalId: testNationalId
+            }
+        };
+
+        const mockJobIdLambdaResponse = {
+            StatusCode: 401,
+            Payload: JSON.stringify({ message: 'Internal error' })
+        };
+
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
+        countSettledSavesStub.resolves(5);
+        findMostCommonCurrencyStub.resolves('ZAR');
+        sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+
+        const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ message: 'Internal error'})) };
+
+        const resultOfSetting = await handler.setWithdrawalBankAccount(event);
+        logger('Result of setting:', resultOfSetting);
+
+        expect(resultOfSetting).to.exist;
+        expect(resultOfSetting).to.deep.equal(expectedResult);
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
+        expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
+        expect(redisSetStub).to.have.not.been.called;
+    });
+
+    it('Returns error from unsuccessful job id retreival from third party', async () => {
+        const event = {
+            requestContext: {
+                authorizer: {
+                    role: 'ORDINARY_USER',
+                    systemWideUserId: testUserId
+                }
+            },
+            body: JSON.stringify({
+                accountId: testAccountId,
+                bankDetails: testBankDetails
+            })
+        };
+
+        const mockJobIdPayload = {
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: '928392739187391',
+                accountType: 'SAVINGS',
+                reference: testUserId,
+                initials: 'J',
+                surname: 'Doe',
+                nationalId: testNationalId
+            }
+        };
+
+        const mockJobIdLambdaResponse = {
+            StatusCode: 200,
+            Payload: JSON.stringify({
+                status: 'FAILED',
+                jobId: 'KSDF382'
+            })
+        };
+
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
+        countSettledSavesStub.resolves(5);
+        findMostCommonCurrencyStub.resolves('ZAR');
+        sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+
+        const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ status: 'FAILED', jobId: 'KSDF382' })) };
+
+        const resultOfSetting = await handler.setWithdrawalBankAccount(event);
+        logger('Result of setting:', resultOfSetting);
+
+        expect(resultOfSetting).to.exist;
+        expect(resultOfSetting).to.deep.equal(expectedResult);
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
+        expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
         expect(redisSetStub).to.have.not.been.called;
     });
 
@@ -539,7 +654,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
     };
 
     beforeEach(() => {
-        helper.resetStubs(publishEventStub, redisGetStub, lamdbaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub);
+        helper.resetStubs(publishEventStub, redisGetStub, lamdbaInvokeStub, updateTxSettlementStatusStub, fetchTransactionStub, sumAccountBalanceStub);
     });
 
     it('Confirms user withdrawal', async () => {
@@ -617,6 +732,38 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         expect(lamdbaInvokeStub).to.have.not.been.called;
         expect(updateTxSettlementStatusStub).to.have.not.been.called;
         expect(fetchTransactionStub).to.have.not.been.called;
+    });
+
+    it('Returns error where transaction update returns empty rows', async () => {
+        const event = {
+            requestContext: {
+                authorizer: {
+                    role: 'ORDINARY_USER',
+                    systemWideUserId: testUserId
+                }
+            },
+            body: JSON.stringify({ transactionId: testTransactionId, userDecision: 'WITHDRAW' })
+        };
+
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        redisGetStub.resolves(JSON.stringify(testBankDetails));
+        lamdbaInvokeStub.returns({ promise: () => mockJobIdLambdaResponse });
+        updateTxSettlementStatusStub.resolves();
+
+        const expectedResult = { statusCode: 500, body: JSON.stringify('Transaction update returned empty rows') };
+
+        const confirmationResult = await handler.confirmWithdrawal(event);
+        logger('Result of withdrawal confirmation:', confirmationResult);
+
+        expect(confirmationResult).to.exist;
+        expect(confirmationResult).to.deep.equal(expectedResult);
+        expect(redisGetStub).to.have.been.calledTwice;
+        expect(redisGetStub).to.have.been.calledWith(testUserId);
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        expect(updateTxSettlementStatusStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, settlementStatus: 'PENDING' });
+        expect(fetchTransactionStub).to.have.not.been.called;
+        expect(sumAccountBalanceStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
     });
 
     it('Fails on missing context user id', async () => {
@@ -715,6 +862,147 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         expect(confirmationResult).to.exist;
         expect(confirmationResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(publishEventStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(updateTxSettlementStatusStub).to.have.not.been.called;
+        expect(fetchTransactionStub).to.have.not.been.called;
+    });
+
+    it('Fails on invalid user bank account, caches verification result', async () => {
+        const event = {
+            requestContext: {
+                authorizer: {
+                    role: 'ORDINARY_USER',
+                    systemWideUserId: testUserId
+                }
+            },
+            body: JSON.stringify({ transactionId: testTransactionId, userDecision: 'WITHDRAW' })
+        };
+
+        const mockLambdaResponse = {
+            StatusCode: 200,
+            Payload: JSON.stringify({
+                result: 'FAILED',
+                jobId: 'KSDF382'
+            })
+        };
+
+        redisGetStub.resolves(JSON.stringify(testBankDetails));
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+
+        const expectedResult = { statusCode: 400, body: { result: 'BANK_ACCOUNT_INVALID' } };
+
+        const confirmationResult = await handler.confirmWithdrawal(event);
+        logger('Result of withdrawal confirmation:', confirmationResult);
+
+        expect(confirmationResult).to.exist;
+        expect(confirmationResult).to.deep.equal(expectedResult);
+        expect(redisGetStub).to.have.been.calledWith(testUserId);
+        expect(publishEventStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        expect(updateTxSettlementStatusStub).to.have.not.been.called;
+        expect(fetchTransactionStub).to.have.not.been.called;
+    });
+
+    it('Returns error on unseccessful job id invocation', async () => {
+        const event = {
+            requestContext: {
+                authorizer: {
+                    role: 'ORDINARY_USER',
+                    systemWideUserId: testUserId
+                }
+            },
+            body: JSON.stringify({ transactionId: testTransactionId, userDecision: 'WITHDRAW' })
+        };
+
+        const mockLambdaResponse = {
+            StatusCode: 401,
+            Payload: JSON.stringify({ message: 'Internal error' })
+        };
+
+        redisGetStub.resolves(JSON.stringify(testBankDetails));
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+
+        const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ message: 'Internal error'})) };
+
+        const confirmationResult = await handler.confirmWithdrawal(event);
+        logger('Result of withdrawal confirmation:', confirmationResult);
+
+        expect(confirmationResult).to.exist;
+        expect(confirmationResult).to.deep.equal(expectedResult);
+        expect(redisGetStub).to.have.been.calledWith(testUserId);
+        expect(publishEventStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        expect(updateTxSettlementStatusStub).to.have.not.been.called;
+        expect(fetchTransactionStub).to.have.not.been.called;
+    });
+
+    it('Returns error on unsuccessful job id retreival from third party', async () => {
+        const event = {
+            requestContext: {
+                authorizer: {
+                    role: 'ORDINARY_USER',
+                    systemWideUserId: testUserId
+                }
+            },
+            body: JSON.stringify({ transactionId: testTransactionId, userDecision: 'WITHDRAW' })
+        };
+
+        const mockLambdaResponse = {
+            StatusCode: 200,
+            Payload: JSON.stringify({ message: 'Third party error' })
+        };
+
+        redisGetStub.resolves(JSON.stringify(testBankDetails));
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+
+        const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ message: 'Third party error'})) };
+
+        const confirmationResult = await handler.confirmWithdrawal(event);
+        logger('Result of withdrawal confirmation:', confirmationResult);
+
+        expect(confirmationResult).to.exist;
+        expect(confirmationResult).to.deep.equal(expectedResult);
+        expect(redisGetStub).to.have.been.calledWith(testUserId);
+        expect(publishEventStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        expect(updateTxSettlementStatusStub).to.have.not.been.called;
+        expect(fetchTransactionStub).to.have.not.been.called;
+    });
+
+    it('Returns error on missing job id in cached bank details', async () => {    
+        const event = {
+            requestContext: {
+                authorizer: {
+                    role: 'ORDINARY_USER',
+                    systemWideUserId: testUserId
+                }
+            },
+            body: JSON.stringify({ transactionId: testTransactionId, userDecision: 'WITHDRAW' })
+        };
+
+        const invalidBankDetails = {
+            bankName: 'ABSA',
+            accountNumber: '928392739187391',
+            accountType: 'SAVINGS'
+        };
+
+        const mockLambdaResponse = {
+            StatusCode: 200,
+            Payload: JSON.stringify({ message: 'Third party error' })
+        };
+
+        redisGetStub.resolves(JSON.stringify(invalidBankDetails));
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+
+        const expectedResult = { statusCode: 500, body: JSON.stringify('No job ID for bank verification') };
+
+        const confirmationResult = await handler.confirmWithdrawal(event);
+        logger('Result of withdrawal confirmation:', confirmationResult);
+
+        expect(confirmationResult).to.exist;
+        expect(confirmationResult).to.deep.equal(expectedResult);
+        expect(redisGetStub).to.have.been.calledWith(testUserId);
         expect(publishEventStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;
         expect(updateTxSettlementStatusStub).to.have.not.been.called;

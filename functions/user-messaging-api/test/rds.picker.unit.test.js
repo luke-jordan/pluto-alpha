@@ -131,6 +131,21 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         expect(multiUpdateInsertStub).to.have.been.calledOnceWith([expectedUpdateDef], []);
     });
 
+    it('Gets message instruction', async () => {
+        const testInstructionId = uuid();
+
+        const selectQuery = `select * from ${userMessageTable} where destination_user_id = $1 and instruction_id = $2`;
+
+        selectQueryStub.resolves([msgRawFromRds]);
+
+        const messageIntruction = await persistence.getInstructionMessage(testUserId, testInstructionId);
+        logger('Result of instruction extraction:', messageIntruction);
+
+        expect(messageIntruction).to.exist;
+        expect(messageIntruction).to.deep.equal([expectedTransformedMsg]);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(selectQuery, [testUserId, testInstructionId]);
+    });
+
     it('Handles batch status updates', async () => {
         const mockMessageId = uuid();
         const mockMessageIds = [mockMessageId, mockMessageId];
