@@ -48,7 +48,7 @@
     },
     "payment": {
         "test": false,
-        "dummy": "ON"
+        "dummy": "OFF"
     },
     "publishing": {
         "userEvents": {

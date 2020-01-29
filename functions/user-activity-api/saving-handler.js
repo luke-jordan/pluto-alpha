@@ -360,7 +360,7 @@ module.exports.checkPendingPayment = async (event) => {
 
     await publisher.publishUserEvent(systemWideUserId, 'SAVING_EVENT_PAYMENT_CHECK', { context: { transactionId }});
 
-    const dummySuccess = config.has('dummy') && config.get('dummy') === 'ON';
+    const dummySuccess = config.has('payment.dummy') && config.get('payment.dummy') === 'ON';
     if (dummySuccess) {
       const dummyResult = await dummyPaymentResult(systemWideUserId, params, transactionRecord);
       return { statusCode: 200, body: JSON.stringify(dummyResult) };
