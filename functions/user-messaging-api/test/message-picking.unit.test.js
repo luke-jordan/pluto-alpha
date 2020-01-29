@@ -107,19 +107,38 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     it('Fills in account balances properly', async () => {
         logger('HUUUUH ABT: ', testUserId);
+        const testDestinationUserId = uuid();
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
-        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
-            'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
-        )]);
+        getMessagesStub.withArgs(testDestinationUserId, ['CARD']).resolves([{
+            destinationUserId: testDestinationUserId,
+            creationTime: testOpenMoment,
+            followsPriorMessage: false,
+            messagePriority: 0,
+            endTime: testExpiryMoment,
+            messageBody: 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
+        }]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 80000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testDestinationUserId }, ['personal_name', 'family_name']).resolves({
+            systemWideUserId: testUserId, 
+            personalName: 'Luke', 
+            familyName: 'Jordan'
+        });
 
-        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testDestinationUserId }, relevantProfileCols).resolves({ 
+            systemWideUserId: testUserId, 
+            personalName: 'Luke', 
+            familyName: 'Jordan', 
+            creationTimeEpochMillis: testOpenMoment.valueOf(), 
+            defaultCurrency: 'USD'
+        });
+
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testDestinationUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
-
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
+        expect(fetchDynamoRowStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('user_history_aggregate', false, { aggregates: ['balance::HUNDREDTH_CENT::USD'], systemWideUserId: testDestinationUserId }));
     });
 
     it('Handles last capitalization properly', async () => {
