@@ -280,7 +280,6 @@ const dispatcher = {
  */
 module.exports.manageReferralCodes = async (event) => {
     try {
-        logger('Event: ', event);
         if (!adminUtil.isUserAuthorized(event)) {
             return adminUtil.unauthorizedResponse;
         }

@@ -19,6 +19,9 @@ const allocateNonUserStub = sinon.stub();
 const allocateToUsersStub = sinon.stub();
 const supercedeAccrualsStub = sinon.stub();
 
+const fetchRecordsStub = sinon.stub();
+const writeCsvFileStub = sinon.stub();
+
 const fetchFloatConfigVarsStub = sinon.stub();
 
 const BigNumber = require('bignumber.js');
@@ -32,10 +35,15 @@ const handler = proxyquire('../capitalization-handler', {
         'addOrSubtractFloat': addOrSubtractStub, 
         'allocateFloat': allocateNonUserStub,
         'allocateToUsers': allocateToUsersStub,
-        'supercedeAccruals': supercedeAccrualsStub
+        'supercedeAccruals': supercedeAccrualsStub,
+        'fetchRecordsRelatedToLog': fetchRecordsStub,
+        '@noCallThru': true
     },
     './persistence/dynamodb': {
         'fetchConfigVarsForFloat': fetchFloatConfigVarsStub
+    },
+    './persistence/csvfile': {
+        'writeAndUploadCsv': writeCsvFileStub
     },
     '@noCallThru': true
 });
@@ -352,7 +360,6 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
 
 });
 
-// note : will also need to expire the prior ones
 describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
 
     const testNumberAccounts = 1;
@@ -419,6 +426,7 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         const expectedEntityAllocBase = { currency: 'USD', unit: 'HUNDREDTH_CENT', transactionType: 'CAPITALIZATION', transactionState: 'SETTLED' };
         expectedEntityAllocBase.relatedEntityType = 'CAPITALIZATION_EVENT';
         expectedEntityAllocBase.relatedEntityId = mockFloatLogId;
+        expectedEntityAllocBase.logId = mockFloatLogId;
 
         const clientAlloc = { ...expectedEntityAllocBase, amount: clientAmount, allocatedToId: clientShareId, allocatedToType: 'COMPANY_SHARE', label: 'CLIENT' };
         const bonusAlloc = { ...expectedEntityAllocBase, amount: bonusAmount, allocatedToId: bonusPoolId, allocatedToType: 'BONUS_POOL', label: 'BONUS' };
@@ -463,14 +471,10 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId, expectedUserAllocs);
         
         const expectedSupercedArgs = { startTime: expectedStartTime, endTime: expectedEndTime, clientId: testClientId, floatId: testFloatId, currency: 'USD' };
-        expect(supercedeAccrualsStub).to.have.been.calledOnceWithExactly(expectedSupercedArgs);
+        expect(supercedeAccrualsStub).to.have.been.calledOnceWithExactly(expectedSupercedArgs, mockFloatLogId);
     });
 
     // it('Handles case where no prior capitalization', async () => {
-
-    // });
-
-    // it('Handles case where interest is less than prior accruals', async () => {
 
     // });
 

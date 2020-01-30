@@ -508,7 +508,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });
-        updateMessageInstructionStub.withArgs(mockInstructionId, 'last_processed_time', testTime.format()).resolves({ updatedTime: mockUpdatedTime });
+        updateMessageInstructionStub.withArgs(mockInstructionId, { lastProcessedTime: testTime.format() }).resolves({ updatedTime: mockUpdatedTime });
 
         const result = await handler.createFromPendingInstructions();
         logger('Result of pending intruction handling:', result);
@@ -556,7 +556,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });
-        updateMessageInstructionStub.withArgs(mockInstructionId, 'last_processed_time', testTime.format()).resolves({ updatedTime: mockUpdatedTime });
+        updateMessageInstructionStub.withArgs(mockInstructionId, { lastProcessedTime: testTime.format() }).resolves({ updatedTime: mockUpdatedTime });
 
         const result = await handler.createFromPendingInstructions();
         logger('Result of scheduled message handling:', result);
@@ -684,7 +684,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });
-        updateMessageInstructionStub.withArgs(mockInstructionId, 'last_processed_time', sinon.match.string).resolves({ updatedTime: mockUpdatedTime });
+        updateMessageInstructionStub.withArgs(mockInstructionId, { lastProcessedTime: sinon.match.string }).resolves({ updatedTime: mockUpdatedTime });
 
         const result = await msgHandler.createFromPendingInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));
@@ -731,7 +731,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });        
-        updateMessageInstructionStub.withArgs(mockInstructionId, 'last_processed_time', sinon.match.string).resolves({ updatedTime: mockUpdatedTime });
+        updateMessageInstructionStub.withArgs(mockInstructionId, { lastProcessedTime: sinon.match.string }).resolves({ updatedTime: mockUpdatedTime });
 
         const result = await msgHandler.createFromPendingInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));

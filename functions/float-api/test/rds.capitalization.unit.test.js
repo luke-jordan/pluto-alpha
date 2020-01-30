@@ -14,7 +14,7 @@ const chai = require('chai');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const queryStub = sinon.stub();
 const updateStub = sinon.stub();
@@ -215,11 +215,13 @@ describe('*** SUPERCEDE PRIOR ACCRUALS ***', () => {
     beforeEach(() => helper.resetStubs(queryStub));
 
     it('Formulates supercession update properly, and executes', async () => {
+        const testLogId = uuid();
+
         const expectedArgs = { 
             startTime: mockStartTime,
             endTime: mockEndTime,
             clientId: testClientId, 
-            floatId: testFloatId, 
+            floatId: testFloatId,
             currency: 'USD' 
         };
 
@@ -227,26 +229,27 @@ describe('*** SUPERCEDE PRIOR ACCRUALS ***', () => {
         // instead of selecting, modifying, and doing a big update one by one, we do it all at once, first in float,
         // then in account
 
-        const expectedFloatQuery = `update float_data.float_transaction_ledger set t_state = $1 where ` +
-            `client_id = $2 and float_id = $3 and t_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
-            `returning updated_time`;
+        const expectedFloatQuery = `update float_data.float_transaction_ledger set t_state = $1, log_id = array_append(log_id, $2) where ` +
+            `client_id = $3 and float_id = $4 and t_type = $5 and currency = $6 and creation_time between $7 and $8 returning updated_time`;
 
-        const expectedAccQuery = `update transaction_data.core_transaction_ledger set settlement_status = $1 where ` +
-            `client_id = $2 and float_id = $3 and transaction_type = $4 and currency = $5 and creation_time between $6 and $7 ` +
-            `returning updated_time`;
+        const expectedAccQuery = `update transaction_data.core_transaction_ledger set settlement_status = $1, tags = array_append(tags, $2) where ` +
+            `client_id = $3 and float_id = $4 and transaction_type = $5 and currency = $6 and creation_time between $7 and $8 returning updated_time`;
 
-        const values = ['SUPERCEDED', testClientId, testFloatId, 'ACCRUAL', 'USD', mockStartTime.format(), mockEndTime.format()];
+        const values = ['SUPERCEDED', testLogId, testClientId, testFloatId, 'ACCRUAL', 'USD', mockStartTime.format(), mockEndTime.format()];
 
         // todo : need some way to put these in a TX
-        updateStub.withArgs(expectedFloatQuery, values).resolves({ rows: [{ 'updated_time': moment().format() }] });
-        updateStub.withArgs(expectedAccQuery, values).resolves({ rows: [{ 'updated_time': moment().format() }] });
+        updateStub.onFirstCall().resolves({ rows: [{ 'updated_time': moment().format() }] });
+        updateStub.onSecondCall().resolves({ rows: [{ 'updated_time': moment().format() }] });
 
-        const resultOfSupercession = await rds.supercedeAccruals(expectedArgs);
+        const resultOfSupercession = await rds.supercedeAccruals(expectedArgs, testLogId);
 
         expect(resultOfSupercession).to.deep.equal({ result: 'SUCCESS', floatRowsUpdated: 1, accountRowsUpdated: 1 });
         expect(updateStub).to.have.been.calledTwice;
         expect(updateStub).to.have.been.calledWithExactly(expectedFloatQuery, values);
-        expect(updateStub).to.have.been.calledWithExactly(expectedAccQuery, values);
+
+        const accountValues = [...values];
+        accountValues[1] = `SUPERCEDE_FLOAT_LOG_ID::${testLogId}`;
+        expect(updateStub).to.have.been.calledWithExactly(expectedAccQuery, accountValues);
 
     });
 

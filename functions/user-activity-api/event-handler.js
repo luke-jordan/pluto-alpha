@@ -17,6 +17,7 @@ AWS.config.update({ region: config.get('aws.region') });
 // for dispatching the mails & DLQ & invoking other lambdas
 const ses = new AWS.SES();
 const sqs = new AWS.SQS();
+const sns = new AWS.SNS();
 const s3 = new AWS.S3();
 const lambda = new AWS.Lambda();
 
@@ -25,7 +26,6 @@ const redis = new Redis({ port: config.get('cache.port'), host: config.get('cach
 
 const sourceEmail = config.get('publishing.eventsEmailAddress');
 const emailSendingEnabled = config.get('publishing.eventsEmailEnabled');
-const balanceSheetUpdateEnabled = config.has('defaults.balanceSheet.enabled') && Boolean(config.get('defaults.balanceSheet.enabled'));
 
 const UNIT_DIVISORS_TO_WHOLE = {
     'HUNDREDTH_CENT': 100 * 100,
@@ -64,6 +64,37 @@ const addToDlq = async (event, err) => {
     logger('Sending to SQS DLQ: ', params);
     const sqsResult = await sqs.sendMessage(params).promise();
     logger('Result of sqs transmission:', sqsResult);
+};
+
+const invokeProfileLambda = async (systemWideUserId, includeContactMethod) => {
+    const profileFetchLambdaInvoke = invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId, includeContactMethod });
+    logger('Invoke profile fetch with arguments: ', profileFetchLambdaInvoke);
+    const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
+    logger('Result of profile fetch: ', profileFetchResult);
+    const profileResult = extractLambdaBody(profileFetchResult);
+    const cacheTtl = config.get('cache.ttls.profile');
+    // NOTE : todo: going to need to make sure cache gets invalidated when we implement / put live profile update
+    logger('Fetched profile, putting in cache');
+    await redis.set(`${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`, JSON.stringify(profileResult), 'EX', cacheTtl);
+    return profileResult;
+};
+
+const fetchUserProfile = async (systemWideUserId, includePrimaryContact) => {
+    const requiresContactScan = typeof includePrimaryContact === 'boolean' && includePrimaryContact;
+    logger(`Fetching profile in event process, passed includePrimaryContact: ${includePrimaryContact} and sending on: ${requiresContactScan}`);
+    const key = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
+    const cachedProfile = await redis.get(key);
+    if (!cachedProfile || typeof cachedProfile !== 'string' || cachedProfile.length === 0) {
+        return invokeProfileLambda(systemWideUserId, requiresContactScan);
+    }
+
+    const parsedProfile = JSON.parse(cachedProfile);
+    if (requiresContactScan && !parsedProfile.contactMethod) {
+        logger('Required contact scan but not present in profile, so fetching');
+        return invokeProfileLambda(systemWideUserId, true);
+    }
+
+    return parsedProfile;
 };
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -166,17 +197,51 @@ const safeEmailAttempt = async (eventBody) => {
     }
 };
 
+// handling withdrawals by sending email
+const safeWithdrawalEmail = async (eventBody) => {
+    const { userId } = eventBody;
+    const key = `${config.get('cache.keyPrefixes.withdrawal')}::${userId}`;
+    const [cachedDetails, userProfile] = await Promise.all([redis.get(key), fetchUserProfile(userId, true)]);
+    const bankAccountDetails = JSON.parse(cachedDetails);
+
+    const templateVariables = { ...bankAccountDetails };
+    templateVariables.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
+    templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount); // note: make positive in time
+    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
+    templateVariables.contactMethod = userProfile.contactMethod;
+
+    const subject = 'User wants to withdraw';
+    const htmlTemplate = await obtainTemplate(config.get('templates.withdrawalEmail'));
+    const htmlBody = format(htmlTemplate, templateVariables);
+
+    const textBody = 'Jupiter withdrawal requested';
+
+    const emailParams = assembleEmailParameters({ 
+        toAddresses: config.get('publishing.withdrawalEmailDestination'),
+        subject, htmlBody, textBody
+    });
+    
+    try {
+        const emailResult = await ses.sendEmail(emailParams).promise();
+        logger('Result of sending email: ', emailResult);
+    } catch (err) {
+        // we want the rest to execute, so we manually publish to the dlq, and alert admins
+        addToDlq({ eventType: 'WITHDRAWAL', eventBody, templateVariables });
+        const snsMessage = {
+            Message: `Jupiter Withdrawal! Withdrawal triggered for ${userProfile.contactMethod}, but failed on email dispatch.`,
+            MessageStructure: 'string',
+            TopicArn: config.get('publishing.userEvents.withdrawalTopic')
+        };
+
+        logger('Sending parameters to message: ', snsMessage);
+        const resultOfSns = await sns.publish(snsMessage).promise();
+        logger('Result of SNS dispatch: ', resultOfSns);
+    }
+};
+
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 // ///////////////////////// EVENT DISPATCHING ////////////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
-
-const fetchUserProfile = async (systemWideUserId) => {
-    const profileFetchLambdaInvoke = invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId });
-    const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
-    logger('Result of profile fetch: ', profileFetchResult);
-
-    return extractLambdaBody(profileFetchResult);
-};
 
 const assembleBoostProcessInvocation = (eventBody) => {
     const eventPayload = {
@@ -218,8 +283,8 @@ const updateAccountTags = async (systemWideUserId, FWAccountNumber) => {
     return accountUpdateResult;
 };
 
-const updateTxTags = async (accountId, flag) => {
-    const txUpdateResult = await persistence.updateTxTags(accountId, flag);
+const updateTxTags = async (transactionId, flag) => {
+    const txUpdateResult = await persistence.updateTxTags(transactionId, flag);
     logger('Got this back from updating tx flags:', txUpdateResult);
     
     return txUpdateResult;
@@ -234,33 +299,38 @@ const createFinWorksAccount = async (userDetails) => {
     return JSON.parse(accountCreationResult['Payload']);
 };
 
-const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency }) => {
-    const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
-    logger('Got third party account number:', accountNumber);
+const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency, transactionId }) => {
+    // still some stuff to work out here, e.g., in syncing up the account number, so rather catch & log, and let other actions pass
+    try {
+        const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
+        logger('Got third party account number:', accountNumber);
 
-    if (!accountNumber) {
-        // we don't actually throw this, but do log it, because admin needs to know
-        logger('FATAL_ERROR: No FinWorks account number for user!');
-        return;
+        if (!accountNumber) {
+            // we don't actually throw this, but do log it, because admin needs to know
+            logger('FATAL_ERROR: No FinWorks account number for user!');
+            return;
+        }
+        
+        const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
+
+        const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
+        const investmentInvocation = invokeLambda(config.get('lambdas.addTxToBalanceSheet'), { operation, transactionDetails });
+        
+        logger('lambda args:', investmentInvocation);
+        const investmentResult = await lambda.invoke(investmentInvocation).promise();
+        logger('Investment result from third party:', investmentResult);
+
+        const parsedResult = JSON.parse(investmentResult['Payload']);
+        logger('Got response body', parsedResult);
+        if (Object.keys(parsedResult).includes('result') && parsedResult.result === 'ERROR') {
+            throw new Error(`Error sending investment to third party: ${parsedResult}`);
+        }
+
+        const txUpdateResult = await updateTxTags(transactionId, config.get('defaults.balanceSheet.txFlag'));
+        logger('Result of transaction update:', txUpdateResult);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
     }
-    
-    const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
-
-    const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
-    const investmentInvocation = invokeLambda(config.get('lambdas.addTxToBalanceSheet'), { operation, transactionDetails });
-    
-    logger('lambda args:', investmentInvocation);
-    const investmentResult = await lambda.invoke(investmentInvocation).promise();
-    logger('Investment result from third party:', investmentResult);
-
-    const parsedResult = JSON.parse(investmentResult['Payload']);
-    logger('Got response body', parsedResult);
-    if (Object.keys(parsedResult).includes('result') && parsedResult.result === 'ERROR') {
-        throw new Error(`Error sending investment to third party: ${parsedResult}`);
-    }
-
-    const txUpdateResult = await updateTxTags(accountId, config.get('defaults.balanceSheet.txFlag'));
-    logger('Result of transaction update:', txUpdateResult);
 };
 
 
@@ -280,75 +350,52 @@ const handleSavingEvent = async (eventBody) => {
         promisesToInvoke.push(safeEmailAttempt(eventBody));
     }
 
-    // todo : in time, make sure that this doesn't go backwards
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
     promisesToInvoke.push(lambda.invoke(statusInvocation).promise());
     
-    if (balanceSheetUpdateEnabled) {
-        const accountId = eventBody.context.accountId;
-        const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
-        promisesToInvoke.push(addInvestmentToBSheet({ operation: 'INVEST', accountId, amount, unit, currency }));
-    }
+    const accountId = eventBody.context.accountId;
+    const transactionId = eventBody.context.transactionId;
+    const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
+    promisesToInvoke.push(addInvestmentToBSheet({ operation: 'INVEST', accountId, transactionId, amount, unit, currency }));
 
     await Promise.all(promisesToInvoke);
 };
 
 const handleWithdrawalEvent = async (eventBody) => {
-    const userId = eventBody.userId;
-    const key = `${userId}::BANK_DETAILS`;
-    const cachedDetails = await redis.get(key);
-    const bankAccountDetails = JSON.parse(cachedDetails);
+    logger('Withdrawal event triggered! Event body: ', eventBody);
 
-    const templateVariables = { ...bankAccountDetails };
-    templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount);
-    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
-
-    const subject = 'Withdrawal requested';
-    const htmlTemplate = await obtainTemplate(config.get('templates.withdrawalEmail'));
-    const htmlBody = format(htmlTemplate, templateVariables);
-
-    const textBody = 'Jupiter withdrawal requested';
-
-    const emailParams = assembleEmailParameters({ 
-        toAddresses: config.get('publishing.withdrawalEmailDestination'),
-        subject, htmlBody, textBody
-    });
-    
-    const emailResult = await ses.sendEmail(emailParams).promise();
-    logger('Result of sending email: ', emailResult);
+    await safeWithdrawalEmail(eventBody);
 
     const processingPromises = [];
     const boostProcessInvocation = assembleBoostProcessInvocation(eventBody);
     processingPromises.push(lambda.invoke(boostProcessInvocation).promise());
 
-    if (balanceSheetUpdateEnabled) {
-            const accountId = eventBody.context.accountId;
-            const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
-            processingPromises.push(addInvestmentToBSheet({ operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency }));
-    }
+    const accountId = eventBody.context.accountId;
+    const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
+    processingPromises.push(addInvestmentToBSheet({ operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency }));
+
+    const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
+    const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
+    logger('Status invocation: ', statusInvocation);
+    processingPromises.push(lambda.invoke(statusInvocation).promise());
 
     await Promise.all(processingPromises);
-
-    // todo : as above, make sure doesn't alter status backwards
-    // const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
 };
 
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
 
-    if (balanceSheetUpdateEnabled) {
-        const userProfile = await fetchUserProfile(eventBody.userId);
-        const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
-        const bsheetAccountResult = await createFinWorksAccount(userDetails);
-        if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
-            throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
-        }
-
-        logger('Finworks account creation resulted in:', bsheetAccountResult);
-        const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
-        logger(`Result of user account update: ${accountUpdateResult}`);
+    const userProfile = await fetchUserProfile(eventBody.userId);
+    const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
+    const bsheetAccountResult = await createFinWorksAccount(userDetails);
+    if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
+        throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
     }
+
+    logger('Finworks account creation resulted in:', bsheetAccountResult);
+    const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
+    logger(`Result of user account update: ${accountUpdateResult}`);
 };
 
 /**

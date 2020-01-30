@@ -8,6 +8,7 @@ const status = require('statuses');
 const persistence = require('./persistence/rds.account');
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
+const publisher = require('publish-common');
 
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
@@ -78,7 +79,7 @@ const obtainUserHistory = async (systemWideUserId) => {
     logger('Result of history fetch: ', historyFetchResult);
 
     // this one is not wrapped because it is only ever used on direct invocation
-    if (historyFetchResult['StatusCode'] !== 200 || JSON.parse(historyFetchResult['Payload']).result !== 'success') {
+    if (historyFetchResult['StatusCode'] !== 200 || JSON.parse(historyFetchResult['Payload']).result !== 'SUCCESS') {
         logger('ERROR! Something went wrong fetching history');
     }
 
@@ -86,7 +87,6 @@ const obtainUserHistory = async (systemWideUserId) => {
 };
 
 const obtainUserPendingTx = async (systemWideUserId) => {
-    // todo : make sure includes withdrawals
     logger('Also fetching pending transactions for user ...');
     const startMoment = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days');
     return persistence.fetchUserPendingTransactions(systemWideUserId, startMoment);
@@ -108,6 +108,29 @@ const obtainUserBalance = async (userProfile) => {
     return extractLambdaBody(userBalanceResult);
 };
 
+const obtainSystemWideIdFromProfile = async (lookUpPayload) => {
+    const lookUpInvoke = adminUtil.invokeLambda(config.get('lambdas.systemWideIdLookup'), lookUpPayload);
+
+    logger('Invoking system wide user ID lookup with params: ', lookUpInvoke);
+    const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
+    const systemIdPayload = JSON.parse(systemWideIdResult['Payload']);
+    logger('Result of system wide user ID lookup: ', systemIdPayload);
+
+    if (systemIdPayload.statusCode !== 200) {
+        return null;
+    }
+
+    const { systemWideUserId } = JSON.parse(systemIdPayload.body);
+    logger(`From query params: ${JSON.stringify(lookUpPayload)}, got system ID: ${systemWideUserId}`);
+    
+    return systemWideUserId;
+};
+
+const obtainSystemWideIdFromBankRef = async (lookUpPayload) => {
+    logger('Trying to find user from bank reference or account name');
+    return persistence.findUserFromRef({ searchValue: lookUpPayload.bankReference, bsheetPrefix: config.get('bsheet.prefix') });
+};
+
 /**
  * Function for looking up a user and returning basic data about them
  * @param {object} event An event object containing the request context and query paramaters specifying the search to make
@@ -121,31 +144,34 @@ module.exports.lookUpUser = async (event) => {
         }
 
         const lookUpPayload = opsCommonUtil.extractQueryParams(event);
-        const lookUpInvoke = adminUtil.invokeLambda(config.get('lambdas.systemWideIdLookup'), lookUpPayload);
+        logger('Looking up user, with payload: ', lookUpPayload);
 
-        logger('Invoking system wide user ID lookup with params: ', lookUpInvoke);
-        const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
-        const systemIdPayload = JSON.parse(systemWideIdResult['Payload']);
+        let systemWideUserId = null;
+        if (Reflect.has(lookUpPayload, 'bankReference')) {
+            systemWideUserId = await obtainSystemWideIdFromBankRef(lookUpPayload);
+        } else {
+            systemWideUserId = await obtainSystemWideIdFromProfile(lookUpPayload);
+        }
 
-        if (systemIdPayload.statusCode !== 200) {
+        if (!systemWideUserId) {
             return opsCommonUtil.wrapResponse({ result: 'USER_NOT_FOUND' }, status('Not Found'));
         }
 
-        const { systemWideUserId } = JSON.parse(systemIdPayload.body);
-        logger(`From query params: ${JSON.stringify(lookUpPayload)}, got system ID: ${systemWideUserId}`);
 
         const [userProfile, pendingTransactions, userHistory] = await Promise.all([
             fetchUserProfile(systemWideUserId), obtainUserPendingTx(systemWideUserId), obtainUserHistory(systemWideUserId)
         ]);
 
         // need profile currency etc for this one, so can't parallel process with above
-        const userBalance = await obtainUserBalance(userProfile);
+        const balanceResult = await obtainUserBalance(userProfile);
+        const bsheetIdentifier = await persistence.fetchBsheetTag({ accountId: balanceResult.accountId[0], tagPrefix: config.get('bsheet.prefix') });
+        const userBalance = { ...balanceResult, bsheetIdentifier };
 
         const resultObject = { 
             ...userProfile,
             userBalance,
             pendingTransactions,
-            userHistory 
+            userHistory
         };
         
         logger('Returning: ', resultObject);
@@ -193,38 +219,87 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
     
     const returnResult = updatePayload.statusCode === 200
         ? { result: 'SUCCESS', updateLog: JSON.parse(updatePayload.body) }
-        : { result: 'FAILURE', message: JSON.parse(updatePayload.body)};
+        : { result: 'FAILURE', message: JSON.parse(updatePayload.body) };
 
     logger('Returning result: ', returnResult);
 
-    return updateResult;
+    return returnResult;
+};
+
+const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
+    const logPayload = { initiator: adminUserId, options: { context }};
+    logger('Dispatching user log: ', logPayload);
+    return publisher.publishUserEvent(systemWideUserId, eventType, logPayload);
+};
+
+const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reasonToLog }) => {
+    const settlePayload = { transactionId, paymentRef: reasonToLog, paymentProvider: 'ADMIN_OVERRIDE', settlingUserId: adminUserId };
+    logger('Invoking settle lambda, payload: ', settlePayload);
+    const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
+    logger('Transaction settle, result: ', settleResponse);
+
+    const resultPayload = JSON.parse(settleResponse['Payload']);
+    if (settleResponse['StatusCode'] === 200) {
+        const logContext = { settleInstruction: settlePayload, resultPayload };
+        const transactionType = resultPayload.transactionDetails[0].accountTransactionType;
+        const eventType = transactionType === 'USER_SAVING_EVENT' ? 'ADMIN_SETTLED_SAVE' : `ADMIN_SETTLED_${transactionType}`;
+        const loggingPromises = [
+            publishUserLog({ adminUserId, systemWideUserId, eventType, context: logContext }),
+            persistence.insertAccountLog({ transactionId, adminUserId, logType: eventType, logContext })
+        ];
+        if (transactionType === 'USER_SAVING_EVENT') {
+            loggingPromises.push(publishUserLog({ adminUserId, systemWideUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL', context: logContext }));
+        }
+        await Promise.all(loggingPromises);
+        return { result: 'SUCCESS', updateLog: resultPayload };
+    } 
+    
+    return { result: 'ERROR', message: resultPayload };
+};
+
+const updateTxStatus = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
+    const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, reason: reasonToLog, newStatus: newTxStatus };
+    const resultOfRdsUpdate = await persistence.adjustTxStatus({ transactionId, newTxStatus, logContext });
+    logger('Result of straight persistence adjustment: ', resultOfRdsUpdate);
+    await Promise.all([
+        publishUserLog({ adminUserId, systemWideUserId, eventType: 'ADMIN_UPDATED_TX', context: { ...logContext, transactionId }}),
+        persistence.insertAccountLog({ transactionId, adminUserId, logType: 'ADMIN_UPDATED_TX', logContext })
+    ]);
+    return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
 };
 
 const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
-    // todo : definitely need audit tables to do something with the logs
     logger(`Updating transaction, for user ${systemWideUserId}, transaction ${transactionId}, new status ${newTxStatus}, should log: ${reasonToLog}`);
 
     let resultBody = { };
     if (newTxStatus === 'SETTLED') {
-        const settlePayload = { transactionId, paymentRef: reasonToLog, paymentProvider: 'ADMIN_OVERRIDE' };
-        logger('Invoking settle lambda ...');
-        const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
-        logger('Transaction settle, result: ', settleResponse);
-        const resultPayload = JSON.parse(settleResponse['Payload']);
-        if (settleResponse['StatusCode'] === 200) {
-            resultBody = { result: 'SUCCESS', updateLog: resultPayload };
-        } else {
-            resultBody = { result: 'ERROR', message: resultPayload };
-        }
+        resultBody = await settleUserTx({ adminUserId, systemWideUserId, transactionId, reasonToLog });
     } else {
-        const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, reasong: reasonToLog };
-        const resultOfRdsUpdate = await persistence.adjustTxStatus({ transactionId, newTxStatus, logContext });
-        logger('Result of straight persistence adjustment: ', resultOfRdsUpdate);
-        resultBody = { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
+        resultBody = await updateTxStatus({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog });
     }
 
     logger('Completed transaction update, result: ', resultBody);
     return resultBody;
+};
+
+const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId, newIdentifier }) => {
+    logger(`Updating balance sheet account for ${systemWideUserId}, setting it to ${newIdentifier}`);
+    const bsheetPrefix = config.get('bsheet.prefix');
+    // happens inside to prevent accidental duplication etc
+    const resultOfRdsUpdate = await persistence.updateBsheetTag({ accountId, tagPrefix: bsheetPrefix, newIdentifier });
+    logger('Result of RDS update: ', resultOfRdsUpdate);
+    if (!resultOfRdsUpdate) {
+        return { result: 'ERROR', message: 'Failed on persistence update' };
+    }
+    
+    const oldIdentifier = resultOfRdsUpdate.oldIdentifier;
+    const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, newIdentifier, oldIdentifier };
+
+    await Promise.all([
+        publishUserLog({ adminUserId, systemWideUserId, eventType: 'ADMIN_UPDATED_BSHEET_TAG', context: { ...logContext, accountId } }),
+        persistence.insertAccountLog({ accountId, adminUserId, logType: 'ADMIN_UPDATED_BSHEET_TAG', logContext })
+    ]);
+    return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
 };
 
 /**
@@ -237,8 +312,10 @@ module.exports.manageUser = async (event) => {
             return adminUtil.unauthorizedResponse;
         }
 
-        const params = opsCommonUtil.extractParamsFromEvent(event);
-        logger('Params for user management: ', event);
+        const adminUserId = opsCommonUtil.extractUserDetails(event).systemWideUserId;
+
+        const params = { ...opsCommonUtil.extractParamsFromEvent(event), adminUserId };
+        logger('Params for user management: ', params);
 
         if (!params.systemWideUserId || !params.fieldToUpdate || !params.reasonToLog) {
             const message = 'Requests must include a user ID to update, a field, and a reason to log';
@@ -260,6 +337,22 @@ module.exports.manageUser = async (event) => {
                 return opsCommonUtil.wrapResponse('Error, bad field or type for user update', 400);
             }
             resultOfUpdate = await handleStatusUpdate(params);
+        }
+        
+        if (params.fieldToUpdate === 'BSHEET') {
+            logger('Updating the FinWorks (balance sheet management) identifier for the user');
+            if (!params.accountId) {
+                return opsCommonUtil.wrapResponse('Error, must pass in account ID', 400);
+            }
+            if (!params.newIdentifier) {
+                return opsCommonUtil.wrapResponse('Error, must pass in newIdentifier', 400);
+            }
+            resultOfUpdate = await handleBsheetAccUpdate(params);
+        }
+
+        if (params.fieldToUpdate === 'PWORD') {
+            logger('Resetting the user password, trigger and send back');
+            
         }
 
         if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {

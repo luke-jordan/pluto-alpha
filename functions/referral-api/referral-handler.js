@@ -100,8 +100,10 @@ module.exports.create = async (event) => {
     try {
         // todo : validation of e.g., only system admin can open non-user referral codes
         
-        logger('Referral creation event: ', event);
+        logger('Referral creation initiated');
         const params = opsUtil.extractParamsFromEvent(event);
+        logger('Referral parameters: ', params);
+        
         const { countryCode } = params;
         
         let codeToCreate = '';
@@ -177,6 +179,10 @@ module.exports.verify = async (event) => {
         // todo : validation of request
         const params = opsUtil.extractParamsFromEvent(event);
         logger('Referral verification params: ', params);
+        if (!params.referralCode || typeof params.referralCode !== 'string' || params.referralCode.trim().length === 0) {
+            return { statusCode: status['Not found'], body: JSON.stringify({ result: 'NO_CODE_PROVIDED' })};
+        }
+        
         const referralCode = params.referralCode.toUpperCase().trim();
         const codeKey = { referralCode, countryCode: params.countryCode };
         const colsToReturn = ['referralCode', 'codeType', 'expiryTimeMillis', 'context'];

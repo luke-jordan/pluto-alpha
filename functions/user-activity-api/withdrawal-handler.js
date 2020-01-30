@@ -9,7 +9,14 @@ const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
 
 const Redis = require('ioredis');
-const redis = new Redis({ port: config.get('cache.port'), host: config.get('cache.host') });
+const redis = new Redis({ 
+    port: config.get('cache.port'), 
+    host: config.get('cache.host'), 
+    keyPrefix: `${config.get('cache.keyPrefixes.withdrawal')}::`
+});
+
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
 
@@ -39,12 +46,102 @@ const UNIT_MULTIPLIERS = {
     }
 };
 
+const fetchUserProfile = async (systemWideUserId) => {
+    const profileFetchLambdaInvoke = {
+        FunctionName: config.get('lambdas.fetchProfile'),
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify({ systemWideUserId })
+    };
+    const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
+    logger('Result of profile fetch: ', profileFetchResult);
+
+    return JSON.parse((JSON.parse(profileFetchResult['Payload']).body));
+};
+
 // note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
-const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails) => {
-    const accountTimeOut = config.get('cache.detailsTTL');
-    const key = `${systemWideUserId}::BANK_DETAILS`;
-    await redis.set(key, JSON.stringify(bankAccountDetails), 'EX', accountTimeOut);
+const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails, verificationJobId) => {
+    const accountTimeOut = config.get('cache.ttls.withdrawal');
+    logger('Logging, passed job ID: ', verificationJobId);
+    await redis.set(systemWideUserId, JSON.stringify({ ...bankAccountDetails, verificationJobId }), 'EX', accountTimeOut);
     logger('Done! Can move along');
+};
+
+const getBankVerificationJobId = async (bankDetails, userProfile) => {
+    const initials = userProfile.personalName.split(' ').map((name) => name[0]).join('');
+    const parameters = {
+        bankName: bankDetails.bankName,
+        accountNumber: bankDetails.accountNumber,
+        accountType: bankDetails.accountType,
+        reference: userProfile.systemWideUserId,
+        initials,
+        surname: userProfile.familyName,
+        nationalId: userProfile.nationalId
+    };
+
+    const lambdaInvocation = {
+        FunctionName: config.get('lambdas.userBankVerify'),
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify({ operation: 'initialize', parameters })
+    };
+
+    logger('Invoking bank verification initialize, with invocation: ', lambdaInvocation);
+    const resultOfLambda = await lambda.invoke(lambdaInvocation).promise();
+    logger('Received response from bank verification lambda: ', resultOfLambda);
+    if (resultOfLambda['StatusCode'] !== 200) {
+        throw new Error(resultOfLambda['Payload']);
+    }
+
+    const resultPayload = JSON.parse(resultOfLambda['Payload']);
+    if (resultPayload.status !== 'SUCCESS') {
+        throw new Error(JSON.stringify(resultPayload));
+    }
+
+    return resultPayload.jobId;
+};
+
+const checkBankVerification = async (systemWideUserId) => {
+    const bankDetailsRaw = await redis.get(systemWideUserId);
+    logger('Bank details from Redis: ', bankDetailsRaw);
+    const bankDetails = JSON.parse(bankDetailsRaw);
+    
+    if (Reflect.has(bankDetails, 'verificationStatus')) {
+        const alreadyCached = true;
+        return bankDetails.verificationStatus ? { result: 'VERIFIED', alreadyCached } 
+            : { result: 'FAILED', cause: bankDetails.failureReason, alreadyCached };
+    }
+    
+    if (!bankDetails.verificationJobId) {
+        throw new Error('No job ID for bank verification');
+    }
+
+    const parameters = { jobId: bankDetails.verificationJobId };
+    const lambdaInvocation = {
+        FunctionName: config.get('lambdas.userBankVerify'),
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify({ operation: 'statusCheck', parameters })
+    };
+
+    const resultOfLambda = await lambda.invoke(lambdaInvocation).promise();
+    if (resultOfLambda['StatusCode'] !== 200) {
+        throw new Error(resultOfLambda['Payload']);
+    }
+
+    const resultPayload = JSON.parse(resultOfLambda['Payload']);
+    if (!Reflect.has(resultPayload, 'result')) {
+        throw new Error(JSON.stringify(resultPayload));
+    }
+
+    return resultPayload;
+};
+
+const updateBankAccountVerificationStatus = async (systemWideUserId, verificationStatus, failureReason) => {
+    const cachedDetailsRaw = await redis.get(systemWideUserId);
+    const cachedDetails = JSON.parse(cachedDetailsRaw);
+    cachedDetails.verificationStatus = verificationStatus;
+    if (failureReason) {
+        cachedDetails.failureReason = failureReason;
+    }
+    await redis.set(systemWideUserId, JSON.stringify({ cachedDetails }), 'EX', config.get('cache.detailsTTL'));
 };
 
 /**
@@ -63,29 +160,32 @@ module.exports.setWithdrawalBankAccount = async (event) => {
           return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
         }
         
-        // await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_INITIATED');
+        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_INITIATED');
         const withdrawalInformation = JSON.parse(event.body);
-        const accountId = withdrawalInformation.accountId;
+        const { accountId, bankDetails } = withdrawalInformation;
+        const { systemWideUserId } = authParams;
 
-        // first, verify bank account ownership, to be completed
-        const isBankAccountValid = true;
-        if (!isBankAccountValid) {
-            return invalidRequestResponse({ result: 'BANK_ACCOUNT_INVALID' });
-        }
+        // dispatch a series of events: cache the bank account, send off bank account for verification, etc.
+        const [userProfile, priorUserSaves, currency] = await Promise.all([
+            fetchUserProfile(systemWideUserId),
+            persistence.countSettledSaves(accountId),
+            persistence.findMostCommonCurrency(accountId)
+        ]);
 
-        // then, make sure the user has saved in the past
-        const priorUserSaves = await persistence.countSettledSaves(accountId);
+        // then, make sure the user has saved in the past, and get their most common currency
         if (priorUserSaves === 0) {            
             return invalidRequestResponse({ result: 'USER_HAS_NOT_SAVED' });
         }
 
-        // then, get the balance available, and also store the account details
-        const currency = await persistence.findMostCommonCurrency(accountId);
+        // then, get the balance available, and check if the bank verification has completed, in time also the boost etc.
         logger('Most common currency: ', currency);
-        const availableBalance = await persistence.sumAccountBalance(withdrawalInformation.accountId, currency);
+        const [bankVerifyJobId, availableBalance] = await Promise.all([
+            getBankVerificationJobId(bankDetails, userProfile),
+            persistence.sumAccountBalance(accountId, currency)
+        ]);
 
-        await cacheBankAccountDetails(authParams.systemWideUserId, withdrawalInformation.bankDetails);
-
+        await cacheBankAccountDetails(systemWideUserId, bankDetails, bankVerifyJobId);
+        
         // todo : actually calculate projection
         const responseObject = {
             availableBalance,
@@ -119,10 +219,25 @@ module.exports.setWithdrawalAmount = async (event) => {
         if (!authParams || !authParams.systemWideUserId) {
           return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
         }
+
+        // do a check first, before proceeding onwards
+        const { systemWideUserId } = authParams;
+        logger('Setting withdrawal amount for user: ', systemWideUserId);
+
+        const bankVerificationStatus = await checkBankVerification(systemWideUserId);
+        if (bankVerificationStatus.result === 'FAILED') {
+            await updateBankAccountVerificationStatus(systemWideUserId, false, bankVerificationStatus.cause);
+            return invalidRequestResponse({ result: 'BANK_ACCOUNT_INVALID' });
+        }
+
+        if (bankVerificationStatus.result === 'VERIFIED') {
+            await updateBankAccountVerificationStatus(systemWideUserId, true);
+        }
         
         const withdrawalInformation = JSON.parse(event.body);
         
         if (!withdrawalInformation.amount || !withdrawalInformation.unit || !withdrawalInformation.currency) {
+            logger('Withdrawal amount failed validation, responding with failure');
             return invalidRequestResponse('Error, must send amount to withdraw, along with unit and currency');
         }
 
@@ -137,7 +252,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         // make sure the amount is negative (as that makes the sums etc work)
         withdrawalInformation.amount = -Math.abs(withdrawalInformation.amount);
         withdrawalInformation.transactionType = 'WITHDRAWAL';
-        withdrawalInformation.settlementStatus = 'PENDING';
+        withdrawalInformation.settlementStatus = 'INITIATED';
         withdrawalInformation.initiationTime = moment();
 
         if (!withdrawalInformation.floatId || !withdrawalInformation.clientId) {
@@ -154,10 +269,13 @@ module.exports.setWithdrawalAmount = async (event) => {
         // for now, we are just stubbing this
         const delayTime = moment().add(1, 'week');
         const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
-        
+
+        const resultObject = { transactionId, delayOffer };
+        logger('Result object on withdrawal amount, to send back: ', resultObject);
+
         // then, assemble and send back
         return {
-            statusCode: 200, body: JSON.stringify({ transactionId, delayOffer })
+            statusCode: 200, body: JSON.stringify(resultObject)
         };
     } catch (err) {
         return handleError(err);
@@ -165,7 +283,7 @@ module.exports.setWithdrawalAmount = async (event) => {
 };
 
 /**
- * This function confirms a withdrawal.
+ * This function confirms a withdrawal. However, it makes it only "pending", until admin confirms the transfer is done.
  * @param {object} event An event object containing the request context and request body. Body properties are described below.
  * @property {string} transactionId The transactions unique identifier.
  * @property {string} userDecision The users decision. Valid values are CANCEL AND WITHDRAW.
@@ -177,6 +295,8 @@ module.exports.confirmWithdrawal = async (event) => {
           return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
         }
 
+        const { systemWideUserId } = authParams;
+
         const withdrawalInformation = JSON.parse(event.body);
         if (!withdrawalInformation.transactionId) {
             return invalidRequestResponse('Requires a transaction Id');
@@ -187,26 +307,49 @@ module.exports.confirmWithdrawal = async (event) => {
         const transactionId = withdrawalInformation.transactionId;
         if (withdrawalInformation.userDecision === 'CANCEL') {
             // process the boost, and tell the user, then update the transaction
-            await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
+            await publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
             return { statusCode: 200 };
         }
+        
+        // in case it was pending before -- only do it after cancel else pointless
+        const bankVerificationStatus = await checkBankVerification(systemWideUserId);
+        if (bankVerificationStatus.result === 'FAILED') {
+            if (!bankVerificationStatus.alreadyCached) {
+                await updateBankAccountVerificationStatus(systemWideUserId, false, bankVerificationStatus.cause);
+            }
+            return invalidRequestResponse({ result: 'BANK_ACCOUNT_INVALID' });
+        }
 
-        // user wants to go through with it, so (1) send an email about it, (2) update the transaction, (3) update 3rd-party
-        const resultOfUpdate = await persistence.updateTxToSettled({ transactionId, settlementTime: moment() });
+        if (bankVerificationStatus.result === 'VERIFIED' && !bankVerificationStatus.alreadyCached) {
+            await updateBankAccountVerificationStatus(systemWideUserId, true);
+        }
+
+        // user wants to go through with it, so (1) send an email about it, (2) update the transaction to pending, (3) update 3rd-party
+        const resultOfUpdate = await persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'PENDING' });
+        logger('Result of update: ', resultOfUpdate);
 
         // then, return the balance
+        if (!resultOfUpdate) {
+            throw new Error('Transaction update returned empty rows');
+        }
+
         const response = { balance: resultOfUpdate.newBalance };
         
         // last, publish this (i.e., so instruction goes out)
         const txProperties = await persistence.fetchTransaction(transactionId);
+        logger('Withdrawal TX properties: ', txProperties);
+        const newBalance = await persistence.sumAccountBalance(txProperties.accountId, txProperties.currency);
+        logger('New account balance: ', newBalance);
+        
         const context = {
             transactionId,
             accountId: txProperties.accountId,
             timeInMillis: txProperties.settlementTime,
             withdrawalAmount: collapseAmount(txProperties),
-            newBalance: collapseAmount(response.balance)
+            newBalance: collapseAmount(newBalance)
         };
-        await publisher.publishUserEvent(authParams.systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
+        
+        await publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
 
         return { statusCode: 200, body: JSON.stringify(response) };
     } catch (err) {

@@ -13,6 +13,8 @@
         "rewardTransactions": "transaction_data.core_transaction_ledger",
         "floatTransactions": "float_data.float_transaction_ledger",
         "accountLedger": "account_data.core_account_ledger",
+        "boostMaster": "boost_data.boost",
+        "boostJoin": "boost_data.boost_account_status",
         "clientFloatVars": "ClientFloatTable"
     },
     "db": {
@@ -25,7 +27,17 @@
     "cache": {
         "port": 6739,
         "detailsTTL": 900,
-        "host": "localhost"
+        "host": "localhost",
+        "keyPrefixes": {
+            "withdrawal": "WITHDRAWAL_DETAILS",
+            "profile": "USER_PROFILE",
+            "account": "ACCOUNT_DETAILS"
+        },
+        "ttls": {
+            "withdrawal": 900,
+            "profile": 25200,
+            "account": 25200
+        }
     },
     "projection": {
         "defaultDays": 3,
@@ -40,16 +52,18 @@
         "userHistory": "user_log_reader",
         "fetchProfile": "profile_fetch",
         "createBalanceSheetAccount": "balance_sheet_acc_create",
-        "addTxToBalanceSheet": "balance_sheet_acc_update"
+        "addTxToBalanceSheet": "balance_sheet_acc_update",
+        "userBankVerify": "bank_account_verify"
     },
     "payment": {
         "test": false,
-        "dummy": "ON"
+        "dummy": "OFF"
     },
     "publishing": {
         "userEvents": {
             "topicArn": "<<override here>>",
-            "processingDlq": "<<insert_here>>"
+            "processingDlq": "<<insert_here>>",
+            "withdrawalTopic": "<<insert_here>>"
         },
         "processingLambdas": {
             "boosts": "boost_event_process",

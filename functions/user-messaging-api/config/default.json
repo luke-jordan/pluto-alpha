@@ -16,7 +16,8 @@
     "lambdas": {
         "generateUserMessages": "message_user_create_once",
         "updateMessageStatus": "message_user_process",
-        "sendSystemEmail": "sendgrid_dispatch_emails"
+        "sendSystemEmail": "sendgrid_dispatch_emails",
+        "fetchAccountAggregate": "user_history_aggregate"
     },
     "db": {
         "host": "localhost",

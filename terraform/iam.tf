@@ -121,6 +121,27 @@ resource "aws_iam_policy" "fworks_s3_access" {
 EOF
 }
 
+resource "aws_iam_policy" "float_record_s3_access" {
+    name      = "${terraform.workspace}_float_record_s3_access"
+    path      = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PutObjectAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:PutObject"
+            ],
+            "Resource": "${aws_s3_bucket.float_record_bucket.arn}/*"
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
     name = "warmup_ops_lambda_invoke_access_${terraform.workspace}"
     path = "/"
@@ -143,7 +164,8 @@ resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {
                 "${aws_lambda_function.save_payment_check.arn}",
                 "${aws_lambda_function.message_user_fetch.arn}",
                 "${aws_lambda_function.user_history_list.arn}",
-                "${aws_lambda_function.referral_verify.arn}"
+                "${aws_lambda_function.referral_verify.arn}",
+                "${aws_lambda_function.user_history_aggregate.arn}"
             ],
             "Condition": {
                 "StringEquals": {
@@ -344,6 +366,55 @@ resource "aws_iam_policy" "save_check_invoke_access" {
 }
 EOF
 }
+
+resource "aws_iam_policy" "lambda_invoke_history_aggregate_access" {
+    name = "lambda_history_aggregate_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "MessageProcessInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.user_history_aggregate.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "lamdba_invoke_bank_verify_access" {
+    name = "lambda_bank_verify_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "InvokeBankVerify",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.bank_account_verify.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 
 /////////////// COMPOSITE POLICIES FOR PROCESSING/ADMIN LAMBDAS THAT DO A LOT ///////////////////
 

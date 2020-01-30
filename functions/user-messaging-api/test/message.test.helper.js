@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:tests');
-// const stringify = require('json-stable-stringify');
+const stringify = require('json-stable-stringify');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -32,16 +32,6 @@ module.exports.standardOkayChecks = (result, expectedResult) => {
     return parsedResult;
 };
 
-/*
-    const commonAssertions = (statusCode, result, expectedResult) => {
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(statusCode);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
-    };
-*/
-
 module.exports.logNestedMatches = (expectedObj, passedToArgs) => {
     Object.keys(expectedObj).forEach((key) => {
         const doesItMatch = sinon.match(expectedObj[key]).test(passedToArgs[key]);
@@ -63,15 +53,13 @@ module.exports.expectedHeaders = {
     'Access-Control-Allow-Origin': '*'
 };
 
-// module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
-//     FunctionName: functionName,
-//     InvocationType: async ? 'Event' : 'RequestResponse',
-//     Payload: stringify(payload)
-// });
+module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
+    FunctionName: functionName,
+    InvocationType: async ? 'Event' : 'RequestResponse',
+    Payload: stringify(payload)
+});
 
-// module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
-//     Payload: JSON.stringify({
-//         statusCode,
-//         body: JSON.stringify(body)
-//     })
-// });
+module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
+    StatusCode: statusCode,
+    Payload: JSON.stringify(body)
+});

@@ -9,6 +9,7 @@ const constants = require('./constants');
 
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
+const csvFile = require('./persistence/csvfile');
 
 const BigNumber = require('bignumber.js');
 
@@ -206,7 +207,8 @@ module.exports.confirm = async (params) => {
         transactionType, 
         transactionState: 'SETTLED',
         relatedEntityType: backingEntityType,
-        relatedEntityId: floatLogId
+        relatedEntityId: floatLogId,
+        logId: floatLogId
     };
 
     const bonusAlloc = { ...entityAllocBase, amount: bonusAmount, allocatedToId: bonusPoolId, allocatedToType: 'BONUS_POOL', label: 'BONUS' };
@@ -225,13 +227,19 @@ module.exports.confirm = async (params) => {
     logger('User allocations done, made ', resultOfUserAllocation.length, ' paired transactions, first : ', resultOfUserAllocation[0]);
 
     const supercedeParams = { clientId, floatId, startTime: metadata.startTime, endTime: metadata.endTime, currency: params.currency };
-    const resultOfSupercession = await rds.supercedeAccruals(supercedeParams);
+    const resultOfSupercession = await rds.supercedeAccruals(supercedeParams, floatLogId);
     logger('Result of supercession: ', resultOfSupercession);
 
     const resultPackage = assembleSummaryData(allocations, floatConfigVars, metadata);
     logger('Final result: ', resultPackage);
 
-    // todo : add in 'done' rows
+    // then we upload the results
+    const allTransactionRecords = await rds.fetchRecordsRelatedToLog(floatLogId);
+    const resultOfUpload = await csvFile.writeAndUploadCsv({ filePrefix: 'capitalization', rowsFromRds: allTransactionRecords, logId: floatLogId });
+    logger('Result of upload: ', resultOfUpload);
+
+    resultPackage.s3record = resultOfUpload;
+
     return resultPackage;
 };
 

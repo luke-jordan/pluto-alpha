@@ -99,6 +99,11 @@ resource "aws_iam_role_policy_attachment" "float_capitalize_client_float_table_a
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
 
+resource "aws_iam_role_policy_attachment" "float_capitalize_s3_put_access" {
+  role = aws_iam_role.float_capitalize_role.name
+  policy_arn = aws_iam_policy.float_record_s3_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "float_capitalize_secret_get" {
   role = "${aws_iam_role.float_capitalize_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_float_worker_read"

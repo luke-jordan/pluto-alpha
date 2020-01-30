@@ -21,6 +21,11 @@ const stdProperties = {
         type: 'match',
         description: 'Last save date',
         expects: 'epochMillis'
+    },
+    lastCapitalization: {
+        type: 'match',
+        description: 'Last capitalization',
+        expects: 'epochMillis'
     }
 };
 
@@ -65,6 +70,15 @@ const columnConverters = {
                 { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
             ]}
        ]
+    }),
+    lastCapitalization: (condition) => ({
+        conditions: [
+            { op: 'and', children: [
+                { op: condition.op, prop: 'creation_time', value: convertEpochToFormat(condition.value) },
+                { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
+                { op: 'is', prop: 'transaction_type', value: 'CAPITALIZATION' }
+            ]}
+        ]
     })
 };
 
@@ -147,9 +161,16 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
     return columnCondition.conditions[0];
 };
 
-const constructColumnConditions = async (params) => {
+const logParams = (params) => {
     logger('Passed parameters to construct column conditions: ', params);
-    
+    if (params.conditions && params.conditions.length > 0 && (params.conditions[0].op === 'and' || params.conditions[0].op === 'or')) {
+        logger('First level conditions: ', params.conditions[0].children);
+    }
+};
+
+const constructColumnConditions = async (params) => {
+    logParams(params);
+
     const passedPropertyConditions = params.conditions;
     
     const { clientId, creatingUserId, isDynamic, sample } = params;

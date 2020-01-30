@@ -30,16 +30,6 @@ const extractTxTagIfExists = (txDetails, desiredTag) => {
   return '';
 };
 
-// todo : remove need for this in app soon
-const legacyKeyFix = (passedSaveDetails) => {
-  const saveDetails = { ...passedSaveDetails };
-  saveDetails.amount = saveDetails.amount || saveDetails.savedAmount;
-  saveDetails.unit = saveDetails.unit || saveDetails.savedUnit;
-  saveDetails.currency = saveDetails.currency || saveDetails.savedCurrency;
-  ['savedAmount', 'savedUnit', 'savedCurrency'].forEach((key) => Reflect.deleteProperty(saveDetails, key));
-  return saveDetails;
-};
-
 const save = async (eventBody) => {
   const saveInformation = eventBody;
   logger('Have a saving request inbound: ', saveInformation);
@@ -105,7 +95,7 @@ module.exports.initiatePendingSave = async (event) => {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
     
-    const saveInformation = legacyKeyFix(JSON.parse(event.body));
+    const saveInformation = JSON.parse(event.body);
 
     if (!saveInformation.accountId) {
       return invalidRequestResponse('Error! No account ID provided for the save');
@@ -209,6 +199,8 @@ module.exports.completeSavingPaymentFlow = async (event) => {
 
     // for security reasons, we obviously don't trust the incoming path variables for payment status, but trigger a background check
     // to payment provider to make sure of it -- that then stores the result for when the user resumes
+    
+    // if this fails it will just fail; if it succeeds, it will allow checking to be quicker later
     if (resultType === 'SUCCESS') {
       logger('Payment result is a success, fire off lambda invocation in the background');
       await payment.triggerTxStatusCheck({ transactionId, paymentProvider });
@@ -275,6 +267,10 @@ module.exports.settle = async (settleInfo) => {
     return invalidRequestResponse('Error! No transaction ID provided');
   }
 
+  if (!settleInfo.settlingUserId) {
+    return invalidRequestResponse('Error! No settling user ID provided');
+  }
+
   if (Reflect.has(settleInfo, 'settlementTimeEpochMillis')) {
     settleInfo.settlementTime = moment(settleInfo.settlementTimeEpochMillis);
     Reflect.deleteProperty(settleInfo, 'settlementTimeEpochMillis');
@@ -288,7 +284,7 @@ module.exports.settle = async (settleInfo) => {
   return resultOfUpdate;
 };
 
-const handlePaymentFailure = async (failureType, transactionDetails) => {
+const handlePaymentPendingOrFailed = async (statusType, transactionDetails) => {
   logger('Payment failed, consider how and return which way, tx details: ', transactionDetails);
   
   const { clientId, floatId } = transactionDetails;
@@ -297,7 +293,7 @@ const handlePaymentFailure = async (failureType, transactionDetails) => {
 
   const bankDetails = { ...clientFloatVars.bankDetails, useReference: humanRef };
 
-  if (failureType === 'PAYMENT_FAILED') {
+  if (statusType === 'PAYMENT_FAILED') {
     return { 
       result: 'PAYMENT_FAILED', 
       messageToUser: `Sorry the payment failed. Please contact your bank or contact support and quote reference ${humanRef}`,
@@ -316,13 +312,13 @@ const dummyPaymentResult = async (systemWideUserId, params, transactionDetails) 
   if (paymentSuccessful) {
     const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
     const { transactionId } = transactionDetails;
-    const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef });
+    const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef, settlingUserId: systemWideUserId });
     logger('Result of save: ', resultOfSave);
     await publishSaveSucceeded(systemWideUserId, transactionId);
     return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
   }
 
-  return handlePaymentFailure(params.failureType, transactionDetails);
+  return handlePaymentPendingOrFailed(params.failureType, transactionDetails);
 };
 
 /**
@@ -341,8 +337,8 @@ module.exports.checkPendingPayment = async (event) => {
       return { statusCode: status('Forbidden'), message: 'User ID not found in context' };
     }
     
-    logger('Checking for payment with inbound event: ', event);
     const params = event.queryStringParameters || event;
+    logger('Checking for payment with inbound paramaters: ', params);
     const transactionId = params.transactionId;
     
     const transactionRecord = await persistence.fetchTransaction(transactionId);
@@ -364,7 +360,7 @@ module.exports.checkPendingPayment = async (event) => {
 
     await publisher.publishUserEvent(systemWideUserId, 'SAVING_EVENT_PAYMENT_CHECK', { context: { transactionId }});
 
-    const dummySuccess = config.has('dummy') && config.get('dummy') === 'ON';
+    const dummySuccess = config.has('payment.dummy') && config.get('payment.dummy') === 'ON';
     if (dummySuccess) {
       const dummyResult = await dummyPaymentResult(systemWideUserId, params, transactionRecord);
       return { statusCode: 200, body: JSON.stringify(dummyResult) };
@@ -377,16 +373,17 @@ module.exports.checkPendingPayment = async (event) => {
 
     if (statusCheckResult.paymentStatus === 'SETTLED') {
       // do these one after the other instead of parallel because don't want to fire if something goes wrong
-      const resultOfSave = await exports.settle({ transactionId });
+      const resultOfSave = await exports.settle({ transactionId, settlingUserId: systemWideUserId });
       await publishSaveSucceeded(systemWideUserId, transactionId);
       responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
+    } else if (statusCheckResult.result === 'PENDING') {
+      responseBody = await handlePaymentPendingOrFailed('PAYMENT_PENDING', transactionRecord);
     } else if (statusCheckResult.result === 'ERROR') {
-      responseBody = await handlePaymentFailure('PAYMENT_FAILED', transactionRecord);
+      responseBody = await handlePaymentPendingOrFailed('PAYMENT_FAILED', transactionRecord);
     } else {
-      responseBody = await handlePaymentFailure('Payment failed', transactionRecord);
+      responseBody = await handlePaymentPendingOrFailed('Payment failed', transactionRecord);
     }
     
-
     return { statusCode: 200, body: JSON.stringify(responseBody) };
 
   } catch (err) {

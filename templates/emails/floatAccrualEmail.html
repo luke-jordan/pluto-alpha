@@ -1,15 +1,24 @@
 <html>
-    <p>Hello,</p>
-    <p>We ran accrual on the float. Here are the results for today: 
+    <p>Jupiter admin,</p>
+    <p>We ran the daily accrual calculation on the {floatId} float for {clientId}. The summary results of the accrual were: 
         <ul>
             <li>Base float amount: {floatAmount}</li>
             <li>Annual total yield: {baseAccrualRate}</li>
             <li>Calculated simple daily (or since last calc): {dailyRate}</li>
             <li>Amount accrued: {accrualAmount}</li>
-            <li>Amount to bonus pool: {bonusAmount}</li>
-            <li>Amount to company: {companyAmount}</li>
+            <li>Fee amount to bonus pool: {bonusAmount}</li>
+            <li>Fee amount to company: {companyAmount}</li>
+            <li>Bonus pool internal interest: {bonustShare}</li>
+            <li>Company fee pool internal interest: {companyShare}</li>
             <li>Number of users allocated a share: {numberUserAllocations}</li>
             <li>Was there an excess after the division?: {bonusAllocation}</li>
         </ul>
+    </p>
+    <p>
+        For further details, you can request the daily spreadsheet which lists all accruals from the system admin. At some point
+        we will include a link here.
+    </p>
+    <p>
+        Jupiter System
     </p>
 </html>

@@ -5,19 +5,14 @@ const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment-timezone');
 
+const opsUtil = require('ops-util-common');
+
 const camelcase = require('camelcase');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-// NOTE: these are expressed in multiples of the DEFAULT unit, which is hundredth cent (basis point equivalent of currency)
 const DEFAULT_UNIT = 'HUNDREDTH_CENT';
-const floatUnitTransforms = {
-    DEFAULT: 1,
-    HUNDREDTH_CENT: 1,
-    WHOLE_CENT: 100,
-    WHOLE_CURRENCY: 100 * 100
-};
 
 const camelizeKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [camelcase(key)]: object[key] }), {});
 
@@ -64,8 +59,9 @@ module.exports.fetchInfoForBankRef = async (accountId) => {
     const txTable = config.get('tables.accountTransactions');
     // note: left join in case this is first save ...
     const query = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
-        `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 group by human_ref`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId]);
+        `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 and ` + 
+        `transaction_type = $2 group by human_ref`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT']); // so we don't count accruals
     logger('Result of bank info query: ', resultOfQuery);
     return camelizeKeys(resultOfQuery[0]);
 };
@@ -96,47 +92,41 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
     return resultOfQuery.map((row) => row['account_id']);
 };
 
-// todo : modernize this (see account figures)
+module.exports.countAvailableBoosts = async (accountId) => {
+    const boostAccountTable = config.get('tables.boostJoin');
+    const boostMasterTable = config.get('tables.boostMaster');
+
+    const query = `select count(*) from ${boostAccountTable} inner join ${boostMasterTable} on ` + 
+        `${boostMasterTable}.boost_id = ${boostAccountTable}.boost_id where account_id = $1 and ` +
+        `${boostMasterTable}.active = true and ${boostMasterTable}.end_time > current_timestamp and ` +
+        `${boostAccountTable}.boost_status in ($2, $3, $4)`;
+    const values = [accountId, 'CREATED', 'OFFERED', 'PENDING'];        
+
+    logger('Counting pending boosts, query: ', query);
+    logger('And values for boost count query: ', values);
+    const resultOfQuery = await rdsConnection.selectQuery(query, values);
+
+    return resultOfQuery && resultOfQuery.length > 0 ? resultOfQuery[0]['count'] : 0;
+};
+
 module.exports.sumAccountBalance = async (accountId, currency, time = moment()) => {
     const tableToQuery = config.get('tables.accountTransactions');
     
-    const findUnitsQuery = `select distinct(unit) from ${tableToQuery} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
-        `and creation_time < to_timestamp($3)`;
-
     const transTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
     const preTransParamCount = 5;
-    const transTypeIdxs = transTypesToInclude.map((_, idx) => `$${idx + preTransParamCount}`).join(', ');
-
-    const sumQueryForUnit = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and unit = $3 and ` +
-        `settlement_status = 'SETTLED' and creation_time < to_timestamp($4) and transaction_type in (${transTypeIdxs}) group by unit`;
-
-    // logger('Finding units prior to : ', time.format(), ' which is unix timestamp: ', time.unix());
-    const params = [accountId, currency, time.unix()];
-    logger('Seeking balance with query: ', sumQueryForUnit, ' and params: ', params);
-
-    const unitQueryResult = await rdsConnection.selectQuery(findUnitsQuery, params);
-    logger('Result of unit query: ', unitQueryResult);
-    const usedUnits = unitQueryResult.map((row) => row.unit);
-
-    const unitQueries = [];
     
-    for (let i = 0; i < usedUnits.length; i += 1) {
-        const unit = usedUnits[i];
-        const sumParams = [accountId, currency, unit, time.unix(), ...transTypesToInclude]; 
-        const thisQuery = rdsConnection.selectQuery(sumQueryForUnit, sumParams);
-        // logger('Retrieved query: ', thisQuery);
-        unitQueries.push(thisQuery);
-    }
+    const transTypeIdxs = opsUtil.extractArrayIndices(transTypesToInclude, preTransParamCount + 1);
 
-    const queryResults = await Promise.all(unitQueries);
-    logger('Unit query results: ', queryResults);
-    // const accountObj = accountTotalResult.reduce((obj, row) => ({ ...obj, [row['allocated_to_id']]: row['sum']}), {}); 
-    const unitsWithSums = queryResults.reduce((obj, queryResult) => ({ ...obj, [queryResult[0]['unit']]: queryResult[0]['sum']}), {});
+    const sumQuery = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and ` +
+        `settlement_status in ($3, $4) and creation_time < to_timestamp($5) and transaction_type in (${transTypeIdxs}) group by unit`;
 
-    logger('For units : ', usedUnits, ' result of sums: ', unitsWithSums);
+    const params = [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude];
+    logger('Summing with query: ', sumQuery, ' and params: ', params);
 
-    const totalBalanceInDefaultUnit = Object.keys(unitsWithSums).map((unit) => unitsWithSums[unit] * floatUnitTransforms[unit]).
-        reduce((cum, value) => cum + value, 0);
+    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
+    logger('Result of unit query: ', summedRows);
+    
+    const totalBalanceInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
     logger('For account ID, RDS calculation yields result: ', totalBalanceInDefaultUnit);
 
     // note: try combine with earlier, and/or optimize when these get big
@@ -170,12 +160,12 @@ module.exports.updateAccountTags = async (systemWideUserId, tag) => {
 };
 
 
-module.exports.updateTxTags = async (accountId, tag) => {
+module.exports.updateTxTags = async (transactionId, tag) => {
     const accountTxTable = config.get('tables.accountTransactions');
 
-    const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where account_id = $2 returning updated_time`;
+    const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where transaction_id = $2 returning updated_time`;
 
-    const updateResult = await rdsConnection.updateRecord(updateQuery, [tag, accountId]);
+    const updateResult = await rdsConnection.updateRecord(updateQuery, [tag, transactionId]);
     logger('Transaction tag update resulted in:', updateResult);
 
     const updateMoment = moment(updateResult['rows'][0]['updated_time']);
@@ -307,7 +297,8 @@ const validateTxDetails = (txDetails) => {
         }
     });
 
-    if (txDetails.settlementStatus !== 'INITIATED' && txDetails.settlementStatus !== 'SETTLED') {
+    const validSettlementStates = ['INITIATED', 'PENDING', 'SETTLED'];
+    if (validSettlementStates.indexOf(txDetails.settlementStatus) < 0) {
         throw new Error(`Invalid settlement status: ${txDetails.settlementStatus}`);
     }
 
@@ -398,6 +389,23 @@ module.exports.addTransactionToAccount = async (transactionDetails) => {
     return responseEntity;
 };
 
+const assembleSettlementLog = ({ txDetails, paymentDetails, settlementTime, settlingUserId }) => {
+    const logObject = {
+        logId: uuid(),
+        accountId: txDetails.accountId,
+        transactionId: txDetails.transactionId,
+        referenceTime: settlementTime.format(),
+        settlingUserId,
+        logContext: paymentDetails
+    };
+    
+    const query = 'insert into account_data.account_log (log_id, account_id, transaction_id, reference_time, creating_user_id, log_type, log_context) values %L';
+    const columnTemplate = '${logId}, ${accountId}, ${transactionId}, ${referenceTime}, ${settlingUserId}, *{TRANSACTION_SETTLED}, ${logContext}';
+
+    return { query, columnTemplate, rows: [logObject] };
+};
+
+
 /**
  * Second core method. Records that a saving / withdrawal event settled (via any payment intermediary). Payment details includes 
  * provider and reference.
@@ -406,7 +414,7 @@ module.exports.addTransactionToAccount = async (transactionDetails) => {
  * @param {string} paymentReference The reference for the payment provided by the payment intermediary
  * @param {moment} settlementTime When the payment settled
  */
-module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settlementTime }) => {
+module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settlementTime, settlingUserId }) => {
     const responseEntity = { };
 
     const accountTxTable = config.get('tables.accountTransactions');
@@ -449,11 +457,14 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
     const floatQueryDef = assembleFloatTxInsertions(transactionId, txDetails, { floatAdjustmentTxId, floatAllocationTxId });
     logger('Assembled float query def: ', floatQueryDef);
 
-    const updateAndInsertResult = await rdsConnection.multiTableUpdateAndInsert([updateQueryDef], [floatQueryDef]);
+    const insertLogQueryDef = assembleSettlementLog({ txDetails, paymentDetails, settlementTime, settlingUserId });
+
+    const updateAndInsertResult = await rdsConnection.multiTableUpdateAndInsert([updateQueryDef], [floatQueryDef, insertLogQueryDef]);
     logger('Result of update and insert: ', updateAndInsertResult);
 
     const transactionDetails = [];
     transactionDetails.push({ 
+        accountTransactionType: txDetails.transactionType,
         accountTransactionId: updateAndInsertResult[0][0]['transaction_id'], 
         updatedTimeEpochMillis: moment(updateAndInsertResult[0][0]['updated_time']).valueOf()
     });
@@ -491,4 +502,29 @@ module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, pay
     const updateMoment = moment(resultOfUpdate['rows'][0]['updated_time']);
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
+};
+
+/**
+ * SImple utility method to adjust a settlement status, when not settling (e.g., move from initiated to pending)
+ */
+module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStatus }) => {
+    if (!settlementStatus) {
+        throw new Error('Must supply settlement status');
+    }
+
+    if (settlementStatus === 'SETTLED') {
+        throw new Error('Use settle TX for this operation');
+    }
+
+    const updateDef = { 
+        key: { transactionId },
+        value: { settlementStatus },
+        table: config.get('tables.accountTransactions'),
+        returnClause: 'updated_time'
+    };
+
+    const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);
+    logger('Result of update: ', resultOfUpdate);
+
+    return Array.isArray(resultOfUpdate) && resultOfUpdate.length > 0 ? moment(resultOfUpdate[0]['updated_time']) : null; 
 };

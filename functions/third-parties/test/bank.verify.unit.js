@@ -22,7 +22,10 @@ const resetStubs = (...stubs) => {
 describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
     
     const testAccountNumber = '3243463245';
-    const testAccountType = 'SAVINGSACCOUNT';
+    
+    const testAccountTypeInput = 'CURRENT';
+    const testAccountTypeRequest = 'CURRENTCHEQUEACCOUNT';
+
     const testIdNumber = '8307065125487';
     const testReference = 'TEST_REF';
 
@@ -40,7 +43,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
                 'bvs_details[verificationType]': 'Individual',
                 'bvs_details[bank_name]': 'NEDBANK',
                 'bvs_details[acc_number]': testAccountNumber,
-                'bvs_details[acc_type]': testAccountType,
+                'bvs_details[acc_type]': testAccountTypeRequest,
                 'bvs_details[yourReference]': testReference,
                 'bvs_details[id_number]': testIdNumber,
                 'bvs_details[initials]': 'JF',
@@ -49,27 +52,35 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
             json: true
         };
 
-        const expectedResponse = {
+        const mockRequestResponse = {
             'Status': 'Success',
             'XDSBVS': {
               'JobStatus': 'Enquiry Submitted Successfully',
               'JobID': '72828608'
             }
-          };
-        
-        requestStub.withArgs(expectedRequestArgs).resolves(expectedResponse);
-
-        const testEvent = {
-            bankName: 'NEDBANK',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
         };
 
-        const result = await handler.initialize(testEvent);
+        const expectedResponse = {
+            status: 'SUCCESS',
+            jobId: '72828608'
+        };
+        
+        requestStub.withArgs(expectedRequestArgs).resolves(mockRequestResponse);
+
+        const testEvent = {
+            operation: 'initialize',
+            parameters: {
+                bankName: 'NEDBANK',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
+        };
+
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
 
         expect(result).to.exist;
@@ -87,7 +98,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
                 'bvs_details[verificationType]': 'Individual',
                 'bvs_details[bank_name]': 'ABSA',
                 'bvs_details[acc_number]': testAccountNumber,
-                'bvs_details[acc_type]': testAccountType,
+                'bvs_details[acc_type]': testAccountTypeRequest,
                 'bvs_details[yourReference]': testReference,
                 'bvs_details[id_number]': testIdNumber,
                 'bvs_details[initials]': 'JF',
@@ -99,184 +110,214 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
         requestStub.withArgs(expectedRequestArgs).resolves('Balderdash');
 
         const testEvent = {
-            bankName: 'ABSA',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
 
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Balderdash' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'Balderdash' });
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
     });
 
     it('Fails on missing bank name', async () => {
         const testEvent = {
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
 
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing bank name' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_BANK_NAME' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on unsupported bank', async () => {
         const testEvent = {
-            bankName: 'JP MORGAN',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'JP MORGAN',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
 
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The bank you have entered is currently not supported' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'BANK_NOT_SUPPORTED' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on missing account number', async () => {
         const testEvent = {
-            bankName: 'ABSA',
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
         
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing account number' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_ACCOUNT_NUMBER' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on missing account type', async () => {
         const testEvent = {
-            bankName: 'ABSA',
-            accountNumber: testAccountNumber,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: testAccountNumber,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
         
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing account type' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_ACCOUNT_TYPE' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on invalid account type', async () => {
         const testEvent = {
-            bankName: 'ABSA',
-            accountNumber: testAccountNumber,
-            accountType: 'HEDGEFUND',
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: testAccountNumber,
+                accountType: 'HEDGEFUND',
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
         
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Invalid account type' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'INVALID_ACCOUNT_TYPE' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on missing reference', async () => {
         const testEvent = {
-            bankName: 'ABSA',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            initials: 'JF',
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
         
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing reference' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_REFERENCE' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on missing national id number on verification of an individuals bank account', async () => {
         const testEvent = {
-            bankName: 'ABSA',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            surname: 'Kennedy'
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy'
+            }
         };
         
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The individuals national id is required for individual account verification' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_NATIONAL_ID' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on missing initials on verification of and individuals bank account', async () => {
         const testEvent = {
-            bankName: 'ABSA',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            surname: 'Kennedy',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
         };
         
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The individuals initials are required for individual account verification' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_INITIALS' });
         expect(requestStub).to.have.not.been.called;
     });
 
     it('Fails on missing surname on verification of an individuals bank account', async () => {
         const testEvent = {
-            bankName: 'ABSA',
-            accountNumber: testAccountNumber,
-            accountType: testAccountType,
-            reference: testReference,
-            initials: 'JF',
-            nationalId: testIdNumber
+            operation: 'initialize',
+            parameters: {
+                bankName: 'ABSA',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                nationalId: testIdNumber
+            }
         };
         
-        const result = await handler.initialize(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Account verification resulted in:', result);
         
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'The individuals surname is required for individual account verification' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_SURNAME' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -316,6 +357,8 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         }
     };
 
+    const expectedTransformedOkay = { result: 'VERIFIED' };
+
     beforeEach(() => {
         resetStubs(requestStub);
     });
@@ -333,14 +376,77 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         };
 
         requestStub.withArgs(expectedRequestArgs).resolves(testResponse);
-        const testEvent = { jobId: testJobId };
+        const testEvent = {
+            operation: 'statusCheck',
+            parameters: { jobId: testJobId }
+        };
 
-        const result = await handler.checkStatus(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Result of account verification check:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal(testResponse);
+        expect(result).to.deep.equal(expectedTransformedOkay);
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
+    });
+
+    it('Reports failure if bank account ID number does not match', async () => {
+        const expectedRequestArgs = {
+            method: 'POST',
+            url: config.get('pbVerify.endpoint'),
+            formData: {
+                'memberkey': config.get('pbVerify.memberKey'),
+                'password': config.get('pbVerify.password'),
+                'jobId': testJobId
+            },
+            json: true
+        };
+
+        const failureResponse = JSON.parse(JSON.stringify(testResponse));
+        failureResponse['Results']['IDNUMBERMATCH'] = 'No';
+        requestStub.withArgs(expectedRequestArgs).resolves(failureResponse);
+
+        const testEvent = {
+            operation: 'statusCheck',
+            parameters: { jobId: testJobId }
+        };
+
+        const result = await handler.handle(testEvent);
+        logger('Result of account verification check:', result);
+
+        expect(result).to.deep.equal({ result: 'FAILED', cause: 'ID number does not match' });
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
+    });
+
+    it('Reports failure if account is not open or does not accept credits', async () => {
+        const testEvent = {
+            operation: 'statusCheck',
+            parameters: { jobId: testJobId }
+        };
+
+        const expectedRequestArgs = {
+            method: 'POST',
+            url: config.get('pbVerify.endpoint'),
+            formData: {
+                'memberkey': config.get('pbVerify.memberKey'),
+                'password': config.get('pbVerify.password'),
+                'jobId': testJobId
+            },
+            json: true
+        };
+
+        const failureResponse = JSON.parse(JSON.stringify(testResponse));
+        failureResponse['Results']['ACCOUNT-OPEN'] = 'No';
+        requestStub.withArgs(expectedRequestArgs).resolves(failureResponse);
+
+        const result = await handler.handle(testEvent);
+        expect(result).to.deep.equal({ result: 'FAILED', cause: 'Account not open' });
+
+        const secondFailureReponse = JSON.parse(JSON.stringify(testResponse));
+        secondFailureReponse['Results']['ACCOUNTACCEPTSCREDITS'] = 'No';
+        requestStub.withArgs(expectedRequestArgs).resolves(secondFailureReponse);
+        
+        const secondResult = await handler.handle(testEvent);
+        expect(secondResult).to.deep.equal({ result: 'FAILED', cause: 'Account does not accept credits' });
     });
 
     it('Fails on unexpected response from third party', async () => {
@@ -357,24 +463,30 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
 
         requestStub.withArgs(expectedRequestArgs).resolves({ Status: 'Failure' });
         
-        const testEvent = { jobId: testJobId };
+        const testEvent = {
+            operation: 'statusCheck',
+            parameters: { jobId: testJobId }
+        };
 
-        const result = await handler.checkStatus(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Result of account verification check:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: { Status: 'Failure' }});
+        expect(result).to.deep.equal({ status: 'ERROR', details: { Status: 'Failure' }});
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
     });
 
     it('Throws (and catches) error on missing job id', async () => {        
-        const testEvent = { };
+        const testEvent = {
+            operation: 'statusCheck',
+            parameters: { }
+        };
 
-        const result = await handler.checkStatus(testEvent);
+        const result = await handler.handle(testEvent);
         logger('Result of account verification check on error:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ Status: 'Error', details: 'Missing job id' });
+        expect(result).to.deep.equal({ status: 'ERROR', details: 'Missing job id' });
         expect(requestStub).to.have.not.been.called;
     });
 

@@ -2,9 +2,13 @@
 
 const logger = require('debug')('jupiter:admin:expiration');
 const config = require('config');
+const uuid = require('uuid/v4');
 const moment = require('moment');
 
+const opsUtil = require('ops-util-common');
+
 const camelCaseKeys = require('camelcase-keys');
+const decamelize = require('decamelize');
 
 // note : this will probably create two pools, but that can be managed as this will rarely/ever be called concurrently
 const RdsConnection = require('rds-common');
@@ -83,6 +87,39 @@ module.exports.expireHangingTransactions = async () => {
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
 };
 
+module.exports.expireBoosts = async () => {
+    const boostMasterTable = config.get('tables.boostMasterTable');
+    const boostJoinTable = config.get('tables.boostJoinTable');
+    
+    const updateBoostQuery = `update ${boostMasterTable} set active = $1 where active = true and ` + 
+        `end_time < current_timestamp returning boost_id`;
+    const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
+    logger('Result of straight update boosts: ', updateBoostResult);
+    if (updateBoostResult.rowCount === 0) {
+        logger('No boosts expired, can exit');
+        return [];
+    }
+
+    // note : could do boost_id in above query, but would rather go for a bit of redundancy and slight inneficiency in the
+    // query and ensure a bit of robustness, especially in night time batch job. can evaluate again in future
+    const updateAccountBoosts = `update ${boostJoinTable} set boost_status = $1 where boost_status not in ($2, $3, $4) and ` +
+        `boost_id in (select boost_id from ${boostMasterTable} where active = $5) returning boost_id, account_id`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateAccountBoosts, ['EXPIRED', 'REDEEMED', 'REVOKED', 'EXPIRED', false]);
+    logger('Result of updating boost account status: ', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
+        ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
+};
+
+module.exports.fetchUserIdsForAccounts = async (accountIds) => {
+    const accountTable = config.get('tables.accountTable');
+
+    const query = `select account_id, owner_user_id from ${accountTable} where account_id in (${opsUtil.extractArrayIndices(accountIds)})`;
+    const fetchResult = await rdsConnection.selectQuery(query, accountIds);
+
+    return fetchResult.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['owner_user_id'] }), {});
+};
+
 module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext }) => {
     logger('Would be logging this context: ', logContext);
 
@@ -96,4 +133,119 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
 
     return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
         ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
+};
+
+module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId, logType, logContext }) => {
+    let relevantAccountId = accountId;
+    if (!relevantAccountId) {
+        const getIdQuery = `select account_id from ${config.get('tables.transactionTable')} where transaction_id = $1`;
+        logger('Finding account ID with query: ', getIdQuery);
+        const accountIdFetchRow = await rdsConnection.selectQuery(getIdQuery, [transactionId]);
+        logger('Result of finding account ID: ', accountIdFetchRow);
+        relevantAccountId = accountIdFetchRow[0]['account_id'];
+    }
+
+    const logObject = {
+        logId: uuid(),
+        creatingUserId: adminUserId,
+        accountId: relevantAccountId,
+        transactionId,
+        logType,
+        logContext
+    };
+
+    const objectKeys = Object.keys(logObject);
+    const columnNames = objectKeys.map((key) => decamelize(key)).join(', ');
+    const columnTemplate = objectKeys.map((key) => `\${${key}}`).join(', ');
+
+    const insertQuery = `insert into ${config.get('tables.accountLogTable')} (${columnNames}) values %L returning creation_time`;
+    
+    logger('Inserting log object: ', logObject);
+    logger('Sending in insertion query: ', insertQuery, ' with column template: ', columnTemplate);
+    
+    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [logObject]);
+    logger('Result of insertion: ', resultOfInsert);
+
+    return resultOfInsert;
+};
+
+// we use this to find accounts by either bank reference or balance sheet (FinWorks) reference
+module.exports.findUserFromRef = async ({ searchValue, bsheetPrefix }) => {
+    // first search
+    const normalizedValue = searchValue.trim().toUpperCase();
+    const firstQuery = `select owner_user_id from ${config.get('tables.accountTable')} where human_ref = $1`;
+    const firstSearch = await rdsConnection.selectQuery(firstQuery, [normalizedValue]);
+    logger('Result of first account ref search: ', firstSearch);
+    if (firstSearch.length > 0) {
+        return firstSearch[0]['owner_user_id'];
+    }
+
+    const secondQuery = `select owner_user_id from ${config.get('tables.accountTable')} where $1 = any(tags)`;
+    const secondSearch = await rdsConnection.selectQuery(secondQuery, [`${bsheetPrefix}::${normalizedValue}`]);
+    logger('Result of second account ref search: ', secondSearch);
+    if (secondSearch.length > 0) {
+        return secondSearch[0]['owner_user_id'];
+    }
+
+    const thirdQuery = `select owner_user_id from ${config.get('tables.accountTable')} inner join ${config.get('tables.transactionTable')} ` +
+        `on ${config.get('tables.accountTable')}.account_id = ${config.get('tables.transactionTable')}.account_id ` +
+        `where ${config.get('tables.transactionTable')}.human_reference = $1`;
+    const thirdSearch = await rdsConnection.selectQuery(thirdQuery, [normalizedValue]);
+    logger('Result of final search: ', thirdSearch);
+    if (thirdSearch.length > 0) {
+        return thirdSearch[0]['owner_user_id'];
+    }
+
+    return null;
+};
+
+module.exports.fetchBsheetTag = async ({ accountId, tagPrefix }) => {
+    const selectResult = await rdsConnection.selectQuery(`select tags from ${config.get('tables.accountTable')} where account_id = $1`, [accountId]);
+    logger('Got account tags result:', selectResult);
+
+    if (!selectResult || selectResult.length === 0 || !Array.isArray(selectResult[0]['tags']) || selectResult[0]['tags'].length === 0) {
+        return null;
+    }
+
+    const prefixedTags = selectResult[0]['tags'].filter((tag) => tag.startsWith(`${tagPrefix}::`)); 
+    if (prefixedTags.length === 0) {
+        return null;
+    }
+
+    return prefixedTags[0].split(`${tagPrefix}::`)[1];
+};
+
+module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier }) => {
+    const oldIdentifier = await exports.fetchBsheetTag({ accountId, tagPrefix });
+
+    let arrayOperation = '';
+    let updateValues = [];
+
+    if (oldIdentifier) {
+        logger('Account has prior identifier, ', oldIdentifier, ' will be just inserting for first time');
+        arrayOperation = `array_replace(tags, $1, $2) where account_id = $3`;
+        updateValues = [`${tagPrefix}::${oldIdentifier}`, `${tagPrefix}::${newIdentifier}`, accountId];
+    } else {
+        logger('Account has no prior identifier, will be just inserting for first time');
+        arrayOperation = `array_append(tags, $1) where account_id = $2`;
+        updateValues = [`${tagPrefix}::${newIdentifier}`, accountId];
+    }
+    
+    const updateQuery = `update ${config.get('tables.accountTable')} set tags = ${arrayOperation} returning owner_user_id, tags`;
+    
+    logger('Updating balance sheet tag, query: ', updateQuery);
+    logger('Updating balance sheet tag, values: ', updateValues);
+
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
+
+    logger('Result of transaction update: ', resultOfUpdate);
+
+    if (typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows)) {
+        const returnedValues = camelCaseKeys(resultOfUpdate.rows[0]);
+        return { ...returnedValues, oldIdentifier };
+    }
+
+    logger('FATAL_ERROR: User admin balance sheet tag update failed');
+
+    return null;
 };

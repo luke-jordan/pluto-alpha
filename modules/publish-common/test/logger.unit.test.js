@@ -54,7 +54,7 @@ const resetStubs = () => {
     sendEmailStub.reset();
 };
 
-describe.only('*** UNIT TEST PUBLISHING MODULE ***', () => {
+describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
     const testTime = moment();
     const testUserId = uuid();
@@ -70,7 +70,7 @@ describe.only('*** UNIT TEST PUBLISHING MODULE ***', () => {
         interface: options.interface,
         initiator: options.initiator,
         context: options.initiator,
-        generatedHash: expectedHash(eventType)
+        hash: expectedHash(eventType)
     });
 
     const wellFormedSnsPublish = (userId, eventType, options) => ({
@@ -180,6 +180,46 @@ describe.only('*** UNIT TEST PUBLISHING MODULE ***', () => {
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: templateBucket, Key: templateKey });
         expect(sendEmailStub).to.have.been.calledOnceWithExactly(expectedEmail);
+    });
+
+    it('Handles the publication of multiple user events at once', async () => {
+        const userIds = [testUserId, testUserId, testUserId];
+
+        momentStub.withArgs().returns(testTime);
+        snsPublishStub.returns({ promise: () => dummySnsResult });
+
+        const resultOfDispatch = await eventPublisher.publishMultiUserEvent(userIds, 'USER_LOGIN');
+        logger('Result of multiple event publish:', resultOfDispatch);
+
+        expect(resultOfDispatch).to.exist;
+        expect(resultOfDispatch).to.deep.equal({ successCount: 3, failureCount: 0 });
+        expect(snsPublishStub).to.have.been.calledThrice;
+
+        const expectedSnsArgs = {
+            Message: JSON.stringify({
+                eventType: 'USER_LOGIN',
+                hash: '0c3c5d2646a4ef310524f8458b7f42f0c8e5b15301a8c8a41488649626340c29',
+                timestamp: testTime.valueOf(),
+                userId: testUserId
+            }),
+            Subject: 'USER_LOGIN',
+            TopicArn: config.get('publishing.userEvents.topicArn')
+        };
+        expect(snsPublishStub).to.have.been.calledWith(expectedSnsArgs);
+    });
+
+    it('Catches thrown errors during bulk publish', async () => {
+        const userIds = { throws: 'error' };
+
+        momentStub.withArgs().returns(testTime);
+        snsPublishStub.throws(new Error('Publish error'));
+
+        const resultOfDispatch = await eventPublisher.publishMultiUserEvent(userIds, 'USER_LOGIN');
+        logger('Result of multiple event publish:', resultOfDispatch);
+
+        expect(resultOfDispatch).to.exist;
+        expect(resultOfDispatch).to.deep.equal({ result: 'FAILURE' });
+        expect(snsPublishStub).to.have.not.been.called;
     });
 
     it('Swallows and returns failure, if publish fails or error thrown', async () => {

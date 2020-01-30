@@ -14,7 +14,6 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
 const userMessageTable = config.get('tables.userMessagesTable');
-// const userAccountTable = config.get('tables.accountLedger');
 
 const testMsgId = uuid();
 const testFollowingMsgId = uuid();
@@ -89,14 +88,14 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
     it('Finds messages for user correctly and transforms them', async () => {
         const expectedQuery = `select * from ${userMessageTable} where destination_user_id = $1 and ` + 
-            `processed_status = $2 and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' != $3`;
+            `processed_status = $2 and end_time > current_timestamp and deliveries_done < deliveries_max and display ->> 'type' in ($3)`;
         selectQueryStub.resolves([msgRawFromRds]);
 
-        const resultOfFetch = await persistence.getNextMessage(testUserId, true);
+        const resultOfFetch = await persistence.getNextMessage(testUserId, ['CARD']);
         logger('Result of fetch: ', resultOfFetch);
 
         expect(resultOfFetch).to.deep.equal([expectedTransformedMsg]);
-        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING', 'PUSH']);
+        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING', 'CARD']);
     });
 
     it('Finds pending push messages', async () => {
@@ -114,44 +113,6 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...expectedQuery);
     });
 
-    it('Retrieves user balance correctly', async () => {
-        const expectedBalanceQuery = `select sum(amount), unit from ${config.get('tables.accountLedger')} inner join ${config.get('tables.transactionLedger')} ` +
-            `on ${config.get('tables.accountLedger')}.account_id = ${config.get('tables.transactionLedger')}.account_id where owner_user_id = $1 and currency = $2 and settlement_status = $3 group by unit`;
-        // const expectedBalanceTypes = [`'USER_SAVING_EVENT'`, `'ACCRUAL'`, `'CAPITALIZATION'`, `'WITHDRAWAL'`];
-        const expectedBalanceValues = [testUserId, 'USD', 'SETTLED'];
-        
-        selectQueryStub.resolves([{ sum: 100, unit: 'WHOLE_CURRENCY' }, { sum: 10000, unit: 'WHOLE_CENT' }, { sum: 1000000, unit: 'HUNDREDTH_CENT' }]);
-        
-        const resultOfSum = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' });
-        logger('Result of sum: ', resultOfSum);
-        
-        expect(resultOfSum).to.deep.equal({ amount: 30000, unit: 'WHOLE_CENT', currency: 'USD' });
-        expect(selectQueryStub).to.have.been.calledWith(expectedBalanceQuery, expectedBalanceValues);
-    });
-
-    it('Retrieves and sums user interest correctly', async () => {
-        const expectedInterestQuery = `select sum(amount), unit from ${config.get('tables.transactionLedger')} where owner_user_id = $1 and ` +
-            `currency = $2 and settlement_status = $3 and transaction_type in ($4) and creation_time > $5 group by unit`;
-        const expectedTxTypes = [`'ACCRUAL'`, `'CAPITALIZATION'`];
-        const expectedValues = [testUserId, 'USD', 'SETTLED', expectedTxTypes.join(','), moment(0).format()];
-
-        selectQueryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
-        const resultOfInterest = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CURRENCY::USD::0'});
-        logger('Result of interest calc: ', resultOfInterest);
-        logger('args    :', selectQueryStub.getCall(0).args);
-        logger('expected:', [expectedInterestQuery, expectedValues]);
-
-        expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
-        expect(selectQueryStub).to.have.been.calledWith(expectedInterestQuery, expectedValues);
-    });
-
-    it('Gracefully handles unknown parameter', async () => {
-        const resultOfBadQuery = await persistence.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
-        logger('Result of bad query: ', resultOfBadQuery);
-        expect(resultOfBadQuery).to.be.null;
-    });
-
-
     it('Updates message processed status correctly', async () => {
         const updatedTime = moment();
         const expectedUpdateDef = { 
@@ -168,6 +129,21 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         expect(resultOfUpdateQ).to.exist;
         expect(resultOfUpdateQ).to.deep.equal({ messageId: testMsgId, updatedTime: moment(updatedTime.format()) });
         expect(multiUpdateInsertStub).to.have.been.calledOnceWith([expectedUpdateDef], []);
+    });
+
+    it('Gets message instruction', async () => {
+        const testInstructionId = uuid();
+
+        const selectQuery = `select * from ${userMessageTable} where destination_user_id = $1 and instruction_id = $2`;
+
+        selectQueryStub.resolves([msgRawFromRds]);
+
+        const messageIntruction = await persistence.getInstructionMessage(testUserId, testInstructionId);
+        logger('Result of instruction extraction:', messageIntruction);
+
+        expect(messageIntruction).to.exist;
+        expect(messageIntruction).to.deep.equal([expectedTransformedMsg]);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(selectQuery, [testUserId, testInstructionId]);
     });
 
     it('Handles batch status updates', async () => {

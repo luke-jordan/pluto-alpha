@@ -265,7 +265,7 @@ const retrieveBoostAmounts = (params) => {
 };
 
 const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boostId, boostAmountDict, initiator }) => {
-    const eventType = `BOOST_${boostType}_CREATED`;
+    const eventType = `BOOST_CREATED_${boostType}`;
     const options = {
         initiator,
         context: {
@@ -448,13 +448,13 @@ module.exports.createBoostWrapper = async (event) => {
     try {
         const userDetails = util.extractUserDetails(event);
 
-        logger('Boost create event: ', event);
-        logger('User details: ', userDetails);
+        logger('Boost create, user details: ', userDetails);
         if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
             return { statusCode: status('Forbidden') };
         }
 
         const params = util.extractEventBody(event);
+        logger('Boost create, params: ', params);
         params.creatingUserId = userDetails.systemWideUserId;
 
         const resultOfCall = await exports.createBoost(params);

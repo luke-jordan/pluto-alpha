@@ -21,7 +21,9 @@ const STANDARD_PARAMS = [
     'user_full_name',
     'current_balance',
     'opened_date',
-    'total_interest'
+    'total_interest',
+    'last_capitalization',
+    'total_earnings'
 ];
 
 const UNIT_DIVISORS = {
@@ -70,21 +72,6 @@ const fetchAccountOpenDates = (userProfile, dateFormat) => {
     return openMoment.format(dateFormat);
 };
 
-const fetchAccountInterest = async (systemWideUserId, currency, sinceTimeMillis) => {
-    const operation = `interest::WHOLE_CENT::${currency}::${sinceTimeMillis}`;
-    const amountResult = await persistence.getUserAccountFigure({ systemWideUserId, operation });
-    logger('Retrieved from persistence: ', amountResult);
-    return formatAmountResult(amountResult);
-};
-
-const fetchCurrentBalance = async (systemWideUserId, currency) => {
-    const amountResult = await persistence.getUserAccountFigure({
-        systemWideUserId, operation: `balance::WHOLE_CENT::${currency}`
-    });
-    logger('For balance, from persistence: ', amountResult);
-    return formatAmountResult(amountResult);
-};
-
 const extractParamsFromTemplate = (template) => {
     const extractedParams = [];
     let match = paramRegex.exec(template);
@@ -94,6 +81,20 @@ const extractParamsFromTemplate = (template) => {
     }
     // do not include any that are non-standard
     return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) >= 0);
+};
+
+// todo : all at once if multiple params
+// todo : warmup (esp for agg figure)
+const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId) => {
+    const invocation = {
+        FunctionName: config.get('lambdas.fetchAccountAggregate'),
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify({ aggregates: [aggregateOperation], systemWideUserId })
+    };
+    const resultOfInvoke = await lambda.invoke(invocation).promise();
+    logger('Aggregate response: ', resultOfInvoke);
+    const resultBody = JSON.parse(resultOfInvoke['Payload']);
+    return formatAmountResult(resultBody.results[0]);
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
@@ -114,11 +115,19 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         return fetchAccountOpenDates(userProfile, specifiedDateFormat);
     } else if (paramName === 'total_interest') {
         const sinceMillis = getSubParamOrDefault(paramSplit, 0); // i.e., beginning of time
-        return fetchAccountInterest(destinationUserId, userProfile.defaultCurrency, sinceMillis);
+        const aggregateOperation = `interest::HUNDREDTH_CENT::${userProfile.defaultCurrency}::${sinceMillis}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     } else if (paramName === 'current_balance') {
-        const defaultCurrency = getSubParamOrDefault(paramSplit, userProfile.defaultCurrency);
-        logger('Have currency: ', defaultCurrency);
-        return fetchCurrentBalance(destinationUserId, defaultCurrency, userProfile);
+        const aggregateOperation = `balance::HUNDREDTH_CENT::${userProfile.defaultCurrency}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
+    } else if (paramName === 'last_capitalization') {
+        const aggregateOperation = `capitalization::${userProfile.defaultCurrency}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
+    } else if (paramName === 'total_earnings') {
+        const thisMonthOnly = getSubParamOrDefault(paramSplit, false);
+        const opSuffix = `HUNDREDTH_CENT::${userProfile.defaultCurrency}${thisMonthOnly ? moment().startOf('month').valueOf() : ''}`;
+        const aggregateOperation = `total_earnings::${opSuffix}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     }
 };
 
@@ -251,9 +260,13 @@ const determineAnchorMsg = (openingMessages) => {
  * @param {string} destinationUserId The messages destination user id.
  * @param {string} withinFlowFromMsgId The messageId of the last message in the sequence to be processed prior to the current one.
  */
-module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowFromMsgId = null) => {
-    logger('Initiating message retrieval, excluding push notifications');
-    const retrievedMessages = await persistence.getNextMessage(destinationUserId, true);
+module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructionId, withinFlowFromMsgId }) => {
+    logger('Initiating message retrieval, of just card notifications, for user: ', destinationUserId);
+    const retrievedMessages = await (instructionId 
+        ? persistence.getInstructionMessage(destinationUserId, instructionId)
+        : persistence.getNextMessage(destinationUserId, ['CARD']) 
+    );
+    logger('Retrieved from RDS: ', retrievedMessages);
     // first, check it's not empty. if so, return empty.
     if (!Array.isArray(retrievedMessages) || retrievedMessages.length === 0) {
         return [];
@@ -267,7 +280,7 @@ module.exports.fetchAndFillInNextMessage = async (destinationUserId, withinFlowF
     let anchorMessage = null;
     if (withinFlowFromMsgId) {
         const flowMessage = openingMessages.find((msg) => msg.messageId === withinFlowFromMsgId);
-        anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage; 
+        anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage;
     } else {
         anchorMessage = determineAnchorMsg(openingMessages);
     }
@@ -303,10 +316,6 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext, destinationU
     logger('And log publish result: ', publishResult);
 };
 
-// For now, for mobile test
-const dryRunGameResponseOpening = require('./dry-run-messages');
-const dryRunGameChaseArrows = require('./dry-run-arrow');
-
 /**
  * Wrapper for the above, based on token, i.e., direct fetch
  * @param {object} event An object containing the request context, with request body being passed as query string parameters.
@@ -325,20 +334,17 @@ module.exports.getNextMessageForUser = async (event) => {
         if (!userDetails) {
             return { statusCode: 403 };
         }
-
-        const queryParams = event.queryStringParameters;
-        if (queryParams && queryParams.gameDryRun) {
-            const relevantGame = queryParams.gameType || 'TAP_SCREEN';
-            const messagesToReturn = relevantGame === 'CHASE_ARROW' ? dryRunGameChaseArrows : dryRunGameResponseOpening;
-            return { statusCode: 200, body: JSON.stringify(messagesToReturn)};
-        }
-
-        const withinFlowFromMsgId = event.queryStringParameters ? event.queryStringParameters.anchorMessageId : null;
-        const userMessages = await exports.fetchAndFillInNextMessage(userDetails.systemWideUserId, withinFlowFromMsgId);
+        const destinationUserId = userDetails.systemWideUserId;
+        
+        // here we have multiple flow options: either we have an 'anchor message' that starts the sequence, or we have
+        // a message instruction ID, which then produces all the messages for the user that follow that message, or
+        // we have an instruction ID, in which case we pull the messages for that instruction
+        const queryParams = event.queryStringParameters || {};
+        const { withinFlowFromMsgId, instructionId } = queryParams;
+        
+        const userMessages = await exports.fetchAndFillInNextMessage({ destinationUserId, withinFlowFromMsgId, instructionId });
         logger('Retrieved user messages: ', userMessages);
-        const resultBody = {
-            messagesToDisplay: userMessages
-        };
+        const resultBody = { messagesToDisplay: userMessages };
 
         if (Array.isArray(userMessages) && userMessages.length > 0) {
             await fireOffMsgStatusUpdate(userMessages, event.requestContext);

@@ -1,6 +1,9 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:list');
+const config = require('config');
+const moment = require('moment');
+
 const status = require('statuses');
 const util = require('./boost.util');
 
@@ -41,6 +44,26 @@ module.exports.listUserBoosts = async (event) => {
         return util.wrapHttpResponse(listBoosts);
     } catch (err) {
         logger('FATAL_ERROR:', err);
+        return util.wrapHttpResponse({ error: err.message }, 500);
+    }
+};
+
+module.exports.listChangedBoosts = async (event) => {
+    try {
+        const authParams = event.requestContext.authorizer;
+        if (!authParams || !authParams.systemWideUserId) {
+            return util.wrapHttpResponse({ message: 'User ID not found' }, status('Forbidden'));
+        }
+
+        const { systemWideUserId } = authParams;
+        const accountId = await fetchUserDefaultAccount(systemWideUserId);
+
+        const changeCutOff = moment().subtract(config.get('time.changeCutOff.number'), config.get('time.changeCutOff.unit'));
+        const listBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, ['CREATED', 'OFFERED', 'EXPIRED']);
+
+        return util.wrapHttpResponse(listBoosts);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
         return util.wrapHttpResponse({ error: err.message }, 500);
     }
 };

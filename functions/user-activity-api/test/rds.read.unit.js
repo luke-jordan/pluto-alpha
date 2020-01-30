@@ -85,11 +85,10 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
 
     const txTable = config.get('tables.accountTransactions');
         const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
-        const txIndices = '$5, $6, $7, $8, $9';
-        const unitQuery = `select distinct(unit) from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` + 
-            `and creation_time < to_timestamp($3)`;
-        const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and unit = $3 and settlement_status = 'SETTLED' ` +
-            `and creation_time < to_timestamp($4) and transaction_type in (${txIndices}) group by unit`;
+        const txIndices = '$6, $7, $8, $9, $10';
+        const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
+            `settlement_status in ($3, $4) and creation_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
+        // on this one we leave out the accrued
         const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
             `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
 
@@ -98,17 +97,15 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
     it('Obtain the balance of an account at a point in time correctly', async () => {
         const testTime = moment();
         const testLastTxTime = moment().subtract(5, 'hours');
-        const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
+        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...transTypes];
         
         logger('Test time value of: ', testTime.valueOf());
         
-        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([{ 'unit': 'HUNDREDTH_CENT' }, { 'unit': 'WHOLE_CENT' }]);
-        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'HUNDREDTH_CENT', testTime.unix(), ...transTypes]).
-            returns(Promise.resolve([{ 'sum': testBalance, 'unit': 'HUNDREDTH_CENT' }]));
-        queryStub.withArgs(sumQuery, [testAccountId, 'USD', 'WHOLE_CENT', testTime.unix(), ...transTypes]).
-            returns(Promise.resolve([{ 'sum': testBalanceCents, 'unit': 'WHOLE_CENT' }]));
-        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).
-            returns(Promise.resolve([{ 'creation_time': testLastTxTime._d }]));
+        queryStub.withArgs(sumQuery, queryArgs).resolves([
+            { 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }
+        ]);
+        queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([{ 'creation_time': testLastTxTime.format() }]);
+
         const expectedBalance = testBalance + (100 * testBalanceCents);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
@@ -116,18 +113,14 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         expect(balanceResult).to.exist;
         expect(balanceResult).to.have.property('amount', expectedBalance);
         expect(balanceResult).to.have.property('unit', 'HUNDREDTH_CENT');
-        expect(balanceResult).to.have.property('lastTxTime');
-        // result of sinon hatred
-        const balanceLastTxTime = balanceResult.lastTxTime;
-        expect(testLastTxTime.isSame(balanceLastTxTime)).to.be.true;
-        // expect(balanceResult).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', lastTxTime: testHelper.momentMatchertestLastTxTime });
+        expect(balanceResult.lastTxTime.format()).to.equal(testLastTxTime.format());
     });
 
     it('Handle case of no prior transactions properly', async () => {
         const testTime = moment();
-        const unitQueryArgs = sinon.match([testAccountId, 'USD', testTime.unix()]);
+        const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...transTypes];
 
-        queryStub.withArgs(unitQuery, unitQueryArgs).resolves([]);
+        queryStub.withArgs(sumQuery, queryArgs).resolves([]);
         queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([]);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
@@ -227,6 +220,30 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(currencyQuery, [testAccountId]);
     });
 
+    it('Checks if a boost is available', async () => {
+        const testBoostCount = 10;
+
+        const boostQuery = `select count(*) from boost_data.boost_account_status inner join boost_data.boost on ` + 
+            `boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` +
+            `boost_data.boost.active = true and boost_data.boost.end_time > current_timestamp and ` +
+            `boost_data.boost_account_status.boost_status in ($2, $3, $4)`;
+        const boostValues = [testAccountId, 'CREATED', 'OFFERED', 'PENDING'];        
+        
+        queryStub.resolves([{ 'count': testBoostCount }]);
+
+        const result = await rds.countAvailableBoosts(testAccountId);
+        expect(result).to.equal(10);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(boostQuery, boostValues);
+    });
+
+    // just being careful; other stuff is handled above, so
+    it('Returns 0 if no count', async () => {
+        queryStub.resolves([]);
+        const result = await rds.countAvailableBoosts(testAccountId);
+        expect(result).to.equal(0);
+    });
+
     it('Counts settled saves', async () => {
         const countQuery = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
             `transaction_type = $2 and settlement_status = $3`;
@@ -266,7 +283,8 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         const txTable = config.get('tables.accountTransactions');
 
         const selectQuery = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
-            `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 group by human_ref`;
+            `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 ` + 
+            `and transaction_type = $2 group by human_ref`;
 
         queryStub.resolves([{ 'human_ref': 'BUS123', 'count': 2 }]);
 
@@ -275,7 +293,31 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
         expect(bankRefInfo).to.exist;
         expect(bankRefInfo).to.deep.equal({ humanRef: 'BUS123', count: 2 });
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId, 'USER_SAVING_EVENT']);
+    });
+
+    it('Checks for duplicate saves', async () => {
+        const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+            `amount = $2 and currency = $3 and unit = $4 and settlement_status = $5 and ` +
+            `creation_time > $6 order by creation_time desc limit 1`;
+
+        const selectValues = [testAccountId, testSaveAmount, 'ZAR', 'HUNDREDTH_CENT', 'INITIATED', sinon.match.string];
+
+        queryStub.resolves([expectedTxRow]);
+
+        const params = {
+            accountId: testAccountId,
+            amount: testSaveAmount,
+            currency: 'ZAR',
+            unit: 'HUNDREDTH_CENT'
+        };
+
+        const resultOfCheck = await rds.checkForDuplicateSave(params);
+        logger('Duplicates:', resultOfCheck);
+
+        expect(resultOfCheck).to.exist;
+        expect(resultOfCheck).to.deep.equal(camelizeKeys(expectedTxRow));
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, selectValues);
     });
 
 });

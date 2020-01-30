@@ -58,10 +58,15 @@ resource "aws_lambda_function" "user_event_process" {
       )}"
     }
   }
+
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
     security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, 
       aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
+  }
+
+  dead_letter_config {
+    target_arn = "${aws_sqs_queue.user_event_dlq.arn}"
   }
 
   depends_on = [aws_cloudwatch_log_group.user_event_process]
@@ -111,8 +116,8 @@ resource "aws_iam_role_policy_attachment" "user_event_process_achievements" {
 }
 
 resource "aws_iam_role_policy_attachment" "user_event_fetch_profile_invoke_policy" {
-  role = "${aws_iam_role.admin_user_find_role.name}"
-  policy_arn = "${var.user_profile_admin_policy_arn[terraform.workspace]}"
+  role = aws_iam_role.user_event_process_role.name
+  policy_arn = var.user_profile_admin_policy_arn[terraform.workspace]
 }
 
 resource "aws_iam_role_policy_attachment" "user_event_process_secret_get" {

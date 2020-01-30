@@ -80,7 +80,7 @@ module.exports.updateBoost = async (updateParameters) => {
     return response.map(camelizeKeys);
 };
 
-module.exports.fetchUserBoosts = async (accountId) => {
+module.exports.fetchUserBoosts = async (accountId, changedSinceTime = null, excludedStatus = ['CREATED']) => {
     const boostMainTable = config.get('tables.boostTable');
     const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
     
@@ -90,19 +90,23 @@ module.exports.fetchUserBoosts = async (accountId) => {
         'status_conditions', 'message_instruction_ids'
     ];
 
-    const excludedStatus = ['CREATED'];
     const statusIndex = 2;
-
     const excludedType = ['REFERRAL']; // for now
     const typeIndex = statusIndex + excludedStatus.length;
+
+    const updatedTimeRestriction = changedSinceTime ? `and ${boostAccountJoinTable}.updated_time > $${typeIndex + excludedType.length}` : '';
 
     const selectBoostQuery = `select ${columns} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
        `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 and ` + 
        `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
-       `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ` +
+       `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${updatedTimeRestriction} ` +
        `order by ${boostAccountJoinTable}.creation_time desc`;
 
     const values = [accountId, ...excludedStatus, ...excludedType];
+    if (changedSinceTime) {
+        values.push(changedSinceTime.format());
+    }
+
     logger('Assembled select query: ', selectBoostQuery);
     logger('Values for query: ', values);
     const boostsResult = await rdsConnection.selectQuery(selectBoostQuery, values);

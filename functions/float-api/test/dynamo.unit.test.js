@@ -18,7 +18,8 @@ const fetchStub = sinon.stub();
 
 const dynamo = proxyquire('../persistence/dynamodb', {
     'dynamo-common': {
-        fetchSingleRow: fetchStub
+        fetchSingleRow: fetchStub,
+        '@noCallThru': true
     },
     '@noCallThru': true
 });

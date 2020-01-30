@@ -24,5 +24,8 @@
         "preview": {
             "accountsToSample": 10
         }
+    },
+    "records": {
+        "bucket": "floatrecordsbucket"
     }
 }

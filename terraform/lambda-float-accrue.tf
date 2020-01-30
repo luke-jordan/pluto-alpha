@@ -44,6 +44,9 @@ resource "aws_lambda_function" "float_accrue" {
               "database": "${local.database_config.database}",
               "port" :"${local.database_config.port}"
             },
+            "records": {
+              "bucket": "${aws_s3_bucket.float_record_bucket.bucket}"
+            }
         }
       )}"
     }
@@ -98,6 +101,11 @@ resource "aws_iam_role_policy_attachment" "float_accrue_vpc_execution_policy" {
 resource "aws_iam_role_policy_attachment" "float_accrue_client_float_table_access" {
   role = "${aws_iam_role.float_accrue_role.name}"
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "float_accrue_s3_put_access" {
+  role = aws_iam_role.float_accrue_role.name
+  policy_arn = aws_iam_policy.float_record_s3_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "float_accrue_secret_get" {

@@ -20,10 +20,40 @@ AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
 const MILLIS_IN_DAY = 86400000;
+const FORMAT_NUM_DIGITS = 4;
 
 const expireHangingTransactions = async () => {
     const resultOfExpiration = await rdsAccount.expireHangingTransactions();
     return resultOfExpiration.length;
+};
+
+const expireBoosts = async () => {
+    const expiredBoosts = await rdsAccount.expireBoosts();
+    logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
+    if (expiredBoosts.length === 0) {
+        logger('No boosts to expire, returning');
+        return { result: 'NO_BOOSTS' };
+    }
+
+    const accountIds = expiredBoosts.map((row) => row.accountId);
+    const userIdsExpired = await rdsAccount.fetchUserIdsForAccounts(accountIds);
+    
+    const boostExpireUserIds = { };
+    expiredBoosts.forEach((row) => {
+        if (!Object.keys(boostExpireUserIds).includes(row.boostId)) {
+            boostExpireUserIds[row.boostId] = [];
+        }
+        const userId = userIdsExpired[row.accountId];
+        boostExpireUserIds[row.boostId].push(userId);
+    });
+
+    const boostIds = Object.keys(boostExpireUserIds);
+    const logPublishPromises = boostIds.map((boostId) => (
+        publisher.publishMultiUserEvent(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }})
+    ));
+
+    await Promise.all(logPublishPromises);
+    return { result: 'EXPIRED_BOOSTS', boostsExpired: expireBoosts.length };
 };
 
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
@@ -97,7 +127,20 @@ const assembleAccrualInvocation = async (clientFloatInfo) => {
     return accrualInvocation;
 };
 
-const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
+const safeSimpleFormat = (objectWithAmount, unit, currency) => {
+    if (!objectWithAmount) {
+        return 'Unknown : Error, consult logs';
+    }
+
+    if (typeof objectWithAmount.amount !== 'number' && typeof objectWithAmount.amount !== 'string') {
+        return 'Unknown : bad number parameter';
+    }
+
+    const amount = typeof objectWithAmount.amount === 'number' ? objectWithAmount.amount : parseInt(objectWithAmount.amount, 10);
+    return `${currency} ${parseFloat(opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')).toFixed(FORMAT_NUM_DIGITS)}`;
+};
+
+const extractParamsForFloatAccrualEmail = (accrualInvocation, accrualInvocationResult) => {
     const resultPayload = JSON.parse(accrualInvocationResult['Payload']);
     const resultBody = JSON.parse(resultPayload.body);
 
@@ -105,22 +148,29 @@ const extractParamsForEmail = (accrualInvocation, accrualInvocationResult) => {
     const unit = accrualInstruction.unit;
     const currency = accrualInstruction.currency;
     
-    const bonusAmountRaw = resultBody.entityAllocations.bonusShare;
-    const companyShareRaw = resultBody.entityAllocations.clientShare;
+    const bonusFeeRaw = resultBody.entityAllocations['BONUS_FEE'];
+    const companyFeeRaw = resultBody.entityAllocations['CLIENT_FEE'];
 
-    const simpleFormat = (amount) => `${currency} ${opsUtil.convertToUnit(amount, unit, 'WHOLE_CURRENCY')}`;
+    const bonusShareRaw = resultBody.entityAllocations['BONUS_SHARE'];
+    const companyShareRaw = resultBody.entityAllocations['CLIENT_SHARE'];
 
     const numberUserAllocations = resultBody.userAllocationTransactions.allocationRecords.accountTxIds.length;
     const bonusAllocation = Reflect.has(resultBody.userAllocationTransactions, 'bonusAllocation') 
         ? 'None' : '(yes : insert excess)';
 
+    const bpsToPercentAndTrim = (rate) => parseFloat(rate * 100).toFixed(FORMAT_NUM_DIGITS);
+
     return {
-        floatAmount: simpleFormat(accrualInstruction.calculationBasis.floatAmountHunCent),
+        clientId: accrualInstruction.clientId,
+        floatId: accrualInstruction.floatId,
+        floatAmount: safeSimpleFormat({ amount: accrualInstruction.calculationBasis.floatAmountHunCent }, unit, currency),
         baseAccrualRate: `${accrualInstruction.calculationBasis.accrualRateAnnualBps} bps`,
-        dailyRate: `${accrualInstruction.calculationBasis.accrualRateApplied} %`,
-        accrualAmount: simpleFormat(accrualInstruction.accrualAmount),
-        bonusAmount: simpleFormat(bonusAmountRaw),
-        companyAmount: simpleFormat(companyShareRaw),
+        dailyRate: `${bpsToPercentAndTrim(accrualInstruction.calculationBasis.accrualRateApplied)} %`,
+        accrualAmount: safeSimpleFormat({ amount: accrualInstruction.accrualAmount }, unit, currency),
+        bonusAmount: safeSimpleFormat(bonusFeeRaw, unit, currency),
+        companyAmount: safeSimpleFormat(companyFeeRaw, unit, currency),
+        bonusShare: safeSimpleFormat(bonusShareRaw, unit, currency),
+        companyShare: safeSimpleFormat(companyShareRaw, unit, currency),
         numberUserAllocations,
         bonusAllocation: JSON.stringify(bonusAllocation)
     };
@@ -138,7 +188,7 @@ const initiateFloatAccruals = async () => {
     logger('Results of accruals: ', accrualInvocationResults);
 
     // todo: use more robust templatting so can handle indefinite length arrays, for now just do this one
-    const accrualEmailDetails = extractParamsForEmail(accrualInvocations[0], accrualInvocationResults[0]);
+    const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualInvocations[0], accrualInvocationResults[0]);
 
     const emailResult = await publisher.sendSystemEmail({
         subject: 'Daily float accrual results',
@@ -152,42 +202,13 @@ const initiateFloatAccruals = async () => {
     return accrualInvocations.length;
 };
 
-const sendSystemStats = async () => {
-    const endTime = moment();
-    const startOfTime = moment(0);
-    const startOfDay = moment().startOf('day');
-    const startOfWeek = moment().startOf('week');
-
-    logger(`Finding users with times: end = ${endTime.format()}, start of time: ${startOfTime.format()}, start of day: ${startOfDay.format()}, start of week: ${startOfWeek.format()}`);
-
-    // todo : obviously, want to add a lot into here
-    const [userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek] = 
-        await Promise.all([
-            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, false),
-            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, false),
-            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, false),
-            rdsAccount.countUserIdsWithAccounts(startOfTime, endTime, true),
-            rdsAccount.countUserIdsWithAccounts(startOfWeek, endTime, true),
-            rdsAccount.countUserIdsWithAccounts(startOfDay, endTime, true)
-        ]);
-
-    const templateVariables = { userNumbersTotal, userNumbersWeek, userNumbersToday, numberSavedTotal, numberSavedToday, numberSavedWeek };
-
-    logger('Sending : ', templateVariables);
-
-    return publisher.sendSystemEmail({ 
-        subject: 'Daily system stats',
-        toList: config.get('email.systemStats.toList'),
-        bodyTemplateKey: config.get('email.systemStats.templateKey'),
-        templateVariables
-    });
-};
+// note : system stat email transferred to data pipeline, for various reasons
 
 // used to control what should execute
 const operationMap = {
-    'SYSTEM_STATS': sendSystemStats,
     'ACRRUE_FLOAT': initiateFloatAccruals,
     'EXPIRE_HANGING': expireHangingTransactions,
+    'EXPIRE_BOOSTS': expireBoosts, 
     'CHECK_FLOATS': floatConsistency.checkAllFloats
 };
 
@@ -201,7 +222,7 @@ module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
 
     const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : config.get('defaults.scheduledJobs');
-    const promises = tasksToRun.map((operation) => operationMap[operation]());
+    const promises = tasksToRun.filter((operation) => Reflect.has(operationMap, operation)).map((operation) => operationMap[operation]());
     const results = await Promise.all(promises);
 
     logger('Results of tasks: ', results);
