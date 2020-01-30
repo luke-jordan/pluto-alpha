@@ -182,6 +182,17 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         'human_reference': 'BUSANI7'
     };
 
+    const testPendingTransactions = [
+        {
+            'transaction_type': 'USER_SAVING_EVENT',
+            'amount': '100'
+        },
+        {
+            'transaction_type': 'WITHDRAWAL',
+            'amount': '50'
+        }
+    ];
+
     const camelizeKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [camelcase(key)]: object[key] }), {});
 
     beforeEach(() => {
@@ -208,6 +219,20 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
         expect(priorTxs).to.exist;
         expect(priorTxs).to.deep.equal([expectedTxRow, expectedTxRow, expectedTxRow].map((row) => camelizeKeys(row)));
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, selectValues);
+    });
+
+    it('Fetches pending transactions', async () => {
+        const selectQuery = `select transaction_type, amount from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
+        `and settlement_status = $2 and transaction_type in ($3, $4) order by creation_time desc`;
+        const selectValues = [testAccountId, 'PENDING', 'USER_SAVING_EVENT', 'WITHDRAWAL'];
+
+        queryStub.resolves(testPendingTransactions);
+        const priorTxs = await rds.fetchPendingTransactions(testAccountId);
+        logger('Got prior txs:', priorTxs);
+
+        expect(priorTxs).to.exist;
+        expect(priorTxs).to.deep.equal(testPendingTransactions.map((row) => camelizeKeys(row)));
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, selectValues);
     });
 
