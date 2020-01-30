@@ -80,6 +80,21 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
     });
 
+    it('Checks for boosts with recently changed status', async () => {
+        findAccountsStub.resolves([testAccountId]);
+        fetchBoostStub.resolves([expectedBoostResult]);
+
+        const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
+
+        expect(resultOfChangeFetch).to.exist;
+        expect(resultOfChangeFetch).to.have.property('statusCode', 200);
+        expect(resultOfChangeFetch).to.have.property('body', JSON.stringify([expectedBoostResult]));
+        
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testAccountId, sinon.match.any, ['CREATED', 'OFFERED', 'EXPIRED'])
+        expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
+
+    });
+
     it('Handles dry run', async () => {
         fetchBoostStub.withArgs(testAccountId).resolves([expectedBoostResult, expectedBoostResult]);
         findAccountsStub.resolves([testAccountId]);

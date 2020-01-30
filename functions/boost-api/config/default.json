@@ -13,6 +13,10 @@
         "defaultEnd": {
             "number": "50",
             "unit": "years"
+        },
+        "changeCutOff": {
+            "number": 2,
+            "unit": "minutes"
         }
     },
     "tables": {
