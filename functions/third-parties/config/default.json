@@ -78,9 +78,9 @@
         "chunkSize": 1000,
         "fromName": "Jupiter",
         "fromAddress": "noreply@jupitersave.com",
-        "replyToAddress": "",
+        "replyToAddress": "noreply@jupitersave.com",
         "replyToName": "Jupiter",
-        "sandbox": true,
+        "sandbox": false,
         "supportedAttachments": {
             ".pdf": "application/pdf",
             ".json": "application/json",

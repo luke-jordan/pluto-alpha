@@ -2,6 +2,7 @@
 
 // const logger = require('debug')('jupiter:third-parties:sendgrid-unit-test');
 const config = require('config');
+const path = require('path');
 
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -30,21 +31,23 @@ const handler = proxyquire('../email-handler', {
     }
 });
 
+const fetchAttachmentType = (fileExtension) => config.get('sendgrid.supportedAttachments')[fileExtension];
+
 const resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
 describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', () => {
 
-    const testUserName = 'Jane';
-    const testEmailAddress = 'jane@email.com';
+    const testUserName = 'FRTNX';
+    const testEmailAddress = 'frtnx@protonmail.com';
     const validSubject = 'Welcome to Jupiter';
 
     const validHtmlTemplate = '<p>Greetings {{user}}, \nWelcome to Jupiter.</p>';
     const validTextTemplate = 'Greetings {{user}}. \nWelcome to Jupiter.';
 
-    const testTemplateBucket = 'templateBucket';
-    const testTemplateKey = 'templateKey';
+    const mockTemplateBucket = 'templateBucket';
+    const mockTemplateKey = 'templateKey';
 
     const testDestinationDetails = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
     const validPersonalization = {
@@ -89,7 +92,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
         const testEvent = {
             templates: {
-                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
                 textTemplate: validTextTemplate
             },
             subject: validSubject,
@@ -101,7 +104,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
 
-        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
+        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: mockTemplateBucket, Key: mockTemplateKey });
         expect(sendGridStub).to.have.been.calledOnceWithExactly(validAssembledEmail);
     });
 
@@ -115,7 +118,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
         const testEvent = {
             templates: {
-                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
                 textTemplate: validTextTemplate
             },
             subject: validSubject,
@@ -127,7 +130,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
 
-        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
+        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: mockTemplateBucket, Key: mockTemplateKey });
         expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
     });
 
@@ -142,7 +145,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
         const testEvent = {
             templates: {
-                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
                 textTemplate: validTextTemplate
             },
             subject: validSubject,
@@ -154,7 +157,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         expect(resultOfEmail).to.exist;
         expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
 
-        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: testTemplateBucket, Key: testTemplateKey });
+        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: mockTemplateBucket, Key: mockTemplateKey });
         expect(sendGridStub).to.have.been.calledThrice;
 
         const firstCall = sendGridStub.getCall(0).args[0];
@@ -167,20 +170,203 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         expect(thirdCall.personalizations.length).to.equal(500);
     });
 
-    // it('Handles attachments', async () => {
+    it('Handles attachments', async () => {
+        const mockAttachmentBucket = 'attachments';
+        const mockAttachmentContent = 'T3VycyBpcyBhIHdvcmxkIG9mIG51Y2xlYXIgZ2lhbnRzIGFuZCBldGhpY2FsIGluZmFudHMuIFdlIGtub3cgbW9yZSBh' +
+            'Ym91dCB3YXIgdGhhbiB3ZSBrbm93IGFib3V0IHBlYWNlLCBtb3JlIGFib3V0IGtpbGxpbmcgdGhhdCB3ZSBrbm93IGFib3V0IGxpdmluZy4=';
 
-    // });
+        const validAttachment = (filename) => ({
+            content: mockAttachmentContent,
+            filename,
+            type: fetchAttachmentType(path.extname(filename)),
+            disposition: 'attachment'
+        });
 
-    // it('Fails on unsupported or invalid attachment', async () => {
+        const expectedAssembledEmail = { ...validAssembledEmail };
+        expectedAssembledEmail.personalizations = [validPersonalization, validPersonalization, validPersonalization]; 
+        expectedAssembledEmail.attachments = [validAttachment('attachment.pdf'), validAttachment('attachment.csv')];
 
-    // });
+        getObjectStub.withArgs({ Bucket: mockTemplateBucket, Key: mockTemplateKey }).returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockAttachmentContent }})});
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const testEvent = {
+            templates: {
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: [testDestinationDetails, testDestinationDetails, testDestinationDetails],
+            attachments: [
+                {
+                    source: { key: 'attachement.pdf', bucket: mockAttachmentBucket },
+                    filename: 'attachment.pdf'
+                },
+                {
+                    source: { key: 'attachement.csv', bucket: mockAttachmentBucket },
+                    filename: 'attachment.csv'
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
+        expect(getObjectStub).to.have.been.calledThrice;
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockTemplateBucket, Key: mockTemplateKey });
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement.pdf' });
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement.csv' });
+        expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
+    });
+
+    it('Overwrites default fromName and replyToName values when provided in event', async () => {
+        const mockAttachmentBucket = 'attachments';
+        const mockAttachmentContent = 'TmF0dXJlIHdpbGwgYmVhciB0aGUgY2xvc2VzdCBpbnNwZWN0aW9uLiBTaGUgaW52aXRlcyB1cy' + 
+            'B0byBsYXkgb3VyIGV5ZSBsZXZlbCB3aXRoIGhlciBzbWFsbGVzdCBsZWFmLCBhbmQgdGFrZSBhbiBpbnNlY3QgdmlldyBvZiBpdHMgcGxhaW4u';
+
+        const validAttachment = (filename) => ({
+            content: mockAttachmentContent,
+            filename,
+            type: 'application/pdf',
+            disposition: 'attachment'
+        });
+
+        const expectedAssembledEmail = { ...validAssembledEmail };
+        expectedAssembledEmail.personalizations = [validPersonalization, validPersonalization, validPersonalization]; 
+        expectedAssembledEmail.attachments = [validAttachment('attachment.pdf'), validAttachment('attachment2.pdf')];
+        expectedAssembledEmail.from.name = 'Jupiter Admin';
+        expectedAssembledEmail.reply_to.name = 'Jupiter Admin';
+
+        getObjectStub.withArgs({ Bucket: mockTemplateBucket, Key: mockTemplateKey }).returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockAttachmentContent }})});
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const testEvent = {
+            templates: {
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: [testDestinationDetails, testDestinationDetails, testDestinationDetails],
+            sourceDetails: { fromName: 'Jupiter Admin', replyToName: 'Jupiter Admin' },
+            attachments: [
+                {
+                    source: { key: 'attachement.pdf', bucket: mockAttachmentBucket },
+                    filename: 'attachment.pdf'
+                },
+                {
+                    source: { key: 'attachement2.pdf', bucket: mockAttachmentBucket },
+                    filename: 'attachment2.pdf'
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
+        expect(getObjectStub).to.have.been.calledThrice;
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockTemplateBucket, Key: mockTemplateKey });
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement.pdf' });
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement2.pdf' });
+        expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
+    });
+
+    it('Fails on unsupported or invalid attachment', async () => {
+        const mockAttachmentBucket = 'attachments';
+    
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
+
+        const testEvent = {
+            templates: {
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray,
+            attachments: [
+                {
+                    source: { key: 'attachement.js', bucket: mockAttachmentBucket },
+                    filename: 'attachment.js'
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'ERR', message: 'Unsupported attachment type: attachment.js' });
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.not.been.called;
+    });
+
+    it('Fails on missing attachment file name', async () => {
+        const mockAttachmentBucket = 'attachments';
+    
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
+
+        const testEvent = {
+            templates: {
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray,
+            attachments: [
+                {
+                    source: { key: 'attachement.jpeg', bucket: mockAttachmentBucket }
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'ERR', message: 'Invalid attachment. Missing attachment filename' });
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.not.been.called;
+    });
+
+    it('Fails on missing or invalid attachment S3 key-bucket pair', async () => {
+        const mockAttachmentBucket = 'attachments';
+    
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
+
+        const testEvent = {
+            templates: {
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray,
+            attachments: [
+                {
+                    source: { bucket: mockAttachmentBucket },
+                    filename: 'attachment.odt'
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'ERR', message: 'Invalid attachment source' });
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.not.been.called;
+    });
 
     it('Fails on invalid method parameters', async () => {
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
 
         const testEvent = {
             templates: {
-                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
                 textTemplate: validTextTemplate
             },
             subject: validSubject,
@@ -197,11 +383,11 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('Missing required html template'));
 
-        testEvent.templates.templateKeyBucket = { bucket: testTemplateBucket };
+        testEvent.templates.templateKeyBucket = { bucket: mockTemplateBucket };
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('Missing valid template key-bucket pair'));
 
-        testEvent.templates.templateKeyBucket = { key: testTemplateKey, bucket: testTemplateBucket };
+        testEvent.templates.templateKeyBucket = { key: mockTemplateKey, bucket: mockTemplateBucket };
 
         Reflect.deleteProperty(testEvent, 'destinationArray');
 
@@ -211,9 +397,11 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
         sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('No valid destinations found'));
 
         testEvent.destinationArray = [{ someOtherKey: 'that should not exist' }];
+
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError('No valid destinations found'));
  
         expect(getObjectStub).to.have.not.been.called;
@@ -225,7 +413,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
     
         const testEvent = {
             templates: {
-                templateKeyBucket: { key: testTemplateKey, bucket: testTemplateBucket },
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
                 textTemplate: validTextTemplate
             },
             subject: validSubject,
@@ -250,7 +438,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
 
         await expect(handler.sendEmailsFromSource(testEvent)).to.eventually.deep.equal(formatError(`Invalid text template: ${JSON.stringify({ invalid: 'text template'})}`));
 
-        expect(getObjectStub).to.have.been.calledWith({ Bucket: testTemplateBucket, Key: testTemplateKey });
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockTemplateBucket, Key: mockTemplateKey });
         expect(sendGridStub).to.have.not.been.called;
     });
 });
@@ -382,13 +570,191 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         expect(thirdCall.personalizations.length).to.equal(500);
     });
 
-    // it('Handles attachments', async () => {
+    it('Handles attachments', async () => {
+        const mockAttachmentBucket = 'attachments';
+        const mockAttachmentContent = 'SXQgaXMgbm90IGtub3dsZWRnZSwgYnV0IHRoZSBhY3Qgb2YgbGVhcm5pbmcsIG5vdCBwb3Nz' + 
+            'ZXNzaW9uIGJ1dCB0aGUgYWN0IG9mIGdldHRpbmcgdGhlcmUsIHdoaWNoIGdyYW50cyB0aGUgZ3JlYXRlc3QgZW5qb3ltZW50Lg==';
 
-    // });
+            const validAttachment = (filename) => ({
+                content: mockAttachmentContent,
+                filename,
+                type: 'application/pdf',
+                disposition: 'attachment'
+            });
+    
+            const expectedAssembledEmail = { ...validAssembledEmail };
+            expectedAssembledEmail.personalizations = [validPersonalization, validPersonalization, validPersonalization]; 
+            expectedAssembledEmail.attachments = [validAttachment('attachment.pdf'), validAttachment('attachment2.pdf')];
+    
+            getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockAttachmentContent }})});
+            sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+    
+            const testEvent = {
+                templates: {
+                    htmlTemplate: validHtmlTemplate,
+                    textTemplate: validTextTemplate
+                },
+                subject: validSubject,
+                destinationArray: [testDestinationDetails, testDestinationDetails, testDestinationDetails],
+                attachments: [
+                    {
+                        source: { key: 'attachement.pdf', bucket: mockAttachmentBucket },
+                        filename: 'attachment.pdf'
+                    },
+                    {
+                        source: { key: 'attachement2.pdf', bucket: mockAttachmentBucket },
+                        filename: 'attachment2.pdf'
+                    }
+                ]
+            };
+    
+            const resultOfEmail = await handler.sendEmails(testEvent);
+    
+            expect(resultOfEmail).to.exist;
+            expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+    
+            expect(getObjectStub).to.have.been.calledTwice;
+            expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement.pdf' });
+            expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement2.pdf' });
+            expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
+    });
 
-    // it('Fails on unsupported or invalid attachment', async () => {
+    it('Overwrites default fromName and replyToName values when provided in event', async () => {
+        const mockAttachmentBucket = 'attachments';
+        const mockAttachmentContent = 'S25vd2xlZGdlIGlzIGxvdmUgYW5kIGxpZ2h0IGFuZCB2aXNpb24u';
 
-    // });
+        const validAttachment = (filename) => ({
+            content: mockAttachmentContent,
+            filename,
+            type: 'application/pdf',
+            disposition: 'attachment'
+        });
+
+        const expectedAssembledEmail = { ...validAssembledEmail };
+        expectedAssembledEmail.personalizations = [validPersonalization, validPersonalization, validPersonalization]; 
+        expectedAssembledEmail.attachments = [validAttachment('attachment.pdf'), validAttachment('attachment2.pdf')];
+        expectedAssembledEmail.from.name = 'Jupiter Admin';
+        expectedAssembledEmail.reply_to.name = 'Jupiter Admin';
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockAttachmentContent }})});
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const testEvent = {
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: [testDestinationDetails, testDestinationDetails, testDestinationDetails],
+            sourceDetails: { fromName: 'Jupiter Admin', replyToName: 'Jupiter Admin' },
+            attachments: [
+                {
+                    source: { key: 'attachement.pdf', bucket: mockAttachmentBucket },
+                    filename: 'attachment.pdf'
+                },
+                {
+                    source: { key: 'attachement2.pdf', bucket: mockAttachmentBucket },
+                    filename: 'attachment2.pdf'
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmails(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [] });
+
+        expect(getObjectStub).to.have.been.calledTwice;
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement.pdf' });
+        expect(getObjectStub).to.have.been.calledWith({ Bucket: mockAttachmentBucket, Key: 'attachement2.pdf' });
+        expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
+    });
+
+    it('Fails on unsupported or invalid attachment', async () => {
+        const mockAttachmentBucket = 'attachments';
+    
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
+
+        const testEvent = {
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray,
+            attachments: [
+                {
+                    source: { key: 'attachement.js', bucket: mockAttachmentBucket },
+                    filename: 'attachment.js'
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmails(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'ERR', message: 'Unsupported attachment type: attachment.js' });
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.not.been.called;
+    });
+
+    it('Fails on missing attachment file name', async () => {
+        const mockAttachmentBucket = 'attachments';
+    
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
+
+        const testEvent = {
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray,
+            attachments: [
+                {
+                    source: { key: 'attachement.png', bucket: mockAttachmentBucket }
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmails(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'ERR', message: 'Invalid attachment. Missing attachment filename' });
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.not.been.called;
+    });
+
+    it('Fails on invalid attachment key-bucket pair', async () => {
+        const mockAttachmentBucket = 'attachments';
+    
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];
+
+        const testEvent = {
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray,
+            attachments: [
+                {
+                    source: { bucket: mockAttachmentBucket },
+                    filename: 'attachment.doc'
+                }
+            ]
+        };
+
+        const resultOfEmail = await handler.sendEmails(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'ERR', message: 'Invalid attachment source' });
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.not.been.called;
+    });
 
     it('Fails on invalid method parameters', async () => {
         const testDestinationArray = [testDestinationDetails, testDestinationDetails, testDestinationDetails];

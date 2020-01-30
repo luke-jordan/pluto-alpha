@@ -53,7 +53,7 @@ const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, desti
                 throw new Error('Invalid attachment. Missing attachment filename');
             }
 
-            if (!Reflect.has(attachment, 'source') || !Reflect.has(attachment.source, 'bucket') || !Reflect.has(attachment.source, 'bucket')) {
+            if (!Reflect.has(attachment, 'source') || !Reflect.has(attachment.source, 'bucket') || !Reflect.has(attachment.source, 'key')) {
                 throw new Error('Invalid attachment source');
             }
             
@@ -62,8 +62,6 @@ const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, desti
             }
         });
     }
-
-    // validate source details
 
     const failedAddresses = [];
     destinationArray.forEach((destination) => {
@@ -83,7 +81,7 @@ const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, desti
 
 const validateDispatchParams = (dispatchParams) => {
     if (!dispatchParams.htmlTemplate && !dispatchParams.textTemplate) {
-        throw new Error('You must provide either a text or html template or both');
+        throw new Error('You must provide either a text or html template or both'); // unreachable but a good fortification
     }
 
     if (dispatchParams.htmlTemplate && typeof dispatchParams.htmlTemplate !== 'string') {
@@ -122,8 +120,8 @@ const chunkDispatchRecipients = (destinationArray) => {
 };
 
 const assembleDispatchPayload = (dispatchParams, destinationArray) => {
-    const fromName = dispatchParams.sourceDetails ? dispatchParams.sourceDetails.source : config.get('sendgrid.fromName');
-    const replyToName = dispatchParams.sourceDetails ? dispatchParams.sourceDetails.replyTo : config.get('sendgrid.replyToName');
+    const fromName = dispatchParams.sourceDetails ? dispatchParams.sourceDetails.fromName : config.get('sendgrid.fromName');
+    const replyToName = dispatchParams.sourceDetails ? dispatchParams.sourceDetails.replyToName : config.get('sendgrid.replyToName');
 
     const { subject, htmlTemplate, textTemplate, attachments } = dispatchParams;
 
@@ -174,20 +172,18 @@ const fetchAttachmentType = (fileExtension) => config.get('sendgrid.supportedAtt
 
 const assembleAttachments = async (attachments) => {
     const formattedAttachments = [];
-    for (const attachment in attachments) {
-        if (attachments.hasOwnProperty(attachment)) {
-            const attachmentType = fetchAttachmentType(path.extname(attachment.filename));
-            const { key, bucket } = attachment.source;
-            /* eslint-disable no-await-in-loop */
-            const file = await fetchAttachment(bucket, key);
-            /* eslint-enable no-await-in-loop */
-            formattedAttachments.push({
-                content: file,
-                filename: attachment.filename,
-                type: attachmentType,
-                disposition: 'attachment'
-            });
-        }
+    for (const attachment of attachments) {
+        const attachmentType = fetchAttachmentType(path.extname(attachment.filename));
+        const { key, bucket } = attachment.source;
+        /* eslint-disable no-await-in-loop */
+        const file = await fetchAttachment(attachment.filename, bucket, key);
+        /* eslint-enable no-await-in-loop */
+        formattedAttachments.push({
+            content: file,
+            filename: attachment.filename,
+            type: attachmentType,
+            disposition: 'attachment'
+        });
     }
 
     return formattedAttachments;
@@ -255,6 +251,7 @@ module.exports.sendEmailsFromSource = async (event) => {
         const dispatchChunks = chunkDispatchRecipients(sanitizedDestinationArray);
         /* eslint-enable id-length */
 
+        // todo: dispatch in parallel
         for (const chunk of dispatchChunks) {
             const dispatchPayload = assembleDispatchPayload(assembledDispatchParams, chunk);
             validateDispatchPayload(dispatchPayload);
