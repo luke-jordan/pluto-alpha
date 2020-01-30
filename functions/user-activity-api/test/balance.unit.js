@@ -34,6 +34,16 @@ const testTimeEOD = testTimeNow.clone().endOf('day');
 
 const testClientId = 'a_client_somewhere';
 const testFloatId = 'usd_cash_primary';
+const testPendingTransactions = [
+    {
+        'transaction_type': 'USER_SAVING_EVENT',
+        'amount': '100'
+    },
+    {
+        'transaction_type': 'WITHDRAWAL',
+        'amount': '50'
+    }
+];
 
 const testAccrualRateBps = 250;
 const testBonusPoolShare = 0.1; // percent of an accrual (not bps)
@@ -89,13 +99,15 @@ const accountClientFloatStub = sinon.stub();
 const findAccountsForUserStub = sinon.stub();
 const countAvailableBoostStub = sinon.stub();
 const floatPrincipalVarsStub = sinon.stub();
+const fetchPendingTransactionsStub = sinon.stub();
 
 const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
         'getOwnerInfoForAccount': accountClientFloatStub,
         'findAccountsForUser': findAccountsForUserStub,
-        'countAvailableBoosts': countAvailableBoostStub
+        'countAvailableBoosts': countAvailableBoostStub,
+        'fetchPendingTransactions': fetchPendingTransactionsStub
     },
     './persistence/dynamodb': {
         'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub,
@@ -111,12 +123,14 @@ const resetStubs = (historyOnly = true) => {
         findAccountsForUserStub.resetHistory();
         floatPrincipalVarsStub.resetHistory();
         countAvailableBoostStub.resetHistory();
+        fetchPendingTransactionsStub.resetHistory();
     } else {
         accountBalanceQueryStub.reset();
         accountClientFloatStub.reset();
         findAccountsForUserStub.reset();
         floatPrincipalVarsStub.reset();
         countAvailableBoostStub.resetHistory();
+        fetchPendingTransactionsStub.resetHistory();
     }
 };
 
@@ -161,7 +175,8 @@ describe('Fetches user balance and makes projections', () => {
         },
         balanceSubsequentDays: expectedBalanceSubsequentDays,
         availableBoostCount: testNumberBoosts, 
-        comparatorRates: testComparatorRates
+        comparatorRates: testComparatorRates,
+        pendingTransactions: testPendingTransactions
     };
 
     // logger('Expected body: ', wellFormedResultBody);
@@ -210,6 +225,7 @@ describe('Fetches user balance and makes projections', () => {
         });
 
         countAvailableBoostStub.withArgs(testAccountId).resolves(testNumberBoosts);
+        fetchPendingTransactionsStub.withArgs(testAccountId).resolves(testPendingTransactions);
     });
 
     beforeEach(() => resetStubs(true));
