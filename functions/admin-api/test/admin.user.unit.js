@@ -300,7 +300,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
             StatusCode: 200,
             Payload: JSON.stringify({
                 transactionDetails: [
-                    { transactionType: 'USER_SAVING_EVENT' }
+                    { accountTransactionType: 'USER_SAVING_EVENT' }
                 ]
             })
         };
@@ -320,7 +320,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
                         settlingUserId: testUserId
                     },
                     resultPayload: {
-                        transactionDetails: [{ 'transactionType': 'USER_SAVING_EVENT' }]
+                        transactionDetails: [{ 'accountTransactionType': 'USER_SAVING_EVENT' }]
                     }
                 }
             }
@@ -338,7 +338,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
                     settlingUserId: testUserId
                 },
                 resultPayload: {
-                    transactionDetails: [{ 'transactionType': 'USER_SAVING_EVENT' }]
+                    transactionDetails: [{ 'accountTransactionType': 'USER_SAVING_EVENT' }]
                 }
             }
         };
@@ -357,7 +357,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         const expectedResult = {
             statusCode: 200,
             headers: helper.expectedHeaders,
-            body: JSON.stringify({result: 'SUCCESS', updateLog: { transactionDetails: [{ transactionType: 'USER_SAVING_EVENT' }]}})
+            body: JSON.stringify({result: 'SUCCESS', updateLog: { transactionDetails: [{ accountTransactionType: 'USER_SAVING_EVENT' }]}})
         };
 
         const requestBody = {
