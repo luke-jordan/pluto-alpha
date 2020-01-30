@@ -219,11 +219,11 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
     
     const returnResult = updatePayload.statusCode === 200
         ? { result: 'SUCCESS', updateLog: JSON.parse(updatePayload.body) }
-        : { result: 'FAILURE', message: JSON.parse(updatePayload.body)};
+        : { result: 'FAILURE', message: JSON.parse(updatePayload.body) };
 
     logger('Returning result: ', returnResult);
 
-    return updateResult;
+    return returnResult;
 };
 
 const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
@@ -287,13 +287,13 @@ const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId,
     const bsheetPrefix = config.get('bsheet.prefix');
     // happens inside to prevent accidental duplication etc
     const resultOfRdsUpdate = await persistence.updateBsheetTag({ accountId, tagPrefix: bsheetPrefix, newIdentifier });
-    const oldIdentifier = resultOfRdsUpdate.oldIdentifier;
-
-    const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, newIdentifier, oldIdentifier };
     logger('Result of RDS update: ', resultOfRdsUpdate);
     if (!resultOfRdsUpdate) {
         return { result: 'ERROR', message: 'Failed on persistence update' };
     }
+    
+    const oldIdentifier = resultOfRdsUpdate.oldIdentifier;
+    const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, newIdentifier, oldIdentifier };
 
     await Promise.all([
         publishUserLog({ adminUserId, systemWideUserId, eventType: 'ADMIN_UPDATED_BSHEET_TAG', context: { ...logContext, accountId } }),
@@ -342,10 +342,10 @@ module.exports.manageUser = async (event) => {
         if (params.fieldToUpdate === 'BSHEET') {
             logger('Updating the FinWorks (balance sheet management) identifier for the user');
             if (!params.accountId) {
-                return opsCommonUtil.wrapResponse('Error, must pass in account ID');
+                return opsCommonUtil.wrapResponse('Error, must pass in account ID', 400);
             }
             if (!params.newIdentifier) {
-                return opsCommonUtil.wrapResponse('Error, must pass in newIdentifier');
+                return opsCommonUtil.wrapResponse('Error, must pass in newIdentifier', 400);
             }
             resultOfUpdate = await handleBsheetAccUpdate(params);
         }

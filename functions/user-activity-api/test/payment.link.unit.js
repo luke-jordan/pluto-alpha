@@ -41,15 +41,15 @@ describe('*** UNIT TESTING PAYMENT LAMBDAS INVOCATION ***', () => {
     });
 
     it('Generate payment references, properly', async () => {
-        const testStems = ['LJORDAN1', 'ABRIJMOHUN12', 'BNDLOVU102', 'BAJIBAWO1002', 'SPILLAY-BRIJMOHUN10', 'SPILLAY-BRIJMOHUN10'];
-        const testNumberSaves = [104, 2045, 1, 4095, 1, 23];
-        const expectedRef = ['LJORDAN1-00104', 'ABRIJMOHUN12-02045', 'BNDLOVU102-00001', 'BAJIBAWO1002-04095', 'SPILLAY-BRIJMOH10-1', 'SPILLAY-BRIJMO10-23'];
+        const testStems = ['LJORDAN1', 'ABRIJMOHUN12', 'BNDLOVU102', 'BAJIBAWO1002', 'SPILLAY-BRIJMOHUN10', 'SPILLAY-BRIJMOHUN10', 'EXTRATERRESTRIAL'];
+        const testNumberSaves = [104, 2045, 1, 4095, 1, 23, 2];
+        const expectedRef = ['LJORDAN1-00104', 'ABRIJMOHUN12-02045', 'BNDLOVU102-00001', 'BAJIBAWO1002-04095', 'SPILLAY-BRIJMOH10-1', 'SPILLAY-BRIJMO10-23', 'EXTRATERRESTRIAL-002'];
 
         testStems.forEach((stem, idx) => {
             const assembledRef = paymentLinkHandler.generateBankRef({ bankRefStem: stem, priorSaveCount: testNumberSaves[idx] });
             logger('Assembled: ', assembledRef);
             expect(assembledRef).to.equal(expectedRef[idx]);
-            expect(assembledRef.length).to.be.lessThan(20);
+            expect(assembledRef.length <= 20).to.be.true;
         });
     });
 

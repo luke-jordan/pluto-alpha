@@ -80,7 +80,7 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
     });
 
     it('Handles warmup event', async () => {
-        requestStub.resolves(); // intentionally resolves undefined
+        requestStub.resolves();
         const mockEvent = { };
 
         const resultOfWarmup = await handler.paymentUrlRequest(mockEvent);
@@ -88,7 +88,35 @@ describe('*** UNIT TEST PAYMENT HANDLER ***', () => {
 
         expect(resultOfWarmup).to.exist;
         expect(resultOfWarmup).to.have.property('result', 'WARMUP_COMPLETE');
-        expect(requestStub).to.have.been.called;
+        
+        const expectedRequestOptions = {
+            method: 'GET',
+            uri: config.get('ozow.endpoints.warmup'),
+            body: {},
+            headers: { Accept: 'application/json', ApiKey: config.get('ozow.apiKey') },
+            json: true
+        };
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
+    });
+
+    it('Catches expected error during warm up', async () => {
+        requestStub.throws(new Error('Expected error'));
+        const mockEvent = { };
+
+        const resultOfWarmup = await handler.paymentUrlRequest(mockEvent);
+        logger('Result of warmup call:', resultOfWarmup);
+
+        expect(resultOfWarmup).to.exist;
+        expect(resultOfWarmup).to.have.property('result', 'WARMUP_COMPLETE');
+
+        const expectedRequestOptions = {
+            method: 'GET',
+            uri: config.get('ozow.endpoints.warmup'),
+            body: {},
+            headers: { Accept: 'application/json', ApiKey: config.get('ozow.apiKey') },
+            json: true
+        };
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
     });
 
     it('Handles dry run', async () => {
@@ -227,6 +255,44 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
             },
             json: true
         };
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
+    });
+
+    it('Handles pending response', async () => {
+        requestStub.throws(new Error('StatusCodeError: 404 - undefined'));
+        const mockEvent = { transactionId: mockTransactionReference, isTest: true };
+
+        const transactionStatus = await handler.statusCheck(mockEvent);
+        logger('Transaction status result:', transactionStatus);
+
+        expect(transactionStatus).to.exist;
+        expect(transactionStatus).to.have.property('result', 'PENDING');
+       
+        const expectedRequestOptions = {
+            method: 'GET',
+            uri: config.get('ozow.endpoints.transactionStatus'),
+            qs: {
+                SiteCode: config.get('ozow.siteCode'),
+                IsTest: true,
+                TransactionReference: mockTransactionReference
+            },
+            headers: {
+                ApiKey: config.get('ozow.apiKey'),
+                Accept: 'application/json'
+            },
+            json: true
+        };
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
+        resetStubs(requestStub);
+
+        requestStub.throws(new Error('404 -undefined'));
+
+        const secondTransactionStatus = await handler.statusCheck(mockEvent);
+
+        logger('Transaction status result:', secondTransactionStatus);
+
+        expect(secondTransactionStatus).to.exist;
+        expect(secondTransactionStatus).to.have.property('result', 'PENDING');
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
     });
 

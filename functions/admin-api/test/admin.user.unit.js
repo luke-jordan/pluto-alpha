@@ -9,6 +9,7 @@ const sinon = require('sinon');
 const proxyquire = require('proxyquire');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
 const helper = require('./test.helper');
@@ -19,8 +20,12 @@ const MIN_AMOUNT = 5000000;
 const momentStub = sinon.stub();
 const pendingTxStub = sinon.stub();
 const countUsersStub = sinon.stub();
+const publishEventStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const adjustTxStatusStub = sinon.stub();
 const fetchBsheetTagStub = sinon.stub();
+const updateBsheetTagStub = sinon.stub();
+const insertAccountLogStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -30,9 +35,15 @@ class MockLambdaClient {
 
 const handler = proxyquire('../admin-user-handler', {
     './persistence/rds.account': {
-        'fetchUserPendingTransactions': pendingTxStub,
         'fetchBsheetTag': fetchBsheetTagStub,
+        'adjustTxStatus': adjustTxStatusStub,
+        'updateBsheetTag': updateBsheetTagStub,
+        'insertAccountLog': insertAccountLogStub,
+        'fetchUserPendingTransactions': pendingTxStub,
         '@noCallThru': true
+    },
+    'publish-common': {
+        publishUserEvent: publishEventStub
     },
     './admin.util': {},
     'moment': momentStub,
@@ -270,4 +281,569 @@ describe('*** UNIT TEST USER COUNT ***', () => {
         expect(countUsersStub).to.have.been.calledOnce;
     });
     
+});
+
+describe('*** UNIT TEST USER MANAGEMENT ***', () => {
+    const testAccountId = uuid();
+    const testAdminId = uuid();
+    const testUserId = uuid();
+    const testTxId = uuid();
+
+    const testCreationTime = moment().format();
+    const testUpdatedTime = moment().format();
+
+    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub, fetchBsheetTagStub));
+
+    it('Settles user transaction', async () => {
+
+        const mockLambdaResponse = {
+            StatusCode: 200,
+            Payload: JSON.stringify({
+                transactionDetails: [
+                    { transactionType: 'USER_SAVING_EVENT' }
+                ]
+            })
+        };
+
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        insertAccountLogStub.resolves({ creationTime: testCreationTime });
+
+        const expectedPublishArgs = {
+            initiator: testUserId,
+            options: {
+                context: {
+                    settleInstruction: {
+                        transactionId: testTxId,
+                        paymentRef: 'Saving event completed',
+                        paymentProvider: 'ADMIN_OVERRIDE',
+                        settlingUserId: testUserId
+                    },
+                    resultPayload: {
+                        transactionDetails: [{ 'transactionType': 'USER_SAVING_EVENT' }]
+                    }
+                }
+            }
+        };
+
+        const expectedLog = {
+            transactionId: testTxId,
+            adminUserId: testUserId,
+            logType: 'ADMIN_SETTLED_SAVE',
+            logContext: {
+                settleInstruction: {
+                    transactionId: testTxId,
+                    paymentRef: 'Saving event completed',
+                    paymentProvider: 'ADMIN_OVERRIDE',
+                    settlingUserId: testUserId
+                },
+                resultPayload: {
+                    transactionDetails: [{ 'transactionType': 'USER_SAVING_EVENT' }]
+                }
+            }
+        };
+
+        const expectedInvocation = {
+            FunctionName: config.get('lambdas.directSettle'),
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({
+                paymentProvider: 'ADMIN_OVERRIDE',
+                paymentRef: 'Saving event completed',
+                settlingUserId: testUserId,
+                transactionId: testTxId
+            })
+        };
+
+        const expectedResult = {
+            statusCode: 200,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify({result: 'SUCCESS', updateLog: { transactionDetails: [{ transactionType: 'USER_SAVING_EVENT' }]}})
+        };
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            transactionId: testTxId,
+            fieldToUpdate: 'TRANSACTION',
+            newTxStatus: 'SETTLED',
+            reasonToLog: 'Saving event completed'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        logger('Result of update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(expectedResult);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(publishEventStub).to.have.been.calledTwice;
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_SETTLED_SAVE', expectedPublishArgs);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'SAVING_PAYMENT_SUCCESSFUL', expectedPublishArgs);
+        expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
+    });
+
+    it('Handles pending transactions', async () => {
+
+        const mockLambdaResponse = {
+            StatusCode: 200,
+            Payload: JSON.stringify({
+                transactionDetails: [
+                    { transactionType: 'USER_SAVING_EVENT' }
+                ]
+            })
+        };
+
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        adjustTxStatusStub.resolves({ settlementStatus: 'PENDING', updatedTime: testUpdatedTime });
+
+        const expectedPublishArgs = {
+            initiator: testUserId,
+            options: {
+                context: {
+                    newStatus: 'PENDING',
+                    owningUserId: testUserId,
+                    performedBy: testUserId,
+                    reason: 'Saving event pending',
+                    transactionId: testTxId
+                }
+            }
+        };
+
+        const expectedLog = {
+            transactionId: testTxId,
+            adminUserId: testUserId,
+            logType: 'ADMIN_UPDATED_TX',
+            logContext: {
+                performedBy: testUserId,
+                owningUserId: testUserId,
+                reason: 'Saving event pending',
+                newStatus: 'PENDING'
+            }
+        };
+
+        const expectedResult = {
+            statusCode: 200,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify({result: 'SUCCESS', updateLog: { settlementStatus: 'PENDING', updatedTime: testUpdatedTime }})
+        };
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            transactionId: testTxId,
+            fieldToUpdate: 'TRANSACTION',
+            newTxStatus: 'PENDING',
+            reasonToLog: 'Saving event pending'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        logger('Result of update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(expectedResult);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_UPDATED_TX', expectedPublishArgs);
+        expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Updates user kyc status', async () => {
+
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({result: 'SUCCESS'}, 200) });
+
+        const expectedResult = {
+            statusCode: 200,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify({ result: 'SUCCESS', updateLog: { result: 'SUCCESS' }})
+        };
+
+        const expectedInvocation = {
+            FunctionName: config.get('lambdas.statusUpdate'),
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({
+                initiator: testUserId,
+                systemWideUserId: testUserId,
+                updatedKycStatus: {
+                    changeTo: 'CONTACT_VERIFIED',
+                    reasonToLog: 'User contact verified'
+                }
+            })
+        };
+
+        const requestBody = {
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'KYC',
+            newStatus: 'CONTACT_VERIFIED',
+            reasonToLog: 'User contact verified'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        logger('Result of update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(expectedResult);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+    });
+
+    it('Updated user status', async () => {
+        
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({result: 'SUCCESS'}, 200) });
+
+        const expectedResult = {
+            statusCode: 200,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify({ result: 'SUCCESS', updateLog: { result: 'SUCCESS' }})
+        };
+
+        const expectedInvocation = {
+            FunctionName: 'profile_status_update',
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({
+                initiator: testUserId,
+                systemWideUserId: testUserId,
+                updatedUserStatus: {
+                    changeTo: 'ACCOUNT_OPENED',
+                    reasonToLog: 'User account opened'
+                }
+            })
+        };
+
+        const requestBody = {
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'STATUS',
+            newStatus: 'ACCOUNT_OPENED',
+            reasonToLog: 'User account opened'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        logger('Result of update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(expectedResult);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+    });
+
+    it('Updates user balance sheet', async () => {
+
+        updateBsheetTagStub.resolves({ ownerUserId: testUserId, tags: ['FINWORKS::NEW_IDENTIFIER'], oldItendifier: 'OLD_IDENTIFIER'});
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        insertAccountLogStub.resolves({ creationTime: testCreationTime });
+
+        const expectedResult = {
+            statusCode: 200,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify({
+                result: 'SUCCESS',
+                updateLog: {
+                    ownerUserId: testUserId,
+                    tags: ['FINWORKS::NEW_IDENTIFIER'],
+                    oldItendifier: 'OLD_IDENTIFIER'
+                }
+            })
+        };
+
+        const expectedLog = {
+            accountId: testAccountId,
+            adminUserId: testUserId,
+            logType: 'ADMIN_UPDATED_BSHEET_TAG',
+            logContext: {
+                performedBy: testUserId,
+                owningUserId: testUserId,
+                newIdentifier: 'NEW_IDENTIFIER',
+                oldIdentifier: undefined
+            }
+        };
+
+        const expectedPublishArgs = {
+            initiator: testUserId,
+            options: {
+                context: {
+                    performedBy: testUserId,
+                    owningUserId: testUserId,
+                    newIdentifier: 'NEW_IDENTIFIER',
+                    oldIdentifier: undefined,
+                    accountId: testAccountId
+                }
+            }
+        };
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            accountId: testAccountId,
+            newIdentifier: 'NEW_IDENTIFIER',
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'BSHEET',
+            reasonToLog: 'Updating user balance sheet'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        logger('Result of update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(expectedResult);
+        expect(updateBsheetTagStub).to.have.been.calledOnceWithExactly({
+            accountId: testAccountId,
+            tagPrefix: 'FINWORKS',
+            newIdentifier: 'NEW_IDENTIFIER'
+        });
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'ADMIN_UPDATED_BSHEET_TAG', expectedPublishArgs);
+        expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('User balance sheet update returns error on persistence failure', async () => {
+
+        updateBsheetTagStub.resolves();
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        insertAccountLogStub.resolves({ creationTime: testCreationTime });
+
+        const expectedResult = {
+            statusCode: 200,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify({ result: 'ERROR', message: 'Failed on persistence update' })
+        };
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            accountId: testAccountId,
+            newIdentifier: 'NEW_IDENTIFIER',
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'BSHEET',
+            reasonToLog: 'Updating user balance sheet'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        logger('Result of update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(expectedResult);
+        expect(updateBsheetTagStub).to.have.been.calledOnceWithExactly({
+            accountId: testAccountId,
+            tagPrefix: 'FINWORKS',
+            newIdentifier: 'NEW_IDENTIFIER'
+        });
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('Fails on unauthorized user', async () => {
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            transactionId: testTxId,
+            fieldToUpdate: 'TRANSACTION',
+            newTxStatus: 'SETTLED',
+            reasonToLog: 'Saving event completed'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testUserId, 'ORDINARY_USER');
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        logger('Result of update:', resultOfUpdate);
+
+        expect(updateBsheetTagStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+    });
+
+    it('User update fails on invalid parameters', async () => {
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            transactionId: testTxId,
+            fieldToUpdate: 'TRANSACTION',
+            newTxStatus: 'SETTLED',
+            reasonToLog: 'Saving event completed'
+        };
+
+        const expectedResult = {
+            statusCode: 400,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify('Requests must include a user ID to update, a field, and a reason to log')
+        };
+
+        const requiredProperties = ['systemWideUserId', 'fieldToUpdate', 'reasonToLog'];
+        requiredProperties.forEach(async (property) => {
+            const params = { ...requestBody };
+            Reflect.deleteProperty(params, property);
+            await expect(handler.manageUser(helper.wrapEvent(params, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
+        });
+
+        expect(updateBsheetTagStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+
+    });
+
+    it('User transaction status update fails on invalid parameters', async () => {
+    
+        const requestBody = {
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            transactionId: testTxId,
+            fieldToUpdate: 'TRANSACTION',
+            newTxStatus: 'SETTLED',
+            reasonToLog: 'Saving event completed'
+        };
+
+        const expectedResult = {
+            statusCode: 400,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify('Error, transaction ID needed and valid transaction status')
+        };
+
+        const requiredProperties = ['transactionId', 'newTxStatus'];
+        requiredProperties.forEach(async (property) => {
+            const params = { ...requestBody };
+            Reflect.deleteProperty(params, property);
+            await expect(handler.manageUser(helper.wrapEvent(params, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
+        });
+
+        const params = { ...requestBody };
+        params.newTxStatus = 'INVALID_STATUS';
+        await expect(handler.manageUser(helper.wrapEvent(params, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
+
+        expect(updateBsheetTagStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+
+    });
+
+    it('User status update fails on invalid parameters', async () => {
+
+        const requestBody = {
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'STATUS',
+            newStatus: 'ACCOUNT_OPENED',
+            reasonToLog: 'User account opened'
+        };
+
+        const expectedResult = {
+            statusCode: 400,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify('Error, bad field or type for user update')
+        };
+
+        const testCases = ['KYC', 'STATUS'];
+
+        testCases.forEach(async (testCase) => {
+            const params = { ...requestBody };
+            params.fieldToUpdate = testCase;
+            params.newStatus = 'INVALID_STATUS';
+            await expect(handler.manageUser(helper.wrapEvent(params, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
+        });
+
+        expect(updateBsheetTagStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+
+    });
+
+    it('User balance sheet update fails on missing account ID', async () => {
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            newIdentifier: 'Test Identifier',
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'BSHEET',
+            reasonToLog: 'Updating user balance sheet'
+        };
+
+        const expectedResult = {
+            statusCode: 400,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify('Error, must pass in account ID')
+        };
+
+        await expect(handler.manageUser(helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
+        expect(updateBsheetTagStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+
+    });
+
+    it('User balance sheet update fails on missing new identifier', async () => {
+
+        const requestBody = {
+            accountId: testAccountId,
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            fieldToUpdate: 'BSHEET',
+            reasonToLog: 'Updating user balance sheet'
+        };
+
+        const expectedResult = {
+            statusCode: 400,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify('Error, must pass in newIdentifier')
+        };
+
+        await expect(handler.manageUser(helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
+        expect(updateBsheetTagStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+
+    });
+
+    it('Catches thrown errors', async () => {
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            transactionId: testTxId,
+            fieldToUpdate: 'TRANSACTION',
+            newTxStatus: 'SETTLED',
+            reasonToLog: 'Saving event completed'
+        };
+
+        const expectedInvocation = {
+            FunctionName: config.get('lambdas.directSettle'),
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({
+                paymentProvider: 'ADMIN_OVERRIDE',
+                paymentRef: 'Saving event completed',
+                settlingUserId: testUserId,
+                transactionId: testTxId
+            })
+        };
+
+        const expectedResult = {
+            statusCode: 500,
+            headers: helper.expectedHeaders,
+            body: JSON.stringify('Invocation error')
+        };
+
+        lamdbaInvokeStub.throws(new Error('Invocation error'));
+
+        await expect(handler.manageUser(helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN'))).to.eventually.deep.equal(expectedResult);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(updateBsheetTagStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.not.been.called;
+        expect(insertAccountLogStub).to.have.not.been.called;
+    });
+
 });

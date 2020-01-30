@@ -127,7 +127,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         const thisMonthOnly = getSubParamOrDefault(paramSplit, false);
         const opSuffix = `HUNDREDTH_CENT::${userProfile.defaultCurrency}${thisMonthOnly ? moment().startOf('month').valueOf() : ''}`;
         const aggregateOperation = `total_earnings::${opSuffix}`;
-        return fetchAccountAggFigure(aggregateOperation);
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     }
 };
 
@@ -280,7 +280,7 @@ module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructi
     let anchorMessage = null;
     if (withinFlowFromMsgId) {
         const flowMessage = openingMessages.find((msg) => msg.messageId === withinFlowFromMsgId);
-        anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage; 
+        anchorMessage = typeof flowMessage === 'undefined' ? determineAnchorMsg(openingMessages) : flowMessage;
     } else {
         anchorMessage = determineAnchorMsg(openingMessages);
     }

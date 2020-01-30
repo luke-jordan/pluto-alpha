@@ -44,7 +44,7 @@ const rds = proxyquire('../persistence/rds', {
 });
 
 const resetStubs = () => {
-    testHelper.resetStubs(queryStub, insertStub, multiTableStub, multiOpStub, uuidStub, updateRecordStub);
+    testHelper.resetStubs(queryStub, insertStub, multiTableStub, multiOpStub, uuidStub, updateRecordStub, updateRecordsStub);
     uuidStub.callsFake(uuid); // not actually a fake but call through is tricky, so this is simpler
 };
 
@@ -555,5 +555,46 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(updateResult).to.have.property('updatedTime');
         expect(updateResult.updatedTime).to.deep.equal(moment(updateTime.format()));
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateTagQuery, [testTag, testUserId]);
+    });
+
+    it('Updates transaction settlement status', async () => {
+        const testTransactionId = uuid();
+        const testSettlementStatus = 'PENDING';
+
+        updateRecordsStub.resolves([{ 'updated_time': testUpdatedTime }]);
+
+        const expectedArgs = {
+            key: { transactionId: testTransactionId},
+            value: { settlementStatus: testSettlementStatus },
+            table: config.get('tables.accountTransactions'),
+            returnClause: 'updated_time'
+        };
+
+        const params = {
+            transactionId: testTransactionId,
+            settlementStatus: testSettlementStatus
+        };
+
+        const updateResult = await rds.updateTxSettlementStatus(params);
+        logger('Result of transaction settlement status update:', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal(moment(testUpdatedTime));
+        expect(updateRecordsStub).to.have.been.calledOnceWithExactly(expectedArgs);
+    });
+
+    it('Transaction settlment status update fails on invalid parameters', async () => {
+        const testTransactionId = uuid();
+        const testSettlementStatus = 'SETTLED';
+
+        const params = {
+            transactionId: testTransactionId,
+            settlementStatus: testSettlementStatus
+        };
+
+        await expect(rds.updateTxSettlementStatus(params)).to.eventually.be.rejectedWith('Use settle TX for this operation');
+        Reflect.deleteProperty(params, 'settlementStatus');
+        await expect(rds.updateTxSettlementStatus(params)).to.eventually.be.rejectedWith('Must supply settlement status');
+        expect(updateRecordsStub).to.have.not.been.called;
     });
 });

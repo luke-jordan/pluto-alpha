@@ -28,6 +28,7 @@ const profileTable = config.get('tables.dynamoProfileTable');
 
 const testUserId = uuid();
 const testBoostId = uuid();
+const testMessageId = uuid();
 
 const testOpenMoment = moment('2019-07-01');
 const testExpiryMoment = moment().add(6, 'hours');
@@ -54,7 +55,7 @@ const handler = proxyquire('../message-picking-handler', {
     '@noCallThru': true
 });
 
-describe.only('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
+describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
 
@@ -106,19 +107,38 @@ describe.only('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     it('Fills in account balances properly', async () => {
         logger('HUUUUH ABT: ', testUserId);
+        const testDestinationUserId = uuid();
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
-        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
-            'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
-        )]);
+        getMessagesStub.withArgs(testDestinationUserId, ['CARD']).resolves([{
+            destinationUserId: testDestinationUserId,
+            creationTime: testOpenMoment,
+            followsPriorMessage: false,
+            messagePriority: 0,
+            endTime: testExpiryMoment,
+            messageBody: 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.'
+        }]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 80000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testDestinationUserId }, ['personal_name', 'family_name']).resolves({
+            systemWideUserId: testUserId, 
+            personalName: 'Luke', 
+            familyName: 'Jordan'
+        });
 
-        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testDestinationUserId }, relevantProfileCols).resolves({ 
+            systemWideUserId: testUserId, 
+            personalName: 'Luke', 
+            familyName: 'Jordan', 
+            creationTimeEpochMillis: testOpenMoment.valueOf(), 
+            defaultCurrency: 'USD'
+        });
+
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testDestinationUserId });
         expect(filledMessage).to.exist;
         expect(filledMessage[0].body).to.equal(expectedMessage);
-
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
+        expect(fetchDynamoRowStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('user_history_aggregate', false, { aggregates: ['balance::HUNDREDTH_CENT::USD'], systemWideUserId: testDestinationUserId }));
     });
 
     it('Handles last capitalization properly', async () => {
@@ -236,6 +256,23 @@ describe.only('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('balance::HUNDREDTH_CENT::USD'));
     });
+
+    it('Handles messages within flow (non-anchor)', async () => {
+        const expectedMessage = 'Hello Luke Jordan. Did you know you have made $100 in earnings since you opened your account in July 2019?';
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
+            'Hello #{user_full_name}. Did you know you have made #{total_earnings} in earnings since you opened your account in #{opened_date}?' 
+        )]);
+
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
+
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId, withinFlowFromMsgId: testMessageId });
+        logger('Filled message: ', filledMessage);
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('total_earnings::HUNDREDTH_CENT::USD'));
+    });
 });
 
 describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly', () => {
@@ -340,7 +377,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
             }) 
         };
 
-        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
@@ -350,7 +387,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(bodyOfFetch.messagesToDisplay).to.be.an('array');
         expect(bodyOfFetch.messagesToDisplay[0]).to.deep.equal(expectedFirstMessage);
         expect(bodyOfFetch.messagesToDisplay[1]).to.deep.equal(expectedSecondMsg);
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
@@ -367,7 +404,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
             }) 
         };
 
-        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds]);
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
@@ -376,7 +413,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
@@ -392,14 +429,14 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
             }) 
         };
 
-        getMessagesStub.withArgs(testUserId).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
-        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, true);
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
