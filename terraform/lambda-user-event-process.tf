@@ -45,6 +45,9 @@ resource "aws_lambda_function" "user_event_process" {
                   "topicArn": "${var.user_event_topic_arn[terraform.workspace]}",
                   "processingDlq": "${aws_sqs_queue.user_event_dlq.name}"
                 },
+                "hash": {
+                  "key": "${var.log_hashing_secret[terraform.workspace]}"
+                },
                 "processingLambdas": {
                   "boosts": "${aws_lambda_function.boost_event_process.function_name}"
                 },

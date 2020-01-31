@@ -22,14 +22,14 @@ resource "aws_lambda_function" "float_accrue" {
       NODE_CONFIG = "${
         jsonencode(
           {
-            "aws"= {
+            "aws": {
                 "region"= "${var.aws_default_region[terraform.workspace]}",
                 "apiVersion"= "2012-08-10",
                 "endpoints"= {
                     "dynamodb"= null
                 }
             },
-            "variableKeys"= {
+            "variableKeys": {
                 "bonusPoolShare"= "bonus_pool_accrual_share",
                 "companyShare"= "company_accrual_share"
             },

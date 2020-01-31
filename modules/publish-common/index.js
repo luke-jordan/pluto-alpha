@@ -17,7 +17,8 @@ const s3 = new AWS.S3();
 
 // config's biggest weakness is its handling of modules, which blows. there is a complex way
 // to set defaults but it requires a constructor pattern, so far as I can tell. hence, doing this. 
-const getCryptoConfigOrDefault = (key, defaultValue) => (config.has(`crypto.${key}`) ? config.get(`crypto.${key}`) : defaultValue);
+const getCryptoConfigOrDefault = (key, defaultValue) => (config.has(`publishing.hash.${key}`) 
+    ? config.get(`publishing.hash.${key}`) : defaultValue);
 
 const generateHashForEvent = (eventType) => {
     const hashingSecret = getCryptoConfigOrDefault('key', 'abcdefg');
