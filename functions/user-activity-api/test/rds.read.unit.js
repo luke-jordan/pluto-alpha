@@ -183,14 +183,8 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
     };
 
     const testPendingTransactions = [
-        {
-            'transaction_type': 'USER_SAVING_EVENT',
-            'amount': '100'
-        },
-        {
-            'transaction_type': 'WITHDRAWAL',
-            'amount': '50'
-        }
+        {'transaction_type': 'USER_SAVING_EVENT', 'amount': '100'},
+        {'transaction_type': 'WITHDRAWAL', 'amount': '50'}
     ];
 
     const camelizeKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [camelcase(key)]: object[key] }), {});

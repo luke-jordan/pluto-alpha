@@ -25,6 +25,7 @@ const getOwnerInfoForAccountStub = sinon.stub();
 const findMostCommonCurrencyStub = sinon.stub();
 const addTransactionToAccountStub = sinon.stub();
 const updateTxSettlementStatusStub = sinon.stub();
+const fetchFloatVarsForBalanceCalcStub = sinon.stub();
 
 const lamdbaInvokeStub = sinon.stub();
 class MockLambdaClient {
@@ -52,6 +53,9 @@ const handler = proxyquire('../withdrawal-handler', {
         'findMostCommonCurrency': findMostCommonCurrencyStub,
         'addTransactionToAccount': addTransactionToAccountStub,
         'updateTxSettlementStatus': updateTxSettlementStatusStub
+    },
+    './persistence/dynamodb': {
+        'fetchFloatVarsForBalanceCalc': fetchFloatVarsForBalanceCalcStub
     },
     'ioredis': MockRedis,
     'aws-sdk': { 'Lambda': MockLambdaClient },
@@ -434,7 +438,8 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
             statusCode: 200,
             body: JSON.stringify({
                 transactionId: testTransactionId,
-                delayOffer: { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: testInitiationTime.add(1, 'week') }
+                delayOffer: { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: testInitiationTime.add(1, 'week') },
+                potentialInterest: '0.973321632671356201171875'
             })
         };
 
@@ -444,6 +449,22 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
         addTransactionToAccountStub.resolves({ transactionDetails: [{ accountTransactionId: testTransactionId }] });
+        const testAccrualRateBps = 250;
+        const testBonusPoolShare = 0.1; // percent of an accrual (not bps)
+        const testClientCoShare = 0.05; // as above
+        const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce projected increment by
+        const testReferenceRate = Math.floor(testAccrualRateBps * (1 - testBonusPoolShare - testClientCoShare));
+        const testComparatorRates = { referenceRate: testReferenceRate, intervalUnit: 'WHOLE_CURRENCY' };
+
+        fetchFloatVarsForBalanceCalcStub.withArgs(testClientId, testFloatId).resolves({
+            accrualRateAnnualBps: testAccrualRateBps,
+            bonusPoolShareOfAccrual: testBonusPoolShare,
+            clientShareOfAccrual: testClientCoShare,
+            prudentialFactor: testPrudentialDiscountFactor,
+            defaultTimezone: 'America/New_York',
+            currency: 'USD',
+            comparatorRates: testComparatorRates
+        });
 
         const resultOfSetting = await handler.setWithdrawalAmount(event);
         logger('Result of setting:', resultOfSetting);
@@ -455,6 +476,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
         expect(getOwnerInfoForAccountStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(fetchFloatVarsForBalanceCalcStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
         // expect(addTransactionToAccountStub).to.have.been.calledOnceWithExactly(getOwnerArgs);
     });
 

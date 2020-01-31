@@ -7,6 +7,9 @@ const moment = require('moment');
 const status = require('statuses');
 const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
+const dynamodb = require('./persistence/dynamodb');
+const BigNumber = require('bignumber.js');
+const FIVE_YEARS = 5;
 
 const Redis = require('ioredis');
 const redis = new Redis({ 
@@ -55,7 +58,7 @@ const fetchUserProfile = async (systemWideUserId) => {
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     logger('Result of profile fetch: ', profileFetchResult);
 
-    return JSON.parse((JSON.parse(profileFetchResult['Payload']).body));
+    return JSON.parse(JSON.parse(profileFetchResult['Payload']).body);
 };
 
 // note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
@@ -206,6 +209,36 @@ const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
     return absValueWithdrawal <= balanceInformation.amount * multiplier;
 };
 
+const calculateCompoundInterest = async (amount, annualInterestRateAsBigNumber, numberOfYears) => {
+    logger(`Calculate potential compound interest for amount: ${amount} at 
+    annual interest rate: ${annualInterestRateAsBigNumber} for years: ${numberOfYears}`);
+    const amountAsBigNumber = new BigNumber(amount);
+    const baseCompoundRatePerYear = new BigNumber(1).plus(annualInterestRateAsBigNumber);
+    const baseCompoundRateAfterGivenYears = baseCompoundRatePerYear.exponentiatedBy(numberOfYears);
+
+    const potentialCompoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenYears).minus(amountAsBigNumber);
+    logger(`Successfully calculated Potential Compound Interest: ${potentialCompoundInterest}`);
+    return potentialCompoundInterest;
+};
+
+const calculateAnnualInterestRate = async (floatProjectionVars) => {
+    const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
+    const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
+    const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
+    plus(floatProjectionVars.prudentialFactor);
+
+    const annualInterestRateAsBigNumber = annualAccrualRateNominalGross.times(new BigNumber(1).minus(floatDeductions));
+    logger(`Annual Interest rate as big number: ${annualInterestRateAsBigNumber}`);
+    return annualInterestRateAsBigNumber;
+};
+
+const constructParametersForPotentialInterest = async (withdrawalInformation) => {
+    const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(withdrawalInformation.clientId, withdrawalInformation.floatId);
+    const annualInterestRate = await calculateAnnualInterestRate(floatProjectionVars);
+    const withdrawalAmount = Math.abs(withdrawalInformation.amount);
+    return { withdrawalAmount, annualInterestRate };
+};
+
 /**
  * Proceeds to next item, the withdrawal amount, where we create the pending transaction, and decide whether to make an offer
  * @param {object} event An event object containing the request context and request body.
@@ -233,7 +266,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         if (bankVerificationStatus.result === 'VERIFIED') {
             await updateBankAccountVerificationStatus(systemWideUserId, true);
         }
-        
+
         const withdrawalInformation = JSON.parse(event.body);
         
         if (!withdrawalInformation.amount || !withdrawalInformation.unit || !withdrawalInformation.currency) {
@@ -269,8 +302,10 @@ module.exports.setWithdrawalAmount = async (event) => {
         // for now, we are just stubbing this
         const delayTime = moment().add(1, 'week');
         const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
+        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawalInformation);
+        const potentialInterest = await calculateCompoundInterest(withdrawalAmount, annualInterestRate, FIVE_YEARS);
 
-        const resultObject = { transactionId, delayOffer };
+        const resultObject = { transactionId, delayOffer, potentialInterest };
         logger('Result object on withdrawal amount, to send back: ', resultObject);
 
         // then, assemble and send back
