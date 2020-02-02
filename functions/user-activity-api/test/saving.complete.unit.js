@@ -307,6 +307,35 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(fetchClientFloatStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
     });
 
+    it('Handles non-standard payment responses', async () => {
+        const expectedBankDetails = {
+            bankName: 'JPM',
+            accountType: 'Cheque',
+            accountNumber: '123456',
+            routingNumber: '343677',
+            beneficiaryName: 'Jupiter Savings'
+        };
+
+        const expectedEvent = { transactionId: testPendingTxId };
+        const dummyTx = { ...testTransaction, settlementStatus: 'PENDING', humanReference: 'TUSER170001' };        
+
+        fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
+        getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ result: 'UNKNOWN' });
+        fetchClientFloatStub.resolves({ bankDetails: expectedBankDetails });
+        
+        const paymentCheckPendingResult = await handler.checkPendingPayment(wrapTestParams(expectedEvent));
+        expect(paymentCheckPendingResult).to.exist;
+        expect(paymentCheckPendingResult).to.have.property('statusCode', 200);
+        expect(paymentCheckPendingResult).to.have.property('body');
+        const resultOfCheck = JSON.parse(paymentCheckPendingResult.body);
+        expect(resultOfCheck).to.deep.equal({ 
+            result: 'PAYMENT_PENDING', 
+            bankDetails: { ...expectedBankDetails, useReference: 'TUSER170001' } 
+        });
+
+        expect(fetchClientFloatStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+    });
+
     it('Handles warmup call', async () => {        
         const warmupResult = await handler.checkPendingPayment({});
         expect(warmupResult).to.exist;
@@ -320,6 +349,86 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(paymentCheckErrorResult).to.deep.equal({ statusCode: 500, body: JSON.stringify(`Cannot read property 'settlementStatus' of undefined`) });
         expect(fetchTransactionStub).to.have.been.calledOnce;
         testHelper.expectNoCalls(publishStub, getPaymentStatusStub, updateSaveRdsStub, countSettledSavesStub, momentStub);
+    });
+
+});
+
+
+describe('*** UNIT TEST TRANSACTION SETTLEMENT ***', async () => {
+
+    const testSettlementTime = moment();
+    const testfloatAdditionTxId = uuid();
+    const testFloatAllocTxId = uuid();
+    const testPendingTxId = uuid();
+
+    const testSettleInfo = {
+        transactionId: testPendingTxId,
+        settlingUserId: testUserId,
+        settlementTimeEpochMillis: testSettlementTime.valueOf()
+    };
+
+    const mockNewBalance = { amount: sumOfTestAmounts, unit: 'HUNDREDTH_CENT' }; 
+
+    const responseToTxUpdated = {
+        transactionDetails: [
+            { accountTransactionId: testPendingTxId, updatedTime: moment().format() }, 
+            { floatAdditionTransactionId: testfloatAdditionTxId, creationTime: moment().format() },
+            { floatAllocationTransactionId: testFloatAllocTxId, creationTime: moment().format() }
+        ],
+        newBalance: mockNewBalance
+    };
+
+    beforeEach(() => testHelper.resetStubs(getPaymentStatusStub, updateSaveRdsStub, publishStub, fetchTransactionStub, countSettledSavesStub, fetchClientFloatStub, momentStub));
+
+    it('Updates transaction to settled', async () => {
+        updateSaveRdsStub.resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const testEvent = { ...testSettleInfo };
+
+        const resultOfSettle = await handler.settle(testEvent);
+        expect(resultOfSettle).to.exist;
+        expect(resultOfSettle).to.deep.equal(responseToTxUpdated);
+        expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testPendingTxId, settlementTime: testSettlementTime, settlingUserId: testUserId });
+    });
+
+    it('Uodates settlement time', async () => {
+        updateSaveRdsStub.resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const testEvent = { ...testSettleInfo };
+        Reflect.deleteProperty(testEvent, 'settlementTimeEpochMillis');
+
+        const resultOfSettle = await handler.settle(testEvent);
+        expect(resultOfSettle).to.exist;
+        expect(resultOfSettle).to.deep.equal(responseToTxUpdated);
+        expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testPendingTxId, settlementTime: testSettlementTime, settlingUserId: testUserId });
+    });
+
+    it('Fails on missing transaction id', async () => {
+        updateSaveRdsStub.resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const testEvent = { ...testSettleInfo };
+        Reflect.deleteProperty(testEvent, 'transactionId');
+
+        const resultOfSettle = await handler.settle(testEvent);
+        expect(resultOfSettle).to.exist;
+        expect(resultOfSettle).to.deep.equal({ statusCode: 400, body: 'Error! No transaction ID provided' });
+        expect(updateSaveRdsStub).to.have.not.been.called;
+    });
+
+    it('Fails on missing settling user id', async () => {
+        updateSaveRdsStub.resolves(responseToTxUpdated);
+        momentStub.returns(testSettlementTime);
+
+        const testEvent = { ...testSettleInfo };
+        Reflect.deleteProperty(testEvent, 'settlingUserId');
+
+        const resultOfSettle = await handler.settle(testEvent);
+        expect(resultOfSettle).to.exist;
+        expect(resultOfSettle).to.deep.equal({ statusCode: 400, body: 'Error! No settling user ID provided' });
+        expect(updateSaveRdsStub).to.have.not.been.called;
     });
 
 });

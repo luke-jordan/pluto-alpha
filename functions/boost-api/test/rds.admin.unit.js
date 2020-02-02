@@ -6,6 +6,7 @@ const uuid = require('uuid/v4');
 const moment = require('moment');
 
 const testHelper = require('./boost.test.helper');
+const camelizeKeys = require('camelize-keys');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -215,12 +216,48 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         testHelper.resetStubs(queryStub);
     });
 
-    // add expectations, with args
     it('Fetches user boosts', async () => {
         queryStub.resolves([boostFromPersistence, boostFromPersistence]);
 
+        const expectedColumns = [
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
+            'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
+            'status_conditions', 'message_instruction_ids'
+        ];
+    
+        const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
+            `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
+            `boost_status not in ($2) and boost_type not in ($3)  ` +
+            `order by boost_data.boost_account_status.creation_time desc`;
+
+         const expectedValues = [testAccountId, 'CREATED', 'REFERRAL'];
+
         const result = await rds.fetchUserBoosts(testAccountId);
-        logger('Result of user boost extraction:', result);
+        expect(result).to.deep.equal([camelizeKeys(boostFromPersistence), camelizeKeys(boostFromPersistence)]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectBoostQuery, expectedValues);
+    });
+
+    it('Fetches recently changed boosts', async () => {
+        queryStub.resolves([boostFromPersistence]);
+        const dummyTime = moment().subtract(2, 'minutes');
+
+        const expectedColumns = [
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
+            'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
+            'status_conditions', 'message_instruction_ids'
+        ];
+    
+        const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
+            `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
+            `boost_status not in ($2, $3, $4) and boost_type not in ($5) and boost_data.boost_account_status.updated_time > $6 ` +
+            `order by boost_data.boost_account_status.creation_time desc`;
+         const expectedValues = [testAccountId, 'CREATED', 'OFFERED', 'EXPIRED', 'REFERRAL', dummyTime.format()];
+
+        const result = await rds.fetchUserBoosts(testAccountId, dummyTime, ['CREATED', 'OFFERED', 'EXPIRED']);
+   
+        expect(result).to.exist;
+        expect(result).to.deep.equal([camelizeKeys(boostFromPersistence)]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectBoostQuery, expectedValues);
     });
 
     it('Finds user accounts', async () => {

@@ -128,7 +128,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const testFloatId = uuid();
         const testUpdateTime = moment();
         const testNationalId = '0340450540345';
-        const testCountryCode = '';
+        const testCountryCode = 'FIJ';
 
         const testUserProfile = {
             systemWideUserId: testUserId,

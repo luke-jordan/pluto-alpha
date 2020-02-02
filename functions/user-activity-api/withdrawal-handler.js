@@ -135,7 +135,8 @@ const checkBankVerification = async (systemWideUserId) => {
 };
 
 const updateBankAccountVerificationStatus = async (systemWideUserId, verificationStatus, failureReason) => {
-    const cachedDetails = await JSON.parse(redis.get(systemWideUserId));
+    const cachedDetailsRaw = await redis.get(systemWideUserId);
+    const cachedDetails = JSON.parse(cachedDetailsRaw);
     cachedDetails.verificationStatus = verificationStatus;
     if (failureReason) {
         cachedDetails.failureReason = failureReason;

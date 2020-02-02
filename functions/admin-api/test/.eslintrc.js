@@ -1,5 +1,6 @@
 module.exports = {
     'rules': {
+        'no-undefined': 'off',
         'no-process-env': 'off',
         'max-lines-per-function': 'off',
         'max-classes-per-file': 'off',
