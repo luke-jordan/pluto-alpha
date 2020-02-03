@@ -95,6 +95,8 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
       resultObject.comparatorRates = { referenceRate, ...floatProjectionVars.comparatorRates };
     }
 
+    resultObject.pendingTransactions = await persistence.fetchPendingTransactions(accountId);
+
     return resultObject;
 };
 
