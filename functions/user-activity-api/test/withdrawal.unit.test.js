@@ -406,25 +406,10 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
     it('Sets withdrawal amount', async () => {
         const event = {
             requestContext: {
-                authorizer: {
-                    role: 'ORDINARY_USER',
-                    systemWideUserId: testUserId
-                }
+                authorizer: { role: 'ORDINARY_USER', systemWideUserId: testUserId }
             },
-            body: JSON.stringify({ accountId: testAccountId, amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD' })
+            body: JSON.stringify({ accountId: testAccountId, amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' })
         };
-
-        // const getOwnerArgs = {
-        //     accountId: testAccountId,
-        //     amount: -10,
-        //     unit: 'HUNDREDTH_CENT',
-        //     currency: 'USD',
-        //     transactionType: 'WITHDRAWAL',
-        //     settlementStatus: 'INITIATED',
-        //     initiationTime: testInitiationTime.add(1, 'week'),
-        //     floatId: testFloatId,
-        //     clientId: testClientId
-        // };
 
         const mockJobIdLambdaResponse = {
             StatusCode: 200,
@@ -437,33 +422,34 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         momentStub.returns({ add: () => testInitiationTime });
         redisGetStub.resolves(JSON.stringify(testBankDetails));
         lamdbaInvokeStub.returns({ promise: () => mockJobIdLambdaResponse });
-        sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
         addTransactionToAccountStub.resolves({ transactionDetails: [{ accountTransactionId: testTransactionId }] });
+
         const testAccrualRateBps = 250;
         const testBonusPoolShare = 0.1; // percent of an accrual (not bps)
         const testClientCoShare = 0.05; // as above
         const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce projected increment by
-        const testReferenceRate = Math.floor(testAccrualRateBps * (1 - testBonusPoolShare - testClientCoShare));
-        const testComparatorRates = { referenceRate: testReferenceRate, intervalUnit: 'WHOLE_CURRENCY' };
 
         fetchFloatVarsForBalanceCalcStub.withArgs(testClientId, testFloatId).resolves({
             accrualRateAnnualBps: testAccrualRateBps,
             bonusPoolShareOfAccrual: testBonusPoolShare,
             clientShareOfAccrual: testClientCoShare,
-            prudentialFactor: testPrudentialDiscountFactor,
-            defaultTimezone: 'America/New_York',
-            currency: 'USD',
-            comparatorRates: testComparatorRates
+            prudentialFactor: testPrudentialDiscountFactor
         });
 
-        const testCompoundInterest = '0.973321632671356201171875';
+        const requiredInterestBps = testAccrualRateBps * (1 - testBonusPoolShare - testClientCoShare - testPrudentialDiscountFactor); 
+        // eslint-disable-next-line no-mixed-operators
+        const annualIncrease = (1 + requiredInterestBps / 10000);
+        const fiveYearTotal = Math.pow(annualIncrease, 5);
+        
+        const testCompoundInterest = Math.floor(100000 * (fiveYearTotal - 1));
+
         const expectedResult = {
             statusCode: 200,
             body: JSON.stringify({
                 transactionId: testTransactionId,
-                delayOffer: { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: testInitiationTime.add(1, 'week') },
-                potentialInterest: testCompoundInterest
+                potentialInterest: { amount: testCompoundInterest, unit: 'HUNDREDTH_CENT', currency: 'USD' }
             })
         };
 

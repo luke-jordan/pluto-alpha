@@ -4,10 +4,13 @@ const logger = require('debug')('jupiter:withdraw:main');
 const config = require('config');
 const moment = require('moment');
 
+const opsUtil = require('ops-util-common');
+
 const status = require('statuses');
 const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
 const dynamodb = require('./persistence/dynamodb');
+
 const BigNumber = require('bignumber.js');
 const FIVE_YEARS = 5;
 
@@ -29,25 +32,6 @@ const handleError = (err) => {
 };
 
 const collapseAmount = (amountDict) => `${amountDict.amount}::${amountDict.unit}::${amountDict.currency}`;
-
-// note: third use of this. probably want a common location before long. first key is "from", second key is "to"
-const UNIT_MULTIPLIERS = {
-    'WHOLE_CURRENCY': {
-        'HUNDREDTH_CENT': 10000,
-        'WHOLE_CENT': 100,
-        'WHOLE_CURRENCY': 1
-    },
-    'WHOLE_CENT': {
-        'WHOLE_CURRENCY': 0.01,
-        'WHOLE_CENT': 1,
-        'HUNDREDTH_CENT': 100
-    },
-    'HUNDREDTH_CENT': {
-        'WHOLE_CURRENCY': 0.0001,
-        'WHOLE_CENT': 0.01,
-        'HUNDREDTH_CENT': 1
-    }
-};
 
 const fetchUserProfile = async (systemWideUserId) => {
     const profileFetchLambdaInvoke = {
@@ -204,9 +188,9 @@ module.exports.setWithdrawalBankAccount = async (event) => {
 
 // note: _should_ come from client as positive, but just to make sure
 const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
-    const multiplier = UNIT_MULTIPLIERS[balanceInformation.unit][withdrawalInformation.unit];
-    const absValueWithdrawal = Math.abs(withdrawalInformation.amount); 
-    return absValueWithdrawal <= balanceInformation.amount * multiplier;
+    const withdrawalInBalanceUnit = opsUtil.convertToUnit(withdrawalInformation.amount, withdrawalInformation.unit, balanceInformation.unit);
+    const absValueWithdrawal = Math.abs(withdrawalInBalanceUnit); 
+    return absValueWithdrawal <= balanceInformation.amount;
 };
 
 const calculateCompoundInterest = async (amount, annualInterestRateAsBigNumber, numberOfYears) => {
@@ -218,7 +202,7 @@ const calculateCompoundInterest = async (amount, annualInterestRateAsBigNumber, 
 
     const potentialCompoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenYears).minus(amountAsBigNumber);
     logger(`Successfully calculated Potential Compound Interest: ${potentialCompoundInterest}`);
-    return potentialCompoundInterest;
+    return potentialCompoundInterest.integerValue().toNumber();
 };
 
 const calculateAnnualInterestRate = async (floatProjectionVars) => {
@@ -232,10 +216,10 @@ const calculateAnnualInterestRate = async (floatProjectionVars) => {
     return annualInterestRateAsBigNumber;
 };
 
-const constructParametersForPotentialInterest = async (withdrawalInformation) => {
+const constructParametersForPotentialInterest = async (withdrawalInformation, calculationUnit = 'HUNDREDTH_CENT') => {
     const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(withdrawalInformation.clientId, withdrawalInformation.floatId);
     const annualInterestRate = await calculateAnnualInterestRate(floatProjectionVars);
-    const withdrawalAmount = Math.abs(withdrawalInformation.amount);
+    const withdrawalAmount = Math.abs(opsUtil.convertToUnit(withdrawalInformation.amount, withdrawalInformation.unit, calculationUnit));
     return { withdrawalAmount, annualInterestRate };
 };
 
@@ -299,13 +283,16 @@ module.exports.setWithdrawalAmount = async (event) => {
         logger('Transaction details from persistence: ', transactionDetails);
         const transactionId = transactionDetails[0]['accountTransactionId'];
 
-        // for now, we are just stubbing this
-        const delayTime = moment().add(1, 'week');
-        const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
-        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawalInformation);
-        const potentialInterest = await calculateCompoundInterest(withdrawalAmount, annualInterestRate, FIVE_YEARS);
+        // for now, we are just stubbing this :: and in fact now removing it
+        // const delayTime = moment().add(1, 'week');
+        // const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
 
-        const resultObject = { transactionId, delayOffer, potentialInterest };
+        // work out how much the user would earn over next five years
+        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawalInformation, 'HUNDREDTH_CENT');
+        const potentialInterestAmount = await calculateCompoundInterest(withdrawalAmount, annualInterestRate, FIVE_YEARS);
+        const potentialInterest = { amount: potentialInterestAmount, unit: 'HUNDREDTH_CENT', currency: withdrawalInformation.currency };
+
+        const resultObject = { transactionId, potentialInterest };
         logger('Result object on withdrawal amount, to send back: ', resultObject);
 
         // then, assemble and send back
