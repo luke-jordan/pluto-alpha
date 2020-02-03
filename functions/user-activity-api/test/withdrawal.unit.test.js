@@ -434,15 +434,6 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
             })
         };
 
-        const expectedResult = {
-            statusCode: 200,
-            body: JSON.stringify({
-                transactionId: testTransactionId,
-                delayOffer: { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: testInitiationTime.add(1, 'week') },
-                potentialInterest: '0.973321632671356201171875'
-            })
-        };
-
         momentStub.returns({ add: () => testInitiationTime });
         redisGetStub.resolves(JSON.stringify(testBankDetails));
         lamdbaInvokeStub.returns({ promise: () => mockJobIdLambdaResponse });
@@ -465,6 +456,16 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
             currency: 'USD',
             comparatorRates: testComparatorRates
         });
+
+        const testCompoundInterest = '0.973321632671356201171875';
+        const expectedResult = {
+            statusCode: 200,
+            body: JSON.stringify({
+                transactionId: testTransactionId,
+                delayOffer: { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: testInitiationTime.add(1, 'week') },
+                potentialInterest: testCompoundInterest
+            })
+        };
 
         const resultOfSetting = await handler.setWithdrawalAmount(event);
         logger('Result of setting:', resultOfSetting);
