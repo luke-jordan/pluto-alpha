@@ -43,7 +43,8 @@ class MockRedis {
 
 const handler = proxyquire('../withdrawal-handler', {
     'publish-common': {
-        'publishUserEvent': publishEventStub
+        'publishUserEvent': publishEventStub,
+        '@noCallThru': true
     },
     './persistence/rds': {
         'fetchTransaction': fetchTransactionStub,
@@ -52,10 +53,12 @@ const handler = proxyquire('../withdrawal-handler', {
         'getOwnerInfoForAccount': getOwnerInfoForAccountStub,
         'findMostCommonCurrency': findMostCommonCurrencyStub,
         'addTransactionToAccount': addTransactionToAccountStub,
-        'updateTxSettlementStatus': updateTxSettlementStatusStub
+        'updateTxSettlementStatus': updateTxSettlementStatusStub,
+        '@noCallThru': true
     },
     './persistence/dynamodb': {
-        'fetchFloatVarsForBalanceCalc': fetchFloatVarsForBalanceCalcStub
+        'fetchFloatVarsForBalanceCalc': fetchFloatVarsForBalanceCalcStub,
+        '@noCallThru': true
     },
     'ioredis': MockRedis,
     'aws-sdk': { 'Lambda': MockLambdaClient },
@@ -95,6 +98,13 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         updatedTimeEpochMillis: moment().valueOf()
     };
 
+    const mockInterestVars = {
+        accrualRateAnnualBps: 750,
+        bonusPoolShareOfAccrual: 0.1,
+        clientShareOfAccrual: 0.1,
+        prudentialFactor: 0
+    };
+
     const mockLambdaResponse = (body, statusCode = 200) => ({
         Payload: JSON.stringify({
             statusCode,
@@ -103,7 +113,11 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
     });
 
     beforeEach(() => {
-        helper.resetStubs(publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, updateTxSettlementStatusStub, fetchTransactionStub, countSettledSavesStub, findMostCommonCurrencyStub);
+        helper.resetStubs(
+            publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, 
+            updateTxSettlementStatusStub, fetchTransactionStub, countSettledSavesStub, findMostCommonCurrencyStub, 
+            getOwnerInfoForAccountStub, fetchFloatVarsForBalanceCalcStub
+        );
     });
 
     it('Sets withdrawal bank account', async () => {
@@ -144,8 +158,12 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
+        
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
+        getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
+        fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
+
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         redisSetStub.resolves();
 
@@ -154,7 +172,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             body: JSON.stringify({
                 availableBalance: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
                 cardTitle: 'Did you know?',
-                cardBody: 'Over the next two years you could accumulate xx% interest. Why not delay your withdraw to keep these savings and earn more for your future!'
+                cardBody: 'Over the next two years you could accumulate 12% interest. Why not delay your withdrawal to keep these savings and earn more for your future!'
             })
         };
 
@@ -183,7 +201,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             },
             body: JSON.stringify({
                 accountId: testAccountId,
-                bankDetails: testBankDetails
+                bankDetails: testBankDetails,
+                clientId: testClientId,
+                floatId: testFloatId
             })
         };
 
@@ -276,6 +296,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
+        getOwnerInfoForAccountStub.resolves({ clientId: testClientId, floatId: testFloatId });
+        fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
 
         const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ message: 'Internal error'})) };
@@ -305,7 +327,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             },
             body: JSON.stringify({
                 accountId: testAccountId,
-                bankDetails: testBankDetails
+                bankDetails: testBankDetails,
+                clientId: testClientId,
+                floatId: testFloatId
             })
         };
 
@@ -335,6 +359,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
+        fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
 
         const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ status: 'FAILED', jobId: 'KSDF382' })) };
@@ -351,6 +376,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
+        expect(getOwnerInfoForAccountStub).to.not.have.been.called;
         expect(redisSetStub).to.have.not.been.called;
     });
 

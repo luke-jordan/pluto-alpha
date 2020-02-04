@@ -114,6 +114,11 @@ resource "aws_iam_role_policy_attachment" "withdraw_initiate_user_event_publish_
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
+resource "aws_iam_role_policy_attachment" "withdraw_initiate_client_float_access" {
+  role = aws_iam_role.withdraw_initiate_role.name
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "withdraw_initiate_secret_get" {
   role = aws_iam_role.withdraw_initiate_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"

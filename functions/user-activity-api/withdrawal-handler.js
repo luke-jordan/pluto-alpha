@@ -131,6 +131,42 @@ const updateBankAccountVerificationStatus = async (systemWideUserId, verificatio
     await redis.set(systemWideUserId, JSON.stringify({ cachedDetails }), 'EX', config.get('cache.detailsTTL'));
 };
 
+const obtainClientFloatId = async (withdrawalInformation) => {
+    if (withdrawalInformation.floatId && withdrawalInformation.clientId) {
+        return { clientId: withdrawalInformation.clientId, floatId: withdrawalInformation.floatId };
+    }
+    
+    const floatAndClient = await persistence.getOwnerInfoForAccount(withdrawalInformation.accountId);
+    const floatId = withdrawalInformation.floatId || floatAndClient.floatId;
+    const clientId = withdrawalInformation.clientId || floatAndClient.clientId;
+    return { clientId, floatId };
+};
+
+const fetchClientFloatVars = async (withdrawalInformation) => {
+    const { clientId, floatId } = await obtainClientFloatId(withdrawalInformation);
+    return dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+};
+
+const calculateAnnualInterestRate = (floatProjectionVars) => {
+    const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
+    const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
+    const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
+    plus(floatProjectionVars.prudentialFactor);
+
+    const annualInterestRateAsBigNumber = annualAccrualRateNominalGross.times(new BigNumber(1).minus(floatDeductions));
+    logger(`Annual Interest rate as big number: ${annualInterestRateAsBigNumber}`);
+    return annualInterestRateAsBigNumber;
+};
+
+const obtainWithdrawalCardMsg = (clientFloatVars) => {
+    const annualInterestRate = calculateAnnualInterestRate(clientFloatVars);
+    const twoYearRate = (annualInterestRate.plus(1).exponentiatedBy(2)).minus(1);
+    
+    const valueForText = (twoYearRate.times(100)).integerValue().toNumber();
+    return `Over the next two years you could accumulate ${valueForText}% interest. Why not delay your withdrawal to keep these ` + 
+        `savings and earn more for your future!`;
+};
+
 /**
  * Initiates a withdrawal by setting the bank account for it, which gets verified, and then we go from there
  * @param {object} event An evemt object containing the request context and request body. The request context contains
@@ -153,10 +189,11 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         const { systemWideUserId } = authParams;
 
         // dispatch a series of events: cache the bank account, send off bank account for verification, etc.
-        const [userProfile, priorUserSaves, currency] = await Promise.all([
+        const [userProfile, priorUserSaves, currency, floatVars] = await Promise.all([
             fetchUserProfile(systemWideUserId),
             persistence.countSettledSaves(accountId),
-            persistence.findMostCommonCurrency(accountId)
+            persistence.findMostCommonCurrency(accountId),
+            fetchClientFloatVars(withdrawalInformation)
         ]);
 
         // then, make sure the user has saved in the past, and get their most common currency
@@ -166,9 +203,10 @@ module.exports.setWithdrawalBankAccount = async (event) => {
 
         // then, get the balance available, and check if the bank verification has completed, in time also the boost etc.
         logger('Most common currency: ', currency);
-        const [bankVerifyJobId, availableBalance] = await Promise.all([
+        const [bankVerifyJobId, availableBalance, messageBody] = await Promise.all([
             getBankVerificationJobId(bankDetails, userProfile),
-            persistence.sumAccountBalance(accountId, currency)
+            persistence.sumAccountBalance(accountId, currency),
+            obtainWithdrawalCardMsg(floatVars)
         ]);
 
         await cacheBankAccountDetails(systemWideUserId, bankDetails, bankVerifyJobId);
@@ -177,7 +215,7 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         const responseObject = {
             availableBalance,
             cardTitle: 'Did you know?',
-            cardBody: 'Over the next two years you could accumulate xx% interest. Why not delay your withdraw to keep these savings and earn more for your future!'
+            cardBody: messageBody
         };
 
         return { statusCode: 200, body: JSON.stringify(responseObject) };
@@ -203,17 +241,6 @@ const calculateCompoundInterest = async (amount, annualInterestRateAsBigNumber, 
     const potentialCompoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenYears).minus(amountAsBigNumber);
     logger(`Successfully calculated Potential Compound Interest: ${potentialCompoundInterest}`);
     return potentialCompoundInterest.integerValue().toNumber();
-};
-
-const calculateAnnualInterestRate = async (floatProjectionVars) => {
-    const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
-    const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
-    const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
-    plus(floatProjectionVars.prudentialFactor);
-
-    const annualInterestRateAsBigNumber = annualAccrualRateNominalGross.times(new BigNumber(1).minus(floatDeductions));
-    logger(`Annual Interest rate as big number: ${annualInterestRateAsBigNumber}`);
-    return annualInterestRateAsBigNumber;
 };
 
 const constructParametersForPotentialInterest = async (withdrawalInformation, calculationUnit = 'HUNDREDTH_CENT') => {
@@ -272,14 +299,10 @@ module.exports.setWithdrawalAmount = async (event) => {
         withdrawalInformation.settlementStatus = 'INITIATED';
         withdrawalInformation.initiationTime = moment();
 
-        if (!withdrawalInformation.floatId || !withdrawalInformation.clientId) {
-            const floatAndClient = await persistence.getOwnerInfoForAccount(accountId);
-            withdrawalInformation.floatId = withdrawalInformation.floatId || floatAndClient.floatId;
-            withdrawalInformation.clientId = withdrawalInformation.clientId || floatAndClient.clientId;
-        }
-
+        const { clientId, floatId } = await obtainClientFloatId(withdrawalInformation);
+        const withdrawWithClientFloat = { ...withdrawalInformation, clientId, floatId };
         // (1) create the pending transaction, and (2) decide if a boost should be offered
-        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawalInformation);
+        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawWithClientFloat);
         logger('Transaction details from persistence: ', transactionDetails);
         const transactionId = transactionDetails[0]['accountTransactionId'];
 
@@ -288,7 +311,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         // const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
 
         // work out how much the user would earn over next five years
-        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawalInformation, 'HUNDREDTH_CENT');
+        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawWithClientFloat, 'HUNDREDTH_CENT');
         const potentialInterestAmount = await calculateCompoundInterest(withdrawalAmount, annualInterestRate, FIVE_YEARS);
         const potentialInterest = { amount: potentialInterestAmount, unit: 'HUNDREDTH_CENT', currency: withdrawalInformation.currency };
 
