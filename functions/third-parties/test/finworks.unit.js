@@ -46,13 +46,13 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
             resolveWithFullResponse: true,
             json: true,
-            body: { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName }
+            body: { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName, accountNumber: 'HFZ0024' }
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({ statusCode: 200, body: { accountNumber: 'POL23' }, toJSON: () => 'log-output' });
 
-        const testEvent = { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName };
+        const testEvent = { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName, humanRef: 'HFZ0024' };
 
         const resultOfRegistration = await handler.createAccount(testEvent);
         logger('Result of FinWorks account creation:', resultOfRegistration);
@@ -63,7 +63,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
 
-    it('Cathes error during account creation', async () => {
+    it('Catches error during account creation', async () => {
         const testNationalId = '1234566789';
         const testFirstName = 'Han';
         const testLastName = 'Fei Zi';
@@ -75,7 +75,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
             resolveWithFullResponse: true,
             json: true,
-            body: { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName }
+            body: { idNumber: testNationalId, surname: testLastName, firstNames: testFirstName, accountNumber: '' }
         };
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});

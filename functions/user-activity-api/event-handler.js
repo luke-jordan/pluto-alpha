@@ -385,9 +385,13 @@ const handleWithdrawalEvent = async (eventBody) => {
 
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
-
-    const userProfile = await fetchUserProfile(eventBody.userId);
+    const { userId } = eventBody;
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId), persistence.findHumanRefForUser(userId)]);
+    logger('Result of account info retrieval: ', accountInfo);
     const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
+    if (Array.isArray(accountInfo) && accountInfo.length > 0) {
+        userDetails.humanRef = accountInfo[0].humanRef;
+    }
     const bsheetAccountResult = await createFinWorksAccount(userDetails);
     if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
         throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
