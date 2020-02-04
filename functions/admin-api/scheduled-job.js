@@ -48,7 +48,9 @@ const expireBoosts = async () => {
     });
 
     const boostIds = Object.keys(boostExpireUserIds);
-    const logPublishPromises = boostIds.map((boostId) => publisher.publishMultiUserEvent(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }}));
+    const logPublishPromises = boostIds.map((boostId) => (
+        publisher.publishMultiUserEvent(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }})
+    ));
 
     await Promise.all(logPublishPromises);
     return { result: 'EXPIRED_BOOSTS', boostsExpired: expireBoosts.length };

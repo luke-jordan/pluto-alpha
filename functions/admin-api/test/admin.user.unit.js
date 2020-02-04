@@ -94,7 +94,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
     const generateAmount = () => {
         const base = Math.floor(Math.random());
-        const multiplier = MAX_AMOUNT - MIN_AMOUNT;
+        const multiplier = (MAX_AMOUNT - MIN_AMOUNT);
         const normalizer = MIN_AMOUNT;
         const rawResult = base * multiplier;
         return rawResult + normalizer;
