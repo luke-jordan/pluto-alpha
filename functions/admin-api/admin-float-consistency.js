@@ -10,7 +10,6 @@ const dynamoFloat = require('./persistence/dynamo.float');
 const opsUtil = require('ops-util-common');
 
 const TWENTY_FOUR_HOURS = 24;
-const CURRENT_HOUR = 0;
 
 const compareInCurrency = (balanceInfoA, labelA, balanceInfoB, labelB, currency) => {
     const backupAmount = { amount: 0, unit: 'HUNDREDTH_CENT' };
@@ -49,17 +48,6 @@ const extractLogTypesFromLogs = (logs) => {
     return logTypes;
 };
 
-const calculateStartAndEndTimeGivenHours = (startHour, endHour) => {
-    logger(`Calculating start and end time given hours. Start hour: ${startHour}, end hour: ${endHour}`);
-    const calculatedTime = {
-        startTime: moment().subtract(startHour, 'hours').utc().format(),
-        endTime: moment().subtract(endHour, 'hours').utc().format()
-    };
-    logger(`Successfully calculated start and end time given hours. 
-    Start hour: ${startHour}, end hour: ${endHour}. Calculated times: ${JSON.stringify(calculatedTime)}`);
-    return calculatedTime;
-};
-
 const isFetchedLogTypeExistsInNewAnomalyLogs = (fetchedLogsFromDBArray, newLog) => fetchedLogsFromDBArray.some((fetchedLog) => fetchedLog.logType === newLog.logType);
 
 const removeDuplicatesFromAnomalyLogs = async (fetchedLogsFromDBArray, newLogsArray) => {
@@ -85,7 +73,8 @@ const retrieveLogsThatHaveNoDuplicatesWithinPeriod = async (clientId, floatId, n
 
     const logTypes = extractLogTypesFromLogs(newAnomalyLogs);
 
-    const { startTime, endTime } = calculateStartAndEndTimeGivenHours(TWENTY_FOUR_HOURS, CURRENT_HOUR);
+    const startTime = moment().subtract(TWENTY_FOUR_HOURS, 'hours').utc().format();
+    const endTime = moment();
     logger(`Remove duplicates from anomaly logs i.e. logs that were stored from start: ${startTime} and end: ${endTime}`);
     const config = {
         clientId,
