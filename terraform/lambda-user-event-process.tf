@@ -51,7 +51,8 @@ resource "aws_lambda_function" "user_event_process" {
                 "processingLambdas": {
                   "boosts": "${aws_lambda_function.boost_event_process.function_name}"
                 },
-                "eventsEmailAddress": "${var.events_source_email_address[terraform.workspace]}"
+                "eventsEmailAddress": "${var.events_source_email_address[terraform.workspace]}",
+                "adminSiteUrl": "${terraform.workspace == "master" ? "https://admin.jupitersave.com" : "https://staging-admin.jupitersave.com"}"
               },
               "templates": {
                 "bucket": "${terraform.workspace}.jupiter.templates",

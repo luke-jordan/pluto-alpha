@@ -246,7 +246,8 @@ const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
     timeInMillis: txDetails.settlementTime,
     firstSave: count === 1,
     saveCount: count,
-    savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`
+    savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`,
+    bankReference: txDetails.humanReference
   };
 
   logger('Triggering publish, with context: ', context);

@@ -239,7 +239,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(currencyQuery, [testAccountId]);
     });
 
-    it.only('Fetches human ref properly', async () => {
+    it('Fetches human ref properly', async () => {
         const query = `select account_id, human_ref from account_data.core_account_ledger where owner_user_id = $1 ` + 
             `order by creation_time desc limit 1`;
         queryStub.resolves([{ 'human_ref': 'SOMEREF', 'account_id': 'some-id' }]);

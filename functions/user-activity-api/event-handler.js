@@ -172,7 +172,10 @@ const assembleSaveEmail = async (eventBody) => {
     }
 
     templateVariables.saveCountText = countText;
-    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${eventBody.userId}`;
+    templateVariables.bankReference = eventBody.bankReference;
+    
+    const profileSearch = `users?searchValue=${encodeURIComponent(eventBody.bankReference)}&searchType=bankReference`;
+    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
     
     const toAddresses = config.get('publishing.saveEmailDestination');
     const subject = 'Yippie kay-yay';
@@ -207,7 +210,9 @@ const safeWithdrawalEmail = async (eventBody) => {
     const templateVariables = { ...bankAccountDetails };
     templateVariables.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
     templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount); // note: make positive in time
-    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
+
+    const profileSearch = `users?searchValue=${encodeURIComponent(userProfile.contactMethod)}&searchType=phoneOrEmail`;
+    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
     templateVariables.contactMethod = userProfile.contactMethod;
 
     const subject = 'User wants to withdraw';

@@ -124,7 +124,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expectNoCalls(lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, redisGetStub);
     });
 
-    it.only('Registers account with third party, persists account id from third party', async () => {
+    it('Registers account with third party, persists account id from third party', async () => {
         const testUserId = uuid();
         const testClientId = uuid();
         const testFloatId = uuid();
