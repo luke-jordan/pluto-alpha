@@ -255,18 +255,11 @@ module.exports.insertFloatLog = async (logObject) => {
     return resultOfInsert['rows'][0]['log_id'];
 };
 
-module.exports.getFloatLogsWithinPeriod = async (configForQuery) => {
-    const {
-        clientId,
-        floatId,
-        startTime,
-        endTime,
-        logTypes
-    } = configForQuery;
+module.exports.getFloatLogsWithinPeriod = async ({clientId, floatId, startTime, endTime, logTypes}) => {
     const floatLogTable = config.get('tables.floatLogTable');
     const startIndexForLogTypesInSQLParams = 5;
     const selectQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 ` +
-        `where creation_time >= $3 and creation_time <= $4 log_type in (${extractArrayIndices(logTypes, startIndexForLogTypesInSQLParams)})`;
+        `and creation_time >= $3 and creation_time <= $4 and log_type in (${extractArrayIndices(logTypes, startIndexForLogTypesInSQLParams)})`;
     const values = [clientId, floatId, startTime, endTime, ...logTypes];
 
     logger('Running get float logs within period alert query: ', selectQuery);
