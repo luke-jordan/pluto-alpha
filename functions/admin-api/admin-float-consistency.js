@@ -48,25 +48,21 @@ const extractLogTypesFromLogs = (logs) => {
     return logTypes;
 };
 
-const isFetchedLogTypeExistsInNewAnomalyLogs = (fetchedLogsFromDBArray, newLog) => fetchedLogsFromDBArray.some((fetchedLog) => fetchedLog.logType === newLog.logType);
+const newLogTypeExistsInFetchedLogsFromDBArray = (newLog, fetchedLogsFromDBArray) => fetchedLogsFromDBArray.some((fetchedLog) => fetchedLog.logType === newLog.logType);
+const newLogHasNoDuplicateInLogsFromDB = (newLog, fetchedLogsFromDBArray) => newLogTypeExistsInFetchedLogsFromDBArray(newLog, fetchedLogsFromDBArray) === false;
 
 const removeDuplicatesFromAnomalyLogs = async (fetchedLogsFromDBArray, newLogsArray) => {
     logger(`Removing duplicates from anomaly logs. FetchedLogsFromDB: ${JSON.stringify(fetchedLogsFromDBArray)}
         and newLogsArray: ${JSON.stringify(newLogsArray)}`);
-    const newLogsArrayWithoutDuplicates = [];
-    newLogsArray.forEach((newLog) => {
-        if (isFetchedLogTypeExistsInNewAnomalyLogs(fetchedLogsFromDBArray, newLog) === false) {
-            newLogsArrayWithoutDuplicates.push(newLog);
-        }
-    });
+    const newLogsArrayWithoutDuplicates = newLogsArray.filter((newLog) => newLogHasNoDuplicateInLogsFromDB(newLog, fetchedLogsFromDBArray));
     logger(`Anomaly logs without duplicates are: ${JSON.stringify(newLogsArrayWithoutDuplicates)}`);
     return newLogsArrayWithoutDuplicates;
 };
 
 const retrieveLogsThatHaveNoDuplicatesWithinPeriod = async (clientId, floatId, newAnomalyLogs) => {
-    if (newAnomalyLogs.length <= 0) {
+    if (!doesArrayHaveNonNull(newAnomalyLogs)) {
         logger('Anomaly logs are empty');
-        return;
+        return newAnomalyLogs;
     }
 
     logger(`Retrieve logs that have no duplicates from anomaly logs: ${JSON.stringify(newAnomalyLogs)}`);
@@ -75,7 +71,7 @@ const retrieveLogsThatHaveNoDuplicatesWithinPeriod = async (clientId, floatId, n
 
     const startTime = moment().subtract(TWENTY_FOUR_HOURS, 'hours').utc().format();
     const endTime = moment();
-    logger(`Remove duplicates from anomaly logs i.e. logs that were stored from start: ${startTime} and end: ${endTime}`);
+    logger(`About to search for float logs that were stored between start: ${startTime} and end: ${endTime}`);
     const config = {
         clientId,
         floatId,
@@ -84,6 +80,11 @@ const retrieveLogsThatHaveNoDuplicatesWithinPeriod = async (clientId, floatId, n
         logTypes
     };
     const fetchedLogsWithinPeriod = await rdsFloat.getFloatLogsWithinPeriod(config);
+    if (!doesArrayHaveNonNull(fetchedLogsWithinPeriod)) {
+        logger('No logs found for given time interval');
+        return newAnomalyLogs;
+    }
+
     const anomalyLogsWithoutDuplicatesWithinPeriod = await removeDuplicatesFromAnomalyLogs(fetchedLogsWithinPeriod, newAnomalyLogs);
     logger(`Successfully retrieved logs that have no duplicates`);
     return anomalyLogsWithoutDuplicatesWithinPeriod;
@@ -129,8 +130,10 @@ const checkClientFloatForAnomaly = async (clientFloatInfo) => {
 
     const anomalyLogsWithoutDuplicates = await retrieveLogsThatHaveNoDuplicatesWithinPeriod(clientId, floatId, anomalyLogs);
 
-    const resultOfLogInserts = await Promise.all(anomalyLogsWithoutDuplicates.map((logDef) => rdsFloat.insertFloatLog(logDef)));
-    logger('Result of anomaly log insertion: ', resultOfLogInserts);
+    if (doesArrayHaveNonNull(anomalyLogsWithoutDuplicates)) {
+        const resultOfLogInserts = await Promise.all(anomalyLogsWithoutDuplicates.map((logDef) => rdsFloat.insertFloatLog(logDef)));
+        logger('Result of anomaly log insertion: ', resultOfLogInserts);
+    }
     return anomalyLogsWithoutDuplicates.length > 0 ? { result: 'ANOMALIES_FOUND', anomalies } : { result: 'NO_ANOMALIES' };
 };
 

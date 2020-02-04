@@ -255,6 +255,17 @@ module.exports.insertFloatLog = async (logObject) => {
     return resultOfInsert['rows'][0]['log_id'];
 };
 
+module.exports.updateFloatLog = async ({ logId, contextToUpdate }) => {
+    const floatLogTable = config.get('tables.floatLogTable');
+
+    const updateQuery = `update ${floatLogTable} set log_context = log_context || $1 where log_id = $2`;
+    logger('Updating log with query: ', updateQuery, ' and log context: ', contextToUpdate);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [contextToUpdate, logId]);
+    logger('Result of updating log: ', resultOfUpdate);
+
+    return resultOfUpdate;
+};
+
 module.exports.getFloatLogsWithinPeriod = async ({clientId, floatId, startTime, endTime, logTypes}) => {
     const floatLogTable = config.get('tables.floatLogTable');
     const startIndexForLogTypesInSQLParams = 5;
@@ -266,15 +277,4 @@ module.exports.getFloatLogsWithinPeriod = async ({clientId, floatId, startTime, 
     logger('With values: ', values);
     const resultOfSearch = await rdsConnection.selectQuery(selectQuery, values);
     return resultOfSearch.length > 0 ? camelcaseKeys(resultOfSearch) : null;
-};
-
-module.exports.updateFloatLog = async ({ logId, contextToUpdate }) => {
-    const floatLogTable = config.get('tables.floatLogTable');
-
-    const updateQuery = `update ${floatLogTable} set log_context = log_context || $1 where log_id = $2`;
-    logger('Updating log with query: ', updateQuery, ' and log context: ', contextToUpdate);
-    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [contextToUpdate, logId]);
-    logger('Result of updating log: ', resultOfUpdate);
-
-    return resultOfUpdate;
 };
