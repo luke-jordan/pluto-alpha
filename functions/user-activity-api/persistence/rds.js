@@ -41,6 +41,14 @@ module.exports.fetchTransactionsForHistory = async (accountId) => {
     return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : null;
 };
 
+module.exports.fetchPendingTransactions = async (accountId) => {
+  const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL'];
+  const query = `select transaction_type, amount from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
+      `and settlement_status = $2 and transaction_type in ($3, $4) order by creation_time desc`;
+  const rows = await rdsConnection.selectQuery(query, [accountId, 'PENDING', ...txTypes]);
+  return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : null;
+};
+
 module.exports.countSettledSaves = async (accountId) => {
     const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
         `transaction_type = $2 and settlement_status = $3`;
@@ -90,6 +98,13 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
     const resultOfQuery = await rdsConnection.selectQuery(findQuery, [userId]);
     logger('Result of account find query: ', resultOfQuery);
     return resultOfQuery.map((row) => row['account_id']);
+};
+
+module.exports.findHumanRefForUser = async (userId) => {
+    const query = `select account_id, human_ref from ${config.get('tables.accountLedger')} where owner_user_id = $1 ` + 
+        `order by creation_time desc limit 1`;
+    const result = await rdsConnection.selectQuery(query, [userId]);
+    return result.map((row) => camelizeKeys(row)); // slightly more robust than camelizeKeys(rows[0])
 };
 
 module.exports.countAvailableBoosts = async (accountId) => {

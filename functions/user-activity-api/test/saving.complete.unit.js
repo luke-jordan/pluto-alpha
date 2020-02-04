@@ -230,7 +230,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         const resultOfCheck = JSON.parse(paymentCheckSuccessResult.body);
         expect(resultOfCheck).to.deep.equal(expectedResult);
         
-        expect(publishStub).to.have.been.calledTwice;
+        expect(publishStub).to.have.been.calledTwice; // todo : add expectations for what is published
         expect(updateSaveRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testPendingTxId, settlementTime: testSettlementTime, settlingUserId: testUserId });
         expect(fetchTransactionStub).to.have.been.calledTwice;
         expect(fetchTransactionStub).to.have.been.calledWith(testPendingTxId);

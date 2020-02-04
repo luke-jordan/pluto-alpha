@@ -48,6 +48,9 @@ resource "aws_lambda_function" "withdraw_update" {
               "publishing": {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                },
+                "hash": {
+                  "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
               }
           }
@@ -109,6 +112,11 @@ resource "aws_iam_role_policy_attachment" "withdraw_update_bank_verify_invoke_po
 resource "aws_iam_role_policy_attachment" "withdraw_update_user_event_publish_policy" {
   role = "${aws_iam_role.withdraw_update_role.name}"
   policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "withdraw_update_client_float_access" {
+  role = aws_iam_role.withdraw_update_role.name
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "withdraw_update_secret_get" {
