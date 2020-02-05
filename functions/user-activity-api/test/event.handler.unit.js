@@ -19,6 +19,7 @@ const getObjectStub = sinon.stub();
 const sqsSendStub = sinon.stub();
 const getQueueUrlStub = sinon.stub();
 
+const getHumanRefStub = sinon.stub();
 const updateTagsStub = sinon.stub();
 const updateTxFlagsStub = sinon.stub();
 const fetchBSheetAccStub = sinon.stub();
@@ -67,6 +68,7 @@ const eventHandler = proxyquire('../event-handler', {
     },
     'ioredis': MockRedis,
     './persistence/rds': {
+        'findHumanRefForUser': getHumanRefStub,
         'updateAccountTags': updateTagsStub,
         'updateTxTags': updateTxFlagsStub,
         'fetchAccountTagByPrefix': fetchBSheetAccStub,
@@ -89,7 +91,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
     beforeEach(() => {
         helper.resetStubs(
             lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, sendEmailStub, updateTagsStub, updateTxFlagsStub, 
-            fetchBSheetAccStub, redisGetStub, redisSetStub
+            fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub
         );
     });
 
@@ -152,11 +154,13 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
             surname: testUserProfile.familyName,
-            firstNames: testUserProfile.personalName
+            firstNames: testUserProfile.personalName,
+            humanRef: 'MKZ0010'
         });
 
+        getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id' }]);
         redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'POL1' }) })});
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
         updateTagsStub.resolves({ updatedTime: testUpdateTime });
 
         const snsEvent = wrapEventSns({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT' });
@@ -166,8 +170,9 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(resultOfHandle).to.exist;
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
         expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
+        expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
-        expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::POL1');
+        expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::MKZ0010');
         expect(getQueueUrlStub).to.have.not.been.called;
         expect(sqsSendStub).to.have.not.been.called;
     });

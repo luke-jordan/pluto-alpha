@@ -7,7 +7,7 @@ resource "aws_lambda_function" "boost_user_changed" {
 
   function_name                  = var.boost_user_changed_lambda_function_name
   role                           = aws_iam_role.boost_user_changed_role.arn
-  handler                        = "boost-list-handler.listUserBoosts"
+  handler                        = "boost-list-handler.listChangedBoosts"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15

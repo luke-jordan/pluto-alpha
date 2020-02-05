@@ -143,7 +143,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
                     initiator: 'SYSTEM',
                     context: JSON.stringify({ freeForm: 'JSON object' }),
                     interface: 'MOBILE_APP',
-                    timestamp: moment().subtract((startDay - interval) - interval, 'days').valueOf(),
+                    timestamp: moment().subtract(startDay - interval - interval, 'days').valueOf(),
                     userId: testUserId,
                     eventType: 'USER_LOGIN'
                 }]
@@ -237,7 +237,7 @@ describe('*** UNIT TEST USER COUNT ***', () => {
     
     const generateUserCount = () => {
         const base = Math.floor(Math.random());
-        const multiplier = (MAX_USERS - MIN_USERS);
+        const multiplier = MAX_USERS - MIN_USERS;
         const normalizer = MIN_USERS;
         const rawResult = base * multiplier;
         return rawResult + normalizer;

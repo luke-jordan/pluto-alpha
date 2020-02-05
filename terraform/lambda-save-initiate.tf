@@ -39,6 +39,9 @@ resource "aws_lambda_function" "save_initiate" {
               "publishing": {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                },
+                "hash": {
+                  "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
               },
               "payment": {

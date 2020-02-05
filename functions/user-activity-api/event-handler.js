@@ -172,7 +172,10 @@ const assembleSaveEmail = async (eventBody) => {
     }
 
     templateVariables.saveCountText = countText;
-    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${eventBody.userId}`;
+    templateVariables.bankReference = saveContext.bankReference;
+    
+    const profileSearch = `users?searchValue=${encodeURIComponent(eventBody.bankReference)}&searchType=bankReference`;
+    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
     
     const toAddresses = config.get('publishing.saveEmailDestination');
     const subject = 'Yippie kay-yay';
@@ -207,7 +210,9 @@ const safeWithdrawalEmail = async (eventBody) => {
     const templateVariables = { ...bankAccountDetails };
     templateVariables.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
     templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount); // note: make positive in time
-    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/users/profile?userId=${userId}`;
+
+    const profileSearch = `users?searchValue=${encodeURIComponent(userProfile.contactMethod)}&searchType=phoneOrEmail`;
+    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
     templateVariables.contactMethod = userProfile.contactMethod;
 
     const subject = 'User wants to withdraw';
@@ -385,9 +390,13 @@ const handleWithdrawalEvent = async (eventBody) => {
 
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
-
-    const userProfile = await fetchUserProfile(eventBody.userId);
+    const { userId } = eventBody;
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId), persistence.findHumanRefForUser(userId)]);
+    logger('Result of account info retrieval: ', accountInfo);
     const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
+    if (Array.isArray(accountInfo) && accountInfo.length > 0) {
+        userDetails.humanRef = accountInfo[0].humanRef;
+    }
     const bsheetAccountResult = await createFinWorksAccount(userDetails);
     if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
         throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);

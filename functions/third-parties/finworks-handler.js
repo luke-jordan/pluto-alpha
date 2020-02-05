@@ -37,7 +37,10 @@ const assembleRequest = (method, endpoint, data) => {
 module.exports.createAccount = async (event) => {
     try {
         const params = opsUtil.extractParamsFromEvent(event);
-        const body = { idNumber: params.idNumber, surname: params.surname, firstNames: params.firstNames };
+        logger('Received params for FW account create: ', params);
+        const accountNumber = params.humanRef ? params.humanRef : '';
+        const body = { idNumber: params.idNumber, surname: params.surname, firstNames: params.firstNames, accountNumber };
+        logger('Sending body to FW: ', body);
         const [crt, pem] = await fetchAccessCreds();
         const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${config.get('finworks.endpoints.accountCreation')}`;
         const options = assembleRequest('POST', endpoint, { body, crt, pem });

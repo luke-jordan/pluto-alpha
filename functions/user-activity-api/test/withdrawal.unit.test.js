@@ -25,6 +25,7 @@ const getOwnerInfoForAccountStub = sinon.stub();
 const findMostCommonCurrencyStub = sinon.stub();
 const addTransactionToAccountStub = sinon.stub();
 const updateTxSettlementStatusStub = sinon.stub();
+const fetchFloatVarsForBalanceCalcStub = sinon.stub();
 
 const lamdbaInvokeStub = sinon.stub();
 class MockLambdaClient {
@@ -42,7 +43,8 @@ class MockRedis {
 
 const handler = proxyquire('../withdrawal-handler', {
     'publish-common': {
-        'publishUserEvent': publishEventStub
+        'publishUserEvent': publishEventStub,
+        '@noCallThru': true
     },
     './persistence/rds': {
         'fetchTransaction': fetchTransactionStub,
@@ -51,7 +53,12 @@ const handler = proxyquire('../withdrawal-handler', {
         'getOwnerInfoForAccount': getOwnerInfoForAccountStub,
         'findMostCommonCurrency': findMostCommonCurrencyStub,
         'addTransactionToAccount': addTransactionToAccountStub,
-        'updateTxSettlementStatus': updateTxSettlementStatusStub
+        'updateTxSettlementStatus': updateTxSettlementStatusStub,
+        '@noCallThru': true
+    },
+    './persistence/dynamodb': {
+        'fetchFloatVarsForBalanceCalc': fetchFloatVarsForBalanceCalcStub,
+        '@noCallThru': true
     },
     'ioredis': MockRedis,
     'aws-sdk': { 'Lambda': MockLambdaClient },
@@ -91,6 +98,13 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         updatedTimeEpochMillis: moment().valueOf()
     };
 
+    const mockInterestVars = {
+        accrualRateAnnualBps: 750,
+        bonusPoolShareOfAccrual: 0.1,
+        clientShareOfAccrual: 0.1,
+        prudentialFactor: 0
+    };
+
     const mockLambdaResponse = (body, statusCode = 200) => ({
         Payload: JSON.stringify({
             statusCode,
@@ -99,7 +113,11 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
     });
 
     beforeEach(() => {
-        helper.resetStubs(publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, updateTxSettlementStatusStub, fetchTransactionStub, countSettledSavesStub, findMostCommonCurrencyStub);
+        helper.resetStubs(
+            publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, 
+            updateTxSettlementStatusStub, fetchTransactionStub, countSettledSavesStub, findMostCommonCurrencyStub, 
+            getOwnerInfoForAccountStub, fetchFloatVarsForBalanceCalcStub
+        );
     });
 
     it('Sets withdrawal bank account', async () => {
@@ -140,8 +158,12 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
+        
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
+        getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
+        fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
+
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         redisSetStub.resolves();
 
@@ -150,7 +172,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             body: JSON.stringify({
                 availableBalance: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
                 cardTitle: 'Did you know?',
-                cardBody: 'Over the next two years you could accumulate xx% interest. Why not delay your withdraw to keep these savings and earn more for your future!'
+                cardBody: 'Over the next two years you could accumulate 12% interest. Why not delay your withdrawal to keep these savings and earn more for your future!'
             })
         };
 
@@ -179,7 +201,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             },
             body: JSON.stringify({
                 accountId: testAccountId,
-                bankDetails: testBankDetails
+                bankDetails: testBankDetails,
+                clientId: testClientId,
+                floatId: testFloatId
             })
         };
 
@@ -272,6 +296,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
+        getOwnerInfoForAccountStub.resolves({ clientId: testClientId, floatId: testFloatId });
+        fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
 
         const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ message: 'Internal error'})) };
@@ -301,7 +327,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             },
             body: JSON.stringify({
                 accountId: testAccountId,
-                bankDetails: testBankDetails
+                bankDetails: testBankDetails,
+                clientId: testClientId,
+                floatId: testFloatId
             })
         };
 
@@ -331,6 +359,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockJobIdLambdaResponse });
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
+        fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
 
         const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ status: 'FAILED', jobId: 'KSDF382' })) };
@@ -347,6 +376,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
+        expect(getOwnerInfoForAccountStub).to.not.have.been.called;
         expect(redisSetStub).to.have.not.been.called;
     });
 
@@ -402,25 +432,10 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
     it('Sets withdrawal amount', async () => {
         const event = {
             requestContext: {
-                authorizer: {
-                    role: 'ORDINARY_USER',
-                    systemWideUserId: testUserId
-                }
+                authorizer: { role: 'ORDINARY_USER', systemWideUserId: testUserId }
             },
-            body: JSON.stringify({ accountId: testAccountId, amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD' })
+            body: JSON.stringify({ accountId: testAccountId, amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' })
         };
-
-        // const getOwnerArgs = {
-        //     accountId: testAccountId,
-        //     amount: -10,
-        //     unit: 'HUNDREDTH_CENT',
-        //     currency: 'USD',
-        //     transactionType: 'WITHDRAWAL',
-        //     settlementStatus: 'INITIATED',
-        //     initiationTime: testInitiationTime.add(1, 'week'),
-        //     floatId: testFloatId,
-        //     clientId: testClientId
-        // };
 
         const mockJobIdLambdaResponse = {
             StatusCode: 200,
@@ -430,20 +445,39 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
             })
         };
 
+        momentStub.returns({ add: () => testInitiationTime });
+        redisGetStub.resolves(JSON.stringify(testBankDetails));
+        lamdbaInvokeStub.returns({ promise: () => mockJobIdLambdaResponse });
+        sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
+        addTransactionToAccountStub.resolves({ transactionDetails: [{ accountTransactionId: testTransactionId }] });
+
+        const testAccrualRateBps = 250;
+        const testBonusPoolShare = 0.1; // percent of an accrual (not bps)
+        const testClientCoShare = 0.05; // as above
+        const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce projected increment by
+
+        fetchFloatVarsForBalanceCalcStub.withArgs(testClientId, testFloatId).resolves({
+            accrualRateAnnualBps: testAccrualRateBps,
+            bonusPoolShareOfAccrual: testBonusPoolShare,
+            clientShareOfAccrual: testClientCoShare,
+            prudentialFactor: testPrudentialDiscountFactor
+        });
+
+        const requiredInterestBps = testAccrualRateBps * (1 - testBonusPoolShare - testClientCoShare - testPrudentialDiscountFactor); 
+        // eslint-disable-next-line no-mixed-operators
+        const annualIncrease = (1 + requiredInterestBps / 10000);
+        const fiveYearTotal = Math.pow(annualIncrease, 5);
+        
+        const testCompoundInterest = Math.floor(100000 * (fiveYearTotal - 1));
+
         const expectedResult = {
             statusCode: 200,
             body: JSON.stringify({
                 transactionId: testTransactionId,
-                delayOffer: { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: testInitiationTime.add(1, 'week') }
+                potentialInterest: { amount: testCompoundInterest, unit: 'HUNDREDTH_CENT', currency: 'USD' }
             })
         };
-
-        momentStub.returns({ add: () => testInitiationTime });
-        redisGetStub.resolves(JSON.stringify(testBankDetails));
-        lamdbaInvokeStub.returns({ promise: () => mockJobIdLambdaResponse });
-        sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
-        getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
-        addTransactionToAccountStub.resolves({ transactionDetails: [{ accountTransactionId: testTransactionId }] });
 
         const resultOfSetting = await handler.setWithdrawalAmount(event);
         logger('Result of setting:', resultOfSetting);
@@ -455,6 +489,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
         expect(getOwnerInfoForAccountStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(fetchFloatVarsForBalanceCalcStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
         // expect(addTransactionToAccountStub).to.have.been.calledOnceWithExactly(getOwnerArgs);
     });
 

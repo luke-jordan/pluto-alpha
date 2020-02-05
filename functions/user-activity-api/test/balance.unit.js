@@ -34,6 +34,10 @@ const testTimeEOD = testTimeNow.clone().endOf('day');
 
 const testClientId = 'a_client_somewhere';
 const testFloatId = 'usd_cash_primary';
+const testPendingTransactions = [
+    {'transactionType': 'USER_SAVING_EVENT', 'amount': '100'},
+    {'transactionType': 'WITHDRAWAL', 'amount': '50'}
+];
 
 const testAccrualRateBps = 250;
 const testBonusPoolShare = 0.1; // percent of an accrual (not bps)
@@ -89,13 +93,15 @@ const accountClientFloatStub = sinon.stub();
 const findAccountsForUserStub = sinon.stub();
 const countAvailableBoostStub = sinon.stub();
 const floatPrincipalVarsStub = sinon.stub();
+const fetchPendingTransactionsStub = sinon.stub();
 
 const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
         'sumAccountBalance': accountBalanceQueryStub,
         'getOwnerInfoForAccount': accountClientFloatStub,
         'findAccountsForUser': findAccountsForUserStub,
-        'countAvailableBoosts': countAvailableBoostStub
+        'countAvailableBoosts': countAvailableBoostStub,
+        'fetchPendingTransactions': fetchPendingTransactionsStub
     },
     './persistence/dynamodb': {
         'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub,
@@ -111,12 +117,14 @@ const resetStubs = (historyOnly = true) => {
         findAccountsForUserStub.resetHistory();
         floatPrincipalVarsStub.resetHistory();
         countAvailableBoostStub.resetHistory();
+        fetchPendingTransactionsStub.resetHistory();
     } else {
         accountBalanceQueryStub.reset();
         accountClientFloatStub.reset();
         findAccountsForUserStub.reset();
         floatPrincipalVarsStub.reset();
         countAvailableBoostStub.resetHistory();
+        fetchPendingTransactionsStub.reset();
     }
 };
 
@@ -161,7 +169,8 @@ describe('Fetches user balance and makes projections', () => {
         },
         balanceSubsequentDays: expectedBalanceSubsequentDays,
         availableBoostCount: testNumberBoosts, 
-        comparatorRates: testComparatorRates
+        comparatorRates: testComparatorRates,
+        pendingTransactions: null
     };
 
     // logger('Expected body: ', wellFormedResultBody);
@@ -210,6 +219,7 @@ describe('Fetches user balance and makes projections', () => {
         });
 
         countAvailableBoostStub.withArgs(testAccountId).resolves(testNumberBoosts);
+        fetchPendingTransactionsStub.withArgs(testAccountId).resolves(null);
     });
 
     beforeEach(() => resetStubs(true));
@@ -275,6 +285,25 @@ describe('Fetches user balance and makes projections', () => {
         });
         logger('Result: ', balanceAndProjections);
         checkResultIsWellFormed(balanceAndProjections);
+    });
+
+    it('Obtains PENDING transactions and balance and future projections correctly when given an account ID', async () => {
+        fetchPendingTransactionsStub.withArgs(testAccountId).resolves(testPendingTransactions);
+        const expectedResult = { ...wellFormedResultBody, pendingTransactions: testPendingTransactions };
+        const balanceAndProjections = await handler.balance({
+            accountId: testAccountId,
+            clientId: testClientId,
+            floatId: testFloatId,
+            currency: 'USD',
+            atEpochMillis: testTimeNow.valueOf(),
+            timezone: testTimeZone
+        });
+        logger('Result: ', balanceAndProjections);
+        checkResultIsWellFormed(balanceAndProjections, expectedResult);
+
+        // above test is a special check for when pending transactions exists
+        // the default scenario is that pending transactions are null
+        fetchPendingTransactionsStub.withArgs(testAccountId).resolves(null);
     });
 
     it('Obtains balance and future projections correctly when given a system wide user ID, single and multiple accounts', async () => {

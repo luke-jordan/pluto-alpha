@@ -246,4 +246,67 @@ describe('*** UNIT TEST RDS FLOAT FUNCTIONS ***', () => {
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [testLogContext, testLogId]);
 
     });
+
+    it('Gets float logs within period fetched successfully', async () => {
+        const testLogTypes = ['BALANCE_MISMATCH', 'ALLOCATION_TOTAL_MISMATCH'];
+        const expectedQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 ` +
+            `and creation_time >= $3 and creation_time <= $4 and log_type in ($5, $6)`;
+        const expectedValues = [testClientId, testFloatId, testStartTime, testEndTime, ...testLogTypes];
+
+        const expectedResult = {
+            'log_id': uuid(),
+            'client_id': testClientId,
+            'float_id': testFloatId,
+            'creation_time': testCreationTime,
+            'updated_time': moment().format(),
+            'reference_time': moment().format(),
+            'log_type': 'BALANCE_MISMATCH',
+            'log_context': { resolved: false }
+        };
+
+        const finalResult = camelCaseKeys(expectedResult);
+
+        queryStub.withArgs(expectedQuery, expectedValues).resolves([expectedResult, expectedResult, expectedResult]);
+
+        const configForGetFloatLogsWithinPeriod = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            startTime: testStartTime,
+            endTime: testEndTime,
+            logTypes: testLogTypes
+        };
+
+        const result = await persistence.getFloatLogsWithinPeriod(configForGetFloatLogsWithinPeriod);
+        logger('Got alerts:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal([finalResult, finalResult, finalResult]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
+    });
+
+    it('Gets float logs within period handles no logs found', async () => {
+        const testLogTypes = ['BALANCE_MISMATCH'];
+        const expectedQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 ` +
+            `and creation_time >= $3 and creation_time <= $4 and log_type in ($5)`;
+        const expectedValues = [testClientId, testFloatId, testStartTime, testEndTime, ...testLogTypes];
+
+        const expectedResult = null;
+        const emptyArray = [];
+        queryStub.withArgs(expectedQuery, expectedValues).resolves(emptyArray);
+
+        const configForGetFloatLogsWithinPeriod = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            startTime: testStartTime,
+            endTime: testEndTime,
+            logTypes: testLogTypes
+        };
+
+        const result = await persistence.getFloatLogsWithinPeriod(configForGetFloatLogsWithinPeriod);
+        logger('Got alerts:', result);
+
+        expect(result).to.not.exist;
+        expect(result).to.equal(expectedResult);
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
+    });
 });

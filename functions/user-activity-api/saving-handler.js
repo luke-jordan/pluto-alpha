@@ -126,7 +126,7 @@ module.exports.initiatePendingSave = async (event) => {
     logger('Validated request, publishing user event');
     await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_INITIATED');
     
-    saveInformation.settlementStatus = 'INITIATED';
+    saveInformation.settlementStatus = 'PENDING'; // we go straight to pending here, as next step is completed when payment received
 
     if (!saveInformation.initiationTimeEpochMillis) {
       saveInformation.initiationTimeEpochMillis = moment().valueOf();
@@ -246,7 +246,8 @@ const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
     timeInMillis: txDetails.settlementTime,
     firstSave: count === 1,
     saveCount: count,
-    savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`
+    savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`,
+    bankReference: txDetails.humanReference
   };
 
   logger('Triggering publish, with context: ', context);

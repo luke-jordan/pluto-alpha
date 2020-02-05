@@ -39,6 +39,9 @@ resource "aws_lambda_function" "boost_create" {
               "publishing": {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                },
+                "hash": {
+                  "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
               }
           }

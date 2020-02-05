@@ -4,9 +4,15 @@ const logger = require('debug')('jupiter:withdraw:main');
 const config = require('config');
 const moment = require('moment');
 
+const opsUtil = require('ops-util-common');
+
 const status = require('statuses');
 const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
+const dynamodb = require('./persistence/dynamodb');
+
+const BigNumber = require('bignumber.js');
+const FIVE_YEARS = 5;
 
 const Redis = require('ioredis');
 const redis = new Redis({ 
@@ -27,25 +33,6 @@ const handleError = (err) => {
 
 const collapseAmount = (amountDict) => `${amountDict.amount}::${amountDict.unit}::${amountDict.currency}`;
 
-// note: third use of this. probably want a common location before long. first key is "from", second key is "to"
-const UNIT_MULTIPLIERS = {
-    'WHOLE_CURRENCY': {
-        'HUNDREDTH_CENT': 10000,
-        'WHOLE_CENT': 100,
-        'WHOLE_CURRENCY': 1
-    },
-    'WHOLE_CENT': {
-        'WHOLE_CURRENCY': 0.01,
-        'WHOLE_CENT': 1,
-        'HUNDREDTH_CENT': 100
-    },
-    'HUNDREDTH_CENT': {
-        'WHOLE_CURRENCY': 0.0001,
-        'WHOLE_CENT': 0.01,
-        'HUNDREDTH_CENT': 1
-    }
-};
-
 const fetchUserProfile = async (systemWideUserId) => {
     const profileFetchLambdaInvoke = {
         FunctionName: config.get('lambdas.fetchProfile'),
@@ -55,7 +42,7 @@ const fetchUserProfile = async (systemWideUserId) => {
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     logger('Result of profile fetch: ', profileFetchResult);
 
-    return JSON.parse((JSON.parse(profileFetchResult['Payload']).body));
+    return JSON.parse(JSON.parse(profileFetchResult['Payload']).body);
 };
 
 // note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
@@ -144,6 +131,42 @@ const updateBankAccountVerificationStatus = async (systemWideUserId, verificatio
     await redis.set(systemWideUserId, JSON.stringify({ cachedDetails }), 'EX', config.get('cache.detailsTTL'));
 };
 
+const obtainClientFloatId = async (withdrawalInformation) => {
+    if (withdrawalInformation.floatId && withdrawalInformation.clientId) {
+        return { clientId: withdrawalInformation.clientId, floatId: withdrawalInformation.floatId };
+    }
+    
+    const floatAndClient = await persistence.getOwnerInfoForAccount(withdrawalInformation.accountId);
+    const floatId = withdrawalInformation.floatId || floatAndClient.floatId;
+    const clientId = withdrawalInformation.clientId || floatAndClient.clientId;
+    return { clientId, floatId };
+};
+
+const fetchClientFloatVars = async (withdrawalInformation) => {
+    const { clientId, floatId } = await obtainClientFloatId(withdrawalInformation);
+    return dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+};
+
+const calculateAnnualInterestRate = (floatProjectionVars) => {
+    const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
+    const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
+    const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
+    plus(floatProjectionVars.prudentialFactor);
+
+    const annualInterestRateAsBigNumber = annualAccrualRateNominalGross.times(new BigNumber(1).minus(floatDeductions));
+    logger(`Annual Interest rate as big number: ${annualInterestRateAsBigNumber}`);
+    return annualInterestRateAsBigNumber;
+};
+
+const obtainWithdrawalCardMsg = (clientFloatVars) => {
+    const annualInterestRate = calculateAnnualInterestRate(clientFloatVars);
+    const twoYearRate = (annualInterestRate.plus(1).exponentiatedBy(2)).minus(1);
+    
+    const valueForText = (twoYearRate.times(100)).integerValue().toNumber();
+    return `Over the next two years you could accumulate ${valueForText}% interest. Why not delay your withdrawal to keep these ` + 
+        `savings and earn more for your future!`;
+};
+
 /**
  * Initiates a withdrawal by setting the bank account for it, which gets verified, and then we go from there
  * @param {object} event An evemt object containing the request context and request body. The request context contains
@@ -166,10 +189,11 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         const { systemWideUserId } = authParams;
 
         // dispatch a series of events: cache the bank account, send off bank account for verification, etc.
-        const [userProfile, priorUserSaves, currency] = await Promise.all([
+        const [userProfile, priorUserSaves, currency, floatVars] = await Promise.all([
             fetchUserProfile(systemWideUserId),
             persistence.countSettledSaves(accountId),
-            persistence.findMostCommonCurrency(accountId)
+            persistence.findMostCommonCurrency(accountId),
+            fetchClientFloatVars(withdrawalInformation)
         ]);
 
         // then, make sure the user has saved in the past, and get their most common currency
@@ -179,9 +203,10 @@ module.exports.setWithdrawalBankAccount = async (event) => {
 
         // then, get the balance available, and check if the bank verification has completed, in time also the boost etc.
         logger('Most common currency: ', currency);
-        const [bankVerifyJobId, availableBalance] = await Promise.all([
+        const [bankVerifyJobId, availableBalance, messageBody] = await Promise.all([
             getBankVerificationJobId(bankDetails, userProfile),
-            persistence.sumAccountBalance(accountId, currency)
+            persistence.sumAccountBalance(accountId, currency),
+            obtainWithdrawalCardMsg(floatVars)
         ]);
 
         await cacheBankAccountDetails(systemWideUserId, bankDetails, bankVerifyJobId);
@@ -190,7 +215,7 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         const responseObject = {
             availableBalance,
             cardTitle: 'Did you know?',
-            cardBody: 'Over the next two years you could accumulate xx% interest. Why not delay your withdraw to keep these savings and earn more for your future!'
+            cardBody: messageBody
         };
 
         return { statusCode: 200, body: JSON.stringify(responseObject) };
@@ -201,9 +226,28 @@ module.exports.setWithdrawalBankAccount = async (event) => {
 
 // note: _should_ come from client as positive, but just to make sure
 const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
-    const multiplier = UNIT_MULTIPLIERS[balanceInformation.unit][withdrawalInformation.unit];
-    const absValueWithdrawal = Math.abs(withdrawalInformation.amount); 
-    return absValueWithdrawal <= balanceInformation.amount * multiplier;
+    const withdrawalInBalanceUnit = opsUtil.convertToUnit(withdrawalInformation.amount, withdrawalInformation.unit, balanceInformation.unit);
+    const absValueWithdrawal = Math.abs(withdrawalInBalanceUnit); 
+    return absValueWithdrawal <= balanceInformation.amount;
+};
+
+const calculateCompoundInterest = async (amount, annualInterestRateAsBigNumber, numberOfYears) => {
+    logger(`Calculate potential compound interest for amount: ${amount} at 
+    annual interest rate: ${annualInterestRateAsBigNumber} for years: ${numberOfYears}`);
+    const amountAsBigNumber = new BigNumber(amount);
+    const baseCompoundRatePerYear = new BigNumber(1).plus(annualInterestRateAsBigNumber);
+    const baseCompoundRateAfterGivenYears = baseCompoundRatePerYear.exponentiatedBy(numberOfYears);
+
+    const potentialCompoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenYears).minus(amountAsBigNumber);
+    logger(`Successfully calculated Potential Compound Interest: ${potentialCompoundInterest}`);
+    return potentialCompoundInterest.integerValue().toNumber();
+};
+
+const constructParametersForPotentialInterest = async (withdrawalInformation, calculationUnit = 'HUNDREDTH_CENT') => {
+    const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(withdrawalInformation.clientId, withdrawalInformation.floatId);
+    const annualInterestRate = await calculateAnnualInterestRate(floatProjectionVars);
+    const withdrawalAmount = Math.abs(opsUtil.convertToUnit(withdrawalInformation.amount, withdrawalInformation.unit, calculationUnit));
+    return { withdrawalAmount, annualInterestRate };
 };
 
 /**
@@ -233,7 +277,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         if (bankVerificationStatus.result === 'VERIFIED') {
             await updateBankAccountVerificationStatus(systemWideUserId, true);
         }
-        
+
         const withdrawalInformation = JSON.parse(event.body);
         
         if (!withdrawalInformation.amount || !withdrawalInformation.unit || !withdrawalInformation.currency) {
@@ -255,22 +299,23 @@ module.exports.setWithdrawalAmount = async (event) => {
         withdrawalInformation.settlementStatus = 'INITIATED';
         withdrawalInformation.initiationTime = moment();
 
-        if (!withdrawalInformation.floatId || !withdrawalInformation.clientId) {
-            const floatAndClient = await persistence.getOwnerInfoForAccount(accountId);
-            withdrawalInformation.floatId = withdrawalInformation.floatId || floatAndClient.floatId;
-            withdrawalInformation.clientId = withdrawalInformation.clientId || floatAndClient.clientId;
-        }
-
+        const { clientId, floatId } = await obtainClientFloatId(withdrawalInformation);
+        const withdrawWithClientFloat = { ...withdrawalInformation, clientId, floatId };
         // (1) create the pending transaction, and (2) decide if a boost should be offered
-        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawalInformation);
+        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawWithClientFloat);
         logger('Transaction details from persistence: ', transactionDetails);
         const transactionId = transactionDetails[0]['accountTransactionId'];
 
-        // for now, we are just stubbing this
-        const delayTime = moment().add(1, 'week');
-        const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
+        // for now, we are just stubbing this :: and in fact now removing it
+        // const delayTime = moment().add(1, 'week');
+        // const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
 
-        const resultObject = { transactionId, delayOffer };
+        // work out how much the user would earn over next five years
+        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawWithClientFloat, 'HUNDREDTH_CENT');
+        const potentialInterestAmount = await calculateCompoundInterest(withdrawalAmount, annualInterestRate, FIVE_YEARS);
+        const potentialInterest = { amount: potentialInterestAmount, unit: 'HUNDREDTH_CENT', currency: withdrawalInformation.currency };
+
+        const resultObject = { transactionId, potentialInterest };
         logger('Result object on withdrawal amount, to send back: ', resultObject);
 
         // then, assemble and send back
