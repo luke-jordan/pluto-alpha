@@ -111,7 +111,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
     const testSavePendingBase = (amount = testAmounts[0]) => ({
         accountId: testAccountId,
         initiationTimeEpochMillis: testTimeInitiated.valueOf(),
-        settlementStatus: 'INITIATED',
+        settlementStatus: 'PENDING',
         amount: amount,
         currency: 'USD',
         unit: 'HUNDREDTH_CENT'
@@ -120,7 +120,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
     const wellFormedMinimalPendingRequestToRds = {
         accountId: testAccountId,
         initiationTime: testHelper.momentMatcher(testTimeInitiated),
-        settlementStatus: 'INITIATED',
+        settlementStatus: 'PENDING',
         amount: sinon.match.number,
         currency: 'USD',
         unit: 'HUNDREDTH_CENT',
@@ -245,7 +245,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const minimalPendingRequestToRds = {
             accountId: testAccountId,
             initiationTime: testHelper.momentMatcher(testTimeInitiated),
-            settlementStatus: 'INITIATED',
+            settlementStatus: 'PENDING',
             amount: sinon.match.number,
             currency: 'USD',
             unit: 'HUNDREDTH_CENT',

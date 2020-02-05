@@ -31,7 +31,7 @@ resource "aws_lambda_function" "payment_status_check" {
                 "privateKey": "${var.ozow_privatekey[terraform.workspace]}"
               },
               "payment": {
-                "dummy": "${terraform.workspace != "master" ? "ON" : "OFF"}"
+                "dummy": "OFF"
               }
           }
       )}"

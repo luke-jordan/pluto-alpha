@@ -43,7 +43,7 @@ module.exports.fetchTransactionsForHistory = async (accountId) => {
 
 module.exports.fetchPendingTransactions = async (accountId) => {
   const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL'];
-  const query = `select transaction_type, amount from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
+  const query = `select transaction_type, amount, unit, currency from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
       `and settlement_status = $2 and transaction_type in ($3, $4) order by creation_time desc`;
   const rows = await rdsConnection.selectQuery(query, [accountId, 'PENDING', ...txTypes]);
   return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : null;

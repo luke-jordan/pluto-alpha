@@ -568,7 +568,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload));
     });
 
-    it('Cathces thrown errors', async () => {
+    it('Catches thrown errors', async () => {
 
         const testEvent = {
             requestContext: {

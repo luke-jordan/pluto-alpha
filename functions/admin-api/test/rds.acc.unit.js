@@ -52,7 +52,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     
     const generateUserCount = () => {
         const base = Math.floor(Math.random());
-        const multiplier = (MAX_USERS - MIN_USERS);
+        const multiplier = MAX_USERS - MIN_USERS;
         const normalizer = MIN_USERS;
         const rawResult = base * multiplier;
         return rawResult + normalizer;
