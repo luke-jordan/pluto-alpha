@@ -16,6 +16,11 @@ AWS.config.update({ region: config.get('aws.region') });
 
 const lambda = new AWS.Lambda();
 
+const interestHelper = require('./interest-helper');
+const {
+    calculateEstimatedInterestEarned
+} = interestHelper;
+
 const UNIT_DIVISORS = {
     'HUNDREDTH_CENT': 100 * 100,
     'WHOLE_CENT': 100,
@@ -134,10 +139,8 @@ const normalizeHistory = (events) => {
     return result;
 };
 
-const normalizeTx = (events) => {
-    const result = [];
-    events.forEach((event) => {
-        result.push({
+const normalizeTx = async (events) => {
+    const promisifiedResult = events.map(async (event) => ({
             timestamp: moment(event.creationTime).valueOf(),
             type: 'TRANSACTION',
             details: {
@@ -147,11 +150,13 @@ const normalizeTx = (events) => {
                 amount: event.amount,
                 currency: event.currency,
                 unit: event.unit,
-                humanReference: event.humanReference
+                humanReference: event.humanReference,
+                estimatedInterestEarned: event.transactionType === 'USER_SAVING_EVENT' ? await calculateEstimatedInterestEarned(event) : null
             }
-        });
-    });
-    return result;
+        }));
+    const normalizedTransactions = await Promise.all(promisifiedResult);
+    logger(`Completed normalizing transactions. Result: ${JSON.stringify(normalizedTransactions)}`);
+    return normalizedTransactions;
 };
 
 /**
