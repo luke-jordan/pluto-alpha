@@ -14,6 +14,8 @@ const s3 = new AWS.S3();
 sendGridMail.setApiKey(config.get('sendgrid.apiKey'));
 sendGridMail.setSubstitutionWrappers('{{', '}}');
 
+const SUCCESS_STATUSES = [200, 202];
+
 const fetchHtmlTemplate = async (Bucket, Key) => {
     const template = await s3.getObject({ Bucket, Key }).promise();
     return template.Body.toString('ascii');
@@ -111,6 +113,27 @@ const validateDispatchPayload = (payload) => {
     if (!payload.from.email) {
         throw new Error('Configuration error. Missing payload source email address');
     }
+};
+
+// todo: refactor
+const hasValidProperties = (object, type, requiredProperties) => {
+    try {
+        requiredProperties.forEach((property) => {
+            if (!Reflect.has(object, property) || !object[property]) {
+                logger(`Invalid ${type} object: ${JSON.stringify(object)}`);
+                throw new Error(`Missing required property: ${property}`);
+            }
+        });
+        return true;
+    } catch (err) {
+        logger(err.message);
+        return false;
+    }
+};
+
+const validateEmailMessages = (emailMessages) => {
+    const requiredProperties = ['messageId', 'to', 'from', 'subject', 'text', 'html'];
+    return emailMessages.filter((email) => hasValidProperties(email, 'email', requiredProperties));
 };
 
 const chunkDispatchRecipients = (destinationArray) => {
@@ -237,8 +260,8 @@ module.exports.sendEmailsFromSource = async (event) => {
 
         const { subject, templates, destinationArray, attachments, sourceDetails } = opsUtil.extractParamsFromEvent(event);
         const { templateKeyBucket, textTemplate } = templates;
-        const invalidDestinationArray = validateDispatchEvent({ subject, templateKeyBucket, destinationArray, attachments });
 
+        const invalidDestinationArray = validateDispatchEvent({ subject, templateKeyBucket, destinationArray, attachments });
         const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(JSON.stringify(destination)));
         if (sanitizedDestinationArray.length === 0) {
             throw new Error('No valid destinations found');
@@ -263,6 +286,7 @@ module.exports.sendEmailsFromSource = async (event) => {
         }
         
         const failedAddresses = invalidDestinationArray.map((destinationDetails) => destinationDetails.emailAddress);
+        // todo: DLQ then SES failed addresses
 
         return { result: 'SUCCESS', failedAddresses };
     } catch (err) {
@@ -287,8 +311,8 @@ module.exports.sendEmails = async (event) => {
         }
         const { subject, templates, destinationArray, attachments, sourceDetails } = opsUtil.extractParamsFromEvent(event);
         const { htmlTemplate, textTemplate } = templates;
-        const invalidDestinationArray = validateDispatchEvent({ subject, htmlTemplate, destinationArray, attachments });
 
+        const invalidDestinationArray = validateDispatchEvent({ subject, htmlTemplate, destinationArray, attachments });
         const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(JSON.stringify(destination)));
         if (sanitizedDestinationArray.length === 0) {
             throw new Error('No valid destinations found');
@@ -314,6 +338,57 @@ module.exports.sendEmails = async (event) => {
         const failedAddresses = invalidDestinationArray.map((destinationDetails) => destinationDetails.emailAddress);
 
         return { result: 'SUCCESS', failedAddresses };
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { result: 'ERR', message: err.message };
+    }
+};
+
+const dispatchEmailChunk = async (chunk) => {
+    const payload = chunk.reduce((array, msg) => ([...array, { to: msg.to, from: msg.from, subject: msg.subject, text: msg.text, html: msg.html }]), []);
+    const result = await sendGridMail.send(payload);
+    return { result: JSON.stringify(result), messageIds: chunk.map((msg) => msg.messageId) };
+};
+
+/**
+ * This function sends with pre-assembled emails.
+ * @param {object} event
+ * @property {array} emailMessages An array of emails objects to be dispatched. Each email must have the following properties: to, from, subject, text, html
+ */
+module.exports.sendEmailMessages = async (event) => {
+    try {
+        if (opsUtil.isWarmup(event)) {
+            return { result: 'Empty invocation' };
+        }
+
+        const { emailMessages } = opsUtil.extractParamsFromEvent(event);
+
+        const validMessages = validateEmailMessages(emailMessages);
+        if (!validMessages || validMessages.length === 0) {
+            throw new Error('No valid emails found');
+        }
+
+        const validMessageIds = validMessages.map((msg) => msg.messageId);
+
+        const messageChunks = chunkDispatchRecipients(validMessages);
+        logger('Created chunks:', messageChunks);
+
+        const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailChunk(chunk)));
+        const failedChunks = dispatchResult.map((chunk) => {
+            const result = JSON.parse(chunk.result)[0];
+            if (!Reflect.has(result, 'statusCode') || !SUCCESS_STATUSES.includes(result.statusCode)) {
+                return chunk.messageIds;
+            }
+            return null;
+        }).filter((result) => result !== null).flat();
+
+        const failedMessages = emailMessages.filter((email) => !validMessageIds.includes(email) && failedChunks.includes(email.messageId));
+        logger('Failed messages:', failedMessages.length);
+
+        const failedMessageIds = failedMessages.map((msg) => msg.messageId);
+
+        return { result: 'SUCCESS', failedMessageIds };
+
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERR', message: err.message };

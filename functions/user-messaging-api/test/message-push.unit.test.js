@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler-test');
-const config = require('config');
+// const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
@@ -11,13 +11,13 @@ chai.use(require('sinon-chai'));
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
-const testHelper = require('./message.test.helper');
+const helper = require('./message.test.helper');
 
 // config.picker.push.running = true; // todo: modify test order to run this test first
 
 const sendPushNotificationsAsyncStub = sinon.stub();
 const chunkPushNotificationsStub = sinon.stub();
-const getPendingPushMessagesStub = sinon.stub();
+const getPendingOutboundMessagesStub = sinon.stub();
 const bulkUpdateStatusStub = sinon.stub();
 const getPushTokenStub = sinon.stub();
 const insertPushTokenStub = sinon.stub();
@@ -46,7 +46,7 @@ const handler = proxyquire('../message-push-handler', {
         'deletePushToken': deletePushTokenStub
     },
     './persistence/rds.msgpicker': {
-        'getPendingPushMessages': getPendingPushMessagesStub,
+        'getPendingOutboundMessages': getPendingOutboundMessagesStub,
         'bulkUpdateStatus': bulkUpdateStatusStub
     },
     './message-picking-handler': {
@@ -61,7 +61,7 @@ const handler = proxyquire('../message-push-handler', {
     }
 });
 
-const resetStubs = () => testHelper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingPushMessagesStub,
+const resetStubs = () => helper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingOutboundMessagesStub,
     bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub, publishUserEventStub, lamdbaInvokeStub);
 
 describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
@@ -84,7 +84,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
         const mockEvent = {
             provider: expectedProvider,
             token: expectedToken,
-            requestContext: testHelper.requestContext(mockUserId)
+            requestContext: helper.requestContext(mockUserId)
         };
 
         const resultOfInsertion = await handler.managePushToken(mockEvent);
@@ -159,7 +159,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
         const mockEvent = {
             provider: expectedProvider,
             token: expectedToken,
-            requestContext: testHelper.requestContext(mockUserId)
+            requestContext: helper.requestContext(mockUserId)
         };
 
         const resultOfInsertion = await handler.managePushToken(mockEvent);
@@ -167,7 +167,7 @@ describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
 
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion.statusCode).to.equal(500);
-        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfInsertion.headers).to.deep.equal(helper.expectedHeaders);
         expect(resultOfInsertion.body).to.deep.equal(JSON.stringify('PersistenceError'));
         expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId], expectedProvider);
         expect(deletePushTokenStub).to.have.not.been.called;
@@ -190,7 +190,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
 
         const mockEvent = {
             body: JSON.stringify({ provider: expectedProvider }),
-            requestContext: testHelper.requestContext(mockUserId)
+            requestContext: helper.requestContext(mockUserId)
         };
 
         const resultOfDeletion = await handler.deletePushToken(mockEvent);
@@ -208,7 +208,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
         
         const mockEvent = {
             body: JSON.stringify({ token: mockToken }),
-            requestContext: testHelper.requestContext(mockUserId)
+            requestContext: helper.requestContext(mockUserId)
         };
 
         deletePushTokenStub.resolves({ deleteCount: 1 });
@@ -237,7 +237,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
         const mockEvent = {
             provider: expectedProvider,
             userId: uuid(),
-            requestContext: testHelper.requestContext(mockUserId),
+            requestContext: helper.requestContext(mockUserId),
             httpMethod: 'DELETE'
         };
 
@@ -256,7 +256,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
 
         const mockEvent = {
             body: JSON.stringify({ provider: expectedProvider, userId: mockUserId }),
-            requestContext: testHelper.requestContext(mockUserId)
+            requestContext: helper.requestContext(mockUserId)
         };
 
         const resultOfDeletion = await handler.deletePushToken(mockEvent);
@@ -264,7 +264,7 @@ describe('*** UNIT TESTING PUSH TOKEN DELETION ***', () => {
 
         expect(resultOfDeletion).to.exist;
         expect(resultOfDeletion.statusCode).to.equal(500);
-        expect(resultOfDeletion.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfDeletion.headers).to.deep.equal(helper.expectedHeaders);
         expect(resultOfDeletion.body).to.deep.equal(JSON.stringify('PersistenceError'));
         expect(deletePushTokenStub).to.have.been.calledOnceWithExactly({ provider: expectedProvider, userId: mockUserId });
     });
@@ -316,7 +316,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
             priority: 1
         };
 
-        getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
+        getPendingOutboundMessagesStub.resolves([minimalMessage, minimalMessage]);
         bulkUpdateStatusStub.resolves([]);
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
         assembleMessageStub.resolves(mockMessageBase);
@@ -330,7 +330,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 2 });
-        expect(getPendingPushMessagesStub).to.have.been.calledOnceWithExactly();
+        expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId, mockUserId]);
         expect(bulkUpdateStatusStub).to.have.been.calledTwice;
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMsgId, testMsgId], 'SENDING');
@@ -349,7 +349,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
             priority: 1
         };
 
-        getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
+        getPendingOutboundMessagesStub.resolves([minimalMessage, minimalMessage]);
         bulkUpdateStatusStub.resolves([]);
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
         assembleMessageStub.resolves(mockMessageBase);
@@ -365,7 +365,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 1 });
-        expect(getPendingPushMessagesStub).to.have.been.calledOnceWithExactly();
+        expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId, mockUserId]);
         expect(bulkUpdateStatusStub).to.have.been.calledTwice;
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMsgId, testMsgId], 'SENDING');
@@ -384,7 +384,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
             priority: 1
         };
 
-        getPendingPushMessagesStub.resolves([]);
+        getPendingOutboundMessagesStub.resolves([]);
         bulkUpdateStatusStub.resolves([]);
         getPushTokenStub.resolves({ [mockUserId]: persistedToken });
         assembleMessageStub.resolves(mockMessageBase);
@@ -400,7 +400,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'NONE_PENDING', numberSent: 0 });
-        expect(getPendingPushMessagesStub).to.have.been.calledOnceWithExactly();
+        expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.not.been.called;
         expect(bulkUpdateStatusStub).to.have.not.been.called;
         expect(bulkUpdateStatusStub).to.have.not.been.called;
@@ -413,7 +413,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
     });
     
     it('Fails on push token extraction failure', async () => {
-        getPendingPushMessagesStub.resolves([minimalMessage, minimalMessage]);
+        getPendingOutboundMessagesStub.resolves([minimalMessage, minimalMessage]);
         bulkUpdateStatusStub.resolves([]);
         getPushTokenStub.throws(new Error('PersistenceError'));
 
@@ -422,94 +422,130 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'ERROR', message: 'PersistenceError' });
-        expect(getPendingPushMessagesStub).to.have.been.calledOnce;
+        expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.been.calledOnce;
     });
 
     it('Catches thrown errors', async () => {
-        getPendingPushMessagesStub.throws(new Error('PersistenceError'));
+        getPendingOutboundMessagesStub.throws(new Error('PersistenceError'));
 
         const result = await handler.sendPushNotifications();
         logger('Result of push notification sending:', result);
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'ERR', message: 'PersistenceError' });
-        expect(getPendingPushMessagesStub).to.have.been.calledOnce;
+        expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(bulkUpdateStatusStub).to.have.not.been.called;
         expect(getPushTokenStub).to.have.not.been.called;
     });
 
 });
 
-describe('*** UNIT TEST SYSTEM EMAIL ROUTE ***', () => {
+describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
+    const testUserId = uuid();
+    const testClientId = uuid();
+    const testFloatId = uuid();
+    const testInstructionId = uuid();
 
-    const testUserName = 'James';
-    const testEmailAddress = 'james@email.com';
-    const validSubject = 'Welcome to Jupiter';
+    const testNationalId = '91122594738373';
+    const testCountryCode = 'ZAF';
 
-    const validHtmlTemplate = '<p>Greetings {{user}}, \nWelcome to Jupiter.</p>';
-    const validTextTemplate = 'Greetings {{user}}. \nWelcome to Jupiter.';
+    const testUpdateTime = moment().format(); 
 
-    const testDestinationDetails = { emailAddress: testEmailAddress, templateVariables: { user: testUserName }};
+    const template = '<p>Greetings {{user}}. Welcome to Jupiter.</p>';
 
-    const mockLambdaResponse = (body, statusCode = 200) => ({
-        Payload: JSON.stringify({
-            statusCode,
-            body: JSON.stringify(body)
-        })
+    const testUserProfile = {
+        systemWideUserId: testUserId,
+        creationTimeEpochMillis: moment().valueOf(),
+        clientId: testClientId,
+        floatId: testFloatId,
+        defaultCurrency: 'USD',
+        defaultTimezone: 'America/New_York',
+        personalName: 'John',
+        familyName: 'Doe',
+        phoneNumber: '278384748264',
+        emailAddress: 'user@email.com',
+        countryCode: testCountryCode,
+        nationalId: testNationalId,
+        userStatus: 'CREATED',
+        kycStatus: 'CONTACT_VERIFIED',
+        securedStatus: 'PASSWORD_SET',
+        updatedTimeEpochMillis: moment().valueOf()
+    };
+
+    const mockUserMessage = () => ({
+        destinationUserId: uuid(),
+        messageBody: template,
+        messageTitle: 'Welcome to Jupiter',
+        messageId: uuid(),
+        instructionId: testInstructionId
     });
+
+    const mockMessageBase = {
+        messageId: uuid(),
+        title: 'Welcome to jupiter. ',
+        body: 'Greetings. Welcome to jupiter. ',
+        priority: 1
+    };
 
     beforeEach(() => {
         resetStubs();
     });
 
-    it('Assembles email payload and invokes send email lambda', async () => {
-        const testEmailEvent = {
-            templates: {
-                htmlTemplate: validHtmlTemplate,
-                textTemplate: validTextTemplate
-            },
-            subject: validSubject,
-            destinationArray: [testDestinationDetails, testDestinationDetails]
-        };
+    it('Sends pending push messages and emails', async () => {
+        getPendingOutboundMessagesStub.resolves([mockUserMessage(), mockUserMessage(), mockUserMessage(), mockUserMessage()]);
+        bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
+        lamdbaInvokeStub.onCall(0).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onCall(1).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onCall(2).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onCall(3).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        assembleMessageStub.resolves(mockMessageBase);
+        publishUserEventStub.resolves({ result: 'SUCCESS' });
 
-        const expectedInvocation = {
-            FunctionName: config.get('lambdas.sendSystemEmail'),
-            InvocationType: 'Event',
-            LogType: 'None',
-            Payload: JSON.stringify(testEmailEvent)
-        };
+        const expectedResult = { result: 'SUCCESS', numberSent: 4 };
 
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        const result = await handler.sendEmailMessages();
+        logger('Result of email dispatch:', result);
 
-        const resultOfInvoke = await handler.sendSystemEmails(testEmailEvent);
-        expect(resultOfInvoke).to.exist;
-        expect(resultOfInvoke).to.deep.equal({ result: 'SUCCESS' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        // todo: expectations on stub args
     });
 
-    it('Returns error on failure', async () => {
-        const testEmailEvent = {
-            templates: {
-                htmlTemplate: validHtmlTemplate,
-                textTemplate: validTextTemplate
-            },
-            subject: validSubject,
-            destinationArray: [testDestinationDetails, testDestinationDetails]
-        };
+    it('Returns where no pending emails are found', async () => {
+        getPendingOutboundMessagesStub.resolves([]);
 
-        const expectedInvocation = {
-            FunctionName: config.get('lambdas.sendSystemEmail'),
-            InvocationType: 'Event',
-            LogType: 'None',
-            Payload: JSON.stringify(testEmailEvent)
-        };
+        const expectedResult = { result: 'NONE_PENDING', numberSent: 0 };
 
-        lamdbaInvokeStub.throws(new Error('Invocation error'));
+        const result = await handler.sendEmailMessages();
+        logger('Result of email dispatch:', result);
 
-        const resultOfInvoke = await handler.sendSystemEmails(testEmailEvent);
-        expect(resultOfInvoke).to.exist;
-        expect(resultOfInvoke).to.deep.equal({ result: 'ERR', message: 'Invocation error' });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(getPendingOutboundMessagesStub).to.have.been.calledOnce;
+        expect(bulkUpdateStatusStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(assembleMessageStub).to.have.not.been.called;
+        expect(publishUserEventStub).to.have.not.been.called;
     });
 
+    it('Catches thrown errors', async () => {
+        getPendingOutboundMessagesStub.resolves([mockUserMessage(), mockUserMessage(), mockUserMessage(), mockUserMessage()]);
+        bulkUpdateStatusStub.throws(new Error('Update error'));
+
+        const expectedResult = { result: 'ERR', message: 'Update error' };
+
+        const result = await handler.sendEmailMessages();
+        logger('Result of email dispatch:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        // todo: add more stub expectations       
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(assembleMessageStub).to.have.not.been.called;
+        expect(publishUserEventStub).to.have.not.been.called;
+    });
 });

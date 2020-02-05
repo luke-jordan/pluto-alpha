@@ -16,7 +16,8 @@
     "lambdas": {
         "generateUserMessages": "message_user_create_once",
         "updateMessageStatus": "message_user_process",
-        "sendSystemEmail": "sendgrid_dispatch_emails",
+        "sendEmailMessages": "email_bulk_dispatch",
+        "fetchProfile": "profile_fetch",
         "fetchAccountAggregate": "user_history_aggregate"
     },
     "db": {
@@ -47,6 +48,9 @@
         "push": {
             "running": true
         }
+    },
+    "email": {
+        "fromAddress": "noreply@jupitersave.com"
     },
     "security": {
         "roleRequired": false

@@ -2,6 +2,7 @@
 
 // const logger = require('debug')('jupiter:third-parties:sendgrid-unit-test');
 const config = require('config');
+const uuid = require('uuid/v4');
 const path = require('path');
 
 const sinon = require('sinon');
@@ -822,4 +823,150 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         expect(getObjectStub).to.have.not.been.called;
         expect(sendGridStub).to.have.not.been.called;
     });
+});
+
+describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
+    const testMessageId = uuid();
+
+    const validEmailEvent = (messageId = uuid()) => ({
+        messageId,
+        to: 'user@email.org',
+        from: config.get('sendgrid.fromAddress'),
+        subject: 'Welcome to Jupiter',
+        text: 'Greetings. Welcome to jupiter',
+        html: '<p>Greetings. Welcome to jupiter</p>'
+    });
+
+    const validEmailMessage = {
+        to: 'user@email.org',
+        from: config.get('sendgrid.fromAddress'),
+        subject: 'Welcome to Jupiter',
+        text: 'Greetings. Welcome to jupiter',
+        html: '<p>Greetings. Welcome to jupiter</p>'
+    };
+
+    beforeEach(() => {
+        resetStubs(sendGridStub);
+    });
+
+    it('Handled warm up event', async () => {
+        const result = await handler.sendEmailMessages({ });
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ result: 'Empty invocation' });
+
+        expect(sendGridStub).to.have.not.been.called;        
+    });
+
+    it('Sends out emails', async () => {
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
+
+        const testEvent = {
+            emailMessages: [validEmailEvent(testMessageId), validEmailEvent(testMessageId), validEmailEvent(testMessageId)]
+        };
+
+        const result = await handler.sendEmailMessages(testEvent);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
+    });
+
+    it('Handles payload chunking where third party rate limit is exceeded', async () => {
+        const emailMessages = [];
+        while (emailMessages.length < 2652) {
+            emailMessages.push(validEmailEvent(testMessageId));
+        }
+
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
+
+        const result = await handler.sendEmailMessages({ emailMessages });
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(sendGridStub).to.have.been.calledThrice;
+
+        const firstCall = sendGridStub.getCall(0).args[0];
+        expect(firstCall.length).to.equal(1000);
+
+        const secondCall = sendGridStub.getCall(1).args[0];
+        expect(secondCall.length).to.equal(1000);
+
+        const thirdCall = sendGridStub.getCall(2).args[0];
+        expect(thirdCall.length).to.equal(652);
+    });
+
+    it('Isolated failures and returns failed message ids to caller', async () => {
+        const emailMessages = [];
+        while (emailMessages.length < 2652) {
+            emailMessages.push(validEmailEvent());
+        }
+
+        sendGridStub.onFirstCall().resolves([{ error: 'Internal error' }]);
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const result = await handler.sendEmailMessages({ emailMessages });
+
+        expect(result).to.exist;
+
+        expect(result).to.have.property('result', 'SUCCESS');
+        expect(result).to.have.property('failedMessageIds');
+
+        expect(result.failedMessageIds.length).to.deep.equal(1000);
+
+        expect(sendGridStub).to.have.been.calledThrice;
+
+        const firstCall = sendGridStub.getCall(0).args[0];
+        expect(firstCall.length).to.equal(1000);
+
+        const secondCall = sendGridStub.getCall(1).args[0];
+        expect(secondCall.length).to.equal(1000);
+
+        const thirdCall = sendGridStub.getCall(2).args[0];
+        expect(thirdCall.length).to.equal(652);
+    });
+
+    it('Fails where no valid emails are found', async () => {
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const expectedResult = { result: 'ERR', message: 'No valid emails found' };
+
+        const invalidEmailEvent = { ...validEmailEvent(testMessageId) };
+        Reflect.deleteProperty(invalidEmailEvent, 'from');
+
+        const testEvent = {
+            emailMessages: [invalidEmailEvent, invalidEmailEvent, invalidEmailEvent]
+        };
+
+        const result = await handler.sendEmailMessages(testEvent);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(sendGridStub).to.have.not.been.called;
+    });
+
+    it('Cathces thrown errors', async () => {
+        sendGridStub.throws(new Error('Dispatch error'));
+
+        const expectedResult = { result: 'ERR', message: 'Dispatch error' };
+
+        const testEvent = {
+            emailMessages: [validEmailEvent(testMessageId), validEmailEvent(testMessageId), validEmailEvent(testMessageId)]
+        };
+
+        const result = await handler.sendEmailMessages(testEvent);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
+    });
+
 });

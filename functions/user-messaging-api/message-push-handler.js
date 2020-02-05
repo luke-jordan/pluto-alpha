@@ -144,7 +144,7 @@ const sendPendingPushMsgs = async () => {
         return { result: 'TURNED_OFF' };
     }
 
-    const messagesToSend = await rdsPickerUtil.getPendingPushMessages();
+    const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('PUSH');
     if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
         return { result: 'NONE_PENDING', numberSent: 0 };
     }
@@ -185,6 +185,81 @@ const sendPendingPushMsgs = async () => {
         return resultOfSend;
     } catch (err) {
         // just in case, we revert, else messages never sent out
+        const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
+        logger('Result of state lock release: ', releaseStateLock);
+        return { result: 'ERROR', message: err.message };
+    }
+};
+
+const fetchUserEmail = async (systemWideUserId) => {
+    const profileFetchLambdaInvoke = {
+        FunctionName: config.get('lambdas.fetchProfile'),
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify({ systemWideUserId })
+    };
+
+    const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
+    const userProfile = JSON.parse(profileFetchResult['Payload']);
+
+    return Reflect.has(userProfile, 'emailAddress') ? { systemWideUserId, emailAddress: userProfile.emailAddress } : null;
+};
+
+const dispatchEmailMessages = async (emailMessages) => {
+    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages });
+    const resultOfSend = await lambda.invoke(emailInvocation).promise();
+    logger('Result of batch email send:', resultOfSend);
+
+    return JSON.parse(resultOfSend.Payload);
+};
+
+const sendPendingEmailMsgs = async () => {
+        const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAILS');
+        if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
+            return { result: 'NONE_PENDING', numberSent: 0 };
+        }
+
+        const messageIds = messagesToSend.map((msg) => msg.messageId);
+        logger('Alright, processing messages: ', messageIds);
+        const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
+        logger('State lock done? : ', stateLock);
+        
+    try {
+        const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
+        const emailAddresses = await Promise.all(destinationUserIds.map((userId) => fetchUserEmail(userId)));
+        const destinationMap = emailAddresses.filter((email) => email !== null)
+            .reduce((obj, emailAndUserId) => ({ ...obj, [emailAndUserId.systemWideUserId]: emailAndUserId.emailAddress }), {});
+
+        const assembledMessages = await Promise.all(messagesToSend.map((msg) => pickMessageBody(msg)));
+
+        const messages = assembledMessages.map((msg) => ({
+            messageId: msg.messageId,
+            to: destinationMap[msg.destinationUserId],
+            from: config.get('email.fromAddress'),
+            subject: msg.title,
+            text: msg.body,
+            html: `<p>${msg.body}</p>`
+        }));
+
+        const resultOfSend = await dispatchEmailMessages(messages);
+        logger('Result of email sending: ', resultOfSend);
+
+        if (Reflect.has(resultOfSend, 'result') && resultOfSend.result === 'SUCCESS') {
+            const successfulMessages = assembledMessages.filter((msg) => !resultOfSend.failedMessageIds.includes(msg.messageId)); 
+            const successfulMessageIds = messageIds.filter((msgId) => !resultOfSend.failedMessageIds.includes(msgId));
+
+            const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(successfulMessageIds, 'SENT');
+            logger('Final update worked? : ', updateToProcessed);
+
+            const userLogPromises = successfulMessages.map((msg) => publishMessageSentLog(msg));
+            const resultOfLogPublish = await Promise.all(userLogPromises);
+            logger('Result of publishing email message logs: ', resultOfLogPublish);
+
+            return { result: 'SUCCESS', numberSent: successfulMessages.length };
+        }
+
+        throw new Error(resultOfSend);
+
+    } catch (err) {
         const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
         logger('Result of state lock release: ', releaseStateLock);
         return { result: 'ERROR', message: err.message };
@@ -235,24 +310,19 @@ module.exports.sendPushNotifications = async (params) => {
 };
 
 /**
- * This function sends system emails.
+ * This function sends email messages.
  * @param {object} params
  * @property {object} htmlTemplate The emails html template.
  * @property {string} textTemplate The emails text template.
  * @property {subject} subject The emails subject.
  * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' string and 'templateVariables' object property.
  */
-module.exports.sendSystemEmails = async (params) => {
+module.exports.sendEmailMessages = async () => {
     try {
-        const lambdaPayload = msgUtil.extractEventBody(params);
+        const result = await sendPendingEmailMsgs();
+        logger('Batch email dispatch result:', result);
 
-        const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendSystemEmail'), lambdaPayload);
-        const resultOfSend = lambda.invoke(emailInvocation).promise();
-        logger('Result of email invocation:', resultOfSend);
-
-        const parsedResult = JSON.parse(JSON.parse(resultOfSend.Payload).body);
-
-        return parsedResult;
+        return result;
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { result: 'ERR', message: err.message };
