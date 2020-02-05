@@ -46,37 +46,37 @@ const calculateNumberOfDaysPassedSinceDateAndToday = async (givenDate) => {
     return numberOfDaysPassedSinceDate;
 };
 
-const fetchFloatVarsForBalanceCalcFromCacheOrDB = async (transactionInformation) => {
-  logger(`Fetching float vars for balance calc from cache or database with transaction information: 
+const fetchInterestRateFromCacheOrDB = async (transactionInformation) => {
+  logger(`Fetching interest rate from cache or database with transaction information: 
   ${JSON.stringify(transactionInformation)}`);
   try {
       const clientId = transactionInformation.clientId;
       const floatId = transactionInformation.floatId;
-      const cacheKeyForFloatVars = `${clientId}_${floatId}`;
+      const cacheKeyForFloatVars = `${clientId}_${floatId}_interest_rate`;
 
-      logger(`Fetching float vars for balance calc from cache`);
+      logger(`Fetching 'interest rate' from cache with key: ${cacheKeyForFloatVars}`);
       const responseFromCache = await redis.get(cacheKeyForFloatVars);
       if (!responseFromCache) {
-          logger(`'float vars for balance calc' NOT found in cache`);
-          logger(`Fetch 'float vars for balance calc' from database`);
-          const responseFromDB = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
-          await redis.set(cacheKeyForFloatVars, JSON.stringify(responseFromDB), 'EX', CACHE_TTL_IN_SECONDS);
-          logger(`Successfully fetched 'float vars for balance calc' from database and stored in cache`);
-          return responseFromDB;
+          logger(`${cacheKeyForFloatVars} NOT found in cache`);
+          logger(`Fetching 'float vars for balance calc' from database`);
+          const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+          const interestRateAsBigNumber = await calculateInterestRate(floatProjectionVars);
+          await redis.set(cacheKeyForFloatVars, JSON.stringify(interestRateAsBigNumber), 'EX', CACHE_TTL_IN_SECONDS);
+          logger(`Successfully fetched 'interest rate' from database and stored in cache`);
+          return interestRateAsBigNumber;
       }
 
-      logger(`Successfully fetched 'float vars for balance calc' from cache`);
+      logger(`Successfully fetched 'interest rate' from cache`);
       return responseFromCache;
   } catch (error) {
-      logger(`Error occurred while fetching float vars for balance calc from cache or database with transaction information: 
+      logger(`Error occurred while fetching 'interest rate' from cache or database with transaction information: 
   ${JSON.stringify(transactionInformation)}. Error: ${error.message}`);
   }
 };
 
 module.exports.calculateEstimatedInterestEarned = async (transactionInformation, calculationUnit = 'HUNDREDTH_CENT') => {
     logger(`Calculate estimated interest earned`);
-    const floatProjectionVars = await fetchFloatVarsForBalanceCalcFromCacheOrDB(transactionInformation);
-    const interestRateAsBigNumber = await calculateInterestRate(floatProjectionVars);
+    const interestRateAsBigNumber = await fetchInterestRateFromCacheOrDB(transactionInformation);
     const numberOfDaysSinceSettleTime = await calculateNumberOfDaysPassedSinceDateAndToday(transactionInformation.settlementTime);
     const amount = Math.abs(opsUtil.convertToUnit(transactionInformation.amount, transactionInformation.unit, calculationUnit));
     const interestEarned = await calculateCompoundInterestUsingDayInterval(amount, interestRateAsBigNumber, numberOfDaysSinceSettleTime);
