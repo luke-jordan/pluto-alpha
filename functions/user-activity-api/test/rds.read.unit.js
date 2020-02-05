@@ -183,8 +183,8 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
     };
 
     const testPendingTransactions = [
-        {'transaction_type': 'USER_SAVING_EVENT', 'amount': '100'},
-        {'transaction_type': 'WITHDRAWAL', 'amount': '50'}
+        {'transaction_type': 'USER_SAVING_EVENT', 'amount': '100', 'unit': 'WHOLE_CENT', 'currency': 'USD' },
+        {'transaction_type': 'WITHDRAWAL', 'amount': '50', 'unit': 'WHOLE_CURRENCY', 'currency': 'USD' }
     ];
 
     const camelizeKeys = (object) => Object.keys(object).reduce((o, key) => ({ ...o, [camelcase(key)]: object[key] }), {});
@@ -217,7 +217,7 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
     });
 
     it('Fetches pending transactions', async () => {
-        const selectQuery = `select transaction_type, amount from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
+        const selectQuery = `select transaction_type, amount, unit, currency from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
         `and settlement_status = $2 and transaction_type in ($3, $4) order by creation_time desc`;
         const selectValues = [testAccountId, 'PENDING', 'USER_SAVING_EVENT', 'WITHDRAWAL'];
 

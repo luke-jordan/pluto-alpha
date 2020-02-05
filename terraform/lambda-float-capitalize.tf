@@ -43,6 +43,9 @@ resource "aws_lambda_function" "float_capitalize" {
               "database": "${local.database_config.database}",
               "port" :"${local.database_config.port}"
             },
+            "records": {
+              "bucket": "${aws_s3_bucket.float_record_bucket.bucket}"
+            }
         }
       )}"
     }
