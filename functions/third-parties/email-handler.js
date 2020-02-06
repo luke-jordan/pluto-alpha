@@ -374,6 +374,7 @@ module.exports.sendEmailMessages = async (event) => {
         logger('Created chunks:', messageChunks);
 
         const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailChunk(chunk)));
+        logger('Got dispatch result:', dispatchResult);
         const failedChunks = dispatchResult.map((chunk) => {
             const result = JSON.parse(chunk.result)[0];
             if (!Reflect.has(result, 'statusCode') || !SUCCESS_STATUSES.includes(result.statusCode)) {
