@@ -345,15 +345,15 @@ module.exports.sendEmails = async (event) => {
 };
 
 const dispatchEmailChunk = async (chunk) => {
-    const payload = chunk.reduce((array, msg) => ([...array, { to: msg.to, from: msg.from, subject: msg.subject, text: msg.text, html: msg.html }]), []);
+    const payload = chunk.reduce((array, msg) => ([...array, { to: msg.to, from: msg.from, subject: msg.subject, text: msg.text, html: msg.html }]), []); // filters out messageId property
     const result = await sendGridMail.send(payload);
     return { result: JSON.stringify(result), messageIds: chunk.map((msg) => msg.messageId) };
 };
 
 /**
- * This function sends with pre-assembled emails.
- * @param {object} event
- * @property {array} emailMessages An array of emails objects to be dispatched. Each email must have the following properties: to, from, subject, text, html
+ * This function sends pre-assembled emails.
+ * @param    {object} event
+ * @property {array}  emailMessages An array of emails objects to be dispatched. Each email must have the following properties: messageId, to, from, subject, text, html.
  */
 module.exports.sendEmailMessages = async (event) => {
     try {
@@ -362,19 +362,17 @@ module.exports.sendEmailMessages = async (event) => {
         }
 
         const { emailMessages } = opsUtil.extractParamsFromEvent(event);
-
         const validMessages = validateEmailMessages(emailMessages);
+
         if (!validMessages || validMessages.length === 0) {
             throw new Error('No valid emails found');
         }
 
         const validMessageIds = validMessages.map((msg) => msg.messageId);
-
         const messageChunks = chunkDispatchRecipients(validMessages);
         logger('Created chunks:', messageChunks);
-
         const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailChunk(chunk)));
-        logger('Got dispatch result:', dispatchResult);
+
         const failedChunks = dispatchResult.map((chunk) => {
             const result = JSON.parse(chunk.result)[0];
             if (!Reflect.has(result, 'statusCode') || !SUCCESS_STATUSES.includes(result.statusCode)) {

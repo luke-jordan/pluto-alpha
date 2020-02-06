@@ -510,7 +510,11 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        // todo: expectations on stub args
+        // Stub args are asserted in handler.sendOutbandMessages tests.
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL');
+        expect(bulkUpdateStatusStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub.callCount).to.equal(5);
+        expect(assembleMessageStub.callCount).to.equal(4);
     });
 
     it('Returns where no pending emails are found', async () => {
@@ -543,9 +547,135 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        // todo: add more stub expectations       
+        expect(getPendingOutboundMessagesStub).have.been.calledOnceWithExactly('EMAIL');
         expect(lamdbaInvokeStub).to.have.not.been.called;
         expect(assembleMessageStub).to.have.not.been.called;
         expect(publishUserEventStub).to.have.not.been.called;
+    });
+});
+
+describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
+    const testUserId = uuid();
+    const testMessageId = uuid();
+    const testInstructionId = uuid();
+    const persistedToken = uuid();
+
+    const testUpdateTime = moment().format(); 
+
+    const template = 'Greetings {{user}}. Welcome to Jupiter.';
+
+    const testUserProfile = {
+        systemWideUserId: testUserId,
+        personalName: 'John',
+        familyName: 'Doe',
+        phoneNumber: '278384748264',
+        emailAddress: 'user@email.com'
+    };
+
+    const mockUserMessage = {
+        destinationUserId: testUserId,
+        messageBody: template,
+        messageTitle: 'Welcome to Jupiter',
+        messageId: testMessageId,
+        instructionId: testInstructionId
+    };
+
+    const emailMessagesInvocation = {
+        FunctionName: 'email_bulk_dispatch',
+        InvocationType: 'RequestResponse',
+        LogType: 'None',
+        Payload: JSON.stringify({
+            emailMessages: [{
+                messageId: testMessageId,
+                to: 'user@email.com',
+                from: 'noreply@jupitersave.com',
+                subject: 'Welcome to jupiter. ',
+                text: 'Greetings. Welcome to jupiter. ',
+                html: '<p>Greetings. Welcome to jupiter. </p>'
+            }]
+        })
+    };
+
+    const mockMessageBase = {
+        instructionId: testInstructionId,
+        messageId: testMessageId,
+        title: 'Welcome to jupiter. ',
+        body: 'Greetings. Welcome to jupiter. '
+    };
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('It sends out push and email messages', async () => {
+        getPendingOutboundMessagesStub.resolves([mockUserMessage]);
+        bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        assembleMessageStub.resolves(mockMessageBase);
+        publishUserEventStub.resolves({ result: 'SUCCESS' });
+
+        getPushTokenStub.resolves({ [testUserId]: persistedToken });
+        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
+
+        const expectedResult = [
+            { result: 'SUCCESS', numberSent: 2 },
+            { result: 'SUCCESS', numberSent: 1 }
+        ];
+
+        const result = await handler.sendOutboundMessages();
+        logger('result of scheduled job:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(getPendingOutboundMessagesStub).have.been.calledTwice;
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('PUSH');
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL');
+
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENDING');
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENT');
+        expect(bulkUpdateStatusStub.callCount).to.equal(4);
+
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(emailMessagesInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+
+        expect(assembleMessageStub).to.have.been.calledWith(mockUserMessage);
+        expect(publishUserEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_PUSH_NOTIFICATION_SENT', { context: mockMessageBase });
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId]);
+        expect(chunkPushNotificationsStub).to.have.been.calledOnce;
+
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
+    });
+
+    it('Catches thrown errors', async () => {
+        getPendingOutboundMessagesStub.throws(new Error('Internal error'));
+
+        const expectResult = [
+            { result: 'ERR', message: 'Internal error' },
+            { result: 'ERR', message: 'Internal error' }
+        ];
+
+        const result = await handler.sendOutboundMessages();
+        logger('result of scheduled job:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectResult);
+
+        expect(getPendingOutboundMessagesStub).have.been.calledTwice;
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('PUSH');
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL');
+
+        expect(bulkUpdateStatusStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.have.not.been.called;
+        expect(assembleMessageStub).to.have.not.been.called;
+        expect(publishUserEventStub).to.have.not.been.called;
+        expect(getPushTokenStub).to.have.not.been.called;
+        expect(chunkPushNotificationsStub).to.have.not.been.called;
+        expect(sendPushNotificationsAsyncStub).to.have.not.been.called;
     });
 });

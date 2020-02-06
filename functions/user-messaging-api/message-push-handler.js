@@ -205,7 +205,7 @@ const fetchUserEmail = async (systemWideUserId) => {
 };
 
 const dispatchEmailMessages = async (emailMessages) => {
-    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages });
+    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages }, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
 
@@ -213,7 +213,7 @@ const dispatchEmailMessages = async (emailMessages) => {
 };
 
 const sendPendingEmailMsgs = async () => {
-        const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAILS');
+        const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL');
         if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
             return { result: 'NONE_PENDING', numberSent: 0 };
         }
@@ -311,11 +311,6 @@ module.exports.sendPushNotifications = async (params) => {
 
 /**
  * This function sends email messages.
- * @param {object} params
- * @property {object} htmlTemplate The emails html template.
- * @property {string} textTemplate The emails text template.
- * @property {subject} subject The emails subject.
- * @property {array} destinationArray An array containing destination objects. Each destination object contains an 'emailAddress' string and 'templateVariables' object property.
  */
 module.exports.sendEmailMessages = async () => {
     try {
@@ -323,6 +318,25 @@ module.exports.sendEmailMessages = async () => {
         logger('Batch email dispatch result:', result);
 
         return result;
+
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { result: 'ERR', message: err.message };
+    }
+};
+
+/**
+ * Primary method. Sends push messages and emails in parallel. 
+ * @param {object} params An optional object containing an array of system wide user ids. Used during push message dispatch.
+ * @property {Array} systemWideUserIds An optional array of system wide user ids who will serve as reciepients of the push notifications.
+ */
+module.exports.sendOutboundMessages = async (params) => {
+    try {
+        const result = await Promise.all([exports.sendPushNotifications(params), exports.sendEmailMessages()]);
+        logger('Result of outbound messages:', result);
+
+        return result;
+
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { result: 'ERR', message: err.message };

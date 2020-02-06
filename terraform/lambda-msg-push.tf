@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_push" {
 
   function_name                  = "${var.message_push}"
   role                           = "${aws_iam_role.message_push_role.arn}"
-  handler                        = "message-push-handler.sendPushNotifications"
+  handler                        = "message-push-handler.sendOutboundMessages"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 60
