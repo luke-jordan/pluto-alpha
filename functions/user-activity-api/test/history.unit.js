@@ -21,6 +21,11 @@ const findAccountStub = sinon.stub();
 const fetchPriorTxStub = sinon.stub();
 const getAccountFigureStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const calculateEstimatedInterestEarnedStub = sinon.stub();
+
+const MockInterestHelper = {
+    calculateEstimatedInterestEarned: calculateEstimatedInterestEarnedStub
+};
 
 class MockLambdaClient {
     constructor () {
@@ -36,6 +41,7 @@ const handler = proxyquire('../history-handler', {
     './persistence/account.calculations.js': {
         'getUserAccountFigure': getAccountFigureStub
     },
+    './interest-helper': MockInterestHelper,
     'moment': momentStub,
     'aws-sdk': {
         'Lambda': MockLambdaClient
@@ -48,18 +54,8 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     const testPhone = '+276323503434';
     const testNationalId = '931223493933434';
     const testTime = moment();
-
-    const expectedTxResponse = {
-        transactionId: uuid(),
-        accountId: uuid(),
-        creationTime: moment().format(),
-        transactionType: 'ALLOCATION',
-        settlementStatus: 'SETTLED',
-        amount: '100',
-        currency: 'USD',
-        unit: 'HUNDREDTH_CENT',
-        humanReference: 'BUSANI6'
-    };
+    const testClientId = uuid();
+    const testFloatId = uuid();
 
     const expectedProfile = {
         systemWideUserId: testUserId,
@@ -145,7 +141,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     };
 
     beforeEach(() => {
-        helper.resetStubs(momentStub, findAccountStub, fetchPriorTxStub, lamdbaInvokeStub, getAccountFigureStub);
+        helper.resetStubs(momentStub, findAccountStub, fetchPriorTxStub, lamdbaInvokeStub, getAccountFigureStub, calculateEstimatedInterestEarnedStub);
     });
 
     it('Fetches user balance, accrued interest, previous user transactions, and major user events', async () => {
@@ -164,6 +160,18 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             timezone: 'America/New_York', 
             clientId: 'some_client_co',
             daysToProject: 0
+        };
+
+        const expectedTxResponse = {
+            transactionId: uuid(),
+            accountId: uuid(),
+            creationTime: moment().format(),
+            transactionType: 'ALLOCATION',
+            settlementStatus: 'SETTLED',
+            amount: '100',
+            currency: 'USD',
+            unit: 'HUNDREDTH_CENT',
+            humanReference: 'BUSANI6'
         };
 
         momentStub.returns({
@@ -220,6 +228,105 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'});
         expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'net_saving::WHOLE_CENT::USD'});
         
+        expect(findAccountStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(fetchPriorTxStub).to.have.been.calledOnceWithExactly(testAccountId);
+    });
+
+    it('Fetches user history along with `estimatedInterestEarned`', async () => {
+        const testCalculationUnit = 'HUNDREDTH_CENT';
+        const testCurrency = 'USD';
+        const testCompoundInterest = '18.8485978005249';
+
+        const testHistoryEvent = {
+            userId: testUserId,
+            eventTypes: config.get('defaults.userHistory.eventTypes'),
+            startDate: testTime.valueOf(),
+            endDate: testTime.valueOf()
+        };
+
+        const testBalancePayload = {
+            userId: testUserId,
+            currency: testCurrency,
+            atEpochMillis: testTime.valueOf(),
+            timezone: 'America/New_York',
+            clientId: 'some_client_co',
+            daysToProject: 0
+        };
+
+        const expectedTxResponseWithUserSavingEvent = {
+            clientId: testClientId,
+            floatId: testFloatId,
+            transactionId: uuid(),
+            accountId: uuid(),
+            creationTime: moment().format(),
+            transactionType: 'USER_SAVING_EVENT',
+            settlementStatus: 'SETTLED',
+            amount: '100',
+            currency: testCurrency,
+            unit: testCalculationUnit,
+            humanReference: 'BUSANI6'
+        };
+
+        momentStub.returns({
+            valueOf: () => testTime.valueOf(),
+            subtract: () => testTime,
+            startOf: () => testTime
+        });
+
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
+            promise: () => mockLambdaResponse(expectedProfile)
+        });
+
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({ promise: () => expectedHistory });
+
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
+            promise: () => mockLambdaResponse(expectedBalance)
+        });
+
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'}).
+            resolves({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
+        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'net_saving::WHOLE_CENT::USD'}).
+            resolves({ amount: 1000, unit: 'WHOLE_CURRENCY', currency: 'USD' });
+
+        findAccountStub.withArgs(testUserId).resolves([testAccountId]);
+
+        fetchPriorTxStub.withArgs(testAccountId).resolves([expectedTxResponseWithUserSavingEvent]);
+
+        calculateEstimatedInterestEarnedStub.withArgs(expectedTxResponseWithUserSavingEvent).resolves({
+            amount: testCompoundInterest,
+            unit: testCalculationUnit,
+            currency: testCurrency
+        });
+
+        const testEvent = {
+            requestContext: {
+                authorizer: { systemWideUserId: testUserId }
+            },
+            httpMethod: 'GET'
+        };
+
+        const userHistoryArray = JSON.parse(expectedHistory.Payload).userEvents.userEvents;
+
+        const expectedResult = {
+            userBalance: expectedBalance,
+            accruedInterest: '$20',
+            userHistory: [...helper.normalizeHistory(userHistoryArray), ...helper.normalizeTx([expectedTxResponseWithUserSavingEvent])]
+        };
+
+        const result = await handler.fetchUserHistory(testEvent);
+        logger('Result of user look up:', result);
+        logger('expected result:', expectedResult);
+
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 200);
+        // expect(result.body).to.deep.equal(JSON.stringify(expectedResult)); // momentStub isn't stubbing out a specific instance. to be seen to. all else is as expected.
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
+
+        expect(getAccountFigureStub).to.have.been.calledTwice;
+        expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'});
+        expect(getAccountFigureStub).to.have.been.calledWithExactly({ systemWideUserId: testUserId, operation: 'net_saving::WHOLE_CENT::USD'});
+
         expect(findAccountStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(fetchPriorTxStub).to.have.been.calledOnceWithExactly(testAccountId);
     });

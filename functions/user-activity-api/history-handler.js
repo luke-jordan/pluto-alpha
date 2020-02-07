@@ -140,6 +140,7 @@ const normalizeHistory = (events) => {
 };
 
 const normalizeTx = async (events) => {
+    logger('Normalizing transactions');
     const promisifiedResult = events.map(async (event) => ({
             timestamp: moment(event.creationTime).valueOf(),
             type: 'TRANSACTION',
@@ -192,7 +193,8 @@ module.exports.fetchUserHistory = async (event) => {
         const priorTransactions = await persistenceRead.fetchTransactionsForHistory(accountId);
         logger('Got prior transactions:', priorTransactions);
 
-        const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
+        const normalizedTransactions = await normalizeTx(priorTransactions);
+        const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];
         logger('Created formatted array:', userHistory);
 
         const resultObject = {
