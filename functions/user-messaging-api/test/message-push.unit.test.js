@@ -654,17 +654,6 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     });
 
     it('Sends emails and push messages to specific users', async () => {
-        getPendingOutboundMessagesStub.resolves([mockUserMessage]);
-        bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
-        publishUserEventStub.resolves({ result: 'SUCCESS' });
-
-        getPushTokenStub.resolves({ [testUserId]: persistedToken });
-        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
-        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
-
         const expectedEmail = {
             messageId: testUserId,
             to: 'user@email.com',
@@ -680,6 +669,17 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
             LogType: 'None',
             Payload: JSON.stringify({ emailMessages: [expectedEmail, expectedEmail] })
         };
+
+        getPendingOutboundMessagesStub.resolves([mockUserMessage]);
+        bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        publishUserEventStub.resolves({ result: 'SUCCESS' });
+
+        getPushTokenStub.resolves({ [testUserId]: persistedToken });
+        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
         const expectedResult = [
             { channel: 'PUSH', result: 'SUCCESS', numberSent: 2 },

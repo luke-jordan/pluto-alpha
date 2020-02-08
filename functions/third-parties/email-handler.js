@@ -381,7 +381,7 @@ module.exports.sendEmailMessages = async (event) => {
             return null;
         }).filter((result) => result !== null).flat();
 
-        const failedMessages = emailMessages.filter((email) => !validMessageIds.includes(email) && failedChunks.includes(email.messageId));
+        const failedMessages = emailMessages.filter((message) => !validMessageIds.includes(message.messageId) || failedChunks.includes(message.messageId));
         logger('Failed messages:', failedMessages.length);
 
         const failedMessageIds = failedMessages.map((msg) => msg.messageId);
