@@ -300,7 +300,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         logger('Result of push notification sending:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 2 });
+        expect(result).to.deep.equal({ channel: 'PUSH', result: 'SUCCESS', numberSent: 2 });
         expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId, mockUserId], mockProvider);
         expect(chunkPushNotificationsStub).to.have.been.calledOnceWithExactly([mockMessage, mockMessage]);
         expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
@@ -329,7 +329,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         logger('Result of push notification sending:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 2 });
+        expect(result).to.deep.equal({ channel: 'PUSH', result: 'SUCCESS', numberSent: 2 });
         expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId, mockUserId]);
         expect(bulkUpdateStatusStub).to.have.been.calledTwice;
@@ -364,7 +364,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         logger('Result of push notification sending:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'SUCCESS', numberSent: 1 });
+        expect(result).to.deep.equal({ channel: 'PUSH', result: 'SUCCESS', numberSent: 1 });
         expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.been.calledOnceWithExactly([mockUserId, mockUserId]);
         expect(bulkUpdateStatusStub).to.have.been.calledTwice;
@@ -399,7 +399,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         logger('Result of push notification sending:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'NONE_PENDING', numberSent: 0 });
+        expect(result).to.deep.equal({ channel: 'PUSH', result: 'NONE_PENDING', numberSent: 0 });
         expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.not.been.called;
         expect(bulkUpdateStatusStub).to.have.not.been.called;
@@ -421,7 +421,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         logger('Result of push notification sending:', result); 
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'ERROR', message: 'PersistenceError' });
+        expect(result).to.deep.equal({ channel: 'PUSH', result: 'ERROR', message: 'PersistenceError' });
         expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(getPushTokenStub).to.have.been.calledOnce;
     });
@@ -432,7 +432,7 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
         const result = await handler.sendPushNotifications();
         logger('Result of push notification sending:', result);
         expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'ERR', message: 'PersistenceError' });
+        expect(result).to.deep.equal({ channel: 'PUSH', result: 'ERR', message: 'PersistenceError' });
         expect(getPendingOutboundMessagesStub).to.have.been.calledOnceWithExactly('PUSH');
         expect(bulkUpdateStatusStub).to.have.not.been.called;
         expect(getPushTokenStub).to.have.not.been.called;
@@ -502,7 +502,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
 
-        const expectedResult = { result: 'SUCCESS', numberSent: 4 };
+        const expectedResult = { channel: 'EMAIL', result: 'SUCCESS', numberSent: 4 };
 
         const result = await handler.sendEmailMessages();
         logger('Result of email dispatch:', result);
@@ -520,7 +520,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
     it('Returns where no pending emails are found', async () => {
         getPendingOutboundMessagesStub.resolves([]);
 
-        const expectedResult = { result: 'NONE_PENDING', numberSent: 0 };
+        const expectedResult = { channel: 'EMAIL', result: 'NONE_PENDING', numberSent: 0 };
 
         const result = await handler.sendEmailMessages();
         logger('Result of email dispatch:', result);
@@ -539,7 +539,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage(), mockUserMessage(), mockUserMessage(), mockUserMessage()]);
         bulkUpdateStatusStub.throws(new Error('Update error'));
 
-        const expectedResult = { result: 'ERR', message: 'Update error' };
+        const expectedResult = { channel: 'EMAIL', result: 'ERR', message: 'Update error' };
 
         const result = await handler.sendEmailMessages();
         logger('Result of email dispatch:', result);
@@ -558,6 +558,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     const testUserId = uuid();
     const testMessageId = uuid();
     const testInstructionId = uuid();
+    const mockProvider = uuid();
     const persistedToken = uuid();
 
     const testUpdateTime = moment().format(); 
@@ -620,8 +621,8 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
         const expectedResult = [
-            { result: 'SUCCESS', numberSent: 2 },
-            { result: 'SUCCESS', numberSent: 1 }
+            { channel: 'PUSH', result: 'SUCCESS', numberSent: 2 },
+            { channel: 'EMAIL', result: 'SUCCESS', numberSent: 1 }
         ];
 
         const result = await handler.sendOutboundMessages();
@@ -652,12 +653,75 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
     });
 
+    it('Sends emails and push messages to specific users', async () => {
+        getPendingOutboundMessagesStub.resolves([mockUserMessage]);
+        bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        publishUserEventStub.resolves({ result: 'SUCCESS' });
+
+        getPushTokenStub.resolves({ [testUserId]: persistedToken });
+        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
+
+        const expectedEmail = {
+            messageId: testUserId,
+            to: 'user@email.com',
+            from: 'noreply@jupitersave.com',
+            subject: 'Welcome to jupiter. ',
+            text: 'Greetings. Welcome to jupiter. ',
+            html: '<p>Greetings. Welcome to jupiter. </p>'
+        };
+
+        const expectedInvocation = {
+            FunctionName: 'email_bulk_dispatch',
+            InvocationType: 'RequestResponse',
+            LogType: 'None',
+            Payload: JSON.stringify({ emailMessages: [expectedEmail, expectedEmail] })
+        };
+
+        const expectedResult = [
+            { channel: 'PUSH', result: 'SUCCESS', numberSent: 2 },
+            { channel: 'EMAIL', result: 'SUCCESS', numberSent: 2 }
+        ];
+
+        const testParams = {
+            systemWideUserIds: [testUserId, testUserId],
+            provider: mockProvider,
+            title: 'Welcome to jupiter. ',
+            body: 'Greetings. Welcome to jupiter. '
+        };
+
+        const result = await handler.sendOutboundMessages(testParams);
+        logger('result of scheduled job:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId, testUserId], mockProvider);
+        expect(chunkPushNotificationsStub).to.have.been.calledOnce;
+
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
+
+        expect(assembleMessageStub).have.not.been.called;
+        expect(publishUserEventStub).have.not.been.called;
+        expect(bulkUpdateStatusStub).have.not.been.called;
+        expect(getPendingOutboundMessagesStub).have.not.been.called;
+    });
+
     it('Catches thrown errors', async () => {
         getPendingOutboundMessagesStub.throws(new Error('Internal error'));
 
         const expectResult = [
-            { result: 'ERR', message: 'Internal error' },
-            { result: 'ERR', message: 'Internal error' }
+            { channel: 'PUSH', result: 'ERR', message: 'Internal error' },
+            { channel: 'EMAIL', result: 'ERR', message: 'Internal error' }
         ];
 
         const result = await handler.sendOutboundMessages();

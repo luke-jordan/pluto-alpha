@@ -129,6 +129,7 @@ const chunkAndSendMessages = async (messages) => {
     }
 
     return {
+        channel: 'PUSH',
         result: 'SUCCESS',
         numberSent: tickets.length
     };
@@ -141,12 +142,12 @@ const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, ti
 const sendPendingPushMsgs = async () => {
     const switchedOn = config.has('picker.push.running') && config.get('picker.push.running');
     if (!switchedOn) {
-        return { result: 'TURNED_OFF' };
+        return { channel: 'PUSH', result: 'TURNED_OFF' };
     }
 
     const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('PUSH');
     if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
-        return { result: 'NONE_PENDING', numberSent: 0 };
+        return { channel: 'PUSH', result: 'NONE_PENDING', numberSent: 0 };
     }
 
     const messageIds = messagesToSend.map((msg) => msg.messageId);
@@ -187,7 +188,7 @@ const sendPendingPushMsgs = async () => {
         // just in case, we revert, else messages never sent out
         const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
         logger('Result of state lock release: ', releaseStateLock);
-        return { result: 'ERROR', message: err.message };
+        return { channel: 'PUSH', result: 'ERROR', message: err.message };
     }
 };
 
@@ -215,7 +216,7 @@ const dispatchEmailMessages = async (emailMessages) => {
 const sendPendingEmailMsgs = async () => {
         const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL');
         if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
-            return { result: 'NONE_PENDING', numberSent: 0 };
+            return { channel: 'EMAIL', result: 'NONE_PENDING', numberSent: 0 };
         }
 
         const messageIds = messagesToSend.map((msg) => msg.messageId);
@@ -244,26 +245,48 @@ const sendPendingEmailMsgs = async () => {
         logger('Result of email sending: ', resultOfSend);
 
         if (Reflect.has(resultOfSend, 'result') && resultOfSend.result === 'SUCCESS') {
-            const successfulMessages = assembledMessages.filter((msg) => !resultOfSend.failedMessageIds.includes(msg.messageId)); 
-            const successfulMessageIds = messageIds.filter((msgId) => !resultOfSend.failedMessageIds.includes(msgId));
+            const successfulMsgs = assembledMessages.filter((msg) => !resultOfSend.failedMessageIds.includes(msg.messageId)); 
+            const successfulMsgIds = messageIds.filter((msgId) => !resultOfSend.failedMessageIds.includes(msgId));
 
-            const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(successfulMessageIds, 'SENT');
+            const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(successfulMsgIds, 'SENT');
             logger('Final update worked? : ', updateToProcessed);
 
-            const userLogPromises = successfulMessages.map((msg) => publishMessageSentLog(msg));
+            const userLogPromises = successfulMsgs.map((msg) => publishMessageSentLog(msg));
             const resultOfLogPublish = await Promise.all(userLogPromises);
             logger('Result of publishing email message logs: ', resultOfLogPublish);
 
-            return { result: 'SUCCESS', numberSent: successfulMessages.length };
+            return { channel: 'EMAIL', result: 'SUCCESS', numberSent: successfulMsgs.length };
         }
-
-        throw new Error(resultOfSend);
 
     } catch (err) {
         const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
         logger('Result of state lock release: ', releaseStateLock);
-        return { result: 'ERROR', message: err.message };
+        return { channel: 'EMAIL', result: 'ERROR', message: err.message };
     }
+};
+
+const sendEmailsToSpecificUsers = async (params) => {
+    const destinationUserIds = params.systemWideUserIds;
+    const emailAddresses = await Promise.all(destinationUserIds.map((userId) => fetchUserEmail(userId)));
+
+    const messages = emailAddresses.map((email) => ({
+        messageId: email.systemWideUserId, // allows target function to return user ids associated with failed messages
+        to: email.emailAddress,
+        from: config.get('email.fromAddress'),
+        subject: params.title,
+        text: params.body,
+        html: `<p>${params.body}</p>`
+    }));
+
+    const resultOfSend = await dispatchEmailMessages(messages);
+    logger('Result of email sending: ', resultOfSend);
+
+    if (Reflect.has(resultOfSend, 'result') && resultOfSend.result === 'SUCCESS') {
+        const successfulMsgs = destinationUserIds.filter((userId) => !resultOfSend.failedMessageIds.includes(userId));
+        return { channel: 'EMAIL', result: 'SUCCESS', numberSent: successfulMsgs.length };
+    }
+
+    return { channel: 'EMAIL', result: 'ERR', message: JSON.stringify(resultOfSend) };
 };
 
 const generateFromSpecificMsgs = async (params) => {
@@ -305,23 +328,33 @@ module.exports.sendPushNotifications = async (params) => {
         
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return { result: 'ERR', message: err.message };
+        return { channel: 'PUSH', result: 'ERR', message: err.message };
     }
 };
 
 /**
  * This function sends email messages.
  */
-module.exports.sendEmailMessages = async () => {
+module.exports.sendEmailMessages = async (params) => {
     try {
-        const result = await sendPendingEmailMsgs();
-        logger('Batch email dispatch result:', result);
+        const haveSpecificIds = typeof params === 'object' && Reflect.has(params, 'systemWideUserIds');
+        logger('Sending a email to user IDs : ', haveSpecificIds ? params.systemWideUserIds : null);
+   
+        let result = {};
+        if (typeof params === 'object' && Reflect.has(params, 'systemWideUserIds')) {
+            logger('Sending emails to provided specific users');
+            result = await sendEmailsToSpecificUsers(params);
+        } else {
+            logger('No specifics given, process any pending emails');
+            result = await sendPendingEmailMsgs();
+        }
 
+        logger('Completed sending email, result: ', result);
         return result;
 
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        return { result: 'ERR', message: err.message };
+        return { channel: 'EMAIL', result: 'ERR', message: err.message };
     }
 };
 
@@ -332,7 +365,7 @@ module.exports.sendEmailMessages = async () => {
  */
 module.exports.sendOutboundMessages = async (params) => {
     try {
-        const result = await Promise.all([exports.sendPushNotifications(params), exports.sendEmailMessages()]);
+        const result = await Promise.all([exports.sendPushNotifications(params), exports.sendEmailMessages(params)]);
         logger('Result of outbound messages:', result);
 
         return result;
