@@ -135,6 +135,37 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
     });
 
+    it('Isolates invalid destination objects', async () => {
+        const expectedAssembledEmail = { ...validAssembledEmail };
+        expectedAssembledEmail.personalizations = [validPersonalization, validPersonalization]; 
+        const invalidDestinationDetails = [{ emailAddress: 'test@email.com', templateVariables: { }}, { templateVariables: { }}, { emailAddress: 'test2@email.com' }];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, ...invalidDestinationDetails];
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const testEvent = {
+            templates: {
+                templateKeyBucket: { key: mockTemplateKey, bucket: mockTemplateBucket },
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray
+        };
+
+        const resultOfEmail = await handler.sendEmailsFromSource(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [
+            { templateVariables: {} },
+            { emailAddress: 'test2@email.com' },
+            { emailAddress: 'test@email.com', templateVariables: {} }
+        ]});
+
+        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: mockTemplateBucket, Key: mockTemplateKey });
+        expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
+    });
+
     it('Handles chunking of payloads where target email addresses exceed third party rate limit', async () => {
         const testDestinationArray = [];
         while (testDestinationArray.length < 2500) {
@@ -170,6 +201,10 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
         const thirdCall = sendGridStub.getCall(2).args[0];
         expect(thirdCall.personalizations.length).to.equal(500);
     });
+
+    // it('Isolates failed chunks', async () => {
+
+    // });
 
     it('Handles attachments', async () => {
         const mockAttachmentBucket = 'attachments';
@@ -536,6 +571,37 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
     });
 
+    it('Isolates invalid destination objects', async () => {
+        const expectedAssembledEmail = { ...validAssembledEmail };
+        expectedAssembledEmail.personalizations = [validPersonalization, validPersonalization]; 
+        const invalidDestinationDetails = [{ emailAddress: 'test@email.com', templateVariables: { }}, { templateVariables: { }}, { emailAddress: 'test2@email.com' }];
+        const testDestinationArray = [testDestinationDetails, testDestinationDetails, ...invalidDestinationDetails];
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => validHtmlTemplate }})});
+        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+
+        const testEvent = {
+            templates: {
+                htmlTemplate: validHtmlTemplate,
+                textTemplate: validTextTemplate
+            },
+            subject: validSubject,
+            destinationArray: testDestinationArray
+        };
+
+        const resultOfEmail = await handler.sendEmails(testEvent);
+
+        expect(resultOfEmail).to.exist;
+        expect(resultOfEmail).to.deep.equal({ result: 'SUCCESS', failedAddresses: [
+            { templateVariables: {} },
+            { emailAddress: 'test2@email.com' },
+            { emailAddress: 'test@email.com', templateVariables: {} }
+        ]});
+
+        expect(getObjectStub).to.have.not.been.called;
+        expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedAssembledEmail);
+    });
+
     it('Handles chunking of payloads where target email addresses exceed third party rate limit', async () => {
         const testDestinationArray = [];
         while (testDestinationArray.length < 2500) {
@@ -570,6 +636,10 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
         const thirdCall = sendGridStub.getCall(2).args[0];
         expect(thirdCall.personalizations.length).to.equal(500);
     });
+
+    // it('Isolates failed chunks', async () => {
+
+    // });
 
     it('Handles attachments', async () => {
         const mockAttachmentBucket = 'attachments';

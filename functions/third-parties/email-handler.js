@@ -65,20 +65,20 @@ const validateDispatchEvent = ({ subject, templateKeyBucket, htmlTemplate, desti
         });
     }
 
-    const failedAddresses = [];
+    const invalidDestinations = [];
     destinationArray.forEach((destination) => {
         if (typeof destination !== 'object' || Object.keys(destination).length === 0) {
             logger(`Invalid email destination object: ${JSON.stringify(destination)}`);
-            failedAddresses.push(destination);
+            invalidDestinations.push(destination);
         }
 
         if (!destination.emailAddress || !destination.templateVariables) {
             logger(`Invalid email destination object: ${JSON.stringify(destination)}`);
-            failedAddresses.push(destination);
+            invalidDestinations.push(destination);
         }
     });
 
-    return failedAddresses.map((address) => JSON.stringify(address));
+    return invalidDestinations;
 };
 
 const validateDispatchParams = (dispatchParams) => {
@@ -115,6 +115,14 @@ const validateDispatchPayload = (payload) => {
     }
 };
 
+const countSubstitutions = (template) => template.match(/\{\{/gu).length;
+
+const validateSubstitutions = (template, destinations) => {
+    const substitutionCount = countSubstitutions(template);
+    logger('Got substitution count:', substitutionCount);
+    return destinations.filter((destination) => Object.keys(destination.templateVariables).length < substitutionCount);
+};
+
 // todo: refactor
 const hasValidProperties = (object, type, requiredProperties) => {
     try {
@@ -147,6 +155,8 @@ const assembleDispatchPayload = (dispatchParams, destinationArray) => {
     const replyToName = dispatchParams.sourceDetails ? dispatchParams.sourceDetails.replyToName : config.get('sendgrid.replyToName');
 
     const { subject, htmlTemplate, textTemplate, attachments } = dispatchParams;
+    
+    const invalidDestinations = countSubstitutions(htmlTemplate) > 0 ? validateSubstitutions(htmlTemplate, destinationArray) : [];
 
     const payload = {
         'from': {
@@ -166,12 +176,14 @@ const assembleDispatchPayload = (dispatchParams, destinationArray) => {
 
     const personalizationsArray = [];
     destinationArray.forEach((destination) => {
-        const substitutions = destination.templateVariables;
-        substitutions.subject = subject;
-        personalizationsArray.push({
-            to: [{ email: destination.emailAddress }],
-            substitutions
-        });
+        if (!invalidDestinations.includes(destination)) {
+            const substitutions = destination.templateVariables;
+            substitutions.subject = subject;
+            personalizationsArray.push({
+                to: [{ email: destination.emailAddress }],
+                substitutions
+            });
+        }
     });
 
     payload.personalizations = personalizationsArray;
@@ -188,7 +200,7 @@ const assembleDispatchPayload = (dispatchParams, destinationArray) => {
         payload.attachments = attachments;
     }
 
-    return payload;
+    return { payload, invalidDestinations };
 };
 
 const fetchAttachmentType = (fileExtension) => config.get('sendgrid.supportedAttachments')[fileExtension];
@@ -243,8 +255,19 @@ const assembleDispatchParams = async ({ subject, templateKeyBucket, htmlTemplate
 
 const formatResult = (result) => ({ statusCode: result[0].statusCode, statusMessage: result[0].statusMessage });
 
+const dispatchEmailChunk = async (chunk, params) => {
+    const { payload, invalidDestinations } = assembleDispatchPayload(params, chunk);
+    validateDispatchPayload(payload);
+    const resultOfDispatch = await sendGridMail.send(payload);
+    return { result: formatResult(resultOfDispatch), invalidDestinations };
+};
+
 /**
- * This function sends emails to provided addresses. The email template is stored remotely and a locator key-bucket pair is required.
+ * This function sends emails to provided addresses. The email template is stored remotely and a locator key-bucket pair is required. In order to use substitutions in the email template
+ * simply enclose the name of the template variable in double braces, then add the variable name and value to the destination objects temblateVariable object within the destinationArray.
+ * For example, if your template was 'Greetings {{user}}.' then in order to insert a different username per address, the destination object related to this template would look
+ * like { emailAddress: user@email, templateVariables: { user: 'Vladimir' } }. The user will then recieve an email: 'Greetings Vladimir'. Multiple substitutions are supported.
+ * This format also applies the below sendEmails function.
  * @param    {object}  event 
  * @property {object}  templateKeyBucket An object whose properties are the s3 key and bucket containing the emails html template.
  * @property {string}  textTemplate The emails text template. String formatting requires the name of the varriable enclosed in double braces i.e {{variableName}}. This also applies to the html template on S3.
@@ -262,31 +285,26 @@ module.exports.sendEmailsFromSource = async (event) => {
         const { templateKeyBucket, textTemplate } = templates;
 
         const invalidDestinationArray = validateDispatchEvent({ subject, templateKeyBucket, destinationArray, attachments });
-        const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(JSON.stringify(destination)));
+        const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(destination));
         if (sanitizedDestinationArray.length === 0) {
             throw new Error('No valid destinations found');
         }
 
-        const assembledDispatchParams = await assembleDispatchParams({ subject, templateKeyBucket, textTemplate, attachments, sourceDetails });
+        const dispatchParams = await assembleDispatchParams({ subject, templateKeyBucket, textTemplate, attachments, sourceDetails });
         
-        validateDispatchParams(assembledDispatchParams);
+        validateDispatchParams(dispatchParams);
 
         const dispatchChunks = chunkDispatchRecipients(sanitizedDestinationArray);
         /* eslint-enable id-length */
 
-        // todo: dispatch in parallel
-        for (const chunk of dispatchChunks) {
-            const dispatchPayload = assembleDispatchPayload(assembledDispatchParams, chunk);
-            validateDispatchPayload(dispatchPayload);
-            /* eslint-disable no-await-in-loop */
-            const resultOfDispatch = await sendGridMail.send(dispatchPayload);
-            /* eslint-enable no-await-in-loop */
-            const formattedResult = formatResult(resultOfDispatch);
-            logger('Result of email send: ', formattedResult);
-        }
+        const dispatchResult = await Promise.all(dispatchChunks.map((chunk) => dispatchEmailChunk(chunk, dispatchParams)));
+        logger('Dispatch result:', JSON.stringify(dispatchResult));
         
-        const failedAddresses = invalidDestinationArray.map((destinationDetails) => destinationDetails.emailAddress);
-        // todo: DLQ then SES failed addresses
+        const failedAddresses = [
+            ...invalidDestinationArray,
+            ...dispatchResult.reduce((failedArray, result) => [...failedArray, ...result.invalidDestinations], [])
+        ];
+        // todo: Add addresses in failed chunks to failedAdresses, DLQ then SES failed addresses
 
         return { result: 'SUCCESS', failedAddresses };
     } catch (err) {
@@ -313,29 +331,26 @@ module.exports.sendEmails = async (event) => {
         const { htmlTemplate, textTemplate } = templates;
 
         const invalidDestinationArray = validateDispatchEvent({ subject, htmlTemplate, destinationArray, attachments });
-        const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(JSON.stringify(destination)));
+        const sanitizedDestinationArray = destinationArray.filter((destination) => !invalidDestinationArray.includes(destination));
         if (sanitizedDestinationArray.length === 0) {
             throw new Error('No valid destinations found');
         }
 
-        const assembledDispatchParams = await assembleDispatchParams({ subject, htmlTemplate, textTemplate, attachments, sourceDetails });
+        const dispatchParams = await assembleDispatchParams({ subject, htmlTemplate, textTemplate, attachments, sourceDetails });
         
-        validateDispatchParams(assembledDispatchParams);
+        validateDispatchParams(dispatchParams);
 
-        const dispatchChunks = chunkDispatchRecipients(destinationArray);
+        const dispatchChunks = chunkDispatchRecipients(sanitizedDestinationArray);
         /* eslint-enable id-length */
 
-        for (const chunk of dispatchChunks) {
-            const dispatchPayload = assembleDispatchPayload(assembledDispatchParams, chunk);
-            validateDispatchPayload(dispatchPayload);
-            /* eslint-disable no-await-in-loop */
-            const resultOfDispatch = await sendGridMail.send(dispatchPayload);
-            /* eslint-enable no-await-in-loop */
-            const formattedResult = formatResult(resultOfDispatch);
-            logger('Result of email send: ', formattedResult);
-        }
+        const dispatchResult = await Promise.all(dispatchChunks.map((chunk) => dispatchEmailChunk(chunk, dispatchParams)));
+        logger('Dispatch result:', JSON.stringify(dispatchResult));
+        
+        const failedAddresses = [
+            ...invalidDestinationArray,
+            ...dispatchResult.reduce((failedArray, result) => [...failedArray, ...result.invalidDestinations], [])
+        ];
 
-        const failedAddresses = invalidDestinationArray.map((destinationDetails) => destinationDetails.emailAddress);
 
         return { result: 'SUCCESS', failedAddresses };
     } catch (err) {
@@ -344,7 +359,7 @@ module.exports.sendEmails = async (event) => {
     }
 };
 
-const dispatchEmailChunk = async (chunk) => {
+const dispatchEmailMessageChunk = async (chunk) => {
     const payload = chunk.reduce((array, msg) => ([...array, { to: msg.to, from: msg.from, subject: msg.subject, text: msg.text, html: msg.html }]), []); // filters out messageId property
     const result = await sendGridMail.send(payload);
     return { result: JSON.stringify(result), messageIds: chunk.map((msg) => msg.messageId) };
@@ -371,7 +386,7 @@ module.exports.sendEmailMessages = async (event) => {
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
         logger('Created chunks:', messageChunks.map((chunk) => chunk.length));
-        const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailChunk(chunk)));
+        const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailMessageChunk(chunk)));
 
         const failedChunks = dispatchResult.map((chunk) => {
             const result = JSON.parse(chunk.result)[0];
