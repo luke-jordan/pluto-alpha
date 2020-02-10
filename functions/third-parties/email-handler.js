@@ -370,7 +370,7 @@ module.exports.sendEmailMessages = async (event) => {
 
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
-        logger('Created chunks:', messageChunks);
+        logger('Created chunks:', messageChunks.map((chunk) => chunk.length));
         const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailChunk(chunk)));
 
         const failedChunks = dispatchResult.map((chunk) => {
@@ -379,7 +379,7 @@ module.exports.sendEmailMessages = async (event) => {
                 return chunk.messageIds;
             }
             return null;
-        }).filter((result) => result !== null).flat();
+        }).filter((result) => result !== null).reduce((flatArray, currentArray) => [...flatArray, ...currentArray], []);
 
         const failedMessages = emailMessages.filter((message) => !validMessageIds.includes(message.messageId) || failedChunks.includes(message.messageId));
         logger('Failed messages:', failedMessages.length);
