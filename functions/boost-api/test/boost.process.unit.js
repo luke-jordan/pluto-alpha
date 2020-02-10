@@ -137,6 +137,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
                 fromType: 'BONUS_POOL',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
+                transactionType: 'BOOST_REDEMPTION',
                 relatedEntityType: 'BOOST_REDEMPTION',
                 settlementStatus: 'SETTLED',
                 recipients: [
@@ -279,6 +280,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 floatId: mockBoostToFromPersistence.fromFloatId,
                 fromId: mockBoostToFromPersistence.fromBonusPoolId,
                 fromType: 'BONUS_POOL',
+                transactionType: 'BOOST_REDEMPTION',
                 relatedEntityType: 'BOOST_REDEMPTION',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,

@@ -104,6 +104,11 @@ resource "aws_iam_role_policy_attachment" "message_push_user_event_publish_polic
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
+resource "aws_iam_role_policy_attachment" "message_push_history_aggregate_invoke" {
+  role = aws_iam_role.message_push_role.name
+  policy_arn = aws_iam_policy.lambda_invoke_history_aggregate_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "message_push_secret_get" {
   role = "${aws_iam_role.message_push_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"

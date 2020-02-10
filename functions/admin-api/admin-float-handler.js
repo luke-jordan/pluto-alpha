@@ -332,6 +332,7 @@ const accrueDifferenceToUsers = async ({ clientId, floatId, amountDef, adminUser
             ...amountDef,
             identifier: logId,
             relatedEntityType: 'ADMIN_INSTRUCTION',
+            transactionType: 'ADMIN_BALANCE_RECON',
             recipients: [{
                 recipientType: 'ALL_USERS',
                 amount: amountDef.amount
