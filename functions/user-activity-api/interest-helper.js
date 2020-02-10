@@ -5,16 +5,16 @@ const dynamodb = require('./persistence/dynamodb');
 const moment = require('moment');
 const DAYS_IN_A_YEAR = 365;
 const opsUtil = require('ops-util-common');
-const Decimal = require('decimal.js');
+const DecimalLight = require('decimal.js-light');
 
 const calculateInterestRate = async (floatProjectionVars) => {
     logger(`Calculate interest rate for float projection vars: ${JSON.stringify(floatProjectionVars)}`);
     const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
-    const annualAccrualRateNominalGross = new Decimal(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
-    const floatDeductions = new Decimal(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
+    const annualAccrualRateNominalGross = new DecimalLight(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
+    const floatDeductions = new DecimalLight(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
     plus(floatProjectionVars.prudentialFactor);
 
-    const interestRateAsBigNumber = annualAccrualRateNominalGross.times(new Decimal(1).minus(floatDeductions));
+    const interestRateAsBigNumber = annualAccrualRateNominalGross.times(new DecimalLight(1).minus(floatDeductions));
     logger(`Interest rate as big number: ${interestRateAsBigNumber}`);
     return interestRateAsBigNumber;
 };
@@ -22,10 +22,10 @@ const calculateInterestRate = async (floatProjectionVars) => {
 const calculateCompoundInterestUsingDayInterval = (amount, interestRateAsBigNumber, numberOfDays) => {
     logger(`Calculate compound interest for amount: ${amount} at 
     daily interest rate: ${interestRateAsBigNumber} for total days: ${numberOfDays}`);
-    const amountAsBigNumber = new Decimal(amount);
-    const baseCompoundRate = new Decimal(1).plus(interestRateAsBigNumber);
+    const amountAsBigNumber = new DecimalLight(amount);
+    const baseCompoundRate = new DecimalLight(1).plus(interestRateAsBigNumber);
 
-    const baseCompoundRateAfterGivenDays = baseCompoundRate.pow(new Decimal(numberOfDays).dividedBy(DAYS_IN_A_YEAR));
+    const baseCompoundRateAfterGivenDays = baseCompoundRate.pow(new DecimalLight(numberOfDays).dividedBy(DAYS_IN_A_YEAR));
     logger('base compound rate after given days', baseCompoundRateAfterGivenDays);
 
     const compoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenDays).minus(amountAsBigNumber);

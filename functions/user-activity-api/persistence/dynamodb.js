@@ -5,7 +5,7 @@ const logger = require('debug')('pluto:activity:dynamo');
 
 const dynamoCommon = require('dynamo-common');
 const Redis = require('ioredis');
-const CACHE_TTL_IN_SECONDS = 3600;
+const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.clientFloat');
 
 const relevantFloatColumns = ['accrualRateAnnualBps', 
     'bonusPoolShareOfAccrual', 
@@ -21,11 +21,17 @@ const initiateCacheConnection = async () => {
     logger('Initiating connection to cache');
     try {
         // TODO: change `retryStrategy` to default when redis-connection is set
-        const connectionToCache = new Redis({ port: config.get('cache.port'), host: config.get('cache.host'), retryStrategy: () => `dont retry`});
+        const connectionToCache = new Redis({ 
+            port: config.get('cache.port'), 
+            host: config.get('cache.host'), 
+            retryStrategy: () => `dont retry`, 
+            keyPrefix: `${config.get('cache.keyPrefixes.clientFloat')}::`
+        });
         logger('Successfully initiated connection to cache');
         return connectionToCache;
     } catch (error) {
         logger(`Error while initiating connection to cache. Error: ${JSON.stringify(error.message)}`);
+        return null;
     }
 };
 
@@ -43,29 +49,29 @@ const fetchFloatVarsForBalanceCalcFromDB = async (clientId, floatId) => {
     return rowFromDynamo;
 };
 
-const fetchFloatVarsForBalanceCalcFromCache = async (cacheKeyForFloatVars) => {
+const fetchFloatVarsForBalanceCalcFromCache = async (cacheKeyWithoutPrefixForFloatVars) => {
     logger(`Fetching 'float vars for balance calc' from cache`);
     const cache = await initiateCacheConnection();
     if (!cache || cache.status === 'connecting') {
         return { cache: null, responseFromCache: null };
     }
 
-    const responseFromCache = await cache.get(cacheKeyForFloatVars);
+    const responseFromCache = await cache.get(cacheKeyWithoutPrefixForFloatVars);
     return { cache, responseFromCache };
 };
 
 const fetchFloatVarsForBalanceCalcFromCacheOrDB = async (clientId, floatId) => {
     logger(`Fetching 'float vars for balance calc' from database or cache`);
-    const cacheKeyForFloatVars = `${clientId}_${floatId}_float_vars_for_balance_calc`;
+    const cacheKeyWithoutPrefixForFloatVars = `${clientId}_${floatId}`;
     try {
         // TODO: simplify logic when redis-connection is setup
-        const { cache, responseFromCache } = await fetchFloatVarsForBalanceCalcFromCache(cacheKeyForFloatVars);
+        const { cache, responseFromCache } = await fetchFloatVarsForBalanceCalcFromCache(cacheKeyWithoutPrefixForFloatVars);
         if (!responseFromCache) {
-            logger(`${cacheKeyForFloatVars} NOT found in cache`);
+            logger(`${cacheKeyWithoutPrefixForFloatVars} NOT found in cache`);
             const floatProjectionVars = await fetchFloatVarsForBalanceCalcFromDB(clientId, floatId);
             if (cache) {
                 logger(`Successfully fetched 'float vars for balance calc' from database and stored in cache`);
-                await cache.set(cacheKeyForFloatVars, JSON.stringify(cacheKeyForFloatVars), 'EX', CACHE_TTL_IN_SECONDS);
+                await cache.set(cacheKeyWithoutPrefixForFloatVars, JSON.stringify(cacheKeyWithoutPrefixForFloatVars), 'EX', CACHE_TTL_IN_SECONDS);
             }
 
             logger(`Successfully fetched 'float vars for balance calc' from database and NOT stored in cache`);
