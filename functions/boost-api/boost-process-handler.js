@@ -139,8 +139,10 @@ const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = 
         currency: boost.boostCurrency,
         unit: boost.boostUnit,
         identifier: boost.boostId,
-        transactionType,
         relatedEntityType: 'BOOST_REDEMPTION',
+        allocType: transactionType, // for float allocation
+        allocState: 'SETTLED',
+        transactionType, // for matching account records
         settlementStatus: 'SETTLED',
         recipients
     };

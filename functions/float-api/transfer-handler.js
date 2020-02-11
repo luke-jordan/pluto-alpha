@@ -50,6 +50,7 @@ const allocationForUser = (recipient, instruction) => ({
     accountId: recipient.recipientId,
     allocType: instruction.transactionType,
     allocState: instruction.settlementStatus,
+    settlementStatus: instruction.settlementStatus,
     relatedEntityType: instruction.relatedEntityType,
     relatedEntityId: instruction.identifier
 });
@@ -60,6 +61,7 @@ const allUserAllocation = (instruction) => ({
     totalAmount: instruction.recipients[0].amount,
     currency: instruction.currency,
     unit: instruction.unit,
+    settlementStatus: instruction.settlementStatus,
     allocType: instruction.transactionType,
     backingEntityType: instruction.relatedEntityType,
     backingEntityIdentifer: instruction.identifider,
