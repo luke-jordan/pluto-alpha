@@ -4,6 +4,7 @@ const logger = require('debug')('jupiter:user-notifications:create-msg-instructi
 const uuid = require('uuid/v4');
 const config = require('config');
 const moment = require('moment');
+const stringify = require('json-stable-stringify');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -179,7 +180,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             FunctionName: 'message_user_create_once',
             InvocationType: 'Event',
             LogType: 'None',
-            Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
+            Payload: stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
         };
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
@@ -215,7 +216,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             FunctionName: 'message_user_create_once',
             InvocationType: 'Event',
             LogType: 'None',
-            Payload: JSON.stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
+            Payload: stringify({instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }]})
         };
 
         lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});

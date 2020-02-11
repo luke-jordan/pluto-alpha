@@ -908,11 +908,12 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
     });
 
     const validEmailMessage = {
-        to: 'user@email.org',
-        from: config.get('sendgrid.fromAddress'),
-        subject: 'Welcome to Jupiter',
-        text: 'Greetings. Welcome to jupiter',
-        html: '<p>Greetings. Welcome to jupiter</p>'
+        'to': 'user@email.org',
+        'from': config.get('sendgrid.fromAddress'),
+        'subject': 'Welcome to Jupiter',
+        'text': 'Greetings. Welcome to jupiter',
+        'html': '<p>Greetings. Welcome to jupiter</p>',
+        'mail_settings': { 'sandbox_mode': { 'enable': true }}
     };
 
     beforeEach(() => {
@@ -938,8 +939,6 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         };
 
         const result = await handler.sendEmailMessages(testEvent);
-
-        expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
         expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);

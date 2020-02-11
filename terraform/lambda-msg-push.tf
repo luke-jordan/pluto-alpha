@@ -43,6 +43,9 @@ resource "aws_lambda_function" "message_push" {
                 "hash": {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
+              },
+              "email": {
+                "fromAddress": "${var.messaging_source_email_address[terraform.workspace]}"
               }
           }
       )}"
@@ -104,9 +107,14 @@ resource "aws_iam_role_policy_attachment" "message_push_user_event_publish_polic
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
-resource "aws_iam_role_policy_attachment" "message_push_history_aggregate_invoke" {
+resource "aws_iam_role_policy_attachment" "message_push_other_invocation_policy" {
   role = aws_iam_role.message_push_role.name
-  policy_arn = aws_iam_policy.lambda_invoke_history_aggregate_access.arn
+  policy_arn = aws_iam_policy.message_push_lambda_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "message_push_fetch_profile_invoke_policy" {
+  role = aws_iam_role.message_push_role.name
+  policy_arn = var.user_profile_admin_policy_arn[terraform.workspace]
 }
 
 resource "aws_iam_role_policy_attachment" "message_push_secret_get" {

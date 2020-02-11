@@ -360,7 +360,12 @@ module.exports.sendEmails = async (event) => {
 };
 
 const dispatchEmailMessageChunk = async (chunk) => {
-    const payload = chunk.reduce((array, msg) => ([...array, { to: msg.to, from: msg.from, subject: msg.subject, text: msg.text, html: msg.html }]), []); // filters out messageId property
+    const defaultFrom = config.get('sendgrid.fromAddress');
+    const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: true } }};
+    const payload = chunk.reduce((array, msg) => ([
+        ...array, 
+        { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
+    ]), []); 
     const result = await sendGridMail.send(payload);
     return { result: JSON.stringify(result), messageIds: chunk.map((msg) => msg.messageId) };
 };
@@ -385,6 +390,7 @@ module.exports.sendEmailMessages = async (event) => {
 
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
+        
         logger('Created chunks:', messageChunks.map((chunk) => chunk.length));
         const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailMessageChunk(chunk)));
 

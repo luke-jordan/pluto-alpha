@@ -6,6 +6,9 @@ const logger = require('debug')('jupiter:messaging:push');
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
 
+const stringify = require('json-stable-stringify');
+const striptags = require('striptags');
+
 const rdsMainUtil = require('./persistence/rds.notifications');
 const rdsPickerUtil = require('./persistence/rds.msgpicker');
 
@@ -196,16 +199,17 @@ const fetchUserEmail = async (systemWideUserId) => {
     const profileFetchLambdaInvoke = {
         FunctionName: config.get('lambdas.fetchProfile'),
         InvocationType: 'RequestResponse',
-        Payload: JSON.stringify({ systemWideUserId })
+        Payload: stringify({ systemWideUserId, includeContactMethod: true })
     };
 
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     const userProfile = JSON.parse(profileFetchResult['Payload']);
-
-    return Reflect.has(userProfile, 'emailAddress') ? { systemWideUserId, emailAddress: userProfile.emailAddress } : null;
+    
+    return userProfile.contactType === 'EMAIL' ? { systemWideUserId, emailAddress: userProfile.contactMethod } : null;
 };
 
 const dispatchEmailMessages = async (emailMessages) => {
+    logger('Fuck off and die: ', emailMessages);
     const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages }, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
@@ -237,8 +241,8 @@ const sendPendingEmailMsgs = async () => {
             to: destinationMap[msg.destinationUserId],
             from: config.get('email.fromAddress'),
             subject: msg.title,
-            text: msg.body,
-            html: `<p>${msg.body}</p>`
+            text: striptags(msg.body),
+            html: msg.body
         }));
 
         const resultOfSend = await dispatchEmailMessages(messages);
@@ -265,6 +269,7 @@ const sendPendingEmailMsgs = async () => {
     }
 };
 
+// TODO THIS IS WRONG -- IT WAS SPECIFIED THAT THIS SHOULD STILL PICK THE MESSAGE ID NOT BE FREE FORM. FIX.
 const sendEmailsToSpecificUsers = async (params) => {
     const destinationUserIds = params.systemWideUserIds;
     const emailAddresses = await Promise.all(destinationUserIds.map((userId) => fetchUserEmail(userId)));
@@ -274,8 +279,8 @@ const sendEmailsToSpecificUsers = async (params) => {
         to: email.emailAddress,
         from: config.get('email.fromAddress'),
         subject: params.title,
-        text: params.body,
-        html: `<p>${params.body}</p>`
+        text: striptags(params.body),
+        html: params.body
     }));
 
     const resultOfSend = await dispatchEmailMessages(messages);

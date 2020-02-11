@@ -2,8 +2,10 @@
 
 const logger = require('debug')('jupiter:user-notifications:user-message-handler-test');
 // const config = require('config');
+
 const uuid = require('uuid/v4');
 const moment = require('moment');
+const stringify = require('json-stable-stringify');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -483,7 +485,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
     const mockMessageBase = {
         messageId: uuid(),
         title: 'Welcome to jupiter. ',
-        body: 'Greetings. Welcome to jupiter. ',
+        body: 'Greetings. Welcome to jupiter.',
         priority: 1
     };
 
@@ -570,7 +572,8 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         personalName: 'John',
         familyName: 'Doe',
         phoneNumber: '278384748264',
-        emailAddress: 'user@email.com'
+        contactType: 'EMAIL',
+        contactMethod: 'user@email.com'
     };
 
     const mockUserMessage = {
@@ -585,14 +588,14 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         FunctionName: 'email_bulk_dispatch',
         InvocationType: 'RequestResponse',
         LogType: 'None',
-        Payload: JSON.stringify({
+        Payload: stringify({
             emailMessages: [{
                 messageId: testMessageId,
                 to: 'user@email.com',
                 from: 'noreply@jupitersave.com',
-                subject: 'Welcome to jupiter. ',
-                text: 'Greetings. Welcome to jupiter. ',
-                html: '<p>Greetings. Welcome to jupiter. </p>'
+                subject: 'Welcome to jupiter.',
+                text: 'Greetings. Welcome to jupiter.',
+                html: '<p>Greetings. Welcome to jupiter.</p>'
             }]
         })
     };
@@ -600,8 +603,8 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     const mockMessageBase = {
         instructionId: testInstructionId,
         messageId: testMessageId,
-        title: 'Welcome to jupiter. ',
-        body: 'Greetings. Welcome to jupiter. '
+        title: 'Welcome to jupiter.',
+        body: '<p>Greetings. Welcome to jupiter.</p>'
     };
 
     beforeEach(() => {
@@ -639,7 +642,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENT');
         expect(bulkUpdateStatusStub.callCount).to.equal(4);
 
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(emailMessagesInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
 
@@ -658,16 +661,16 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
             messageId: testUserId,
             to: 'user@email.com',
             from: 'noreply@jupitersave.com',
-            subject: 'Welcome to jupiter. ',
-            text: 'Greetings. Welcome to jupiter. ',
-            html: '<p>Greetings. Welcome to jupiter. </p>'
+            subject: 'Welcome to jupiter.',
+            text: 'Greetings. Welcome to jupiter.',
+            html: '<p>Greetings. Welcome to jupiter.</p>'
         };
 
         const expectedInvocation = {
             FunctionName: 'email_bulk_dispatch',
             InvocationType: 'RequestResponse',
             LogType: 'None',
-            Payload: JSON.stringify({ emailMessages: [expectedEmail, expectedEmail] })
+            Payload: stringify({ emailMessages: [expectedEmail, expectedEmail] })
         };
 
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
@@ -689,8 +692,8 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         const testParams = {
             systemWideUserIds: [testUserId, testUserId],
             provider: mockProvider,
-            title: 'Welcome to jupiter. ',
-            body: 'Greetings. Welcome to jupiter. '
+            title: 'Welcome to jupiter.',
+            body: '<p>Greetings. Welcome to jupiter.</p>'
         };
 
         const result = await handler.sendOutboundMessages(testParams);
@@ -699,7 +702,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledThrice;
 
