@@ -36,13 +36,21 @@ module.exports.getNextMessage = async (destinationUserId, messageTypes) => {
     return result.map((msg) => transformMsg(msg));
 };
 
-module.exports.getPendingPushMessages = async () => {
+module.exports.getPendingOutboundMessages = async (messageType) => {
     const query = `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
         `deliveries_done < deliveries_max and display ->> 'type' = $2`;
-    const values = ['READY_FOR_SENDING', 'PUSH'];
+    const values = ['READY_FOR_SENDING', messageType];
     const resultOfQuery = await rdsConnection.selectQuery(query, values);
     return resultOfQuery.map((msg) => transformMsg(msg));
 };
+
+// module.exports.getPendingEmailMessages = async () => {
+//     const query = `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
+//         `deliveries_done < deliveries_max and display ->> 'type' = $2`;
+//     const values = ['READY_FOR_SENDING', 'EMAIL'];
+//     const resultOfQuery = await rdsConnection.selectQuery(query, values);
+//     return resultOfQuery.map((msg) => transformMsg(msg));
+// };
 
 module.exports.getInstructionMessage = async (destinationUserId, instructionId) => {
     const query = `select * from ${userMessageTable} where destination_user_id = $1 and instruction_id = $2`;
