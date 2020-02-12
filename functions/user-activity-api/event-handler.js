@@ -201,11 +201,9 @@ const safeEmailAttempt = async (eventBody) => {
 };
 
 // handling withdrawals by sending email
-const safeWithdrawalEmail = async (eventBody) => {
+const safeWithdrawalEmail = async (eventBody, bankAccountDetails) => {
     const { userId } = eventBody;
-    const key = `${config.get('cache.keyPrefixes.withdrawal')}::${userId}`;
-    const [cachedDetails, userProfile] = await Promise.all([redis.get(key), fetchUserProfile(userId, true)]);
-    const bankAccountDetails = JSON.parse(cachedDetails);
+    const userProfile = await fetchUserProfile(userId, true);
 
     const templateVariables = { ...bankAccountDetails };
     templateVariables.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
@@ -304,7 +302,7 @@ const createFinWorksAccount = async (userDetails) => {
     return JSON.parse(accountCreationResult['Payload']);
 };
 
-const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency, transactionId }) => {
+const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, currency, transactionId, bankDetails }) => {
     // still some stuff to work out here, e.g., in syncing up the account number, so rather catch & log, and let other actions pass
     try {
         const accountNumber = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
@@ -319,6 +317,9 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
         const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
 
         const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
+        if (operation === 'WITHDRAW') {
+            transactionDetails.bankDetails = bankDetails;
+        }
         const investmentInvocation = invokeLambda(config.get('lambdas.addTxToBalanceSheet'), { operation, transactionDetails });
         
         logger('lambda args:', investmentInvocation);
@@ -367,10 +368,18 @@ const handleSavingEvent = async (eventBody) => {
     await Promise.all(promisesToInvoke);
 };
 
+const obtainBankAccountDetails = async (userId) => {
+    const key = `${config.get('cache.keyPrefixes.withdrawal')}::${userId}`;
+    const cachedDetails = await redis.get(key);
+    return JSON.parse(cachedDetails);
+};
+
 const handleWithdrawalEvent = async (eventBody) => {
     logger('Withdrawal event triggered! Event body: ', eventBody);
 
-    await safeWithdrawalEmail(eventBody);
+    const bankDetails = await obtainBankAccountDetails(eventBody.userId);
+
+    await safeWithdrawalEmail(eventBody, bankDetails);
 
     const processingPromises = [];
     const boostProcessInvocation = assembleBoostProcessInvocation(eventBody);
@@ -378,7 +387,7 @@ const handleWithdrawalEvent = async (eventBody) => {
 
     const accountId = eventBody.context.accountId;
     const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
-    processingPromises.push(addInvestmentToBSheet({ operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency }));
+    processingPromises.push(addInvestmentToBSheet({ operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency, bankDetails }));
 
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
@@ -407,6 +416,24 @@ const handleAccountOpenedEvent = async (eventBody) => {
     logger(`Result of user account update: ${accountUpdateResult}`);
 };
 
+const handleBoostRedeemedEvent = async (eventBody) => {
+    logger('Handling boost redeemed event: ', eventBody);
+    const { accountId, boostAmount } = eventBody.context;
+
+    const bSheetReference = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
+    const [amount, unit, currency] = boostAmount.split('::');
+    const wholeCurrencyAmount = parseInt(amount, 10) / UNIT_DIVISORS_TO_WHOLE[unit];
+
+    const transactionDetails = { accountNumber: bSheetReference, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
+    const lambdaPayload = { operation: 'BOOST', transactionDetails };
+
+    const investmentInvocation = invokeLambda(config.get('lambdas.addTxToBalanceSheet'), lambdaPayload);
+    logger('Payload for balance sheet lambda: ', investmentInvocation);
+
+    const bSheetResult = await lambda.invoke(investmentInvocation).promise();
+    logger('Balance sheet result: ', bSheetResult);
+};
+
 /**
  * This function handles successful account opening, saving, and withdrawal events. It is typically called by SNS. The following properties are expected in the SNS message:
  * @param {object} snsEvent An SNS event object containing our parameter(s) of interest in its Message property.
@@ -425,6 +452,10 @@ module.exports.handleUserEvent = async (snsEvent) => {
                 break;
             case 'USER_CREATED_ACCOUNT':
                 await handleAccountOpenedEvent(eventBody);
+                break;
+            case 'BOOST_REDEEMED':
+                logger('*** Handling BOOST redeemed event');
+                await handleBoostRedeemedEvent(eventBody);
                 break;
             default:
                 logger(`We don't handle ${eventType}, let it pass`);

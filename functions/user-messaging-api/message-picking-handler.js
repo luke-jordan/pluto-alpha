@@ -394,6 +394,11 @@ module.exports.updateUserMessage = async (event) => {
                 response = { statusCode: 200, body: JSON.stringify(bodyOfResponse) };
                 break;
             }
+            case 'ACTED': {
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'ACTED' });
+                response = { statusCode: 200 };
+                break;
+            }
             default:
                 response = { statusCode: 400, body: 'UNKNOWN_ACTION' };
         }

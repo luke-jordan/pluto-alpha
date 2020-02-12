@@ -305,6 +305,7 @@ describe('User account allocation', () => {
         currency: 'ZAR',
         unit: constants.floatUnits.DEFAULT,
         allocatedToType: constants.entityTypes.END_USER_ACCOUNT,
+        allocType: constants.floatTransTypes.BOOST_REDEMPTION,
         relatedEntityType: constants.entityTypes.ACCRUAL_EVENT,
         relatedEntityId: common.testValidAccrualId,
         logId: testLogId
@@ -313,7 +314,6 @@ describe('User account allocation', () => {
     const generateUserAllocationRequests = (amountAllocations) => {
         const numberUsers = amountAllocations.length;
         const accountIds = generateUids(numberUsers);
-        // logger('Base alloc request: ', baseAllocationRequest);
         const requests = amountAllocations.map((amount, idx) => {
             const newRequest = JSON.parse(JSON.stringify(baseAllocationRequest));
             newRequest.floatTxId = uuid();
@@ -346,12 +346,13 @@ describe('User account allocation', () => {
     it('Persists a large number of allocations correctly', async () => {
         const floatQueryDef = { ...baseFloatAllocationQueryDef };
         const allocRequests = generateAllocations(10, 100 * 100 * 100); // a hundred rand in hundredth cents (as daily interest, equals ind account of R1m roughly)
-        
+        logger('Requests: ', allocRequests);
+
         floatQueryDef.rows = allocRequests.map((request) => ({
             'transaction_id': request.floatTxId,
             'client_id': common.testValidClientId,
             'float_id': common.testValidFloatId,
-            't_type': constants.floatTransTypes.ALLOCATION,
+            't_type': constants.floatTransTypes.BOOST_REDEMPTION,
             't_state': constants.floatTxStates.SETTLED,
             'amount': request.amount,
             'currency': request.currency,
@@ -367,7 +368,7 @@ describe('User account allocation', () => {
         accountQueryDef.rows = allocRequests.map((request) => ({
             'transaction_id': request.accountTxId,
             'account_id': request.accountId,
-            'transaction_type': 'FLOAT_ALLOCATION',
+            'transaction_type': 'BOOST_REDEMPTION',
             'settlement_status': 'ACCRUED',
             'settlement_time': null,
             'amount': request.amount,

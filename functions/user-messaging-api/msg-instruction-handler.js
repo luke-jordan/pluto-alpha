@@ -20,7 +20,7 @@ const validateMessageSequence = (template) => {
     const standardSequenceProperties = ['title', 'body', 'display', 'followsPriorMessage', 'hasFollowingMessage'];
 
     if (!Array.isArray(messageSequence)) {
-        throw new Error('Messages sequence must be contained within an array');
+        throw new Error('Message sequence must be contained within an array');
     }
 
     if (messageSequence.length === 0) {

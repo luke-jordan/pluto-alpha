@@ -3,6 +3,8 @@
 const config = require('config');
 const logger = require('debug')('jupiter:message:util');
 
+const stringify = require('json-stable-stringify');
+
 module.exports.paramRegex = /#{(?<param>[^}]*)}/g;
 
 const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
@@ -43,6 +45,6 @@ module.exports.lambdaInvocation = (functionName, payload, requestResponse = fals
     FunctionName: functionName,
     InvocationType: requestResponse ? 'RequestResponse' : 'Event',
     LogType: logs ? 'Tail' : 'None',
-    Payload: JSON.stringify(payload)
+    Payload: stringify(payload)
 });
 

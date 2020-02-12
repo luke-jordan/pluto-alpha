@@ -219,6 +219,7 @@ module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cash
  * @param {string} currency The currency involved
  * @param {string} unit The units involved
  * @param {string} allocType The type of the allocation (e.g., accrual), recorded as transaction type
+ * @param {string} allocState The status of the allocation (also recorded in the accounts table under settlement status)
  * @param {string} relatedEntityType A related entity type (e.g., if recording based on an external accrual tx)
  * @param {string} relatedEntityId The id of the related entity type (if present)
  */
@@ -275,7 +276,7 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
             tags.push(`FLOAT_LOG_ID::${request.logId}`);
         }
 
-        const settlementStatus = request.settlementStatus || 'ACCRUED';
+        const settlementStatus = request.settlementStatus || request.allocState || 'ACCRUED';
         const settlementTime = settlementStatus === 'SETTLED' ? moment().format() : null;
         return {
             'transaction_id': request.accountTxId || uuid(),
