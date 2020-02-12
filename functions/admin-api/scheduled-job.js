@@ -3,15 +3,11 @@
 const logger = require('debug')('jupiter:admin:scheduled');
 const config = require('config');
 const moment = require('moment');
-
-const BigNumber = require('bignumber.js');
-
+const DecimalLight = require('decimal.js-light');
 const rdsAccount = require('./persistence/rds.account');
 const rdsFloat = require('./persistence/rds.float');
 const dynamoFloat = require('./persistence/dynamo.float');
-
 const floatConsistency = require('./admin-float-consistency');
-
 const opsUtil = require('ops-util-common');
 const publisher = require('publish-common');
 
@@ -53,7 +49,7 @@ const expireBoosts = async () => {
     ));
 
     await Promise.all(logPublishPromises);
-    return { result: 'EXPIRED_BOOSTS', boostsExpired: expireBoosts.length };
+    return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };
 };
 
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
@@ -73,24 +69,24 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     // see the balance handler for a more detailed & commented version
     const accrualRateAnnualBps = clientFloatInfo.accrualRateAnnualBps;
     const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
-    const annualAccrualRateNominalGross = new BigNumber(accrualRateAnnualBps).dividedBy(basisPointDivisor);
+    const annualAccrualRateNominalGross = new DecimalLight(accrualRateAnnualBps).dividedBy(basisPointDivisor);
     // note : assumes the annual rate is simple, not effective
     const dailyAccrualRateNominalNet = annualAccrualRateNominalGross.dividedBy(365);
     
     const calculationTimeMillis = moment().valueOf();
     const millisSinceLastCalc = calculationTimeMillis - lastFloatAccrualTime.valueOf();
     logger(`Last calculation was at ${lastFloatAccrualTime.format()}, which is ${millisSinceLastCalc} msecs ago, and there are ${MILLIS_IN_DAY} msecs in a day`);
-    const portionOfDay = new BigNumber(millisSinceLastCalc).dividedBy(new BigNumber(MILLIS_IN_DAY));
+    const portionOfDay = new DecimalLight(millisSinceLastCalc).dividedBy(new DecimalLight(MILLIS_IN_DAY));
     logger(`That works out to ${portionOfDay.toNumber()} as a proportion of a day, since the last calc`);
     const accrualRateToApply = dailyAccrualRateNominalNet.times(portionOfDay);
     logger(`And hence, from an annual ${annualAccrualRateNominalGross.toNumber()}, an amount to apply of ${accrualRateToApply.toNumber()}`);
 
-    const todayAccrualAmount = new BigNumber(floatAmountHunCent).times(accrualRateToApply);
+    const todayAccrualAmount = new DecimalLight(floatAmountHunCent).times(accrualRateToApply);
     logger(`Another check: ${todayAccrualAmount.toNumber()}, rate to apply: ${accrualRateToApply.toNumber()}`);
     logger(`Altogether, with annual bps of ${accrualRateAnnualBps}, and a float balance of ${floatAmountHunCent}, we have an accrual of ${todayAccrualAmount.toNumber()}`);
 
     const identifierToUse = `SYSTEM_CALC_DAILY_${calculationTimeMillis}`;
-    
+
     // add calculation basis for logging, notification email, etc. 
     const calculationBasis = {
         floatAmountHunCent,
@@ -103,7 +99,7 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     return {
         clientId: clientFloatInfo.clientId,
         floatId: clientFloatInfo.floatId,
-        accrualAmount: todayAccrualAmount.decimalPlaces(0).toNumber(),
+        accrualAmount: todayAccrualAmount.toDecimalPlaces(0).toNumber(),
         currency: clientFloatInfo.currency,
         unit: 'HUNDREDTH_CENT',
         referenceTimeMillis: calculationTimeMillis,
@@ -187,7 +183,7 @@ const initiateFloatAccruals = async () => {
 
     logger('Results of accruals: ', accrualInvocationResults);
 
-    // todo: use more robust templatting so can handle indefinite length arrays, for now just do this one
+    // todo: use more robust templating so can handle indefinite length arrays, for now just do this one
     const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualInvocations[0], accrualInvocationResults[0]);
 
     const emailResult = await publisher.sendSystemEmail({
