@@ -22,6 +22,7 @@ const rdsExpireHangingTransactionsStub = sinon.stub();
 const expireBoostsStub = sinon.stub();
 const publishMultiUserEventStub = sinon.stub();
 const checkAllFloatsStub = sinon.stub();
+const fetchUserIdsForAccountsStub = sinon.stub();
 
 const MILLIS_IN_DAY = 86400000;
 const DAYS_IN_A_YEAR = 365;
@@ -42,7 +43,8 @@ const handler = proxyquire('../scheduled-job', {
     },
     './persistence/rds.account': {
         'expireHangingTransactions': rdsExpireHangingTransactionsStub,
-        'expireBoosts': expireBoostsStub
+        'expireBoosts': expireBoostsStub,
+        'fetchUserIdsForAccounts': fetchUserIdsForAccountsStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient
@@ -79,7 +81,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
 
     beforeEach(() => helper.resetStubs(
         listClientFloatsStub, getFloatBalanceAndFlowsStub, getLastFloatAccrualTimeStub, lamdbaInvokeStub, momentStub, sendSystemEmailStub,
-        rdsExpireHangingTransactionsStub, expireBoostsStub, publishMultiUserEventStub, checkAllFloatsStub
+        rdsExpireHangingTransactionsStub, expireBoostsStub, publishMultiUserEventStub, checkAllFloatsStub, fetchUserIdsForAccountsStub
     ));
 
     it('should run regular job - accrue float successfully', async () => {
@@ -194,16 +196,19 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        };
        const testAccountId = uuid();
        const testBoostId = uuid();
-        const expectedBoosts = [{ boostId: testBoostId, accountId: testAccountId }];
+       const expectedBoosts = [{ boostId: testBoostId, accountId: testAccountId }];
+       const testUserIdAccounts = { accountId: testAccountId };
 
-        expireBoostsStub.withArgs().resolves(expectedBoosts);
-        publishMultiUserEventStub.withArgs().resolves({});
+       expireBoostsStub.withArgs().resolves(expectedBoosts);
+       fetchUserIdsForAccountsStub.withArgs().resolves(testUserIdAccounts);
+       publishMultiUserEventStub.withArgs().resolves({});
 
        const result = await handler.runRegularJobs(testEvent);
        expect(result).to.exist;
        expect(result).to.have.property('statusCode', 200);
        expect(result.body).to.deep.equal([{ result: 'EXPIRED_BOOSTS', boostsExpired: expectedBoosts.length }]);
        expect(expireBoostsStub).to.have.been.calledOnce;
+       expect(fetchUserIdsForAccountsStub).to.have.been.calledOnceWithExactly([testAccountId]);
        expect(publishMultiUserEventStub).to.have.been.calledOnce;
     });
 
