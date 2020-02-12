@@ -418,7 +418,7 @@ const handleAccountOpenedEvent = async (eventBody) => {
 
 const handleBoostRedeemedEvent = async (eventBody) => {
     logger('Handling boost redeemed event: ', eventBody);
-    const { accountId, boostAmount } = eventBody;
+    const { accountId, boostAmount } = eventBody.context;
 
     const bSheetReference = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
     const [amount, unit, currency] = boostAmount.split('::');

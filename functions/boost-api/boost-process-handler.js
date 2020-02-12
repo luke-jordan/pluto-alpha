@@ -275,7 +275,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
             boostUpdateTimeMillis: boostUpdateTime.valueOf(),
             boostAmount: `${boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
             transferResults,
-            eventContext: event.eventContext
+            triggeringEventContext: event.eventContext
         };
         return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, { initiator, context });
     });

@@ -342,7 +342,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 boostCategory: 'TIME_LIMITED',
                 boostUpdateTimeMillis: updateProcessedTime.valueOf(),
                 transferResults: expectedAllocationResult[testBoostId],
-                eventContext: testEvent.eventContext
+                triggeringEventContext: testEvent.eventContext
             }
         };
         publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
