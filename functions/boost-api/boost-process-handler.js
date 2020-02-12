@@ -264,12 +264,16 @@ const generateMessageSendInvocation = (messageInstructions) => ({
 });
 
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event }) => {
-    const eventType = `${boost.boostType}_REDEEMED`;
+    const eventType = `BOOST_REDEEMED`;
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
         const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
+            accountId,
             boostId: boost.boostId,
+            boostType: boost.boostType,
+            boostCategory: boost.boostCategory,
             boostUpdateTimeMillis: boostUpdateTime.valueOf(),
+            boostAmount: `${boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
             transferResults,
             eventContext: event.eventContext
         };

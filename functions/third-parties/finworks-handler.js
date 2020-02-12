@@ -11,6 +11,22 @@ const s3 = new AWS.S3();
 
 const SUCCESS_RESPONSES = [200, 201];
 
+const BANK_BRANCH_CODES = {
+    'FNB': '250655',
+    'ABSA': '632005',
+    'STANDARD': '051001',
+    'NEDBANK': '198765',
+    'CAPITEC': '470010'
+};
+
+const FINWORKS_NAMES = {
+    'FNB': 'First National Bank',
+    'ABSA': 'ABSA',
+    'STANDARD': 'Standard Bank',
+    'NEDBANK': 'Nedbank',
+    'CAPITEC': 'Capitec'
+};
+
 const fetchAccessCreds = async () => {
     const bucket = config.get('finworks.s3.bucket');
     const [crt, pem] = await Promise.all([
@@ -60,26 +76,43 @@ module.exports.createAccount = async (event) => {
     }
 };
 
+const assembleAddMoneyOptions = async (event, endPointTemplate) => {
+    const { accountNumber, amount, currency, unit } = opsUtil.extractParamsFromEvent(event);
+
+    const body = { amount, unit, currency };
+
+    const [crt, pem] = await fetchAccessCreds();
+    const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(endPointTemplate, accountNumber)}`;
+    logger('Assembled endpoint:', endpoint);
+
+    const options = assembleRequest('POST', endpoint, { body, crt, pem });
+    const response = await request(options);
+
+    logger('Got response:', response.toJSON());
+
+    if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
+        throw new Error(JSON.stringify(response.body));
+    }
+
+    return response;
+};
+
 module.exports.addCash = async (event) => {
     try {
-        const { accountNumber, amount, currency, unit } = opsUtil.extractParamsFromEvent(event);
-
-        const body = { amount, unit, currency };
-
-        const [crt, pem] = await fetchAccessCreds();
-        const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.addCash'), accountNumber)}`;
-        logger('Assembled endpoint:', endpoint);
-
-        const options = assembleRequest('POST', endpoint, { body, crt, pem });
-        const response = await request(options);
-        logger('Got response:', response.toJSON());
-
-        if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
-            throw new Error(JSON.stringify(response.body));
-        }
-
+        const response = await assembleAddMoneyOptions(event, config.get('finworks.endpoints.addCash'));
+        logger('Response from generic method for add cash: ', response);
         return response.body;
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { result: 'ERROR', details: err.message };
+    }
+};
 
+module.exports.addBoost = async (event) => {
+    try {
+        const response = await assembleAddMoneyOptions(event, config.get('finworks.endpoints.addBoost'));
+        logger('Response from generic method for boost: ', response);
+        return response.body;
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERROR', details: err.message };
@@ -90,16 +123,17 @@ module.exports.sendWithdrawal = async (event) => {
     try {
         const { accountNumber, amount, currency, unit, bankDetails } = opsUtil.extractParamsFromEvent(event);
 
+        // we have to do a little transformation in here to handle different naming conventions & continued use of branch codes
         const body = {
             amount,
             currency,
             unit,
             bankDetails: {
-                holderName: bankDetails.holderName,
+                holderName: bankDetails.accountHolder,
                 accountNumber: bankDetails.accountNumber,
-                branchCode: bankDetails.branchCode,
+                branchCode: BANK_BRANCH_CODES[bankDetails.bankName],
                 type: bankDetails.accountType,
-                bankName: bankDetails.bankName
+                bankName: FINWORKS_NAMES[bankDetails.bankName]
             }
         };
 

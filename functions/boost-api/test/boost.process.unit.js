@@ -335,19 +335,23 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const publishOptions = {
             initiator: testUserId,
             context: {
+                accountId: testAccountId,
+                boostAmount: '100000::HUNDREDTH_CENT::USD',
                 boostId: testBoostId,
+                boostType: 'SIMPLE',
+                boostCategory: 'TIME_LIMITED',
                 boostUpdateTimeMillis: updateProcessedTime.valueOf(),
                 transferResults: expectedAllocationResult[testBoostId],
                 eventContext: testEvent.eventContext
             }
         };
-        publishStub.withArgs(testUserId, 'SIMPLE_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
+        publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
 
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
         expect(resultOfEventRecord).to.exist;
         
-        expect(publishStub).to.be.calledWithExactly(testUserId, 'SIMPLE_REDEEMED', publishOptions);
+        expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
     });
 
     it('Fails where event currency and status condition currency do not match', async () => {

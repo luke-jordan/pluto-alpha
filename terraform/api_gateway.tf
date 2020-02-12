@@ -614,7 +614,7 @@ resource "aws_api_gateway_integration" "boost_user_list" {
 resource "aws_api_gateway_resource" "boost_user_changed" {
   rest_api_id = "${aws_api_gateway_rest_api.api_gateway.id}"
   parent_id   = "${aws_api_gateway_resource.boost_path_root.id}"
-  path_part   = "changed"
+  path_part   = "display"
 }
 
 resource "aws_api_gateway_method" "boost_user_changed" {
