@@ -4,7 +4,7 @@
             "rootUrl": "https://fwtest.jupitersave.com",
             "accountCreation": "api/accounts/createPersonAndAccount",
             "addCash": "api/accounts/%s/investments",
-            "addBost": "api/accounts/%s/boost",
+            "addBoost": "api/accounts/%s/boost",
             "marketValue": "api/accounts/%s/marketValue",
             "withdrawals": "api/accounts/%s/withdrawals"
         },

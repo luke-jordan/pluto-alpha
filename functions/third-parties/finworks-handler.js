@@ -100,7 +100,7 @@ const assembleAddMoneyOptions = async (event, endPointTemplate) => {
 module.exports.addCash = async (event) => {
     try {
         const response = await assembleAddMoneyOptions(event, config.get('finworks.endpoints.addCash'));
-        logger('Response from generic method for add cash: ', response);
+        // logger('Response from generic method for add cash: ', response);
         return response.body;
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -111,7 +111,7 @@ module.exports.addCash = async (event) => {
 module.exports.addBoost = async (event) => {
     try {
         const response = await assembleAddMoneyOptions(event, config.get('finworks.endpoints.addBoost'));
-        logger('Response from generic method for boost: ', response);
+        // logger('Response from generic method for boost: ', response);
         return response.body;
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -161,7 +161,7 @@ module.exports.addTransaction = async (event) => {
     logger('Adding transaction to balance sheet, event: ', event);
     const { operation, transactionDetails } = event;
 
-    const dispatch = { 'INVEST': exports.addCash, 'WITHDRAW': exports.sendWithdrawal };    
+    const dispatch = { 'INVEST': exports.addCash, 'BOOST': exports.addBoost, 'WITHDRAW': exports.sendWithdrawal };    
     if (!operation || !Object.keys(dispatch).includes(operation)) {
         return { result: 'ERROR', message: 'No or invalid operation' };
     }

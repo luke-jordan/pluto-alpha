@@ -454,6 +454,7 @@ module.exports.handleUserEvent = async (snsEvent) => {
                 await handleAccountOpenedEvent(eventBody);
                 break;
             case 'BOOST_REDEEMED':
+                logger('*** Handling BOOST redeemed event');
                 await handleBoostRedeemedEvent(eventBody);
                 break;
             default:
