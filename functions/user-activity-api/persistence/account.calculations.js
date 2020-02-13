@@ -61,11 +61,24 @@ const capitalizationQuery = async (params, systemWideUserId) => {
             `and transaction_type = $2 and settlement_status = $3 order by ${txTable}.creation_time desc limit 1`;
         const selectValues = [systemWideUserId, 'CAPITALIZATION', 'SETTLED']; 
         const fetchRow = await rdsConnection.selectQuery(selectQuery, selectValues);
-        logger('FInding last capitalization, result from RDS: ', fetchRow);
+        logger('Finding last capitalization, result from RDS: ', fetchRow);
         result.amount = fetchRow.length === 0 ? 0 : opsUtil.convertToUnit(fetchRow[0]['amount'], fetchRow[0]['unit'], DEFAULT_UNIT);
     }
     logger('Capitalization query result: ', result);
     return result;
+};
+
+const getLastTransactionOfType = async (params, systemWideUserId) => {
+    const result = { currency: params.currency, unit: DEFAULT_UNIT};
+    const selectQuery = `select amount, unit from ${userAccountTable} inner join ${txTable} ` +
+        `on ${userAccountTable}.account_id = ${txTable}.account_id where owner_user_id = $1 ` +
+        `and transaction_type = $2 and settlement_status = $3 order by ${txTable}.creation_time desc limit 1`;
+    const selectValues = [systemWideUserId, params.txType, 'SETTLED']; 
+    const fetchRow = await rdsConnection.selectQuery(selectQuery, selectValues);
+    logger('Finding last transaction, result from RDS: ', fetchRow);
+    result.amount = fetchRow.length === 0 ? 0 : opsUtil.convertToUnit(fetchRow[0]['amount'], fetchRow[0]['unit'], DEFAULT_UNIT);
+    logger('last transaction query result: ', result);
+    return result;    
 };
 
 const sumOverSettledTransactionTypes = async (params, systemWideUserId, transTypesToInclude) => {
@@ -132,6 +145,11 @@ const executeAggregateOperation = (operationParams, systemWideUserId) => {
             const startTimeMillis = operationParams.length > 2 ? Number(operationParams[2]) : null;
             const endTimeMillis = operationParams.length > 3 ? Number(operationParams[3]) : null;
             return capitalizationQuery({ currency, startTimeMillis, endTimeMillis }, systemWideUserId);
+        }
+        case 'last_saved_amount': {
+            logger('Returning user last saved amount');
+            const currency = operationParams[1];
+            return getLastTransactionOfType({ currency, txType: 'USER_SAVING_EVENT' }, systemWideUserId);
         }
         case 'total_earnings': {
             const params = { unit: operationParams[1], currency: operationParams[2] };

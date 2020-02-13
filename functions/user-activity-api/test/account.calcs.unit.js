@@ -130,6 +130,22 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
         expect(queryStub).to.have.been.calledWith(expectedSavingsQuery, expectedValues);
     });
 
+    it('Retrieves user last saved amount', async () => {
+        const userAccountTable = config.get('tables.accountLedger');
+        const txTable = config.get('tables.accountTransactions');
+
+        const expectedQuery = `select amount, unit from ${userAccountTable} inner join ${txTable} ` +
+            `on ${userAccountTable}.account_id = ${txTable}.account_id where owner_user_id = $1 ` +
+            `and transaction_type = $2 and settlement_status = $3 order by ${txTable}.creation_time desc limit 1`;
+        const expectedValues = [testUserId, 'USER_SAVING_EVENT', 'SETTLED']; 
+
+        queryStub.resolves([{ amount: 1000, unit: 'WHOLE_CURRENCY' }]);
+        const lastSavingAmount = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `last_saved_amount::WHOLE_CURRENCY`});
+        logger('Last saved amount: ', lastSavingAmount);
+        expect(lastSavingAmount).to.deep.equal({ amount: 10000000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
+        expect(queryStub).to.have.been.calledWith(expectedQuery, expectedValues);
+    });
+
     it('Gracefully handles unknown parameter', async () => {
         const resultOfBadQuery = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
         logger('Result of bad query: ', resultOfBadQuery);
