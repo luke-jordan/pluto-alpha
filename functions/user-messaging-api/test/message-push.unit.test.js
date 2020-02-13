@@ -585,7 +585,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     };
 
     const emailMessagesInvocation = {
-        FunctionName: 'email_bulk_dispatch',
+        FunctionName: 'email_send',
         InvocationType: 'RequestResponse',
         LogType: 'None',
         Payload: stringify({
@@ -667,7 +667,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         };
 
         const expectedInvocation = {
-            FunctionName: 'email_bulk_dispatch',
+            FunctionName: 'email_send',
             InvocationType: 'RequestResponse',
             LogType: 'None',
             Payload: stringify({ emailMessages: [expectedEmail, expectedEmail] })

@@ -138,7 +138,6 @@ resource "aws_lambda_permission" "allow_cloudwatch_to_call_message_pusher" {
     source_arn = "${aws_cloudwatch_event_rule.ops_every_minute.arn}"
 }
 
-
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_message_push" {

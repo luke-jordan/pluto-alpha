@@ -204,12 +204,13 @@ const fetchUserEmail = async (systemWideUserId) => {
 
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     const userProfile = JSON.parse(profileFetchResult['Payload']);
+    logger('User profile fetch result: ', userProfile);
     
     return userProfile.contactType === 'EMAIL' ? { systemWideUserId, emailAddress: userProfile.contactMethod } : null;
 };
 
 const dispatchEmailMessages = async (emailMessages) => {
-    logger('Fuck off and die: ', emailMessages);
+    logger('Dispatching these email messages: ', emailMessages);
     const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages }, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
