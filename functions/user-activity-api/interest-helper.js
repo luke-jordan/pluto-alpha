@@ -30,7 +30,7 @@ const calculateCompoundInterestUsingDayInterval = (amount, interestRateAsBigNumb
 
     const compoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenDays).minus(amountAsBigNumber);
     logger(`Successfully calculated Compound Interest: ${compoundInterest} for day interval: ${numberOfDays}`);
-    return compoundInterest.valueOf();
+    return new DecimalLight(compoundInterest.valueOf()).toNumber();
 };
 
 const calculateNumberOfDaysPassedSinceDateAndToday = async (givenDate) => {

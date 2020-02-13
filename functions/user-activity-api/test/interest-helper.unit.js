@@ -54,7 +54,7 @@ describe('*** Unit Test Admin User Handler ***', () => {
         const testAmountAsBigNumber = new DecimalLight(testTransactionInformation.amount);
         const testBaseCompoundRate = new DecimalLight(1).plus(testInterestRate);
         const testBaseCompoundRateAfterGivenDays = testBaseCompoundRate.pow(new DecimalLight(testNumberOfDaysPassedSinceDate).dividedBy(DAYS_IN_A_YEAR));
-        const testCompoundInterest = testAmountAsBigNumber.times(testBaseCompoundRateAfterGivenDays).minus(testAmountAsBigNumber).valueOf();
+        const testCompoundInterest = new DecimalLight(testAmountAsBigNumber.times(testBaseCompoundRateAfterGivenDays).minus(testAmountAsBigNumber).valueOf()).toNumber();
 
         const expectedResult = {
             amount: testCompoundInterest,

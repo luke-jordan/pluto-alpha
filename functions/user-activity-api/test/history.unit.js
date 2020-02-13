@@ -235,7 +235,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     it('Fetches user history along with `estimatedInterestEarned`', async () => {
         const testCalculationUnit = 'HUNDREDTH_CENT';
         const testCurrency = 'USD';
-        const testCompoundInterest = '18.8485978005249';
+        const testCompoundInterest = 18.8485978005249;
 
         const testHistoryEvent = {
             userId: testUserId,

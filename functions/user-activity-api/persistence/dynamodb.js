@@ -63,28 +63,21 @@ const fetchFloatVarsForBalanceCalcFromCache = async (cacheKeyWithoutPrefixForFlo
 const fetchFloatVarsForBalanceCalcFromCacheOrDB = async (clientId, floatId) => {
     logger(`Fetching 'float vars for balance calc' from database or cache`);
     const cacheKeyWithoutPrefixForFloatVars = `${clientId}_${floatId}`;
-    try {
-        // TODO: simplify logic when redis-connection is setup
-        const { cache, responseFromCache } = await fetchFloatVarsForBalanceCalcFromCache(cacheKeyWithoutPrefixForFloatVars);
-        if (!responseFromCache) {
-            logger(`${cacheKeyWithoutPrefixForFloatVars} NOT found in cache`);
-            const floatProjectionVars = await fetchFloatVarsForBalanceCalcFromDB(clientId, floatId);
-            if (cache) {
-                logger(`Successfully fetched 'float vars for balance calc' from database and stored in cache`);
-                await cache.set(cacheKeyWithoutPrefixForFloatVars, JSON.stringify(cacheKeyWithoutPrefixForFloatVars), 'EX', CACHE_TTL_IN_SECONDS);
-            }
-
-            logger(`Successfully fetched 'float vars for balance calc' from database and NOT stored in cache`);
-            return floatProjectionVars;
+    const { cache, responseFromCache } = await fetchFloatVarsForBalanceCalcFromCache(cacheKeyWithoutPrefixForFloatVars);
+    if (!responseFromCache) {
+        logger(`${cacheKeyWithoutPrefixForFloatVars} NOT found in cache`);
+        const floatProjectionVars = await fetchFloatVarsForBalanceCalcFromDB(clientId, floatId);
+        if (cache) {
+            logger(`Successfully fetched 'float vars for balance calc' from database and stored in cache`);
+            await cache.set(cacheKeyWithoutPrefixForFloatVars, JSON.stringify(cacheKeyWithoutPrefixForFloatVars), 'EX', CACHE_TTL_IN_SECONDS);
         }
 
-        logger(`Successfully fetched 'interest rate' from cache`);
-        return responseFromCache;
-    } catch (error) {
-        logger(`Error occurred while fetching 'float vars for balance calc' from database or cache.
-        Error: ${JSON.stringify(error.message)}`);
-        throw error;
+        logger(`Successfully fetched 'float vars for balance calc' from database and NOT stored in cache`);
+        return floatProjectionVars;
     }
+
+    logger(`Successfully fetched 'interest rate' from cache`);
+    return responseFromCache;
 };
 
 /**
