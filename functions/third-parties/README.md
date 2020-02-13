@@ -1,8 +1,7 @@
-# Third Party Integrations
+# Third Parties
 
-# Bank Account Verification
-
-## Functions
+## Payment Functions
+___
 
 <a name="initialize"></a>
 
@@ -50,8 +49,6 @@ the verification which will be used to check on the status of the bank account v
 | Name | Type | Description |
 | --- | --- | --- |
 | jobId | <code>string</code> | JobId returned from the bank account verification API |
-
-# Payment Url And Transaction Status Check
 
 <a name="paymentUrlRequest"></a>
 
@@ -110,3 +107,45 @@ All properties (including those not returned to the caller) are listed below.
 | createdDate | <code>datetime</code> | Transaction created date and time. |
 | paymentDate | <code>datetime</code> | Transaction payment date and time. |
 
+<a name="sendEmailsFromSource"></a>
+
+## sendEmailsFromSource(event)
+This function sends emails to provided addresses. The email template is stored remotely and a locator key-bucket pair is required.
+
+**Kind**: global function  
+
+| Param | Type |
+| --- | --- |
+| event | <code>object</code> | 
+
+**Properties**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| templateSource | <code>object</code> | An object whose properties are the s3 key and bucket containing the emails html template. |
+| textTemplate | <code>string</code> | The emails text template. |
+| subject | <code>subject</code> | The emails subject. |
+| destinationArray | <code>array</code> | An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property. These contain target email and template variables respectively. |
+
+## Email Dispatch Functions
+___
+
+<a name="sendEmails"></a>
+
+## sendEmails(event)
+This function sends emails to provided addresses.
+
+**Kind**: global function  
+
+| Param | Type |
+| --- | --- |
+| event | <code>object</code> | 
+
+**Properties**
+
+| Name | Type | Description |
+| --- | --- | --- |
+| htmlTemplate | <code>object</code> | The emails html template. |
+| textTemplate | <code>string</code> | The emails text template. |
+| subject | <code>subject</code> | The emails subject. |
+| destinationArray | <code>array</code> | An array containing destination objects. Each destination object contains an 'emailAddress' and 'templateVariables' property.These contain target email and template variables respectively. |

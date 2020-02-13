@@ -23,7 +23,8 @@ const STANDARD_PARAMS = [
     'opened_date',
     'total_interest',
     'last_capitalization',
-    'total_earnings'
+    'total_earnings',
+    'last_saved_amount'
 ];
 
 const UNIT_DIVISORS = {
@@ -122,6 +123,9 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     } else if (paramName === 'last_capitalization') {
         const aggregateOperation = `capitalization::${userProfile.defaultCurrency}`;
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
+    } else if (paramName === 'last_saved_amount') {
+        const aggregateOperation = `last_saved_amount::${userProfile.defaultCurrency}`;
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     } else if (paramName === 'total_earnings') {
         const thisMonthOnly = getSubParamOrDefault(paramSplit, false);
@@ -392,6 +396,11 @@ module.exports.updateUserMessage = async (event) => {
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'DISMISSED' });
                 const bodyOfResponse = { result: 'SUCCESS', processedTimeMillis: updateResult.updatedTime.valueOf() };
                 response = { statusCode: 200, body: JSON.stringify(bodyOfResponse) };
+                break;
+            }
+            case 'ACTED': {
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'ACTED' });
+                response = { statusCode: 200 };
                 break;
             }
             default:

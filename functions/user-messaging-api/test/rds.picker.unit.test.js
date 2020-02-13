@@ -105,7 +105,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         ];
         selectQueryStub.withArgs(...expectedQuery).resolves([msgRawFromRds, msgRawFromRds]);
 
-        const result = await persistence.getPendingPushMessages();
+        const result = await persistence.getPendingOutboundMessages('PUSH');
         logger('Result of pending messages extraction:', result);
     
         expect(result).to.exist;

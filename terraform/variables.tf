@@ -140,3 +140,12 @@ variable "events_email_receipients" {
         "master" = ["luke@jupitersave.com", "avish@jupitersave.com"]
     }
 }
+
+variable "messaging_source_email_address" {
+    description = "The source email address for non-event emails, e.g., messages etc"
+    type = "map"
+    default = {
+        "staging" = "noreply@jupitersave.com"
+        "master" = "service@jupitersave.com"
+    }
+}

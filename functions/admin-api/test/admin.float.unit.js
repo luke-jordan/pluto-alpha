@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:admin:float-test');
-const config = require('config');
+// const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 const status = require('statuses');
@@ -451,7 +451,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         expect(resultOfAllocation.headers).to.deep.equal(helper.expectedHeaders);
         expect(resultOfAllocation.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
         expect(insertFloatLogStub).to.have.been.calledOnceWithExactly(floatLogInsertArgs);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload));
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc('float_transfer', false, lambdaPayload));
     });
 
     it('Adds or subtract funds', async () => {
@@ -483,7 +483,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         };
 
         insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc('float_transfer', false, lambdaPayload)).returns({
             promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [uuid()]}})
         });       
 
@@ -509,7 +509,7 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
         expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
         expect(insertFloatLogStub).to.have.been.calledOnceWithExactly(floatLogInsertArgs);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload));
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc('float_transfer', false, lambdaPayload));
     });
 
     it('Distributes float to users', async () => {
@@ -533,13 +533,14 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
                 amount: 100,
                 unit: 'HUNDREDTH_CENT',
                 identifier: testLogId,
+                transactionType: 'ADMIN_BALANCE_RECON',
                 relatedEntityType: 'ADMIN_INSTRUCTION',
                 recipients: [{'recipientType': 'ALL_USERS', 'amount': 100 }]
             }]
         };
 
         insertFloatLogStub.withArgs(floatLogInsertArgs).resolves(testLogId);        
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload)).returns({
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc('float_transfer', false, lambdaPayload)).returns({
             promise: () => helper.mockLambdaResponse({ [testLogId]: { floatTxIds: [uuid()]}})
         });
 
@@ -565,10 +566,10 @@ describe('*** UNIT TEST ADMIN FLOAT HANDLER ***', () => {
         expect(resultOfAdjustment.headers).to.deep.equal(helper.expectedHeaders);
         expect(resultOfAdjustment.body).to.deep.equal(JSON.stringify({ result: 'SUCCESS' }));
         expect(insertFloatLogStub).to.have.been.calledOnceWithExactly(floatLogInsertArgs);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc(config.get('lambdas.floatTransfer'), false, lambdaPayload));
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(helper.wrapLambdaInvoc('float_transfer', false, lambdaPayload));
     });
 
-    it('Cathces thrown errors', async () => {
+    it('Catches thrown errors', async () => {
 
         const testEvent = {
             requestContext: {

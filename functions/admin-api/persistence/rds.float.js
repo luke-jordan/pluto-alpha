@@ -265,3 +265,16 @@ module.exports.updateFloatLog = async ({ logId, contextToUpdate }) => {
 
     return resultOfUpdate;
 };
+
+module.exports.getFloatLogsWithinPeriod = async ({clientId, floatId, startTime, endTime, logTypes}) => {
+    const floatLogTable = config.get('tables.floatLogTable');
+    const startIndexForLogTypesInSQLParams = 5;
+    const selectQuery = `select * from ${floatLogTable} where client_id = $1 and float_id = $2 ` +
+        `and creation_time >= $3 and creation_time <= $4 and log_type in (${extractArrayIndices(logTypes, startIndexForLogTypesInSQLParams)})`;
+    const values = [clientId, floatId, startTime, endTime, ...logTypes];
+
+    logger('Running get float logs within period alert query: ', selectQuery);
+    logger('With values: ', values);
+    const resultOfSearch = await rdsConnection.selectQuery(selectQuery, values);
+    return resultOfSearch.length > 0 ? camelcaseKeys(resultOfSearch) : null;
+};

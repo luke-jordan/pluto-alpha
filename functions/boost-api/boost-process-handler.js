@@ -70,9 +70,7 @@ const testCondition = (event, statusCondition) => {
     const { eventContext } = event;
     switch (conditionType) {
         case 'save_event_greater_than':
-            logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue));
-            logger('And amount from event: ', equalizeAmounts(eventContext.savedAmount));
-            logger(`Also asserting if currency ${currency(eventContext.savedAmount)} === ${currency(parameterValue)}`);
+            logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue), ' and amount from event: ', equalizeAmounts(eventContext.savedAmount));
             return safeEvaluateAbove(eventContext, 'savedAmount', parameterValue) && currency(eventContext.savedAmount) === currency(parameterValue);
         case 'save_completed_by':
             logger(`Checking if save completed by ${event.accountId} === ${parameterValue}, result: ${event.accountId === parameterValue}`);
@@ -130,6 +128,7 @@ const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = 
     const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
     const amount = revoke ? -boost.boostAmount : boost.boostAmount;
+    const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
     const recipients = recipientAccounts.map((recipientId) => ({ 
         recipientId, amount, recipientType: 'END_USER_ACCOUNT'
     }));
@@ -141,6 +140,9 @@ const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = 
         unit: boost.boostUnit,
         identifier: boost.boostId,
         relatedEntityType: 'BOOST_REDEMPTION',
+        allocType: transactionType, // for float allocation
+        allocState: 'SETTLED',
+        transactionType, // for matching account records
         settlementStatus: 'SETTLED',
         recipients
     };
@@ -262,14 +264,18 @@ const generateMessageSendInvocation = (messageInstructions) => ({
 });
 
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event }) => {
-    const eventType = `${boost.boostType}_REDEEMED`;
+    const eventType = `BOOST_REDEEMED`;
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
         const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
+            accountId,
             boostId: boost.boostId,
+            boostType: boost.boostType,
+            boostCategory: boost.boostCategory,
             boostUpdateTimeMillis: boostUpdateTime.valueOf(),
+            boostAmount: `${boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
             transferResults,
-            eventContext: event.eventContext
+            triggeringEventContext: event.eventContext
         };
         return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, { initiator, context });
     });

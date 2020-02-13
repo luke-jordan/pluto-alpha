@@ -538,6 +538,31 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
 EOF
 }
 
+resource "aws_iam_policy" "message_push_lambda_policy" {
+    name = "lambda_message_push_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "InvokeLambdas",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.user_history_aggregate.arn}",
+                "${aws_lambda_function.email_send.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "referral_code_read_policy" {
     name = "dynamo_table_referral_read_${terraform.workspace}"
     path = "/"

@@ -251,9 +251,9 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
                 bankDetails: {
                     holderName: 'John Doe',
                     accountNumber: '624563712',
-                    branchCode: '222626',
+                    branchCode: '250655',
                     type: 'Savings',
-                    bankName: 'FNB'
+                    bankName: 'First National Bank'
                 }
             }
         };
@@ -267,9 +267,8 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             accountNumber: 'POL122',
             unit: 'WHOLE_CURRENCY',
             bankDetails: {
-                holderName: 'John Doe',
+                accountHolder: 'John Doe',
                 accountNumber: '624563712',
-                branchCode: '222626',
                 accountType: 'Savings',
                 bankName: 'FNB'
             }
@@ -299,9 +298,9 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
                 bankDetails: {
                     holderName: 'John Doe',
                     accountNumber: '624563712',
-                    branchCode: '222626',
+                    branchCode: '632005',
                     type: 'Savings',
-                    bankName: 'FNB'
+                    bankName: 'ABSA'
                 }
             }
         };
@@ -325,11 +324,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
             holderName: 'John Doe',
             accountNumber: 'POL122',
             bankDetails: {
-                holderName: 'John Doe',
+                accountHolder: 'John Doe',
                 accountNumber: '624563712',
-                branchCode: '222626',
                 accountType: 'Savings',
-                bankName: 'FNB'
+                bankName: 'ABSA'
             }
         };
 
@@ -378,6 +376,39 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         
     });
 
+    it('Directs boost redemption correctly', async () => {
+        const testAccountNumber = 'POL23';
+
+        const saveEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/boost`;
+
+        const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
+        const transactionDetails = { accountNumber: testAccountNumber, amount: parseInt(testAmount, 10), unit: testUnit, currency: testCurrency };        
+
+        const saveEvent = { operation: 'BOOST', transactionDetails };
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+
+        const expectedOptions = {
+            method: 'POST',
+            uri: saveEndpoint,
+            agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
+            json: true,
+            body: { amount: parseInt(testAmount, 10), unit: testUnit, currency: testCurrency }
+        };
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+        requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
+
+        const resultOfHandler = await handler.addTransaction(saveEvent);
+        logger('Boost result from third party:', resultOfHandler);
+
+        expect(resultOfHandler).to.deep.equal({ });
+        expect(getObjectStub).to.have.been.calledTwice;
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+        
+    });
+
     it('Directs withdraw transaction correctly', async () => {
         const testAccountNumber = 'POL23';
         const withdrawEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/withdrawals`;
@@ -385,11 +416,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
         
         const testBankDetails = {
-            holderName: 'John Doe',
+            accountHolder: 'John Doe',
             accountNumber: '624563712',
-            branchCode: '222626',
             accountType: 'Savings',
-            bankName: 'FNB'
+            bankName: 'STANDARD'
         };
 
         const transactionDetails = { 
@@ -404,7 +434,14 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
 
-        const expectedBankDetails = { ...testBankDetails, type: testBankDetails.accountType };
+        const expectedBankDetails = { 
+            holderName: 'John Doe',
+            accountNumber: '624563712',
+            type: 'Savings',
+            bankName: 'Standard Bank',
+            branchCode: '051001'     
+        };
+
         Reflect.deleteProperty(expectedBankDetails, 'accountType');
         const expectedOptions = {
             method: 'POST',

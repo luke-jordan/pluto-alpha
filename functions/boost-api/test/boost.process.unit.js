@@ -137,8 +137,11 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
                 fromType: 'BONUS_POOL',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
+                transactionType: 'BOOST_REDEMPTION',
                 relatedEntityType: 'BOOST_REDEMPTION',
                 settlementStatus: 'SETTLED',
+                allocType: 'BOOST_REDEMPTION',
+                allocState: 'SETTLED',
                 recipients: [
                     { recipientId: testReferredUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' },
                     { recipientId: testReferringUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
@@ -279,10 +282,13 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 floatId: mockBoostToFromPersistence.fromFloatId,
                 fromId: mockBoostToFromPersistence.fromBonusPoolId,
                 fromType: 'BONUS_POOL',
+                transactionType: 'BOOST_REDEMPTION',
                 relatedEntityType: 'BOOST_REDEMPTION',
                 currency: mockBoostToFromPersistence.boostCurrency,
                 unit: mockBoostToFromPersistence.boostUnit,
                 settlementStatus: 'SETTLED',
+                allocType: 'BOOST_REDEMPTION',
+                allocState: 'SETTLED',
                 recipients: [
                     { recipientId: testAccountId, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
                 ]
@@ -329,19 +335,23 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const publishOptions = {
             initiator: testUserId,
             context: {
+                accountId: testAccountId,
+                boostAmount: '100000::HUNDREDTH_CENT::USD',
                 boostId: testBoostId,
+                boostType: 'SIMPLE',
+                boostCategory: 'TIME_LIMITED',
                 boostUpdateTimeMillis: updateProcessedTime.valueOf(),
                 transferResults: expectedAllocationResult[testBoostId],
-                eventContext: testEvent.eventContext
+                triggeringEventContext: testEvent.eventContext
             }
         };
-        publishStub.withArgs(testUserId, 'SIMPLE_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
+        publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
 
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
         expect(resultOfEventRecord).to.exist;
         
-        expect(publishStub).to.be.calledWithExactly(testUserId, 'SIMPLE_REDEEMED', publishOptions);
+        expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
     });
 
     it('Fails where event currency and status condition currency do not match', async () => {

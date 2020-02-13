@@ -105,6 +105,23 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('interest::HUNDREDTH_CENT::USD::0'));
     });
 
+    it('Fills in message templates properly, happy path 2', async () => {
+        const expectedMessage = 'Hello Luke Jordan. You have just saved a whopping $100. Congratulations on this fearsome feat.';
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
+            'Hello #{user_full_name}. You have just saved a whopping #{last_saved_amount}. Congratulations on this fearsome feat.'
+        )]);
+
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
+        lamdbaInvokeStub.returns({ promise: () => queryResult});
+
+        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
+        logger('Filled message: ', filledMessage);
+        expect(filledMessage).to.exist;
+        expect(filledMessage[0].body).to.equal(expectedMessage);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('last_saved_amount::USD'));
+    });
+
     it('Fills in account balances properly', async () => {
         logger('HUUUUH ABT: ', testUserId);
         const testDestinationUserId = uuid();
