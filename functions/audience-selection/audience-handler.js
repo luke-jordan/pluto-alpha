@@ -26,6 +26,16 @@ const stdProperties = {
         type: 'match',
         description: 'Last capitalization',
         expects: 'epochMillis'
+    },
+    humanReference: {
+        type: 'match',
+        description: 'Human reference',
+        expects: 'stringMultiple'
+    },
+    table: {
+        type: 'match',
+        description: 'Optional property table',
+        expects: 'string'
     }
 };
 
@@ -78,6 +88,11 @@ const columnConverters = {
                 { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                 { op: 'is', prop: 'transaction_type', value: 'CAPITALIZATION' }
             ]}
+        ]
+    }),
+    humanReference: (condition) => ({
+        conditions: [
+            { op: condition.op, prop: 'human_ref', value: condition.value }
         ]
     })
 };
@@ -161,6 +176,32 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
     return columnCondition.conditions[0];
 };
 
+const validateColumnConditions = (conditions) => {
+    if (conditions.length === 0) {
+        return;
+    }
+    conditions.forEach((condition) => {
+        if (condition.op === 'and') {
+            condition.children.forEach((child) => {
+                if (child.prop === 'humanReference') {
+                    throw new Error(`Only 'in' and 'or' are supported with 'human_ref'`);
+                }
+            });
+        }
+    });
+};
+
+const extractColumnConditionsTable = (conditions) => {
+    const columnConditionsTable = conditions.map((condition) => {
+        if (Reflect.has(condition, 'table')) {
+            return condition.table;
+        }
+        return null;
+    });
+    logger('Got table:', columnConditionsTable);
+    return columnConditionsTable.filter((table) => table !== null)[0];
+};
+
 const logParams = (params) => {
     logger('Passed parameters to construct column conditions: ', params);
     if (params.conditions && params.conditions.length > 0 && (params.conditions[0].op === 'and' || params.conditions[0].op === 'or')) {
@@ -192,13 +233,20 @@ const constructColumnConditions = async (params) => {
         selectionObject.sample = sample;
     }
 
-    const withClientId = addTableAndClientId(selectionObject, clientId, passedPropertyConditions.table);
+    const hasTableSpecified = passedPropertyConditions.some((condition) => Reflect.has(condition, 'table'));
+    logger('Has table specified:', hasTableSpecified);
+
+    const conditionTable = hasTableSpecified ? extractColumnConditionsTable(passedPropertyConditions) : txTable;
+    logger('Got condition table:', conditionTable);
+
+    const withClientId = addTableAndClientId(selectionObject, clientId, conditionTable);
     
     logger('Reassembled conditions: ', JSON.stringify(withClientId, null, 2));
     return { columnConditions: withClientId, persistenceParams };
 };
 
 module.exports.createAudience = async (params) => {
+    validateColumnConditions(params.conditions);
     const { columnConditions, persistenceParams } = await constructColumnConditions(params);
     persistenceParams.audienceType = 'PRIMARY';
     
