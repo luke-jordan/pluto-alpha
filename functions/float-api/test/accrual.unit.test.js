@@ -1,7 +1,5 @@
 'use strict';
 
-// process.env.NODE_ENV = 'test';
-
 const logger = require('debug')('jupiter:float:test');
 const helper = require('./test.helper');
 
@@ -17,21 +15,43 @@ chai.use(sinonChai);
 
 const BigNumber = require('bignumber.js');
 
-// using rather nice patterns from here: https://gist.github.com/StephaneTrebel/0c90fc435b6d93f297f52c72b3fddfb6
-const rdsPath = './persistence/rds';
-const dynamoPath = './persistence/dynamodb';
-
-const createStubs = (customStubs) => ({
-    [rdsPath]: customStubs[rdsPath],
-    [dynamoPath]: customStubs[dynamoPath]
-});
-
 const common = require('./common');
-const rds = require('../persistence/rds');
-const dynamo = require('../persistence/dynamodb');
 const constants = require('../constants');
 
-let handler = require('../accrual-handler');
+const fetchFloatConfigVarsStub = sinon.stub();
+
+const adjustFloatBalanceStub = sinon.stub();
+const allocateFloatBalanceStub = sinon.stub();
+const calculateFloatBalanceStub = sinon.stub();
+const obtainEntityBalanceStub = sinon.stub();
+const fetchRecordsRelatedToLog = sinon.stub();
+const writeCsvFileStub = sinon.stub();
+
+const obtainAccountBalancesStub = sinon.stub();
+const allocateToUsersStub = sinon.stub();
+
+let allocationStub = sinon.stub();
+let apportionStub = sinon.stub();
+
+const handler = proxyquire('../accrual-handler', {
+    './persistence/dynamodb': { 
+        fetchConfigVarsForFloat: fetchFloatConfigVarsStub,
+        '@noCallThru': true 
+    },
+    './persistence/rds': { 
+        addOrSubtractFloat: adjustFloatBalanceStub,
+        allocateFloat: allocateFloatBalanceStub,
+        calculateFloatBalance: calculateFloatBalanceStub,
+        obtainPriorAllocationBalances: obtainEntityBalanceStub,
+        fetchRecordsRelatedToLog: fetchRecordsRelatedToLog,
+        obtainAllAccountsWithPriorAllocations: obtainAccountBalancesStub,
+        allocateToUsers: allocateToUsersStub
+    },
+    './persistence/csvfile': {
+        writeAndUploadCsv: writeCsvFileStub,
+        '@noCallThru': true
+    }
+});
 
 describe('Single apportionment operations', () => {
 
@@ -143,41 +163,17 @@ describe('Multiple apportionment operations', () => {
 
 describe('Primary allocation of inbound accrual lambda', () => {
 
-    const fetchFloatConfigVarsStub = sinon.stub();
-
-    const adjustFloatBalanceStub = sinon.stub();
-    const allocateFloatBalanceStub = sinon.stub();
-    const calculateFloatBalanceStub = sinon.stub();
-    const obtainEntityBalanceStub = sinon.stub();
-    const fetchRecordsRelatedToLog = sinon.stub();
-    const writeCsvFileStub = sinon.stub();
-
-    let allocationStub = sinon.stub();
-
     before(() => {        
-        handler = proxyquire('../accrual-handler', {
-            [dynamoPath]: { 
-                fetchConfigVarsForFloat: fetchFloatConfigVarsStub 
-            },
-            [rdsPath]: { 
-                addOrSubtractFloat: adjustFloatBalanceStub,
-                allocateFloat: allocateFloatBalanceStub,
-                calculateFloatBalance: calculateFloatBalanceStub,
-                obtainPriorAllocationBalances: obtainEntityBalanceStub,
-                fetchRecordsRelatedToLog: fetchRecordsRelatedToLog
-            },
-            './persistence/csvfile': {
-                writeAndUploadCsv: writeCsvFileStub,
-                '@noCallThru': true
-            }
-        });
-
         // withArgs(common.testValidClientId, common.testValidFloatId).
         allocationStub = sinon.stub(handler, 'allocate');
     });
 
     beforeEach(() => {
         helper.resetStubs(fetchFloatConfigVarsStub, adjustFloatBalanceStub, allocateFloatBalanceStub, calculateFloatBalanceStub, allocationStub);
+    });
+
+    after(() => {
+        handler.allocate.restore();
     });
 
     it('Handles errors correctly (ie still exits)', async () => {
@@ -309,46 +305,21 @@ describe('Primary allocation of inbound accrual lambda', () => {
 
 describe('Primary allocation of unallocated float lamdba', () => {
 
-    let obtainAccountBalancesStub = { };
-    let allocateFloatStub = { };
-    let allocateToUsersStub = { };
-    let apportionStub = { };
-    let fetchFloatConfigVarsStub = { };
-
     before(() => {
-        obtainAccountBalancesStub = sinon.stub(rds, 'obtainAllAccountsWithPriorAllocations');
-        allocateFloatStub = sinon.stub(rds, 'allocateFloat');
-        allocateToUsersStub = sinon.stub(rds, 'allocateToUsers');
-
-        fetchFloatConfigVarsStub = sinon.stub(dynamo, 'fetchConfigVarsForFloat');
-
-        handler = proxyquire('../accrual-handler', createStubs({
-            [rdsPath]: { 
-                obtainAllAccountsWithPriorAllocations: obtainAccountBalancesStub,
-                allocateFloat: allocateFloatStub,
-                allocateToUsers: allocateToUsersStub
-            },
-            [dynamoPath]: {
-                fetchConfigVarsForFloat: fetchFloatConfigVarsStub
-            }
-        }));
-
         apportionStub = sinon.stub(handler, 'apportion');
     });
 
-    after(() => {
-        rds.obtainAllAccountsWithPriorAllocations.restore();
-        rds.allocateToUsers.restore();
+    beforeEach(() => {
+        helper.resetStubs(fetchFloatConfigVarsStub, adjustFloatBalanceStub, allocateFloatBalanceStub, calculateFloatBalanceStub, 
+            obtainAccountBalancesStub, allocateToUsersStub);
     });
 
-    afterEach(() => {
-        obtainAccountBalancesStub.reset();
-        allocateToUsersStub.reset();
+    after(() => {
         handler.apportion.restore();
     });
 
     it('Happy path, when passed a balance to divide', async () => {
-        const numberAccounts = 10;
+        const numberAccounts = 10000;
         const amountToAllocate = 1000 * 100 * 100; // allocating R1k in interest
 
         const mockLogId = uuid();
@@ -418,7 +389,7 @@ describe('Primary allocation of unallocated float lamdba', () => {
         // only one call to each and arguments are more efficiently (for debugging) tested below
         apportionStub.returns(apportionedBalances);
         obtainAccountBalancesStub.resolves(existingBalances);
-        allocateFloatStub.resolves({ 'BONUS': bonusTxId });
+        allocateFloatBalanceStub.resolves({ 'BONUS': bonusTxId });
         allocateToUsersStub.resolves(mockResultFromRds);
         
         const allocationResult = await handler.allocate(incomingEvent, { });
@@ -433,10 +404,10 @@ describe('Primary allocation of unallocated float lamdba', () => {
         
         expect(apportionStub).to.have.been.calledOnceWithExactly(amountToAllocate, existingBalances, true);
         expect(obtainAccountBalancesStub).to.have.been.calledOnceWithExactly(common.testValidFloatId, 'ZAR', constants.entityTypes.END_USER_ACCOUNT);
-        expect(allocateFloatStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, [bonuxTxAlloc]);
+        expect(allocateFloatBalanceStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, [bonuxTxAlloc]);
         
         expect(allocateToUsersStub).to.have.been.calledOnceWithExactly(common.testValidClientId, common.testValidFloatId, expectedUserAllocsToRds);
     
-    }).timeout(3000);
+    });
 
 });

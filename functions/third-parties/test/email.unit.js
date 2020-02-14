@@ -898,6 +898,10 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
 describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
     const testMessageId = uuid();
 
+    const chunkSize = config.get('sendgrid.chunkSize');
+    const sendgridOkayResponse = [{ toJSON: () => ({ statusCode: 200 })}];
+    const sendgridOkayChunk = (numberMsgs = chunkSize) => Array(numberMsgs).fill(sendgridOkayResponse);
+
     const validEmailEvent = (messageId = uuid()) => ({
         messageId,
         to: 'user@email.org',
@@ -930,7 +934,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
     });
 
     it('Sends out emails', async () => {
-        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+        sendGridStub.resolves(sendgridOkayChunk(3));
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
 
@@ -946,11 +950,17 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
 
     it('Handles payload chunking where third party rate limit is exceeded', async () => {
         const emailMessages = [];
-        while (emailMessages.length < 2652) {
+        
+        const baseChunks = 2;
+        const trailingChunkSize = 652;
+        const numberMessages = baseChunks * chunkSize + trailingChunkSize;
+
+        while (emailMessages.length < numberMessages) {
             emailMessages.push(validEmailEvent(testMessageId));
         }
 
-        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+        sendGridStub.resolves(sendgridOkayChunk());
+        // sendGridStub.onCall(3).resolves(sendgridOkayChunk(trailingChunkSize));
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
 
@@ -973,18 +983,22 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
 
     it('Isolated failures and returns failed message ids to caller', async () => {
         const emailMessages = [];
-        while (emailMessages.length < 2652) {
+
+        const numberChunks = 3;
+        const numberMessages = numberChunks * chunkSize;
+
+        while (emailMessages.length < numberMessages) {
             emailMessages.push(validEmailEvent());
         }
 
         sendGridStub.onFirstCall().resolves([{ error: 'Internal error' }]);
-        sendGridStub.resolves([{ statusCode: 200, statusMessage: 'OK' }]);
+        sendGridStub.resolves(sendgridOkayChunk());
 
         const result = await handler.sendEmailMessages({ emailMessages });
 
         expect(result).to.exist;
 
-        expect(result).to.have.property('result', 'SUCCESS');
+        expect(result).to.have.property('result', 'PARTIAL');
         expect(result).to.have.property('failedMessageIds');
 
         expect(result.failedMessageIds.length).to.deep.equal(1000);
@@ -998,7 +1012,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(secondCall.length).to.equal(1000);
 
         const thirdCall = sendGridStub.getCall(2).args[0];
-        expect(thirdCall.length).to.equal(652);
+        expect(thirdCall.length).to.equal(1000);
     });
 
     it('Fails where no valid emails are found', async () => {
@@ -1021,7 +1035,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(sendGridStub).to.have.not.been.called;
     });
 
-    it('Cathces thrown errors', async () => {
+    it('Catches thrown errors', async () => {
         sendGridStub.throws(new Error('Dispatch error'));
 
         const expectedResult = { result: 'ERR', message: 'Dispatch error' };

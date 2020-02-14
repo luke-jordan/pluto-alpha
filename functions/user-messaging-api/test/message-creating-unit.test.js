@@ -514,7 +514,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         logger('Result of pending intruction handling:', result);
 
         expect(result).to.exist;
-        expect(result).to.have.property('messagesProcessed', 4);
+        expect(result).to.have.property('messagesProcessed', 2);
         expect(result).to.have.property('processResults');
         result.processResults.forEach((processResult) => {
             const standardizedResult = Array.isArray(processResult) ? processResult[0] : processResult;
@@ -562,7 +562,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         logger('Result of scheduled message handling:', result);
 
         expect(result).to.exist;
-        expect(result).to.have.property('messagesProcessed', 4);
+        expect(result).to.have.property('messagesProcessed', 2);
         expect(result).to.have.property('processResults');
         result.processResults.forEach((processResult) => {
             const standardizedResult = Array.isArray(processResult) ? processResult[0] : processResult;
@@ -690,7 +690,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(result).to.exist;
-        expect(result).to.have.property('messagesProcessed', 4);
+        expect(result).to.have.property('messagesProcessed', 2);
         expect(result).to.have.property('processResults');
         result.processResults.forEach((processResult) => {
             const standardizedResult = Array.isArray(processResult) ? processResult[0] : processResult;
@@ -737,7 +737,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(result).to.exist;
-        expect(result).to.have.property('messagesProcessed', 4);
+        expect(result).to.have.property('messagesProcessed', 2);
         expect(result).to.have.property('processResults');
         result.processResults.forEach((processResult) => {
             const standardizedResult = Array.isArray(processResult) ? processResult[0] : processResult;

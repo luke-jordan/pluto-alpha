@@ -203,13 +203,16 @@ const fetchUserEmail = async (systemWideUserId) => {
     };
 
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
-    const userProfile = JSON.parse(profileFetchResult['Payload']);
+    logger('Raw profile fetch result: ', profileFetchResult);
+    const profilePayload = JSON.parse(profileFetchResult['Payload']);
+    const userProfile = JSON.parse(profilePayload.body);
+    logger('User profile fetch result: ', userProfile);
     
     return userProfile.contactType === 'EMAIL' ? { systemWideUserId, emailAddress: userProfile.contactMethod } : null;
 };
 
 const dispatchEmailMessages = async (emailMessages) => {
-    logger('Fuck off and die: ', emailMessages);
+    logger('Dispatching these email messages: ', emailMessages);
     const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages }, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
@@ -224,17 +227,20 @@ const sendPendingEmailMsgs = async () => {
         }
 
         const messageIds = messagesToSend.map((msg) => msg.messageId);
-        logger('Alright, processing messages: ', messageIds);
+        logger('Alright, processing emails: ', messageIds);
         const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-        logger('State lock done? : ', stateLock);
+        logger('Email state lock done? : ', stateLock);
         
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
         const emailAddresses = await Promise.all(destinationUserIds.map((userId) => fetchUserEmail(userId)));
+        logger('Received email addresses: ', emailAddresses);
         const destinationMap = emailAddresses.filter((email) => email !== null)
             .reduce((obj, emailAndUserId) => ({ ...obj, [emailAndUserId.systemWideUserId]: emailAndUserId.emailAddress }), {});
+        logger('Assembled destination map: ', destinationMap);
 
         const assembledMessages = await Promise.all(messagesToSend.map((msg) => pickMessageBody(msg)));
+        logger('And assembled messages: ', assembledMessages);
 
         const messages = assembledMessages.map((msg) => ({
             messageId: msg.messageId,

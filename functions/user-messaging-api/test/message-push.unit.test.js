@@ -496,10 +496,9 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
     it('Sends pending push messages and emails', async () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage(), mockUserMessage(), mockUserMessage(), mockUserMessage()]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onCall(0).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onCall(1).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onCall(2).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onCall(3).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        const profileResponse = helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) });
+        const numberProfileCalls = 4;
+        Array(numberProfileCalls).fill().forEach((_, index) => lamdbaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -585,7 +584,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     };
 
     const emailMessagesInvocation = {
-        FunctionName: 'email_bulk_dispatch',
+        FunctionName: 'email_send',
         InvocationType: 'RequestResponse',
         LogType: 'None',
         Payload: stringify({
@@ -614,7 +613,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     it('It sends out push and email messages', async () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -667,7 +666,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         };
 
         const expectedInvocation = {
-            FunctionName: 'email_bulk_dispatch',
+            FunctionName: 'email_send',
             InvocationType: 'RequestResponse',
             LogType: 'None',
             Payload: stringify({ emailMessages: [expectedEmail, expectedEmail] })
@@ -675,8 +674,8 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         publishUserEventStub.resolves({ result: 'SUCCESS' });
 
