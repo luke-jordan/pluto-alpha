@@ -11,6 +11,7 @@ const expect = chai.expect;
 const moment = require('moment');
 const helper = require('./test.helper');
 const DecimalLight = require('decimal.js-light');
+const stringFormat = require('string-format');
 
 const listClientFloatsStub = sinon.stub();
 const getFloatBalanceAndFlowsStub = sinon.stub();
@@ -23,6 +24,7 @@ const expireBoostsStub = sinon.stub();
 const publishMultiUserEventStub = sinon.stub();
 const checkAllFloatsStub = sinon.stub();
 const fetchUserIdsForAccountsStub = sinon.stub();
+const fetchPendingTransactionsForAllUsersStub = sinon.stub();
 
 const MILLIS_IN_DAY = 86400000;
 const DAYS_IN_A_YEAR = 365;
@@ -44,7 +46,8 @@ const handler = proxyquire('../scheduled-job', {
     './persistence/rds.account': {
         'expireHangingTransactions': rdsExpireHangingTransactionsStub,
         'expireBoosts': expireBoostsStub,
-        'fetchUserIdsForAccounts': fetchUserIdsForAccountsStub
+        'fetchUserIdsForAccounts': fetchUserIdsForAccountsStub,
+        'fetchPendingTransactionsForAllUsers': fetchPendingTransactionsForAllUsersStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient
@@ -69,6 +72,9 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     const testTime = moment();
     const testTimeValueOf = moment().valueOf();
     const sendSystemEmailReponse = {};
+    const testHumanReference = 'AVISH764';
+    const testTransactionType = 'USER_SAVING_EVENT';
+    const pendingStatus = 'PENDING';
 
     const testFloatBalanceMap = {
         get: () => ({
@@ -80,8 +86,9 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     };
 
     beforeEach(() => helper.resetStubs(
-        listClientFloatsStub, getFloatBalanceAndFlowsStub, getLastFloatAccrualTimeStub, lamdbaInvokeStub, momentStub, sendSystemEmailStub,
-        rdsExpireHangingTransactionsStub, expireBoostsStub, publishMultiUserEventStub, checkAllFloatsStub, fetchUserIdsForAccountsStub
+        listClientFloatsStub, getFloatBalanceAndFlowsStub, getLastFloatAccrualTimeStub, lamdbaInvokeStub, momentStub,
+        sendSystemEmailStub, rdsExpireHangingTransactionsStub, expireBoostsStub, publishMultiUserEventStub,
+        checkAllFloatsStub, fetchUserIdsForAccountsStub, fetchPendingTransactionsForAllUsersStub
     ));
 
     it('should run regular job - accrue float successfully', async () => {
@@ -239,4 +246,64 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
         expect(checkAllFloatsStub).to.have.been.calledOnce;
     });
 
+    it('should run regular job - all pending transactions when NO transactions exist', async () => {
+       const testEvent = {
+           specificOperations: ['ALL_PENDING_TRANSACTIONS']
+       };
+        const expectedResult = [{
+            result: 'NO_PENDING_TRANSACTIONS'
+        }];
+        const emptyArray = [];
+
+        momentStub.returns({
+            format: () => testTime
+        });
+        fetchPendingTransactionsForAllUsersStub.withArgs().resolves(emptyArray);
+
+
+       const result = await handler.runRegularJobs(testEvent);
+       expect(result).to.exist;
+       expect(result).to.have.property('statusCode', 200);
+       expect(result.body).to.deep.equal(expectedResult);
+        expect(fetchPendingTransactionsForAllUsersStub).to.have.been.calledOnce;
+        expect(momentStub).to.have.been.calledTwice;
+    });
+
+    it('should run regular job - all pending transactions when transactions exist', async () => {
+       const testEvent = {
+           specificOperations: ['ALL_PENDING_TRANSACTIONS']
+       };
+       const transaction = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: testAmount, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
+       const transaction1 = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: 249, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
+       const testPendingTransactionsArray = [transaction, transaction1];
+       const testHtmlTemplateForRow = `<tr><td>{humanReference}</td><td>{amount}</td><td>{currency}</td><td>{unit}</td><td>{transactionType}</td><td>{creationTime}</td><td>{settlementStatus}</td></tr>`;
+       const testStartingValue = '';
+        const testAllPendingTransactionsEmailDetails = testPendingTransactionsArray.reduce((accumulator, pendingTransaction) => {
+            const transactionAsTableRow = stringFormat(testHtmlTemplateForRow, pendingTransaction);
+            return `${accumulator} ${transactionAsTableRow}`;
+        }, testStartingValue);
+        const expectedResult = [testPendingTransactionsArray.length];
+
+        momentStub.returns({
+            format: () => testTime
+       });
+       fetchPendingTransactionsForAllUsersStub.withArgs().resolves(testPendingTransactionsArray);
+       const expectedEmailForPendingTransactions = {
+           subject: config.get('email.allPendingTransactions.subject'),
+            toList: config.get('email.allPendingTransactions.toList'),
+            bodyTemplateKey: config.get('email.allPendingTransactions.templateKey'),
+            templateVariables: {
+                pendingTransactionsTableInHTML: testAllPendingTransactionsEmailDetails
+            }
+        };
+       sendSystemEmailStub.withArgs(expectedEmailForPendingTransactions).resolves(sendSystemEmailReponse);
+
+       const result = await handler.runRegularJobs(testEvent);
+       expect(result).to.exist;
+       expect(result).to.have.property('statusCode', 200);
+       expect(result.body).to.deep.equal(expectedResult);
+       expect(fetchPendingTransactionsForAllUsersStub).to.have.been.calledOnce;
+       expect(momentStub).to.have.been.calledTwice;
+       expect(sendSystemEmailStub).to.have.been.calledWithExactly(expectedEmailForPendingTransactions);
+    });
 });

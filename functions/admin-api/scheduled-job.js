@@ -10,6 +10,7 @@ const dynamoFloat = require('./persistence/dynamo.float');
 const floatConsistency = require('./admin-float-consistency');
 const opsUtil = require('ops-util-common');
 const publisher = require('publish-common');
+const stringFormat = require('string-format');
 
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
@@ -198,6 +199,49 @@ const initiateFloatAccruals = async () => {
     return accrualInvocations.length;
 };
 
+const formatAllPendingTransactionsForEmail = async (allPendingTransactions) => {
+    logger(`Formatting all pending transactions for email. 
+    Pending Transactions: ${JSON.stringify(allPendingTransactions)}`);
+
+    const htmlTemplateForRow = `<tr><td>{humanReference}</td><td>{amount}</td><td>{currency}</td><td>{unit}</td><td>{transactionType}</td><td>{creationTime}</td><td>{settlementStatus}</td></tr>`;
+    logger('html template', htmlTemplateForRow);
+    const startingValue = '';
+    const pendingTransactionsFormattedForEmail = allPendingTransactions.reduce((accumulator, pendingTransaction) => {
+        const transactionAsTableRow = stringFormat(htmlTemplateForRow, pendingTransaction);
+        return `${accumulator} ${transactionAsTableRow}`;
+    }, startingValue);
+
+    logger(`Successfully formatted all pending transactions for email. 
+    Formatted Pending Transactions: ${JSON.stringify(pendingTransactionsFormattedForEmail)}`);
+    return pendingTransactionsFormattedForEmail;
+};
+
+const notifyAdminOfPendingTransactionsForAllUsers = async () => {
+    logger('Start job to notify admin of pending transactions for all users');
+
+    const startTime = moment(0).format(); // fetch pending transactions for all time i.e. 1970 till date
+    const endTime = moment().format();
+    const allPendingTransactions = await rdsAccount.fetchPendingTransactionsForAllUsers(startTime, endTime);
+    if (!allPendingTransactions || allPendingTransactions.length === 0) {
+        logger('No pending transactions, returning');
+        return { result: 'NO_PENDING_TRANSACTIONS' };
+    }
+
+    const allPendingTransactionsEmailDetails = await formatAllPendingTransactionsForEmail(allPendingTransactions);
+    const emailResult = await publisher.sendSystemEmail({
+        subject: config.get('email.allPendingTransactions.subject'),
+        toList: config.get('email.allPendingTransactions.toList'),
+        bodyTemplateKey: config.get('email.allPendingTransactions.templateKey'),
+        templateVariables: {
+            pendingTransactionsTableInHTML: allPendingTransactionsEmailDetails
+        }
+    });
+
+    logger(`Result of email to notify admin of pending transactions for all users.
+    Email Result: ${JSON.stringify(emailResult)}`);
+    return allPendingTransactions.length;
+};
+
 // note : system stat email transferred to data pipeline, for various reasons
 
 // used to control what should execute
@@ -205,7 +249,8 @@ const operationMap = {
     'ACRRUE_FLOAT': initiateFloatAccruals,
     'EXPIRE_HANGING': expireHangingTransactions,
     'EXPIRE_BOOSTS': expireBoosts, 
-    'CHECK_FLOATS': floatConsistency.checkAllFloats
+    'CHECK_FLOATS': floatConsistency.checkAllFloats,
+    'ALL_PENDING_TRANSACTIONS': notifyAdminOfPendingTransactionsForAllUsers
 };
 
 /**

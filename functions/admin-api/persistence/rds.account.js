@@ -47,6 +47,24 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
     return resultOfCount[0]['count'];
 };
 
+module.exports.fetchPendingTransactionsForAllUsers = async (startTime, endTime) => {
+    logger(`Fetching pending transactions for all users between start time: ${startTime} and end time: ${endTime}`);
+
+    const txTable = config.get('tables.transactionTable');
+    const columns = `creation_time, transaction_type, settlement_status, amount, currency, unit, human_reference`;
+    const fetchQuery = `select ${columns} from ${txTable} where settlement_status = $1 ` +
+        `and creation_time > $2 and creation_time <= $3 and transaction_type in ($4, $5)`;
+    const values = ['PENDING', startTime, endTime, 'USER_SAVING_EVENT', 'WITHDRAWAL'];
+    logger('Sending query to RDS: ', fetchQuery);
+    logger('With values: ', values);
+
+    const resultOfQuery = await rdsConnection.selectQuery(fetchQuery, values);
+
+    logger('Result of pending TX query: ', resultOfQuery);
+
+    return camelCaseKeys(resultOfQuery);
+};
+
 module.exports.fetchUserPendingTransactions = async (systemWideUserId, startMoment) => {
     logger('Fetching pending transactions for user with ID: ', systemWideUserId);
 
