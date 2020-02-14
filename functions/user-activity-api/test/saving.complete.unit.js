@@ -58,7 +58,8 @@ const handler = proxyquire('../saving-handler', {
         'sumAccountBalance': getAccountBalanceStub
     },
     './persistence/dynamodb': {
-        'fetchFloatVarsForBalanceCalc': fetchClientFloatStub
+        'fetchFloatVarsForBalanceCalc': fetchClientFloatStub,
+        '@noCallThru': true
     },
     './payment-link': {
         'triggerTxStatusCheck': triggerTxStatusStub,

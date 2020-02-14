@@ -345,8 +345,8 @@ describe('User account allocation', () => {
 
     it('Persists a large number of allocations correctly', async () => {
         const floatQueryDef = { ...baseFloatAllocationQueryDef };
-        const allocRequests = generateAllocations(10, 100 * 100 * 100); // a hundred rand in hundredth cents (as daily interest, equals ind account of R1m roughly)
-        logger('Requests: ', allocRequests);
+        const allocRequests = generateAllocations(100, 100 * 100 * 100); // a hundred rand in hundredth cents (as daily interest, equals ind account of R1m roughly)
+        // logger('Requests: ', allocRequests);
 
         floatQueryDef.rows = allocRequests.map((request) => ({
             'transaction_id': request.floatTxId,

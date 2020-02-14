@@ -360,14 +360,28 @@ module.exports.sendEmails = async (event) => {
 };
 
 const dispatchEmailMessageChunk = async (chunk) => {
-    const defaultFrom = config.get('sendgrid.fromAddress');
-    const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: true } }};
-    const payload = chunk.reduce((array, msg) => ([
-        ...array, 
-        { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
-    ]), []); 
-    const result = await sendGridMail.send(payload);
-    return { result: JSON.stringify(result), messageIds: chunk.map((msg) => msg.messageId) };
+    try {
+        logger('Sending chunk of mails: ', chunk);
+        const defaultFrom = config.get('sendgrid.fromAddress');
+        const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: true } }};
+        const payload = chunk.map((msg) => (
+            { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
+        )); 
+
+        logger('Assembled payload: ', payload);
+        const result = await sendGridMail.send(payload);
+        logger('Result: ', JSON.stringify(result));
+        logger('Extracted results, first: ', result.map((insideResult) => insideResult[0].toJSON()));
+
+        const extractedMails = result.map((internalResult) => internalResult[0].toJSON());
+        const messageIdResults = chunk.map((msg, index) => ({ messageId: msg.messageId, statusCode: extractedMails[index].statusCode }));
+        
+        return { result: 'SUCCESS', messageIdResults };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        const messageIds = chunk.map((msg) => msg.messageId);
+        return { result: 'ERROR', messageIds };
+    }
 };
 
 /**
@@ -391,23 +405,29 @@ module.exports.sendEmailMessages = async (event) => {
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
         
-        logger('Created chunks:', messageChunks.map((chunk) => chunk.length));
+        logger('Created chunks of length:', messageChunks.map((chunk) => chunk.length));
         const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailMessageChunk(chunk)));
 
         const failedChunks = dispatchResult.map((chunk) => {
-            const result = JSON.parse(chunk.result)[0];
-            if (!Reflect.has(result, 'statusCode') || !SUCCESS_STATUSES.includes(result.statusCode)) {
-                return chunk.messageIds;
+            const { result } = chunk;
+            if (result === 'ERROR' || !chunk.messageIdResults) {
+                return chunk.messageIds; // all of them
             }
-            return null;
-        }).filter((result) => result !== null).reduce((flatArray, currentArray) => [...flatArray, ...currentArray], []);
+            return chunk.messageIdResults.
+                filter((messageResult) => !SUCCESS_STATUSES.includes(messageResult.statusCode)).map((messageResult) => messageResult.messageId);
+        }).reduce((flatArray, currentArray) => [...flatArray, ...currentArray], []);
 
         const failedMessages = emailMessages.filter((message) => !validMessageIds.includes(message.messageId) || failedChunks.includes(message.messageId));
         logger('Failed messages:', failedMessages.length);
 
         const failedMessageIds = failedMessages.map((msg) => msg.messageId);
+        if (failedMessageIds.length === emailMessages.length) {
+            throw Error('Dispatch error');
+        }
+        
+        const result = failedMessageIds.length === 0 ? 'SUCCESS' : 'PARTIAL';
 
-        return { result: 'SUCCESS', failedMessageIds };
+        return { result, failedMessageIds };
 
     } catch (err) {
         logger('FATAL_ERROR:', err);

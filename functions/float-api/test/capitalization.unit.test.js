@@ -40,7 +40,8 @@ const handler = proxyquire('../capitalization-handler', {
         '@noCallThru': true
     },
     './persistence/dynamodb': {
-        'fetchConfigVarsForFloat': fetchFloatConfigVarsStub
+        'fetchConfigVarsForFloat': fetchFloatConfigVarsStub,
+        '@noCallThru': true
     },
     './persistence/csvfile': {
         'writeAndUploadCsv': writeCsvFileStub
@@ -343,7 +344,7 @@ describe('*** UNIT TEST CAPITALIZATION PREVIEW ***', () => {
         };
 
         const rawResult = await handler.handle({ operation: 'UNSUPPORTED', parameters: testEvent });
-        logger('Result of capitalization:', rawResult);
+        // logger('Result of capitalization:', rawResult);
 
         expect(rawResult).to.exist;
         expect(rawResult).to.have.property('statusCode', 500);
