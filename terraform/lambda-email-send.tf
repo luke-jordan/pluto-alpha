@@ -71,8 +71,13 @@ resource "aws_cloudwatch_log_group" "email_send" {
 }
 
 resource "aws_iam_role_policy_attachment" "email_send_basic_execution_policy" {
-  role = "${aws_iam_role.email_send_role.name}"
+  role = aws_iam_role.email_send_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "email_send_template_access_policy" {
+  role = aws_iam_role.email_send_role.name
+  policy_arn = aws_iam_policy.templates_s3_access.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

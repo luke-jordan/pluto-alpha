@@ -94,6 +94,9 @@
             ".csv": "text/csv",
             ".jpeg": "image/jpeg",
             ".gif": "image/gif"
+        },
+        "sandbox": {
+            "off": false
         }
     }
 }

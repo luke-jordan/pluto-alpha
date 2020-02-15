@@ -161,7 +161,7 @@ const assembleDispatchPayload = (dispatchParams, destinationArray) => {
     
     const invalidDestinations = countSubstitutions(htmlTemplate) > 0 ? validateSubstitutions(htmlTemplate, destinationArray) : [];
 
-    const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.et('sendgrid.sandbox.off');
+    const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.get('sendgrid.sandbox.off');
     const payload = {
         'from': {
             'email': config.get('sendgrid.fromAddress'),
@@ -368,7 +368,7 @@ const dispatchEmailMessageChunk = async (chunk) => {
         logger('Sending chunk of mails: ', chunk);
         const defaultFrom = config.get('sendgrid.fromAddress');
         // being very careful here
-        const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.et('sendgrid.sandbox.off');
+        const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.get('sendgrid.sandbox.off');
         const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: !sandboxOff } }};
         const payload = chunk.map((msg) => (
             { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
