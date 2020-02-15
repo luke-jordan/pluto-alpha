@@ -50,7 +50,12 @@
         }
     },
     "email": {
-        "fromAddress": "noreply@jupitersave.com"
+        "fromAddress": "hello@jupitersave.com",
+        "wrapper": {
+            "enabled": true,
+            "bucket": "jupiter.templates",
+            "key": "emails/messageEmailWrapper.html"
+        }
     },
     "security": {
         "roleRequired": false

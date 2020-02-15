@@ -212,8 +212,17 @@ const fetchUserEmail = async (systemWideUserId) => {
 };
 
 const dispatchEmailMessages = async (emailMessages) => {
-    logger('Dispatching these email messages: ', emailMessages);
-    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages }, true);
+    // logger('Dispatching these email messages: ', emailMessages);
+    logger(`Dispatching ${emailMessages.length} email messages, wrapper enabled: ${config.get('email.wrapper.enabled')}`);
+    const payload = { emailMessages };
+    if (typeof config.get('email.wrapper.enabled') === 'boolean' && config.get('email.wrapper.enabled')) {
+        payload.emailWrapper = {
+            s3bucket: config.get('email.wrapper.bucket'),
+            s3key: config.get('email.wrapper.key')
+        };
+    }
+
+    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), payload, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
 

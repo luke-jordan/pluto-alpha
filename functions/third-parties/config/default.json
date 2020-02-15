@@ -81,7 +81,6 @@
         "fromAddress": "noreply@jupitersave.com",
         "replyToAddress": "noreply@jupitersave.com",
         "replyToName": "Jupiter",
-        "sandbox": true,
         "supportedAttachments": {
             ".pdf": "application/pdf",
             ".json": "application/json",

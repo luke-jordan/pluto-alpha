@@ -27,9 +27,11 @@ resource "aws_lambda_function" "email_send" {
               },
               "sendgrid": {
                 "apiKey": "${var.sendgrid_api_key[terraform.workspace]}",
-                "sandbox": true,
                 "fromAddress": "${var.messaging_source_email_address[terraform.workspace]}",
-                "replyToAddress": "${var.messaging_source_email_address[terraform.workspace]}"
+                "replyToAddress": "${var.messaging_source_email_address[terraform.workspace]}",
+                "sandbox": {
+                  "off": terraform.workspace == "master"
+                }
               }
           }
       )}"

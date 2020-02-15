@@ -65,7 +65,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCHING FROM REMOTE TEMPLATE ***', ()
             { 'type': 'text/html', 'value': validHtmlTemplate }
         ],
         'mail_settings': {
-            'sandbox_mode': { 'enable': config.get('sendgrid.sandbox') }
+            'sandbox_mode': { 'enable': true }
         },
         'personalizations': [validPersonalization]
     };
@@ -503,7 +503,7 @@ describe('*** UNIT TEST SENDGRID EMAIL DISPATCH FROM LOCAL TEMPLATE ***', () => 
             { 'type': 'text/html', 'value': validHtmlTemplate }
         ],
         'mail_settings': {
-            'sandbox_mode': { 'enable': config.get('sendgrid.sandbox') }
+            'sandbox_mode': { 'enable': true }
         },
         'personalizations': [validPersonalization]
     };
@@ -946,6 +946,32 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.deep.equal(expectedResult);
 
         expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
+    });
+
+    it('Sends out emails with template wrapper', async () => {
+        const numberMessages = 4;
+
+        const mockWrapper = '<html><title></title><body>{htmlBody}</body></html>';
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockWrapper }})});
+        sendGridStub.resolves(sendgridOkayChunk(numberMessages));
+
+        const testMessages = Array(numberMessages).fill(validEmailEvent(testMessageId));
+        const testWrapper = { s3bucket: 'email.templates', s3key: 'wrapper.html' };
+
+        const testEvent = {
+            emailMessages: testMessages,
+            emailWrapper: testWrapper
+        };
+
+        const result = await handler.sendEmailMessages(testEvent);
+        expect(result).to.deep.equal({ result: 'SUCCESS', failedMessageIds: [] });
+
+        const expectedWrappedMessage = '<html><title></title><body><p>Greetings. Welcome to jupiter</p></body></html>';
+        const expectedMessages = Array(numberMessages).fill(validEmailMessage).map((msg) => ({ ...msg, 'html': expectedWrappedMessage }));
+        
+        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: 'email.templates', Key: 'wrapper.html' });
+        expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedMessages);
     });
 
     it('Handles payload chunking where third party rate limit is exceeded', async () => {
