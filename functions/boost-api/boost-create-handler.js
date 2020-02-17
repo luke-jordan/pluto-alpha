@@ -375,6 +375,7 @@ module.exports.createBoost = async (event) => {
 
     if (boostType === 'GAME') {
         instructionToRds.messageInstructionIds = {};
+        instructionToRds.gameParams = params.gameParams;
     }
 
     // logger('Sending to persistence: ', instructionToRds);

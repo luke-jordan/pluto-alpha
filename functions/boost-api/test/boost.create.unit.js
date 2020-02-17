@@ -405,6 +405,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
         defaultStatus: 'CREATED',
+        gameParams,
         messageInstructionIds: { } 
     };
 
