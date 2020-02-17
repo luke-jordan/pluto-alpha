@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "",
   "scripts": {
-    "test": "DEBUG=jupiter:* nyc mocha",
+    "test": "DEBUG=jupiter:*:test nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
@@ -16,6 +16,7 @@
     "html-to-text": "^5.1.1",
     "request": "^2.88.0",
     "request-promise": "^4.2.4",
+    "string-format": "^2.0.0",
     "validator": "^12.1.0"
   },
   "devDependencies": {

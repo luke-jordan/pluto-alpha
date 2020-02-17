@@ -339,9 +339,10 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         redisGetStub.withArgs(`USER_PROFILE::${testId}`).resolves(null);
         const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId, includeContactMethod: true });
 
-        const bankDetails = { account: 'Hello' };
+        const cachedBankDetails = { account: 'Hello' };
+        const expectedBankDetails = { account: 'Hello', accountHolder: 'John Nkomo' };
 
-        redisGetStub.withArgs(`WITHDRAWAL_DETAILS::${testId}`).resolves(JSON.stringify(bankDetails));
+        redisGetStub.withArgs(`WITHDRAWAL_DETAILS::${testId}`).resolves(JSON.stringify(cachedBankDetails));
         lamdbaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
 
         getObjectStub.returns({ promise: () => ({ 
@@ -361,7 +362,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         fetchBSheetAccStub.resolves('POL1');
         const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.addTxToBalanceSheet'), false, {
             operation: 'WITHDRAW',
-            transactionDetails: { accountNumber: 'POL1', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD', bankDetails }
+            transactionDetails: { accountNumber: 'POL1', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD', bankDetails: expectedBankDetails }
         });
         const bsheetResult = { result: 'WITHDRAWN' };
         lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify(bsheetResult)})});

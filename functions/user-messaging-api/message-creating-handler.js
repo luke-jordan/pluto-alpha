@@ -261,7 +261,8 @@ const generateRecurringMessages = async (recurringInstruction) => {
 };
 
 /**
- * This runs on a scheduled job. It processes any once off and recurring instructions that have not been processed yet.
+ * This runs on a scheduled job. It processes any recurring instructions that match the parameters.
+ * Note : disabling the once off as at present that gets sent right away, and this is causing potential duplication
  */
 module.exports.createFromPendingInstructions = async () => {
     try {
@@ -269,8 +270,9 @@ module.exports.createFromPendingInstructions = async () => {
         // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
         // include within a fail-safe check that once-off messages are not regenerated when they already exist (simple count should do)
         const unprocessedOnceOffsReady = await rdsUtil.getInstructionsByType('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
-        
-        const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructions: [{ instructionId: instruction.instructionId }]}));
+        logger('Would process these once off messages: ', unprocessedOnceOffsReady);
+
+        // const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructions: [{ instructionId: instruction.instructionId }]}));
         
         // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next
         // which implies: first get the recurring instructions, then expire old messages, then add new to the queue; okay.
@@ -279,9 +281,9 @@ module.exports.createFromPendingInstructions = async () => {
 
         const recurringPromises = obtainRecurringMessages.map((instruction) => generateRecurringMessages(instruction));
 
-        const allPromises = onceOffPromises.concat(recurringPromises);
+        // const allPromises = onceOffPromises.concat(recurringPromises);
 
-        const processResults = await Promise.all(allPromises);
+        const processResults = await Promise.all(recurringPromises);
         logger('Results of message processing: ', processResults);
 
         const messagesProcessed = processResults.length;

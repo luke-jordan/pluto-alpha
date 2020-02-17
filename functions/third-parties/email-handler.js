@@ -2,10 +2,13 @@
 
 const logger = require('debug')('jupiter:third-parties:sendgrid');
 const config = require('config');
+const format = require('string-format');
+const path = require('path');
+
 const opsUtil = require('ops-util-common');
 
-const path = require('path');
 const htmlToText = require('html-to-text');
+
 const sendGridMail = require('@sendgrid/mail');
 const AWS = require('aws-sdk');
 
@@ -158,6 +161,7 @@ const assembleDispatchPayload = (dispatchParams, destinationArray) => {
     
     const invalidDestinations = countSubstitutions(htmlTemplate) > 0 ? validateSubstitutions(htmlTemplate, destinationArray) : [];
 
+    const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.get('sendgrid.sandbox.off');
     const payload = {
         'from': {
             'email': config.get('sendgrid.fromAddress'),
@@ -170,7 +174,7 @@ const assembleDispatchPayload = (dispatchParams, destinationArray) => {
         'subject': '{{subject}}',
         'content': [],
         'mail_settings': {
-            'sandbox_mode': { enable: config.get('sendgrid.sandbox') }
+            'sandbox_mode': { enable: !sandboxOff }
         }
     };
 
@@ -360,18 +364,38 @@ module.exports.sendEmails = async (event) => {
 };
 
 const dispatchEmailMessageChunk = async (chunk) => {
-    const defaultFrom = config.get('sendgrid.fromAddress');
-    const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: true } }};
-    const payload = chunk.reduce((array, msg) => ([
-        ...array, 
-        { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
-    ]), []); 
-    const result = await sendGridMail.send(payload);
-    return { result: JSON.stringify(result), messageIds: chunk.map((msg) => msg.messageId) };
+    try {
+        logger('Sending chunk of mails: ', chunk);
+        const defaultFrom = config.get('sendgrid.fromAddress');
+        // being very careful here
+        const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.get('sendgrid.sandbox.off');
+        const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: !sandboxOff } }};
+        const payload = chunk.map((msg) => (
+            { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
+        )); 
+
+        logger('Assembled payload: ', payload);
+        const result = await sendGridMail.send(payload);
+        logger('Result: ', JSON.stringify(result));
+        logger('Extracted results, first: ', result.map((insideResult) => insideResult[0].toJSON()));
+
+        const extractedMails = result.map((internalResult) => internalResult[0].toJSON());
+        const messageIdResults = chunk.map((msg, index) => ({ messageId: msg.messageId, statusCode: extractedMails[index].statusCode }));
+        
+        return { result: 'SUCCESS', messageIdResults };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        const messageIds = chunk.map((msg) => msg.messageId);
+        return { result: 'ERROR', messageIds };
+    }
 };
 
+const wrapHtmlinTemplate = (emailMessages, wrapperTemplate) => emailMessages.map((msg) => (
+    { ...msg, html: format(wrapperTemplate, { htmlBody: msg.html })
+}));
+
 /**
- * This function sends pre-assembled emails.
+ * This function sends pre-assembled emails, with the option of enclosing them in a wrapper from S3.
  * @param    {object} event
  * @property {array}  emailMessages An array of emails objects to be dispatched. Each email must have the following properties: messageId, to, from, subject, text, html.
  */
@@ -382,32 +406,44 @@ module.exports.sendEmailMessages = async (event) => {
         }
 
         const { emailMessages } = opsUtil.extractParamsFromEvent(event);
-        const validMessages = validateEmailMessages(emailMessages);
+        let validMessages = validateEmailMessages(emailMessages);
 
         if (!validMessages || validMessages.length === 0) {
             throw new Error('No valid emails found');
         }
 
+        if (event.emailWrapper) {
+            const { s3bucket, s3key } = event.emailWrapper;
+            const wrapperTemplate = await fetchHtmlTemplate(s3bucket, s3key);
+            validMessages = wrapHtmlinTemplate(validMessages, wrapperTemplate); 
+        }
+
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
         
-        logger('Created chunks:', messageChunks.map((chunk) => chunk.length));
+        logger('Created chunks of length:', messageChunks.map((chunk) => chunk.length));
         const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailMessageChunk(chunk)));
 
         const failedChunks = dispatchResult.map((chunk) => {
-            const result = JSON.parse(chunk.result)[0];
-            if (!Reflect.has(result, 'statusCode') || !SUCCESS_STATUSES.includes(result.statusCode)) {
-                return chunk.messageIds;
+            const { result } = chunk;
+            if (result === 'ERROR' || !chunk.messageIdResults) {
+                return chunk.messageIds; // all of them
             }
-            return null;
-        }).filter((result) => result !== null).reduce((flatArray, currentArray) => [...flatArray, ...currentArray], []);
+            return chunk.messageIdResults.
+                filter((messageResult) => !SUCCESS_STATUSES.includes(messageResult.statusCode)).map((messageResult) => messageResult.messageId);
+        }).reduce((flatArray, currentArray) => [...flatArray, ...currentArray], []);
 
         const failedMessages = emailMessages.filter((message) => !validMessageIds.includes(message.messageId) || failedChunks.includes(message.messageId));
         logger('Failed messages:', failedMessages.length);
 
         const failedMessageIds = failedMessages.map((msg) => msg.messageId);
+        if (failedMessageIds.length === emailMessages.length) {
+            throw Error('Dispatch error');
+        }
+        
+        const result = failedMessageIds.length === 0 ? 'SUCCESS' : 'PARTIAL';
 
-        return { result: 'SUCCESS', failedMessageIds };
+        return { result, failedMessageIds };
 
     } catch (err) {
         logger('FATAL_ERROR:', err);

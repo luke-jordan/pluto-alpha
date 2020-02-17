@@ -41,6 +41,8 @@ resource "aws_lambda_function" "user_event_process" {
                 }
               },
               "publishing": {
+                "withdrawalEmailDestination": var.events_email_receipients[terraform.workspace],
+                "saveEmailDestination": var.events_email_receipients[terraform.workspace],
                 "userEvents": {
                   "topicArn": "${var.user_event_topic_arn[terraform.workspace]}",
                   "processingDlq": "${aws_sqs_queue.user_event_dlq.name}"

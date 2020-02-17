@@ -142,6 +142,7 @@ module.exports.sendWithdrawal = async (event) => {
         logger('Assembled endpoint:', endpoint);
 
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
+        logger('Withdrawal request options: ', options);
         const response = await request(options);
         logger('Got response:', response.toJSON());
 

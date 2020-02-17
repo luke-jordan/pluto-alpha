@@ -8,7 +8,7 @@ const chai = require('chai');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const testFloatId = 'vnd_primary_cash';
 const testBonusPoolId = 'bonus_pool';
@@ -25,6 +25,12 @@ const handler = proxyquire('../transfer-handler', {
     './persistence/rds': {
         'allocateFloat': allocatePoolStub,
         'allocateToUsers': allocateUserStub,
+        '@noCallThru': true
+    },
+    './persistence/dynamodb': {
+        '@noCallThru': true
+    },
+    './accrual-handler': {
         '@noCallThru': true
     },
     '@noCallThru': true

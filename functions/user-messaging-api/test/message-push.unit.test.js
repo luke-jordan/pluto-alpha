@@ -496,10 +496,11 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
     it('Sends pending push messages and emails', async () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage(), mockUserMessage(), mockUserMessage(), mockUserMessage()]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onCall(0).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onCall(1).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onCall(2).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onCall(3).returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        
+        const numberProfileCalls = 4;
+        const profileResponse = helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) });
+        Array(numberProfileCalls).fill().forEach((_, index) => lamdbaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
+        
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -585,14 +586,18 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     };
 
     const emailMessagesInvocation = {
-        FunctionName: 'email_bulk_dispatch',
+        FunctionName: 'email_send',
         InvocationType: 'RequestResponse',
         LogType: 'None',
         Payload: stringify({
+            emailWrapper: {
+                s3key: 'emails/messageEmailWrapper.html',
+                s3bucket: 'jupiter.templates'
+            },
             emailMessages: [{
                 messageId: testMessageId,
                 to: 'user@email.com',
-                from: 'noreply@jupitersave.com',
+                from: 'hello@jupitersave.com',
                 subject: 'Welcome to jupiter.',
                 text: 'Greetings. Welcome to jupiter.',
                 html: '<p>Greetings. Welcome to jupiter.</p>'
@@ -614,7 +619,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     it('It sends out push and email messages', async () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
@@ -660,23 +665,28 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         const expectedEmail = {
             messageId: testUserId,
             to: 'user@email.com',
-            from: 'noreply@jupitersave.com',
+            from: 'hello@jupitersave.com',
             subject: 'Welcome to jupiter.',
             text: 'Greetings. Welcome to jupiter.',
             html: '<p>Greetings. Welcome to jupiter.</p>'
         };
 
+        const expectedWrapper = {
+            s3bucket: 'jupiter.templates',
+            s3key: 'emails/messageEmailWrapper.html'
+        };
+
         const expectedInvocation = {
-            FunctionName: 'email_bulk_dispatch',
+            FunctionName: 'email_send',
             InvocationType: 'RequestResponse',
             LogType: 'None',
-            Payload: stringify({ emailMessages: [expectedEmail, expectedEmail] })
+            Payload: stringify({ emailMessages: [expectedEmail, expectedEmail], emailWrapper: expectedWrapper })
         };
 
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(testUserProfile) });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         publishUserEventStub.resolves({ result: 'SUCCESS' });
 

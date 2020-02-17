@@ -69,6 +69,9 @@ const handler = proxyquire('../saving-handler', {
     'publish-common': {
         'publishUserEvent': publishStub
     },
+    './persistence/dynamodb': {
+        '@noCallThru': true
+    },
     'moment-timezone': momentStub
 });
 

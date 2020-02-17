@@ -201,12 +201,8 @@ const safeEmailAttempt = async (eventBody) => {
 };
 
 // handling withdrawals by sending email
-const safeWithdrawalEmail = async (eventBody, bankAccountDetails) => {
-    const { userId } = eventBody;
-    const userProfile = await fetchUserProfile(userId, true);
-
+const safeWithdrawalEmail = async (eventBody, userProfile, bankAccountDetails) => {
     const templateVariables = { ...bankAccountDetails };
-    templateVariables.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
     templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount); // note: make positive in time
 
     const profileSearch = `users?searchValue=${encodeURIComponent(userProfile.contactMethod)}&searchType=phoneOrEmail`;
@@ -377,9 +373,12 @@ const obtainBankAccountDetails = async (userId) => {
 const handleWithdrawalEvent = async (eventBody) => {
     logger('Withdrawal event triggered! Event body: ', eventBody);
 
-    const bankDetails = await obtainBankAccountDetails(eventBody.userId);
+    const { userId } = eventBody;
+    const [userProfile, bankDetails] = await Promise.all([fetchUserProfile(userId, true), obtainBankAccountDetails(userId)]);
 
-    await safeWithdrawalEmail(eventBody, bankDetails);
+    bankDetails.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
+    
+    await safeWithdrawalEmail(eventBody, userProfile, bankDetails);
 
     const processingPromises = [];
     const boostProcessInvocation = assembleBoostProcessInvocation(eventBody);

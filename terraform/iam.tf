@@ -557,6 +557,14 @@ resource "aws_iam_policy" "message_push_lambda_policy" {
                 "${aws_lambda_function.user_history_aggregate.arn}",
                 "${aws_lambda_function.email_send.arn}"
             ]
+        },
+        {
+            "Sid": "EmailTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
         }
     ]
 }

@@ -45,7 +45,10 @@ resource "aws_lambda_function" "message_push" {
                 }
               },
               "email": {
-                "fromAddress": "${var.messaging_source_email_address[terraform.workspace]}"
+                "fromAddress": "${var.messaging_source_email_address[terraform.workspace]}",
+                "wrapper": {
+                  "bucket": "${terraform.workspace}.jupiter.templates"
+                }
               }
           }
       )}"
@@ -137,7 +140,6 @@ resource "aws_lambda_permission" "allow_cloudwatch_to_call_message_pusher" {
     principal = "events.amazonaws.com"
     source_arn = "${aws_cloudwatch_event_rule.ops_every_minute.arn}"
 }
-
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 

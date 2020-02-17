@@ -78,6 +78,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "message_user_create_recurr" {
   name = "/aws/lambda/${var.message_user_create_recurr_lambda_function_name}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"
@@ -102,6 +103,22 @@ resource "aws_iam_role_policy_attachment" "message_create_recurr_user_event_publ
 resource "aws_iam_role_policy_attachment" "message_user_create_recurr_secret_get" {
   role = aws_iam_role.message_user_create_recurr_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
+}
+
+////////////////// TRIGGER FOR CREATION //////////////////////////////////////////////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_msg_generate_five_mins" {
+    rule = aws_cloudwatch_event_rule.ops_every_five_minutes.name
+    target_id = aws_lambda_function.message_user_create_recurr.id
+    arn = aws_lambda_function.message_user_create_recurr.arn
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_recurring_msgs" {
+    statement_id = "AllowMsgRecurrExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.message_user_create_recurr.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.ops_every_five_minutes.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
