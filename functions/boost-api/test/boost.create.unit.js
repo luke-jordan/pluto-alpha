@@ -365,7 +365,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
     const testStatusConditions = {
         OFFERED: ['message_instruction_created'],
         UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
-        REDEEMED: ['taps_submitted', 'number_taps_greater_than #{20::20000}']
+        REDEEMED: ['number_taps_greater_than #{20::20000}']
     };
 
     // todo: validation that type/category matches game params

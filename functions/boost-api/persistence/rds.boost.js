@@ -39,6 +39,11 @@ const transformBoostFromRds = (boost) => {
     return transformedBoost;
 };
 
+module.exports.fetchBoost = async (boostId) => {
+    const rawResult = await rdsConnection.selectQuery(`select * from ${boostTable} where boost_id = $1`, [boostId]);
+    return rawResult.length === 0 ? null : camelizeKeys(rawResult[0]);
+};
+
 /**
  * Method that finds boost that may be relevant to a given account, filtering by whether the account is in a certain state related to the boost.
  * Most common use will be to find the boosts for which a given account (e.g., that just saved) is in a 'PENDING STATE'

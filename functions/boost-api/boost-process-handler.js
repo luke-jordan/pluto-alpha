@@ -8,6 +8,8 @@ const stringify = require('json-stable-stringify');
 const status = require('statuses');
 
 const persistence = require('./persistence/rds.boost');
+const auxPersistence = require('./persistence/rds.admin.boost.js'); // todo : need better naming & organizing in here
+
 const publisher = require('publish-common');
 const util = require('./boost.util');
 
@@ -59,6 +61,12 @@ const evaluateWithdrawal = (parameterValue, eventContext) => {
     return timeSettled.isBefore(timeThreshold);
 };
 
+const evaluateGameResponse = (eventContext, parameterValue) => {
+    const { numberTaps, timeTakenMillis } = eventContext;
+    const [requiredTaps, maxTimeMillis] = parameterValue.split('::');
+    return numberTaps >= requiredTaps && timeTakenMillis <= maxTimeMillis;
+};
+
 const testCondition = (event, statusCondition) => {
     logger('Status condition: ', statusCondition);
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
@@ -82,6 +90,8 @@ const testCondition = (event, statusCondition) => {
             return equalizeAmounts(eventContext.newBalance) < equalizeAmounts(parameterValue);
         case 'withdrawal_before':
             return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
+        case 'number_taps_greater_than':
+            return evaluateGameResponse(eventContext, parameterValue);
         default:
             return false;
     }
@@ -176,7 +186,10 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
         const highestStatus = boostStatusChangeDict[boostId][0]; // but needs a sort
         const isChangeRedemption = highestStatus === 'REDEEMED';
         const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
-        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount, transactionId };
+        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount };
+        if (transactionId) {
+            logContext.transactionId = transactionId;
+        }
 
         return {
             boostId,
@@ -233,7 +246,7 @@ const assembleMessageForInstruction = (boost, boostInstruction, affectedAccountU
         const userMsgInstruction = generateMsgInstruction(instructionId, userObjectForTarget.userId, boost);
         logger('Generated instruction: ', userMsgInstruction);
         return [userMsgInstruction];
-    } 
+    }
     
     logger('Target not present in user dict, investigate');
     return [];
@@ -265,6 +278,7 @@ const generateMessageSendInvocation = (messageInstructions) => ({
 
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event }) => {
     const eventType = `BOOST_REDEEMED`;
+    logger('WTF: ', event.eventContext);
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
         const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
@@ -416,9 +430,69 @@ module.exports.processUserBoostResponse = async (event) => {
         const params = util.extractEventBody(event);
         logger('Event params: ', params);
 
+        const { systemWideUserId } = userDetails;
+        const { boostId } = params;
+
+        // todo : make sure boost is available for this account ID
+        const [boost, userAccountIds] = await Promise.all([
+            persistence.fetchBoost(boostId), 
+            auxPersistence.findAccountsForUser(systemWideUserId)
+        ]);
+
+        logger('Fetched boost: ', boost);
+
+        const accountId = userAccountIds[0]; // todo : as above, combine
+        const statusEvent = { eventContext: params };
+
+        const statusResult = extractStatusChangesMet(statusEvent, boost);
+        if (statusResult.length === 0) {
+            return { statusCode: 200, body: JSON.stringify({ result: 'NO_CHANGE' })};
+        }
+
+        const accountDict = { [boostId]: { [accountId]: systemWideUserId }};
+        const boostStatusDict = { [boostId]: statusResult };
+
+        const resultBody = { result: 'TRIGGERED', statusMet: statusResult };
+
+        const isBoostRedemption = statusResult.includes('REDEEMED');
+
+        let resultOfTransfer = {};
+        if (isBoostRedemption) {
+            // do this first, as if it fails, we do not want to proceed
+            const transferInstruction = generateFloatTransferInstructions(accountDict, boost);
+            resultOfTransfer = await triggerFloatTransfers([transferInstruction]);
+            logger('Boost process-redemption, result of transfer: ', resultOfTransfer);
+        }
+
+        if (resultOfTransfer[boostId] && resultOfTransfer[boostId].result !== 'SUCCESS') {
+            throw Error('Error transferring redemption');
+        }
+
+        const updateInstructions = generateUpdateInstructions([boost], boostStatusDict, accountDict);
+        logger('Sending this update instruction to persistence: ', updateInstructions);
+        updateInstructions[0].logContext = { ...updateInstructions[0].logContext, processType: 'USER', submittedParams: params };
+        const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
+        logger('Result of update operation: ', resultOfUpdates);
+   
+        if (statusResult.includes('REDEEMED')) {
+            resultBody.amountAllocated = { amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency };
+            const updateRedeemedAmountPromise = persistence.updateBoostAmountRedeemed([boostId]);
+            const boostUpdateTime = resultOfUpdates[0].updatedTime;
+            const eventForPublishing = { eventContext: params, accountId };
+            logger('Sending in event for publishing: ', eventForPublishing);
+            const publishEventPromise = createPublishEventPromises({ 
+                boost,
+                boostUpdateTime,
+                affectedAccountsUserDict: { [accountId]: { userId: systemWideUserId }},
+                transferResults: resultOfTransfer[boostId],
+                event: eventForPublishing
+            });
+            await Promise.all([updateRedeemedAmountPromise, publishEventPromise]);
+        }
+
         return {
             statusCode: 200,
-            body: JSON.stringify(params)
+            body: JSON.stringify(resultBody)
         };
         
     } catch (err) {
