@@ -24,9 +24,7 @@ const calculateCompoundInterestUsingDayInterval = (amount, interestRateAsBigNumb
     daily interest rate: ${interestRateAsBigNumber} for total days: ${numberOfDays}`);
     const amountAsBigNumber = new DecimalLight(amount);
     const baseCompoundRate = new DecimalLight(1).plus(interestRateAsBigNumber);
-
     const baseCompoundRateAfterGivenDays = baseCompoundRate.pow(new DecimalLight(numberOfDays).dividedBy(DAYS_IN_A_YEAR));
-    logger('base compound rate after given days', baseCompoundRateAfterGivenDays);
 
     const compoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenDays).minus(amountAsBigNumber);
     logger(`Successfully calculated Compound Interest: ${compoundInterest} for day interval: ${numberOfDays}`);
@@ -43,10 +41,30 @@ const calculateNumberOfDaysPassedSinceDateAndToday = async (givenDate) => {
     return numberOfDaysPassedSinceDate;
 };
 
+const clientFloatsToInterestRatesMap = {};
+const storeValueInLocalClientFloats = async (interestRateMapKey, interestRateAsBigNumber) => {
+    clientFloatsToInterestRatesMap[interestRateMapKey] = interestRateAsBigNumber;
+};
+
+const fetchInterestRateFromLocalOrCache = async (clientId, floatId) => {
+    logger(`Get interest rate from local or cache for clientId: ${clientId} and floatId: ${floatId}`);
+    const interestRateMapKey = `${clientId}_${floatId}_interest_rate`;
+    let interestRateAsBigNumber = null;
+    if (interestRateMapKey in clientFloatsToInterestRatesMap) {
+        interestRateAsBigNumber = clientFloatsToInterestRatesMap[interestRateMapKey];
+        logger(`Found interest rate in local map for clientId: ${clientId} and floatId: ${floatId}. Interest rate: ${interestRateAsBigNumber}`);
+    } else {
+        logger(`Interest rate NOT in local map for clientId: ${clientId} and floatId: ${floatId}. Checking cache/database`);
+        const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+        interestRateAsBigNumber = await calculateInterestRate(floatProjectionVars);
+        await storeValueInLocalClientFloats(interestRateMapKey, interestRateAsBigNumber);
+    }
+    return interestRateAsBigNumber;
+};
+
 module.exports.calculateEstimatedInterestEarned = async (transactionInformation, calculationUnit = 'HUNDREDTH_CENT') => {
     logger(`Calculate estimated interest earned`);
-    const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(transactionInformation.clientId, transactionInformation.floatId);
-    const interestRateAsBigNumber = await calculateInterestRate(floatProjectionVars);
+    const interestRateAsBigNumber = await fetchInterestRateFromLocalOrCache(transactionInformation.clientId, transactionInformation.floatId);
     const numberOfDaysSinceSettleTime = await calculateNumberOfDaysPassedSinceDateAndToday(transactionInformation.settlementTime);
     const amount = Math.abs(opsUtil.convertToUnit(transactionInformation.amount, transactionInformation.unit, calculationUnit));
     const interestEarned = await calculateCompoundInterestUsingDayInterval(amount, interestRateAsBigNumber, numberOfDaysSinceSettleTime);

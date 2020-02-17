@@ -33,6 +33,21 @@ class MockLambdaClient {
     }
 }
 
+const currentTime = moment();
+class mockMoment {
+    static valueOf () {
+        return currentTime.valueOf();
+    }
+
+    static subtract (number, string) {
+        return currentTime.clone().subtract(number, string);
+    }
+
+    static format () {
+        return currentTime.format();
+    }
+}
+
 const handler = proxyquire('../history-handler', {
     './persistence/rds': {
         'findAccountsForUser': findAccountStub,
@@ -53,7 +68,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     const testAccountId = uuid();
     const testPhone = '+276323503434';
     const testNationalId = '931223493933434';
-    const testTime = moment();
+    const testTime = currentTime;
     const testClientId = uuid();
     const testFloatId = uuid();
 
@@ -240,7 +255,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         const testHistoryEvent = {
             userId: testUserId,
             eventTypes: config.get('defaults.userHistory.eventTypes'),
-            startDate: testTime.valueOf(),
+            startDate: testTime.clone().subtract(config.get('defaults.userHistory.daysInHistory'), 'days').valueOf(),
             endDate: testTime.valueOf()
         };
 
@@ -267,11 +282,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             humanReference: 'BUSANI6'
         };
 
-        momentStub.returns({
-            valueOf: () => testTime.valueOf(),
-            subtract: () => testTime,
-            startOf: () => testTime
-        });
+        momentStub.returns(mockMoment);
 
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
             promise: () => mockLambdaResponse(expectedProfile)
@@ -320,6 +331,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
         // expect(result.body).to.deep.equal(JSON.stringify(expectedResult)); // momentStub isn't stubbing out a specific instance. to be seen to. all else is as expected.
+        expect(momentStub).to.have.been.callCount(4);
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
 

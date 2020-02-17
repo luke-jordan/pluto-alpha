@@ -48,7 +48,6 @@ const expireBoosts = async () => {
     const logPublishPromises = boostIds.map((boostId) => (
         publisher.publishMultiUserEvent(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }})
     ));
-
     await Promise.all(logPublishPromises);
     return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };
 };
@@ -200,19 +199,26 @@ const initiateFloatAccruals = async () => {
 };
 
 const formatAllPendingTransactionsForEmail = async (allPendingTransactions) => {
-    logger(`Formatting all pending transactions for email. 
-    Pending Transactions: ${JSON.stringify(allPendingTransactions)}`);
-
-    const htmlTemplateForRow = `<tr><td>{humanReference}</td><td>{amount}</td><td>{currency}</td><td>{unit}</td><td>{transactionType}</td><td>{creationTime}</td><td>{settlementStatus}</td></tr>`;
+    logger(`Formatting all pending transactions for email. Pending Transactions: ${JSON.stringify(allPendingTransactions)}`);
+    const transactionsWithWholeCurrencyAmount = allPendingTransactions.map((transaction) => ({ ...transaction, wholeCurrencyAmount: opsUtil.convertToUnit(transaction.amount, transaction.unit, 'WHOLE_CURRENCY'), unit: 'WHOLE_CURRENCY' }));
+    const htmlTemplateForRow = `
+        <tr>
+            <td>{humanReference}</td>
+            <td>{currency} {wholeCurrencyAmount}</td>
+            <td>{unit}</td>
+            <td>{transactionType}</td>
+            <td>{creationTime}</td>
+            <td>{settlementStatus}</td>
+         </tr>
+    `;
     logger('html template', htmlTemplateForRow);
     const startingValue = '';
-    const pendingTransactionsFormattedForEmail = allPendingTransactions.reduce((accumulator, pendingTransaction) => {
+    const pendingTransactionsFormattedForEmail = transactionsWithWholeCurrencyAmount.reduce((accumulator, pendingTransaction) => {
         const transactionAsTableRow = stringFormat(htmlTemplateForRow, pendingTransaction);
         return `${accumulator} ${transactionAsTableRow}`;
     }, startingValue);
 
-    logger(`Successfully formatted all pending transactions for email. 
-    Formatted Pending Transactions: ${JSON.stringify(pendingTransactionsFormattedForEmail)}`);
+    logger(`Successfully formatted all pending transactions for email. Transactions: ${JSON.stringify(pendingTransactionsFormattedForEmail)}`);
     return pendingTransactionsFormattedForEmail;
 };
 
@@ -223,6 +229,7 @@ const notifyAdminOfPendingTransactionsForAllUsers = async () => {
     const endTime = moment().format();
     const allPendingTransactions = await rdsAccount.fetchPendingTransactionsForAllUsers(startTime, endTime);
     if (!allPendingTransactions || allPendingTransactions.length === 0) {
+        logger('all tx', allPendingTransactions);
         logger('No pending transactions, returning');
         return { result: 'NO_PENDING_TRANSACTIONS' };
     }
@@ -237,8 +244,7 @@ const notifyAdminOfPendingTransactionsForAllUsers = async () => {
         }
     });
 
-    logger(`Result of email to notify admin of pending transactions for all users.
-    Email Result: ${JSON.stringify(emailResult)}`);
+    logger(`Result of email to notify admin of pending transactions for all users. Email Result: ${JSON.stringify(emailResult)}`);
     return allPendingTransactions.length;
 };
 

@@ -1,5 +1,6 @@
 'use strict';
 
+const logger = require('debug')('jupiter:interest-helper.unit.test');
 const chai = require('chai');
 const sinon = require('sinon');
 const uuid = require('uuid');
@@ -63,6 +64,8 @@ describe('*** Unit Test Admin User Handler ***', () => {
         };
 
         const response = await handler.calculateEstimatedInterestEarned(testTransactionInformation, testCalculationUnit);
+        logger('second attempt =========>'); // this helps test the presence of a client/float in the local map of client/float to interest-rates
+        await handler.calculateEstimatedInterestEarned(testTransactionInformation, testCalculationUnit);
 
         expect(response).to.exist;
         expect(response).to.deep.equal(expectedResult);

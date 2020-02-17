@@ -48,6 +48,7 @@ const fetchUserProfile = async (systemWideUserId) => {
 
 // fetches user events for the last 6 (?) months (... can extend when we have users long than that & have thought through data etc)
 const obtainUserHistory = async (systemWideUserId) => {
+    logger('Obtaining user history');
     const startDate = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days').valueOf();
     const eventTypes = config.get('defaults.userHistory.eventTypes');
 

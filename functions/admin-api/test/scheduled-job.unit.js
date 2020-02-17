@@ -12,6 +12,7 @@ const moment = require('moment');
 const helper = require('./test.helper');
 const DecimalLight = require('decimal.js-light');
 const stringFormat = require('string-format');
+const opsUtil = require('ops-util-common');
 
 const listClientFloatsStub = sinon.stub();
 const getFloatBalanceAndFlowsStub = sinon.stub();
@@ -70,6 +71,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     const testCurrency = 'ZAR';
     const testAccrualRateAnnualBps = 750;
     const testTime = moment();
+    const formattedTestTime = testTime.format();
     const testTimeValueOf = moment().valueOf();
     const sendSystemEmailReponse = {};
     const testHumanReference = 'AVISH764';
@@ -92,23 +94,23 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     ));
 
     it('should run regular job - accrue float successfully', async () => {
-       const testEvent = {
+        const testEvent = {
            specificOperations: ['ACRRUE_FLOAT']
-       };
-       const expectedResult = [testEvent.specificOperations.length];
+        };
+        const expectedResult = [testEvent.specificOperations.length];
 
-       const testLastFloatAccrualTime = moment();
-       const testMillisSinceLastCalc = testTimeValueOf - testLastFloatAccrualTime.valueOf();
-       const testBasisPointDivisor = 100 * 100; // i.e., hundredths of a percent
-       const testDailyAccrualRateNominalNet = new DecimalLight(testAccrualRateAnnualBps).dividedBy(testBasisPointDivisor).dividedBy(DAYS_IN_A_YEAR);
-       const testPortionOfDay = new DecimalLight(testMillisSinceLastCalc).dividedBy(new DecimalLight(MILLIS_IN_DAY));
-       const testAccrualRateToApply = testDailyAccrualRateNominalNet.times(testPortionOfDay).toNumber();
-       const testTodayAccrualAmount = new DecimalLight(testAmount).times(testAccrualRateToApply);
-       const clientFloats = [{ clientId: testClientId, floatId: testFloatId, currency: testCurrency, accrualRateAnnualBps: testAccrualRateAnnualBps }];
+        const testLastFloatAccrualTime = moment();
+        const testMillisSinceLastCalc = testTimeValueOf - testLastFloatAccrualTime.valueOf();
+        const testBasisPointDivisor = 100 * 100; // i.e., hundredths of a percent
+        const testDailyAccrualRateNominalNet = new DecimalLight(testAccrualRateAnnualBps).dividedBy(testBasisPointDivisor).dividedBy(DAYS_IN_A_YEAR);
+        const testPortionOfDay = new DecimalLight(testMillisSinceLastCalc).dividedBy(new DecimalLight(MILLIS_IN_DAY));
+        const testAccrualRateToApply = testDailyAccrualRateNominalNet.times(testPortionOfDay).toNumber();
+        const testTodayAccrualAmount = new DecimalLight(testAmount).times(testAccrualRateToApply);
+        const clientFloats = [{ clientId: testClientId, floatId: testFloatId, currency: testCurrency, accrualRateAnnualBps: testAccrualRateAnnualBps }];
 
-       listClientFloatsStub.resolves(clientFloats);
-       getFloatBalanceAndFlowsStub.withArgs([testFloatId]).resolves(testFloatBalanceMap);
-       getLastFloatAccrualTimeStub.withArgs(testFloatId, testClientId).resolves(testLastFloatAccrualTime);
+        listClientFloatsStub.resolves(clientFloats);
+        getFloatBalanceAndFlowsStub.withArgs([testFloatId]).resolves(testFloatBalanceMap);
+        getLastFloatAccrualTimeStub.withArgs(testFloatId, testClientId).resolves(testLastFloatAccrualTime);
 
         const testAccrualPayload = {
             clientId: testClientId,
@@ -127,10 +129,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
             }
         };
 
-        momentStub.returns({
-            valueOf: () => testTimeValueOf,
-            subtract: () => testTime
-        });
+        momentStub.returns(testTime);
 
         const testAccrualInvocationResults = {
            entityAllocations: {
@@ -156,9 +155,9 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
         });
         sendSystemEmailStub.resolves(sendSystemEmailReponse);
 
-       const result = await handler.runRegularJobs(testEvent);
-       expect(result).to.exist;
-       expect(result).to.have.property('statusCode', 200);
+        const result = await handler.runRegularJobs(testEvent);
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 200);
         expect(result.body).to.deep.equal(expectedResult);
         expect(listClientFloatsStub).to.have.been.calledOnce;
         expect(getFloatBalanceAndFlowsStub).to.have.been.calledOnce;
@@ -171,7 +170,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        const testEvent = {
            specificOperations: ['EXPIRE_HANGING']
        };
-        const expectedResult = [];
+       const expectedResult = [];
 
        rdsExpireHangingTransactionsStub.withArgs().resolves(expectedResult);
 
@@ -186,9 +185,8 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        const testEvent = {
            specificOperations: ['EXPIRE_BOOSTS']
        };
-        const emptyArray = [];
-
-        expireBoostsStub.withArgs().resolves(emptyArray);
+       const emptyArray = [];
+       expireBoostsStub.withArgs().resolves(emptyArray);
 
        const result = await handler.runRegularJobs(testEvent);
        expect(result).to.exist;
@@ -223,50 +221,46 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        const testEvent = {
            specificOperations: ['CHECK_FLOATS']
        };
-        const testAnomaly = {
+       const testAnomaly = {
             mismatch: -1,
             floatAccountsTotal: 100,
             accountsTxTotal: 101,
             currency: testCurrency,
             unit: 'HUNDREDTH_CENT'
-        };
-        const expectedResult = {
+       };
+       const expectedResult = {
             result: 'ANOMALIES_FOUND',
             anomalies: { BALANCE_MISMATCH: [null], ALLOCATION_TOTAL_MISMATCH: [testAnomaly] }
-        };
+       };
 
-        const response = [expectedResult, expectedResult, expectedResult];
+       const response = [expectedResult, expectedResult, expectedResult];
 
-        checkAllFloatsStub.withArgs().resolves(response);
+       checkAllFloatsStub.withArgs().resolves(response);
 
        const result = await handler.runRegularJobs(testEvent);
        expect(result).to.exist;
        expect(result).to.have.property('statusCode', 200);
        expect(result.body).to.deep.equal([response]);
-        expect(checkAllFloatsStub).to.have.been.calledOnce;
+       expect(checkAllFloatsStub).to.have.been.calledOnce;
     });
 
     it('should run regular job - all pending transactions when NO transactions exist', async () => {
        const testEvent = {
            specificOperations: ['ALL_PENDING_TRANSACTIONS']
        };
-        const expectedResult = [{
+       const expectedResult = [{
             result: 'NO_PENDING_TRANSACTIONS'
-        }];
-        const emptyArray = [];
-
-        momentStub.returns({
-            format: () => testTime
-        });
-        fetchPendingTransactionsForAllUsersStub.withArgs().resolves(emptyArray);
-
+       }];
+       const emptyArray = [];
+       momentStub.returns(testTime);
+       fetchPendingTransactionsForAllUsersStub.withArgs(formattedTestTime, formattedTestTime).resolves(emptyArray);
 
        const result = await handler.runRegularJobs(testEvent);
        expect(result).to.exist;
        expect(result).to.have.property('statusCode', 200);
        expect(result.body).to.deep.equal(expectedResult);
-        expect(fetchPendingTransactionsForAllUsersStub).to.have.been.calledOnce;
-        expect(momentStub).to.have.been.calledTwice;
+       expect(fetchPendingTransactionsForAllUsersStub).to.have.been.calledOnceWithExactly(formattedTestTime, formattedTestTime);
+       expect(momentStub).to.have.been.calledTwice;
     });
 
     it('should run regular job - all pending transactions when transactions exist', async () => {
@@ -276,15 +270,25 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        const transaction = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: testAmount, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
        const transaction1 = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: 249, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
        const testPendingTransactionsArray = [transaction, transaction1];
-       const testHtmlTemplateForRow = `<tr><td>{humanReference}</td><td>{amount}</td><td>{currency}</td><td>{unit}</td><td>{transactionType}</td><td>{creationTime}</td><td>{settlementStatus}</td></tr>`;
+       const testHtmlTemplateForRow = `
+        <tr>
+            <td>{humanReference}</td>
+            <td>{currency} {wholeCurrencyAmount}</td>
+            <td>{unit}</td>
+            <td>{transactionType}</td>
+            <td>{creationTime}</td>
+            <td>{settlementStatus}</td>
+         </tr>
+    `;
        const testStartingValue = '';
-        const testAllPendingTransactionsEmailDetails = testPendingTransactionsArray.reduce((accumulator, pendingTransaction) => {
+       const testTransactionsWithWholeCurrencyAmount = testPendingTransactionsArray.map((testTx) => ({ ...transaction, wholeCurrencyAmount: opsUtil.convertToUnit(testTx.amount, testTx.unit, 'WHOLE_CURRENCY'), unit: 'WHOLE_CURRENCY' }));
+       const testAllPendingTransactionsEmailDetails = testTransactionsWithWholeCurrencyAmount.reduce((accumulator, pendingTransaction) => {
             const transactionAsTableRow = stringFormat(testHtmlTemplateForRow, pendingTransaction);
             return `${accumulator} ${transactionAsTableRow}`;
-        }, testStartingValue);
-        const expectedResult = [testPendingTransactionsArray.length];
+       }, testStartingValue);
+       const expectedResult = [testPendingTransactionsArray.length];
 
-        momentStub.returns({
+       momentStub.returns({
             format: () => testTime
        });
        fetchPendingTransactionsForAllUsersStub.withArgs().resolves(testPendingTransactionsArray);
@@ -295,7 +299,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
             templateVariables: {
                 pendingTransactionsTableInHTML: testAllPendingTransactionsEmailDetails
             }
-        };
+       };
        sendSystemEmailStub.withArgs(expectedEmailForPendingTransactions).resolves(sendSystemEmailReponse);
 
        const result = await handler.runRegularJobs(testEvent);
