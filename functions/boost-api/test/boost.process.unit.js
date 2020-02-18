@@ -260,7 +260,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         
         const testEvent = {
             accountId: testAccountId,
-            eventType: 'SAVING_EVENT_COMPLETED',
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
             timeInMillis: timeSaveCompleted.valueOf(),
             eventContext: {
                 transactionId: testSavingTxId,
@@ -482,6 +482,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
     it('Redeems when game is won', async () => {
         const testEvent = {
+            eventType: 'USER_GAME_COMPLETION',
             boostId: testBoostId,
             numberTaps: 20,
             timeTakenMillis: 9000
@@ -497,6 +498,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             fromFloatId: 'test-float',
             fromBonusPoolId: 'test-bonus-pool',
             statusConditions: {
+                OFFERED: ['message_instruction_created'],
+                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 REDEEMED: ['number_taps_greater_than #{10::10000}']
             }
         };

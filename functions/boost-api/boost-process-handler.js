@@ -23,6 +23,12 @@ const handleError = (err) => {
 
 // //////////////////////////// HELPER METHODS ///////////////////////////////////////////
 
+const EVENT_TYPE_CONDITION_MAP = {
+    'SAVING_PAYMENT_SUCCESSFUL': ['save_event_greater_than', 'save_completed_by', 'first_save_by'],
+    'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
+    'USER_GAME_COMPLETION': ['number_taps_greater_than']
+};
+
 // this takes the event and creates the arguments to pass to persistence to get applicable boosts, i.e.,
 // those that still have budget remaining and are in offered or pending state for this user
 const extractFindBoostKey = (event) => {
@@ -75,7 +81,13 @@ const testCondition = (event, statusCondition) => {
     const parameterValue = parameterMatch ? parameterMatch[1] : null;
     logger('Parameter value: ', parameterValue);
     const eventHasContext = typeof event.eventContext === 'object';
-    const { eventContext } = event;
+    
+    const { eventType, eventContext } = event;
+
+    if (!EVENT_TYPE_CONDITION_MAP[eventType] || !EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType)) {
+        return false;
+    }
+
     switch (conditionType) {
         case 'save_event_greater_than':
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue), ' and amount from event: ', equalizeAmounts(eventContext.savedAmount));
@@ -442,7 +454,9 @@ module.exports.processUserBoostResponse = async (event) => {
         logger('Fetched boost: ', boost);
 
         const accountId = userAccountIds[0]; // todo : as above, combine
-        const statusEvent = { eventContext: params };
+
+        const { eventType } = params;
+        const statusEvent = { eventType, eventContext: params };
 
         const statusResult = extractStatusChangesMet(statusEvent, boost);
         if (statusResult.length === 0) {
