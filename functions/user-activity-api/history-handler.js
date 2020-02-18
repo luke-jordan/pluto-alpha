@@ -6,6 +6,7 @@ const moment = require('moment');
 
 const accountCalculator = require('./persistence/account.calculations');
 const persistenceRead = require('./persistence/rds.js');
+const dynamodb = require('./persistence/dynamodb');
 
 const util = require('./history-util');
 
@@ -18,7 +19,8 @@ const lambda = new AWS.Lambda();
 
 const interestHelper = require('./interest-helper');
 const {
-    calculateEstimatedInterestEarned
+    calculateEstimatedInterestEarned,
+    calculateInterestRate
 } = interestHelper;
 
 const UNIT_DIVISORS = {
@@ -140,8 +142,40 @@ const normalizeHistory = (events) => {
     return result;
 };
 
+const constructUniqueClientFloatsMap = (events) => {
+    const uniqueClientFloatsMapWithSavingEvent = {};
+    events.forEach((event) => {
+        if (event.transactionType === 'USER_SAVING_EVENT') {
+            const clientId = event.clientId;
+            const floatId = event.floatId;
+            uniqueClientFloatsMapWithSavingEvent[`${clientId}_${floatId}`] = {
+                clientId,
+                floatId
+            };
+        }
+    });
+
+    return uniqueClientFloatsMapWithSavingEvent;
+};
+
+const constructClientFloatsToInterestRatesMap = async (events) => {
+    const uniqueClientFloatsMapWithSavingEvent = constructUniqueClientFloatsMap(events);
+
+    const clientFloatsToInterestRatesMap = {};
+    for (const clientFloat of Object.keys(uniqueClientFloatsMapWithSavingEvent)) {
+        const { clientId, floatId } = uniqueClientFloatsMapWithSavingEvent[clientFloat];
+        // eslint-disable-next-line no-await-in-loop
+        const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+        // eslint-disable-next-line no-await-in-loop
+        clientFloatsToInterestRatesMap[`${clientId}_${floatId}`] = await calculateInterestRate(floatProjectionVars);
+    }
+
+    return clientFloatsToInterestRatesMap;
+};
+
 const normalizeTx = async (events) => {
     logger('Normalizing transactions');
+    const clientFloatsToInterestRatesMap = await constructClientFloatsToInterestRatesMap(events);
     const promisifiedResult = events.map(async (event) => ({
             timestamp: moment(event.creationTime).valueOf(),
             type: 'TRANSACTION',
@@ -153,7 +187,7 @@ const normalizeTx = async (events) => {
                 currency: event.currency,
                 unit: event.unit,
                 humanReference: event.humanReference,
-                estimatedInterestEarned: event.transactionType === 'USER_SAVING_EVENT' ? await calculateEstimatedInterestEarned(event) : null
+                estimatedInterestEarned: event.transactionType === 'USER_SAVING_EVENT' ? await calculateEstimatedInterestEarned(event, 'HUNDREDTH_CENT', clientFloatsToInterestRatesMap) : null
             }
         }));
     const normalizedTransactions = await Promise.all(promisifiedResult);

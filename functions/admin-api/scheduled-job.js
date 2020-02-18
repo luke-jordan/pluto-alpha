@@ -205,7 +205,6 @@ const formatAllPendingTransactionsForEmail = async (allPendingTransactions) => {
         <tr>
             <td>{humanReference}</td>
             <td>{currency} {wholeCurrencyAmount}</td>
-            <td>{unit}</td>
             <td>{transactionType}</td>
             <td>{creationTime}</td>
             <td>{settlementStatus}</td>

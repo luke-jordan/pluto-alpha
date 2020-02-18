@@ -12,6 +12,7 @@ chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
 const helper = require('./test.helper');
+const DecimalLight = require('decimal.js-light');
 
 const MAX_AMOUNT = 6000000;
 const MIN_AMOUNT = 5000000;
@@ -22,6 +23,7 @@ const fetchPriorTxStub = sinon.stub();
 const getAccountFigureStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 const calculateEstimatedInterestEarnedStub = sinon.stub();
+const fetchFloatVarsForBalanceCalcStub = sinon.stub();
 
 const MockInterestHelper = {
     calculateEstimatedInterestEarned: calculateEstimatedInterestEarnedStub
@@ -60,6 +62,10 @@ const handler = proxyquire('../history-handler', {
     'moment': momentStub,
     'aws-sdk': {
         'Lambda': MockLambdaClient
+    },
+    './persistence/dynamodb': {
+        'fetchFloatVarsForBalanceCalc': fetchFloatVarsForBalanceCalcStub,
+        '@noCallThru': true
     }
 });
 
@@ -156,7 +162,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     };
 
     beforeEach(() => {
-        helper.resetStubs(momentStub, findAccountStub, fetchPriorTxStub, lamdbaInvokeStub, getAccountFigureStub, calculateEstimatedInterestEarnedStub);
+        helper.resetStubs(momentStub, findAccountStub, fetchPriorTxStub, lamdbaInvokeStub, getAccountFigureStub, calculateEstimatedInterestEarnedStub, fetchFloatVarsForBalanceCalcStub);
     });
 
     it('Fetches user balance, accrued interest, previous user transactions, and major user events', async () => {
@@ -282,6 +288,12 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             humanReference: 'BUSANI6'
         };
 
+        const testAccrualRateBps = 250;
+        const testBonusPoolShare = 0.1; // percent of an accrual (not bps)
+        const testClientCoShare = 0.05; // as above
+        const testPrudentialDiscountFactor = 0.1; // percent, how much to reduce projected increment by
+
+        // TODO: check for a better way of stubbing moment
         momentStub.returns(mockMoment);
 
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
@@ -303,7 +315,25 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         fetchPriorTxStub.withArgs(testAccountId).resolves([expectedTxResponseWithUserSavingEvent]);
 
-        calculateEstimatedInterestEarnedStub.withArgs(expectedTxResponseWithUserSavingEvent).resolves({
+        const testFloatProjectionVars = {
+            accrualRateAnnualBps: testAccrualRateBps,
+            bonusPoolShareOfAccrual: testBonusPoolShare,
+            clientShareOfAccrual: testClientCoShare,
+            prudentialFactor: testPrudentialDiscountFactor
+        };
+        fetchFloatVarsForBalanceCalcStub.withArgs(testClientId, testFloatId).resolves(testFloatProjectionVars);
+
+        const testBasisPointDivisor = 100 * 100; // i.e., hundredths of a percent
+        const testAnnualAccrualRateNominalGross = new DecimalLight(testFloatProjectionVars.accrualRateAnnualBps).dividedBy(testBasisPointDivisor);
+        const floatDeductions = new DecimalLight(testFloatProjectionVars.bonusPoolShareOfAccrual).plus(testFloatProjectionVars.clientShareOfAccrual).
+        plus(testFloatProjectionVars.prudentialFactor);
+        const testInterestRate = testAnnualAccrualRateNominalGross.times(new DecimalLight(1).minus(floatDeductions));
+
+        const testClientFloatsToInterestRatesMap = {
+            [`${testClientId}_${testFloatId}`]: testInterestRate
+        };
+
+        calculateEstimatedInterestEarnedStub.withArgs(expectedTxResponseWithUserSavingEvent, 'HUNDREDTH_CENT', testClientFloatsToInterestRatesMap).resolves({
             amount: testCompoundInterest,
             unit: testCalculationUnit,
             currency: testCurrency
@@ -341,6 +371,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         expect(findAccountStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(fetchPriorTxStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(fetchFloatVarsForBalanceCalcStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
     });
 
     it('Fails on unauthorized access', async () => {
