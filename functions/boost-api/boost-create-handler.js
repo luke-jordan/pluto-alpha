@@ -40,7 +40,6 @@ const convertParamsToRedemptionCondition = (gameParams) => {
     switch (gameParams.gameType) {
         case 'CHASE_ARROW':
         case 'TAP_SCREEN': {
-            conditions.push('taps_submitted');
             const timeLimitMillis = gameParams.timeLimitSeconds * 1000;
             if (gameParams.winningThreshold) {
                 conditions.push(`number_taps_greater_than #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
@@ -375,6 +374,7 @@ module.exports.createBoost = async (event) => {
 
     if (boostType === 'GAME') {
         instructionToRds.messageInstructionIds = {};
+        instructionToRds.gameParams = params.gameParams;
     }
 
     // logger('Sending to persistence: ', instructionToRds);

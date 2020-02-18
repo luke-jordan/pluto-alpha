@@ -373,7 +373,7 @@ const obtainBankAccountDetails = async (userId) => {
 const handleWithdrawalEvent = async (eventBody) => {
     logger('Withdrawal event triggered! Event body: ', eventBody);
 
-    const { userId } = eventBody;
+    const { userId, transactionId } = eventBody;
     const [userProfile, bankDetails] = await Promise.all([fetchUserProfile(userId, true), obtainBankAccountDetails(userId)]);
 
     bankDetails.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
@@ -386,7 +386,9 @@ const handleWithdrawalEvent = async (eventBody) => {
 
     const accountId = eventBody.context.accountId;
     const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
-    processingPromises.push(addInvestmentToBSheet({ operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency, bankDetails }));
+
+    const bsheetOptions = { operation: 'WITHDRAW', accountId, amount: Math.abs(amount), unit, currency, bankDetails, transactionId };
+    processingPromises.push(addInvestmentToBSheet(bsheetOptions));
 
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);

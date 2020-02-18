@@ -135,6 +135,10 @@ const normalizeHistory = (events) => {
 };
 
 const normalizeTx = (events) => {
+    if (!events) {
+        return [];
+    }
+    
     const result = [];
     events.forEach((event) => {
         result.push({

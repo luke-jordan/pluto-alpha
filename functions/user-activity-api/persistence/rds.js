@@ -180,10 +180,11 @@ module.exports.updateTxTags = async (transactionId, tag) => {
 
     const updateQuery = `update ${accountTxTable} set tags = array_append(tags, $1) where transaction_id = $2 returning updated_time`;
 
+    logger('Updating tx tags with query: ', updateQuery, ' and values: ', [tag, transactionId]);
     const updateResult = await rdsConnection.updateRecord(updateQuery, [tag, transactionId]);
     logger('Transaction tag update resulted in:', updateResult);
 
-    const updateMoment = moment(updateResult['rows'][0]['updated_time']);
+    const updateMoment = updateResult['rows'].length > 0 ? moment(updateResult['rows'][0]['updated_time']) : null;
     logger('Extracted moment: ', updateMoment);
     return { updatedTime: updateMoment };
 };

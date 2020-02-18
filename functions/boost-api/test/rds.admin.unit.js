@@ -68,6 +68,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         'audience_selection': testAudienceSelection,
         'redemption_messages': { instructions: testRedemptionMsgs },
         'initial_status': 'PENDING',
+        'game_params': { gameType: 'CHASE_THE_ARROW' },
         'flags': ['REDEEM_ALL_AT_ONCE']
     };
 
@@ -94,6 +95,7 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
         endTime: testEndTime.format(),
         statusConditions: testStatusCondition,
         boostAudienceType: 'INDIVIDUAL',
+        gameParams: { gameType: 'CHASE_THE_ARROW' },
         audienceSelection: testAudienceSelection,
         redemptionMessages: { instructions: testRedemptionMsgs },
         initialStatus: 'PENDING',
@@ -222,7 +224,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const expectedColumns = [
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-            'status_conditions', 'message_instruction_ids'
+            'status_conditions', 'message_instruction_ids', 'game_params'
         ];
     
         const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
@@ -244,7 +246,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const expectedColumns = [
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-            'status_conditions', 'message_instruction_ids'
+            'status_conditions', 'message_instruction_ids', 'game_params'
         ];
     
         const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
