@@ -214,7 +214,7 @@ class RdsConnection {
      * column template, given flexibility/robustness/time trade-offs), must include 'RETURNING' statement if return wanted, and uses formatting
      * from pg-format to assemble the nested array, i.e., use %L for where the nested array of literals should be inserted. Example: 
      * 'INSERT INTO TABLE (VALUE1, VALUE2) VALUES %L'
-     * @param {string} columnTemplate The template used to assemble the VALUES clause from the object aray, as a list of keys with the
+     * @param {string} columnTemplate The template used to assemble the VALUES clause from the object array, as a list of keys with the
      * format ${column_name}, e.g., '${name}, ${email}, ${account_id}'
      * @param {array} objectArray The array of objects, each having a key that maps to the names in column template. Example:
      * [ { name: 'Test1', id: 'X'}, { name: 'Test2', id: 'Y'}])
@@ -288,6 +288,29 @@ class RdsConnection {
 
         RdsConnection._validateUpdateParams(query, values);
         
+        let results = null;
+        const client = await this._getConnection();
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            results = await client.query(query, values);
+            await client.query('COMMIT');
+        } catch (e) {
+            logger('Error running update: ', e);
+            await client.query('ROLLBACK');
+            throw new CommitError(query, values);
+        } finally {
+            await client.release();
+        }
+
+        return results;
+    }
+
+    async upsertRecords (query, values) {
+        if (!Array.isArray(values) || values.length === 0) {
+            throw new NoValuesError(query);
+        }
+
         let results = null;
         const client = await this._getConnection();
         try {

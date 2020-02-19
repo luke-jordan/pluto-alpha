@@ -365,3 +365,27 @@ module.exports.selectAudienceActive = async (audienceId, activeOnly = true) => {
     const queryResult = await rdsConnection.selectQuery(query, [audienceId]);
     return queryResult.map((row) => row['account_id']);
 };
+
+module.exports.deactivateAudienceAccounts = async (audienceId) => {
+    const query = `update ${config.get('tables.audienceJoinTable')} set active = false where audience_id = $1 and active = true`;
+
+    logger(`Deactivating audience accounts with audience id: ${audienceId} using query: ${JSON.stringify(query)}`);
+    const queryResult = await rdsConnection.updateRecord(query, [audienceId]);
+    return queryResult.map((row) => row['account_id']);
+};
+
+const extractInsertQueryClause = (recurrentKey, keys) => {
+    const arrayOfFormattedKeys = keys.map((key) => `(${recurrentKey}, ${key})`);
+    return arrayOfFormattedKeys.join(', ');
+};
+
+module.exports.upsertAudienceAccounts = async (audienceId, audienceAccountIdsList) => {
+    // upsert audienceJoinTable => insert accounts if conflict set active=true
+
+    const query = `insert into ${config.get('tables.audienceJoinTable')} (audience_id, account_id) ` +
+        `values ${extractInsertQueryClause(audienceId, audienceAccountIdsList)} on conflict (account_id) DO update set active = $1`;
+
+    logger(`Upsert audience accounts with audience id: ${audienceId} using query: ${JSON.stringify(query)}`);
+    const queryResult = await rdsConnection.upsertRecords(query, [true]);
+    return queryResult;
+};
