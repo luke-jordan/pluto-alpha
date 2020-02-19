@@ -31,12 +31,14 @@
         "keyPrefixes": {
             "withdrawal": "WITHDRAWAL_DETAILS",
             "profile": "USER_PROFILE",
-            "account": "ACCOUNT_DETAILS"
+            "account": "ACCOUNT_DETAILS",
+            "clientFloat": "CLIENT_FLOAT"
         },
         "ttls": {
             "withdrawal": 900,
             "profile": 25200,
-            "account": 25200
+            "account": 25200,
+            "clientFloat": 3600
         }
     },
     "projection": {

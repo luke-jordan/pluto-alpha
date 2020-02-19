@@ -6,6 +6,7 @@ const moment = require('moment');
 
 const accountCalculator = require('./persistence/account.calculations');
 const persistenceRead = require('./persistence/rds.js');
+const dynamodb = require('./persistence/dynamodb');
 
 const util = require('./history-util');
 
@@ -15,6 +16,12 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 
 const lambda = new AWS.Lambda();
+
+const interestHelper = require('./interest-helper');
+const {
+    calculateEstimatedInterestEarned,
+    calculateInterestRate
+} = interestHelper;
 
 const UNIT_DIVISORS = {
     'HUNDREDTH_CENT': 100 * 100,
@@ -43,6 +50,7 @@ const fetchUserProfile = async (systemWideUserId) => {
 
 // fetches user events for the last 6 (?) months (... can extend when we have users long than that & have thought through data etc)
 const obtainUserHistory = async (systemWideUserId) => {
+    logger('Obtaining user history');
     const startDate = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days').valueOf();
     const eventTypes = config.get('defaults.userHistory.eventTypes');
 
@@ -134,14 +142,41 @@ const normalizeHistory = (events) => {
     return result;
 };
 
-const normalizeTx = (events) => {
-    if (!events) {
-        return [];
-    }
-    
-    const result = [];
+const constructUniqueClientFloatsMap = (events) => {
+    const uniqueClientFloatsMapWithSavingEvent = {};
     events.forEach((event) => {
-        result.push({
+        if (event.transactionType === 'USER_SAVING_EVENT') {
+            const clientId = event.clientId;
+            const floatId = event.floatId;
+            uniqueClientFloatsMapWithSavingEvent[`${clientId}_${floatId}`] = {
+                clientId,
+                floatId
+            };
+        }
+    });
+
+    return uniqueClientFloatsMapWithSavingEvent;
+};
+
+const constructClientFloatsToInterestRatesMap = async (events) => {
+    const uniqueClientFloatsMapWithSavingEvent = constructUniqueClientFloatsMap(events);
+
+    const clientFloatsToInterestRatesMap = {};
+    for (const clientFloat of Object.keys(uniqueClientFloatsMapWithSavingEvent)) {
+        const { clientId, floatId } = uniqueClientFloatsMapWithSavingEvent[clientFloat];
+        // eslint-disable-next-line no-await-in-loop
+        const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+        // eslint-disable-next-line no-await-in-loop
+        clientFloatsToInterestRatesMap[`${clientId}_${floatId}`] = await calculateInterestRate(floatProjectionVars);
+    }
+
+    return clientFloatsToInterestRatesMap;
+};
+
+const normalizeTx = async (events) => {
+    logger('Normalizing transactions');
+    const clientFloatsToInterestRatesMap = await constructClientFloatsToInterestRatesMap(events);
+    const promisifiedResult = events.map(async (event) => ({
             timestamp: moment(event.creationTime).valueOf(),
             type: 'TRANSACTION',
             details: {
@@ -151,11 +186,13 @@ const normalizeTx = (events) => {
                 amount: event.amount,
                 currency: event.currency,
                 unit: event.unit,
-                humanReference: event.humanReference
+                humanReference: event.humanReference,
+                estimatedInterestEarned: event.transactionType === 'USER_SAVING_EVENT' ? await calculateEstimatedInterestEarned(event, 'HUNDREDTH_CENT', clientFloatsToInterestRatesMap) : null
             }
-        });
-    });
-    return result;
+        }));
+    const normalizedTransactions = await Promise.all(promisifiedResult);
+    logger(`Completed normalizing transactions. Result: ${JSON.stringify(normalizedTransactions)}`);
+    return normalizedTransactions;
 };
 
 /**
@@ -191,7 +228,8 @@ module.exports.fetchUserHistory = async (event) => {
         const priorTransactions = await persistenceRead.fetchTransactionsForHistory(accountId);
         logger('Got prior transactions:', priorTransactions);
 
-        const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
+        const normalizedTransactions = await normalizeTx(priorTransactions);
+        const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];
         logger('Created formatted array:', userHistory);
 
         const resultObject = {

@@ -5,7 +5,7 @@ const config = require('config');
 const status = require('statuses');
 
 const moment = require('moment-timezone');
-const BigNumber = require('bignumber.js');
+const DecimalLight = require('decimal.js-light');
 
 const persistence = require('./persistence/rds');
 const dynamodb = require('./persistence/dynamodb');
@@ -24,14 +24,14 @@ const fetchUserDefaultAccount = async (systemWideUserId) => {
 
 const accrueBalanceByDay = (currentBalanceAmount, floatProjectionVars) => {
   const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
-  const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
+  const annualAccrualRateNominalGross = new DecimalLight(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
   // logger('Accrual rate gross: ', annualAccrualRateNominalGross.toNumber());
-  const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
+  const floatDeductions = new DecimalLight(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
     plus(floatProjectionVars.prudentialFactor);
   // logger('Float deductions: ', floatDeductions.toNumber());
-  const dailyAccrualRateNominalNet = annualAccrualRateNominalGross.dividedBy(365).times(new BigNumber(1).minus(floatDeductions));
+  const dailyAccrualRateNominalNet = annualAccrualRateNominalGross.dividedBy(365).times(new DecimalLight(1).minus(floatDeductions));
   // logger('Daily accrual net: ', dailyAccrualRateNominalNet.toNumber());
-  const endOfDayBalanceAmount = new BigNumber(currentBalanceAmount).times(new BigNumber(1).plus(dailyAccrualRateNominalNet));
+  const endOfDayBalanceAmount = new DecimalLight(currentBalanceAmount).times(new DecimalLight(1).plus(dailyAccrualRateNominalNet));
   // logger('Balance: ', endOfDayBalanceAmount.toNumber());
   return endOfDayBalanceAmount;
 };
@@ -65,15 +65,15 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
 
     const endOfDayMoment = timeForBalance.clone().endOf('day');
     const endOfTodayBalance = accrueBalanceByDay(startingBalance.amount, floatProjectionVars);
-    logger('Balance at end of today: ', endOfTodayBalance.decimalPlaces(0).toNumber());
+    logger('Balance at end of today: ', endOfTodayBalance.toDecimalPlaces(0).toNumber());
     
-    resultObject.balanceEndOfToday = createBalanceDict(endOfTodayBalance.decimalPlaces(0).toNumber(), unit, currency, endOfDayMoment);
+    resultObject.balanceEndOfToday = createBalanceDict(endOfTodayBalance.toDecimalPlaces(0).toNumber(), unit, currency, endOfDayMoment);
 
     const secondsDifference = timeForBalance.unix() - startTime.unix();
     const accruedAmountPerSecond = endOfTodayBalance.minus(startingBalance.amount).dividedBy(endOfDayMoment.unix() - startTime.unix());
-    const currentBalanceAmount = new BigNumber(startingBalance.amount).plus(accruedAmountPerSecond.times(secondsDifference));
+    const currentBalanceAmount = new DecimalLight(startingBalance.amount).plus(accruedAmountPerSecond.times(secondsDifference));
 
-    resultObject.currentBalance = createBalanceDict(currentBalanceAmount.decimalPlaces(0).toNumber(), unit, currency, timeForBalance);
+    resultObject.currentBalance = createBalanceDict(currentBalanceAmount.toDecimalPlaces(0).toNumber(), unit, currency, timeForBalance);
 
     if (daysToProject > 0) {
       let currentProjectedBalance = endOfTodayBalance;
@@ -81,7 +81,7 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
       for (let i = 1; i <= daysToProject; i += 1) {
         currentProjectedBalance = accrueBalanceByDay(currentProjectedBalance, floatProjectionVars);
         const endOfThatDay = endOfDayMoment.clone().add(i, 'days');
-        const endOfIthDayDict = createBalanceDict(currentProjectedBalance.decimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
+        const endOfIthDayDict = createBalanceDict(currentProjectedBalance.toDecimalPlaces(0).toNumber(), unit, currency, endOfThatDay);
         // logger('Adding end of day dict: ', endOfIthDayDict);
         balanceSubsequentDays.push(endOfIthDayDict);
       }
