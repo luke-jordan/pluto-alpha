@@ -266,8 +266,13 @@ const operationMap = {
  */
 module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
+    if (!event.specificOperations) {
+        logger('Default job pattern is now turned off');
+        return { statusCode: 400 };
+    }
 
-    const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : config.get('defaults.scheduledJobs');
+    // leaving some robustness in otherwise might get loops of recurring failure
+    const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : [];
     const promises = tasksToRun.filter((operation) => Reflect.has(operationMap, operation)).map((operation) => operationMap[operation]());
     const results = await Promise.all(promises);
 

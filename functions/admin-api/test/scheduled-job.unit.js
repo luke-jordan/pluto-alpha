@@ -274,7 +274,6 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
         <tr>
             <td>{humanReference}</td>
             <td>{currency} {wholeCurrencyAmount}</td>
-            <td>{unit}</td>
             <td>{transactionType}</td>
             <td>{creationTime}</td>
             <td>{settlementStatus}</td>
