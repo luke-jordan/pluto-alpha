@@ -44,11 +44,7 @@ describe('*** Unit Test Admin User Handler ***', () => {
             currency: testCurrency
         };
 
-        const testClientFloatsToInterestRatesMap = {
-            [`${testClientId}_${testFloatId}`]: testInterestRate
-        };
-
-        const response = await handler.calculateEstimatedInterestEarned(testTransactionInformation, testCalculationUnit, testClientFloatsToInterestRatesMap);
+        const response = handler.calculateEstimatedInterestEarned(testTransactionInformation, testCalculationUnit, testInterestRate);
 
         expect(response).to.exist;
         expect(response).to.deep.equal(expectedResult);

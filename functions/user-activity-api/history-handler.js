@@ -9,19 +9,14 @@ const persistenceRead = require('./persistence/rds.js');
 const dynamodb = require('./persistence/dynamodb');
 
 const util = require('./history-util');
-
 const opsUtil = require('ops-util-common');
+
+const interestHelper = require('./interest-helper');
 
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 
 const lambda = new AWS.Lambda();
-
-const interestHelper = require('./interest-helper');
-const {
-    calculateEstimatedInterestEarned,
-    calculateInterestRate
-} = interestHelper;
 
 const UNIT_DIVISORS = {
     'HUNDREDTH_CENT': 100 * 100,
@@ -143,40 +138,30 @@ const normalizeHistory = (events) => {
 };
 
 const constructUniqueClientFloatsMap = (events) => {
-    const uniqueClientFloatsMapWithSavingEvent = {};
-    events.forEach((event) => {
-        if (event.transactionType === 'USER_SAVING_EVENT') {
-            const clientId = event.clientId;
-            const floatId = event.floatId;
-            uniqueClientFloatsMapWithSavingEvent[`${clientId}_${floatId}`] = {
-                clientId,
-                floatId
-            };
-        }
-    });
+    const allClientFloatIds = events.
+        filter((event) => event.transactionType === 'USER_SAVING_EVENT').
+        map((event) => `${event.clientId}::${event.floatId}`);
+    return [...new Set(allClientFloatIds)];
+};
 
-    return uniqueClientFloatsMapWithSavingEvent;
+const obtainClientFloatVars = async (clientFloatPair) => {
+    const [clientId, floatId] = clientFloatPair.split('::');
+    const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+    const interestRate = interestHelper.calculateInterestRate(floatProjectionVars);
+    return { clientFloatPair, interestRate };
 };
 
 const constructClientFloatsToInterestRatesMap = async (events) => {
-    const uniqueClientFloatsMapWithSavingEvent = constructUniqueClientFloatsMap(events);
-
-    const clientFloatsToInterestRatesMap = {};
-    for (const clientFloat of Object.keys(uniqueClientFloatsMapWithSavingEvent)) {
-        const { clientId, floatId } = uniqueClientFloatsMapWithSavingEvent[clientFloat];
-        // eslint-disable-next-line no-await-in-loop
-        const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
-        // eslint-disable-next-line no-await-in-loop
-        clientFloatsToInterestRatesMap[`${clientId}_${floatId}`] = await calculateInterestRate(floatProjectionVars);
-    }
-
-    return clientFloatsToInterestRatesMap;
+    const uniqueClientFloatPairs = constructUniqueClientFloatsMap(events);
+    const interestArray = await Promise.all(uniqueClientFloatPairs.map((clientFloatPair) => obtainClientFloatVars(clientFloatPair)));
+    return interestArray.reduce((map, entry) => ({ ...map, [entry.clientFloatPair]: entry.interestRate}), {});
 };
 
 const normalizeTx = async (events) => {
     logger('Normalizing transactions');
     const clientFloatsToInterestRatesMap = await constructClientFloatsToInterestRatesMap(events);
-    const promisifiedResult = events.map(async (event) => ({
+    const normalizedTransactions = events.map((event) => {
+        const normalizedTx = {
             timestamp: moment(event.creationTime).valueOf(),
             type: 'TRANSACTION',
             details: {
@@ -186,11 +171,18 @@ const normalizeTx = async (events) => {
                 amount: event.amount,
                 currency: event.currency,
                 unit: event.unit,
-                humanReference: event.humanReference,
-                estimatedInterestEarned: event.transactionType === 'USER_SAVING_EVENT' ? await calculateEstimatedInterestEarned(event, 'HUNDREDTH_CENT', clientFloatsToInterestRatesMap) : null
+                humanReference: event.humanReference
             }
-        }));
-    const normalizedTransactions = await Promise.all(promisifiedResult);
+        };
+
+        if (event.transactionType === 'USER_SAVING_EVENT') {
+            const thisInterestRate = clientFloatsToInterestRatesMap[`${event.clientId}::${event.floatId}`];
+            normalizedTx.estimatedInterestEarned = interestHelper.calculateEstimatedInterestEarned(event, 'HUNDREDTH_CENT', thisInterestRate); 
+        }
+
+        return normalizedTx;
+    });
+
     logger(`Completed normalizing transactions. Result: ${JSON.stringify(normalizedTransactions)}`);
     return normalizedTransactions;
 };

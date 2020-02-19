@@ -6,12 +6,12 @@ const DAYS_IN_A_YEAR = 365;
 const opsUtil = require('ops-util-common');
 const DecimalLight = require('decimal.js-light');
 
-module.exports.calculateInterestRate = async (floatProjectionVars) => {
+module.exports.calculateInterestRate = (floatProjectionVars) => {
     logger(`Calculate interest rate for float projection vars: ${JSON.stringify(floatProjectionVars)}`);
     const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
     const annualAccrualRateNominalGross = new DecimalLight(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
     const floatDeductions = new DecimalLight(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
-    plus(floatProjectionVars.prudentialFactor);
+        plus(floatProjectionVars.prudentialFactor);
 
     const interestRateAsBigNumber = annualAccrualRateNominalGross.times(new DecimalLight(1).minus(floatDeductions));
     logger(`Interest rate as big number: ${interestRateAsBigNumber}`);
@@ -19,8 +19,7 @@ module.exports.calculateInterestRate = async (floatProjectionVars) => {
 };
 
 const calculateCompoundInterestUsingDayInterval = (amount, interestRateAsBigNumber, numberOfDays) => {
-    logger(`Calculate compound interest for amount: ${amount} at 
-    daily interest rate: ${interestRateAsBigNumber} for total days: ${numberOfDays}`);
+    logger(`Calculate compound interest for amount: ${amount} at daily interest rate: ${interestRateAsBigNumber} for total days: ${numberOfDays}`);
     const amountAsBigNumber = new DecimalLight(amount);
     const baseCompoundRate = new DecimalLight(1).plus(interestRateAsBigNumber);
     const baseCompoundRateAfterGivenDays = baseCompoundRate.pow(new DecimalLight(numberOfDays).dividedBy(DAYS_IN_A_YEAR));
@@ -30,7 +29,7 @@ const calculateCompoundInterestUsingDayInterval = (amount, interestRateAsBigNumb
     return new DecimalLight(compoundInterest.valueOf()).toNumber();
 };
 
-const calculateNumberOfDaysPassedSinceDateAndToday = async (givenDate) => {
+const calculateNumberOfDaysPassedSinceDateAndToday = (givenDate) => {
     const givenDateFormatted = moment(givenDate, 'YYYY-MM-DD');
     const dateOfToday = moment().startOf('day');
     logger(`Calculate number of days since start of date: ${givenDate} and start of today: ${dateOfToday}`);
@@ -40,11 +39,11 @@ const calculateNumberOfDaysPassedSinceDateAndToday = async (givenDate) => {
     return numberOfDaysPassedSinceDate;
 };
 
-module.exports.calculateEstimatedInterestEarned = async (transactionInformation, calculationUnit = 'HUNDREDTH_CENT', clientFloatsToInterestRatesMap) => {
+module.exports.calculateEstimatedInterestEarned = (transactionInformation, calculationUnit = 'HUNDREDTH_CENT', interestRate) => {
     logger(`Calculate estimated interest earned`);
-    const interestRateAsBigNumber = clientFloatsToInterestRatesMap[`${transactionInformation.clientId}_${transactionInformation.floatId}`];
-    const numberOfDaysSinceSettleTime = await calculateNumberOfDaysPassedSinceDateAndToday(transactionInformation.settlementTime);
+    const interestRateAsBigNumber = new DecimalLight(interestRate);
+    const numberOfDaysSinceSettleTime = calculateNumberOfDaysPassedSinceDateAndToday(transactionInformation.settlementTime);
     const amount = Math.abs(opsUtil.convertToUnit(transactionInformation.amount, transactionInformation.unit, calculationUnit));
-    const interestEarned = await calculateCompoundInterestUsingDayInterval(amount, interestRateAsBigNumber, numberOfDaysSinceSettleTime);
+    const interestEarned = calculateCompoundInterestUsingDayInterval(amount, interestRateAsBigNumber, numberOfDaysSinceSettleTime);
     return { amount: interestEarned, unit: calculationUnit, currency: transactionInformation.currency };
 };
