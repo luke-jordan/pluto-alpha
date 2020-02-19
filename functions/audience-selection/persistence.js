@@ -324,7 +324,7 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
 };
 
 /**
- * Called right at the end when the column conditions are all in good oder. FOr selection query only, just past the object.
+ * Called right at the end when the column conditions are all in good oder. For selection query only, just past the object.
  * If the audience is to be persisted, set persistSelection to true and pass these parameters:
  * @param {object} persistenceParams A map of properties for the audience
  * @property {string} creatingUserId Who is creating this audience
