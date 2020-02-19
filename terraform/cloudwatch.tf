@@ -15,3 +15,9 @@ resource "aws_cloudwatch_event_rule" "ops_every_day" {
     description = "Fires once a day for admin ops tasks"
     schedule_expression = "cron(0 22 * * ? *)"
 }
+
+resource "aws_cloudwatch_event_rule" "ops_admin_daytime" {
+    name = "ops_admin_daytime_call"
+    description = "Fires during the day for pending tx scan"
+    schedule_expression = "cron(0 6,12,15,18 * * ? *)"
+}

@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        table {
+            font-family: arial, sans-serif;
+            border-collapse: collapse;
+            width: 100%;
+        }
+
+        td, th {
+            border: 1px solid #dddddd;
+            text-align: left;
+            padding: 8px;
+        }
+
+        tr:nth-child(even) {
+            background-color: #dddddd;
+        }
+    </style>
+</head>
+<body>
+    <p>Hello Jupiter Admin</p>
+    <p>Here are all the pending transactions:</p>
+    <table>
+    <tr>
+        <th>Human Reference</th>
+        <th>Amount</th>
+        <th>Transaction Type</th>
+        <th>Creation Time</th>
+        <th>Settlement Status</th>
+    </tr>
+    {pendingTransactionsTableInHTML}
+    </table>
+</body>
+</html>

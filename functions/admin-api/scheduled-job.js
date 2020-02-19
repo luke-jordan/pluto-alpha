@@ -3,17 +3,14 @@
 const logger = require('debug')('jupiter:admin:scheduled');
 const config = require('config');
 const moment = require('moment');
-
-const BigNumber = require('bignumber.js');
-
+const DecimalLight = require('decimal.js-light');
 const rdsAccount = require('./persistence/rds.account');
 const rdsFloat = require('./persistence/rds.float');
 const dynamoFloat = require('./persistence/dynamo.float');
-
 const floatConsistency = require('./admin-float-consistency');
-
 const opsUtil = require('ops-util-common');
 const publisher = require('publish-common');
+const stringFormat = require('string-format');
 
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
@@ -51,9 +48,8 @@ const expireBoosts = async () => {
     const logPublishPromises = boostIds.map((boostId) => (
         publisher.publishMultiUserEvent(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }})
     ));
-
     await Promise.all(logPublishPromises);
-    return { result: 'EXPIRED_BOOSTS', boostsExpired: expireBoosts.length };
+    return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };
 };
 
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
@@ -73,24 +69,24 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     // see the balance handler for a more detailed & commented version
     const accrualRateAnnualBps = clientFloatInfo.accrualRateAnnualBps;
     const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
-    const annualAccrualRateNominalGross = new BigNumber(accrualRateAnnualBps).dividedBy(basisPointDivisor);
+    const annualAccrualRateNominalGross = new DecimalLight(accrualRateAnnualBps).dividedBy(basisPointDivisor);
     // note : assumes the annual rate is simple, not effective
     const dailyAccrualRateNominalNet = annualAccrualRateNominalGross.dividedBy(365);
     
     const calculationTimeMillis = moment().valueOf();
     const millisSinceLastCalc = calculationTimeMillis - lastFloatAccrualTime.valueOf();
     logger(`Last calculation was at ${lastFloatAccrualTime.format()}, which is ${millisSinceLastCalc} msecs ago, and there are ${MILLIS_IN_DAY} msecs in a day`);
-    const portionOfDay = new BigNumber(millisSinceLastCalc).dividedBy(new BigNumber(MILLIS_IN_DAY));
+    const portionOfDay = new DecimalLight(millisSinceLastCalc).dividedBy(new DecimalLight(MILLIS_IN_DAY));
     logger(`That works out to ${portionOfDay.toNumber()} as a proportion of a day, since the last calc`);
     const accrualRateToApply = dailyAccrualRateNominalNet.times(portionOfDay);
     logger(`And hence, from an annual ${annualAccrualRateNominalGross.toNumber()}, an amount to apply of ${accrualRateToApply.toNumber()}`);
 
-    const todayAccrualAmount = new BigNumber(floatAmountHunCent).times(accrualRateToApply);
+    const todayAccrualAmount = new DecimalLight(floatAmountHunCent).times(accrualRateToApply);
     logger(`Another check: ${todayAccrualAmount.toNumber()}, rate to apply: ${accrualRateToApply.toNumber()}`);
     logger(`Altogether, with annual bps of ${accrualRateAnnualBps}, and a float balance of ${floatAmountHunCent}, we have an accrual of ${todayAccrualAmount.toNumber()}`);
 
     const identifierToUse = `SYSTEM_CALC_DAILY_${calculationTimeMillis}`;
-    
+
     // add calculation basis for logging, notification email, etc. 
     const calculationBasis = {
         floatAmountHunCent,
@@ -103,7 +99,7 @@ const assembleAccrualPayload = async (clientFloatInfo) => {
     return {
         clientId: clientFloatInfo.clientId,
         floatId: clientFloatInfo.floatId,
-        accrualAmount: todayAccrualAmount.decimalPlaces(0).toNumber(),
+        accrualAmount: todayAccrualAmount.toDecimalPlaces(0).toNumber(),
         currency: clientFloatInfo.currency,
         unit: 'HUNDREDTH_CENT',
         referenceTimeMillis: calculationTimeMillis,
@@ -187,7 +183,7 @@ const initiateFloatAccruals = async () => {
 
     logger('Results of accruals: ', accrualInvocationResults);
 
-    // todo: use more robust templatting so can handle indefinite length arrays, for now just do this one
+    // todo: use more robust templating so can handle indefinite length arrays, for now just do this one
     const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualInvocations[0], accrualInvocationResults[0]);
 
     const emailResult = await publisher.sendSystemEmail({
@@ -202,6 +198,55 @@ const initiateFloatAccruals = async () => {
     return accrualInvocations.length;
 };
 
+const formatAllPendingTransactionsForEmail = async (allPendingTransactions) => {
+    logger(`Formatting all pending transactions for email. Pending Transactions: ${JSON.stringify(allPendingTransactions)}`);
+    const transactionsWithWholeCurrencyAmount = allPendingTransactions.map((transaction) => ({ ...transaction, wholeCurrencyAmount: opsUtil.convertToUnit(transaction.amount, transaction.unit, 'WHOLE_CURRENCY'), unit: 'WHOLE_CURRENCY' }));
+    const htmlTemplateForRow = `
+        <tr>
+            <td>{humanReference}</td>
+            <td>{currency} {wholeCurrencyAmount}</td>
+            <td>{transactionType}</td>
+            <td>{creationTime}</td>
+            <td>{settlementStatus}</td>
+         </tr>
+    `;
+    logger('html template', htmlTemplateForRow);
+    const startingValue = '';
+    const pendingTransactionsFormattedForEmail = transactionsWithWholeCurrencyAmount.reduce((accumulator, pendingTransaction) => {
+        const transactionAsTableRow = stringFormat(htmlTemplateForRow, pendingTransaction);
+        return `${accumulator} ${transactionAsTableRow}`;
+    }, startingValue);
+
+    logger(`Successfully formatted all pending transactions for email. Transactions: ${JSON.stringify(pendingTransactionsFormattedForEmail)}`);
+    return pendingTransactionsFormattedForEmail;
+};
+
+const notifyAdminOfPendingTransactionsForAllUsers = async () => {
+    logger('Start job to notify admin of pending transactions for all users');
+
+    const startTime = moment(0).format(); // fetch pending transactions for all time i.e. 1970 till date
+    const endTime = moment().format();
+    const allPendingTransactions = await rdsAccount.fetchPendingTransactionsForAllUsers(startTime, endTime);
+    if (!allPendingTransactions || allPendingTransactions.length === 0) {
+        logger('all tx', allPendingTransactions);
+        logger('No pending transactions, returning');
+        return { result: 'NO_PENDING_TRANSACTIONS' };
+    }
+
+    const allPendingTransactionsEmailDetails = await formatAllPendingTransactionsForEmail(allPendingTransactions);
+    const emailResult = await publisher.sendSystemEmail({
+        subject: config.get('email.allPendingTransactions.subject'),
+        toList: config.get('email.allPendingTransactions.toList'),
+        bodyTemplateKey: config.get('email.allPendingTransactions.templateKey'),
+        templateVariables: {
+            pendingTransactionsTableInHTML: allPendingTransactionsEmailDetails
+        }
+    });
+
+    logger(`Result of email to notify admin of pending transactions for all users. Email Result: ${JSON.stringify(emailResult)}`);
+    return allPendingTransactions.length;
+};
+
 // note : system stat email transferred to data pipeline, for various reasons
 
 // used to control what should execute
@@ -209,7 +254,8 @@ const operationMap = {
     'ACRRUE_FLOAT': initiateFloatAccruals,
     'EXPIRE_HANGING': expireHangingTransactions,
     'EXPIRE_BOOSTS': expireBoosts, 
-    'CHECK_FLOATS': floatConsistency.checkAllFloats
+    'CHECK_FLOATS': floatConsistency.checkAllFloats,
+    'ALL_PENDING_TRANSACTIONS': notifyAdminOfPendingTransactionsForAllUsers
 };
 
 /**
@@ -220,8 +266,13 @@ const operationMap = {
  */
 module.exports.runRegularJobs = async (event) => {
     logger('Scheduled job received event: ', event);
+    if (!event.specificOperations) {
+        logger('Default job pattern is now turned off');
+        return { statusCode: 400 };
+    }
 
-    const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : config.get('defaults.scheduledJobs');
+    // leaving some robustness in otherwise might get loops of recurring failure
+    const tasksToRun = Array.isArray(event.specificOperations) ? event.specificOperations : [];
     const promises = tasksToRun.filter((operation) => Reflect.has(operationMap, operation)).map((operation) => operationMap[operation]());
     const results = await Promise.all(promises);
 
