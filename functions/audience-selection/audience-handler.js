@@ -11,6 +11,8 @@ const persistence = require('./persistence');
 const txTable = config.get('tables.transactionTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');
 
+const DEFAULT_TABLE = 'transactionTable';
+
 const stdProperties = {
     saveCount: {
         type: 'aggregate',
@@ -30,12 +32,8 @@ const stdProperties = {
     humanReference: {
         type: 'match',
         description: 'Human reference',
-        expects: 'stringMultiple'
-    },
-    table: {
-        type: 'match',
-        description: 'Optional property table',
-        expects: 'string'
+        expects: 'stringMultiple',
+        table: 'accountTable'
     }
 };
 
@@ -97,11 +95,14 @@ const columnConverters = {
     })
 };
 
-const addTableAndClientId = (selection, clientId, tableName) => {
-    const selectionConditions = selection.conditions;
+const addTableAndClientId = (selection, clientId, tableKey) => {
+    const tableName = config.get(`tables.${tableKey}`);
+    const { conditions: selectionConditions } = selection;
     
     const existingTopLevel = { ...selectionConditions[0] };
-    const clientCondition = { op: 'is', prop: 'client_id', value: clientId };
+
+    const clientColumn = tableKey === 'accountTable' ? 'responsible_client_id' : 'client_id';
+    const clientCondition = { op: 'is', prop: clientColumn, value: clientId };
 
     let newTopLevel = {};
 
@@ -132,7 +133,7 @@ const addTableAndClientId = (selection, clientId, tableName) => {
 const convertAggregateIntoEntity = async (aggregateCondition, persistenceParams) => {
     const converter = columnConverters[aggregateCondition.prop];
     const columnSelection = { creatingUserId: persistenceParams.creatingUserId, ...converter(aggregateCondition) };
-    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId);
+    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId, DEFAULT_TABLE);
     
     logger('Transforming aggregate condition: ', clientRestricted);
     const copiedParams = { ...persistenceParams };
@@ -184,22 +185,47 @@ const validateColumnConditions = (conditions) => {
         if (condition.op === 'and') {
             condition.children.forEach((child) => {
                 if (child.prop === 'humanReference') {
-                    throw new Error(`Only 'in' and 'or' are supported with 'human_ref'`);
+                    throw new Error(`The 'human_ref' condition cannot be used in combination with others`);
                 }
             });
         }
     });
 };
 
-const extractColumnConditionsTable = (conditions) => {
-    const columnConditionsTable = conditions.map((condition) => {
-        if (Reflect.has(condition, 'table')) {
-            return condition.table;
+const hasAccountTableProperty = (conditions) => {
+    if (conditions.length === 0) {
+        return false;
+    }
+
+    return conditions.some((condition) => {
+        if (['and', 'or'].includes(condition.op)) {
+            return hasAccountTableProperty(condition.children);
         }
-        return null;
+        return Reflect.has(stdProperties[condition.prop], 'table');
     });
-    logger('Got table:', columnConditionsTable);
-    return columnConditionsTable.filter((table) => table !== null)[0];
+};
+
+const extractColumnConditionsTable = (conditions) => {
+    if (conditions.length === 0) {
+        return false;
+    }
+    
+    const tables = conditions.map((condition) => {
+        if (['and', 'or'].includes(condition.op)) {
+            return extractColumnConditionsTable(conditions);
+        }
+        return [stdProperties[condition.prop].table] || [];
+    }).reduce((cum, list) => [...cum, ...list], []);
+    
+    if (tables.length > 1) {
+        throw new Error('Invalid selection, spans tables. Not supported yet');
+    }
+
+    if (tables.length === 0) {
+        return DEFAULT_TABLE;
+    }
+
+    return tables[0];
 };
 
 const logParams = (params) => {
@@ -233,10 +259,10 @@ const constructColumnConditions = async (params) => {
         selectionObject.sample = sample;
     }
 
-    const hasTableSpecified = passedPropertyConditions.some((condition) => Reflect.has(condition, 'table'));
+    const hasTableSpecified = hasAccountTableProperty(passedPropertyConditions);
     logger('Has table specified:', hasTableSpecified);
 
-    const conditionTable = hasTableSpecified ? extractColumnConditionsTable(passedPropertyConditions) : txTable;
+    const conditionTable = hasTableSpecified ? extractColumnConditionsTable(passedPropertyConditions) : DEFAULT_TABLE;
     logger('Got condition table:', conditionTable);
 
     const withClientId = addTableAndClientId(selectionObject, clientId, conditionTable);
