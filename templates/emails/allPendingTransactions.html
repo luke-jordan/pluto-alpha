@@ -21,14 +21,15 @@
 </head>
 <body>
     <p>Hello Jupiter Admin</p>
-    <p>Here are all the pending transactions:</p>
+    <p>Here are all the pending transactions, as of {presentDate}:</p>
     <table>
     <tr>
-        <th>Human Reference</th>
+        <th>Reference</th>
         <th>Amount</th>
         <th>Transaction Type</th>
         <th>Creation Time</th>
         <th>Settlement Status</th>
+        <th>Link</th>
     </tr>
     {pendingTransactionsTableInHTML}
     </table>

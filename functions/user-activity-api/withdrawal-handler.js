@@ -5,6 +5,7 @@ const config = require('config');
 const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
+const paymentUtil = require('./payment-link');
 
 const status = require('statuses');
 const publisher = require('publish-common');
@@ -299,10 +300,19 @@ module.exports.setWithdrawalAmount = async (event) => {
         withdrawalInformation.settlementStatus = 'INITIATED';
         withdrawalInformation.initiationTime = moment();
 
-        const { clientId, floatId } = await obtainClientFloatId(withdrawalInformation);
-        const withdrawWithClientFloat = { ...withdrawalInformation, clientId, floatId };
+        // get client float for interest projections, and bank ref info, to assist in generating a tracker 
+        const [clientFloatInfo, bankRefInfo] = await Promise.all([
+            obtainClientFloatId(withdrawalInformation), 
+            persistence.fetchInfoForBankRef(accountId)
+        ]);
+
+        const { clientId, floatId } = clientFloatInfo;
+        const humanRef = paymentUtil.generateBankRef(bankRefInfo);
+
+        const withdrawWithInfo = { ...withdrawalInformation, clientId, floatId, humanRef };
+
         // (1) create the pending transaction, and (2) decide if a boost should be offered
-        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawWithClientFloat);
+        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawWithInfo);
         logger('Transaction details from persistence: ', transactionDetails);
         const transactionId = transactionDetails[0]['accountTransactionId'];
 
@@ -311,7 +321,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         // const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
 
         // work out how much the user would earn over next five years
-        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawWithClientFloat, 'HUNDREDTH_CENT');
+        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawWithInfo, 'HUNDREDTH_CENT');
         const potentialInterestAmount = await calculateCompoundInterest(withdrawalAmount, annualInterestRate, FIVE_YEARS);
         const potentialInterest = { amount: potentialInterestAmount, unit: 'HUNDREDTH_CENT', currency: withdrawalInformation.currency };
 

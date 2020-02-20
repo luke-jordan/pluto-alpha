@@ -68,8 +68,8 @@ module.exports.fetchInfoForBankRef = async (accountId) => {
     // note: left join in case this is first save ...
     const query = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
         `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 and ` + 
-        `transaction_type = $2 group by human_ref`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT']); // so we don't count accruals
+        `transaction_type in ($2, $3) group by human_ref`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT', 'WITHDRAWAL']); // so we don't count accruals
     logger('Result of bank info query: ', resultOfQuery);
     return camelizeKeys(resultOfQuery[0]);
 };
@@ -222,7 +222,8 @@ const assembleAccountTxInsertion = (accountTxId, transactionDetails, floatTxIds)
         settlementStatus: transactionDetails.settlementStatus,
         initiationTime: transactionDetails.initiationTime.format(),
         floatId: transactionDetails.floatId,
-        clientId: transactionDetails.clientId
+        clientId: transactionDetails.clientId,
+        humanRef: transactionDetails.humanRef || ''
     };
 
     let accountQuery = '';
@@ -236,16 +237,16 @@ const assembleAccountTxInsertion = (accountTxId, transactionDetails, floatTxIds)
         accountRow.floatAllocTransactionId = floatTxIds.floatAllocationTxId;
         
         accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id, ` +
-            `settlement_status, initiation_time, settlement_time, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
+            `settlement_status, initiation_time, settlement_time, human_reference, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
         // todo : should obviously change syntax in RDS module but that is going to get messy, for now have to leave for later debt clean up
         accountColumnKeys = '${accountTransactionId}, *{' + transactionType + '}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
-            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
+            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${humanRef}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
 
     } else {
         accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id, ` +
-            `settlement_status, initiation_time) values %L returning transaction_id, creation_time`;
+            `settlement_status, initiation_time, human_reference) values %L returning transaction_id, creation_time`;
         accountColumnKeys = '${accountTransactionId}, *{' + transactionType + '}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
-            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}';
+            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${humanRef}';
     }
 
     return {

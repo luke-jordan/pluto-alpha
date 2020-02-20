@@ -39,6 +39,10 @@ resource "aws_lambda_function" "balance_fetch" {
               "database": "${local.database_config.database}",
               "port" :"${local.database_config.port}"
             },
+            "cache": {
+              "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+              "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+            },
             "secrets": {
                 "enabled": true,
                 "names": {
@@ -51,7 +55,8 @@ resource "aws_lambda_function" "balance_fetch" {
   }
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, 
+      aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
   }
 
   depends_on = [aws_cloudwatch_log_group.balance_fetch]
@@ -86,22 +91,22 @@ resource "aws_cloudwatch_log_group" "balance_fetch" {
 }
 
 resource "aws_iam_role_policy_attachment" "balance_fetch_basic_execution_policy" {
-  role = "${aws_iam_role.balance_fetch_role.name}"
+  role = aws_iam_role.balance_fetch_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "balance_fetch_vpc_execution_policy" {
-  role = "${aws_iam_role.balance_fetch_role.name}"
+  role = aws_iam_role.balance_fetch_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "balance_fetch_client_float_table_access" {
-  role = "${aws_iam_role.balance_fetch_role.name}"
+  role = aws_iam_role.balance_fetch_role.name
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "balance_fetch_transaction_secret_get" {
-  role = "${aws_iam_role.balance_fetch_role.name}"
+  role = aws_iam_role.balance_fetch_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 

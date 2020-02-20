@@ -51,6 +51,9 @@
             "toList": ["luke@jupitersave.com"],
             "subject": "Pending transactions for all Users",
             "templateKey": "emails/allPendingTransactions.html"
+        },
+        "systemLinks": {
+            "baseUrl": "https://staging-admin.jupitersave.com"
         }
     },
     "verification": {

@@ -44,6 +44,9 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
                 "accrualResult": {
                   "subject": "${terraform.workspace == "master" ? "Daily Jupiter interest calculation" : "(STAGING) Daily float accrual"}",
                   "toList": "${var.events_email_receipients[terraform.workspace]}"
+                },
+                "systemLinks": {
+                  "baseUrl": "${terraform.workspace == "master" ? "https://admin.jupitersave.com" : "https://staging-admin.jupitersave.com"}"
                 }
               },
               "templates": {

@@ -70,9 +70,11 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     const testUnit = 'HUNDREDTH_CENT';
     const testCurrency = 'ZAR';
     const testAccrualRateAnnualBps = 750;
+    
     const testTime = moment();
     const formattedTestTime = testTime.format();
     const testTimeValueOf = moment().valueOf();
+    
     const sendSystemEmailReponse = {};
     const testHumanReference = 'AVISH764';
     const testTransactionType = 'USER_SAVING_EVENT';
@@ -264,49 +266,64 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     });
 
     it('should run regular job - all pending transactions when transactions exist', async () => {
-       const testEvent = {
-           specificOperations: ['ALL_PENDING_TRANSACTIONS']
-       };
-       const transaction = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: testAmount, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
-       const transaction1 = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: 249, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
-       const testPendingTransactionsArray = [transaction, transaction1];
-       const testHtmlTemplateForRow = `
+        const testEvent = {
+            specificOperations: ['ALL_PENDING_TRANSACTIONS']
+        };
+
+        const transaction = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: testAmount, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
+        const transaction1 = { creationTime: testTime, transactionType: testTransactionType, settlementStatus: pendingStatus, amount: 249, currency: testCurrency, unit: testUnit, humanReference: testHumanReference };
+        const testPendingTransactionsArray = [transaction, transaction1];
+        
+        momentStub.returns(testTime);
+        momentStub.withArgs(0).returns(moment(0));
+
+        fetchPendingTransactionsForAllUsersStub.resolves(testPendingTransactionsArray);
+        sendSystemEmailStub.resolves(sendSystemEmailReponse);
+
+        const expectedResult = [testPendingTransactionsArray.length];
+        const result = await handler.runRegularJobs(testEvent);
+
+        expect(result).to.exist;
+        expect(result).to.have.property('statusCode', 200);
+        expect(result.body).to.deep.equal(expectedResult);
+        expect(fetchPendingTransactionsForAllUsersStub).to.have.been.calledOnceWithExactly(moment(0).format(), testTime.format());
+        const expectedMomentCallCount = testPendingTransactionsArray.length + 3; // 1 = for email timestamp, 2 = for start/end time
+        expect(momentStub).to.have.callCount(expectedMomentCallCount);
+        
+        const expectedHtmlTemplateForRow = `
         <tr>
             <td>{humanReference}</td>
             <td>{currency} {wholeCurrencyAmount}</td>
             <td>{transactionType}</td>
             <td>{creationTime}</td>
             <td>{settlementStatus}</td>
-         </tr>
-    `;
-       const testStartingValue = '';
-       const testTransactionsWithWholeCurrencyAmount = testPendingTransactionsArray.map((testTx) => ({ ...transaction, wholeCurrencyAmount: opsUtil.convertToUnit(testTx.amount, testTx.unit, 'WHOLE_CURRENCY'), unit: 'WHOLE_CURRENCY' }));
-       const testAllPendingTransactionsEmailDetails = testTransactionsWithWholeCurrencyAmount.reduce((accumulator, pendingTransaction) => {
-            const transactionAsTableRow = stringFormat(testHtmlTemplateForRow, pendingTransaction);
+            <td><a href='{linkToUser}'>User profile</a></td>
+         </tr>`;
+        
+        const testStartingValue = '';
+
+        const expectedTxForHumans = testPendingTransactionsArray.map((testTx) => ({ 
+            ...transaction, 
+            wholeCurrencyAmount: opsUtil.convertToUnit(testTx.amount, testTx.unit, 'WHOLE_CURRENCY'), 
+            creationTime: moment(testTime.format()).format('MMMM Do YYYY, h:mm:ss a'),
+            linkToUser: `https://staging-admin.jupitersave.com/#/users?searchValue=${testHumanReference}&searchType=bankReference` 
+        }));
+
+        const expectedEmailDetails = expectedTxForHumans.reduce((accumulator, pendingTransaction) => {
+            const transactionAsTableRow = stringFormat(expectedHtmlTemplateForRow, pendingTransaction);
             return `${accumulator} ${transactionAsTableRow}`;
-       }, testStartingValue);
-       const expectedResult = [testPendingTransactionsArray.length];
+        }, testStartingValue);
 
-       momentStub.returns({
-            format: () => testTime
-       });
-       fetchPendingTransactionsForAllUsersStub.withArgs().resolves(testPendingTransactionsArray);
-       const expectedEmailForPendingTransactions = {
-           subject: config.get('email.allPendingTransactions.subject'),
-            toList: config.get('email.allPendingTransactions.toList'),
-            bodyTemplateKey: config.get('email.allPendingTransactions.templateKey'),
-            templateVariables: {
-                pendingTransactionsTableInHTML: testAllPendingTransactionsEmailDetails
-            }
-       };
-       sendSystemEmailStub.withArgs(expectedEmailForPendingTransactions).resolves(sendSystemEmailReponse);
+        const expectedEmailForPendingTransactions = {
+            subject: config.get('email.allPendingTransactions.subject'),
+                toList: config.get('email.allPendingTransactions.toList'),
+                bodyTemplateKey: config.get('email.allPendingTransactions.templateKey'),
+                templateVariables: {
+                    presentDate: testTime.format('dddd, MMMM Do YYYY, h:mm:ss a'),
+                    pendingTransactionsTableInHTML: expectedEmailDetails
+                }
+        };
 
-       const result = await handler.runRegularJobs(testEvent);
-       expect(result).to.exist;
-       expect(result).to.have.property('statusCode', 200);
-       expect(result.body).to.deep.equal(expectedResult);
-       expect(fetchPendingTransactionsForAllUsersStub).to.have.been.calledOnce;
-       expect(momentStub).to.have.been.calledTwice;
-       expect(sendSystemEmailStub).to.have.been.calledWithExactly(expectedEmailForPendingTransactions);
+        expect(sendSystemEmailStub).to.have.been.calledWithExactly(expectedEmailForPendingTransactions);
     });
 });

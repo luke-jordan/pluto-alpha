@@ -218,7 +218,7 @@ module.exports.fetchUserHistory = async (event) => {
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
         const priorTransactions = await persistenceRead.fetchTransactionsForHistory(accountId);
-        logger('Got prior transactions:', priorTransactions);
+        logger(`Got ${priorTransactions.length} prior transactions, sample: ${JSON.stringify(priorTransactions)}`);
 
         const normalizedTransactions = await normalizeTx(priorTransactions);
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];

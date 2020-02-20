@@ -198,9 +198,20 @@ const initiateFloatAccruals = async () => {
     return accrualInvocations.length;
 };
 
+const generateUserViewLink = (humanRef) => {
+    const profileSearch = `users?searchValue=${encodeURIComponent(humanRef)}&searchType=bankReference`;
+    return `${config.get('email.systemLinks.baseUrl')}/#/${profileSearch}`;
+};
+
 const formatAllPendingTransactionsForEmail = async (allPendingTransactions) => {
     logger(`Formatting all pending transactions for email. Pending Transactions: ${JSON.stringify(allPendingTransactions)}`);
-    const transactionsWithWholeCurrencyAmount = allPendingTransactions.map((transaction) => ({ ...transaction, wholeCurrencyAmount: opsUtil.convertToUnit(transaction.amount, transaction.unit, 'WHOLE_CURRENCY'), unit: 'WHOLE_CURRENCY' }));
+    const transactionsForHumans = allPendingTransactions.map((transaction) => ({ 
+        ...transaction, 
+        wholeCurrencyAmount: opsUtil.convertToUnit(transaction.amount, transaction.unit, 'WHOLE_CURRENCY'), 
+        creationTime: moment(transaction.creationTime).format('MMMM Do YYYY, h:mm:ss a'),
+        linkToUser: generateUserViewLink(transaction.humanReference)
+    }));
+    
     const htmlTemplateForRow = `
         <tr>
             <td>{humanReference}</td>
@@ -208,11 +219,13 @@ const formatAllPendingTransactionsForEmail = async (allPendingTransactions) => {
             <td>{transactionType}</td>
             <td>{creationTime}</td>
             <td>{settlementStatus}</td>
-         </tr>
-    `;
+            <td><a href='{linkToUser}'>User profile</a></td>
+         </tr>`;
+    
     logger('html template', htmlTemplateForRow);
+    
     const startingValue = '';
-    const pendingTransactionsFormattedForEmail = transactionsWithWholeCurrencyAmount.reduce((accumulator, pendingTransaction) => {
+    const pendingTransactionsFormattedForEmail = transactionsForHumans.reduce((accumulator, pendingTransaction) => {
         const transactionAsTableRow = stringFormat(htmlTemplateForRow, pendingTransaction);
         return `${accumulator} ${transactionAsTableRow}`;
     }, startingValue);
@@ -226,19 +239,22 @@ const notifyAdminOfPendingTransactionsForAllUsers = async () => {
 
     const startTime = moment(0).format(); // fetch pending transactions for all time i.e. 1970 till date
     const endTime = moment().format();
+
     const allPendingTransactions = await rdsAccount.fetchPendingTransactionsForAllUsers(startTime, endTime);
+    
     if (!allPendingTransactions || allPendingTransactions.length === 0) {
-        logger('all tx', allPendingTransactions);
         logger('No pending transactions, returning');
         return { result: 'NO_PENDING_TRANSACTIONS' };
     }
-
+    
     const allPendingTransactionsEmailDetails = await formatAllPendingTransactionsForEmail(allPendingTransactions);
+
     const emailResult = await publisher.sendSystemEmail({
         subject: config.get('email.allPendingTransactions.subject'),
         toList: config.get('email.allPendingTransactions.toList'),
         bodyTemplateKey: config.get('email.allPendingTransactions.templateKey'),
         templateVariables: {
+            presentDate: moment().format('dddd, MMMM Do YYYY, h:mm:ss a'),
             pendingTransactionsTableInHTML: allPendingTransactionsEmailDetails
         }
     });
