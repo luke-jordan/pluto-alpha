@@ -5,13 +5,14 @@ const config = require('config');
 const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
+const paymentUtil = require('./payment-link');
 
 const status = require('statuses');
 const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
 const dynamodb = require('./persistence/dynamodb');
 
-const BigNumber = require('bignumber.js');
+const DecimalLight = require('decimal.js-light');
 const FIVE_YEARS = 5;
 
 const Redis = require('ioredis');
@@ -149,20 +150,20 @@ const fetchClientFloatVars = async (withdrawalInformation) => {
 
 const calculateAnnualInterestRate = (floatProjectionVars) => {
     const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
-    const annualAccrualRateNominalGross = new BigNumber(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
-    const floatDeductions = new BigNumber(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
+    const annualAccrualRateNominalGross = new DecimalLight(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
+    const floatDeductions = new DecimalLight(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
     plus(floatProjectionVars.prudentialFactor);
 
-    const annualInterestRateAsBigNumber = annualAccrualRateNominalGross.times(new BigNumber(1).minus(floatDeductions));
-    logger(`Annual Interest rate as big number: ${annualInterestRateAsBigNumber}`);
-    return annualInterestRateAsBigNumber;
+    const annualInterestRateAsDecimalLight = annualAccrualRateNominalGross.times(new DecimalLight(1).minus(floatDeductions));
+    logger(`Annual Interest rate as big number: ${annualInterestRateAsDecimalLight}`);
+    return annualInterestRateAsDecimalLight;
 };
 
 const obtainWithdrawalCardMsg = (clientFloatVars) => {
     const annualInterestRate = calculateAnnualInterestRate(clientFloatVars);
-    const twoYearRate = (annualInterestRate.plus(1).exponentiatedBy(2)).minus(1);
+    const twoYearRate = (annualInterestRate.plus(1).pow(2)).minus(1);
     
-    const valueForText = (twoYearRate.times(100)).integerValue().toNumber();
+    const valueForText = (twoYearRate.times(100)).toInteger().toNumber();
     return `Over the next two years you could accumulate ${valueForText}% interest. Why not delay your withdrawal to keep these ` + 
         `savings and earn more for your future!`;
 };
@@ -231,16 +232,16 @@ const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
     return absValueWithdrawal <= balanceInformation.amount;
 };
 
-const calculateCompoundInterest = async (amount, annualInterestRateAsBigNumber, numberOfYears) => {
+const calculateCompoundInterest = async (amount, annualInterestRateAsDecimalLight, numberOfYears) => {
     logger(`Calculate potential compound interest for amount: ${amount} at 
-    annual interest rate: ${annualInterestRateAsBigNumber} for years: ${numberOfYears}`);
-    const amountAsBigNumber = new BigNumber(amount);
-    const baseCompoundRatePerYear = new BigNumber(1).plus(annualInterestRateAsBigNumber);
-    const baseCompoundRateAfterGivenYears = baseCompoundRatePerYear.exponentiatedBy(numberOfYears);
+    annual interest rate: ${annualInterestRateAsDecimalLight} for years: ${numberOfYears}`);
+    const amountAsDecimalLight = new DecimalLight(amount);
+    const baseCompoundRatePerYear = new DecimalLight(1).plus(annualInterestRateAsDecimalLight);
+    const baseCompoundRateAfterGivenYears = baseCompoundRatePerYear.pow(numberOfYears);
 
-    const potentialCompoundInterest = amountAsBigNumber.times(baseCompoundRateAfterGivenYears).minus(amountAsBigNumber);
+    const potentialCompoundInterest = amountAsDecimalLight.times(baseCompoundRateAfterGivenYears).minus(amountAsDecimalLight);
     logger(`Successfully calculated Potential Compound Interest: ${potentialCompoundInterest}`);
-    return potentialCompoundInterest.integerValue().toNumber();
+    return potentialCompoundInterest.toInteger().toNumber();
 };
 
 const constructParametersForPotentialInterest = async (withdrawalInformation, calculationUnit = 'HUNDREDTH_CENT') => {
@@ -299,10 +300,21 @@ module.exports.setWithdrawalAmount = async (event) => {
         withdrawalInformation.settlementStatus = 'INITIATED';
         withdrawalInformation.initiationTime = moment();
 
-        const { clientId, floatId } = await obtainClientFloatId(withdrawalInformation);
-        const withdrawWithClientFloat = { ...withdrawalInformation, clientId, floatId };
+        // get client float for interest projections, and bank ref info, to assist in generating a tracker 
+        const [clientFloatInfo, bankRefInfo] = await Promise.all([
+            obtainClientFloatId(withdrawalInformation), 
+            persistence.fetchInfoForBankRef(accountId)
+        ]);
+
+        const { clientId, floatId } = clientFloatInfo;
+        const { humanRef: bankRefStem, count: priorSaveCount } = bankRefInfo;
+
+        const humanRef = paymentUtil.generateBankRef({ bankRefStem, priorSaveCount });
+
+        const withdrawWithInfo = { ...withdrawalInformation, clientId, floatId, humanRef };
+
         // (1) create the pending transaction, and (2) decide if a boost should be offered
-        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawWithClientFloat);
+        const { transactionDetails } = await persistence.addTransactionToAccount(withdrawWithInfo);
         logger('Transaction details from persistence: ', transactionDetails);
         const transactionId = transactionDetails[0]['accountTransactionId'];
 
@@ -311,7 +323,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         // const delayOffer = { boostAmount: '30000::HUNDREDTH_CENT::ZAR', requiredDelay: delayTime };
 
         // work out how much the user would earn over next five years
-        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawWithClientFloat, 'HUNDREDTH_CENT');
+        const { withdrawalAmount, annualInterestRate } = await constructParametersForPotentialInterest(withdrawWithInfo, 'HUNDREDTH_CENT');
         const potentialInterestAmount = await calculateCompoundInterest(withdrawalAmount, annualInterestRate, FIVE_YEARS);
         const potentialInterest = { amount: potentialInterestAmount, unit: 'HUNDREDTH_CENT', currency: withdrawalInformation.currency };
 

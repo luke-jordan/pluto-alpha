@@ -9,6 +9,7 @@ const moment = require('moment');
 const chai = require('chai');
 const sinon = require('sinon');
 chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -174,6 +175,57 @@ describe('Converts standard properties into column conditions', () => {
         expect(secondCallArgs[2]).to.deep.equal(primaryParams);
     });
 
+    it('should handle human reference audience selection properly', async () => {
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            isDynamic: false,
+            conditions: [
+                { op: 'in', prop: 'humanReference', value: 'TESTREF1, TESTREF2, TESTREF3' }
+            ]
+        };
+
+        const expectedSelection = {
+            creatingUserId: mockUserId,
+            table: 'account_data.core_account_ledger',
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'responsible_client_id', value: mockClientId },
+                    { op: 'in', prop: 'human_ref', value: 'TESTREF1, TESTREF2, TESTREF3' }
+                ]
+            }]
+        };
+
+        const expectedPersistenceParams = {
+            audienceType: 'PRIMARY',
+            clientId: 'test-client-id',
+            creatingUserId: mockUserId,
+            isDynamic: false,
+            propertyConditions: mockSelectionJSON.conditions
+        };
+
+        const authorizedRequest = {
+            httpMethod: 'POST',
+            pathParameters: { proxy: 'create' },
+            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
+            body: JSON.stringify(mockSelectionJSON)
+        };
+
+        const mockAudienceId = uuid();
+
+        executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
+
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+        
+        expect(wrappedResult).to.have.property('statusCode', 200);
+        expect(wrappedResult).to.have.property('headers');
+        expect(wrappedResult).to.have.property('body');
+
+        const unWrappedResult = JSON.parse(wrappedResult.body);
+        expect(unWrappedResult).to.deep.equal({ audienceId: mockAudienceId, audienceCount: 10000 });
+        
+        expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
+    });
+
     it('Handles the simplest case - whole client, no properties - properly', async () => {
         const mockSelectionJSON = {
             clientId: mockClientId,
@@ -246,6 +298,39 @@ describe('Converts standard properties into column conditions', () => {
         const selectionJson = executeConditionsStub.getCall(0).args[0];
         expect(selectionJson).to.have.property('sample');
         expect(selectionJson.sample).to.deep.equal({ random: 50 });
+    });
+
+    it('Throws error where other condtions are included with human reference', async () => {
+        const mockStart = moment().subtract(30, 'days');
+
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            isDynamic: true,
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'greater_than', prop: 'humanReference', type: 'match', value: 'TESTREF123' },
+                    { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3, startTime: mockStart.valueOf() }
+                ]}
+            ]
+        };
+
+        const authorizedRequest = {
+            httpMethod: 'POST',
+            pathParameters: { proxy: 'create' },
+            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
+            body: JSON.stringify(mockSelectionJSON)
+        };
+
+        const mockAudienceId = uuid();
+
+        executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
+
+        const errorResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+        
+        expect(errorResult).to.have.property('statusCode', 500);
+        expect(errorResult).to.have.property('message', `The 'human_ref' condition cannot be used in combination with others`);
+        
+        expect(executeConditionsStub).to.have.not.been.called;
     });
 
 });

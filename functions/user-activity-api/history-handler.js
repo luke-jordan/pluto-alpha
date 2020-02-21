@@ -6,10 +6,12 @@ const moment = require('moment');
 
 const accountCalculator = require('./persistence/account.calculations');
 const persistenceRead = require('./persistence/rds.js');
+const dynamodb = require('./persistence/dynamodb');
 
 const util = require('./history-util');
-
 const opsUtil = require('ops-util-common');
+
+const interestHelper = require('./interest-helper');
 
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
@@ -43,6 +45,7 @@ const fetchUserProfile = async (systemWideUserId) => {
 
 // fetches user events for the last 6 (?) months (... can extend when we have users long than that & have thought through data etc)
 const obtainUserHistory = async (systemWideUserId) => {
+    logger('Obtaining user history');
     const startDate = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days').valueOf();
     const eventTypes = config.get('defaults.userHistory.eventTypes');
 
@@ -134,14 +137,31 @@ const normalizeHistory = (events) => {
     return result;
 };
 
-const normalizeTx = (events) => {
-    if (!events) {
-        return [];
-    }
-    
-    const result = [];
-    events.forEach((event) => {
-        result.push({
+const constructUniqueClientFloatsMap = (events) => {
+    const allClientFloatIds = events.
+        filter((event) => event.transactionType === 'USER_SAVING_EVENT').
+        map((event) => `${event.clientId}::${event.floatId}`);
+    return [...new Set(allClientFloatIds)];
+};
+
+const obtainClientFloatVars = async (clientFloatPair) => {
+    const [clientId, floatId] = clientFloatPair.split('::');
+    const floatProjectionVars = await dynamodb.fetchFloatVarsForBalanceCalc(clientId, floatId);
+    const interestRate = interestHelper.calculateInterestRate(floatProjectionVars);
+    return { clientFloatPair, interestRate };
+};
+
+const constructClientFloatsToInterestRatesMap = async (events) => {
+    const uniqueClientFloatPairs = constructUniqueClientFloatsMap(events);
+    const interestArray = await Promise.all(uniqueClientFloatPairs.map((clientFloatPair) => obtainClientFloatVars(clientFloatPair)));
+    return interestArray.reduce((map, entry) => ({ ...map, [entry.clientFloatPair]: entry.interestRate}), {});
+};
+
+const normalizeTx = async (events) => {
+    logger('Normalizing transactions');
+    const clientFloatsToInterestRatesMap = await constructClientFloatsToInterestRatesMap(events);
+    const normalizedTransactions = events.map((event) => {
+        const normalizedTx = {
             timestamp: moment(event.creationTime).valueOf(),
             type: 'TRANSACTION',
             details: {
@@ -153,9 +173,18 @@ const normalizeTx = (events) => {
                 unit: event.unit,
                 humanReference: event.humanReference
             }
-        });
+        };
+
+        if (event.transactionType === 'USER_SAVING_EVENT') {
+            const thisInterestRate = clientFloatsToInterestRatesMap[`${event.clientId}::${event.floatId}`];
+            normalizedTx.estimatedInterestEarned = interestHelper.calculateEstimatedInterestEarned(event, 'HUNDREDTH_CENT', thisInterestRate); 
+        }
+
+        return normalizedTx;
     });
-    return result;
+
+    logger(`Completed normalizing transactions. Sample result: ${JSON.stringify(normalizedTransactions.length > 0 ? normalizedTransactions[0] : {})}`);
+    return normalizedTransactions;
 };
 
 /**
@@ -189,10 +218,11 @@ module.exports.fetchUserHistory = async (event) => {
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
         const priorTransactions = await persistenceRead.fetchTransactionsForHistory(accountId);
-        logger('Got prior transactions:', priorTransactions);
+        logger(`Got ${priorTransactions.length} prior transactions, sample: ${JSON.stringify(priorTransactions)}`);
 
-        const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizeTx(priorTransactions)];
-        logger('Created formatted array:', userHistory);
+        const normalizedTransactions = await normalizeTx(priorTransactions);
+        const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];
+        logger(`Created formatted array of length ${userHistory.length} and sample: ${JSON.stringify(userHistory[0])}`);
 
         const resultObject = {
             userBalance,

@@ -34,7 +34,7 @@ module.exports.warmUpPayment = async (type) => {
     return { result: 'TRIGGERED' };
 };
 
-// exporting this so we can test it thoroughly (small trade off)
+// exporting this so we can test it thoroughly and use in withdrawal separate from payment URL
 module.exports.generateBankRef = (accountInfo) => {
     const countPart = String(accountInfo.priorSaveCount);
     const refStem = accountInfo.bankRefStem;

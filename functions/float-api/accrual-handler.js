@@ -6,16 +6,10 @@ const opsUtil = require('ops-util-common');
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
 const csvFile = require('./persistence/csvfile');
-
+const DecimalLight = require('decimal.js-light');
 const constants = require('./constants');
 
-const BigNumber = require('bignumber.js');
-// make this guy safe for the world
-BigNumber.prototype.valueOf = () => {
-  throw Error('valueOf called!');
-};
-
-const calculatePercent = (total, account) => (new BigNumber(account)).dividedBy(total);
+const calculatePercent = (total, account) => (new DecimalLight(account)).dividedBy(total);
 
 const consolidateCsvRows = (priorBalanceMap, priorEntityBalances, rowsFromRds) => rowsFromRds.map((row) => {
   const allocType = row['allocated_to_type'];
@@ -274,7 +268,7 @@ module.exports.allocate = async (event) => {
 // todo: add in capitalization at month end (think through how to do that)
 
 /**
- * Utility method to reliably calculate a share, using BigNumber and a lot of tests to enforce robustness and avoid 
+ * Utility method to reliably calculate a share, using DecimalLight and a lot of tests to enforce robustness and avoid 
  * possible floating point issues. It is exported as (1) it might graduate to its own lambda, and (2) although small
  * it is the kind of thing that can crash spaceships into planets so it needs to be tested very very thoroughly on its own
  * @param {number} totalPool What is the total pool that we are dividing
@@ -296,14 +290,15 @@ module.exports.calculateShare = (totalPool = 100, shareInPercent = 0.1, roundEve
   }
 
   // now we convert both of these to big numbers, so we can do the multiplication properly
-  const pool = new BigNumber(totalPool);
-  const share = new BigNumber(shareInPercent);
+  const pool = new DecimalLight(totalPool);
+  const share = new DecimalLight(shareInPercent);
 
   const result = pool.times(share);
-  const roundingMode = roundEvenUp ? BigNumber.ROUND_HALF_UP : BigNumber.ROUND_FLOOR; // for users, we round even up, for us, floow
-  const resultAsNumber = result.integerValue(roundingMode).toNumber();
+  const roundingMode = roundEvenUp ? DecimalLight.ROUND_HALF_UP : DecimalLight.ROUND_FLOOR; // for users, we round even up, for us, floow
+  DecimalLight.config({ rounding: roundingMode });
+  const resultAsNumber = result.toInteger().toNumber();
 
-  // logger(`Result of calculation: ${resultAsNumber}`);
+  logger(`Result of calculation: ${resultAsNumber}`);
   return resultAsNumber;
 };
 
@@ -339,13 +334,13 @@ module.exports.apportion = (amountToDivide = 100, accountTotals = new Map(), app
   const shareMap = new Map(); 
 
   const accountTotal = sumUpBalances(accountTotals);
-  const totalToShare = new BigNumber(amountToDivide);
+  const totalToShare = new DecimalLight(amountToDivide);
   
   // NOTE: the percentage is of the account relative to all other accounts, not relative to the float at present, hence calculate percent
   // is called with the total of the prior existing balances, and then multiples the amount to apportion
   for (const accountId of accountTotals.keys()) {
     // logger(`For account ${accountId}, balance is ${accountTotals.get(accountId)}`);
-    shareMap.set(accountId, calculatePercent(accountTotal, accountTotals.get(accountId)).times(totalToShare).integerValue().toNumber());
+    shareMap.set(accountId, calculatePercent(accountTotal, accountTotals.get(accountId)).times(totalToShare).toInteger().toNumber());
   }
 
   const apportionedAmount = sumUpBalances(shareMap);
