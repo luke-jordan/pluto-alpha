@@ -307,7 +307,9 @@ module.exports.setWithdrawalAmount = async (event) => {
         ]);
 
         const { clientId, floatId } = clientFloatInfo;
-        const humanRef = paymentUtil.generateBankRef(bankRefInfo);
+        const { humanRef: bankRefStem, count: priorSaveCount } = bankRefInfo;
+
+        const humanRef = paymentUtil.generateBankRef({ bankRefStem, priorSaveCount });
 
         const withdrawWithInfo = { ...withdrawalInformation, clientId, floatId, humanRef };
 

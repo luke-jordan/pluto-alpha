@@ -183,7 +183,7 @@ const normalizeTx = async (events) => {
         return normalizedTx;
     });
 
-    logger(`Completed normalizing transactions. Result: ${JSON.stringify(normalizedTransactions)}`);
+    logger(`Completed normalizing transactions. Sample result: ${JSON.stringify(normalizedTransactions.length > 0 ? normalizedTransactions[0] : {})}`);
     return normalizedTransactions;
 };
 
@@ -222,7 +222,7 @@ module.exports.fetchUserHistory = async (event) => {
 
         const normalizedTransactions = await normalizeTx(priorTransactions);
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];
-        logger('Created formatted array:', userHistory);
+        logger(`Created formatted array of length ${userHistory.length} and sample: ${JSON.stringify(userHistory[0])}`);
 
         const resultObject = {
             userBalance,

@@ -510,7 +510,9 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
         expect(getOwnerInfoForAccountStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(fetchBankRefInfoStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(generateBankRefStub).to.have.been.calledOnceWithExactly(testBankRefInfo);
+
+        const expectedBankRefParams = { bankRefStem: 'JUPSAVER31', priorSaveCount: 15 };
+        expect(generateBankRefStub).to.have.been.calledOnceWithExactly(expectedBankRefParams);
         expect(fetchFloatVarsForBalanceCalcStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
         // expect(addTransactionToAccountStub).to.have.been.calledOnceWithExactly(getOwnerArgs);
     });
