@@ -26,6 +26,7 @@ const adjustTxStatusStub = sinon.stub();
 const fetchBsheetTagStub = sinon.stub();
 const updateBsheetTagStub = sinon.stub();
 const insertAccountLogStub = sinon.stub();
+const fetchTxDetailsStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -40,6 +41,7 @@ const handler = proxyquire('../admin-user-handler', {
         'updateBsheetTag': updateBsheetTagStub,
         'insertAccountLog': insertAccountLogStub,
         'fetchUserPendingTransactions': pendingTxStub,
+        'getTransactionDetails': fetchTxDetailsStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -308,25 +310,45 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
         publishEventStub.resolves({ result: 'SUCCESS' });
         insertAccountLogStub.resolves({ creationTime: testCreationTime });
+        fetchTxDetailsStub.resolves({ accountId: testAccountId, humanReference: 'JSAVE111', amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+        
+        const testLogTime = moment();
+        momentStub.returns(testLogTime);
 
-        const expectedPublishArgs = {
+        const expectedLogContext = {
+            settleInstruction: {
+                transactionId: testTxId,
+                paymentRef: 'Saving event completed',
+                paymentProvider: 'ADMIN_OVERRIDE',
+                settlingUserId: testUserId
+            },
+            resultPayload: {
+                transactionDetails: [{ 'accountTransactionType': 'USER_SAVING_EVENT' }]
+            }
+        };
+
+        const expectedSaveSettledLog = {
             initiator: testUserId,
             options: {
                 context: {
-                    settleInstruction: {
-                        transactionId: testTxId,
-                        paymentRef: 'Saving event completed',
-                        paymentProvider: 'ADMIN_OVERRIDE',
-                        settlingUserId: testUserId
-                    },
-                    resultPayload: {
-                        transactionDetails: [{ 'accountTransactionType': 'USER_SAVING_EVENT' }]
-                    }
+                    transactionId: testTxId,
+                    accountId: testAccountId,
+                    timeInMillis: testLogTime.valueOf(),
+                    bankReference: 'JSAVE111',
+                    savedAmount: '100000::HUNDREDTH_CENT::USD',
+                    logContext: expectedLogContext
                 }
             }
         };
 
-        const expectedLog = {
+        const expectedAdminSettledLog = {
+            initiator: testUserId,
+            options: {
+                context: expectedLogContext
+            }
+        };
+
+        const expectedAccountLog = {
             transactionId: testTxId,
             adminUserId: testUserId,
             logType: 'ADMIN_SETTLED_SAVE',
@@ -378,9 +400,9 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         expect(resultOfUpdate).to.deep.equal(expectedResult);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
         expect(publishEventStub).to.have.been.calledTwice;
-        expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_SETTLED_SAVE', expectedPublishArgs);
-        expect(publishEventStub).to.have.been.calledWith(testUserId, 'SAVING_PAYMENT_SUCCESSFUL', expectedPublishArgs);
-        expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedLog);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'SAVING_PAYMENT_SUCCESSFUL', expectedSaveSettledLog);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_SETTLED_SAVE', expectedAdminSettledLog);
+        expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedAccountLog);
     });
 
     it('Handles pending transactions', async () => {

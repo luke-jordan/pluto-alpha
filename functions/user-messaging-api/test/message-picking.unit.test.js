@@ -160,12 +160,12 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
     it('Handles last capitalization properly', async () => {
         logger('HUUUUH LCT: ', testUserId);
-        const expectedMessage = 'Hello Luke. This week you got paid $100 in interest';
+        const expectedMessage = 'Hello Luke. This week you got paid $10.05 in interest';
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. This week you got paid #{last_capitalization} in interest'
         )]);
 
-        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
+        const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 100500, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
 
         const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });

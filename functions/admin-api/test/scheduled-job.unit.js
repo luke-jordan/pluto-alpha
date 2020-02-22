@@ -73,7 +73,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     
     const testTime = moment();
     const formattedTestTime = testTime.format();
-    const testTimeValueOf = moment().valueOf();
+    const testTimeValueOf = testTime.valueOf();
     
     const sendSystemEmailReponse = {};
     const testHumanReference = 'AVISH764';
@@ -120,7 +120,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
             accrualAmount: testTodayAccrualAmount.toDecimalPlaces(0).toNumber(),
             currency: testCurrency,
             unit: testUnit,
-            referenceTimeMillis: testTimeValueOf,
+            referenceTimeMillis: testTime.valueOf(),
             backingEntityIdentifier: `SYSTEM_CALC_DAILY_${testTimeValueOf}`,
             backingEntityType: 'ACCRUAL_EVENT',
             calculationBasis: {
@@ -152,12 +152,11 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
             InvocationType: 'RequestResponse',
             Payload: JSON.stringify(testAccrualPayload)
         };
-        lamdbaInvokeStub.withArgs(argsForLambdaExecutingAccrualRate).returns({
-            promise: () => helper.mockLambdaResponse(testAccrualInvocationResults)
-        });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(testAccrualInvocationResults) });
         sendSystemEmailStub.resolves(sendSystemEmailReponse);
 
         const result = await handler.runRegularJobs(testEvent);
+
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
         expect(result.body).to.deep.equal(expectedResult);
