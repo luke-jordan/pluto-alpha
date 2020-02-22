@@ -227,9 +227,9 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
 };
 
 const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
-    const logPayload = { initiator: adminUserId, options: { context }};
-    logger('Dispatching user log: ', logPayload);
-    return publisher.publishUserEvent(systemWideUserId, eventType, logPayload);
+    const logOptions = { initiator: adminUserId, context };
+    logger('Dispatching user log of event type: ', eventType, ', with log options: ', logOptions);
+    return publisher.publishUserEvent(systemWideUserId, eventType, logOptions);
 };
 
 const publishSaveSettledLog = async ({ adminUserId, systemWideUserId, logContext, transactionId }) => {

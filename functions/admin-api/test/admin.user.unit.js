@@ -329,23 +329,19 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
         const expectedSaveSettledLog = {
             initiator: testUserId,
-            options: {
-                context: {
-                    transactionId: testTxId,
-                    accountId: testAccountId,
-                    timeInMillis: testLogTime.valueOf(),
-                    bankReference: 'JSAVE111',
-                    savedAmount: '100000::HUNDREDTH_CENT::USD',
-                    logContext: expectedLogContext
-                }
+            context: {
+                transactionId: testTxId,
+                accountId: testAccountId,
+                timeInMillis: testLogTime.valueOf(),
+                bankReference: 'JSAVE111',
+                savedAmount: '100000::HUNDREDTH_CENT::USD',
+                logContext: expectedLogContext
             }
         };
 
         const expectedAdminSettledLog = {
             initiator: testUserId,
-            options: {
-                context: expectedLogContext
-            }
+            context: expectedLogContext
         };
 
         const expectedAccountLog = {
@@ -422,14 +418,12 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
         const expectedPublishArgs = {
             initiator: testUserId,
-            options: {
-                context: {
-                    newStatus: 'PENDING',
-                    owningUserId: testUserId,
-                    performedBy: testUserId,
-                    reason: 'Saving event pending',
-                    transactionId: testTxId
-                }
+            context: {
+                newStatus: 'PENDING',
+                owningUserId: testUserId,
+                performedBy: testUserId,
+                reason: 'Saving event pending',
+                transactionId: testTxId
             }
         };
 
@@ -589,14 +583,12 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
         const expectedPublishArgs = {
             initiator: testUserId,
-            options: {
-                context: {
-                    performedBy: testUserId,
-                    owningUserId: testUserId,
-                    newIdentifier: 'NEW_IDENTIFIER',
-                    oldIdentifier: undefined,
-                    accountId: testAccountId
-                }
+            context: {
+                performedBy: testUserId,
+                owningUserId: testUserId,
+                newIdentifier: 'NEW_IDENTIFIER',
+                oldIdentifier: undefined,
+                accountId: testAccountId
             }
         };
 
