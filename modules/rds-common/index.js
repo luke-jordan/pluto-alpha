@@ -120,6 +120,17 @@ class RdsConnection {
         logger('Pool has drained');
     }
 
+
+    async onlyAllowAudienceWorkerRole (client) {
+        const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
+        const thisRoleResult = await client.query('select current_role');
+        const connectedRole = thisRoleResult.rows[0]['current_role'];
+        logger('Calling free form insert with role: ', connectedRole);
+        if (!allowedRoles.includes(connectedRole)) {
+            throw new Error('Attempting to call freeform insert from disallowed user');
+        }
+    }
+
     async selectQuery (query = 'SELECT * FROM TABLE WHERE VALUE = $1', values) {
         if (typeof values === 'undefined') {
             logger('Throwing no values error!');
@@ -313,6 +324,8 @@ class RdsConnection {
 
         let results = null;
         const client = await this._getConnection();
+        await this.onlyAllowAudienceWorkerRole(client);
+
         try {
             await client.query('BEGIN');
             await client.query('SET TRANSACTION READ WRITE');
@@ -404,14 +417,7 @@ class RdsConnection {
      */
     async freeFormInsert (queries) {
         const client = await this._getConnection();
-
-        const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
-        const thisRoleResult = await client.query('select current_role');
-        const connectedRole = thisRoleResult.rows[0]['current_role'];
-        logger('Calling free form insert with role: ', connectedRole);
-        if (!allowedRoles.includes(connectedRole)) {
-            throw new Error('Attempting to call freeform insert from disallowed user');
-        }
+        await this.onlyAllowAudienceWorkerRole(client);
 
         const allowedTables = ['audience_data.audience', 'audience_data.audience_account_join'];
         const queryTest = (query) => allowedTables.some((table) => query.template.startsWith(`insert into ${table}`));

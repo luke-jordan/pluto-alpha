@@ -3,6 +3,7 @@
 const config = require('config');
 const moment = require('moment');
 const decamelize = require('decamelize');
+const camelCaseKeys = require('camelcase-keys');
 
 const chai = require('chai');
 const sinon = require('sinon');
@@ -15,11 +16,15 @@ const uuidStub = sinon.stub();
 
 const selectQueryStub = sinon.stub();
 const freeFormStub = sinon.stub();
+const updateRecordStub = sinon.stub();
+const upsertRecordsStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
         this.selectQuery = selectQueryStub;
         this.freeFormInsert = freeFormStub;
+        this.updateRecord = updateRecordStub;
+        this.upsertRecords = upsertRecordsStub;
     }
 }
 
@@ -32,10 +37,15 @@ const rootJSON = {
     table: 'transactions'
 };
 
+const audienceTable = config.get('tables.audienceTable');
+const audienceJoinTable = config.get('tables.audienceJoinTable');
+
 const resetStubs = () => {
     selectQueryStub.reset();
     freeFormStub.reset();
     uuidStub.reset();
+    updateRecordStub.reset();
+    upsertRecordsStub.reset();
 };
 
 describe('Audience Selection - SQL Query Construction', () => {
@@ -515,5 +525,58 @@ describe('Audience Selection - fetch users given JSON', () => {
 
         expect(freeFormStub).to.have.been.calledWith([expectedAudienceInsertion, expectedJoinQuery]);
 
+    });
+});
+
+describe('Other useful methods', () => {
+    it(`should handle 'deactivate audience accounts' successfully`, async () => {
+        const testAudienceId = uuid();
+        const testAccountId = uuid();
+        const expectedQuery = `update ${audienceJoinTable} set active = false where audience_id = $1 and active = true`;
+        const updateRecordResponse = [{ 'account_id': testAccountId }];
+        const expectedResult = [testAccountId];
+        updateRecordStub.withArgs(expectedQuery, [testAudienceId]).resolves(updateRecordResponse);
+
+        const result = await audienceSelection.deactivateAudienceAccounts(testAudienceId);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(updateRecordStub).to.have.been.calledWithExactly(expectedQuery, [testAudienceId]);
+    });
+
+    it(`should handle 'fetch audience accounts' successfully`, async () => {
+        const testAudienceId = uuid();
+        const testAccountId = uuid();
+        const expectedQuery = `select * from ${audienceTable} where audience_id = $1`;
+        const selectRecordsResponse = [{ 'account_id': testAccountId }];
+        const expectedResult = selectRecordsResponse.map((row) => camelCaseKeys(row));
+        selectQueryStub.withArgs(expectedQuery, [testAudienceId]).resolves(selectRecordsResponse);
+
+        const result = await audienceSelection.fetchAudience(testAudienceId);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(selectQueryStub).to.have.been.calledWithExactly(expectedQuery, [testAudienceId]);
+    });
+
+    it(`should handle 'upsert audience accounts' successfully`, async () => {
+        const testAudienceId = uuid();
+        const testAccountId1 = uuid();
+        const testAccountId2 = uuid();
+        const testActiveStatus = true;
+
+        const testAudienceAccountIdsList = [testAccountId1, testAccountId2];
+
+        const expectedQuery = `insert into ${audienceJoinTable} (audience_id, account_id) ` +
+            `values (${testAudienceId}, ${testAccountId1}), (${testAudienceId}, ${testAccountId2}) on conflict (account_id) DO update set active = $1`;
+
+        const upsertRecordsResponse = [{ 'account_id': testAccountId1 }];
+        upsertRecordsStub.withArgs(expectedQuery, [testActiveStatus]).resolves(upsertRecordsResponse);
+
+        const result = await audienceSelection.upsertAudienceAccounts(testAudienceId, testAudienceAccountIdsList);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(upsertRecordsResponse);
+        expect(upsertRecordsStub).to.have.been.calledWithExactly(expectedQuery, [testActiveStatus]);
     });
 });

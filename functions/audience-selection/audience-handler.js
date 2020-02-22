@@ -219,19 +219,20 @@ module.exports.previewAudience = async (params) => {
 };
 
 module.exports.refreshAudience = async (params) => {
-    if (!params.isDynamic) {
-        logger('No need for a refresh for a non-dynamic audience');
-        return;
-    }
-
     logger('Proceeding to refresh audience');
     const audienceId = params.audienceId;
+    const { isDynamic, propertyConditions } = await persistence.fetchAudience(audienceId);
+
+    if (!isDynamic) {
+        logger('No need to refresh a non-dynamic audience');
+        return { result: 'Refresh not needed' };
+    }
 
     await persistence.deactivateAudienceAccounts(audienceId);
-    const { columnConditions } = await constructColumnConditions(params);
-    const fetchedAudienceAccountIdsList = await persistence.executeColumnConditions(columnConditions);
+    const fetchedAudienceAccountIdsList = await persistence.executeColumnConditions(propertyConditions);
     await persistence.upsertAudienceAccounts(audienceId, fetchedAudienceAccountIdsList);
     logger('Completed refreshing audience');
+    return { result: `Refreshed audience id: ${audienceId} successfully` };
 };
 
 const extractParamsFromHttpEvent = (event) => {

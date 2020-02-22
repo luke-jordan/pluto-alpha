@@ -235,9 +235,6 @@ module.exports.createUserMessages = async (event) => {
 
 const generateRecurringMessages = async (recurringInstruction) => {
     const instructionId = recurringInstruction.instructionId;
-
-    // TODO: send request to service to refresh audience
-
     const userIds = await rdsUtil.getUserIds(recurringInstruction.audienceId);
     const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
    

@@ -15,6 +15,7 @@
   },
   "author": "Bolu Ajibawo",
   "dependencies": {
+    "camelcase-keys": "^6.1.2",
     "config": "^3.1.0",
     "debug": "^4.1.1",
     "decamelize": "^3.2.0",

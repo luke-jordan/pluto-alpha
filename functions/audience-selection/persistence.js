@@ -5,6 +5,7 @@ const config = require('config');
 
 const uuid = require('uuid/v4');
 const decamelize = require('decamelize');
+const camelCaseKeys = require('camelcase-keys');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
@@ -347,6 +348,7 @@ module.exports.executeColumnConditions = async (selectionJSON, persistSelection 
     return queryResult.map((row) => row['account_id']);
 };
 
+// NOTE: not being used at the moment, perhaps will be used later
 module.exports.countAudienceSize = async (audienceId, activeOnly = true) => {
     const query = `select count(account_id) from ${audienceJoinTable} where audience_id = $1` + 
         `${activeOnly ? ' and active = true' : ''}`;
@@ -357,6 +359,7 @@ module.exports.countAudienceSize = async (audienceId, activeOnly = true) => {
     return resultOfQuery[0]['count'];
 };
 
+// NOTE: not being used at the moment, perhaps will be used later
 module.exports.selectAudienceActive = async (audienceId, activeOnly = true) => {
     const query = `select account_id from ${audienceJoinTable} where audience_id = $1` +
         `${activeOnly ? ' and active = true' : ''}`;
@@ -380,12 +383,17 @@ const extractInsertQueryClause = (recurrentKey, keys) => {
 };
 
 module.exports.upsertAudienceAccounts = async (audienceId, audienceAccountIdsList) => {
-    // upsert audienceJoinTable => insert accounts if conflict set active=true
-
     const query = `insert into ${config.get('tables.audienceJoinTable')} (audience_id, account_id) ` +
         `values ${extractInsertQueryClause(audienceId, audienceAccountIdsList)} on conflict (account_id) DO update set active = $1`;
 
     logger(`Upsert audience accounts with audience id: ${audienceId} using query: ${JSON.stringify(query)}`);
-    const queryResult = await rdsConnection.upsertRecords(query, [true]);
-    return queryResult;
+    return rdsConnection.upsertRecords(query, [true]);
+};
+
+module.exports.fetchAudience = async (audienceId) => {
+    const query = `select * from ${audienceTable} where audience_id = $1`;
+
+    logger(`Fetching full audience info with audience id: ${audienceId} using query: ${JSON.stringify(query)}`);
+    const queryResult = await rdsConnection.selectQuery(query, [audienceId]);
+    return queryResult.map((row) => camelCaseKeys(row));
 };
