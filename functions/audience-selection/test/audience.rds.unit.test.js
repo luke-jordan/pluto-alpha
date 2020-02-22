@@ -335,10 +335,6 @@ describe('Audience Selection - SQL Query Construction', () => {
 });
 
 describe('Audience Selection - fetch users given JSON', () => {
-
-    const audienceTable = config.get('tables.audienceTable');
-    const audienceJoinTable = config.get('tables.audienceJoinTable'); 
-
     const mockAccountId = uuid();
     const expectedRawQueryResult = [{ 'account_id': mockAccountId }];
     const expectedParsedUserIds = [mockAccountId];
