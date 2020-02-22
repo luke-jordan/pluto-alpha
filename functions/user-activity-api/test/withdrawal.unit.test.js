@@ -21,7 +21,11 @@ const publishEventStub = sinon.stub();
 const fetchTransactionStub = sinon.stub();
 const countSettledSavesStub = sinon.stub();
 const sumAccountBalanceStub = sinon.stub();
+
 const getOwnerInfoForAccountStub = sinon.stub();
+const fetchBankRefInfoStub = sinon.stub();
+const generateBankRefStub = sinon.stub();
+
 const findMostCommonCurrencyStub = sinon.stub();
 const addTransactionToAccountStub = sinon.stub();
 const updateTxSettlementStatusStub = sinon.stub();
@@ -54,11 +58,15 @@ const handler = proxyquire('../withdrawal-handler', {
         'findMostCommonCurrency': findMostCommonCurrencyStub,
         'addTransactionToAccount': addTransactionToAccountStub,
         'updateTxSettlementStatus': updateTxSettlementStatusStub,
+        'fetchInfoForBankRef': fetchBankRefInfoStub,
         '@noCallThru': true
     },
     './persistence/dynamodb': {
         'fetchFloatVarsForBalanceCalc': fetchFloatVarsForBalanceCalcStub,
         '@noCallThru': true
+    },
+    './payment-link': {
+        'generateBankRef': generateBankRefStub
     },
     'ioredis': MockRedis,
     'aws-sdk': { 'Lambda': MockLambdaClient },
@@ -182,9 +190,11 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
+        
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
+        
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
@@ -424,8 +434,13 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         verificationJobId: 'KSDF382'
     };
 
+    const testBankRefInfo = { humanRef: 'JUPSAVER31', count: 15 };
+
     beforeEach(() => {
-        helper.resetStubs(momentStub, publishEventStub, redisGetStub, sumAccountBalanceStub, addTransactionToAccountStub, getOwnerInfoForAccountStub, lamdbaInvokeStub);
+        helper.resetStubs(
+            momentStub, publishEventStub, redisGetStub, sumAccountBalanceStub, addTransactionToAccountStub, 
+            getOwnerInfoForAccountStub, lamdbaInvokeStub, fetchBankRefInfoStub, generateBankRefStub
+        );
     });
 
 
@@ -448,8 +463,11 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         momentStub.returns({ add: () => testInitiationTime });
         redisGetStub.resolves(JSON.stringify(testBankDetails));
         lamdbaInvokeStub.returns({ promise: () => mockJobIdLambdaResponse });
+        
         sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
+        fetchBankRefInfoStub.resolves(testBankRefInfo);
+        generateBankRefStub.resolves('JUPSAVER-16');
         addTransactionToAccountStub.resolves({ transactionDetails: [{ accountTransactionId: testTransactionId }] });
 
         const testAccrualRateBps = 250;
@@ -486,9 +504,15 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledTwice;
         expect(redisGetStub).to.have.been.calledWith(testUserId);
+        
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
         expect(getOwnerInfoForAccountStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(fetchBankRefInfoStub).to.have.been.calledOnceWithExactly(testAccountId);
+
+        const expectedBankRefParams = { bankRefStem: 'JUPSAVER31', priorSaveCount: 15 };
+        expect(generateBankRefStub).to.have.been.calledOnceWithExactly(expectedBankRefParams);
         expect(fetchFloatVarsForBalanceCalcStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
         // expect(addTransactionToAccountStub).to.have.been.calledOnceWithExactly(getOwnerArgs);
     });

@@ -30,6 +30,10 @@ resource "aws_lambda_function" "user_history_list" {
                 "database": "${local.database_config.database}",
                 "port" :"${local.database_config.port}"
               },
+              "cache": {
+                "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+                "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+              },
               "secrets": {
                 "enabled": true,
                 "names": {
@@ -79,28 +83,33 @@ resource "aws_cloudwatch_log_group" "user_history_list" {
 }
 
 resource "aws_iam_role_policy_attachment" "user_history_list_basic_execution_policy" {
-  role = "${aws_iam_role.user_history_list_role.name}"
+  role = aws_iam_role.user_history_list_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "user_history_list_vpc_execution_policy" {
-  role = "${aws_iam_role.user_history_list_role.name}"
+  role = aws_iam_role.user_history_list_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "user_history_list_secret_get" {
-  role = "${aws_iam_role.user_history_list_role.name}"
+  role = aws_iam_role.user_history_list_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
 resource "aws_iam_role_policy_attachment" "user_history_log_invoke_policy" {
-  role = "${aws_iam_role.user_history_list_role.name}"
+  role = aws_iam_role.user_history_list_role.name
   policy_arn = "${var.user_profile_history_invoke_policy_arn[terraform.workspace]}"
 }
 
 resource "aws_iam_role_policy_attachment" "user_history_balance_invoke_policy" {
-  role = "${aws_iam_role.user_history_list_role.name}"
-  policy_arn = "${aws_iam_policy.balance_lambda_invoke_policy.arn}"
+  role = aws_iam_role.user_history_list_role.name
+  policy_arn = aws_iam_policy.balance_lambda_invoke_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "user_history_client_float_table_access" {
+  role = aws_iam_role.user_history_list_role.name
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

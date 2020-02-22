@@ -47,6 +47,24 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
     return resultOfCount[0]['count'];
 };
 
+module.exports.fetchPendingTransactionsForAllUsers = async (startTime, endTime) => {
+    logger(`Fetching pending transactions for all users between start time: ${startTime} and end time: ${endTime}`);
+
+    const txTable = config.get('tables.transactionTable');
+    const columns = `creation_time, transaction_type, settlement_status, amount, currency, unit, human_reference`;
+    const fetchQuery = `select ${columns} from ${txTable} where settlement_status = $1 ` +
+        `and creation_time > $2 and creation_time <= $3 and transaction_type in ($4, $5)`;
+    const values = ['PENDING', startTime, endTime, 'USER_SAVING_EVENT', 'WITHDRAWAL'];
+    logger('Sending query to RDS: ', fetchQuery);
+    logger('With values: ', values);
+
+    const resultOfQuery = await rdsConnection.selectQuery(fetchQuery, values);
+
+    logger('Result of pending TX query: ', resultOfQuery);
+
+    return camelCaseKeys(resultOfQuery);
+};
+
 module.exports.fetchUserPendingTransactions = async (systemWideUserId, startMoment) => {
     logger('Fetching pending transactions for user with ID: ', systemWideUserId);
 
@@ -135,14 +153,20 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
         ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
 };
 
+module.exports.getTransactionDetails = async (transactionId) => {
+    const allowedColumns = 'transaction_id, account_id, creation_time, updated_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference, tags, flags';
+    const getTxDetailsQuery = `select ${allowedColumns} from ${config.get('tables.transactionTable')} where transaction_id = $1`;
+    logger('Finding transaction with query: ', getTxDetailsQuery);
+    const transactionFetchRow = await rdsConnection.selectQuery(getTxDetailsQuery, [transactionId]);
+    logger('Result of finding transaction details: ', transactionFetchRow);
+    return camelCaseKeys(transactionFetchRow[0]);
+};
+
 module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId, logType, logContext }) => {
     let relevantAccountId = accountId;
     if (!relevantAccountId) {
-        const getIdQuery = `select account_id from ${config.get('tables.transactionTable')} where transaction_id = $1`;
-        logger('Finding account ID with query: ', getIdQuery);
-        const accountIdFetchRow = await rdsConnection.selectQuery(getIdQuery, [transactionId]);
-        logger('Result of finding account ID: ', accountIdFetchRow);
-        relevantAccountId = accountIdFetchRow[0]['account_id'];
+        const txDetails = await exports.getTransactionDetails(transactionId);
+        relevantAccountId = txDetails.accountId;
     }
 
     const logObject = {

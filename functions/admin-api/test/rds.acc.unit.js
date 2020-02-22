@@ -336,7 +336,8 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         const testAdminId = uuid();
         const testUserId = uuid();
 
-        const selectQuery = 'select account_id from transaction_data.core_transaction_ledger where transaction_id = $1'; 
+        const allowedColumns = 'transaction_id, account_id, creation_time, updated_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference, tags, flags';
+        const selectQuery = `select ${allowedColumns} from transaction_data.core_transaction_ledger where transaction_id = $1`; 
         const insertQuery = 'insert into account_data.account_log (log_id, creating_user_id, account_id, transaction_id, log_type, log_context) values %L returning creation_time';
         const insertColumns = '${logId}, ${creatingUserId}, ${accountId}, ${transactionId}, ${logType}, ${logContext}';
 

@@ -11,6 +11,8 @@ const persistence = require('./persistence');
 const txTable = config.get('tables.transactionTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');
 
+const DEFAULT_TABLE = 'transactionTable';
+
 const stdProperties = {
     saveCount: {
         type: 'aggregate',
@@ -26,6 +28,12 @@ const stdProperties = {
         type: 'match',
         description: 'Last capitalization',
         expects: 'epochMillis'
+    },
+    humanReference: {
+        type: 'match',
+        description: 'Human reference',
+        expects: 'stringMultiple',
+        table: 'accountTable'
     }
 };
 
@@ -79,14 +87,22 @@ const columnConverters = {
                 { op: 'is', prop: 'transaction_type', value: 'CAPITALIZATION' }
             ]}
         ]
+    }),
+    humanReference: (condition) => ({
+        conditions: [
+            { op: condition.op, prop: 'human_ref', value: condition.value }
+        ]
     })
 };
 
-const addTableAndClientId = (selection, clientId, tableName) => {
-    const selectionConditions = selection.conditions;
+const addTableAndClientId = (selection, clientId, tableKey) => {
+    const tableName = config.get(`tables.${tableKey}`);
+    const { conditions: selectionConditions } = selection;
     
     const existingTopLevel = { ...selectionConditions[0] };
-    const clientCondition = { op: 'is', prop: 'client_id', value: clientId };
+
+    const clientColumn = tableKey === 'accountTable' ? 'responsible_client_id' : 'client_id';
+    const clientCondition = { op: 'is', prop: clientColumn, value: clientId };
 
     let newTopLevel = {};
 
@@ -117,7 +133,7 @@ const addTableAndClientId = (selection, clientId, tableName) => {
 const convertAggregateIntoEntity = async (aggregateCondition, persistenceParams) => {
     const converter = columnConverters[aggregateCondition.prop];
     const columnSelection = { creatingUserId: persistenceParams.creatingUserId, ...converter(aggregateCondition) };
-    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId);
+    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId, DEFAULT_TABLE);
     
     logger('Transforming aggregate condition: ', clientRestricted);
     const copiedParams = { ...persistenceParams };
@@ -161,6 +177,57 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
     return columnCondition.conditions[0];
 };
 
+const validateColumnConditions = (conditions) => {
+    if (conditions.length === 0) {
+        return;
+    }
+    conditions.forEach((condition) => {
+        if (condition.op === 'and') {
+            condition.children.forEach((child) => {
+                if (child.prop === 'humanReference') {
+                    throw new Error(`The 'human_ref' condition cannot be used in combination with others`);
+                }
+            });
+        }
+    });
+};
+
+const hasAccountTableProperty = (conditions) => {
+    if (conditions.length === 0) {
+        return false;
+    }
+
+    return conditions.some((condition) => {
+        if (['and', 'or'].includes(condition.op)) {
+            return hasAccountTableProperty(condition.children);
+        }
+        return Reflect.has(stdProperties[condition.prop], 'table');
+    });
+};
+
+const extractColumnConditionsTable = (conditions) => {
+    if (conditions.length === 0) {
+        return false;
+    }
+    
+    const tables = conditions.map((condition) => {
+        if (['and', 'or'].includes(condition.op)) {
+            return extractColumnConditionsTable(conditions);
+        }
+        return [stdProperties[condition.prop].table] || [];
+    }).reduce((cum, list) => [...cum, ...list], []);
+    
+    if (tables.length > 1) {
+        throw new Error('Invalid selection, spans tables. Not supported yet');
+    }
+
+    if (tables.length === 0) {
+        return DEFAULT_TABLE;
+    }
+
+    return tables[0];
+};
+
 const logParams = (params) => {
     logger('Passed parameters to construct column conditions: ', params);
     if (params.conditions && params.conditions.length > 0 && (params.conditions[0].op === 'and' || params.conditions[0].op === 'or')) {
@@ -192,13 +259,20 @@ const constructColumnConditions = async (params) => {
         selectionObject.sample = sample;
     }
 
-    const withClientId = addTableAndClientId(selectionObject, clientId, passedPropertyConditions.table);
+    const hasTableSpecified = hasAccountTableProperty(passedPropertyConditions);
+    logger('Has table specified:', hasTableSpecified);
+
+    const conditionTable = hasTableSpecified ? extractColumnConditionsTable(passedPropertyConditions) : DEFAULT_TABLE;
+    logger('Got condition table:', conditionTable);
+
+    const withClientId = addTableAndClientId(selectionObject, clientId, conditionTable);
     
     logger('Reassembled conditions: ', JSON.stringify(withClientId, null, 2));
     return { columnConditions: withClientId, persistenceParams };
 };
 
 module.exports.createAudience = async (params) => {
+    validateColumnConditions(params.conditions);
     const { columnConditions, persistenceParams } = await constructColumnConditions(params);
     persistenceParams.audienceType = 'PRIMARY';
     

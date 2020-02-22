@@ -7,7 +7,7 @@
     "test": "test"
   },
   "scripts": {
-    "test": "DEBUG=jupiter:audience-selection:* nyc mocha",
+    "test": "DEBUG=jupiter:audience-selection:*:test nyc mocha",
     "test-all": "DEBUG=jupiter:audience-selection:* nyc mocha --exit",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint .",
@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "chai": "^4.2.0",
+    "chai-as-promised": "^7.1.1",
     "eslint": "^6.0.1",
     "eslint-plugin-chai-friendly": "^0.4.1",
     "mocha": "^6.1.4",

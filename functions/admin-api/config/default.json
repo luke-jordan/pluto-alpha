@@ -46,6 +46,14 @@
             "toList": ["luke@jupitersave.com"],
             "subject": "Float accrual results",
             "templateKey": "emails/floatAccrualEmail.html"
+        },
+        "allPendingTransactions": {
+            "toList": ["luke@jupitersave.com"],
+            "subject": "Pending transactions for all Users",
+            "templateKey": "emails/allPendingTransactions.html"
+        },
+        "systemLinks": {
+            "baseUrl": "https://staging-admin.jupitersave.com"
         }
     },
     "verification": {

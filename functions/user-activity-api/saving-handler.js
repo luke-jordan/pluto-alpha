@@ -305,7 +305,6 @@ const handlePaymentPendingOrFailed = async (statusType, transactionDetails) => {
   return { result: 'PAYMENT_PENDING', bankDetails };
 };
 
-
 // used quite a lot in testing
 const dummyPaymentResult = async (systemWideUserId, params, transactionDetails) => {
   const paymentSuccessful = !params.failureType; // for now

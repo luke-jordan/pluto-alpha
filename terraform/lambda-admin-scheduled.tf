@@ -44,6 +44,12 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
                 "accrualResult": {
                   "subject": "${terraform.workspace == "master" ? "Daily Jupiter interest calculation" : "(STAGING) Daily float accrual"}",
                   "toList": "${var.events_email_receipients[terraform.workspace]}"
+                },
+                "allPendingTransactions": {
+                  "toList": "${var.events_email_receipients[terraform.workspace]}"
+                },
+                "systemLinks": {
+                  "baseUrl": "${terraform.workspace == "master" ? "https://admin.jupitersave.com" : "https://staging-admin.jupitersave.com"}"
                 }
               },
               "templates": {
@@ -121,18 +127,46 @@ resource "aws_iam_role_policy_attachment" "admin_scheduled_job_permissions" {
   policy_arn = "${aws_iam_policy.daily_job_lambda_policy.arn}"
 }
 
-/////////////////// CLOUD WATCH FOR EVENT SOURCE ///////////////////////
+/////////////////// CLOUD WATCH FOR EVENT SOURCE, DAILY ///////////////////////
 
 resource "aws_cloudwatch_event_target" "trigger_ops_admin_scheduled_every_day" {
-    rule = "${aws_cloudwatch_event_rule.ops_every_day.name}"
-    target_id = "${aws_lambda_function.ops_admin_scheduled.id}"
-    arn = "${aws_lambda_function.ops_admin_scheduled.arn}"
+    rule = aws_cloudwatch_event_rule.ops_every_day.name
+    target_id = aws_lambda_function.ops_admin_scheduled.id
+    arn = aws_lambda_function.ops_admin_scheduled.arn
+
+    input = jsonencode(
+      {
+        specificOperations = ["ACRRUE_FLOAT", "EXPIRE_HANGING", "EXPIRE_BOOSTS", "CHECK_FLOATS"]
+      }
+    )
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch_to_call_ops_admin_scheduled" {
     statement_id = "AllowDailyAdminExecutionFromCloudWatch"
     action = "lambda:InvokeFunction"
-    function_name = "${aws_lambda_function.ops_admin_scheduled.function_name}"
+    function_name = aws_lambda_function.ops_admin_scheduled.function_name
     principal = "events.amazonaws.com"
-    source_arn = "${aws_cloudwatch_event_rule.ops_every_day.arn}"
+    source_arn = aws_cloudwatch_event_rule.ops_every_day.arn
+}
+
+/////////////////// CLOUD WATCH FOR EVENT SOURCE, DAYTIME OP ///////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_pending_tx_scan_daytime" {
+    rule = aws_cloudwatch_event_rule.ops_admin_daytime.name
+    target_id = aws_lambda_function.ops_admin_scheduled.id
+    arn = aws_lambda_function.ops_admin_scheduled.arn
+
+    input = jsonencode(
+      {
+        specificOperations = ["ALL_PENDING_TRANSACTIONS"]
+      }
+    )
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_daytime_to_call_ops_admin_scheduled" {
+    statement_id = "AllowDaytimeAdminExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.ops_admin_scheduled.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.ops_admin_daytime.arn
 }
