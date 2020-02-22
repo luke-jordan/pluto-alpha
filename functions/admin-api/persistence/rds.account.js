@@ -155,10 +155,10 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
 
 module.exports.getTransactionDetails = async (transactionId) => {
     const allowedColumns = 'transaction_id, account_id, creation_time, updated_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference, tags, flags';
-    const getTxDetailsQuery = `select (${allowedColumns}) from ${config.get('tables.transactionTable')} where transaction_id = $1`;
+    const getTxDetailsQuery = `select ${allowedColumns} from ${config.get('tables.transactionTable')} where transaction_id = $1`;
     logger('Finding transaction with query: ', getTxDetailsQuery);
     const transactionFetchRow = await rdsConnection.selectQuery(getTxDetailsQuery, [transactionId]);
-    logger('Result of finding account ID: ', transactionFetchRow);
+    logger('Result of finding transaction details: ', transactionFetchRow);
     return camelCaseKeys(transactionFetchRow[0]);
 };
 
