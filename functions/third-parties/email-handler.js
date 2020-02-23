@@ -397,7 +397,8 @@ const wrapHtmlinTemplate = (emailMessages, wrapperTemplate) => emailMessages.map
 /**
  * This function sends pre-assembled emails, with the option of enclosing them in a wrapper from S3.
  * @param    {object} event
- * @property {array}  emailMessages An array of emails objects to be dispatched. Each email must have the following properties: messageId, to, from, subject, text, html.
+ * @property {array}  emailMessages An array of emails objects to be dispatched. 
+ * Each email must have the following properties: messageId, to, from, subject, text, html.
  */
 module.exports.sendEmailMessages = async (event) => {
     try {

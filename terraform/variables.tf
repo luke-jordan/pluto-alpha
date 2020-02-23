@@ -127,8 +127,8 @@ variable "events_source_email_address" {
   description = "The source email address that will serve as the origin of various events emails"
   type = "map"
   default = {
-      "staging" = "noreply@jupitersave.com",
-      "master" = "service@jupitersave.com"
+      "staging" = "\"Jupiter System\" <noreply@jupitersave.com>",
+      "master" = "\"Jupiter System\" <service@jupitersave.com>"
   }
 }
 
@@ -145,7 +145,7 @@ variable "messaging_source_email_address" {
     description = "The source email address for non-event emails, e.g., messages etc"
     type = "map"
     default = {
-        "staging" = "noreply@jupitersave.com"
-        "master" = "service@jupitersave.com"
+        "staging" = "Jupiter Team <noreply@jupitersave.com>"
+        "master" = "Jupiter Team <hello@jupitersave.com>"
     }
 }
