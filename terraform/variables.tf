@@ -141,6 +141,15 @@ variable "events_email_receipients" {
     }
 }
 
+variable "events_source_ses_identity" {
+    description = "The source email without name, for IAM"
+    type = "map"
+    default = {
+        "staging" = "noreply@jupitersave.com"
+        "master" = "service@jupitersave.com"
+    }
+}
+
 variable "messaging_source_email_address" {
     description = "The source email address for non-event emails, e.g., messages etc"
     type = "map"
@@ -149,3 +158,4 @@ variable "messaging_source_email_address" {
         "master" = "Jupiter Team <hello@jupitersave.com>"
     }
 }
+

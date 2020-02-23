@@ -517,11 +517,11 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
             ],
             "Resource": [
                 "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_email_address[terraform.workspace]}"
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_ses_identity[terraform.workspace]}"
             ],
             "Condition": {
                 "StringLike": {
-                    "ses:FromAddress": "${var.events_source_email_address[terraform.workspace]}"
+                    "ses:FromAddress": "${var.events_source_ses_identity[terraform.workspace]}"
                 }
             }
         },
