@@ -132,21 +132,21 @@ variable "events_source_email_address" {
   }
 }
 
-variable "events_email_receipients" {
-    description = "Recipient list for daily stats and system emails"
-    type = "map"
-    default = {
-        "staging" = ["luke@jupitersave.com"],
-        "master" = ["luke@jupitersave.com", "avish@jupitersave.com"]
-    }
-}
-
 variable "events_source_ses_identity" {
     description = "The source email without name, for IAM"
     type = "map"
     default = {
         "staging" = "noreply@jupitersave.com"
         "master" = "service@jupitersave.com"
+    }
+}
+
+variable "events_email_receipients" {
+    description = "Recipient list for daily stats and system emails"
+    type = "map"
+    default = {
+        "staging" = ["luke@jupitersave.com"],
+        "master" = ["luke@jupitersave.com", "avish@jupitersave.com"]
     }
 }
 
