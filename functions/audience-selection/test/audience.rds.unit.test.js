@@ -528,8 +528,8 @@ describe('Other useful methods', () => {
     it(`should handle 'deactivate audience accounts' successfully`, async () => {
         const testAudienceId = uuid();
         const testAccountId = uuid();
-        const expectedQuery = `update ${audienceJoinTable} set active = false where audience_id = $1 and active = true`;
-        const updateRecordResponse = [{ 'account_id': testAccountId }];
+        const expectedQuery = `update ${audienceJoinTable} set active = false where audience_id = $1 and active = true returning account_id`;
+        const updateRecordResponse = { rows: [{ 'account_id': testAccountId }] };
         const expectedResult = [testAccountId];
         updateRecordStub.withArgs(expectedQuery, [testAudienceId]).resolves(updateRecordResponse);
 

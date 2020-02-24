@@ -370,11 +370,11 @@ module.exports.selectAudienceActive = async (audienceId, activeOnly = true) => {
 };
 
 module.exports.deactivateAudienceAccounts = async (audienceId) => {
-    const query = `update ${config.get('tables.audienceJoinTable')} set active = false where audience_id = $1 and active = true`;
+    const query = `update ${config.get('tables.audienceJoinTable')} set active = false where audience_id = $1 and active = true returning account_id`;
 
-    logger(`Deactivating audience accounts with audience id: ${audienceId} using query: ${JSON.stringify(query)}`);
+    logger(`Deactivating audience accounts with audience id: ${audienceId} using query: ${query}`);
     const queryResult = await rdsConnection.updateRecord(query, [audienceId]);
-    return queryResult.map((row) => row['account_id']);
+    return queryResult.rows.map((row) => row['account_id']);
 };
 
 const extractInsertQueryClause = (recurrentKey, keys) => {
