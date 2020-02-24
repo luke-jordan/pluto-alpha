@@ -7,7 +7,8 @@ const uuid = require('uuid/v4');
 
 const rdsUtil = require('./persistence/rds.notifications');
 const msgUtil = require('./msg.util');
-
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 const publisher = require('publish-common');
 
 const STANDARD_PARAMS = [
@@ -228,6 +229,24 @@ module.exports.createUserMessages = async (event) => {
     }
 };
 
+const sendRequestToRefreshAudience = async (audienceId) => {
+    logger(`Sending request to refresh audience with audienceId: ${audienceId}`);
+    const lambdaInvocation = {
+        FunctionName: 'audience_handler',
+        InvocationType: 'RequestResponse',
+        Payload: JSON.stringify({ operation: 'refresh', params: { audienceId } })
+    };
+
+    try {
+        const result = await lambda.invoke(lambdaInvocation).promise();
+        logger(`Response from request to refresh audience with audienceId: ${audienceId}. Result: ${JSON.stringify(result)}`);
+        JSON.parse(result.Payload);
+    } catch (error) {
+        logger(`Error during request to refresh audience with audienceId: ${audienceId}. Error: ${JSON.stringify(error.message)}`);
+        throw error;
+    }
+};
+
 // ///////////////////////////////////////////////////////////////////////////
 // ///////////////////// RECURRING MESSAGE HANDLING //////////////////////////
 // ///////////////////////////////////////////////////////////////////////////
@@ -235,7 +254,10 @@ module.exports.createUserMessages = async (event) => {
 
 const generateRecurringMessages = async (recurringInstruction) => {
     const instructionId = recurringInstruction.instructionId;
-    const userIds = await rdsUtil.getUserIds(recurringInstruction.audienceId);
+    const audienceId = recurringInstruction.audienceId;
+    await sendRequestToRefreshAudience(audienceId);
+
+    const userIds = await rdsUtil.getUserIds(audienceId);
     const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
    
     const userMessages = await createAndStoreMsgsForUserIds(usersForMessages, recurringInstruction);
