@@ -292,6 +292,23 @@ module.exports.previewAudience = async (params) => {
     return { audienceCount: persistedAudience.length };
 };
 
+module.exports.refreshAudience = async (params) => {
+    logger('Proceeding to refresh audience');
+    const audienceId = params.audienceId;
+    const { isDynamic, propertyConditions } = await persistence.fetchAudience(audienceId);
+
+    if (!isDynamic) {
+        logger('No need to refresh a non-dynamic audience');
+        return { result: 'Refresh not needed' };
+    }
+
+    await persistence.deactivateAudienceAccounts(audienceId);
+    const fetchedAudienceAccountIdsList = await persistence.executeColumnConditions(propertyConditions);
+    await persistence.upsertAudienceAccounts(audienceId, fetchedAudienceAccountIdsList);
+    logger('Completed refreshing audience');
+    return { result: `Refreshed audience id: ${audienceId} successfully` };
+};
+
 const extractParamsFromHttpEvent = (event) => {
     const params = event.httpMethod.toUpperCase() === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
     const userDetails = opsUtil.extractUserDetails(event);
@@ -317,7 +334,8 @@ const extractRequestType = (event) => {
 const dispatcher = {
     'properties': () => exports.fetchAvailableProperties(),
     'create': (params) => exports.createAudience(params),
-    'preview': (params) => exports.previewAudience(params)
+    'preview': (params) => exports.previewAudience(params),
+    'refresh': (params) => exports.refreshAudience(params)
 };
 
 /**

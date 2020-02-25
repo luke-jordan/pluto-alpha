@@ -186,14 +186,16 @@ const initiateFloatAccruals = async () => {
     // todo: use more robust templating so can handle indefinite length arrays, for now just do this one
     const accrualEmailDetails = extractParamsForFloatAccrualEmail(accrualInvocations[0], accrualInvocationResults[0]);
 
-    const emailResult = await publisher.sendSystemEmail({
-        subject: 'Daily float accrual results',
-        toList: config.get('email.accrualResult.toList'),
-        bodyTemplateKey: config.get('email.accrualResult.templateKey'),
-        templateVariables: accrualEmailDetails
-    });
-
-    logger('Result of email send: ', emailResult);
+    if (config.get('email.accrualResult.enabled')) {
+        const emailResult = await publisher.sendSystemEmail({
+            subject: 'Daily float accrual results',
+            toList: config.get('email.accrualResult.toList'),
+            bodyTemplateKey: config.get('email.accrualResult.templateKey'),
+            templateVariables: accrualEmailDetails
+        });
+        
+        logger('Result of email send: ', emailResult);
+    }
 
     return accrualInvocations.length;
 };

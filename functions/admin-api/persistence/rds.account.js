@@ -153,14 +153,20 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
         ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
 };
 
+module.exports.getTransactionDetails = async (transactionId) => {
+    const allowedColumns = 'transaction_id, account_id, creation_time, updated_time, transaction_type, settlement_status, settlement_time, client_id, float_id, amount, currency, unit, human_reference, tags, flags';
+    const getTxDetailsQuery = `select ${allowedColumns} from ${config.get('tables.transactionTable')} where transaction_id = $1`;
+    logger('Finding transaction with query: ', getTxDetailsQuery);
+    const transactionFetchRow = await rdsConnection.selectQuery(getTxDetailsQuery, [transactionId]);
+    logger('Result of finding transaction details: ', transactionFetchRow);
+    return camelCaseKeys(transactionFetchRow[0]);
+};
+
 module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId, logType, logContext }) => {
     let relevantAccountId = accountId;
     if (!relevantAccountId) {
-        const getIdQuery = `select account_id from ${config.get('tables.transactionTable')} where transaction_id = $1`;
-        logger('Finding account ID with query: ', getIdQuery);
-        const accountIdFetchRow = await rdsConnection.selectQuery(getIdQuery, [transactionId]);
-        logger('Result of finding account ID: ', accountIdFetchRow);
-        relevantAccountId = accountIdFetchRow[0]['account_id'];
+        const txDetails = await exports.getTransactionDetails(transactionId);
+        relevantAccountId = txDetails.accountId;
     }
 
     const logObject = {

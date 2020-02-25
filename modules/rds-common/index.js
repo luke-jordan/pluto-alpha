@@ -120,6 +120,17 @@ class RdsConnection {
         logger('Pool has drained');
     }
 
+
+    async onlyAllowAudienceWorkerRole (client) {
+        const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
+        const thisRoleResult = await client.query('select current_role');
+        const connectedRole = thisRoleResult.rows[0]['current_role'];
+        logger('Calling free form insert with role: ', connectedRole);
+        if (!allowedRoles.includes(connectedRole)) {
+            throw new Error('Attempting to call freeform insert from disallowed user');
+        }
+    }
+
     async selectQuery (query = 'SELECT * FROM TABLE WHERE VALUE = $1', values) {
         if (typeof values === 'undefined') {
             logger('Throwing no values error!');
@@ -214,7 +225,7 @@ class RdsConnection {
      * column template, given flexibility/robustness/time trade-offs), must include 'RETURNING' statement if return wanted, and uses formatting
      * from pg-format to assemble the nested array, i.e., use %L for where the nested array of literals should be inserted. Example: 
      * 'INSERT INTO TABLE (VALUE1, VALUE2) VALUES %L'
-     * @param {string} columnTemplate The template used to assemble the VALUES clause from the object aray, as a list of keys with the
+     * @param {string} columnTemplate The template used to assemble the VALUES clause from the object array, as a list of keys with the
      * format ${column_name}, e.g., '${name}, ${email}, ${account_id}'
      * @param {array} objectArray The array of objects, each having a key that maps to the names in column template. Example:
      * [ { name: 'Test1', id: 'X'}, { name: 'Test2', id: 'Y'}])
@@ -306,6 +317,31 @@ class RdsConnection {
         return results;
     }
 
+    async upsertRecords (query, values) {
+        if (!Array.isArray(values) || values.length === 0) {
+            throw new NoValuesError(query);
+        }
+
+        let results = null;
+        const client = await this._getConnection();
+        await this.onlyAllowAudienceWorkerRole(client);
+
+        try {
+            await client.query('BEGIN');
+            await client.query('SET TRANSACTION READ WRITE');
+            results = await client.query(query, values);
+            await client.query('COMMIT');
+        } catch (e) {
+            logger('Error running update: ', e);
+            await client.query('ROLLBACK');
+            throw new CommitError(query, values);
+        } finally {
+            await client.release();
+        }
+
+        return results;
+    }
+
     // see below for definition of update query def
     async updateRecordObject (updateQueryDef) {
         const { query, values } = RdsConnection.compileUpdateQueryAndArray(updateQueryDef);
@@ -381,14 +417,7 @@ class RdsConnection {
      */
     async freeFormInsert (queries) {
         const client = await this._getConnection();
-
-        const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
-        const thisRoleResult = await client.query('select current_role');
-        const connectedRole = thisRoleResult.rows[0]['current_role'];
-        logger('Calling free form insert with role: ', connectedRole);
-        if (!allowedRoles.includes(connectedRole)) {
-            throw new Error('Attempting to call freeform insert from disallowed user');
-        }
+        await this.onlyAllowAudienceWorkerRole(client);
 
         const allowedTables = ['audience_data.audience', 'audience_data.audience_account_join'];
         const queryTest = (query) => allowedTables.some((table) => query.template.startsWith(`insert into ${table}`));

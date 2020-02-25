@@ -37,22 +37,22 @@ const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'cr
 
 const getSubParamOrDefault = (paramSplit, defaultValue) => (paramSplit.length > 1 ? paramSplit[1] : defaultValue);
 
-const formatAmountResult = (amountResult) => {
+const formatAmountResult = (amountResult, desiredDigits = 0) => {
     logger('Formatting amount result: ', amountResult);
     const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
 
     // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
     // implement for those countries where client opcos have launched
     if (amountResult.currency === 'ZAR') {
-        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: desiredDigits, minimumFractionDigits: desiredDigits });
         return `R${emFormat.format(wholeCurrencyAmount)}`;
     }
 
     const numberFormat = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: amountResult.currency,
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0
+        maximumFractionDigits: desiredDigits,
+        minimumFractionDigits: desiredDigits
     });
     
     return numberFormat.format(wholeCurrencyAmount);
@@ -86,7 +86,7 @@ const extractParamsFromTemplate = (template) => {
 
 // todo : all at once if multiple params
 // todo : warmup (esp for agg figure)
-const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId) => {
+const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId, desiredDigits = 0) => {
     const invocation = {
         FunctionName: config.get('lambdas.fetchAccountAggregate'),
         InvocationType: 'RequestResponse',
@@ -95,7 +95,7 @@ const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId) => {
     const resultOfInvoke = await lambda.invoke(invocation).promise();
     logger('Aggregate response: ', resultOfInvoke);
     const resultBody = JSON.parse(resultOfInvoke['Payload']);
-    return formatAmountResult(resultBody.results[0]);
+    return formatAmountResult(resultBody.results[0], desiredDigits);
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
@@ -123,7 +123,7 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);
     } else if (paramName === 'last_capitalization') {
         const aggregateOperation = `capitalization::${userProfile.defaultCurrency}`;
-        return fetchAccountAggFigure(aggregateOperation, destinationUserId);
+        return fetchAccountAggFigure(aggregateOperation, destinationUserId, 2);
     } else if (paramName === 'last_saved_amount') {
         const aggregateOperation = `last_saved_amount::${userProfile.defaultCurrency}`;
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);

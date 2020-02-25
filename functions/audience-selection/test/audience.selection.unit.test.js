@@ -16,12 +16,18 @@ const proxyquire = require('proxyquire').noCallThru();
 const executeConditionsStub = sinon.stub();
 const countAudienceStub = sinon.stub();
 const selectAudienceStub = sinon.stub();
+const deactivateAudienceAccountsStub = sinon.stub();
+const upsertAudienceAccountsStub = sinon.stub();
+const fetchAudienceStub = sinon.stub();
 
 const audienceHandler = proxyquire('../audience-handler', {
     './persistence': {
         'executeColumnConditions': executeConditionsStub,
         'countAudienceSize': countAudienceStub,
-        'selectAudienceActive': selectAudienceStub
+        'selectAudienceActive': selectAudienceStub,
+        'deactivateAudienceAccounts': deactivateAudienceAccountsStub,
+        'upsertAudienceAccounts': upsertAudienceAccountsStub,
+        'fetchAudience': fetchAudienceStub
     }
 });
 
@@ -35,6 +41,9 @@ const resetStubs = () => {
     executeConditionsStub.reset();
     countAudienceStub.reset();
     selectAudienceStub.reset();
+    deactivateAudienceAccountsStub.reset();
+    upsertAudienceAccountsStub.reset();
+    fetchAudienceStub.reset();
 };
 
 describe('Audience selection - obtain & utilize list of standard properties', () => {
@@ -215,14 +224,14 @@ describe('Converts standard properties into column conditions', () => {
         executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
 
         const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
-        
+
         expect(wrappedResult).to.have.property('statusCode', 200);
         expect(wrappedResult).to.have.property('headers');
         expect(wrappedResult).to.have.property('body');
 
         const unWrappedResult = JSON.parse(wrappedResult.body);
         expect(unWrappedResult).to.deep.equal({ audienceId: mockAudienceId, audienceCount: 10000 });
-        
+
         expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
     });
 
@@ -308,9 +317,9 @@ describe('Converts standard properties into column conditions', () => {
             isDynamic: true,
             conditions: [
                 { op: 'and', children: [
-                    { op: 'greater_than', prop: 'humanReference', type: 'match', value: 'TESTREF123' },
-                    { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3, startTime: mockStart.valueOf() }
-                ]}
+                        { op: 'greater_than', prop: 'humanReference', type: 'match', value: 'TESTREF123' },
+                        { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3, startTime: mockStart.valueOf() }
+                    ]}
             ]
         };
 
@@ -326,11 +335,90 @@ describe('Converts standard properties into column conditions', () => {
         executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
 
         const errorResult = await audienceHandler.handleInboundRequest(authorizedRequest);
-        
+
         expect(errorResult).to.have.property('statusCode', 500);
         expect(errorResult).to.have.property('message', `The 'human_ref' condition cannot be used in combination with others`);
-        
+
         expect(executeConditionsStub).to.have.not.been.called;
     });
 
+    it('Handles refresh audience request successfully when there is NO need for a refresh', async () => {
+        const mockAudienceId = uuid();
+        const testPropertyConditions = [
+            { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3 }
+        ];
+        const testIsDynamicStatus = false;
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            audienceId: mockAudienceId,
+            isDynamic: testIsDynamicStatus,
+            conditions: testPropertyConditions
+        };
+
+        const authorizedRequest = {
+            httpMethod: 'POST',
+            pathParameters: { proxy: 'refresh' },
+            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
+            body: JSON.stringify(mockSelectionJSON)
+        };
+
+
+        fetchAudienceStub.withArgs(mockAudienceId).resolves({ isDynamic: testIsDynamicStatus, propertyConditions: testPropertyConditions });
+
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+
+        expect(wrappedResult).to.have.property('statusCode', 200);
+        expect(wrappedResult).to.have.property('headers');
+        expect(wrappedResult).to.have.property('body');
+
+        const unWrappedResult = JSON.parse(wrappedResult.body);
+        expect(unWrappedResult).to.deep.equal({ result: 'Refresh not needed' });
+        expect(fetchAudienceStub).to.have.been.calledWithExactly(mockAudienceId);
+        expect(deactivateAudienceAccountsStub).to.not.have.been.called;
+        expect(executeConditionsStub).to.not.have.been.called;
+        expect(upsertAudienceAccountsStub).to.not.have.been.called;
+    });
+
+    it('Handles refresh audience request successfully when a REFFRESH is necessary', async () => {
+            const mockAudienceId = uuid();
+            const testPropertyConditions = [
+                { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3 }
+            ];
+            const testIsDynamicStatus = true;
+            const mockSelectionJSON = {
+                clientId: mockClientId,
+                audienceId: mockAudienceId,
+                isDynamic: testIsDynamicStatus,
+                conditions: testPropertyConditions
+            };
+
+            const authorizedRequest = {
+                httpMethod: 'POST',
+                pathParameters: { proxy: 'refresh' },
+                requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
+                body: JSON.stringify(mockSelectionJSON)
+            };
+            const testAccountId1 = uuid();
+            const testAccountId2 = uuid();
+
+            const testAudienceAccountIdsList = [testAccountId1, testAccountId2];
+
+            fetchAudienceStub.withArgs(mockAudienceId).resolves({ isDynamic: testIsDynamicStatus, propertyConditions: testPropertyConditions });
+            deactivateAudienceAccountsStub.withArgs(mockAudienceId).resolves([testAccountId1]);
+            executeConditionsStub.withArgs(testPropertyConditions).resolves(testAudienceAccountIdsList);
+            upsertAudienceAccountsStub.withArgs(mockAudienceId, testAudienceAccountIdsList).resolves(testAudienceAccountIdsList);
+
+            const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+
+            expect(wrappedResult).to.have.property('statusCode', 200);
+            expect(wrappedResult).to.have.property('headers');
+            expect(wrappedResult).to.have.property('body');
+
+            const unWrappedResult = JSON.parse(wrappedResult.body);
+            expect(unWrappedResult).to.deep.equal({ result: `Refreshed audience id: ${mockAudienceId} successfully` });
+            expect(fetchAudienceStub).to.have.been.calledWithExactly(mockAudienceId);
+            expect(deactivateAudienceAccountsStub).to.have.been.calledWithExactly(mockAudienceId);
+            expect(executeConditionsStub).to.have.been.calledWithExactly(testPropertyConditions);
+            expect(upsertAudienceAccountsStub).to.have.been.calledWithExactly(mockAudienceId, testAudienceAccountIdsList);
+        });
 });

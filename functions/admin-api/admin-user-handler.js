@@ -227,9 +227,22 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
 };
 
 const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
-    const logPayload = { initiator: adminUserId, options: { context }};
-    logger('Dispatching user log: ', logPayload);
-    return publisher.publishUserEvent(systemWideUserId, eventType, logPayload);
+    const logOptions = { initiator: adminUserId, context };
+    logger('Dispatching user log of event type: ', eventType, ', with log options: ', logOptions);
+    return publisher.publishUserEvent(systemWideUserId, eventType, logOptions);
+};
+
+const publishSaveSettledLog = async ({ adminUserId, systemWideUserId, logContext, transactionId }) => {
+    const txDetails = await persistence.getTransactionDetails(transactionId);
+    const context = {
+        transactionId,
+        accountId: txDetails.accountId,
+        timeInMillis: moment().valueOf(),
+        bankReference: txDetails.humanReference,
+        savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`,
+        logContext
+    };
+    return publishUserLog({ adminUserId, systemWideUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL', context });
 };
 
 const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reasonToLog }) => {
@@ -237,7 +250,7 @@ const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reas
     logger('Invoking settle lambda, payload: ', settlePayload);
     const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
     logger('Transaction settle, result: ', settleResponse);
-
+    
     const resultPayload = JSON.parse(settleResponse['Payload']);
     if (settleResponse['StatusCode'] === 200) {
         const logContext = { settleInstruction: settlePayload, resultPayload };
@@ -248,7 +261,7 @@ const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reas
             persistence.insertAccountLog({ transactionId, adminUserId, logType: eventType, logContext })
         ];
         if (transactionType === 'USER_SAVING_EVENT') {
-            loggingPromises.push(publishUserLog({ adminUserId, systemWideUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL', context: logContext }));
+            loggingPromises.push(publishSaveSettledLog({ adminUserId, systemWideUserId, logContext, transactionId }));
         }
         await Promise.all(loggingPromises);
         return { result: 'SUCCESS', updateLog: resultPayload };
