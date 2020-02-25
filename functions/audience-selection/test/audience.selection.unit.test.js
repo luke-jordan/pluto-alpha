@@ -269,6 +269,38 @@ describe('Converts standard properties into column conditions', () => {
         expect(executeParams).to.have.property('creatingUserId', mockUserId);
     });
 
+    it('Handles preview properly', async () => {
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            isDynamic: true,
+            conditions: []
+        };
+
+        const authorizedRequest = {
+            httpMethod: 'POST',
+            pathParameters: { proxy: 'preview' },
+            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
+            body: JSON.stringify(mockSelectionJSON)
+        };
+
+        const mockAudienceLength = 10000;
+
+        executeConditionsStub.resolves(Array(mockAudienceLength).fill(1));
+
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);        
+        expect(wrappedResult).to.have.property('statusCode', 200);
+        expect(wrappedResult).to.have.property('headers');
+        
+        const unWrappedResult = JSON.parse(wrappedResult.body);
+        expect(unWrappedResult).to.deep.equal({ audienceCount: mockAudienceLength });
+        
+        expect(executeConditionsStub).to.have.been.calledOnce;
+
+        // direct invoke aspects are done aboe, here just make sure sets persistence to false
+        const executeParams = executeConditionsStub.getCall(0).args;
+        expect(executeParams.length).to.equal(1);
+    });
+
     it('Handles random sample case properly', async () => {
         const mockSelectionJSON = {
             clientId: mockClientId,
@@ -381,44 +413,72 @@ describe('Converts standard properties into column conditions', () => {
 
     it('Handles refresh audience request successfully when a REFFRESH is necessary', async () => {
             const mockAudienceId = uuid();
+
             const testPropertyConditions = [
                 { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3 }
             ];
-            const testIsDynamicStatus = true;
-            const mockSelectionJSON = {
+            
+            const mockAudience = {
                 clientId: mockClientId,
-                audienceId: mockAudienceId,
-                isDynamic: testIsDynamicStatus,
-                conditions: testPropertyConditions
+                creatingUserId: mockUserId,
+                isDynamic: true,
+                propertyConditions: { conditions: testPropertyConditions }
+            };
+            
+            const invocation = {
+                operation: 'refresh',
+                params: { audienceId: mockAudienceId }
             };
 
-            const authorizedRequest = {
-                httpMethod: 'POST',
-                pathParameters: { proxy: 'refresh' },
-                requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
-                body: JSON.stringify(mockSelectionJSON)
-            };
             const testAccountId1 = uuid();
             const testAccountId2 = uuid();
 
             const testAudienceAccountIdsList = [testAccountId1, testAccountId2];
 
-            fetchAudienceStub.withArgs(mockAudienceId).resolves({ isDynamic: testIsDynamicStatus, propertyConditions: testPropertyConditions });
+            // effect of with args is covered by expectations below, which provided better paths for fixing
+            fetchAudienceStub.withArgs(mockAudienceId).resolves(mockAudience);
             deactivateAudienceAccountsStub.withArgs(mockAudienceId).resolves([testAccountId1]);
-            executeConditionsStub.withArgs(testPropertyConditions).resolves(testAudienceAccountIdsList);
-            upsertAudienceAccountsStub.withArgs(mockAudienceId, testAudienceAccountIdsList).resolves(testAudienceAccountIdsList);
+            executeConditionsStub.resolves(testAudienceAccountIdsList);
+            upsertAudienceAccountsStub.resolves(testAudienceAccountIdsList);
 
-            const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+            const wrappedResult = await audienceHandler.handleInboundRequest(invocation);
 
             expect(wrappedResult).to.have.property('statusCode', 200);
             expect(wrappedResult).to.have.property('headers');
             expect(wrappedResult).to.have.property('body');
 
             const unWrappedResult = JSON.parse(wrappedResult.body);
-            expect(unWrappedResult).to.deep.equal({ result: `Refreshed audience id: ${mockAudienceId} successfully` });
-            expect(fetchAudienceStub).to.have.been.calledWithExactly(mockAudienceId);
-            expect(deactivateAudienceAccountsStub).to.have.been.calledWithExactly(mockAudienceId);
-            expect(executeConditionsStub).to.have.been.calledWithExactly(testPropertyConditions);
-            expect(upsertAudienceAccountsStub).to.have.been.calledWithExactly(mockAudienceId, testAudienceAccountIdsList);
+            expect(unWrappedResult).to.deep.equal({ result: `Refreshed audience successfully, audience currently has 2 members` });
+            
+            expect(fetchAudienceStub).to.have.been.calledOnceWithExactly(mockAudienceId);
+            expect(deactivateAudienceAccountsStub).to.have.been.calledOnceWithExactly(mockAudienceId);
+            
+            // the ways in which execute conditions handles property conditions is dealt with above, so here just make sure 
+            // that the aggregate is handled properly, i.e., there is a sub-call in the audience assembly, thus two calls in total
+            expect(executeConditionsStub).to.have.been.calledTwice;
+            
+            expect(upsertAudienceAccountsStub).to.have.been.calledOnceWithExactly(mockAudienceId, testAudienceAccountIdsList);
+        });
+
+        it('Rejects unauthorized requests', async () => {
+
+            const unauthorizedRequest = {
+                httpMethod: 'GET',
+                pathParameters: { proxy: 'preview' },
+                requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'ORDINARY_USER' } },
+                body: JSON.stringify({})
+            };
+
+            const result = await audienceHandler.handleInboundRequest(unauthorizedRequest);
+            logger('Result: ', result);
+
+            expect(result).to.deep.equal({
+                statusCode: 403,
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Access-Control-Allow-Origin': '*'
+                },
+                body: JSON.stringify({})
+            });
         });
 });

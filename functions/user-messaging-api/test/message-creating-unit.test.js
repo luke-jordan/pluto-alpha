@@ -70,7 +70,7 @@ const recurringMsgTemplate = require('./templates/recurringTemplate');
 
 const mockAudienceId = uuid();
 const argsForRefreshAudienceLambda = {
-    FunctionName: 'audience_handler',
+    FunctionName: 'audience_selection',
     InvocationType: 'RequestResponse',
     Payload: JSON.stringify({ operation: 'refresh', params: { audienceId: mockAudienceId } })
 };

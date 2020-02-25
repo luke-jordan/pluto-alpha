@@ -18,7 +18,8 @@
         "updateMessageStatus": "message_user_process",
         "sendEmailMessages": "email_send",
         "fetchProfile": "profile_fetch",
-        "fetchAccountAggregate": "user_history_aggregate"
+        "fetchAccountAggregate": "user_history_aggregate",
+        "audienceHandler": "audience_selection"
     },
     "db": {
         "host": "localhost",
