@@ -30,6 +30,9 @@ resource "aws_lambda_function" "message_user_create_recurr" {
                 "database": "${local.database_config.database}",
                 "port" :"${local.database_config.port}"
               },
+              "lambdas": {
+                "audienceHandler": "${aws_lambda_function.audience_selection.name}"
+              }
               "secrets": {
                 "enabled": true,
                 "names": {
@@ -43,7 +46,7 @@ resource "aws_lambda_function" "message_user_create_recurr" {
                 "hash": {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
-              }
+              },
           }
       )}"
     }
@@ -98,6 +101,11 @@ resource "aws_iam_role_policy_attachment" "message_user_create_recurr_vpc_execut
 resource "aws_iam_role_policy_attachment" "message_create_recurr_user_event_publish_policy" {
   role = aws_iam_role.message_user_create_recurr_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
+}
+
+resource "aws_iam_role_policy_attachment" "message_create_recurr_audience_refresh_policy" {
+  role = aws_iam_role.message_user_create_recurr_role.name
+  policy_arn = aws_iam_policy.audience_lambda_invoke_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "message_user_create_recurr_secret_get" {
