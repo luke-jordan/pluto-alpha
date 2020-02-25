@@ -19,6 +19,11 @@ const stdProperties = {
         description: 'Number of saves',
         expects: 'number'
     },
+    currentBalance: {
+      type: 'aggregate',
+      description: 'Sum of account balance',
+      expects: 'number'
+    },
     lastSaveTime: {
         type: 'match',
         description: 'Last save date',
@@ -69,8 +74,34 @@ const convertSaveCountToColumns = (condition) => {
     };
 };
 
+const convertSumBalanceToColumns = (condition) => {
+    const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
+    const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
+    const columnConditions = [
+        { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
+        { prop: 'transaction_type', op: 'in', value: transactionTypesToInclude }
+    ];
+
+    if (Number.isInteger(condition.startTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'greater_than', value: convertEpochToFormat(condition.startTime) });
+    }
+
+    if (Number.isInteger(condition.endTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
+    }
+
+    return {
+        conditions: [{ op: 'and', children: columnConditions }],
+        groupBy: ['account_id', 'unit'],
+        postConditions: [
+            { op: condition.op, prop: 'sum(amount)', value: condition.value, valueType: 'int' }
+        ]
+    };
+};
+
 const columnConverters = {
     saveCount: (condition) => convertSaveCountToColumns(condition),
+    currentBalance: (condition) => convertSumBalanceToColumns(condition),
     lastSaveTime: (condition) => ({
        conditions: [
             { op: 'and', children: [

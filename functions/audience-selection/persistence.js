@@ -29,7 +29,8 @@ const supportedColumns = [
     'creation_time',
     'owner_user_id',
     'count(account_id)',
-    'distinct(account_id)'
+    'distinct(account_id)',
+    'sum(amount)'
 ];
 
 const addDefaultColumnSpecifications = (selectionJSON) => {
@@ -109,6 +110,14 @@ const extractColumnsToCount = (selectionJSON) => {
     if (selectionJSON.columnsToCount) {
         return validateAndParseColumns(selectionJSON.columnsToCount).
             map((filteredColumn) => `count(${filteredColumn})`).
+            join(', ');
+    }
+};
+
+const extractColumnsToSum = (selectionJSON) => {
+    if (selectionJSON.columnsToSum) {
+        return validateAndParseColumns(selectionJSON.columnsToSum).
+            map((filteredColumn) => `sum(${filteredColumn})`).
             join(', ');
     }
 };
@@ -211,15 +220,17 @@ const constructFullQuery = (selectionJSON, parsedValues) => {
     const {
         columns,
         columnsToCount,
+        columnsToSum,
         table,
         whereFilters,
         groupByFilters,
         havingFilters
     } = parsedValues;
 
-    const columnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
+    const initialColumnsToFetch = columnsToCount ? `${columns}, ${columnsToCount}` : columns;
+    const allColumnsToFetch = columnsToSum ? `${initialColumnsToFetch}, ${columnsToSum}` : initialColumnsToFetch;
 
-    let mainQuery = `select ${columnsToFetch} from ${table}`;
+    let mainQuery = `select ${allColumnsToFetch} from ${table}`;
 
     mainQuery = addWhereFiltersToQuery(whereFilters, mainQuery);
     mainQuery = addGroupByFiltersToQuery(groupByFilters, mainQuery);
@@ -244,6 +255,7 @@ module.exports.extractSQLQueryFromJSON = (passedJSON) => {
 
     const columns = extractColumns(selectionJSON);
     const columnsToCount = extractColumnsToCount(selectionJSON);
+    const columnsToSum = extractColumnsToSum(selectionJSON);
     const table = extractTable(selectionJSON);
     const whereFilters = extractWhereConditions(selectionJSON);
     const groupByFilters = extractGroupBy(selectionJSON);
@@ -253,12 +265,14 @@ module.exports.extractSQLQueryFromJSON = (passedJSON) => {
     logger('parsed table:', table);
     logger('where filters:', whereFilters);
     logger('parsed columns to count:', columnsToCount);
+    logger('parsed columns to sum:', columnsToSum);
     logger('groupBy filters:', groupByFilters);
     logger('having filters:', havingFilters);
 
     const parsedValues = {
         columns,
         columnsToCount,
+        columnsToSum,
         table,
         whereFilters,
         groupByFilters,
