@@ -31,7 +31,7 @@ resource "aws_lambda_function" "message_user_create_recurr" {
                 "port" :"${local.database_config.port}"
               },
               "lambdas": {
-                "audienceHandler": "${aws_lambda_function.audience_selection.name}"
+                "audienceHandler": "${aws_lambda_function.audience_selection.function_name}"
               }
               "secrets": {
                 "enabled": true,

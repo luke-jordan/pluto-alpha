@@ -292,21 +292,29 @@ module.exports.previewAudience = async (params) => {
     return { audienceCount: persistedAudience.length };
 };
 
-module.exports.refreshAudience = async (params) => {
-    logger('Proceeding to refresh audience');
-    const audienceId = params.audienceId;
-    const { isDynamic, propertyConditions } = await persistence.fetchAudience(audienceId);
+module.exports.refreshAudience = async ({ audienceId }) => {
+    logger('Proceeding to refresh audience with ID: ', audienceId);
+    const audienceObject = await persistence.fetchAudience(audienceId);
+    logger('Obtained audience object: ', audienceObject);
+    if (!audienceObject) {
+        return { result: 'Audience does not exist' };
+    }
+
+    const { isDynamic, clientId, creatingUserId, propertyConditions } = audienceObject;
 
     if (!isDynamic) {
         logger('No need to refresh a non-dynamic audience');
         return { result: 'Refresh not needed' };
     }
 
+    logger('Dynamic audience, conditions: ', JSON.stringify(propertyConditions));
     await persistence.deactivateAudienceAccounts(audienceId);
-    const fetchedAudienceAccountIdsList = await persistence.executeColumnConditions(propertyConditions);
+
+    const { columnConditions } = await constructColumnConditions({ clientId, creatingUserId, ...propertyConditions });
+    const fetchedAudienceAccountIdsList = await persistence.executeColumnConditions(columnConditions, false);
     await persistence.upsertAudienceAccounts(audienceId, fetchedAudienceAccountIdsList);
     logger('Completed refreshing audience');
-    return { result: `Refreshed audience id: ${audienceId} successfully` };
+    return { result: `Refreshed audience successfully, audience currently has ${fetchedAudienceAccountIdsList.length} members` };
 };
 
 const extractParamsFromHttpEvent = (event) => {
@@ -350,7 +358,7 @@ const dispatcher = {
  */
 module.exports.handleInboundRequest = async (event) => {
     try {
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId', true)) {
             return opsUtil.wrapResponse({ }, 403);
         }
 

@@ -341,7 +341,7 @@ module.exports.executeColumnConditions = async (selectionJSON, persistSelection 
         return persistenceResult;
     } 
     
-    logger('Selecting accounts according to: ', selectionJSON);
+    logger('Selecting accounts according to: ', JSON.stringify(selectionJSON));
     const sqlQuery = exports.extractSQLQueryFromJSON(selectionJSON);
     const queryResult = await rdsConnection.selectQuery(sqlQuery, []);
     logger('Number of records from query: ', queryResult.length);
@@ -378,16 +378,20 @@ module.exports.deactivateAudienceAccounts = async (audienceId) => {
 };
 
 const extractInsertQueryClause = (recurrentKey, keys) => {
-    const arrayOfFormattedKeys = keys.map((key) => `(${recurrentKey}, ${key})`);
-    return arrayOfFormattedKeys.join(', ');
+    // eslint-disable-next-line id-length
+    const valueIndices = keys.map((_, index) => `($1, $${index + 2})`).join(', ');
+    const valueArray = [recurrentKey, ...keys];
+    return { valueIndices, valueArray };
 };
 
 module.exports.upsertAudienceAccounts = async (audienceId, audienceAccountIdsList) => {
+    const { valueIndices, valueArray } = extractInsertQueryClause(audienceId, audienceAccountIdsList);
+
     const query = `insert into ${config.get('tables.audienceJoinTable')} (audience_id, account_id) ` +
-        `values ${extractInsertQueryClause(audienceId, audienceAccountIdsList)} on conflict (account_id) DO update set active = $1`;
+        `values ${valueIndices} on conflict (audience_id, account_id) do update set active = $${valueArray.length + 1}`;
 
     logger(`Upsert audience accounts with audience id: ${audienceId} using query: ${JSON.stringify(query)}`);
-    return rdsConnection.upsertRecords(query, [true]);
+    return rdsConnection.upsertRecords(query, [...valueArray, true]);
 };
 
 module.exports.fetchAudience = async (audienceId) => {
@@ -395,5 +399,7 @@ module.exports.fetchAudience = async (audienceId) => {
 
     logger(`Fetching full audience info with audience id: ${audienceId} using query: ${JSON.stringify(query)}`);
     const queryResult = await rdsConnection.selectQuery(query, [audienceId]);
-    return queryResult.map((row) => camelCaseKeys(row));
+    logger('Query result: ', queryResult);
+
+    return queryResult.length > 0 ? camelCaseKeys(queryResult[0]) : null;
 };
