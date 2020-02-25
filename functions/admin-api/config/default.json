@@ -43,6 +43,7 @@
             "templateKey": "emails/systemStatsEmail.html"
         },
         "accrualResult": {
+            "enabled": true,
             "toList": ["luke@jupitersave.com"],
             "subject": "Float accrual results",
             "templateKey": "emails/floatAccrualEmail.html"

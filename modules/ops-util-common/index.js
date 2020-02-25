@@ -156,7 +156,7 @@ module.exports.extractParamsFromEvent = (event) => {
 
 module.exports.isApiCall = (event) => Reflect.has(event, 'httpMethod'); // todo : tighten this in time
 
-module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId') => {
+module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId', requiresSystemAdmin = false) => {
     const isHttpRequest = Reflect.has(event, 'httpMethod'); 
     if (!isHttpRequest) {
         return true; // by definition -- means it must be via lambda direct invoke, hence allowed by IAM
@@ -169,7 +169,7 @@ module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId
     }
 
     const params = exports.extractParamsFromEvent(event);
-    const needAdminRole = params[userIdKey] && userDetails.systemWideUserId !== params[userIdKey];
+    const needAdminRole = requiresSystemAdmin || (params[userIdKey] && userDetails.systemWideUserId !== params[userIdKey]);
     logger('Call requires admin role ? : ', needAdminRole, ' and user role: ', userDetails.role);
     
     if (needAdminRole && ['SYSTEM_ADMIN', 'SYSTEM_WORKER'].indexOf(userDetails.role) < 0) {

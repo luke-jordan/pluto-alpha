@@ -3,7 +3,6 @@
 const config = require('config');
 const moment = require('moment');
 const decamelize = require('decamelize');
-const camelCaseKeys = require('camelcase-keys');
 
 const chai = require('chai');
 const sinon = require('sinon');
@@ -580,12 +579,13 @@ describe('Other useful methods', () => {
         expect(updateRecordStub).to.have.been.calledWithExactly(expectedQuery, [testAudienceId]);
     });
 
-    it(`should handle 'fetch audience accounts' successfully`, async () => {
+    it(`should handle 'fetch audience object' successfully`, async () => {
         const testAudienceId = uuid();
-        const testAccountId = uuid();
+        
         const expectedQuery = `select * from ${audienceTable} where audience_id = $1`;
-        const selectRecordsResponse = [{ 'account_id': testAccountId }];
-        const expectedResult = selectRecordsResponse.map((row) => camelCaseKeys(row));
+        const selectRecordsResponse = [{ 'audience_id': testAudienceId, 'is_dynamic': true }];
+        const expectedResult = { audienceId: testAudienceId, isDynamic: true };
+        
         selectQueryStub.withArgs(expectedQuery, [testAudienceId]).resolves(selectRecordsResponse);
 
         const result = await audienceSelection.fetchAudience(testAudienceId);
@@ -604,15 +604,15 @@ describe('Other useful methods', () => {
         const testAudienceAccountIdsList = [testAccountId1, testAccountId2];
 
         const expectedQuery = `insert into ${audienceJoinTable} (audience_id, account_id) ` +
-            `values (${testAudienceId}, ${testAccountId1}), (${testAudienceId}, ${testAccountId2}) on conflict (account_id) DO update set active = $1`;
+            `values ($1, $2), ($1, $3) on conflict (audience_id, account_id) do update set active = $4`;
 
         const upsertRecordsResponse = [{ 'account_id': testAccountId1 }];
-        upsertRecordsStub.withArgs(expectedQuery, [testActiveStatus]).resolves(upsertRecordsResponse);
+        upsertRecordsStub.resolves(upsertRecordsResponse);
 
         const result = await audienceSelection.upsertAudienceAccounts(testAudienceId, testAudienceAccountIdsList);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(upsertRecordsResponse);
-        expect(upsertRecordsStub).to.have.been.calledWithExactly(expectedQuery, [testActiveStatus]);
+        expect(upsertRecordsStub).to.have.been.calledWithExactly(expectedQuery, [testAudienceId, testAccountId1, testAccountId2, testActiveStatus]);
     });
 });

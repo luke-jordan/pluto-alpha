@@ -469,13 +469,8 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             ],
             "Resource": [
                 "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_email_address[terraform.workspace]}"
-            ],
-            "Condition": {
-                "StringLike": {
-                    "ses:FromAddress": "${var.events_source_email_address[terraform.workspace]}"
-                }
-            }
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_ses_identity[terraform.workspace]}"
+            ]
         },
         {
             "Sid": "EmailTemplateAccess",
@@ -517,13 +512,8 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
             ],
             "Resource": [
                 "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_email_address[terraform.workspace]}"
-            ],
-            "Condition": {
-                "StringLike": {
-                    "ses:FromAddress": "${var.events_source_email_address[terraform.workspace]}"
-                }
-            }
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_ses_identity[terraform.workspace]}"
+            ]
         },
         {
             "Sid": "EmailTemplateAccess",
@@ -673,6 +663,30 @@ resource "aws_iam_policy" "balance_lambda_invoke_policy" {
             ],
             "Resource": [
                 "${aws_lambda_function.balance_fetch.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "audience_lambda_invoke_policy" {
+    name = "${terraform.workspace}_lambda_audience_handler_invoke"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "AudienceLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.audience_selection.arn}"
             ]
         }
     ]

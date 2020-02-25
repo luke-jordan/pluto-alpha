@@ -232,7 +232,7 @@ module.exports.createUserMessages = async (event) => {
 const sendRequestToRefreshAudience = async (audienceId) => {
     logger(`Sending request to refresh audience with audienceId: ${audienceId}`);
     const lambdaInvocation = {
-        FunctionName: 'audience_handler',
+        FunctionName: config.get('lambdas.audienceHandler'),
         InvocationType: 'RequestResponse',
         Payload: JSON.stringify({ operation: 'refresh', params: { audienceId } })
     };

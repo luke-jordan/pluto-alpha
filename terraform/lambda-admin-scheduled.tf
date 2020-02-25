@@ -42,6 +42,7 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
                   "toList": "${var.events_email_receipients[terraform.workspace]}"
                 },
                 "accrualResult": {
+                  "enabled": terraform.workspace == "master",
                   "subject": "${terraform.workspace == "master" ? "Daily Jupiter interest calculation" : "(STAGING) Daily float accrual"}",
                   "toList": "${var.events_email_receipients[terraform.workspace]}"
                 },
