@@ -161,6 +161,7 @@ const formatTx = (event) => ({
     timestamp: moment(event.creationTime).valueOf(),
     type: 'TRANSACTION',
     details: {
+        transactionId: event.transactionId,
         accountId: event.accountId,
         transactionType: event.transactionType,
         settlementStatus: event.settlementStatus,

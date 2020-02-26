@@ -76,7 +76,7 @@ const handler = proxyquire('../history-handler', {
     }
 });
 
-describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
+describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
     const testUserId = uuid();
     const testAccountId = uuid();
     const testPhone = '+276323503434';
