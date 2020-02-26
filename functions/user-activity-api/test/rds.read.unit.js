@@ -202,6 +202,13 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(txQuery, [testTxId]);
     });
 
+    it('Fetches logs for transaction', async () => {
+        const logQuery = `select * from account_data.account_log where transaction_id = $1`;
+        queryStub.withArgs(logQuery, [testTxId]).resolves([{ 'log_id': 'some-log', 'log_type': 'ADMIN_SETTLED_SAVE' }]);
+        const result = await rds.fetchLogsForTransaction(testTxId);
+        expect(result).to.deep.equal([{ logId: 'some-log', logType: 'ADMIN_SETTLED_SAVE' }]);
+    });
+
     it('Fetches prior transactions', async () => {
         const selectQuery = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 ` +
         `and settlement_status = $2 and transaction_type in ($3, $4, $5, $6) order by creation_time desc`;

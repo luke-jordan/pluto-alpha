@@ -586,6 +586,55 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(updateRecordsStub).to.have.been.calledOnceWithExactly(expectedArgs);
     });
 
+    it('Update settlement status including log context', async () => {
+        const testLogId = uuid();
+
+        const testReferenceTime = moment();
+
+        const passedLogObject = {
+            accountId: 'some-person-account',
+            referenceTime: testReferenceTime,
+            systemWideUserId: testUserId,
+            logContext: { oldStatus: 'PENDING', newStatus: 'CANCELLED' }
+        };
+
+        const expectedLogObject = {
+            logId: testLogId,
+            transactionId: testTxId,
+            accountId: 'some-person-account',
+            logType: 'UPDATED_TX_STATUS', 
+            creatingUserId: testUserId,
+            referenceTime: testReferenceTime.format(),
+            logContext: passedLogObject.logContext
+        };
+
+        const expectedInsert = {
+            query: `insert into account_data.account_log (log_id, account_id, transaction_id, reference_time, creating_user_id, log_type, log_context) values %L`,
+            columnTemplate: '${logId}, ${accountId}, ${transactionId}, ${referenceTime}, ${creatingUserId}, ${logType}, ${logContext}',
+            rows: [expectedLogObject]
+        };
+    
+        const params = {
+            transactionId: testTxId,
+            settlementStatus: 'CANCELLED',
+            logToInsert: passedLogObject
+        };
+
+        // tested above, so no need to duplicate checks
+        uuidStub.returns(testLogId);
+        updateRecordsStub.resolves([{ 'updated_time': testUpdatedTime }]);
+
+        const updateResult = await rds.updateTxSettlementStatus(params);
+        expect(updateResult).to.exist;
+
+        expect(updateRecordsStub).to.have.been.calledOnce; // as above
+        // const insertArgs = insertStub.getCall(0).args;
+        // expect(insertArgs[0]).to.equal(expectedInsert.query);
+        // expect(insertArgs[1]).to.equal(expectedInsert.columnTemplate);
+        // expect(insertArgs[2]).to.deep.equal(expectedInsert.rows);
+        expect(insertStub).to.have.been.calledOnceWithExactly(expectedInsert.query, expectedInsert.columnTemplate, expectedInsert.rows);
+    });
+
     it('Transaction settlment status update fails on invalid parameters', async () => {
         const testTransactionId = uuid();
         const testSettlementStatus = 'SETTLED';

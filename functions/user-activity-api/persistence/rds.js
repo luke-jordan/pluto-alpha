@@ -22,6 +22,11 @@ module.exports.fetchTransaction = async (transactionId) => {
     return row.length > 0 ? camelizeKeys(row[0]) : null;
 };
 
+module.exports.fetchLogsForTransaction = async (transactionId) => {
+    const queryResult = await rdsConnection.selectQuery(`select * from ${config.get('tables.accountLog')} where transaction_id = $1`, [transactionId]);
+    return queryResult.map((row) => camelizeKeys(row));    
+};
+
 // todo : we need to make sure units don't get in way here (e.g., transform all or transform none). also, test it
 module.exports.checkForDuplicateSave = async ({ accountId, amount, currency, unit }) => {
     const cuttOffTime = moment().subtract(config.get('defaults.duplicate.minuteCutOff'), 'minutes');
@@ -524,7 +529,7 @@ module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, pay
 /**
  * SImple utility method to adjust a settlement status, when not settling (e.g., move from initiated to pending)
  */
-module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStatus }) => {
+module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStatus, logToInsert }) => {
     if (!settlementStatus) {
         throw new Error('Must supply settlement status');
     }
@@ -542,6 +547,28 @@ module.exports.updateTxSettlementStatus = async ({ transactionId, settlementStat
 
     const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);
     logger('Result of update: ', resultOfUpdate);
+
+    // if passed and has minimal params
+    if (logToInsert && logToInsert.accountId && logToInsert.systemWideUserId) {
+        const refTimeFormatted = moment.isMoment(logToInsert.referenceTime) ? logToInsert.referenceTime.format() : moment().format();
+        const logObject = {
+            logId: uuid(),
+            transactionId,
+            accountId: logToInsert.accountId,
+            creatingUserId: logToInsert.systemWideUserId,
+            logType: 'UPDATED_TX_STATUS',
+            referenceTime: refTimeFormatted,
+            logContext: logToInsert.logContext
+        };
+
+        const logDef = {
+            query: `insert into account_data.account_log (log_id, account_id, transaction_id, reference_time, creating_user_id, log_type, log_context) values %L`,
+            columnTemplate: '${logId}, ${accountId}, ${transactionId}, ${referenceTime}, ${creatingUserId}, ${logType}, ${logContext}',
+            rows: [logObject]
+        };
+
+        await rdsConnection.insertRecords(logDef.query, logDef.columnTemplate, logDef.rows);
+    }
 
     return Array.isArray(resultOfUpdate) && resultOfUpdate.length > 0 ? moment(resultOfUpdate[0]['updated_time']) : null; 
 };

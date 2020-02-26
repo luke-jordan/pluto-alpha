@@ -179,3 +179,15 @@ module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId
     // todo : probably want to add in uuid validation on id
     return Reflect.has(userDetails, 'systemWideUserId');
 };
+
+module.exports.extractPathAndParams = (event) => {
+    // if it's an http request, validate that it is admin calling, and extract from path parameters
+    if (Reflect.has(event, 'httpMethod')) {
+        const operation = event.pathParameters.proxy;
+        const params = event.httpMethod.toUpperCase() === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
+        return { operation, params };
+    }
+
+    logger('Event is not http, must be another lambda, return event itself');
+    return event;
+};
