@@ -226,7 +226,7 @@ module.exports.fetchUserHistory = async (event) => {
         ]);
 
         logger(`Got ${priorTransactions.length} prior transactions, sample: ${JSON.stringify(priorTransactions)}`);
-        logger(`Got ${pendingTransactions.length} pending transactions too`);
+        logger('Got ', pendingTransactions.length, ' pending transactions too: ', pendingTransactions);
 
         const normalizedTransactions = await normalizeTx(priorTransactions);
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];

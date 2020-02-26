@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:admin:user-handler-test');
+const logger = require('debug')('jupiter:history:test');
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
@@ -134,32 +134,23 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         balanceSubsequentDays: [testBalance(), testBalance(), testBalance()]
     };
 
-    const expectedHistory = {
+    const mockUserLogs = {
         StatusCode: 200,
         Payload: JSON.stringify({
             result: 'success',
             userEvents: {
                 totalCount: 12,
                 userEvents: [{
-                    initiator: 'SYSTEM',
-                    context: JSON.stringify({ freeForm: 'JSON object' }),
-                    interface: 'MOBILE_APP',
                     timestamp: moment().subtract(5, 'days').valueOf(),
                     userId: testUserId,
                     eventType: 'REGISTERED'
                 },
                 {
-                    initiator: 'SYSTEM',
-                    context: JSON.stringify({ freeForm: 'JSON object' }),
-                    interface: 'MOBILE_APP',
                     timestamp: moment().subtract(4, 'days').valueOf(),
                     userId: testUserId,
                     eventType: 'PASSWORD_SET'
                 },
                 {
-                    initiator: 'SYSTEM',
-                    context: JSON.stringify({ freeForm: 'JSON object' }),
-                    interface: 'MOBILE_APP',
                     timestamp: moment().subtract(2, 'days').valueOf(),
                     userId: testUserId,
                     eventType: 'USER_LOGIN'
@@ -192,7 +183,7 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
 
         const expectedTxResponse = {
             transactionId: uuid(),
-            accountId: uuid(),
+            accountId: testAccountId,
             creationTime: moment().format(),
             transactionType: 'ALLOCATION',
             settlementStatus: 'SETTLED',
@@ -202,21 +193,33 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
             humanReference: 'BUSANI6'
         };
 
+        const pendingTxId = uuid();
+        const expectedPendingTx = {
+            transactionId: pendingTxId,
+            accountId: testAccountId,
+            creationTime: moment().format(),
+            transactionType: 'USER_SAVING_EVENT',
+            settlementStatus: 'PENDING',
+            amount: '20',
+            currency: 'USD',
+            unit: 'HUNDREDTH_CENT',
+            humanReference: 'BUSANI7'
+        };
+
         momentStub.returns({
             valueOf: () => testTime.valueOf(),
             subtract: () => testTime,
             startOf: () => testTime
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
-            promise: () => mockLambdaResponse(expectedProfile)
-        });
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).
+            returns({ promise: () => mockLambdaResponse(expectedProfile) });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({ promise: () => expectedHistory });
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).
+            returns({ promise: () => mockUserLogs });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
-            promise: () => mockLambdaResponse(expectedBalance)
-        });
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).
+            returns({ promise: () => mockLambdaResponse(expectedBalance) });
 
         getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'total_earnings::WHOLE_CENT::USD'}).
             resolves({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
@@ -226,26 +229,23 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         findAccountStub.withArgs(testUserId).resolves([testAccountId]);
 
         fetchPriorTxStub.withArgs(testAccountId).resolves([expectedTxResponse]);
-        fetchPendingTxStub.withArgs(testAccountId).resolves([]);
+        fetchPendingTxStub.withArgs(testAccountId).resolves([expectedPendingTx]);
 
         const testEvent = {
-            requestContext: {
-                authorizer: { systemWideUserId: testUserId }
-            },
+            requestContext: { authorizer: { systemWideUserId: testUserId } },
             httpMethod: 'GET'
         };
 
-        const userHistoryArray = JSON.parse(expectedHistory.Payload).userEvents.userEvents;
-
-        const expectedResult = {
-            userBalance: expectedBalance,
-            accruedInterest: '$20',
-            userHistory: [...helper.normalizeHistory(userHistoryArray), ...helper.normalizeTx([expectedTxResponse])]
-        };
+        // const userLogsArray = JSON.parse(mockUserLogs.Payload).userEvents.userEvents;
+        // const expectedResult = {
+        //     userBalance: expectedBalance,
+        //     accruedInterest: '$20',
+        //     userHistory: [...helper.normalizeHistory(userLogsArray), ...helper.normalizeTx([expectedTxResponse, expectedPendingTx])]
+        // };
 
         const result = await handler.fetchUserHistory(testEvent);
-        logger('Result of user look up:', result);
-        logger('expected result:', expectedResult);
+        logger('Result of user look up:', result.body);
+        // logger('expected result:', expectedResult);
        
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
@@ -308,7 +308,7 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
             promise: () => mockLambdaResponse(expectedProfile)
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({ promise: () => expectedHistory });
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent)).returns({ promise: () => mockUserLogs });
 
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
             promise: () => mockLambdaResponse(expectedBalance)
@@ -355,7 +355,7 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
             httpMethod: 'GET'
         };
 
-        const userHistoryArray = JSON.parse(expectedHistory.Payload).userEvents.userEvents;
+        const userHistoryArray = JSON.parse(mockUserLogs.Payload).userEvents.userEvents;
 
         const expectedResult = {
             userBalance: expectedBalance,
