@@ -11,7 +11,7 @@ chai.use(sinonChai);
 
 // const testHelper = require('./test.helper');
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const insertStub = sinon.stub();
 const queryStub = sinon.stub();

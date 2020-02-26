@@ -42,13 +42,15 @@ const handler = proxyquire('../scheduled-job', {
     },
     './persistence/rds.float': {
         'getFloatBalanceAndFlows': getFloatBalanceAndFlowsStub,
-        'getLastFloatAccrualTime': getLastFloatAccrualTimeStub
+        'getLastFloatAccrualTime': getLastFloatAccrualTimeStub,
+        '@noCallThru': true
     },
     './persistence/rds.account': {
         'expireHangingTransactions': rdsExpireHangingTransactionsStub,
         'expireBoosts': expireBoostsStub,
         'fetchUserIdsForAccounts': fetchUserIdsForAccountsStub,
-        'fetchPendingTransactionsForAllUsers': fetchPendingTransactionsForAllUsersStub
+        'fetchPendingTransactionsForAllUsers': fetchPendingTransactionsForAllUsersStub,
+        '@noCallThru': true
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient
@@ -59,7 +61,8 @@ const handler = proxyquire('../scheduled-job', {
         publishMultiUserEvent: publishMultiUserEventStub
     },
     './admin-float-consistency': {
-        'checkAllFloats': checkAllFloatsStub
+        'checkAllFloats': checkAllFloatsStub,
+        '@noCallThru': true
     }
 });
 

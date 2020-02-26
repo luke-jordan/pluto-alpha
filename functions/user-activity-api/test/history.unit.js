@@ -18,9 +18,13 @@ const MAX_AMOUNT = 6000000;
 const MIN_AMOUNT = 5000000;
 
 const momentStub = sinon.stub();
+
 const findAccountStub = sinon.stub();
 const fetchPriorTxStub = sinon.stub();
+const fetchPendingTxStub = sinon.stub();
+
 const getAccountFigureStub = sinon.stub();
+
 const lamdbaInvokeStub = sinon.stub();
 const calculateEstimatedInterestEarnedStub = sinon.stub();
 const fetchFloatVarsForBalanceCalcStub = sinon.stub();
@@ -53,10 +57,13 @@ class mockMoment {
 const handler = proxyquire('../history-handler', {
     './persistence/rds': {
         'findAccountsForUser': findAccountStub,
-        'fetchTransactionsForHistory': fetchPriorTxStub
+        'fetchTransactionsForHistory': fetchPriorTxStub,
+        'fetchPendingTransactions': fetchPendingTxStub,
+        '@noCallThru': true
     },
     './persistence/account.calculations.js': {
-        'getUserAccountFigure': getAccountFigureStub
+        'getUserAccountFigure': getAccountFigureStub,
+        '@noCallThru': true
     },
     './interest-helper': MockInterestHelper,
     'moment': momentStub,
@@ -219,6 +226,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         findAccountStub.withArgs(testUserId).resolves([testAccountId]);
 
         fetchPriorTxStub.withArgs(testAccountId).resolves([expectedTxResponse]);
+        fetchPendingTxStub.withArgs(testAccountId).resolves([]);
 
         const testEvent = {
             requestContext: {
@@ -314,6 +322,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         findAccountStub.withArgs(testUserId).resolves([testAccountId]);
 
         fetchPriorTxStub.withArgs(testAccountId).resolves([expectedTxResponseWithUserSavingEvent]);
+        fetchPendingTxStub.withArgs(testAccountId).resolves([]);
 
         const testFloatProjectionVars = {
             accrualRateAnnualBps: testAccrualRateBps,
