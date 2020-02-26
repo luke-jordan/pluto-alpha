@@ -77,6 +77,16 @@ const convertSaveCountToColumns = (condition) => {
 const convertSumBalanceToColumns = (condition) => {
     const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
     const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
+    const convertAmountToSingleUnitQuery = `SUM(
+        CASE
+            WHEN unit = 'WHOLE_CENT' THEN
+                amount * 100
+            WHEN unit = 'WHOLE_CURRENCY' THEN
+                amount / 10000
+        ELSE
+            amount
+        END
+    )`;
     const columnConditions = [
         { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
         { prop: 'transaction_type', op: 'in', value: transactionTypesToInclude }
@@ -94,7 +104,7 @@ const convertSumBalanceToColumns = (condition) => {
         conditions: [{ op: 'and', children: columnConditions }],
         groupBy: ['account_id', 'unit'],
         postConditions: [
-            { op: condition.op, prop: 'sum(amount)', value: condition.value, valueType: 'int' }
+            { op: condition.op, prop: convertAmountToSingleUnitQuery, value: condition.value, valueType: 'int' }
         ]
     };
 };

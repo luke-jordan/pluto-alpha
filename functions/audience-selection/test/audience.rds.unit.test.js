@@ -425,10 +425,18 @@ describe('Audience Selection - fetch users given JSON', () => {
     it('Should convert sum balance to columns', async () => {
         const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
         const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
-
+        const convertAmountToSingleUnitQuery = `SUM(
+            CASE
+                WHEN unit = 'WHOLE_CENT' THEN
+                    amount * 100
+                WHEN unit = 'WHOLE_CURRENCY' THEN
+                    amount / 10000
+            ELSE
+                amount
+            END
+        )`;
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             'columns': ['account_id'],
-            'columnsToSum': ['amount'],
             'conditions': [{
                 op: 'and',
                 children: [
@@ -439,16 +447,16 @@ describe('Audience Selection - fetch users given JSON', () => {
             'groupBy': ['account_id', 'unit'],
             'postConditions': [{
                 'op': 'and', 'children': [
-                    {'op': 'greater_than_or_equal_to', 'prop': 'sum(amount)', 'valueType': 'int', 'value': 10},
-                    {'op': 'less_than_or_equal_to', 'prop': 'sum(amount)', 'valueType': 'int', 'value': 50}
+                    {'op': 'greater_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 10},
+                    {'op': 'less_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 50}
                 ]
             }]
         });
 
-        const expectedQuery = `select account_id, sum('amount') from transactions` +
+        const expectedQuery = `select account_id from transactions` +
             ` where (settlement_status in ('SETTLED', 'ACCRUED')` +
             ` and transaction_type in ('USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'))` +
-            ` group by account_id, 'unit' having (sum(amount)>=10 and sum(amount)<=50)`;
+            ` group by account_id, unit having (${convertAmountToSingleUnitQuery}>=10 and ${convertAmountToSingleUnitQuery}<=50)`;
 
         const sqlQuery = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
         expect(sqlQuery).to.exist;

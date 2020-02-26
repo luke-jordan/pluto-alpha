@@ -30,7 +30,8 @@ const supportedColumns = [
     'owner_user_id',
     'count(account_id)',
     'distinct(account_id)',
-    'sum(amount)'
+    'amount',
+    'unit'
 ];
 
 const addDefaultColumnSpecifications = (selectionJSON) => {
