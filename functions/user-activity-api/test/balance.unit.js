@@ -169,7 +169,7 @@ describe('Fetches user balance and makes projections', () => {
         },
         balanceSubsequentDays: expectedBalanceSubsequentDays,
         availableBoostCount: testNumberBoosts, 
-        comparatorRates: testComparatorRates,
+        comparatorRates: testComparatorRates
     };
 
     // logger('Expected body: ', wellFormedResultBody);

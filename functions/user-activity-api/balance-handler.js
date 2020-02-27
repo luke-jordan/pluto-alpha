@@ -96,7 +96,7 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
     }
 
     const pendingTransactions = await persistence.fetchPendingTransactions(accountId);
-    if (Array.isArray(pendingTransactions) && pendingTransactions.length >0) {
+    if (Array.isArray(pendingTransactions) && pendingTransactions.length > 0) {
       resultObject.pendingTransactions = pendingTransactions;
     }
 
