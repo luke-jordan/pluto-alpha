@@ -82,6 +82,28 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     }
 };
 
+module.exports.sendSms = async ({ phoneNumber, message }) => {
+    try {
+        const params = {
+            Message: message,
+            MessageStructure: 'string',
+            PhoneNumber: phoneNumber
+        };
+    
+        const resultOfDispatch = await sns.publish(params).promise();
+        logger('Result of SMS dispatch:', resultOfDispatch);
+        if (typeof resultOfDispatch === 'object' && Reflect.has(resultOfDispatch, 'MessageId')) {
+            return { result: 'SUCCESS' };
+        }
+
+        logger('FATAL_ERROR: ', params);
+        return { result: 'FAILURE' };
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { result: 'FAILURE' };
+    }
+};
+
 module.exports.obtainTemplate = async (templateName) => {
     const templateBucket = config.has('templates.bucket') ? config.get('templates.bucket') : 'staging.jupiter.templates';
 
