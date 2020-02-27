@@ -233,8 +233,7 @@ const checkSufficientBalance = (withdrawalInformation, balanceInformation) => {
 };
 
 const calculateCompoundInterest = async (amount, annualInterestRateAsDecimalLight, numberOfYears) => {
-    logger(`Calculate potential compound interest for amount: ${amount} at 
-    annual interest rate: ${annualInterestRateAsDecimalLight} for years: ${numberOfYears}`);
+    logger(`Calculate potential compound interest for amount: ${amount} at annual interest rate: ${annualInterestRateAsDecimalLight} for years: ${numberOfYears}`);
     const amountAsDecimalLight = new DecimalLight(amount);
     const baseCompoundRatePerYear = new DecimalLight(1).plus(annualInterestRateAsDecimalLight);
     const baseCompoundRateAfterGivenYears = baseCompoundRatePerYear.pow(numberOfYears);
@@ -339,6 +338,18 @@ module.exports.setWithdrawalAmount = async (event) => {
     }
 };
 
+const cancelTransactionIncludingLogging = async ({ transactionId, systemWideUserId }) => {
+    // in time, process the do-not-withdraw boost, and tell the user, then update the transaction
+    const { accountId, settlementStatus } = await persistence.fetchTransaction(transactionId);
+    const logContext = { oldStatus: settlementStatus, newStatus: 'CANCELLED' };
+    const txLog = { accountId, systemWideUserId, logContext };
+    const userLog = { transactionId, ...logContext };
+    await Promise.all([
+        persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'CANCELLED', logToInsert: txLog }),
+        publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED', { context: userLog })
+    ]);
+};
+
 /**
  * This function confirms a withdrawal. However, it makes it only "pending", until admin confirms the transfer is done.
  * @param {object} event An event object containing the request context and request body. Body properties are described below.
@@ -363,8 +374,7 @@ module.exports.confirmWithdrawal = async (event) => {
 
         const transactionId = withdrawalInformation.transactionId;
         if (withdrawalInformation.userDecision === 'CANCEL') {
-            // process the boost, and tell the user, then update the transaction
-            await publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED');
+            await cancelTransactionIncludingLogging({ transactionId, systemWideUserId });
             return { statusCode: 200 };
         }
         

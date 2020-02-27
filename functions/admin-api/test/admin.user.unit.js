@@ -42,6 +42,7 @@ const handler = proxyquire('../admin-user-handler', {
         'insertAccountLog': insertAccountLogStub,
         'fetchUserPendingTransactions': pendingTxStub,
         'getTransactionDetails': fetchTxDetailsStub,
+        'countUserIdsWithAccounts': countUsersStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -245,16 +246,6 @@ describe('*** UNIT TEST USER COUNT ***', () => {
         return rawResult + normalizer;
     };
 
-    const adminHandler = proxyquire('../admin-user-handler', {
-        './persistence/rds.account': {
-            'countUserIdsWithAccounts': countUsersStub
-        },
-        './admin.util': {},
-        'aws-sdk': {
-            'Lambda': MockLambdaClient  
-        }
-    });
-
     it('Fetches user count', async () => {
         const testUserCount = generateUserCount;
 
@@ -273,7 +264,7 @@ describe('*** UNIT TEST USER COUNT ***', () => {
             }
         };
 
-        const userCount = await adminHandler.fetchUserCounts(testEvent);
+        const userCount = await handler.fetchUserCounts(testEvent);
         logger('Result of user count:', userCount);
 
         expect(userCount).to.exist;

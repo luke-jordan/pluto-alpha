@@ -157,24 +157,27 @@ const constructClientFloatsToInterestRatesMap = async (events) => {
     return interestArray.reduce((map, entry) => ({ ...map, [entry.clientFloatPair]: entry.interestRate}), {});
 };
 
+const formatTx = (event) => ({
+    timestamp: moment(event.creationTime).valueOf(),
+    type: 'TRANSACTION',
+    details: {
+        transactionId: event.transactionId,
+        accountId: event.accountId,
+        transactionType: event.transactionType,
+        settlementStatus: event.settlementStatus,
+        amount: event.amount,
+        currency: event.currency,
+        unit: event.unit,
+        humanReference: event.humanReference
+    }
+});
+
 const normalizeTx = async (events) => {
     logger('Normalizing transactions');
     const clientFloatsToInterestRatesMap = await constructClientFloatsToInterestRatesMap(events);
     const normalizedTransactions = events.map((event) => {
-        const normalizedTx = {
-            timestamp: moment(event.creationTime).valueOf(),
-            type: 'TRANSACTION',
-            details: {
-                accountId: event.accountId,
-                transactionType: event.transactionType,
-                settlementStatus: event.settlementStatus,
-                amount: event.amount,
-                currency: event.currency,
-                unit: event.unit,
-                humanReference: event.humanReference
-            }
-        };
-
+        
+        const normalizedTx = formatTx(event);
         if (event.transactionType === 'USER_SAVING_EVENT') {
             const thisInterestRate = clientFloatsToInterestRatesMap[`${event.clientId}::${event.floatId}`];
             normalizedTx.estimatedInterestEarned = interestHelper.calculateEstimatedInterestEarned(event, 'HUNDREDTH_CENT', thisInterestRate); 
@@ -217,19 +220,28 @@ module.exports.fetchUserHistory = async (event) => {
 
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
         logger('Got account id:', accountId);
-        const priorTransactions = await persistenceRead.fetchTransactionsForHistory(accountId);
+        const [priorTransactions, pendingTransactions] = await Promise.all([
+            persistenceRead.fetchTransactionsForHistory(accountId),
+            persistenceRead.fetchPendingTransactions(accountId)
+        ]);
+
         logger(`Got ${priorTransactions.length} prior transactions, sample: ${JSON.stringify(priorTransactions)}`);
+        logger('Got ', pendingTransactions.length, ' pending transactions too: ', pendingTransactions);
 
         const normalizedTransactions = await normalizeTx(priorTransactions);
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];
         logger(`Created formatted array of length ${userHistory.length} and sample: ${JSON.stringify(userHistory[0])}`);
+
+        const userPending = pendingTransactions.map((tx) => formatTx(tx));
+        logger('And formatted pending transactions: ', userPending);
 
         const resultObject = {
             userBalance,
             accruedInterest: totalEarnings, // legacy to avoid mobile crashes, remove soon
             totalEarnings,
             netSavings,
-            userHistory
+            userHistory,
+            userPending
         };
         
         logger('Returning: ', resultObject);
