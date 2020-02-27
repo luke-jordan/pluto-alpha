@@ -428,7 +428,7 @@ describe('Audience Selection - fetch users given JSON', () => {
         const convertAmountToSingleUnitQuery = `SUM(
             CASE
                 WHEN unit = 'WHOLE_CENT' THEN
-                    amount * 100
+                    amount / 100
                 WHEN unit = 'WHOLE_CURRENCY' THEN
                     amount / 10000
             ELSE
