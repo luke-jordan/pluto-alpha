@@ -31,7 +31,8 @@ const handler = proxyquire('../referral-handler', {
         fetchSingleRow: fetchRowStub,
         insertNewRow: insertRowStub,
         updateRow: updateRowStub,
-        deleteRow: deleteRowStub
+        deleteRow: deleteRowStub,
+        '@noCallThru': true
     }
 });
 

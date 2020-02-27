@@ -779,6 +779,8 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
             body: JSON.stringify({ transactionId: testTransactionId, userDecision: 'CANCEL' })
         };
 
+        fetchTransactionStub.resolves({ accountId: testAccountId, settlementStatus: 'PENDING' });
+        updateTxSettlementStatusStub.resolves(moment());
         publishEventStub.resolves({ result: 'SUCCESS' });
 
         const confirmationResult = await handler.confirmWithdrawal(event);
@@ -786,11 +788,21 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         expect(confirmationResult).to.exist;
         expect(confirmationResult).to.deep.equal({ statusCode: 200 });
-        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_CANCELLED');
+
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(testTransactionId);
+
+        const txLogContext = { newStatus: 'CANCELLED', oldStatus: 'PENDING' };
+        const expectedTxLog = { accountId: testAccountId, systemWideUserId: testUserId, logContext: txLogContext };
+        expect(updateTxSettlementStatusStub).to.have.been.calledOnceWithExactly({ 
+            transactionId: testTransactionId, 
+            settlementStatus: 'CANCELLED', 
+            logToInsert: expectedTxLog 
+        });
+        const userLogContext = { newStatus: 'CANCELLED', oldStatus: 'PENDING', transactionId: testTransactionId };
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_CANCELLED', { context: userLogContext });
+
         expect(redisGetStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;
-        expect(updateTxSettlementStatusStub).to.have.not.been.called;
-        expect(fetchTransactionStub).to.have.not.been.called;
     });
 
     it('Returns error where transaction update returns empty rows', async () => {

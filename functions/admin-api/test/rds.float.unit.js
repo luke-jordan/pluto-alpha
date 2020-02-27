@@ -6,7 +6,7 @@ const moment = require('moment');
 const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const chai = require('chai');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;

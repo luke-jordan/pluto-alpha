@@ -18,7 +18,8 @@ const findAccountsStub = sinon.stub();
 const handler = proxyquire('../boost-list-handler', {
     './persistence/rds.admin.boost': {
         'fetchUserBoosts': fetchBoostStub,
-        'findAccountsForUser': findAccountsStub
+        'findAccountsForUser': findAccountsStub,
+        '@noCallThru': true
     },
     '@noCallThru': true
 });

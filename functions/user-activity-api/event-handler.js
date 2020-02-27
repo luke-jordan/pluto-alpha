@@ -238,6 +238,21 @@ const safeWithdrawalEmail = async (eventBody, userProfile, bankAccountDetails) =
     }
 };
 
+// this will be rare so just do a simple one
+const withdrawalCancelledEMail = async (userProfile, transactionDetails) => {
+    const userName = `${userProfile.personalName} ${userProfile.familyName}`;
+    const htmlBody = `<p>Hello,</p><p>Good news! ${userName} has decided to cancel their withdrawal. This was sent with ` +
+        `bank reference, ${transactionDetails.humanReference}. Please abort the withdrawal!</p><p>The Jupiter System</p>`;
+    const textBody = `${userName} cancelled their withdrawal`;
+    const emailParams = assembleEmailParameters({
+        toAddresses: config.get('publishing.withdrawalEmailDestination'),
+        subject: 'Jupiter withdrawal cancelled', 
+        htmlBody, textBody
+    });
+    const emailResult = await ses.sendEmail(emailParams).promise();
+    logger('Result of sending email: ', emailResult);
+};
+
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 // ///////////////////////// EVENT DISPATCHING ////////////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -398,6 +413,29 @@ const handleWithdrawalEvent = async (eventBody) => {
     await Promise.all(processingPromises);
 };
 
+// todo : write some tests
+const handleWithdrawalCancelled = async (eventBody) => {
+    logger('Withdrawal cancelled! Event body: ', eventBody);
+
+    const { userId, context } = eventBody;
+    const { transactionId, oldStatus, newStatus } = context;
+    
+    if (!transactionId) {
+        logger('Malformed context, abort');
+    }
+   
+    const [userProfile, transactionDetails] = await Promise.all([fetchUserProfile(userId), persistence.fetchTransaction(transactionId)]);
+    
+    if (newStatus !== 'CANCELLED' || transactionDetails.settlementStatus !== 'CANCELLED') {
+        logger('Error! Event must have been published incorrectly');
+    }
+
+    // i.e., was not just user cancelling before the end
+    if (oldStatus === 'PENDING') {
+        await withdrawalCancelledEMail(userProfile, transactionDetails);
+    }
+};
+
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
     const { userId } = eventBody;
@@ -450,6 +488,9 @@ module.exports.handleUserEvent = async (snsEvent) => {
                 break;
             case 'WITHDRAWAL_EVENT_CONFIRMED':
                 await handleWithdrawalEvent(eventBody);
+                break;
+            case 'WITHDRAWAL_EVENT_CANCELLED':
+                await handleWithdrawalCancelled(eventBody);
                 break;
             case 'USER_CREATED_ACCOUNT':
                 await handleAccountOpenedEvent(eventBody);

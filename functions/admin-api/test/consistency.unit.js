@@ -22,7 +22,8 @@ const handler = proxyquire('../admin-float-consistency', {
         'getFloatAllocatedTotal': getFloatAllocatedTotalStub,
         'getUserAllocationsAndAccountTxs': getUserAllocationsStub,
         'insertFloatLog': insertFloatLogStub,
-        'getFloatLogsWithinPeriod': getFloatLogsWithinPeriodStub
+        'getFloatLogsWithinPeriod': getFloatLogsWithinPeriodStub,
+        '@noCallThru': true
     },
     './persistence/dynamo.float': {
         'listClientFloats': listClientFloatsStub
