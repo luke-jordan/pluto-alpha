@@ -51,6 +51,14 @@ const handlePendingSaveCheck = async ({ transactionId, settlementStatus, settlem
         return { statusCode: 200, body: JSON.stringify({ result, settlementTimeMillis })};
     }
 
+    if (settlementStatus === 'CANCELLED') {
+        const transactionLogs = await rds.fetchLogsForTransaction(transactionId);
+        const didAdminCancel = transactionLogs.find((log) => log.logType === 'ADMIN_UPDATED_TX');
+        const result = didAdminCancel ? 'ADMIN_CANCELLED' : 'USER_CANCELLED';
+        const settlementTimeMillis = moment(settlementTime).valueOf();
+        return { statusCode: 200, body: JSON.stringify({ result, settlementTimeMillis }) };
+    }
+
     return savingHandler.checkPendingPayment({ transactionId });
 };
 

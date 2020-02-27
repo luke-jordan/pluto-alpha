@@ -52,7 +52,7 @@ module.exports.fetchPendingTransactions = async (accountId) => {
         `from ${config.get('tables.accountTransactions')} where account_id = $1 and settlement_status = $2 and ` +
         `transaction_type in ($3, $4) order by creation_time desc`;
   const rows = await rdsConnection.selectQuery(query, [accountId, 'PENDING', ...txTypes]);
-  return rows.length > 0 ? rows.map((row) => camelizeKeys(row)) : null;
+  return rows.map((row) => camelizeKeys(row));
 };
 
 module.exports.countSettledSaves = async (accountId) => {
