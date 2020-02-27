@@ -224,7 +224,7 @@ describe('*** Unit test rechecking transaction', () => {
         const resultOfCheck = await handler.handlePendingTxEvent(mockEvent);
         
         const resultBody = helper.standardOkayChecks(resultOfCheck);
-        expect(resultBody).to.deep.equal({ result: 'SETTLED' });
+        expect(resultBody).to.deep.equal({ result: 'WITHDRAWAL_SETTLED' });
         
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
     });
@@ -235,7 +235,7 @@ describe('*** Unit test rechecking transaction', () => {
         const resultOfCheck = await handler.handlePendingTxEvent(mockEvent);
         
         const resultBody = helper.standardOkayChecks(resultOfCheck);
-        expect(resultBody).to.deep.equal({ result: 'PENDING' });
+        expect(resultBody).to.deep.equal({ result: 'WITHDRAWAL_PENDING' });
 
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
     });

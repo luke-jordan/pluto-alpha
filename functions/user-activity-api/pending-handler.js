@@ -76,7 +76,7 @@ const recheckTransaction = async ({ transactionId, systemWideUserId }) => {
     }
     
     if (transactionType === 'WITHDRAWAL') {
-        return { statusCode: 200, body: JSON.stringify({ result: settlementStatus })};
+        return { statusCode: 200, body: JSON.stringify({ result: `WITHDRAWAL_${settlementStatus}` })};
     }
 
     return { statusCode: 400, body: JSON.stringify({ error: 'BAD_TRANSACTION_TYPE' })};
