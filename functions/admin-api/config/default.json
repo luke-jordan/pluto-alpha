@@ -49,6 +49,9 @@
             "subject": "Float accrual results",
             "templateKey": "emails/floatAccrualEmail.html"
         },
+        "pwdReset": {
+            "templateKey": "emails/pwdResetEmail.html"
+        },
         "allPendingTransactions": {
             "toList": ["luke@jupitersave.com"],
             "subject": "Pending transactions for all Users",

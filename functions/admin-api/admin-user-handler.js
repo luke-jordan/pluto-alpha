@@ -341,12 +341,17 @@ const handlePwdUpdate = async (params, requestContext) => {
         }
 
         if (contactType === 'EMAIL') {
-            dispatchResult = await publisher.sendSystemEmail({ subject: 'Jupiter Password', toList: [contactMethod], templateVariables: { pwd: newPassword }});
+            dispatchResult = await publisher.sendSystemEmail({
+                subject: 'Jupiter Password',
+                toList: [contactMethod],
+                bodyTemplateKey: config.get('email.pwdReset.templateKey'),
+                templateVariables: { pwd: newPassword }
+            });
         }
 
-        await publishUserLog({ adminUserId, systemWideUserId, eventType: 'PASSWORD_RESET', context: { resultPayload } });
+        await publishUserLog({ adminUserId, systemWideUserId, eventType: 'PASSWORD_RESET', context: { dispatchResult } });
 
-        return { result: 'SUCCESS', updateLog: { resultPayload, dispatchResult }};
+        return { result: 'SUCCESS', updateLog: { dispatchResult }};
     }
    
     return { result: 'ERROR', message: resultPayload };

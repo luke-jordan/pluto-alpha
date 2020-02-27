@@ -38,7 +38,7 @@ const handler = proxyquire('../admin-user-handler', {
     }
 });
 
-describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
+describe.only('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
     const testAdminId = uuid();
     const testUserId = uuid();
 
@@ -46,15 +46,6 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
 
     const expectedProfile = {
         systemWideUserId: testUserId,
-        clientId: 'some_client_co',
-        defaultFloatId: 'some_float',
-        defaultCurrency: 'USD',
-        defaultTimezone: 'America/New_York',
-        nationalId: 'some_national_id_here',
-        userStatus: 'USER_HAS_SAVED',
-        kycStatus: 'VERIFIED_AS_PERSON',
-        kycRiskRating: 0,
-        securedStatus: 'PASSWORD_SET',
         userRole: 'ORDINARY_USER',
         tags: 'GRANTED_GIFT'
     };
@@ -91,11 +82,6 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         body: JSON.stringify({
             result: 'SUCCESS',
             updateLog: {
-                resultPayload: {
-                    statusCode: 200,
-                    headers: helper.expectedHeaders,
-                    body: JSON.stringify(mockPwdBody)
-                },
                 dispatchResult: { result: 'SUCCESS' }
             }
         })
@@ -103,6 +89,13 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
 
     it('Updates user password, email route', async () => {
         const mockUserProfile = { ...expectedProfile, contactMethod: 'user@email.com', contactType: 'EMAIL' };
+
+        const expectedEmailArgs = {
+            subject: 'Jupiter Password',
+            toList: ['user@email.com'],
+            bodyTemplateKey: config.get('email.pwdReset.templateKey'),
+            templateVariables: { pwd: 'IMPUISSANCE-handsbreadth-190' }
+        };
 
         publishEventStub.resolves({ result: 'SUCCESS' });
         sendEmailStub.resolves({ result: 'SUCCESS' });
@@ -130,7 +123,7 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(expectedProfileInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
-        expect(sendEmailStub).to.have.been.calledOnceWithExactly({ subject: 'Jupiter Password', toList: ['user@email.com'], templateVariables: { pwd: 'IMPUISSANCE-handsbreadth-190' }});
+        expect(sendEmailStub).to.have.been.calledOnceWithExactly(expectedEmailArgs);
         expect(sendSmsStub).to.have.not.been.called;
     });
 
