@@ -18,13 +18,13 @@ const stdProperties = {
     saveCount: {
         type: 'aggregate',
         description: 'Number of saves',
-        expects: 'amount',
-        unit: 'HUNDREDTH_CENT'
+        expects: 'number'
     },
     currentBalance: {
       type: 'aggregate',
       description: 'Sum of account balance',
-      expects: 'number'
+      expects: 'amount',
+      unit: 'HUNDREDTH_CENT'
     },
     lastSaveTime: {
         type: 'match',
