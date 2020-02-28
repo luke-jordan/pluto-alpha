@@ -18,6 +18,7 @@ const sendEmailStub = sinon.stub();
 const getObjectStub = sinon.stub();
 const sqsSendStub = sinon.stub();
 const getQueueUrlStub = sinon.stub();
+const sendSmsStub = sinon.stub();
 
 const getHumanRefStub = sinon.stub();
 const updateTagsStub = sinon.stub();
@@ -73,6 +74,9 @@ const eventHandler = proxyquire('../event-handler', {
         'updateTxTags': updateTxFlagsStub,
         'fetchAccountTagByPrefix': fetchBSheetAccStub,
         '@noCallThru': true
+    },
+    'publish-common': {
+        'sendSms': sendSmsStub
     }
 });
 
@@ -132,6 +136,8 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const testNationalId = '0340450540345';
         const testCountryCode = 'FIJ';
 
+        const notificationContacts = config.get('publishing.accountsPhoneNumbers');
+
         const testUserProfile = {
             systemWideUserId: testUserId,
             creationTimeEpochMillis: moment().valueOf(),
@@ -158,6 +164,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             humanRef: 'MKZ0010'
         });
 
+        sendSmsStub.resolves({ result: 'SUCCESS' });
         getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id' }]);
         redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
@@ -173,6 +180,9 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
         expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::MKZ0010');
+        notificationContacts.forEach((contact) => {
+            expect(sendSmsStub).to.have.been.calledWith({ phoneNumber: contact, message: 'New Jupiter account opened. Human reference: MKZ0010' });
+        });
         expect(getQueueUrlStub).to.have.not.been.called;
         expect(sqsSendStub).to.have.not.been.called;
     });

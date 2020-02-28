@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:admin:test');
+// const logger = require('debug')('jupiter:admin:test');
 const config = require('config');
 const uuid = require('uuid/v4');
 
@@ -111,10 +111,8 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         };
 
         const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
-        logger('Sending out test event:', testEvent);
 
         const resultOfUpdate = await handler.manageUser(testEvent);
-        logger('Result of update:', resultOfUpdate);
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(expectedDispatchResult);
@@ -145,10 +143,8 @@ describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
         };
 
         const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
-        logger('Sending out test event:', testEvent);
 
         const resultOfUpdate = await handler.manageUser(testEvent);
-        logger('Result of update:', resultOfUpdate);
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(expectedDispatchResult);

@@ -7,8 +7,9 @@
 
 const config = require('config');
 const format = require('string-format');
-const logger = require('debug')('jupiter:event-handling');
+const logger = require('debug')('jupiter:event-handling:main');
 
+const publisher = require('publish-common');
 const persistence = require('./persistence/rds');
 
 const AWS = require('aws-sdk');
@@ -454,6 +455,9 @@ const handleAccountOpenedEvent = async (eventBody) => {
     logger('Finworks account creation resulted in:', bsheetAccountResult);
     const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
     logger(`Result of user account update: ${accountUpdateResult}`);
+
+    const notificationContacts = config.get('publishing.accountsPhoneNumbers');
+    await Promise.all(notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` })));
 };
 
 const handleBoostRedeemedEvent = async (eventBody) => {
