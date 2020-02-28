@@ -561,6 +561,50 @@ resource "aws_iam_policy" "message_push_lambda_policy" {
 EOF
 }
 
+resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
+    name = "${terraform.workspace}_admin_user_manage_policy"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "InvokeLambdas",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.save_admin_settle.arn}",
+                "${aws_lambda_function.email_send.arn}"
+            ]
+        },
+        {
+            "Sid": "EmailTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        },
+        {
+            "Sid": "EmailSend",
+            "Effect": "Allow",
+            "Action": [
+                "ses:SendEmail"
+            ],
+            "Resource": [
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
+                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_ses_identity[terraform.workspace]}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "referral_code_read_policy" {
     name = "dynamo_table_referral_read_${terraform.workspace}"
     path = "/"

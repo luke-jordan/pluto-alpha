@@ -22,7 +22,9 @@ const validKycStatus = ['NO_INFO', 'CONTACT_VERIFIED', 'PENDING_VERIFICATION_AS_
 
 const validUserStatus = ['CREATED', 'ACCOUNT_OPENED', 'USER_HAS_INITIATED_SAVE', 'USER_HAS_SAVED', 'USER_HAS_WITHDRAWN', 'SUSPENDED_FOR_KYC'];
 
-const validTxStatus = ['INITIATED', 'PENDING', 'SETTLED', 'EXPIRED'];
+const validRegulatoryStatus = ['REQUIRES_AGREEMENT', 'HAS_GIVEN_AGREEMENT'];
+
+const validTxStatus = ['INITIATED', 'PENDING', 'SETTLED', 'EXPIRED', 'CANCELLED'];
 
 /**
  * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default
@@ -194,6 +196,10 @@ const validateStatusUpdate = ({ fieldToUpdate, newStatus }) => {
         return true;
     }
 
+    if (fieldToUpdate === 'REGULATORY' && validRegulatoryStatus.indexOf(newStatus) >= 0) {
+        return true;
+    }
+
     return false;
 };
 
@@ -205,8 +211,17 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
             changeTo: newStatus,
             reasonToLog
         };
-    } else if (fieldToUpdate === 'STATUS') {
+    } 
+    
+    if (fieldToUpdate === 'STATUS') {
         statusPayload.updatedUserStatus = {
+            changeTo: newStatus,
+            reasonToLog
+        };
+    }
+
+    if (fieldToUpdate === 'REGULATORY') {
+        statusPayload.updatedRegulatoryStatus = {
             changeTo: newStatus,
             reasonToLog
         };
@@ -337,19 +352,19 @@ const handlePwdUpdate = async (params, requestContext) => {
         let dispatchResult = null;
 
         if (config.has('defaults.pword.mock.enabled') && config.get('defaults.pword.mock.enabled')) {
-            userProfile.phoneNumber = config.get('defaults.pword.mock.phone');
-            userProfile.emailAddress = config.get('defaults.pword.mock.email');
+            userProfile.phoneNumber = userProfile.phoneNumber ? config.get('defaults.pword.mock.phone') : null;
+            userProfile.emailAddress = userProfile.emailAddress ? config.get('defaults.pword.mock.email') : null;
         }
 
-        if (userProfile.phoneNumber) {
-            dispatchResult = await publisher.sendSms({ phoneNumber: `+${userProfile.phoneNumber}`, message: dispatchMsg });
-        } else if (userProfile.emailAddress) {
+        if (userProfile.emailAddress) {
             dispatchResult = await publisher.sendSystemEmail({
                 subject: 'Jupiter Password',
                 toList: [userProfile.emailAddress],
                 bodyTemplateKey: config.get('email.pwdReset.templateKey'),
                 templateVariables: { pwd: newPassword }
             });
+        } else if (userProfile.phoneNumber) {
+            dispatchResult = await publisher.sendSms({ phoneNumber: `+${userProfile.phoneNumber}`, message: dispatchMsg });
         }
 
         await publishUserLog({ adminUserId, systemWideUserId, eventType: 'PASSWORD_RESET', context: { dispatchResult } });
@@ -384,12 +399,13 @@ module.exports.manageUser = async (event) => {
         if (params.fieldToUpdate === 'TRANSACTION') {
             logger('Updating a transaction, tell RDS to execute and return');
             if (!params.transactionId || !params.newTxStatus || validTxStatus.indexOf(params.newTxStatus) < 0) {
+                logger('Failed, not a valid status, return error');
                 return opsCommonUtil.wrapResponse('Error, transaction ID needed and valid transaction status', 400);
             }
             resultOfUpdate = await handleTxUpdate(params);
         }
 
-        if (params.fieldToUpdate === 'KYC' || params.fieldToUpdate === 'STATUS') {
+        if (params.fieldToUpdate === 'KYC' || params.fieldToUpdate === 'STATUS' || params.fieldToUpdate === 'REGULATORY') {
             logger('Updating user status, validate types and return okay');
             if (!validateStatusUpdate(params)) {
                 return opsCommonUtil.wrapResponse('Error, bad field or type for user update', 400);

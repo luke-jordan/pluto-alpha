@@ -174,7 +174,7 @@ const assembleSaveEmail = async (eventBody) => {
     templateVariables.saveCountText = countText;
     templateVariables.bankReference = saveContext.bankReference;
     
-    const profileSearch = `users?searchValue=${encodeURIComponent(eventBody.bankReference)}&searchType=bankReference`;
+    const profileSearch = `users?searchValue=${encodeURIComponent(saveContext.bankReference)}&searchType=bankReference`;
     templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
     
     const toAddresses = config.get('publishing.saveEmailDestination');

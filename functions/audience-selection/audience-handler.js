@@ -13,6 +13,8 @@ const audienceJoinTable = config.get('tables.audienceJoinTable');
 const opsCommonUtil = require('ops-util-common');
 
 const DEFAULT_TABLE = 'transactionTable';
+// frontend has a complex nesteed structure that makes it very complex to insert the unit specification, hence this
+const DEFAULT_BALANCE_UNIT = 'WHOLE_CURRENCY';
 
 const stdProperties = {
     saveCount: {
@@ -24,7 +26,7 @@ const stdProperties = {
       type: 'aggregate',
       description: 'Sum of account balance',
       expects: 'amount',
-      unit: 'HUNDREDTH_CENT'
+      unit: DEFAULT_BALANCE_UNIT
     },
     lastSaveTime: {
         type: 'match',
@@ -102,7 +104,9 @@ const convertSumBalanceToColumns = (condition) => {
         columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
     }
 
-    const amountInHundredthCent = opsCommonUtil.convertToUnit(condition.amount, condition.unit, 'HUNDREDTH_CENT');
+    const fromUnit = condition.unit || DEFAULT_BALANCE_UNIT;
+    logger(`Transforming ${parseInt(condition.value, 10)} from ${fromUnit} to hundredth cent ...`);
+    const amountInHundredthCent = opsCommonUtil.convertToUnit(parseInt(condition.value, 10), fromUnit, 'HUNDREDTH_CENT');
 
     return {
         conditions: [{ op: 'and', children: columnConditions }],
@@ -274,7 +278,7 @@ const extractColumnConditionsTable = (conditions) => {
 };
 
 const logParams = (params) => {
-    logger('Passed parameters to construct column conditions: ', params);
+    logger('Passed parameters to construct column conditions: ', JSON.stringify(params));
     if (params.conditions && params.conditions.length > 0 && (params.conditions[0].op === 'and' || params.conditions[0].op === 'or')) {
         logger('First level conditions: ', params.conditions[0].children);
     }
