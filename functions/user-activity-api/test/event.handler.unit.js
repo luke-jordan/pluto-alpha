@@ -136,6 +136,8 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const testNationalId = '0340450540345';
         const testCountryCode = 'FIJ';
 
+        const notificationContacts = config.get('publishing.accountsPhoneNumbers');
+
         const testUserProfile = {
             systemWideUserId: testUserId,
             creationTimeEpochMillis: moment().valueOf(),
@@ -178,7 +180,9 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
         expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::MKZ0010');
-        expect(sendSmsStub).to.have.been.calledOnceWithExactly({ phoneNumber: config.get('publishing.accountsPhoneNumber'), message: 'New Jupiter account opened. Human reference: MKZ0010' });
+        notificationContacts.forEach((contact) => {
+            expect(sendSmsStub).to.have.been.calledWith({ phoneNumber: contact, message: 'New Jupiter account opened. Human reference: MKZ0010' });
+        });
         expect(getQueueUrlStub).to.have.not.been.called;
         expect(sqsSendStub).to.have.not.been.called;
     });

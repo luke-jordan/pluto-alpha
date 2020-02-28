@@ -59,7 +59,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         startTime: testStartTime.format(),
         endTime: testEndTime.format(),
         statusConditions: testStatusCondition,
-        initialStatus: 'PENDING'
+        boostStatus: 'OFFERED'
     };
 
     beforeEach(() => {
@@ -82,14 +82,17 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
     });
 
     it('Checks for boosts with recently changed status', async () => {
+        const expiredBoostResult = { ...expectedBoostResult };
+        expiredBoostResult.boostStatus = 'EXPIRED';
         findAccountsStub.resolves([testAccountId]);
-        fetchBoostStub.resolves([expectedBoostResult]);
+        fetchBoostStub.onFirstCall().resolves([expectedBoostResult]);
+        fetchBoostStub.onSecondCall().resolves([expiredBoostResult]);
 
         const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
 
         expect(resultOfChangeFetch).to.exist;
         expect(resultOfChangeFetch).to.have.property('statusCode', 200);
-        expect(resultOfChangeFetch).to.have.property('body', JSON.stringify([expectedBoostResult, expectedBoostResult]));
+        expect(resultOfChangeFetch).to.have.property('body', JSON.stringify([expectedBoostResult, expiredBoostResult]));
         
         expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED']);
         expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['EXPIRED']);

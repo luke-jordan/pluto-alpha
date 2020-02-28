@@ -454,11 +454,9 @@ const handleAccountOpenedEvent = async (eventBody) => {
     logger('Finworks account creation resulted in:', bsheetAccountResult);
     const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
     logger(`Result of user account update: ${accountUpdateResult}`);
-    
-    await publisher.sendSms({
-        phoneNumber: config.get('publishing.accountsPhoneNumber'),
-        message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}`
-    });
+
+    const notificationContacts = config.get('publishing.accountsPhoneNumbers');
+    await Promise.all(notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` })));
 };
 
 const handleBoostRedeemedEvent = async (eventBody) => {
