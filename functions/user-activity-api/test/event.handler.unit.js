@@ -18,6 +18,7 @@ const sendEmailStub = sinon.stub();
 const getObjectStub = sinon.stub();
 const sqsSendStub = sinon.stub();
 const getQueueUrlStub = sinon.stub();
+const sendSmsStub = sinon.stub();
 
 const getHumanRefStub = sinon.stub();
 const updateTagsStub = sinon.stub();
@@ -73,6 +74,9 @@ const eventHandler = proxyquire('../event-handler', {
         'updateTxTags': updateTxFlagsStub,
         'fetchAccountTagByPrefix': fetchBSheetAccStub,
         '@noCallThru': true
+    },
+    'publish-common': {
+        'sendSms': sendSmsStub
     }
 });
 
@@ -158,6 +162,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             humanRef: 'MKZ0010'
         });
 
+        sendSmsStub.resolves({ result: 'SUCCESS' });
         getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id' }]);
         redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
