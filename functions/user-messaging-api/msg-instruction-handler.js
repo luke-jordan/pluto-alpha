@@ -269,9 +269,10 @@ module.exports.updateInstruction = async (event) => {
         logger('Instruction update received, with paramaters:', params);
         const instructionId = params.instructionId;
         const updateValues = params.updateValues;
+        const endTime = Reflect.has(params, 'endTime') ? params.endTime : null;
         const databaseResponse = await rdsUtil.updateMessageInstruction(instructionId, updateValues);
         if (typeof updateValues.active === 'boolean' && !updateValues.active) {
-            await rdsUtil.alterInstructionMessageStates(instructionId, ['CREATED', 'READY_FOR_SENDING'], 'DEACTIVATED');
+            await rdsUtil.alterInstructionMessageStates(instructionId, ['CREATED', 'READY_FOR_SENDING'], 'DEACTIVATED', endTime);
         }
         logger('Result of instruction deactivation:', databaseResponse);
         return msgUtil.wrapHttpResponse(databaseResponse);

@@ -216,6 +216,36 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(multiTableUpdateInsertStub).to.have.been.calledOnceWithExactly(...multiInsertUpdateArgs);
     });
 
+    it('Alters instruction message state and end time', async () => {
+        const mockMessageId = uuid();
+        const mockInstructionId = uuid();
+        const mockUpdateTime = moment().format();
+        const currentTime = moment();
+
+        const mockSelectArgs = [
+            `select message_id from ${config.get('tables.userMessagesTable')} where instruction_id = $1 and processed_status in ($2)`,
+            [mockInstructionId, 'CREATED']
+        ];
+
+        const multiInsertUpdateArgs = [[{
+            table: config.get('tables.userMessagesTable'),
+            key: { messageId: mockMessageId },
+            value: { processedStatus: 'READY_TO_SEND', endTime: currentTime.format() },
+            returnClause: 'updated_time'
+        }], []];
+
+        selectQueryStub.withArgs(...mockSelectArgs).resolves([{ message_id: mockMessageId }]);
+        multiTableUpdateInsertStub.withArgs(...multiInsertUpdateArgs).resolves([{ 'updated_time': mockUpdateTime }]);
+
+        const resultOfUpdate = await rdsUtil.alterInstructionMessageStates(mockInstructionId, ['CREATED'], 'READY_TO_SEND', currentTime);
+        logger('Result of message state update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([{ 'updated_time': mockUpdateTime }]);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
+        expect(multiTableUpdateInsertStub).to.have.been.calledOnceWithExactly(...multiInsertUpdateArgs);
+    });
+
     it('Gracefully exists where no messages to update are found', async () => {
         const mockInstructionId = uuid();
         const mockSelectArgs = [

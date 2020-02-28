@@ -179,7 +179,7 @@ module.exports.updateInstructionState = async (instructionId, newProcessedStatus
     return exports.updateMessageInstruction(instructionId, valueMap);
 };
 
-module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses, newStatus) => {
+module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses, newStatus, endTime) => {
     const table = config.get('tables.userMessagesTable');
     const statusParams = extractParamIndices(oldStatuses, 2);
     const seekMsgsQuery = `select message_id from ${table} where instruction_id = $1 and processed_status in (${statusParams})`;
@@ -192,11 +192,15 @@ module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses
     const messageIds = messageIdRows.map((row) => row['message_id']);
     
     const value = { processedStatus: newStatus };
+    if (endTime) {
+        value.endTime = endTime.format();
+    }
+
     const messageUpdateDefs = messageIds.map((messageId) => ({ table, key: { messageId }, value, returnClause: 'updated_time'}));
 
     const updateResponse = await rdsConnection.multiTableUpdateAndInsert(messageUpdateDefs, []);
     logger('Result of update on batch of messages: ', updateResponse);
-    return updateResponse; // camelize?
+    return updateResponse;
 };
 
 const extractUserIds = async (audienceId) => {
