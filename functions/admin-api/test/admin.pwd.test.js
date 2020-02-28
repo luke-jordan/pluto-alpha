@@ -38,7 +38,7 @@ const handler = proxyquire('../admin-user-handler', {
     }
 });
 
-describe.only('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
+describe('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
     const testAdminId = uuid();
     const testUserId = uuid();
 
@@ -88,7 +88,7 @@ describe.only('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
     };
 
     it('Updates user password, email route', async () => {
-        const mockUserProfile = { ...expectedProfile, contactMethod: 'user@email.com', contactType: 'EMAIL' };
+        const mockUserProfile = { ...expectedProfile, emailAddress: 'user@email.com' };
 
         const expectedEmailArgs = {
             subject: 'Jupiter Password',
@@ -128,7 +128,7 @@ describe.only('*** UNIT TEST ADMIN PASSWORD RESET ***', () => {
     });
 
     it('Updates user password, sms route', async () => {
-        const mockUserProfile = { ...expectedProfile, contactMethod: '+278132324268', contactType: 'PHONE' };
+        const mockUserProfile = { ...expectedProfile, phoneNumber: '278132324268' };
         const mockDispatchMsg = 'Your password has been successfully reset. Please use the following password to login to your account: IMPUISSANCE-handsbreadth-190. Please create a new password once logged in.';
 
         publishEventStub.resolves({ result: 'SUCCESS' });

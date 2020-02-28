@@ -201,7 +201,6 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             personalName: 'Meng',
             familyName: 'Ke',
             phoneNumber: '16061110000',
-            emailAddress: 'mencius@confucianism.com',
             countryCode: testCountryCode,
             nationalId: testNationalId,
             userStatus: 'CREATED',
@@ -335,7 +334,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const testAccountId = uuid();
 
         // we just need the names and contact method
-        const testProfile = { personalName: 'John', familyName: 'Nkomo', contactMethod: 'someone@jupitersave.com' };
+        const testProfile = { personalName: 'John', familyName: 'Nkomo', emailAddress: 'someone@jupitersave.com' };
         redisGetStub.withArgs(`USER_PROFILE::${testId}`).resolves(null);
         const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId, includeContactMethod: true });
 

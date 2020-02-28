@@ -54,7 +54,7 @@ module.exports.fetchUserCounts = async (event) => {
     return adminUtil.wrapHttpResponse({ userCount: userIdCount });
 };
 
-const fetchUserProfile = async (systemWideUserId, includeContactMethod = false) => {
+const fetchUserProfile = async (systemWideUserId, includeContactMethod = true) => {
     const profileFetchLambdaInvoke = adminUtil.invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId, includeContactMethod });
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     logger('Result of profile fetch: ', profileFetchResult);
@@ -333,17 +333,20 @@ const handlePwdUpdate = async (params, requestContext) => {
         const dispatchMsg = `Your password has been successfully reset. Please use the following ` +
             `password to login to your account: ${newPassword}. Please create a new password once logged in.`;
         const userProfile = await fetchUserProfile(systemWideUserId, true);
-        const { contactMethod, contactType } = userProfile;
-
+        
         let dispatchResult = null;
-        if (contactType === 'PHONE') {
-            dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
+
+        if (config.has('defaults.pword.mock.enabled') && config.get('defaults.pword.mock.enabled')) {
+            userProfile.phoneNumber = config.get('defaults.pword.mock.phone');
+            userProfile.emailAddress = config.get('defaults.pword.mock.email');
         }
 
-        if (contactType === 'EMAIL') {
+        if (userProfile.phoneNumber) {
+            dispatchResult = await publisher.sendSms({ phoneNumber: `+${userProfile.phoneNumber}`, message: dispatchMsg });
+        } else if (userProfile.emailAddress) {
             dispatchResult = await publisher.sendSystemEmail({
                 subject: 'Jupiter Password',
-                toList: [contactMethod],
+                toList: [userProfile.emailAddress],
                 bodyTemplateKey: config.get('email.pwdReset.templateKey'),
                 templateVariables: { pwd: newPassword }
             });

@@ -43,6 +43,15 @@ resource "aws_lambda_function" "admin_user_manage" {
                 "hash": {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
+              },
+              "defaults": {
+                "pword": {
+                  "mock": {
+                    "enabled": terraform.workspace == "staging",
+                    "phone": "27813074085",
+                    "email": "luke@jupitersave.com"
+                  }
+                }
               }
           }
       )}"

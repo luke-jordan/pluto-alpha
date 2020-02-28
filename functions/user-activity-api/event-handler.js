@@ -89,7 +89,7 @@ const fetchUserProfile = async (systemWideUserId, includePrimaryContact) => {
     }
 
     const parsedProfile = JSON.parse(cachedProfile);
-    if (requiresContactScan && !parsedProfile.contactMethod) {
+    if (requiresContactScan && !parsedProfile.emailAddress && !parsedProfile.phoneNumber) {
         logger('Required contact scan but not present in profile, so fetching');
         return invokeProfileLambda(systemWideUserId, true);
     }
@@ -205,9 +205,10 @@ const safeWithdrawalEmail = async (eventBody, userProfile, bankAccountDetails) =
     const templateVariables = { ...bankAccountDetails };
     templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount); // note: make positive in time
 
-    const profileSearch = `users?searchValue=${encodeURIComponent(userProfile.contactMethod)}&searchType=phoneOrEmail`;
+    const contactMethod = userProfile.emailAddress || userProfile.phoneNumber;
+    const profileSearch = `users?searchValue=${encodeURIComponent(contactMethod)}&searchType=phoneOrEmail`;
     templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
-    templateVariables.contactMethod = userProfile.contactMethod;
+    templateVariables.contactMethod = contactMethod;
 
     const subject = 'User wants to withdraw';
     const htmlTemplate = await obtainTemplate(config.get('templates.withdrawalEmail'));
@@ -227,7 +228,7 @@ const safeWithdrawalEmail = async (eventBody, userProfile, bankAccountDetails) =
         // we want the rest to execute, so we manually publish to the dlq, and alert admins
         addToDlq({ eventType: 'WITHDRAWAL', eventBody, templateVariables });
         const snsMessage = {
-            Message: `Jupiter Withdrawal! Withdrawal triggered for ${userProfile.contactMethod}, but failed on email dispatch.`,
+            Message: `Jupiter Withdrawal! Withdrawal triggered for ${contactMethod}, but failed on email dispatch.`,
             MessageStructure: 'string',
             TopicArn: config.get('publishing.userEvents.withdrawalTopic')
         };

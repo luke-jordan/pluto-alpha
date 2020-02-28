@@ -199,10 +199,10 @@ module.exports.verify = async (event) => {
         if (params.includeFloatDefaults) {
             const { clientId, floatId } = tableLookUpResult;
             const { userReferralDefaults } = await dynamo.fetchSingleRow(config.get('tables.clientFloatTable'), { clientId, floatId }, ['user_referral_defaults']);
-            codeDetails.floatDefaults = userReferralDefaults;
+            codeDetails.floatDefaults = camelCaseKeys(userReferralDefaults);
         }
         
-        logger('Returning lookup result');
+        logger('Returning lookup result: ', codeDetails);
         return { statusCode: status['OK'], body: JSON.stringify({ result: 'CODE_IS_ACTIVE', codeDetails })};
     } catch (e) {
         return handleErrorAndReturn(e);
