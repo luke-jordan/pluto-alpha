@@ -10,6 +10,7 @@ const persistence = require('./persistence');
 
 const txTable = config.get('tables.transactionTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');
+const opsCommonUtil = require('ops-util-common');
 
 const DEFAULT_TABLE = 'transactionTable';
 
@@ -18,6 +19,12 @@ const stdProperties = {
         type: 'aggregate',
         description: 'Number of saves',
         expects: 'number'
+    },
+    currentBalance: {
+      type: 'aggregate',
+      description: 'Sum of account balance',
+      expects: 'amount',
+      unit: 'HUNDREDTH_CENT'
     },
     lastSaveTime: {
         type: 'match',
@@ -69,8 +76,46 @@ const convertSaveCountToColumns = (condition) => {
     };
 };
 
+const convertSumBalanceToColumns = (condition) => {
+    const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
+    const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
+    const convertAmountToSingleUnitQuery = `SUM(
+        CASE
+            WHEN unit = 'WHOLE_CENT' THEN
+                amount / 100
+            WHEN unit = 'WHOLE_CURRENCY' THEN
+                amount / 10000
+        ELSE
+            amount
+        END
+    )`;
+    const columnConditions = [
+        { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
+        { prop: 'transaction_type', op: 'in', value: transactionTypesToInclude }
+    ];
+
+    if (Number.isInteger(condition.startTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'greater_than', value: convertEpochToFormat(condition.startTime) });
+    }
+
+    if (Number.isInteger(condition.endTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
+    }
+
+    const amountInHundredthCent = opsCommonUtil.convertToUnit(condition.amount, condition.unit, 'HUNDREDTH_CENT');
+
+    return {
+        conditions: [{ op: 'and', children: columnConditions }],
+        groupBy: ['account_id', 'unit'],
+        postConditions: [
+            { op: condition.op, prop: convertAmountToSingleUnitQuery, value: amountInHundredthCent, valueType: 'int' }
+        ]
+    };
+};
+
 const columnConverters = {
     saveCount: (condition) => convertSaveCountToColumns(condition),
+    currentBalance: (condition) => convertSumBalanceToColumns(condition),
     lastSaveTime: (condition) => ({
        conditions: [
             { op: 'and', children: [

@@ -341,7 +341,7 @@ describe('Converts standard properties into column conditions', () => {
         expect(selectionJson.sample).to.deep.equal({ random: 50 });
     });
 
-    it('Throws error where other condtions are included with human reference', async () => {
+    it('Throws error where other conditions are included with human reference', async () => {
         const mockStart = moment().subtract(30, 'days');
 
         const mockSelectionJSON = {

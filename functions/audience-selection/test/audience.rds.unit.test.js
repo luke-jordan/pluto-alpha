@@ -422,6 +422,54 @@ describe('Audience Selection - fetch users given JSON', () => {
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, emptyArray);
     });
 
+    it('Should convert sum balance to columns', async () => {
+        const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
+        const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
+        const convertAmountToSingleUnitQuery = `SUM(
+            CASE
+                WHEN unit = 'WHOLE_CENT' THEN
+                    amount / 100
+                WHEN unit = 'WHOLE_CURRENCY' THEN
+                    amount / 10000
+            ELSE
+                amount
+            END
+        )`;
+        const mockSelectionJSON = Object.assign({}, rootJSON, {
+            'columns': ['account_id'],
+            'conditions': [{
+                op: 'and',
+                children: [
+                    {prop: 'settlement_status', op: 'in', value: settlementStatusToInclude},
+                    {prop: 'transaction_type', op: 'in', value: transactionTypesToInclude}
+                ]
+             }],
+            'groupBy': ['account_id', 'unit'],
+            'postConditions': [{
+                'op': 'and', 'children': [
+                    {'op': 'greater_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 10},
+                    {'op': 'less_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 50}
+                ]
+            }]
+        });
+
+        const expectedQuery = `select account_id from transactions` +
+            ` where (settlement_status in ('SETTLED', 'ACCRUED')` +
+            ` and transaction_type in ('USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'))` +
+            ` group by account_id, unit having (${convertAmountToSingleUnitQuery}>=10 and ${convertAmountToSingleUnitQuery}<=50)`;
+
+        const sqlQuery = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
+        expect(sqlQuery).to.exist;
+        expect(sqlQuery).to.deep.equal(expectedQuery);
+
+        selectQueryStub.withArgs(expectedQuery).resolves(expectedRawQueryResult);
+
+        const result = await audienceSelection.executeColumnConditions(mockSelectionJSON, false);
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedParsedUserIds);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, emptyArray);
+    });
+
     it('Should execute with subqueries, matching apex test in main handler', async () => {
         const mockClientId = 'test-client';
         const oneWeekAgo = moment().subtract(7, 'days');
