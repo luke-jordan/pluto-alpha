@@ -46,7 +46,7 @@ const handler = proxyquire('../admin-user-handler', {
         '@noCallThru': true
     },
     'publish-common': {
-        publishUserEvent: publishEventStub
+        'publishUserEvent': publishEventStub
     },
     './admin.util': {},
     'moment': momentStub,
@@ -181,7 +181,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             promise: () => helper.mockLambdaResponse({ systemWideUserId: testUserId })
         });
 
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId })).returns({
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: false })).returns({
             promise: () => helper.mockLambdaResponse(expectedProfile)
         });
 
@@ -226,7 +226,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: false }));
         expect(pendingTxStub).to.have.been.calledWith(testUserId, sinon.match.any);
     });
 });

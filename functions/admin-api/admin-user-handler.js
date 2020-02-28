@@ -54,8 +54,8 @@ module.exports.fetchUserCounts = async (event) => {
     return adminUtil.wrapHttpResponse({ userCount: userIdCount });
 };
 
-const fetchUserProfile = async (systemWideUserId) => {
-    const profileFetchLambdaInvoke = adminUtil.invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId });
+const fetchUserProfile = async (systemWideUserId, includeContactMethod = false) => {
+    const profileFetchLambdaInvoke = adminUtil.invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId, includeContactMethod });
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     logger('Result of profile fetch: ', profileFetchResult);
 
@@ -315,6 +315,48 @@ const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId,
     return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
 };
 
+const handlePwdUpdate = async (params, requestContext) => {
+    const { adminUserId, systemWideUserId } = params;
+    const updatePayload = { systemWideUserId, generateRandom: true, requestContext };
+    logger('Invoking password update lambda, payload: ', updatePayload);
+    const updateResult = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.passwordUpdate'), updatePayload)).promise();
+    logger('Password update result: ', updateResult);
+
+    const resultPayload = JSON.parse(updateResult['Payload']);
+    if (updateResult['StatusCode'] === 200) {
+        const resultBody = JSON.parse(resultPayload.body);
+        if (!Reflect.has(resultBody, 'newPassword')) {
+            return { result: 'ERROR', message: 'Failed on new password generation' };
+        }
+        
+        const { newPassword } = resultBody;
+        const dispatchMsg = `Your password has been successfully reset. Please use the following ` +
+            `password to login to your account: ${newPassword}. Please create a new password once logged in.`;
+        const userProfile = await fetchUserProfile(systemWideUserId, true);
+        const { contactMethod, contactType } = userProfile;
+
+        let dispatchResult = null;
+        if (contactType === 'PHONE') {
+            dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
+        }
+
+        if (contactType === 'EMAIL') {
+            dispatchResult = await publisher.sendSystemEmail({
+                subject: 'Jupiter Password',
+                toList: [contactMethod],
+                bodyTemplateKey: config.get('email.pwdReset.templateKey'),
+                templateVariables: { pwd: newPassword }
+            });
+        }
+
+        await publishUserLog({ adminUserId, systemWideUserId, eventType: 'PASSWORD_RESET', context: { dispatchResult } });
+
+        return { result: 'SUCCESS', updateLog: { dispatchResult }};
+    }
+   
+    return { result: 'ERROR', message: resultPayload };
+};
+
 /**
  * @property {string} systemWideUserId The ID of the user to adjust
  * @property {string} fieldToUpdate One of: KYC, STATUS, TRANSACTION 
@@ -365,7 +407,7 @@ module.exports.manageUser = async (event) => {
 
         if (params.fieldToUpdate === 'PWORD') {
             logger('Resetting the user password, trigger and send back');
-            
+            resultOfUpdate = await handlePwdUpdate(params, event.requestContext);
         }
 
         if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {
