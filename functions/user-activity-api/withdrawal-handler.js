@@ -151,8 +151,8 @@ const fetchClientFloatVars = async (withdrawalInformation) => {
 const calculateAnnualInterestRate = (floatProjectionVars) => {
     const basisPointDivisor = 100 * 100; // i.e., hundredths of a percent
     const annualAccrualRateNominalGross = new DecimalLight(floatProjectionVars.accrualRateAnnualBps).dividedBy(basisPointDivisor);
-    const floatDeductions = new DecimalLight(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual).
-    plus(floatProjectionVars.prudentialFactor);
+    // not using prudential here
+    const floatDeductions = new DecimalLight(floatProjectionVars.bonusPoolShareOfAccrual).plus(floatProjectionVars.clientShareOfAccrual);
 
     const annualInterestRateAsDecimalLight = annualAccrualRateNominalGross.times(new DecimalLight(1).minus(floatDeductions));
     logger(`Annual Interest rate as big number: ${annualInterestRateAsDecimalLight}`);
@@ -161,11 +161,8 @@ const calculateAnnualInterestRate = (floatProjectionVars) => {
 
 const obtainWithdrawalCardMsg = (clientFloatVars) => {
     const annualInterestRate = calculateAnnualInterestRate(clientFloatVars);
-    const twoYearRate = (annualInterestRate.plus(1).pow(2)).minus(1);
-    
-    const valueForText = (twoYearRate.times(100)).toInteger().toNumber();
-    return `Over the next two years you could accumulate ${valueForText}% interest. Why not delay your withdrawal to keep these ` + 
-        `savings and earn more for your future!`;
+    const valueForText = (annualInterestRate.times(100)).toInteger().toNumber();
+    return `Every R100 kept in your Jupiter account earns you at least R${valueForText} after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you`;
 };
 
 /**

@@ -59,9 +59,12 @@ module.exports.listChangedBoosts = async (event) => {
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
 
         const changeCutOff = moment().subtract(config.get('time.changeCutOff.number'), config.get('time.changeCutOff.unit'));
-        const listBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, ['CREATED', 'OFFERED', 'EXPIRED']);
+        const listActiveBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, ['CREATED', 'OFFERED']);
 
-        return util.wrapHttpResponse(listBoosts);
+        const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));
+        const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, expiredCutOff, ['EXPIRED']);
+
+        return util.wrapHttpResponse([...listActiveBoosts, ...listExpiredBoosts]);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return util.wrapHttpResponse({ error: err.message }, 500);

@@ -17,6 +17,10 @@
         "changeCutOff": {
             "number": 2,
             "unit": "minutes"
+        },
+        "expiredCutOff": {
+            "number": 3,
+            "unit": "days"
         }
     },
     "tables": {

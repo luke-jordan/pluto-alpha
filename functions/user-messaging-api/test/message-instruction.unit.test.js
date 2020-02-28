@@ -738,7 +738,33 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         expect(body).to.have.property('insertionId', mockInsertionId);
         expect(body).to.have.property('updateTime', mockUpdateTime);
         expect(updateMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId, { 'active': false });
-        expect(alterInstructionStatesStub).to.have.been.calledOnceWithExactly(mockInstructionId, ['CREATED', 'READY_FOR_SENDING'], 'DEACTIVATED');
+        expect(alterInstructionStatesStub).to.have.been.calledOnceWithExactly(mockInstructionId, ['CREATED', 'READY_FOR_SENDING'], 'DEACTIVATED', null);
+    });
+
+    it('Updates message instruction and alters instruction message state and endtime', async () => {
+        const currentTime = moment();
+        updateMessageInstructionStub.withArgs(mockInstructionId, { active: false }).returns([{ insertionId: mockInsertionId, updateTime: mockUpdateTime }]);
+        alterInstructionStatesStub.resolves({ result: 'SUCCESS' });
+        const mockEvent = {
+            instructionId: mockInstructionId,
+            updateValues: { active: false },
+            endTime: currentTime,
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        const resultOfUpdate = await handler.updateInstruction(mockEvent);
+        logger('Result of message instruction deactivation:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.have.property('statusCode', 200);
+        expect(resultOfUpdate).to.have.property('headers');
+        expect(resultOfUpdate.headers).to.deep.equal(testHelper.expectedHeaders);
+        expect(resultOfUpdate).to.have.property('body');
+        const body = JSON.parse(resultOfUpdate.body)[0];
+        expect(body).to.have.property('insertionId', mockInsertionId);
+        expect(body).to.have.property('updateTime', mockUpdateTime);
+        expect(updateMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId, { 'active': false });
+        expect(alterInstructionStatesStub).to.have.been.calledOnceWithExactly(mockInstructionId, ['CREATED', 'READY_FOR_SENDING'], 'DEACTIVATED', currentTime);
     });
 
     it('Fails on unauthorized update', async () => {

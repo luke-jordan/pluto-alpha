@@ -22,7 +22,9 @@ const validKycStatus = ['NO_INFO', 'CONTACT_VERIFIED', 'PENDING_VERIFICATION_AS_
 
 const validUserStatus = ['CREATED', 'ACCOUNT_OPENED', 'USER_HAS_INITIATED_SAVE', 'USER_HAS_SAVED', 'USER_HAS_WITHDRAWN', 'SUSPENDED_FOR_KYC'];
 
-const validTxStatus = ['INITIATED', 'PENDING', 'SETTLED', 'EXPIRED'];
+const validRegulatoryStatus = ['REQUIRES_AGREEMENT', 'HAS_GIVEN_AGREEMENT'];
+
+const validTxStatus = ['INITIATED', 'PENDING', 'SETTLED', 'EXPIRED', 'CANCELLED'];
 
 /**
  * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default
@@ -54,8 +56,8 @@ module.exports.fetchUserCounts = async (event) => {
     return adminUtil.wrapHttpResponse({ userCount: userIdCount });
 };
 
-const fetchUserProfile = async (systemWideUserId) => {
-    const profileFetchLambdaInvoke = adminUtil.invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId });
+const fetchUserProfile = async (systemWideUserId, includeContactMethod = true) => {
+    const profileFetchLambdaInvoke = adminUtil.invokeLambda(config.get('lambdas.fetchProfile'), { systemWideUserId, includeContactMethod });
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
     logger('Result of profile fetch: ', profileFetchResult);
 
@@ -194,6 +196,10 @@ const validateStatusUpdate = ({ fieldToUpdate, newStatus }) => {
         return true;
     }
 
+    if (fieldToUpdate === 'REGULATORY' && validRegulatoryStatus.indexOf(newStatus) >= 0) {
+        return true;
+    }
+
     return false;
 };
 
@@ -205,8 +211,17 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
             changeTo: newStatus,
             reasonToLog
         };
-    } else if (fieldToUpdate === 'STATUS') {
+    } 
+    
+    if (fieldToUpdate === 'STATUS') {
         statusPayload.updatedUserStatus = {
+            changeTo: newStatus,
+            reasonToLog
+        };
+    }
+
+    if (fieldToUpdate === 'REGULATORY') {
+        statusPayload.updatedRegulatoryStatus = {
             changeTo: newStatus,
             reasonToLog
         };
@@ -315,6 +330,51 @@ const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId,
     return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
 };
 
+const handlePwdUpdate = async (params, requestContext) => {
+    const { adminUserId, systemWideUserId } = params;
+    const updatePayload = { systemWideUserId, generateRandom: true, requestContext };
+    logger('Invoking password update lambda, payload: ', updatePayload);
+    const updateResult = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.passwordUpdate'), updatePayload)).promise();
+    logger('Password update result: ', updateResult);
+
+    const resultPayload = JSON.parse(updateResult['Payload']);
+    if (updateResult['StatusCode'] === 200) {
+        const resultBody = JSON.parse(resultPayload.body);
+        if (!Reflect.has(resultBody, 'newPassword')) {
+            return { result: 'ERROR', message: 'Failed on new password generation' };
+        }
+        
+        const { newPassword } = resultBody;
+        const dispatchMsg = `Your password has been successfully reset. Please use the following ` +
+            `password to login to your account: ${newPassword}. Please create a new password once logged in.`;
+        const userProfile = await fetchUserProfile(systemWideUserId, true);
+        
+        let dispatchResult = null;
+
+        if (config.has('defaults.pword.mock.enabled') && config.get('defaults.pword.mock.enabled')) {
+            userProfile.phoneNumber = userProfile.phoneNumber ? config.get('defaults.pword.mock.phone') : null;
+            userProfile.emailAddress = userProfile.emailAddress ? config.get('defaults.pword.mock.email') : null;
+        }
+
+        if (userProfile.emailAddress) {
+            dispatchResult = await publisher.sendSystemEmail({
+                subject: 'Jupiter Password',
+                toList: [userProfile.emailAddress],
+                bodyTemplateKey: config.get('email.pwdReset.templateKey'),
+                templateVariables: { pwd: newPassword }
+            });
+        } else if (userProfile.phoneNumber) {
+            dispatchResult = await publisher.sendSms({ phoneNumber: `+${userProfile.phoneNumber}`, message: dispatchMsg });
+        }
+
+        await publishUserLog({ adminUserId, systemWideUserId, eventType: 'PASSWORD_RESET', context: { dispatchResult } });
+
+        return { result: 'SUCCESS', updateLog: { dispatchResult }};
+    }
+   
+    return { result: 'ERROR', message: resultPayload };
+};
+
 /**
  * @property {string} systemWideUserId The ID of the user to adjust
  * @property {string} fieldToUpdate One of: KYC, STATUS, TRANSACTION 
@@ -339,12 +399,13 @@ module.exports.manageUser = async (event) => {
         if (params.fieldToUpdate === 'TRANSACTION') {
             logger('Updating a transaction, tell RDS to execute and return');
             if (!params.transactionId || !params.newTxStatus || validTxStatus.indexOf(params.newTxStatus) < 0) {
+                logger('Failed, not a valid status, return error');
                 return opsCommonUtil.wrapResponse('Error, transaction ID needed and valid transaction status', 400);
             }
             resultOfUpdate = await handleTxUpdate(params);
         }
 
-        if (params.fieldToUpdate === 'KYC' || params.fieldToUpdate === 'STATUS') {
+        if (params.fieldToUpdate === 'KYC' || params.fieldToUpdate === 'STATUS' || params.fieldToUpdate === 'REGULATORY') {
             logger('Updating user status, validate types and return okay');
             if (!validateStatusUpdate(params)) {
                 return opsCommonUtil.wrapResponse('Error, bad field or type for user update', 400);
@@ -365,7 +426,7 @@ module.exports.manageUser = async (event) => {
 
         if (params.fieldToUpdate === 'PWORD') {
             logger('Resetting the user password, trigger and send back');
-            
+            resultOfUpdate = await handlePwdUpdate(params, event.requestContext);
         }
 
         if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {

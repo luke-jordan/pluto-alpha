@@ -69,6 +69,7 @@ const defineReferralContext = async (params) => {
             logger('Referral details: ', referralBoostDetails);
             referralContext.boostAmountOffered = referralBoostDetails.boostAmountEach;
             referralContext.bonusPoolId = referralBoostDetails.fromBonusPoolId;
+            referralContext.shareLink = referralBoostDetails.shareLink;
         }
         return referralContext;
     }
@@ -169,6 +170,7 @@ module.exports.create = async (event) => {
  * @param {object} event An event object containing the referral code to be evaluated.
  * @property {string} countryCode The country where the referral code is being used
  * @property {string} referralCode The referralCode to be verified.
+ * @property {string} includeFloatDefaults Whether to include float defaults, e.g.,  
  */
 module.exports.verify = async (event) => {
     try {
@@ -185,16 +187,23 @@ module.exports.verify = async (event) => {
         
         const referralCode = params.referralCode.toUpperCase().trim();
         const codeKey = { referralCode, countryCode: params.countryCode };
-        const colsToReturn = ['referralCode', 'codeType', 'expiryTimeMillis', 'context'];
+        const colsToReturn = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
         const tableLookUpResult = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), codeKey, colsToReturn);
+        
         logger('Table lookup result: ', tableLookUpResult);
-        logger('Is this object empty? :', opsUtil.isObjectEmpty(tableLookUpResult));
         if (opsUtil.isObjectEmpty(tableLookUpResult)) {
             return { statusCode: status['Not Found'], body: JSON.stringify({ result: 'CODE_NOT_FOUND' })};
-        } 
+        }
         
-        logger('Returning lookup result');
-        return { statusCode: status['OK'], body: JSON.stringify({ result: 'CODE_IS_ACTIVE', codeDetails: tableLookUpResult })};
+        const codeDetails = tableLookUpResult;
+        if (params.includeFloatDefaults) {
+            const { clientId, floatId } = tableLookUpResult;
+            const { userReferralDefaults } = await dynamo.fetchSingleRow(config.get('tables.clientFloatTable'), { clientId, floatId }, ['user_referral_defaults']);
+            codeDetails.floatDefaults = camelCaseKeys(userReferralDefaults);
+        }
+        
+        logger('Returning lookup result: ', codeDetails);
+        return { statusCode: status['OK'], body: JSON.stringify({ result: 'CODE_IS_ACTIVE', codeDetails })};
     } catch (e) {
         return handleErrorAndReturn(e);
     }

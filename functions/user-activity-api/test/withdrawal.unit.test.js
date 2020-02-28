@@ -180,7 +180,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             body: JSON.stringify({
                 availableBalance: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
                 cardTitle: 'Did you know?',
-                cardBody: 'Over the next two years you could accumulate 12% interest. Why not delay your withdrawal to keep these savings and earn more for your future!'
+                cardBody: 'Every R100 kept in your Jupiter account earns you at least R6 after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you'
             })
         };
 
@@ -482,7 +482,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
             prudentialFactor: testPrudentialDiscountFactor
         });
 
-        const requiredInterestBps = testAccrualRateBps * (1 - testBonusPoolShare - testClientCoShare - testPrudentialDiscountFactor); 
+        const requiredInterestBps = testAccrualRateBps * (1 - testBonusPoolShare - testClientCoShare); 
         // eslint-disable-next-line no-mixed-operators
         const annualIncrease = (1 + requiredInterestBps / 10000);
         const fiveYearTotal = Math.pow(annualIncrease, 5);

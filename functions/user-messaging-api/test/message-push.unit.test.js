@@ -573,8 +573,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         personalName: 'John',
         familyName: 'Doe',
         phoneNumber: '278384748264',
-        contactType: 'EMAIL',
-        contactMethod: 'user@email.com'
+        emailAddress: 'user@email.com'
     };
 
     const mockUserMessage = {

@@ -76,6 +76,7 @@
         "withdrawalEmailDestination": ["luke@jupitersave.com"],
         "saveEmailDestination": ["luke@jupitersave.com"],
         "eventsEmailAddress": "noreply@jupitersave.com",
+        "accountsPhoneNumbers": ["<<insert_here>>"],
         "adminSiteUrl": "https://localhost:3000"
     },
     "templates": {

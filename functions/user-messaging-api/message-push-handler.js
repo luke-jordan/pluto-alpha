@@ -208,7 +208,7 @@ const fetchUserEmail = async (systemWideUserId) => {
     const userProfile = JSON.parse(profilePayload.body);
     logger('User profile fetch result: ', userProfile);
     
-    return userProfile.contactType === 'EMAIL' ? { systemWideUserId, emailAddress: userProfile.contactMethod } : null;
+    return userProfile.emailAddress ? { systemWideUserId, emailAddress: userProfile.emailAddress } : null;
 };
 
 const dispatchEmailMessages = async (emailMessages) => {

@@ -10,14 +10,23 @@ const persistence = require('./persistence');
 
 const txTable = config.get('tables.transactionTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');
+const opsCommonUtil = require('ops-util-common');
 
 const DEFAULT_TABLE = 'transactionTable';
+// frontend has a complex nesteed structure that makes it very complex to insert the unit specification, hence this
+const DEFAULT_BALANCE_UNIT = 'WHOLE_CURRENCY';
 
 const stdProperties = {
     saveCount: {
         type: 'aggregate',
         description: 'Number of saves',
         expects: 'number'
+    },
+    currentBalance: {
+      type: 'aggregate',
+      description: 'Sum of account balance',
+      expects: 'amount',
+      unit: DEFAULT_BALANCE_UNIT
     },
     lastSaveTime: {
         type: 'match',
@@ -69,8 +78,48 @@ const convertSaveCountToColumns = (condition) => {
     };
 };
 
+const convertSumBalanceToColumns = (condition) => {
+    const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
+    const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
+    const convertAmountToSingleUnitQuery = `SUM(
+        CASE
+            WHEN unit = 'WHOLE_CENT' THEN
+                amount / 100
+            WHEN unit = 'WHOLE_CURRENCY' THEN
+                amount / 10000
+        ELSE
+            amount
+        END
+    )`;
+    const columnConditions = [
+        { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
+        { prop: 'transaction_type', op: 'in', value: transactionTypesToInclude }
+    ];
+
+    if (Number.isInteger(condition.startTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'greater_than', value: convertEpochToFormat(condition.startTime) });
+    }
+
+    if (Number.isInteger(condition.endTime)) {
+        columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
+    }
+
+    const fromUnit = condition.unit || DEFAULT_BALANCE_UNIT;
+    logger(`Transforming ${parseInt(condition.value, 10)} from ${fromUnit} to hundredth cent ...`);
+    const amountInHundredthCent = opsCommonUtil.convertToUnit(parseInt(condition.value, 10), fromUnit, 'HUNDREDTH_CENT');
+
+    return {
+        conditions: [{ op: 'and', children: columnConditions }],
+        groupBy: ['account_id', 'unit'],
+        postConditions: [
+            { op: condition.op, prop: convertAmountToSingleUnitQuery, value: amountInHundredthCent, valueType: 'int' }
+        ]
+    };
+};
+
 const columnConverters = {
     saveCount: (condition) => convertSaveCountToColumns(condition),
+    currentBalance: (condition) => convertSumBalanceToColumns(condition),
     lastSaveTime: (condition) => ({
        conditions: [
             { op: 'and', children: [
@@ -229,7 +278,7 @@ const extractColumnConditionsTable = (conditions) => {
 };
 
 const logParams = (params) => {
-    logger('Passed parameters to construct column conditions: ', params);
+    logger('Passed parameters to construct column conditions: ', JSON.stringify(params));
     if (params.conditions && params.conditions.length > 0 && (params.conditions[0].op === 'and' || params.conditions[0].op === 'or')) {
         logger('First level conditions: ', params.conditions[0].children);
     }

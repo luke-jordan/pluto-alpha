@@ -30,6 +30,9 @@ resource "aws_lambda_function" "admin_user_manage" {
                 "database": "${local.database_config.database}",
                 "port" :"${local.database_config.port}"
               },
+              "lambdas": {
+                "passwordUpdate": "password_update",
+              }
               "secrets": {
                   "enabled": true,
                   "names": {
@@ -42,6 +45,15 @@ resource "aws_lambda_function" "admin_user_manage" {
                 },
                 "hash": {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
+                }
+              },
+              "defaults": {
+                "pword": {
+                  "mock": {
+                    "enabled": terraform.workspace == "staging",
+                    "phone": "27813074085",
+                    "email": "luke@jupitersave.com"
+                  }
                 }
               }
           }
@@ -100,14 +112,19 @@ resource "aws_iam_role_policy_attachment" "admin_user_manage_profile_invoke_poli
   policy_arn = "${var.user_profile_admin_policy_arn[terraform.workspace]}"
 }
 
-resource "aws_iam_role_policy_attachment" "admin_user_manage_tx_settle" {
-  role = aws_iam_role.admin_user_manage_role.name
-  policy_arn = aws_iam_policy.admin_save_settle_lambda_invoke_policy.arn 
-}
-
 resource "aws_iam_role_policy_attachment" "admin_user_manage_event_publish" {
   role = aws_iam_role.admin_user_manage_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
+}
+
+resource "aws_iam_role_policy_attachment" "admin_user_manage_pword_update" {
+  role = aws_iam_role.admin_user_manage_role.name
+  policy_arn = var.pword_update_policy[terraform.workspace]
+}
+
+resource "aws_iam_role_policy_attachment" "admin_user_manage_omnibus" {
+  role = aws_iam_role.admin_user_manage_role.name
+  policy_arn = aws_iam_policy.admin_user_manage_lambda_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "admin_user_manage_secret_get" {

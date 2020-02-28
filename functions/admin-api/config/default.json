@@ -27,6 +27,7 @@
         "processAccrual": "float_accrue",
         "systemWideIdLookup": "profile_find_by_details",
         "fetchProfile": "profile_fetch",
+        "passwordUpdate": "pword_update",
         "fetchUserBalance": "balance_fetch",
         "userHistory": "user_log_reader",
         "floatTransfer": "float_transfer",
@@ -47,6 +48,9 @@
             "toList": ["luke@jupitersave.com"],
             "subject": "Float accrual results",
             "templateKey": "emails/floatAccrualEmail.html"
+        },
+        "pwdReset": {
+            "templateKey": "emails/pwdResetEmail.html"
         },
         "allPendingTransactions": {
             "toList": ["luke@jupitersave.com"],
