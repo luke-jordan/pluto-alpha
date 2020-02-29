@@ -47,6 +47,9 @@ resource "aws_lambda_function" "admin_user_manage" {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
               },
+              "templates": {
+                "bucket": "${terraform.workspace}.jupiter.templates"
+              },
               "defaults": {
                 "pword": {
                   "mock": {

@@ -28,6 +28,8 @@ const STANDARD_BOOST_TYPES = {
     'REFERRAL': ['USER_CODE_USED']
 };
 
+const DEFAULT_BOOST_PRIORITY = 100;
+
 const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
     return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
@@ -119,7 +121,8 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
         presentationType: messageDefinition.presentationType,
         audienceType: boostParams.boostAudienceType,
         audienceId: boostParams.audienceId,
-        endTime: boostParams.boostEndTime.format()
+        endTime: boostParams.boostEndTime.format(),
+        messagePriority: DEFAULT_BOOST_PRIORITY
     };
     logger('Base of message payload: ', msgPayload);
         

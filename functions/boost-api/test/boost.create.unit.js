@@ -428,6 +428,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         messagePayload.presentationType = 'ONCE_OFF';
         messagePayload.audienceId = testAudienceId;
         messagePayload.endTime = testEndTime.format();
+        messagePayload.messagePriority = 100;
         
         const assembledMessageTemplates = Object.keys(messageTemplates).map((key) => {
             const msgTemplate = messageTemplates[key];
