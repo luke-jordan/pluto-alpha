@@ -27,7 +27,7 @@
         "processAccrual": "float_accrue",
         "systemWideIdLookup": "profile_find_by_details",
         "fetchProfile": "profile_fetch",
-        "passwordUpdate": "pword_update",
+        "passwordUpdate": "password_update",
         "fetchUserBalance": "balance_fetch",
         "userHistory": "user_log_reader",
         "floatTransfer": "float_transfer",

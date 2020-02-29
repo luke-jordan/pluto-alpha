@@ -150,6 +150,15 @@ variable "events_email_receipients" {
     }
 }
 
+variable "events_phone_reciepients" {
+    description = "Recipient list for daily stats and system emails"
+    type = "map"
+    default = {
+        "staging" = [""],
+        "master" = ["+27813074085", "+27834013558"]
+    }
+}
+
 variable "messaging_source_email_address" {
     description = "The source email address for non-event emails, e.g., messages etc"
     type = "map"
@@ -158,4 +167,3 @@ variable "messaging_source_email_address" {
         "master" = "Jupiter Team <hello@jupitersave.com>"
     }
 }
-
