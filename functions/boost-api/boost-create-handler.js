@@ -122,7 +122,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
         audienceType: boostParams.boostAudienceType,
         audienceId: boostParams.audienceId,
         endTime: boostParams.boostEndTime.format(),
-        messagePriority: DEFAULT_BOOST_PRIORITY,
+        messagePriority: DEFAULT_BOOST_PRIORITY
     };
     logger('Base of message payload: ', msgPayload);
         
