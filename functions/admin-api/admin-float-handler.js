@@ -68,6 +68,7 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
     logger('Fetched bonus pools: ', bonusPools);
     logger('Bonus pool outflow: ', bonusOutFlow);
     logger('Bonus pool inflow: ', bonusInflow);
+    logger('Float inflows: ', floatInflows);
     
     // then, key the country entries by client id
     const clientCountries = countriesAndClients.reduce((obj, item) => ({ ...obj, [item.clientId]: item }), {});
@@ -95,7 +96,7 @@ const assembleClientFloatData = async (countriesAndClients, clientFloatItems) =>
 
         const floatBalanceInfo = floatBalances.get(floatId)[currency];
         logger(`For ${floatId}, in ${currency}, have ${JSON.stringify(floatBalanceInfo)}`);
-        const floatInflowInfo = floatInflows.get(floatId)[currency];
+        const floatInflowInfo = floatInflows.get(floatId) ? floatInflows.get(floatId)[currency] : { amount: 0, unit: 'HUNDREDTH_CENT', currency };
 
         const bonusPoolInfo = bonusPools.get(floatId);
         const bonusPoolSum = sumBonusPools(bonusPoolInfo, currency);

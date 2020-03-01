@@ -29,7 +29,11 @@ const handler = proxyquire('../admin-user-handler', {
     'publish-common': {
         'publishUserEvent': publishEventStub,
         'sendSystemEmail': sendEmailStub,
-        'sendSms': sendSmsStub
+        'sendSms': sendSmsStub,
+        '@noCallThru': true
+    },
+    './persistence/rds.account': {
+        '@noCallThru': true
     },
     './admin.util': {},
     'moment': momentStub,

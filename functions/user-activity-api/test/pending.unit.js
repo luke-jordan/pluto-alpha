@@ -37,7 +37,8 @@ const handler = proxyquire('../pending-handler', {
         '@noCallThru': true
     },
     'publish-common': {
-        'publishUserEvent': publishEventStub
+        'publishUserEvent': publishEventStub,
+        '@noCallThru': true
     },
     'moment': momentStub
 });

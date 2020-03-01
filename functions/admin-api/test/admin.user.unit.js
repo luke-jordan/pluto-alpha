@@ -46,7 +46,8 @@ const handler = proxyquire('../admin-user-handler', {
         '@noCallThru': true
     },
     'publish-common': {
-        'publishUserEvent': publishEventStub
+        'publishUserEvent': publishEventStub,
+        '@noCallThru': true
     },
     './admin.util': {},
     'moment': momentStub,

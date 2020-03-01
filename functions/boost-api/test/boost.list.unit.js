@@ -94,8 +94,8 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         expect(resultOfChangeFetch).to.have.property('statusCode', 200);
         expect(resultOfChangeFetch).to.have.property('body', JSON.stringify([expectedBoostResult, expiredBoostResult]));
         
-        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED']);
-        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['EXPIRED']);
+        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED', 'EXPIRED']);
+        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED']);
 
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
 
