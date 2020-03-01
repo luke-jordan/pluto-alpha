@@ -19,6 +19,7 @@ const getMessagesStub = sinon.stub();
 const getAccountFigureStub = sinon.stub();
 const updateMessageStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const publishEventStub = sinon.stub();
 
 const fetchDynamoRowStub = sinon.stub();
 
@@ -50,7 +51,12 @@ const handler = proxyquire('../message-picking-handler', {
         'Lambda': MockLambdaClient  
     },
     'dynamo-common': {
-        'fetchSingleRow': fetchDynamoRowStub
+        'fetchSingleRow': fetchDynamoRowStub,
+        '@noCallThru': true
+    },
+    'publish-common': {
+        'publishUserEvent': publishEventStub,
+        '@noCallThru': true
     },
     '@noCallThru': true
 });

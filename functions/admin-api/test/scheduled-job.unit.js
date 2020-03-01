@@ -58,7 +58,8 @@ const handler = proxyquire('../scheduled-job', {
     'moment': momentStub,
     'publish-common': {
         sendSystemEmail: sendSystemEmailStub,
-        publishMultiUserEvent: publishMultiUserEventStub
+        publishMultiUserEvent: publishMultiUserEventStub,
+        '@noCallThru': true
     },
     './admin-float-consistency': {
         'checkAllFloats': checkAllFloatsStub,

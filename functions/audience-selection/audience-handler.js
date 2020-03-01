@@ -33,6 +33,12 @@ const stdProperties = {
         description: 'Last save date',
         expects: 'epochMillis'
     },
+    accountOpenTime: {
+        type: 'match',
+        description: 'Account open date',
+        expects: 'epochMillis',
+        table: 'accountTable'
+    },
     lastCapitalization: {
         type: 'match',
         description: 'Last capitalization',
@@ -135,6 +141,11 @@ const columnConverters = {
                 { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                 { op: 'is', prop: 'transaction_type', value: 'CAPITALIZATION' }
             ]}
+        ]
+    }),
+    accountOpenTime: (condition) => ({
+        conditions: [
+            { op: condition.op, prop: 'creation_time', value: condition.value }
         ]
     }),
     humanReference: (condition) => ({

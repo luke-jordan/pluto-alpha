@@ -49,7 +49,8 @@ const handler = proxyquire('../message-creating-handler', {
         '@noCallThru': true
     },
     'publish-common': {
-        'publishMultiUserEvent': publishMultiLogStub
+        'publishMultiUserEvent': publishMultiLogStub,
+        '@noCallThru': true
     },
     'moment': momentStub,
     'aws-sdk': {
@@ -669,27 +670,9 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
 
     const expectedInsertionRows = (quantity, start = 1) => Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
 
-    // Isolated tests create a space where moment is not stubbed. Useful in cases where the same moment functions need to
-    // return unique values.
-    const msgHandler = proxyquire('../message-creating-handler', {
-        './persistence/rds.notifications': {
-            'getMessageInstruction': getMessageInstructionStub,
-            'getUserIds': getUserIdsStub,
-            'insertUserMessages': insertUserMessagesStub,
-            'getInstructionsByType': getInstructionsByTypeStub,
-            'filterUserIdsForRecurrence': filterUserIdsForRecurrenceStub,
-            'insertPushToken': insertPushTokenStub,
-            'updateInstructionState': updateInstructionStateStub,
-            'updateMessageInstruction': updateMessageInstructionStub,
-            '@noCallThru': true
-        },
-        'aws-sdk': {
-            'Lambda': MockLambdaClient
-        }
-    });
-
     beforeEach(() => {
         resetStubs();
+        momentStub.returns(moment());
     });
 
     it('Sends scheduled once off messages', async () => {
@@ -718,7 +701,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });
         updateMessageInstructionStub.withArgs(mockInstructionId, { lastProcessedTime: sinon.match.string }).resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await msgHandler.createFromPendingInstructions();
+        const result = await handler.createFromPendingInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(argsForRefreshAudienceLambda);
@@ -769,7 +752,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });        
         updateMessageInstructionStub.withArgs(mockInstructionId, { lastProcessedTime: sinon.match.string }).resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await msgHandler.createFromPendingInstructions();
+        const result = await handler.createFromPendingInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(argsForRefreshAudienceLambda);

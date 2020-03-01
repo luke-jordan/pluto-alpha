@@ -76,7 +76,8 @@ const eventHandler = proxyquire('../event-handler', {
         '@noCallThru': true
     },
     'publish-common': {
-        'sendSms': sendSmsStub
+        'sendSms': sendSmsStub,
+        '@noCallThru': true
     }
 });
 
