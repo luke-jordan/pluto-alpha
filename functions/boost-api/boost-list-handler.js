@@ -58,11 +58,14 @@ module.exports.listChangedBoosts = async (event) => {
         const { systemWideUserId } = authParams;
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
 
+        // todo : make this pattern more sensible
         const changeCutOff = moment().subtract(config.get('time.changeCutOff.number'), config.get('time.changeCutOff.unit'));
-        const listActiveBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, ['CREATED', 'OFFERED']);
+        const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED'];
+        const listActiveBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, excludedForActive);
 
         const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));
-        const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, expiredCutOff, ['EXPIRED']);
+        const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
+        const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, expiredCutOff, excludedForExpired);
 
         return util.wrapHttpResponse([...listActiveBoosts, ...listExpiredBoosts]);
     } catch (err) {
