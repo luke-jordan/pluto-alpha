@@ -139,7 +139,8 @@ describe('Converts standard properties into column conditions', () => {
                     { op: 'or', children: [
                         { op: 'and', children: [
                             { op: 'greater_than', prop: 'creation_time', value: oneWeekAgo.format() },
-                            { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
+                            { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
+                            { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' }
                         ]},
                         { op: 'in', prop: 'account_id', value: expectedSubAudienceQuery }
                     ]}
@@ -189,7 +190,9 @@ describe('Converts standard properties into column conditions', () => {
             clientId: mockClientId,
             isDynamic: false,
             conditions: [
-                { op: 'in', prop: 'humanReference', value: 'TESTREF1, TESTREF2, TESTREF3' }
+                { op: 'and', children: [
+                    { prop: 'humanReference', op: 'in', value: 'TESTREF1, TESTREF2, TESTREF3' }
+                ]}
             ]
         };
 
@@ -198,8 +201,63 @@ describe('Converts standard properties into column conditions', () => {
             table: 'account_data.core_account_ledger',
             conditions: [
                 { op: 'and', children: [
-                    { op: 'is', prop: 'responsible_client_id', value: mockClientId },
-                    { op: 'in', prop: 'human_ref', value: 'TESTREF1, TESTREF2, TESTREF3' }
+                    { op: 'in', prop: 'human_ref', value: 'TESTREF1, TESTREF2, TESTREF3' },
+                    { op: 'is', prop: 'responsible_client_id', value: mockClientId }
+                ]
+            }]
+        };
+
+        const expectedPersistenceParams = {
+            audienceType: 'PRIMARY',
+            clientId: 'test-client-id',
+            creatingUserId: mockUserId,
+            isDynamic: false,
+            propertyConditions: mockSelectionJSON.conditions
+        };
+
+        const authorizedRequest = {
+            httpMethod: 'POST',
+            pathParameters: { proxy: 'create' },
+            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
+            body: JSON.stringify(mockSelectionJSON)
+        };
+
+        const mockAudienceId = uuid();
+
+        executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
+
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+
+        expect(wrappedResult).to.have.property('statusCode', 200);
+        expect(wrappedResult).to.have.property('headers');
+        expect(wrappedResult).to.have.property('body');
+
+        const unWrappedResult = JSON.parse(wrappedResult.body);
+        expect(unWrappedResult).to.deep.equal({ audienceId: mockAudienceId, audienceCount: 10000 });
+
+        expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
+    });
+
+    it('Should handle account opened date well', async () => {
+        const testOpenTime = moment().subtract(30, 'days');
+
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            isDynamic: false,
+            conditions: [
+                { op: 'and', children: [
+                    { prop: 'accountOpenTime', op: 'greater_than', value: testOpenTime.valueOf() }
+                ]}
+            ]
+        };
+
+        const expectedSelection = {
+            creatingUserId: mockUserId,
+            table: 'account_data.core_account_ledger',
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'greater_than', prop: 'creation_time', value: testOpenTime.format() },
+                    { op: 'is', prop: 'responsible_client_id', value: mockClientId }
                 ]
             }]
         };
@@ -357,7 +415,7 @@ describe('Converts standard properties into column conditions', () => {
 
         const authorizedRequest = {
             httpMethod: 'POST',
-            pathParameters: { proxy: 'create' },
+            pathParameters: { proxy: 'preview' },
             requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
             body: JSON.stringify(mockSelectionJSON)
         };
@@ -369,7 +427,7 @@ describe('Converts standard properties into column conditions', () => {
         const errorResult = await audienceHandler.handleInboundRequest(authorizedRequest);
 
         expect(errorResult).to.have.property('statusCode', 500);
-        expect(errorResult).to.have.property('message', `The 'human_ref' condition cannot be used in combination with others`);
+        expect(errorResult).to.have.property('message', `Invalid selection, spans tables. Not supported yet`);
 
         expect(executeConditionsStub).to.have.not.been.called;
     });

@@ -130,7 +130,8 @@ const columnConverters = {
        conditions: [
             { op: 'and', children: [
                 { op: condition.op, prop: 'creation_time', value: convertEpochToFormat(condition.value) },
-                { op: 'is', prop: 'settlement_status', value: 'SETTLED' }
+                { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
+                { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' }
             ]}
        ]
     }),
@@ -145,7 +146,7 @@ const columnConverters = {
     }),
     accountOpenTime: (condition) => ({
         conditions: [
-            { op: condition.op, prop: 'creation_time', value: condition.value }
+            { op: condition.op, prop: 'creation_time', value: convertEpochToFormat(condition.value) }
         ]
     }),
     humanReference: (condition) => ({
@@ -161,6 +162,7 @@ const addTableAndClientId = (selection, clientId, tableKey) => {
     
     const existingTopLevel = { ...selectionConditions[0] };
 
+    logger('*** Table Key? : ', tableKey);
     const clientColumn = tableKey === 'accountTable' ? 'responsible_client_id' : 'client_id';
     const clientCondition = { op: 'is', prop: clientColumn, value: clientId };
 
@@ -239,17 +241,18 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
 
 const validateColumnConditions = (conditions) => {
     if (conditions.length === 0) {
-        return;
+        return true;
     }
-    conditions.forEach((condition) => {
-        if (condition.op === 'and') {
-            condition.children.forEach((child) => {
-                if (child.prop === 'humanReference') {
-                    throw new Error(`The 'human_ref' condition cannot be used in combination with others`);
-                }
-            });
-        }
-    });
+    // todo : restore when have a better way to do this
+    // conditions.forEach((condition) => {
+    //     if (condition.op === 'and') {
+    //         condition.children.forEach((child) => {
+    //             if (child.prop === 'humanReference') {
+    //                 throw new Error(`The 'human_ref' condition cannot be used in combination with others`);
+    //             }
+    //         });
+    //     }
+    // });
 };
 
 const hasAccountTableProperty = (conditions) => {
@@ -265,17 +268,31 @@ const hasAccountTableProperty = (conditions) => {
     });
 };
 
+const extractTableArrayFromCondition = (condition) => {
+    logger('Extracting table from condition: ', condition);
+    if (!condition) {
+        return [];
+    }
+
+    if (['and', 'or'].includes(condition.op)) {
+        return condition.children.map((subCondition) => extractTableArrayFromCondition(subCondition)).
+            reduce((list, cum) => [...list, ...cum], []);
+    }
+
+    const propTable = stdProperties[condition.prop].table;
+    return propTable ? [propTable] : [DEFAULT_TABLE];
+};
+
 const extractColumnConditionsTable = (conditions) => {
-    if (conditions.length === 0) {
+    if (!conditions || conditions.length === 0) {
         return false;
     }
     
-    const tables = conditions.map((condition) => {
-        if (['and', 'or'].includes(condition.op)) {
-            return extractColumnConditionsTable(conditions);
-        }
-        return [stdProperties[condition.prop].table] || [];
-    }).reduce((cum, list) => [...cum, ...list], []);
+    const tableDoubleArray = conditions.map((condition) => (extractTableArrayFromCondition(condition)));
+    logger('Table double array: ', tableDoubleArray);
+
+    const tables = [...new Set(tableDoubleArray.reduce((cum, list) => [...cum, ...list], []))];
+
     
     if (tables.length > 1) {
         throw new Error('Invalid selection, spans tables. Not supported yet');
@@ -299,6 +316,12 @@ const constructColumnConditions = async (params) => {
     logParams(params);
 
     const passedPropertyConditions = params.conditions;
+
+    const hasTableSpecified = hasAccountTableProperty(passedPropertyConditions);
+    logger('Has table specified:', hasTableSpecified);
+
+    const conditionTable = hasTableSpecified ? extractColumnConditionsTable(passedPropertyConditions) : DEFAULT_TABLE;
+    logger('Got condition table:', conditionTable);
     
     const { clientId, creatingUserId, isDynamic, sample } = params;
     const persistenceParams = { 
@@ -318,12 +341,6 @@ const constructColumnConditions = async (params) => {
     if (sample) {
         selectionObject.sample = sample;
     }
-
-    const hasTableSpecified = hasAccountTableProperty(passedPropertyConditions);
-    logger('Has table specified:', hasTableSpecified);
-
-    const conditionTable = hasTableSpecified ? extractColumnConditionsTable(passedPropertyConditions) : DEFAULT_TABLE;
-    logger('Got condition table:', conditionTable);
 
     const withClientId = addTableAndClientId(selectionObject, clientId, conditionTable);
     
