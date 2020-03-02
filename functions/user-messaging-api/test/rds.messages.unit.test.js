@@ -349,6 +349,33 @@ describe('*** UNIT TESTING MESSAGGE INSTRUCTION RDS UTIL ***', () => {
         expect(multiTableStub).to.have.been.calledOnceWithExactly([mockInsertionArgs]);
     });
 
+    it('Finds message instructions by flag', async () => {
+        const testInstructionId = uuid();
+
+        const expectedQuery = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
+            `flags && ARRAY[$1] and active = true order by creation_time desc`;
+        selectQueryStub.resolves([{ 'instruction_id': testInstructionId }]);
+
+        const result = await rdsUtil.findMsgInstructionByFlag('SAVING_PAYMENT_SUCCESSFUL');
+        logger('Result of instruction extraction by flag:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal([testInstructionId]);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['EVENT_TYPE::SAVING_PAYMENT_SUCCESSFUL']);
+    });
+
+    it('Returns null where no instruction matches flag', async () => {
+        const expectedQuery = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
+            `flags && ARRAY[$1] and active = true order by creation_time desc`;
+            selectQueryStub.resolves([]);
+
+        const result = await rdsUtil.findMsgInstructionByFlag('SAVING_PAYMENT_SUCCESSFUL');
+        logger('Result of instruction extraction by flag:', result);
+
+        expect(result).to.be.null;
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['EVENT_TYPE::SAVING_PAYMENT_SUCCESSFUL']);
+    });
+
 });
 
 describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {

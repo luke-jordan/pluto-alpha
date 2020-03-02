@@ -336,3 +336,15 @@ module.exports.deletePushToken = async ({ token, provider, userId }) => {
 
     return { deleteCount };
 };
+
+module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
+    const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
+        `flags && ARRAY[$1] and active = true order by creation_time desc`;
+    const results = await rdsConnection.selectQuery(query, [`EVENT_TYPE::${msgInstructionFlag}`]);
+    logger('Got an instructions? : ', results);
+    if (Array.isArray(results) && results.length > 0) {
+        return results.map((result) => result['instruction_id']);
+    }
+
+    return null;
+};
