@@ -82,6 +82,12 @@ const recheckTransaction = async ({ transactionId, systemWideUserId }) => {
     return { statusCode: 400, body: JSON.stringify({ error: 'BAD_TRANSACTION_TYPE' })};
 };
 
+const getPendingxTx = async (systemWideUserId) => {
+    const userAccounts = await rds.findAccountsForUser(systemWideUserId);
+    const currentPending = await rds.fetchPendingTransactions(userAccounts[0]);
+    return { statusCode: 200, body: JSON.stringify({ pending: currentPending })};
+};
+
 module.exports.handlePendingTxEvent = async (event) => {
     try {
         if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
@@ -94,6 +100,11 @@ module.exports.handlePendingTxEvent = async (event) => {
         logger(`Handling pending transaction, user Id: ${systemWideUserId}, operation: ${operation}, parameters: ${JSON.stringify(params)}`);
 
         const { transactionId } = params;
+
+        // if no transaction ID, get the details for the latest transaction and return them
+        if (operation === 'list' || !transactionId) {
+            return getPendingxTx(systemWideUserId);
+        }
         
         if (operation === 'cancel') {
             return cancelTransaction({ transactionId, systemWideUserId });

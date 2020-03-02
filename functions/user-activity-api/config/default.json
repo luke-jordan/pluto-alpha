@@ -82,6 +82,7 @@
     "templates": {
         "bucket": "staging.jupiter.templates",
         "saveEmail": "emails/savingEventEmail.html",
+        "eftEmail": "emails/eftInboundEmail.html",
         "withdrawalEmail": "emails/withdrawalEmail.html",
         "payment": {
             "success": "payment-success.html",

@@ -98,6 +98,9 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, sendEmailStub, updateTagsStub, updateTxFlagsStub, 
             fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub
         );
+
+        getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'some-queue'}) });
+        sqsSendStub.returns({ promise: () => 'SHOULD_NOT_HAPPEN'});
     });
 
     const commonAssertions = ({ resultOfHandle, investmentInvocation }) => {
@@ -110,7 +113,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
         expect(fetchBSheetAccStub).to.have.been.calledOnce;
         expect(updateTxFlagsStub).to.have.been.calledOnce;
-        expectNoCalls(sqsSendStub);
+        expectNoCalls(getQueueUrlStub, sqsSendStub);
     };
 
     it('Handles non-special (e.g., login) event properly', async () => {
@@ -246,24 +249,56 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(sqsSendStub).to.have.been.calledOnce;
     });
 
+    it('Handles saving initiation (EFT) correctly', async () => {
+        const saveStartEvent = {
+            userId: testId,
+            eventType: 'SAVING_EVENT_INITIATED',
+            timeInMillis: moment().valueOf(),
+            context: {
+                saveInformation: {
+                    paymentProvider: 'MANUAL_ETF',
+                    amount: 1000000,
+                    currency: 'USD',
+                    unit: 'HUNDREDTH_CENT'
+                },
+                initiationResult: {
+                    humanReference: 'JSAVE101'
+                }
+            }
+        };
+
+        // we just need the user status
+        const testProfile = { body: JSON.stringify({ personalName: 'John', familyName: 'Nkomo', userStatus: 'ACCOUNT_OPENED' }) };
+        redisGetStub.withArgs(`USER_PROFILE::${testId}`).resolves(null);
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testId, includeContactMethod: false });
+        lamdbaInvokeStub.withArgs(userProfileInvocation).returns({ promise: () => ({ Payload: JSON.stringify(testProfile) }) });
+
+        const statusInstruct = { systemWideUserId: testId, updatedUserStatus: { changeTo: 'USER_HAS_INITIATED_SAVE', reasonToLog: 'Saving event started' }};
+        const statusUpdateInvoke = helper.wrapLambdaInvoc('profile_status_update', true, statusInstruct);
+        lamdbaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
+        sendEmailStub.returns({ promise: () => 'Email sent' });
+
+        const resultOfCall = await eventHandler.handleUserEvent(wrapEventSns(saveStartEvent));
+        expect(resultOfCall).to.deep.equal({ statusCode: 200 }); 
+    });
+
     // extremely complicated. even for its author. todo : split this thing so it is possible to debug without as much pain.
     it('Handles saving event happy path correctly', async () => {
         const testAccountId = uuid();
         const testAccountNumber = 'POL1';
         const timeNow = moment().valueOf();
         const testUpdateTime = moment();
-        const activeStubs = [lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, updateTxFlagsStub, fetchBSheetAccStub];
+        const activeStubs = [lamdbaInvokeStub, getObjectStub, sendEmailStub, updateTxFlagsStub, fetchBSheetAccStub];
 
         const configureStubs = (bsheetInvocation) => {
             lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-            
-            const bsheetResult = { result: 'ADDED' };
-            lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify(bsheetResult)})});
+            lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
 
-            getObjectStub.returns({ promise: () => ({
-                Body: { toString: () => 'This is an email template' 
-            }})});
+            getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
             sendEmailStub.returns({ promise: () => 'Email sent' });
+            
             fetchBSheetAccStub.resolves('POL1');
             updateTxFlagsStub.resolves({ updatedTime: testUpdateTime });
         };
@@ -287,23 +322,20 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         };
 
         // minor variations in calls, hence the aggregation
-        let snsEvent = wrapEventSns(savingEvent);
-        let resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
+        let resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);
 
         savingEvent.context.saveCount = 1;
         configureStubs(investmentInvocation);
         sendEmailStub.throws({ promise: () => new Error('Error sending email') });
-        snsEvent = wrapEventSns(savingEvent);
-        resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
+        resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);
 
         savingEvent.context.saveCount = 2;
         configureStubs(investmentInvocation);
-        snsEvent = wrapEventSns(savingEvent);
-        resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
+        resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);
 
@@ -313,9 +345,9 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             operation: 'INVEST',
             transactionDetails: { accountNumber: testAccountNumber, amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' }
         });
+
         configureStubs(investmentInvocation);
-        snsEvent = wrapEventSns(savingEvent);
-        resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
+        resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);
 
@@ -326,18 +358,16 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             transactionDetails: { accountNumber: testAccountNumber, amount: null, unit: 'WHOLE_CURRENCY', currency: '' }
         });
         configureStubs(investmentInvocation);
-        snsEvent = wrapEventSns(savingEvent);
-        
-        resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
-        logger('Result:', resultOfHandle);
-        expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
+        const resultOfBadAmount = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
+        logger('Result:', resultOfBadAmount);
+        expect(resultOfBadAmount).to.deep.equal({ statusCode: 500 });
 
         expect(lamdbaInvokeStub).to.have.been.calledThrice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(investmentInvocation);
         expect(fetchBSheetAccStub).to.have.been.calledOnce;
         expect(updateTxFlagsStub).to.have.been.calledOnce;
         expect(sendEmailStub).to.have.not.been.called;
-        expectNoCalls(sqsSendStub);
+        expect(sqsSendStub).to.have.been.calledOnce;
     });
 
     it('Handles withdrawal event happy path correctly', async () => {

@@ -17,6 +17,9 @@ const checkPendingSaveStub = sinon.stub();
 
 const publishEventStub = sinon.stub();
 
+const listPendingStub = sinon.stub();
+const fetchAccountForUserStub = sinon.stub();
+
 const fetchTransactionStub = sinon.stub();
 const updateTxSettlementStatusStub = sinon.stub();
 const fetchLogsStub = sinon.stub();
@@ -34,6 +37,8 @@ const handler = proxyquire('../pending-handler', {
         'fetchTransaction': fetchTransactionStub,
         'updateTxSettlementStatus': updateTxSettlementStatusStub,
         'fetchLogsForTransaction': fetchLogsStub,
+        'findAccountsForUser': fetchAccountForUserStub,
+        'fetchPendingTransactions': listPendingStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -56,6 +61,22 @@ const wrapParamsWithPath = (params, path, systemWideUserId = mockUserId) => ({
         proxy: path
     },
     body: JSON.stringify(params)
+});
+
+describe('*** Unit test simple listing', () => {
+    
+    it('Handles listing pending transactions', async () => {
+        fetchAccountForUserStub.withArgs(mockUserId).resolves(['some-account']);
+        listPendingStub.withArgs('some-account').resolves([]);
+        const listResult = await handler.handlePendingTxEvent(wrapParamsWithPath({}, 'list'));
+        expect(listResult).to.deep.equal({
+            statusCode: 200,
+            body: JSON.stringify({
+                pending: []
+            })
+        });
+    });
+
 });
 
 // todo : check that user ID matches account owner
