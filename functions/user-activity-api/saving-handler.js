@@ -153,6 +153,8 @@ module.exports.initiatePendingSave = async (event) => {
       const clientFloatVars = await dynamo.fetchFloatVarsForBalanceCalc(saveInformation.clientId, saveInformation.floatId);
       initiationResult.humanReference = payment.generateBankRef(paymentInfo.accountInfo);
       initiationResult.bankDetails = { ...clientFloatVars.bankDetails, useReference: initiationResult.humanReference };
+      const detailsStash = await persistence.addPaymentInfoToTx({ transactionId, bankRef: initiationResult.humanReference, paymentProvider: 'MANUAL_EFT' });
+      logger('Result of stashing details: ', detailsStash);
     }
 
     logger('Validated request, publishing user event');

@@ -48,8 +48,7 @@ module.exports.fetchTransactionsForHistory = async (accountId) => {
 
 module.exports.fetchPendingTransactions = async (accountId) => {
   const txTypes = ['USER_SAVING_EVENT', 'WITHDRAWAL'];
-  const query = `select transaction_id, account_id, transaction_type, settlement_status, human_reference, amount, unit, currency ` +
-        `from ${config.get('tables.accountTransactions')} where account_id = $1 and settlement_status = $2 and ` +
+  const query = `select * from ${config.get('tables.accountTransactions')} where account_id = $1 and settlement_status = $2 and ` +
         `transaction_type in ($3, $4) order by creation_time desc`;
   const rows = await rdsConnection.selectQuery(query, [accountId, 'PENDING', ...txTypes]);
   return rows.map((row) => camelizeKeys(row));
@@ -510,16 +509,45 @@ module.exports.updateTxToSettled = async ({ transactionId, paymentDetails, settl
  * @param {string} bankReference The human readable short bank reference for the payment
  * @param {string} paymentUrl The URL for this payment
  */
-module.exports.addPaymentInfoToTx = async ({ transactionId, paymentProvider, paymentRef, bankRef, paymentUrl }) => {
-    logger('Adding payment info to TX before returning');
+module.exports.addPaymentInfoToTx = async (params) => {
+    logger('Adding payment info to TX before returning, passed params: ', params);
 
-    const updateQuery = `update ${config.get('tables.accountTransactions')} set payment_provider = $1, ` +
-        `payment_reference = $2, human_reference = $3, tags = array_append(tags, $4) where transaction_id = $5 returning updated_time`;
-    const updateValues = [paymentProvider, paymentRef, bankRef, `PAYMENT_URL::${paymentUrl}`, transactionId];
+    const { transactionId, paymentProvider, paymentRef, bankRef, paymentUrl } = params;
+    
+    // update record would probably be better here but no time for conversion of it + tests + not sure about flags clause
+    const columnClauses = [];
+    const queryValues = [];
+    
+    if (paymentProvider) {
+        columnClauses.push('payment_provider = $1');
+        queryValues.push(paymentProvider);
+    }
+
+    if (paymentRef) {
+        columnClauses.push(`payment_reference = $${columnClauses.length + 1}`);
+        queryValues.push(paymentRef);
+    }
+
+    if (bankRef) {
+        columnClauses.push(`human_reference = $${columnClauses.length + 1}`);
+        queryValues.push(bankRef);
+    }
+
+    if (paymentUrl) {
+        columnClauses.push(`tags = array_append(tags, $${columnClauses.length + 1})`);
+        queryValues.push(`PAYMENT_URL::${paymentUrl}`);
+    }
+
+    const assembledUpdate = columnClauses.join(', ');
+
+    queryValues.push(transactionId);
+
+    const updateQuery = `update ${config.get('tables.accountTransactions')} set ${assembledUpdate} ` +
+        `where transaction_id = $${columnClauses.length + 1} returning updated_time`;
 
     logger('Updating tx via query: ', updateQuery);
-    logger('And with update values: ', updateValues);
-    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
+    logger('And with update values: ', queryValues);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, queryValues);
     logger('Payment info result from RDS: ', resultOfUpdate);
 
     const updateMoment = moment(resultOfUpdate['rows'][0]['updated_time']);

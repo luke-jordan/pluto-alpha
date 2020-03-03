@@ -214,7 +214,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         });
 
         expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
-        testHelper.expectNoCalls(getPaymentUrlStub, addPaymentInfoRdsStub);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, paymentProvider: 'MANUAL_EFT', bankRef: 'JUPSAVER31-00001' });
+        testHelper.expectNoCalls(getPaymentUrlStub);
     });
 
     it('Returns duplicate save if found', async () => {

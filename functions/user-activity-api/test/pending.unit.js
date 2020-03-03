@@ -22,7 +22,13 @@ const fetchAccountForUserStub = sinon.stub();
 
 const fetchTransactionStub = sinon.stub();
 const updateTxSettlementStatusStub = sinon.stub();
+const fetchInfoForBankRefStub = sinon.stub();
+const addPaymentInfoRdsStub = sinon.stub();
 const fetchLogsStub = sinon.stub();
+
+const getPaymentUrlStub = sinon.stub();
+
+const getFloatVarsStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
@@ -33,12 +39,22 @@ const handler = proxyquire('../pending-handler', {
         'checkPendingPayment': checkPendingSaveStub,
         '@noCallThru': true
     },
+    './payment-link': {
+        'getPaymentLink': getPaymentUrlStub,
+        '@noCallThru': true
+    },
     './persistence/rds': {
         'fetchTransaction': fetchTransactionStub,
         'updateTxSettlementStatus': updateTxSettlementStatusStub,
         'fetchLogsForTransaction': fetchLogsStub,
         'findAccountsForUser': fetchAccountForUserStub,
         'fetchPendingTransactions': listPendingStub,
+        'fetchInfoForBankRef': fetchInfoForBankRefStub,
+        'addPaymentInfoToTx': addPaymentInfoRdsStub,
+        '@noCallThru': true
+    },
+    './persistence/dynamodb': {
+        'fetchFloatVarsForBalanceCalc': getFloatVarsStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -75,6 +91,158 @@ describe('*** Unit test simple listing', () => {
                 pending: []
             })
         });
+    });
+
+    it('Also gives error on unknown operation', async () => {
+        const mockEvent = wrapParamsWithPath({ transactionId: 'bad-or-dodgy' }, 'dothings');
+        const badResult = await handler.handlePendingTxEvent(mockEvent);
+        expect(badResult).to.deep.equal({ statusCode: 400, body: JSON.stringify({ error: 'UNKNOWN_OPERATION' })});
+    });
+
+});
+
+describe('*** Unit test switching payment method', () => {
+   
+    const mockTransactionId = uuid();
+    const mockAccountId = uuid();
+
+    beforeEach(() => helper.resetStubs(fetchTransactionStub, fetchInfoForBankRefStub, getPaymentUrlStub, addPaymentInfoRdsStub, getFloatVarsStub));
+    
+    it('Handles switching from manual EFT to instant EFT, no prior instant EFT info', async () => {
+        const mockAmountDict = { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' };
+        const mockTransaction = { transactionId: mockTransactionId, accountId: mockAccountId, transactionType: 'USER_SAVING_EVENT', paymentProvider: 'MANUAL_EFT', humanReference: 'JSAVE101', ...mockAmountDict };
+        const mockInfo = { humanRef: 'JSAVE', count: 100};
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'OZOW' }, 'update');
+
+        fetchTransactionStub.resolves(mockTransaction);
+        fetchInfoForBankRefStub.resolves(mockInfo);
+        getPaymentUrlStub.resolves({ paymentUrl: 'https://something', paymentRef: 'some-payment-id', bankRef: 'JSAVE101' });
+
+        const result = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(result);
+        expect(resultBody).to.have.property('paymentRedirectDetails');
+        expect(resultBody.paymentRedirectDetails).to.deep.equal({ urlToCompletePayment: 'https://something' });
+        expect(resultBody).to.have.property('humanReference', 'JSAVE101');
+        expect(resultBody).to.have.property('transactionDetails');
+
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(mockAccountId);
+
+        const expectedPaymentParams = { transactionId: mockTransactionId, accountInfo: { bankRefStem: 'JSAVE', priorSaveCount: 100 }, amountDict: mockAmountDict };
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentParams);
+        
+        const expectedUpdateParams = { transactionId: mockTransactionId, paymentProvider: 'OZOW', paymentRef: 'some-payment-id', paymentUrl: 'https://something', bankRef: 'JSAVE101' };
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly(expectedUpdateParams);
+    });
+
+    it('Handles switching from manual EFT to instant EFT, prior instant EFT info exists', async () => {
+        const mockTransaction = { 
+            transactionId: mockTransactionId,
+            transactionType: 'USER_SAVING_EVENT', 
+            paymentProvider: 'MANUAL_EFT', 
+            humanReference: 'JSAVE101',
+            paymentReference: 'some-id',
+            flags: [`PAYMENT_URL::https://somelink`]
+        };
+
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'OZOW' }, 'update');
+        
+        fetchTransactionStub.resolves(mockTransaction);
+
+        const result = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(result);
+        expect(resultBody).to.have.property('paymentRedirectDetails');
+        expect(resultBody.paymentRedirectDetails).to.deep.equal({ urlToCompletePayment: 'https://somelink' });
+        expect(resultBody).to.have.property('humanReference', 'JSAVE101');
+        expect(resultBody).to.have.property('transactionDetails');
+        
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: mockTransactionId, paymentProvider: 'OZOW' });
+        helper.expectNoCalls(fetchInfoForBankRefStub, getPaymentUrlStub);
+    });
+
+    it('Just returns payment URL if already instant', async () => {
+        const mockTransaction = { 
+            transactionType: 'USER_SAVING_EVENT', 
+            paymentProvider: 'OZOW', 
+            humanReference: 'JSAVE101',
+            paymentReference: 'some-id',
+            flags: [`PAYMENT_URL::https://somelink`]
+        };
+
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'OZOW' }, 'update');
+        
+        fetchTransactionStub.resolves(mockTransaction);
+
+        const result = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(result);
+        expect(resultBody).to.have.property('paymentRedirectDetails');
+        expect(resultBody.paymentRedirectDetails).to.deep.equal({ urlToCompletePayment: 'https://somelink' });
+        expect(resultBody).to.have.property('humanReference', 'JSAVE101');
+        expect(resultBody).to.have.property('transactionDetails');
+        
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        helper.expectNoCalls(fetchInfoForBankRefStub, getPaymentUrlStub, addPaymentInfoRdsStub);
+    });
+
+    it('Handles switching from instant EFT to manual EFT', async () => {
+        const mockTransaction = { transactionId: mockTransactionId, transactionType: 'USER_SAVING_EVENT', clientId: 'test-client', floatId: 'test-float', paymentProvider: 'OZOW', humanReference: 'JSAVE101' };
+
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'MANUAL_EFT'}, 'update');
+        
+        fetchTransactionStub.resolves(mockTransaction);
+        const mockBankDetails = { bankName: 'Capitec', beneficiaryName: 'Jupiter Stokvel' };
+        getFloatVarsStub.resolves({ bankDetails: mockBankDetails });
+        
+        const result = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(result);
+
+        expect(resultBody).to.have.property('humanReference', 'JSAVE101');
+        expect(resultBody).to.have.property('bankDetails');
+        expect(resultBody.bankDetails).to.deep.equal({ bankName: 'Capitec', beneficiaryName: 'Jupiter Stokvel' });
+
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        expect(getFloatVarsStub).to.have.been.calledOnceWithExactly('test-client', 'test-float');
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ paymentProvider: 'MANUAL_EFT', transactionId: mockTransactionId }); // we do not erase this
+        helper.expectNoCalls(fetchInfoForBankRefStub, getPaymentUrlStub);
+    });
+
+    it('Just returns with bank details again if manual payment already set', async () => {
+        const mockTransaction = { transactionType: 'USER_SAVING_EVENT', clientId: 'test-client', floatId: 'test-float', paymentProvider: 'MANUAL_EFT', humanReference: 'JSAVE101' };
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'MANUAL_EFT' }, 'update');
+        
+        fetchTransactionStub.resolves(mockTransaction);
+        const mockBankDetails = { bankName: 'Capitec', beneficiaryName: 'Jupiter Stokvel' };
+        getFloatVarsStub.resolves({ bankDetails: mockBankDetails });
+        
+        const result = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(result);
+        expect(resultBody).to.have.property('humanReference', 'JSAVE101');
+        expect(resultBody).to.have.property('bankDetails');
+        expect(resultBody.bankDetails).to.deep.equal({ bankName: 'Capitec', beneficiaryName: 'Jupiter Stokvel' });
+
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        expect(getFloatVarsStub).to.have.been.calledOnceWithExactly('test-client', 'test-float');
+        helper.expectNoCalls(addPaymentInfoRdsStub, fetchInfoForBankRefStub, getPaymentUrlStub);
+    });
+
+    it('Returns settled if transaction already done', async () => {
+        const mockTransaction = { transactionType: 'USER_SAVING_EVENT', settlementStatus: 'SETTLED', humanReference: 'JSAVE101' };
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'OZOW' }, 'update');
+        fetchTransactionStub.resolves(mockTransaction);
+        const result = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(result);
+        expect(resultBody).to.deep.equal({ settlementStatus: 'SETTLED' });
+        helper.expectNoCalls(getFloatVarsStub, addPaymentInfoRdsStub, fetchInfoForBankRefStub, getPaymentUrlStub);
+    });
+
+    it('Returns bad request if transaction is not a save', async () => {
+        const mockTransaction = { transactionType: 'WITHDRAWAL' };
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'MANUAL_EFT' }, 'update');
+        fetchTransactionStub.resolves(mockTransaction);
+        const result = await handler.handlePendingTxEvent(mockEvent);
+        expect(result).to.deep.equal({ statusCode: 400, body: JSON.stringify({ message: 'Transaction is not a save' })});
+        helper.expectNoCalls(getFloatVarsStub, addPaymentInfoRdsStub, fetchInfoForBankRefStub, getPaymentUrlStub);
     });
 
 });

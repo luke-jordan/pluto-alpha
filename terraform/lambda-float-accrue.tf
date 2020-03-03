@@ -89,17 +89,17 @@ resource "aws_cloudwatch_log_group" "float_accrue" {
 }
 
 resource "aws_iam_role_policy_attachment" "float_accrue_basic_execution_policy" {
-  role = "${aws_iam_role.float_accrue_role.name}"
+  role = aws_iam_role.float_accrue_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "float_accrue_vpc_execution_policy" {
-  role = "${aws_iam_role.float_accrue_role.name}"
+  role = aws_iam_role.float_accrue_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "float_accrue_client_float_table_access" {
-  role = "${aws_iam_role.float_accrue_role.name}"
+  role = aws_iam_role.float_accrue_role.name
   policy_arn = "${aws_iam_policy.dynamo_table_client_float_table_access.arn}"
 }
 
@@ -109,7 +109,7 @@ resource "aws_iam_role_policy_attachment" "float_accrue_s3_put_access" {
 }
 
 resource "aws_iam_role_policy_attachment" "float_accrue_secret_get" {
-  role = "${aws_iam_role.float_accrue_role.name}"
+  role = aws_iam_role.float_accrue_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_float_worker_read"
 }
 

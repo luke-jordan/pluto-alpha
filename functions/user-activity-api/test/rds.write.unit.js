@@ -504,7 +504,7 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         expect(multiOpStub).to.have.been.calledOnce;
     });
 
-    it('Updates transaction with payment info', async () => {
+    it('Updates transaction with payment info, if all given', async () => {
         const updateTime = moment();
         
         const expectedQuery = `update transaction_data.core_transaction_ledger set payment_provider = $1, ` +
@@ -514,6 +514,27 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         updateRecordStub.resolves({ 'rows': [{ 'updated_time': updateTime.format() }] });
 
         const passedParams = { transactionId: testTxId, paymentUrl: 'https://someurl', paymentProvider: 'PROVIDER', paymentRef: 'test-reference', bankRef: 'JUPSAVER31-0001' };
+        
+        const resultOfUpdate = await rds.addPaymentInfoToTx(passedParams);
+        
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.have.property('updatedTime');
+        expect(resultOfUpdate.updatedTime).to.deep.equal(moment(updateTime.format()));
+        
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
+    });
+
+    // e.g., in switching from manual to instant and back, do not overwrite
+    it('Updates transaction with payment info, but does not overwrite blank fields', async () => {
+        const updateTime = moment();
+        
+        const expectedQuery = `update transaction_data.core_transaction_ledger set payment_provider = $1, ` +
+            `human_reference = $2 where transaction_id = $3 returning updated_time`;
+        const expectedValues = ['MANUAL_EFT', 'JUPSAVER31-0001', testTxId];
+
+        updateRecordStub.resolves({ 'rows': [{ 'updated_time': updateTime.format() }] });
+
+        const passedParams = { transactionId: testTxId, paymentProvider: 'MANUAL_EFT', bankRef: 'JUPSAVER31-0001' };
         
         const resultOfUpdate = await rds.addPaymentInfoToTx(passedParams);
         
