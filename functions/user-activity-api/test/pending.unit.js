@@ -407,9 +407,12 @@ describe('*** Unit test rechecking transaction', () => {
     it('Handles rechecking a save, if settled already (e.g., by admin)', async () => {
         fetchTransactionStub.resolves({ 
             transactionType: 'USER_SAVING_EVENT', 
-            accountId: mockAccountId, currency: 'ZAR', 
+            accountId: mockAccountId, 
             settlementStatus: 'SETTLED', 
-            settlementTime: mockSettledTime.format() 
+            settlementTime: mockSettledTime.format(),
+            amount: 100,
+            unit: 'HUNDREDTH_CENT',
+            currency: 'ZAR'
         });
         
         fetchLogsStub.resolves([{ logId: 'some-log', logType: 'ADMIN_SETTLED_SAVE' }]);
@@ -422,6 +425,7 @@ describe('*** Unit test rechecking transaction', () => {
         expect(resultBody).to.deep.equal({ 
             result: 'ADMIN_MARKED_PAID', 
             settlementTimeMillis: mockSettledTime.valueOf(),
+            transactionAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
             newBalance: { amount: 10000, unit: 100, currency: 'ZAR' }
         });
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
@@ -429,7 +433,9 @@ describe('*** Unit test rechecking transaction', () => {
     });
 
     it('Handles rechecking a save, if settled already but no logs', async () => {
-        fetchTransactionStub.resolves({ transactionId: mockTransactionId, transactionType: 'USER_SAVING_EVENT', settlementStatus: 'SETTLED', settlementTime: mockSettledTime.format() });
+        let mockTx = { transactionId: mockTransactionId, transactionType: 'USER_SAVING_EVENT', settlementStatus: 'SETTLED', settlementTime: mockSettledTime.format() };
+        mockTx = { ...mockTx, amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR' };
+        fetchTransactionStub.resolves(mockTx);
         fetchLogsStub.resolves([]);
         momentStub.withArgs(mockSettledTime.format()).returns(mockSettledTime);
         getAccountBalanceStub.resolves({ amount: 10000, unit: 100, currency: 'ZAR' });
@@ -440,6 +446,7 @@ describe('*** Unit test rechecking transaction', () => {
         expect(resultBody).to.deep.equal({ 
             result: 'PAYMENT_SUCCEEDED', 
             settlementTimeMillis: mockSettledTime.valueOf(),
+            transactionAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
             newBalance: { amount: 10000, unit: 100, currency: 'ZAR' }
         });
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);

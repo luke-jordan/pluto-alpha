@@ -45,7 +45,7 @@ const cancelTransaction = async ({ transactionId, systemWideUserId }) => {
     return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' }) };
 };
 
-const handlePendingSaveCheck = async ({ transactionId, settlementStatus, settlementTime, accountId, currency }) => {
+const handlePendingSaveCheck = async ({ transactionId, settlementStatus, settlementTime, accountId, amount, unit, currency }) => {
     if (settlementStatus === 'SETTLED') {
         const [transactionLogs, newBalance] = await Promise.all([
             rds.fetchLogsForTransaction(transactionId),
@@ -54,7 +54,8 @@ const handlePendingSaveCheck = async ({ transactionId, settlementStatus, settlem
         const wasAdminSettled = transactionLogs.find((log) => log.logType === 'ADMIN_SETTLED_SAVE');
         const result = wasAdminSettled ? 'ADMIN_MARKED_PAID' : 'PAYMENT_SUCCEEDED';
         const settlementTimeMillis = moment(settlementTime).valueOf();
-        return { statusCode: 200, body: JSON.stringify({ result, settlementTimeMillis, newBalance })};
+        const transactionAmount = { amount, unit, currency };
+        return { statusCode: 200, body: JSON.stringify({ result, settlementTimeMillis, newBalance, transactionAmount })};
     }
 
     if (settlementStatus === 'CANCELLED') {
