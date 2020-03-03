@@ -142,7 +142,7 @@ describe('*** Unit test switching payment method', () => {
             paymentProvider: 'MANUAL_EFT', 
             humanReference: 'JSAVE101',
             paymentReference: 'some-id',
-            flags: [`PAYMENT_URL::https://somelink`]
+            tags: [`PAYMENT_URL::https://somelink`]
         };
 
         const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'OZOW' }, 'update');
@@ -167,7 +167,7 @@ describe('*** Unit test switching payment method', () => {
             paymentProvider: 'OZOW', 
             humanReference: 'JSAVE101',
             paymentReference: 'some-id',
-            flags: [`PAYMENT_URL::https://somelink`]
+            tags: [`PAYMENT_URL::https://somelink`]
         };
 
         const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId, paymentMethod: 'OZOW' }, 'update');

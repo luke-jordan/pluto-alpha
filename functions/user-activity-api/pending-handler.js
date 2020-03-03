@@ -86,14 +86,14 @@ const recheckTransaction = async ({ transactionId, systemWideUserId }) => {
 };
 
 const extractPaymentLink = (transactionDetails) => {
-    if (!transactionDetails.flags || transactionDetails.flags.length === 0) {
+    if (!transactionDetails.tags || transactionDetails.tags.length === 0) {
         logger('Transaction has no flags, exit', transactionDetails.falgs);
         return '';
     }
 
     logger('Extracting payment link from flags: ', transactionDetails.flags);
-    const paymentLinkFlag = transactionDetails.flags.find((flag) => flag.startsWith('PAYMENT_URL::'));
-    return paymentLinkFlag ? paymentLinkFlag.substring('PAYMENT_URL::'.length) : '';
+    const paymentLinkTag = transactionDetails.tags.find((tag) => tag.startsWith('PAYMENT_URL::'));
+    return paymentLinkTag ? paymentLinkTag.substring('PAYMENT_URL::'.length) : '';
 };
 
 const generatePaymentLink = async (transactionDetails) => {

@@ -170,6 +170,7 @@ const formatTx = (event) => ({
         unit: event.unit,
         humanReference: event.humanReference,
         paymentProvider: event.paymentProvider,
+        tags: event.tags,
         flags: event.flags
     }
 });
