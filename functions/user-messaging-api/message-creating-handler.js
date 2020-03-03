@@ -374,7 +374,7 @@ module.exports.createFromUserEvent = async (snsEvent) => {
         ];
 
         if (blackList.includes(eventType)) {
-            return { statusCode: 403 };
+            return { statusCode: 200 };
         }
 
         const instructionIds = await rdsUtil.findMsgInstructionByFlag(eventType);

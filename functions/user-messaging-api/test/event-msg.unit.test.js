@@ -115,14 +115,14 @@ describe('*** UNIT TEST EVENT TRIGGERED MESSAGES ***', () => {
 
     });
 
-    it('Returns 403 when called by blacklisted event', async () => {
+    it('Returns 200 when called by blacklisted event', async () => {
 
         const mockEvent = wrapEventSns({ instructionId: mockInstructionId, userId: mockUserId, eventType: 'MESSAGE_PUSH_NOTIFICATION_SENT' });
 
         const result = await handler.createFromUserEvent(mockEvent);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ statusCode: 403 });
+        expect(result).to.deep.equal({ statusCode: 200 });
 
         expect(findMsgInstructionByFlagStub).to.have.not.been.called;
         expect(getMessageInstructionStub).to.have.not.been.called;
