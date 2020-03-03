@@ -168,7 +168,10 @@ const formatTx = (event) => ({
         amount: event.amount,
         currency: event.currency,
         unit: event.unit,
-        humanReference: event.humanReference
+        humanReference: event.humanReference,
+        paymentProvider: event.paymentProvider,
+        tags: event.tags,
+        flags: event.flags
     }
 });
 
@@ -226,7 +229,7 @@ module.exports.fetchUserHistory = async (event) => {
         ]);
 
         logger(`Got ${priorTransactions.length} prior transactions, sample: ${JSON.stringify(priorTransactions)}`);
-        logger('Got ', pendingTransactions.length, ' pending transactions too: ', pendingTransactions);
+        // logger('Got ', pendingTransactions.length, ' pending transactions too: ', pendingTransactions);
 
         const normalizedTransactions = await normalizeTx(priorTransactions);
         const userHistory = [...normalizeHistory(priorEvents.userEvents), ...normalizedTransactions];

@@ -108,6 +108,11 @@ resource "aws_iam_role_policy_attachment" "transaction_pending_handle_payment_ur
   policy_arn = aws_iam_policy.lambda_invoke_payment_access.arn
 }
 
+resource "aws_iam_role_policy_attachment" "transaction_pending_client_float_get" {
+  role = aws_iam_role.transaction_pending_handle_role.name
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
+}
+
 resource "aws_iam_role_policy_attachment" "transaction_pending_handle_secret_get" {
   role = aws_iam_role.transaction_pending_handle_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"

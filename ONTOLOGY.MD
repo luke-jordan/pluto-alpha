@@ -41,6 +41,26 @@ float's realized returns that should accumulate to the bonus pool
 A portion of the float's realized returns that are reserved for the clients, as their revenue. This share is configured per client
 and per float.
 
+## BACK END EVENT TYPES
+
+* PASSWORD_SET
+* USER_LOGIN
+* STATUS_CHANGED
+* SAVING_EVENT_INITIATED
+* SAVING_EVENT_PAYMENT_CHECK
+* SAVING_PAYMENT_SUCCESSFUL
+* SAVING_EVENT_CANCELLED
+* WITHDRAWAL_EVENT_CONFIRMED
+* WITHDRAWAL_EVENT_CANCELLED
+* WITHDRAWAL_COMPLETED
+* USER_CREATED_ACCOUNT
+* BOOST_REDEEMED
+* USER_GAME_COMPLETION
+* MESSAGE_PUSH_NOTIFICATION_SENT
+* MESSAGE_CREATED
+* MESSAGE_FETCHED
+* USER_REGISTERED
+
 ## AUDIENCE SELECTION CLAUSES
 
 Various core operations require that a group of users is selected from among the user base. The syntax for such audience selection must be persisted with the relevant instruction (e.g., a message send or boost offer). The syntax is as follows:

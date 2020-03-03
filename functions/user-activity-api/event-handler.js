@@ -7,6 +7,8 @@
 
 const config = require('config');
 const format = require('string-format');
+const htmlToText = require('html-to-text');
+
 const logger = require('debug')('jupiter:event-handling:main');
 
 const publisher = require('publish-common');
@@ -110,6 +112,26 @@ const obtainTemplate = async (templateName) => {
     return templateText;
 };
 
+const formatAmountDict = ({ amount, unit, currency }) => {
+    const wholeCurrencyAmount = amount / UNIT_DIVISORS_TO_WHOLE[unit];
+
+    // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
+    // implement for those countries where client opcos have launched
+    if (currency === 'ZAR') {
+        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+        return `R${emFormat.format(wholeCurrencyAmount)}`;
+    }
+
+    const numberFormat = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: currency,
+        maximumFractionDigits: 0,
+        minimumFractionDigits: 0
+    });
+    
+    return numberFormat.format(wholeCurrencyAmount);
+};
+
 const formatAmountText = (amountText) => {
     logger('Formatting amount text: ', amountText);
     if (!amountText || amountText.length === 0) {
@@ -120,23 +142,7 @@ const formatAmountText = (amountText) => {
     const amountResult = { amount, unit, currency };
     logger('Split amount: ', amountResult);
 
-    const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS_TO_WHOLE[amountResult.unit];
-
-    // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
-    // implement for those countries where client opcos have launched
-    if (amountResult.currency === 'ZAR') {
-        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
-        return `R${emFormat.format(wholeCurrencyAmount)}`;
-    }
-
-    const numberFormat = new Intl.NumberFormat('en-US', {
-        style: 'currency',
-        currency: amountResult.currency,
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0
-    });
-    
-    return numberFormat.format(wholeCurrencyAmount);
+    return formatAmountDict(amountResult);
 };
 
 const assembleEmailParameters = ({ toAddresses, subject, htmlBody, textBody }) => ({
@@ -153,11 +159,49 @@ const assembleEmailParameters = ({ toAddresses, subject, htmlBody, textBody }) =
     ReturnPath: sourceEmail
 });
 
+const profileLink = (bankReference) => {
+    const profileSearch = `users?searchValue=${encodeURIComponent(bankReference)}&searchType=bankReference`;
+    return `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
+};
+
+const safeSendEmail = async (emailToSend) => {
+    try {
+        // logger('Sending event email: ', emailToSend);
+        const emailResult = await ses.sendEmail(emailToSend).promise();
+        logger('Email sending result: ', emailResult);
+    } catch (err) {
+        logger('Email sending conked out: ', err);
+    }    
+};
+
+const sendEftInboundEmail = async (eventContext) => {
+    if (!eventContext) {
+        return;
+    }
+
+    const { saveInformation, initiationResult } = eventContext;
+
+    const emailVariables = { 
+        savedAmount: formatAmountDict(saveInformation), 
+        bankReference: initiationResult.humanReference,
+        profileLink: profileLink(initiationResult.humanReference)
+    };
+
+    const htmlTemplate = await obtainTemplate(config.get('templates.eftEmail'));
+    const htmlBody = format(htmlTemplate, emailVariables);
+    const textBody = htmlToText.fromString(htmlBody, { wordwrap: 80 });
+
+    const toAddresses = config.get('publishing.saveEmailDestination');
+    const emailParams = { toAddresses, subject: 'EFT transfer initiated', htmlBody, textBody };
+    
+    const emailToSend = assembleEmailParameters(emailParams);
+    return safeSendEmail(emailToSend);
+};
+
 const assembleSaveEmail = async (eventBody) => {
     const saveContext = eventBody.context;
-    const templateVariables = {};
-    templateVariables.savedAmount = formatAmountText(saveContext.savedAmount);
     let countText = '';
+
     switch (saveContext.saveCount) {
         case 1: 
             countText = 'first'; 
@@ -172,11 +216,13 @@ const assembleSaveEmail = async (eventBody) => {
             countText = `${saveContext.saveCount}th`; 
     }
 
-    templateVariables.saveCountText = countText;
-    templateVariables.bankReference = saveContext.bankReference;
-    
-    const profileSearch = `users?searchValue=${encodeURIComponent(saveContext.bankReference)}&searchType=bankReference`;
-    templateVariables.profileLink = `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
+    logger('HUUUUUH? : ', saveContext.savedAmount);
+    const templateVariables = {
+        savedAmount: formatAmountText(saveContext.savedAmount),
+        saveCountText: countText,
+        bankReference: saveContext.bankReference,
+        profileLink: profileLink(saveContext.bankReference)    
+    };
     
     const toAddresses = config.get('publishing.saveEmailDestination');
     const subject = 'Yippie kay-yay';
@@ -190,15 +236,9 @@ const assembleSaveEmail = async (eventBody) => {
     return assembleEmailParameters(emailParams);
 };
 
-const safeEmailAttempt = async (eventBody) => {
-    try {
-        const emailToSend = await assembleSaveEmail(eventBody);
-        logger('Sending save event emails: ', emailToSend);
-        const emailResult = await ses.sendEmail(emailToSend).promise();
-        logger('Well where did that get us: ', emailResult);
-    } catch (err) {
-        logger('Email sending conked out: ', err);
-    }
+const sendSaveSucceededEmail = async (eventBody) => {
+    const emailToSend = await assembleSaveEmail(eventBody);
+    return safeSendEmail(emailToSend);
 };
 
 // handling withdrawals by sending email
@@ -357,6 +397,48 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+const handleAccountOpenedEvent = async (eventBody) => {
+    logger('Handling event:', eventBody);
+    const { userId } = eventBody;
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId), persistence.findHumanRefForUser(userId)]);
+    logger('Result of account info retrieval: ', accountInfo);
+    const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
+    if (Array.isArray(accountInfo) && accountInfo.length > 0) {
+        userDetails.humanRef = accountInfo[0].humanRef;
+    }
+    const bsheetAccountResult = await createFinWorksAccount(userDetails);
+    if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
+        throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
+    }
+
+    logger('Finworks account creation resulted in:', bsheetAccountResult);
+    const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
+    logger(`Result of user account update: ${accountUpdateResult}`);
+
+    const notificationContacts = config.get('publishing.accountsPhoneNumbers');
+    await Promise.all(notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` })));
+};
+
+const handleSaveInitiatedEvent = async (eventBody) => {
+    logger('User initiated a save! Update their status');
+
+    // user status update will also check, but this could get heavy, so might as well avoid it
+    const userProfile = await fetchUserProfile(eventBody.userId);
+    if (['CREATED', 'PASSWORD_SET', 'ACCOUNT_OPENED'].includes(userProfile.userStatus)) {
+        // could parallel process these, but this is pretty significant if user is starting, and not at all otherwise
+        const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_INITIATED_SAVE', reasonToLog: 'Saving event started' }};
+        const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
+        await lambda.invoke(statusInvocation).promise();
+    }
+
+    const { context } = eventBody;
+    const { saveInformation } = context;
+
+    if (saveInformation && saveInformation.paymentProvider && saveInformation.paymentProvider !== 'OZOW') {
+        await sendEftInboundEmail(context);
+    }
+};
+
 const handleSavingEvent = async (eventBody) => {
     logger('Saving event triggered!: ', eventBody);
 
@@ -366,7 +448,7 @@ const handleSavingEvent = async (eventBody) => {
     promisesToInvoke.push(lambda.invoke(boostProcessInvocation).promise());
     
     if (emailSendingEnabled) {
-        promisesToInvoke.push(safeEmailAttempt(eventBody));
+        promisesToInvoke.push(sendSaveSucceededEmail(eventBody));
     }
 
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};
@@ -438,28 +520,6 @@ const handleWithdrawalCancelled = async (eventBody) => {
     }
 };
 
-const handleAccountOpenedEvent = async (eventBody) => {
-    logger('Handling event:', eventBody);
-    const { userId } = eventBody;
-    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId), persistence.findHumanRefForUser(userId)]);
-    logger('Result of account info retrieval: ', accountInfo);
-    const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
-    if (Array.isArray(accountInfo) && accountInfo.length > 0) {
-        userDetails.humanRef = accountInfo[0].humanRef;
-    }
-    const bsheetAccountResult = await createFinWorksAccount(userDetails);
-    if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
-        throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
-    }
-
-    logger('Finworks account creation resulted in:', bsheetAccountResult);
-    const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
-    logger(`Result of user account update: ${accountUpdateResult}`);
-
-    const notificationContacts = config.get('publishing.accountsPhoneNumbers');
-    await Promise.all(notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` })));
-};
-
 const handleBoostRedeemedEvent = async (eventBody) => {
     logger('Handling boost redeemed event: ', eventBody);
     const { accountId, boostAmount } = eventBody.context;
@@ -488,6 +548,12 @@ module.exports.handleUserEvent = async (snsEvent) => {
         const eventBody = await extractSnsMessage(snsEvent);
         const eventType = eventBody.eventType;
         switch (eventType) {
+            case 'USER_CREATED_ACCOUNT':
+                await handleAccountOpenedEvent(eventBody);
+                break;
+            case 'SAVING_EVENT_INITIATED':
+                await handleSaveInitiatedEvent(eventBody);
+                break;
             case 'SAVING_PAYMENT_SUCCESSFUL':
                 await handleSavingEvent(eventBody);
                 break;
@@ -497,11 +563,7 @@ module.exports.handleUserEvent = async (snsEvent) => {
             case 'WITHDRAWAL_EVENT_CANCELLED':
                 await handleWithdrawalCancelled(eventBody);
                 break;
-            case 'USER_CREATED_ACCOUNT':
-                await handleAccountOpenedEvent(eventBody);
-                break;
             case 'BOOST_REDEEMED':
-                logger('*** Handling BOOST redeemed event');
                 await handleBoostRedeemedEvent(eventBody);
                 break;
             default:

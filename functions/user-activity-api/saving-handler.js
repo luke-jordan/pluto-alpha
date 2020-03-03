@@ -34,13 +34,7 @@ const save = async (eventBody) => {
   const saveInformation = eventBody;
   logger('Have a saving request inbound: ', saveInformation);
 
-  if (!eventBody.floatId && !eventBody.clientId) {
-    const floatAndClient = await persistence.getOwnerInfoForAccount(saveInformation.accountId);
-    saveInformation.floatId = eventBody.floatId || floatAndClient.floatId;
-    saveInformation.clientId = eventBody.clientId || floatAndClient.clientId;
-  }
-
-  saveInformation.initiationTime = moment(saveInformation.initiationTimeEpochMillis);
+  saveInformation.initiationTime = saveInformation.initiationTimeEpochMillis ? moment(saveInformation.initiationTimeEpochMillis) : moment();
   Reflect.deleteProperty(saveInformation, 'initiationTimeEpochMillis');
 
   if (Reflect.has(saveInformation, 'settlementTimeEpochMillis')) {
@@ -110,8 +104,7 @@ module.exports.initiatePendingSave = async (event) => {
     // todo : also use cache to check for duplicate requests
     const duplicateSave = await persistence.checkForDuplicateSave(saveInformation);
     if (duplicateSave) {
-      logger('Duplicate transaction found, was created at: ', duplicateSave.creationTime);
-      logger('Full details to return: ', duplicateSave);
+      logger('Duplicate transaction found, was created at: ', duplicateSave.creationTime, 'full details: ', duplicateSave);
       const returnResult = {
         transactionDetails: [{
           accountTransactionId: duplicateSave.transactionId,
@@ -122,15 +115,13 @@ module.exports.initiatePendingSave = async (event) => {
       };
       return { statusCode: 200, body: JSON.stringify(returnResult) };
     }
-
-    logger('Validated request, publishing user event');
-    await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_INITIATED');
     
     saveInformation.settlementStatus = 'PENDING'; // we go straight to pending here, as next step is completed when payment received
 
-    if (!saveInformation.initiationTimeEpochMillis) {
-      saveInformation.initiationTimeEpochMillis = moment().valueOf();
-      logger('Initiation time: ', saveInformation.initiationTimeEpochMillis);
+    if (!saveInformation.floatId && !saveInformation.clientId) {
+      const floatAndClient = await persistence.getOwnerInfoForAccount(saveInformation.accountId);
+      saveInformation.floatId = saveInformation.floatId || floatAndClient.floatId;
+      saveInformation.clientId = saveInformation.clientId || floatAndClient.clientId;
     }
 
     // todo : verify user account ownership
@@ -140,17 +131,35 @@ module.exports.initiatePendingSave = async (event) => {
     
     const transactionId = initiationResult.transactionDetails[0].accountTransactionId;
     logger('Extracted transaction ID: ', transactionId);
-    const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId);
-    const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
-    logger('Got payment link result: ', paymentLinkResult);
-    const urlToCompletePayment = paymentLinkResult.paymentUrl;
+    
+    // we default to Ozow, for now
+    const paymentProvider = saveInformation.paymentProvider || 'OZOW';
+    logger('********** Payment provider: ', paymentProvider);
 
-    logger('Returning with url to complete payment: ', urlToCompletePayment);
-    initiationResult.paymentRedirectDetails = { urlToCompletePayment };
-    initiationResult.humanReference = paymentLinkResult.bankRef;
+    const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId); // we need this anyway
 
-    const paymentStash = await persistence.addPaymentInfoToTx({ transactionId, ...paymentLinkResult });
-    logger('Result of stashing payment details: ', paymentStash);
+    if (paymentProvider === 'OZOW') {
+      const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
+      logger('Got payment link result: ', paymentLinkResult);
+      const urlToCompletePayment = paymentLinkResult.paymentUrl;
+
+      logger('Returning with url to complete payment: ', urlToCompletePayment);
+      initiationResult.paymentRedirectDetails = { urlToCompletePayment };
+      initiationResult.humanReference = paymentLinkResult.bankRef;
+
+      const paymentStash = await persistence.addPaymentInfoToTx({ transactionId, ...paymentLinkResult });
+      logger('Result of stashing payment details: ', paymentStash);  
+    } else {
+      const clientFloatVars = await dynamo.fetchFloatVarsForBalanceCalc(saveInformation.clientId, saveInformation.floatId);
+      initiationResult.humanReference = payment.generateBankRef(paymentInfo.accountInfo);
+      initiationResult.bankDetails = { ...clientFloatVars.bankDetails, useReference: initiationResult.humanReference };
+      const detailsStash = await persistence.addPaymentInfoToTx({ transactionId, bankRef: initiationResult.humanReference, paymentProvider: 'MANUAL_EFT' });
+      logger('Result of stashing details: ', detailsStash);
+    }
+
+    logger('Validated request, publishing user event');
+    const eventParams = { transactionId, initiationResult, saveInformation };
+    await publisher.publishUserEvent(authParams.systemWideUserId, 'SAVING_EVENT_INITIATED', { context: eventParams });
 
     return { statusCode: 200, body: JSON.stringify(initiationResult) };
 
@@ -255,7 +264,7 @@ const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
 };
 
 const assembleResponseAlreadySettled = async (transactionRecord) => {
-  const balanceSum = await persistence.sumAccountBalance(transactionRecord['accountId'], transactionRecord['currency'], moment());
+  const balanceSum = await persistence.sumAccountBalance(transactionRecord.accountId, transactionRecord.currency, moment());
   logger('Retrieved balance sum: ', balanceSum);
   return { 
     result: 'PAYMENT_SUCCEEDED',

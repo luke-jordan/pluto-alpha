@@ -45,9 +45,12 @@ const updateSaveRdsStub = sinon.stub();
 const fetchTransactionStub = sinon.stub();
 const countSettledSavesStub = sinon.stub();
 
-const fetchBankRefStub = sinon.stub();
+const fetchInfoForBankRefStub = sinon.stub();
 const getPaymentUrlStub = sinon.stub();
+const generateBankRefStub = sinon.stub();
+
 const checkDuplicateStub = sinon.stub();
+const getFloatVarsStub = sinon.stub();
 
 const publishStub = sinon.stub();
 
@@ -59,17 +62,19 @@ const handler = proxyquire('../saving-handler', {
         'addTransactionToAccount': addSavingsRdsStub,
         'countSettledSaves': countSettledSavesStub,
         'addPaymentInfoToTx': addPaymentInfoRdsStub,
-        'fetchInfoForBankRef': fetchBankRefStub,
+        'fetchInfoForBankRef': fetchInfoForBankRefStub,
         'checkForDuplicateSave': checkDuplicateStub
     },
     './payment-link': {
         'getPaymentLink': getPaymentUrlStub,
+        'generateBankRef': generateBankRefStub,
         'warmUpPayment': sinon.stub() // storing/inspecting would add clutter for no robustness
     },
     'publish-common': {
         'publishUserEvent': publishStub
     },
     './persistence/dynamodb': {
+        'fetchFloatVarsForBalanceCalc': getFloatVarsStub,
         '@noCallThru': true
     },
     'moment-timezone': momentStub
@@ -84,7 +89,7 @@ const resetStubHistory = () => {
     fetchTransactionStub.reset();
     countSettledSavesStub.reset();
     getPaymentUrlStub.reset();
-    fetchBankRefStub.reset();
+    fetchInfoForBankRefStub.reset();
     checkDuplicateStub.reset();
     publishStub.reset();
     momentStub.reset();
@@ -108,7 +113,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         floatId: testFloatId,
         clientId: testClientId,
         paymentRef: testPaymentRef,
-        paymentProvider: 'STRIPE'
+        paymentProvider: 'OZOW'
     });
 
     const testSavePendingBase = (amount = testAmounts[0]) => ({
@@ -144,22 +149,20 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         paymentProvider: 'PROVIDER',
         bankRef: 'JUPSAVER31-00001'
     };
-
-    const responseToTxPending = {
-        transactionDetails: [{ accountTransactionId: testTransactionId, persistedTimeEpochMillis: moment().valueOf() }]
-    };
+    
+    const mockTxDetails = [{ accountTransactionId: testTransactionId, persistedTimeEpochMillis: moment().valueOf() }];
 
     const expectedResponseBody = {
         paymentRedirectDetails: {
             urlToCompletePayment: expectedPaymentParams.paymentUrl
         },
         humanReference: expectedPaymentParams.bankRef,
-        transactionDetails: responseToTxPending.transactionDetails
+        transactionDetails: mockTxDetails
     };
 
     before(() => {
         findFloatOrIdStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
-        addSavingsRdsStub.withArgs(wellFormedMinimalPendingRequestToRds).resolves(responseToTxPending);
+        addSavingsRdsStub.withArgs(wellFormedMinimalPendingRequestToRds).resolves({ transactionDetails: mockTxDetails });
     });
 
     beforeEach(() => resetStubHistory());
@@ -170,7 +173,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
         momentStub.returns(testTimeInitiated);
 
-        fetchBankRefStub.resolves(testBankRefInfo);
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
         getPaymentUrlStub.resolves(expectedPaymentParams);
         
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
@@ -180,9 +183,39 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         expect(saveBody).to.deep.equal(expectedResponseBody);
 
-        expect(fetchBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
+    });
+
+    it('Most common route, as wrapper, but with manual EFT as payment method', async () => {
+        const saveEventToWrapper = testSavePendingBase();
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        saveEventToWrapper.paymentProvider = 'MANUAL_EFT';
+        momentStub.returns(testTimeInitiated);
+
+        addSavingsRdsStub.resolves({ transactionDetails: mockTxDetails });
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
+        generateBankRefStub.returns('JUPSAVER31-00001');
+        
+        const mockBankDetails = { bankName: 'FNB', beneficiaryName: 'Jupiter Stokvel' };
+        getFloatVarsStub.resolves({ bankDetails: mockBankDetails });
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        logger('Received: ', resultOfWrapperCall);
+
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        expect(saveBody).to.deep.equal({ 
+            transactionDetails: mockTxDetails,
+            humanReference: 'JUPSAVER31-00001',
+            bankDetails: { ...mockBankDetails, useReference: 'JUPSAVER31-00001' }
+        });
+
+        expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, paymentProvider: 'MANUAL_EFT', bankRef: 'JUPSAVER31-00001' });
+        testHelper.expectNoCalls(getPaymentUrlStub);
     });
 
     it('Returns duplicate save if found', async () => {
@@ -269,17 +302,17 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         saveEventToWrapper.dummy = 'ON';
         momentStub.returns(testTimeInitiated);
 
-        fetchBankRefStub.resolves(testBankRefInfo);
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
         getPaymentUrlStub.resolves(expectedPaymentParams);
-        addSavingsRdsStub.withArgs(minimalPendingRequestToRds).resolves(responseToTxPending);
+        addSavingsRdsStub.withArgs(minimalPendingRequestToRds).resolves({ transactionDetails: mockTxDetails });
         
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
         logger('Received: ', resultOfWrapperCall);
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
-        expect(saveBody).to.deep.equal(responseToTxPending);
+        expect(saveBody).to.deep.equal(expectedResponseBody);
 
-        expect(fetchBankRefStub).to.have.been.calledWithExactly(testAccountId);
+        expect(fetchInfoForBankRefStub).to.have.been.calledWithExactly(testAccountId);
         expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfoTest);
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
     });
@@ -295,7 +328,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const saveEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
         
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
-        fetchBankRefStub.resolves(testBankRefInfo);
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
         getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
@@ -304,7 +337,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(saveResult.statusCode).to.equal(200);
         expect(saveResult.body).to.exist;
         const saveBody = JSON.parse(saveResult.body);
-        expect(saveBody).to.deep.equal(responseToTxPending);
+        expect(saveBody).to.deep.equal(expectedResponseBody);
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
         expect(findFloatOrIdStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMatchingTxStub).to.have.not.been.called;
@@ -316,7 +349,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         saveEvent.clientId = testClientId;
 
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
-        fetchBankRefStub.resolves(testBankRefInfo);
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
         getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
@@ -325,7 +358,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(saveResult.statusCode).to.equal(200);
         expect(saveResult.body).to.exist;
         const saveBody = JSON.parse(saveResult.body);
-        expect(saveBody).to.deep.equal(responseToTxPending);
+        expect(saveBody).to.deep.equal(expectedResponseBody);
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
         expect(findFloatOrIdStub).to.not.have.been.called;
         expect(findMatchingTxStub).to.have.not.been.called;
