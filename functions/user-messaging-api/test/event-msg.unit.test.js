@@ -61,7 +61,7 @@ describe('*** UNIT TEST EVENT TRIGGERED MESSAGES ***', () => {
 
     const mockInstruction = {
         instructionId: mockInstructionId,
-        presentationType: 'ONCE_OFF',
+        presentationType: 'EVENT_DRIVEN',
         active: true,
         audienceType: 'ALL_USERS',
         templates: mockTemplate,
@@ -85,7 +85,7 @@ describe('*** UNIT TEST EVENT TRIGGERED MESSAGES ***', () => {
         momentStub.returns(testTime);
     });
 
-    it('Sends user messages when triggered by non-blocklisted events', async () => {
+    it('Sends user messages when triggered by non-blacklisted events', async () => {
 
         publishMultiLogStub.resolves({ result: 'SUCCESS' });
         findMsgInstructionByFlagStub.resolves([mockInstructionId, mockInstructionId]);
@@ -112,9 +112,27 @@ describe('*** UNIT TEST EVENT TRIGGERED MESSAGES ***', () => {
 
         insertUserMsgArgs = insertUserMessagesStub.getCall(1).args[0];
         expect(insertUserMsgArgs).to.be.an('array').of.length(1);
+
+    });
+
+    it('Returns 403 when called by blacklisted event', async () => {
+
+        const mockEvent = wrapEventSns({ instructionId: mockInstructionId, userId: mockUserId, eventType: 'MESSAGE_PUSH_NOTIFICATION_SENT' });
+
+        const result = await handler.createFromUserEvent(mockEvent);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ statusCode: 403 });
+
+        expect(findMsgInstructionByFlagStub).to.have.not.been.called;
+        expect(getMessageInstructionStub).to.have.not.been.called;
+        expect(insertUserMessagesStub).to.have.not.been.called;
+        expect(updateInstructionStateStub).to.have.not.been.called;
+
     });
 
     it('Catched thrown errors', async () => {
+
         findMsgInstructionByFlagStub.throws(new Error('Error'));
     
         const mockEvent = wrapEventSns({ instructionId: mockInstructionId, userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });
@@ -128,5 +146,6 @@ describe('*** UNIT TEST EVENT TRIGGERED MESSAGES ***', () => {
         expect(getMessageInstructionStub).to.have.not.been.called;
         expect(insertUserMessagesStub).to.have.not.been.called;
         expect(updateInstructionStateStub).to.have.not.been.called;
+
     });
 });

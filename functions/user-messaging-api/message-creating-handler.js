@@ -360,20 +360,28 @@ module.exports.createFromPendingInstructions = async () => {
 // };
 
 /**
- * This function is triggered on user events. If the event is not in any black list and a template for the event exists,
- * the template is processed and the resulting message is sent to the user.
+ * This function is triggered on user events. If the event is not in any black list and a message instruction
+ * for the event exists, the instruction is processed and the resulting message is sent to the user.
  */
 module.exports.createFromUserEvent = async (snsEvent) => {
     try {
         const eventBody = await extractSnsMessage(snsEvent);
         const eventType = eventBody.eventType;
 
-        const blackList = [...config.get('security.defaultBlacklist'), ...config.get('security.additionalBlacklist')];
+        const blackList = [
+            ...config.get('security.defaultBlacklist'),
+            ...config.get('security.additionalBlacklist')
+        ];
+
+        if (blackList.includes(eventType)) {
+            return { statusCode: 403 };
+        }
 
         const instructionIds = await rdsUtil.findMsgInstructionByFlag(eventType);
 
-        if (!blackList.includes(eventType) && instructionIds.length !== 0) {
-            await exports.createUserMessages({ instructions: instructionIds.map((instructionId) => ({ instructionId: instructionId, destinationUserId: eventBody.userId }))});
+        if (instructionIds !== null && instructionIds.length !== 0) {
+            await exports.createUserMessages({ instructions: instructionIds.map((instructionId) => (
+                { instructionId: instructionId, destinationUserId: eventBody.userId }))});
         }
 
         return { statusCode: 200 };

@@ -7,7 +7,6 @@
         "messageInstructionTable": "message_data.message_instruction",
         "userMessagesTable": "message_data.user_message",
         "pushTokenTable": "message_data.user_push_token",
-        "msgInstructionTable": "message_data.message_instruction",
         "boostAccountTable": "boost_data.boost_account_status",
         "transactionLedger": "transaction_data.core_transaction_ledger",
         "audienceTable": "audience_data.audience",
@@ -61,7 +60,7 @@
     },
     "security": {
         "roleRequired": false,
-        "defaultBlacklist": [],
+        "defaultBlacklist": ["MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT"],
         "additionalBlacklist": []
     }
 }
