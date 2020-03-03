@@ -264,7 +264,7 @@ const publishSaveSucceeded = async (systemWideUserId, transactionId) => {
 };
 
 const assembleResponseAlreadySettled = async (transactionRecord) => {
-  const balanceSum = await persistence.sumAccountBalance(transactionRecord['accountId'], transactionRecord['currency'], moment());
+  const balanceSum = await persistence.sumAccountBalance(transactionRecord.accountId, transactionRecord.currency, moment());
   logger('Retrieved balance sum: ', balanceSum);
   return { 
     result: 'PAYMENT_SUCCEEDED',

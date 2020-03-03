@@ -45,13 +45,16 @@ const cancelTransaction = async ({ transactionId, systemWideUserId }) => {
     return { statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' }) };
 };
 
-const handlePendingSaveCheck = async ({ transactionId, settlementStatus, settlementTime }) => {
+const handlePendingSaveCheck = async ({ transactionId, settlementStatus, settlementTime, accountId, currency }) => {
     if (settlementStatus === 'SETTLED') {
-        const transactionLogs = await rds.fetchLogsForTransaction(transactionId);
+        const [transactionLogs, newBalance] = await Promise.all([
+            rds.fetchLogsForTransaction(transactionId),
+            rds.sumAccountBalance(accountId, currency)
+        ]);
         const wasAdminSettled = transactionLogs.find((log) => log.logType === 'ADMIN_SETTLED_SAVE');
         const result = wasAdminSettled ? 'ADMIN_MARKED_PAID' : 'PAYMENT_SUCCEEDED';
         const settlementTimeMillis = moment(settlementTime).valueOf();
-        return { statusCode: 200, body: JSON.stringify({ result, settlementTimeMillis })};
+        return { statusCode: 200, body: JSON.stringify({ result, settlementTimeMillis, newBalance })};
     }
 
     if (settlementStatus === 'CANCELLED') {
@@ -72,10 +75,10 @@ const recheckTransaction = async ({ transactionId, systemWideUserId }) => {
         return { statusCode: 400, body: JSON.stringify({ error: 'NO_TRANSACTION_FOUND' })};
     }
 
-    const { transactionType, settlementStatus, settlementTime } = txDetails;
+    const { transactionType, settlementStatus } = txDetails;
 
     if (transactionType === 'USER_SAVING_EVENT') {
-        return handlePendingSaveCheck({ transactionId, settlementStatus, settlementTime });
+        return handlePendingSaveCheck(txDetails);
     }
     
     if (transactionType === 'WITHDRAWAL') {

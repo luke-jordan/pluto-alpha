@@ -25,6 +25,7 @@ const updateTxSettlementStatusStub = sinon.stub();
 const fetchInfoForBankRefStub = sinon.stub();
 const addPaymentInfoRdsStub = sinon.stub();
 const fetchLogsStub = sinon.stub();
+const getAccountBalanceStub = sinon.stub();
 
 const getPaymentUrlStub = sinon.stub();
 
@@ -51,6 +52,7 @@ const handler = proxyquire('../pending-handler', {
         'fetchPendingTransactions': listPendingStub,
         'fetchInfoForBankRef': fetchInfoForBankRefStub,
         'addPaymentInfoToTx': addPaymentInfoRdsStub,
+        'sumAccountBalance': getAccountBalanceStub,
         '@noCallThru': true
     },
     './persistence/dynamodb': {
@@ -342,13 +344,14 @@ describe('*** Unit test cancelling transaction', () => {
 describe('*** Unit test rechecking transaction', () => {
 
     const mockTransactionId = uuid();
+    const mockAccountId = uuid();
     const mockSettledTime = moment().subtract(5, 'minutes');
     const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId }, 'check');
 
-    beforeEach(() => helper.resetStubs(fetchTransactionStub, checkPendingSaveStub));
+    beforeEach(() => helper.resetStubs(fetchTransactionStub, checkPendingSaveStub, getAccountBalanceStub));
 
     it('Handles rechecking a save, if still pending', async () => {
-        fetchTransactionStub.resolves({ transactionType: 'USER_SAVING_EVENT', settlementStatus: 'PENDING' });
+        fetchTransactionStub.resolves({ transactionId: mockTransactionId, transactionType: 'USER_SAVING_EVENT', settlementStatus: 'PENDING' });
         
         const pendingSaveResult = {
             statusCode: 200,
@@ -367,31 +370,48 @@ describe('*** Unit test rechecking transaction', () => {
     });
 
     it('Handles rechecking a save, if settled already (e.g., by admin)', async () => {
-        fetchTransactionStub.resolves({ transactionType: 'USER_SAVING_EVENT', settlementStatus: 'SETTLED', settlementTime: mockSettledTime.format() });
+        fetchTransactionStub.resolves({ 
+            transactionType: 'USER_SAVING_EVENT', 
+            accountId: mockAccountId, currency: 'ZAR', 
+            settlementStatus: 'SETTLED', 
+            settlementTime: mockSettledTime.format() 
+        });
+        
         fetchLogsStub.resolves([{ logId: 'some-log', logType: 'ADMIN_SETTLED_SAVE' }]);
         momentStub.withArgs(mockSettledTime.format()).returns(mockSettledTime);
+        getAccountBalanceStub.resolves({ amount: 10000, unit: 100, currency: 'ZAR' });
 
         const resultOfCheck = await handler.handlePendingTxEvent(mockEvent);
         
         const resultBody = helper.standardOkayChecks(resultOfCheck);
-        expect(resultBody).to.deep.equal({ result: 'ADMIN_MARKED_PAID', settlementTimeMillis: mockSettledTime.valueOf() });
+        expect(resultBody).to.deep.equal({ 
+            result: 'ADMIN_MARKED_PAID', 
+            settlementTimeMillis: mockSettledTime.valueOf(),
+            newBalance: { amount: 10000, unit: 100, currency: 'ZAR' }
+        });
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        expect(getAccountBalanceStub).to.have.been.calledOnceWithExactly(mockAccountId, 'ZAR'); // send back now balance, _not_ at settlement
     });
 
     it('Handles rechecking a save, if settled already but no logs', async () => {
-        fetchTransactionStub.resolves({ transactionType: 'USER_SAVING_EVENT', settlementStatus: 'SETTLED', settlementTime: mockSettledTime.format() });
+        fetchTransactionStub.resolves({ transactionId: mockTransactionId, transactionType: 'USER_SAVING_EVENT', settlementStatus: 'SETTLED', settlementTime: mockSettledTime.format() });
         fetchLogsStub.resolves([]);
         momentStub.withArgs(mockSettledTime.format()).returns(mockSettledTime);
+        getAccountBalanceStub.resolves({ amount: 10000, unit: 100, currency: 'ZAR' });
 
         const resultOfCheck = await handler.handlePendingTxEvent(mockEvent);
         
         const resultBody = helper.standardOkayChecks(resultOfCheck);
-        expect(resultBody).to.deep.equal({ result: 'PAYMENT_SUCCEEDED', settlementTimeMillis: mockSettledTime.valueOf() });
+        expect(resultBody).to.deep.equal({ 
+            result: 'PAYMENT_SUCCEEDED', 
+            settlementTimeMillis: mockSettledTime.valueOf(),
+            newBalance: { amount: 10000, unit: 100, currency: 'ZAR' }
+        });
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
     });
 
     it('Handles rechecking a save, if settled by payment', async () => {
-        fetchTransactionStub.resolves({ transactionType: 'USER_SAVING_EVENT', settlementStatus: 'PENDING' });
+        fetchTransactionStub.resolves({ transactionId: mockTransactionId, transactionType: 'USER_SAVING_EVENT', settlementStatus: 'PENDING' });
 
         const pendingSaveResult = {
             statusCode: 200,
@@ -401,6 +421,7 @@ describe('*** Unit test rechecking transaction', () => {
             })
         };
         checkPendingSaveStub.resolves(pendingSaveResult);
+        getAccountBalanceStub.resolves({ amount: 10000, unit: 100, currency: 'ZAR' });
 
         const resultOfCheck = await handler.handlePendingTxEvent(mockEvent);
         expect(resultOfCheck).to.deep.equal(pendingSaveResult);
