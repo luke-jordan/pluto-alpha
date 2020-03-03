@@ -98,7 +98,8 @@ describe('*** UNIT TESTING PAYMENT COMPLETE PAGES ***', () => {
     });
 
     it('Maps results to correct pages', async () => {
-        const resultTypes = ['SUCCESS', 'ERROR', 'CANCELLED'];
+        // since OZOW is often marking error results as cancelled, causing user confusion, we are just doubling those
+        const resultTypes = ['SUCCESS', 'ERROR', 'ERROR'];
         
         const mapPathParams = (result) => ({ 
             pathParameters: { proxy: `PROVIDER/${testPendingTxId}/${result}` } 

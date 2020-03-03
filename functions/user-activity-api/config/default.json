@@ -87,7 +87,7 @@
         "payment": {
             "success": "payment-success.html",
             "error": "payment-error.html",
-            "cancelled": "payment-cancelled.html"
+            "cancelled": "payment-error.html"
         }
     },
     "defaults": {

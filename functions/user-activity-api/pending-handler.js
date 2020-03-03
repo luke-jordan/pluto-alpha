@@ -193,8 +193,18 @@ const getPendingxTx = async (systemWideUserId) => {
     return { statusCode: 200, body: JSON.stringify({ pending: currentPending })};
 };
 
+const describeTx = async (transactionId) => {
+    const txDetails = await rds.fetchTransaction(transactionId);
+    if (txDetails.paymentProvider === 'MANUAL_EFT') {
+        const { bankDetails } = await floatVars.fetchFloatVarsForBalanceCalc(txDetails.clientId, txDetails.floatId);
+        txDetails.bankDetails = bankDetails;
+    }
+    return { statusCode: 200, body: JSON.stringify(txDetails)};
+};
+
 const dispatcher = {
     'list': ({ systemWideUserId }) => getPendingxTx(systemWideUserId),
+    'describe': ({ transactionId }) => describeTx(transactionId),
     'cancel': ({ transactionId, systemWideUserId }) => cancelTransaction({ transactionId, systemWideUserId }),
     'check': ({ transactionId, systemWideUserId }) => recheckTransaction({ transactionId, systemWideUserId }),
     'update': (params) => updateTx(params)

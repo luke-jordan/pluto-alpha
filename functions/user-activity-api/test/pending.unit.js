@@ -81,7 +81,9 @@ const wrapParamsWithPath = (params, path, systemWideUserId = mockUserId) => ({
     body: JSON.stringify(params)
 });
 
-describe('*** Unit test simple listing', () => {
+describe('*** Unit test simple functions', () => {
+
+    beforeEach(() => helper.resetStubs(fetchAccountForUserStub, listPendingStub, fetchTransactionStub, getFloatVarsStub));
     
     it('Handles listing pending transactions', async () => {
         fetchAccountForUserStub.withArgs(mockUserId).resolves(['some-account']);
@@ -93,6 +95,39 @@ describe('*** Unit test simple listing', () => {
                 pending: []
             })
         });
+    });
+
+    it('Returns details on a pending transaction, manual EFT', async () => {
+        const mockTransactionId = uuid();
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId }, 'describe');
+        
+        const mockTransaction = { transactionId: mockTransactionId, paymentProvider: 'MANUAL_EFT', clientId: 'some-client', floatId: 'some-float' };
+        fetchTransactionStub.resolves(mockTransaction);
+        const mockBankDetails = { bankName: 'Capitec', beneficiaryName: 'Jupiter Stokvel' };
+        getFloatVarsStub.resolves({ bankDetails: mockBankDetails });
+
+        const resultOfRequest = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(resultOfRequest);
+        expect(resultBody).to.deep.equal({ ...mockTransaction, bankDetails: mockBankDetails });
+
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        expect(getFloatVarsStub).to.have.been.calledOnceWithExactly('some-client', 'some-float');
+        helper.expectNoCalls(fetchInfoForBankRefStub, getPaymentUrlStub, addPaymentInfoRdsStub); // at least
+    });
+
+    it('Returns details on a pending transaction, instant EFT', async () => {
+        const mockTransactionId = uuid();
+        const mockEvent = wrapParamsWithPath({ transactionId: mockTransactionId }, 'describe');
+        
+        const mockTransaction = { transactionId: mockTransactionId, paymentProvider: 'OZOW', tags: ['linkhere'] };
+        fetchTransactionStub.resolves(mockTransaction);
+
+        const resultOfRequest = await handler.handlePendingTxEvent(mockEvent);
+        const resultBody = helper.standardOkayChecks(resultOfRequest);
+        expect(resultBody).to.deep.equal(mockTransaction);
+
+        expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(mockTransactionId);
+        helper.expectNoCalls(fetchInfoForBankRefStub, getPaymentUrlStub, addPaymentInfoRdsStub, getFloatVarsStub); // at least
     });
 
     it('Also gives error on unknown operation', async () => {
