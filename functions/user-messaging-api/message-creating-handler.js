@@ -19,6 +19,8 @@ const STANDARD_PARAMS = [
     'total_interest'
 ];
 
+const extractSnsMessage = async (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
+
 /**
  * NOTE: This is only for custom params supplied with the message-creation event. System defined params should be left alone.
  * This function assembles the selected template and inserts relevent data where required.
@@ -356,3 +358,36 @@ module.exports.createFromPendingInstructions = async () => {
 //         };
 //     }
 // };
+
+/**
+ * This function is triggered on user events. If the event is not in any black list and a message instruction
+ * for the event exists, the instruction is processed and the resulting message is sent to the user.
+ */
+module.exports.createFromUserEvent = async (snsEvent) => {
+    try {
+        const eventBody = await extractSnsMessage(snsEvent);
+        const eventType = eventBody.eventType;
+
+        const blackList = [
+            ...config.get('security.defaultBlacklist'),
+            ...config.get('security.additionalBlacklist')
+        ];
+
+        if (blackList.includes(eventType)) {
+            return { statusCode: 403 };
+        }
+
+        const instructionIds = await rdsUtil.findMsgInstructionByFlag(eventType);
+
+        if (instructionIds !== null && instructionIds.length !== 0) {
+            await exports.createUserMessages({ instructions: instructionIds.map((instructionId) => (
+                { instructionId: instructionId, destinationUserId: eventBody.userId }))});
+        }
+
+        return { statusCode: 200 };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { statusCode: 500 };
+    }
+};

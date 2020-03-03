@@ -59,6 +59,8 @@
         }
     },
     "security": {
-        "roleRequired": false
+        "roleRequired": false,
+        "defaultBlacklist": ["MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT"],
+        "additionalBlacklist": []
     }
 }
