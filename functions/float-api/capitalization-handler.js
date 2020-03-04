@@ -11,7 +11,7 @@ const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
 const csvFile = require('./persistence/csvfile');
 
-const BigNumber = require('bignumber.js');
+const DecimalLight = require('decimal.js-light');
 
 const DEFAULT_UNIT = constants.floatUnits.DEFAULT;
 
@@ -45,17 +45,17 @@ const divideCapitalizationPerAccruals = async ({ clientId, floatId, startTime, e
 
     const allocations = new Map();
     
-    const accruedBigNumber = new BigNumber(totalAccrued); // used below
-    const remainderBigNumber = new BigNumber(remainderUnaccrued); // and the same
+    const accruedBigNumber = new DecimalLight(totalAccrued); // used below
+    const remainderBigNumber = new DecimalLight(remainderUnaccrued); // and the same
 
     // for each entity in the accrual fetch result, we calculate an amount equal to their total accrual, plus a relevant share
     // of the excess. if there is a deficiency, it all gets taken from the bonus pool (as per our general principle)
     accrualMap.forEach((entityDetails, entityId) => {
         let amountToCredit = entityDetails.amountAccrued;
         if (remainderUnaccrued > 0) { // comes out of the bonus pool, which is the excess/overflow absorber
-            const shareOfAllAccrual = new BigNumber(entityDetails.amountAccrued).dividedBy(accruedBigNumber);
+            const shareOfAllAccrual = new DecimalLight(entityDetails.amountAccrued).dividedBy(accruedBigNumber);
             const amountToAdd = remainderBigNumber.times(shareOfAllAccrual);
-            amountToCredit += amountToAdd.integerValue().toNumber();
+            amountToCredit += amountToAdd.toInteger().toNumber();
         } else if (remainderUnaccrued < 0 && entityDetails.entityType === constants.entityTypes.BONUS_POOL && entityId === bonusPoolId) {
             amountToCredit += remainderUnaccrued; // since this is negative
         }
@@ -132,7 +132,7 @@ const assembleAllocationMap = async (params) => {
 
     const passedUnit = params.unit;
     const rawConvertedAmount = opsUtil.convertToUnit(parseInt(yieldPaid, 10), passedUnit, DEFAULT_UNIT);
-    const safeConvertedAmount = (new BigNumber(rawConvertedAmount)).integerValue().toNumber(); // frontend sometimes sends in as .99999
+    const safeConvertedAmount = (new DecimalLight(rawConvertedAmount)).toInteger().toNumber(); // frontend sometimes sends in as .99999
 
     const capitalizedAmount = { amount: safeConvertedAmount, unit: DEFAULT_UNIT, currency };
     const { allocations, metadata } = await divideCapitalizationPerAccruals({ clientId, floatId, startTime, endTime, capitalizedAmount, floatConfigVars });
