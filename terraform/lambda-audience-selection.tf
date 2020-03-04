@@ -74,7 +74,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "audience_selection" {
   name = "/aws/lambda/${var.audience_selection_lambda_function_name}"
-  retention_in_days = 3
+  retention_in_days = 1
 
   tags = {
     environment = "${terraform.workspace}"

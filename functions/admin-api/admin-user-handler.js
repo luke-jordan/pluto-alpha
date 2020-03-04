@@ -139,7 +139,7 @@ const obtainSystemWideIdFromBankRef = async (lookUpPayload) => {
  * @property {object} requestContext As in method above (contains context, from auth, etc)
  * @property {object} queryStringParamaters Contains one of nationalId & country code, phone number, and email address
  */
-module.exports.lookUpUser = async (event) => {
+module.exports.findUsers = async (event) => {
     try {
         if (!adminUtil.isUserAuthorized(event)) {
             return adminUtil.unauthorizedResponse;
@@ -147,6 +147,13 @@ module.exports.lookUpUser = async (event) => {
 
         const lookUpPayload = opsCommonUtil.extractQueryParams(event);
         logger('Looking up user, with payload: ', lookUpPayload);
+
+        // simple thing for now, will add much more stuff when we actually have users
+        if (lookUpPayload.type && lookUpPayload.type === 'list') {
+            const listOfAccounts = await persistence.listAccounts();
+            const responseList = listOfAccounts.map((account) => ({ ...account, creationTime: moment(account.creationTime).valueOf() }));
+            return adminUtil.wrapHttpResponse(responseList);        
+        }
 
         let systemWideUserId = null;
         if (Reflect.has(lookUpPayload, 'bankReference')) {
@@ -296,14 +303,81 @@ const updateTxStatus = async ({ adminUserId, systemWideUserId, transactionId, ne
     return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
 };
 
-const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
+const updateTxAmount = async ({ adminUserId, systemWideUserId, transactionId, newAmount, reasonToLog }) => {
+    const currentTx = await persistence.getTransactionDetails(transactionId);
+    
+    logger('Updating transaction, new amount: ', newAmount);
+    logger('And prior transaction details: ', currentTx);
+
+    if (!newAmount.currency || newAmount.currency !== currentTx.currency) {
+        throw Error('Currency switching is not allowed yet, and currency must be supplied');
+    }
+    if (!newAmount.unit || !newAmount.amount) {
+        throw Error('New amount must supply unit and amount');
+    }
+    const oldAmount = { amount: currentTx.amount, unit: currentTx.unit, currency: currentTx.currency };
+    const resultOfUpdate = await persistence.adjustTxAmount({ transactionId, newAmount });
+    logger('Result of amount adjustment: ', resultOfUpdate);
+    
+    const updatedTime = moment(resultOfUpdate.updatedTime);
+    
+    const userEventLogOptions = {
+        initiator: adminUserId,
+        timestamp: updatedTime.valueOf(),
+        context: {
+            transactionId,
+            accountId: currentTx.accountId,
+            transactionType: currentTx.transactionType,
+            transactionStatus: currentTx.settlementStatus,
+            humanReference: currentTx.humanReference,
+            timeInMillis: updatedTime.valueOf(),
+            newAmount,
+            oldAmount,
+            reason: reasonToLog
+        }
+    };
+
+    const accountLog = {
+        transactionId,
+        accountId: currentTx.accountId,
+        adminUserId,
+        logType: 'ADMIN_UPDATED_TX',
+        logContext: { reason: reasonToLog, oldAmount, newAmount }
+    };
+
+    await Promise.all([
+        publisher.publishUserEvent(systemWideUserId, 'ADMIN_UPDATED_TX', userEventLogOptions),
+        persistence.insertAccountLog(accountLog)
+    ]);
+    return { result: 'SUCCESS', updateLog: resultOfUpdate };
+};
+
+const validateTxUpdate = ({ transactionId, newTxStatus, newAmount }) => {
+    if (!transactionId) {
+        return opsCommonUtil.wrapResponse('Error, transaction ID required', 400);
+    }
+
+    if (!newTxStatus && !newAmount) {
+        return opsCommonUtil.wrapResponse('Must adjust update status or amount', 400);
+    }
+    
+    if (newTxStatus && validTxStatus.indexOf(newTxStatus) < 0) {
+        return opsCommonUtil.wrapResponse('Error, invalid transaction status', 400);
+    }
+
+    return false;
+};
+
+const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, newAmount, reasonToLog }) => {
     logger(`Updating transaction, for user ${systemWideUserId}, transaction ${transactionId}, new status ${newTxStatus}, should log: ${reasonToLog}`);
 
-    let resultBody = { };
+    let resultBody = { };    
     if (newTxStatus === 'SETTLED') {
         resultBody = await settleUserTx({ adminUserId, systemWideUserId, transactionId, reasonToLog });
-    } else {
+    } else if (newTxStatus) {
         resultBody = await updateTxStatus({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog });
+    } else if (newAmount && newAmount.amount) {
+        resultBody = await updateTxAmount({ adminUserId, systemWideUserId, transactionId, newAmount, reasonToLog });
     }
 
     logger('Completed transaction update, result: ', resultBody);
@@ -398,10 +472,10 @@ module.exports.manageUser = async (event) => {
         let resultOfUpdate = { };
         if (params.fieldToUpdate === 'TRANSACTION') {
             logger('Updating a transaction, tell RDS to execute and return');
-            if (!params.transactionId || !params.newTxStatus || validTxStatus.indexOf(params.newTxStatus) < 0) {
-                logger('Failed, not a valid status, return error');
-                return opsCommonUtil.wrapResponse('Error, transaction ID needed and valid transaction status', 400);
-            }
+            const checkForError = validateTxUpdate(params);
+            if (checkForError) {
+                return checkForError;
+            } 
             resultOfUpdate = await handleTxUpdate(params);
         }
 

@@ -23,10 +23,12 @@ const countUsersStub = sinon.stub();
 const publishEventStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 const adjustTxStatusStub = sinon.stub();
+const adjustTxAmountStub = sinon.stub();
 const fetchBsheetTagStub = sinon.stub();
 const updateBsheetTagStub = sinon.stub();
 const insertAccountLogStub = sinon.stub();
 const fetchTxDetailsStub = sinon.stub();
+const listUserAccountsStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -38,11 +40,13 @@ const handler = proxyquire('../admin-user-handler', {
     './persistence/rds.account': {
         'fetchBsheetTag': fetchBsheetTagStub,
         'adjustTxStatus': adjustTxStatusStub,
+        'adjustTxAmount': adjustTxAmountStub,
         'updateBsheetTag': updateBsheetTagStub,
         'insertAccountLog': insertAccountLogStub,
         'fetchUserPendingTransactions': pendingTxStub,
         'getTransactionDetails': fetchTxDetailsStub,
         'countUserIdsWithAccounts': countUsersStub,
+        'listAccounts': listUserAccountsStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -217,7 +221,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             }
         };
 
-        const result = await handler.lookUpUser(testEvent);
+        const result = await handler.findUsers(testEvent);
         logger('Result of user look up:', result);
 
         expect(result).to.exist;
@@ -247,9 +251,12 @@ describe('*** UNIT TEST USER COUNT ***', () => {
         return rawResult + normalizer;
     };
 
+    beforeEach(() => helper.resetStubs(momentStub));
+
     it('Fetches user count', async () => {
         const testUserCount = generateUserCount;
 
+        momentStub.returns(moment());
         countUsersStub.resolves(testUserCount);
 
         const testEvent = {
@@ -274,6 +281,51 @@ describe('*** UNIT TEST USER COUNT ***', () => {
         expect(userCount.body).to.deep.equal(JSON.stringify({ userCount: testUserCount }));
         expect(countUsersStub).to.have.been.calledOnce;
     });
+
+    it('Fetches list of current user accounts', async () => {
+        const testTime = moment().subtract(1, 'month');
+        const testTimeFormat = testTime.format();
+        const testTimeValue = testTime.valueOf();
+
+        const testEvent = {
+            requestContext: {
+                authorizer: { role: 'SYSTEM_ADMIN', systemWideUserId: testUserId }
+            },
+            httpMethod: 'GET',
+            queryStringParameters: {
+                type: 'list'
+            }
+        };
+
+
+        const mockUserList = [{ accountId: 'someaccount', humanRef: 'something', creationTime: testTimeFormat }];
+        const expectedUserList = [{ accountId: 'someaccount', humanRef: 'something', creationTime: testTimeValue }];
+
+        listUserAccountsStub.resolves(mockUserList);
+        momentStub.withArgs(testTimeFormat).returns({ valueOf: () => testTimeValue });
+
+        const userList = await handler.findUsers(testEvent);
+        const userListBody = helper.standardOkayChecks(userList);
+
+        expect(userListBody).to.deep.equal(expectedUserList);
+
+        expect(listUserAccountsStub).to.have.been.calledOnceWithExactly();
+    });
+
+    it('Rejects with error unauthorized call to list events', async () => {
+        const testEvent = {
+            requestContext: {
+                authorizer: { role: 'ORDINARY_USER', systemWideUserId: testUserId }
+            },
+            httpMethod: 'GET',
+            queryStringParameters: {
+                type: 'list'
+            }
+        };
+
+        const userList = await handler.findUsers(testEvent);
+        expect(userList).to.deep.equal({ statusCode: 403, headers: helper.expectedHeaders });
+    });
     
 });
 
@@ -286,7 +338,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
     const testCreationTime = moment().format();
     const testUpdatedTime = moment().format();
 
-    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub, fetchBsheetTagStub));
+    beforeEach(() => helper.resetStubs(fetchTxDetailsStub, lamdbaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub, fetchBsheetTagStub));
 
     it('Settles user transaction', async () => {
 
@@ -390,6 +442,83 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         expect(publishEventStub).to.have.been.calledTwice;
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'SAVING_PAYMENT_SUCCESSFUL', expectedSaveSettledLog);
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'ADMIN_SETTLED_SAVE', expectedAdminSettledLog);
+        expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedAccountLog);
+    });
+
+    it('Adjusts amount on user transactions', async () => {
+
+        const mockTx = { 
+            accountId: testAccountId,
+            transactionType: 'USER_SAVING_EVENT', 
+            settlementStatus: 'PENDING', 
+            humanReference: 'JSAVE111', 
+            amount: 5000, 
+            unit: 'HUNDREDTH_CENT', 
+            currency: 'USD' 
+        };
+        
+        fetchTxDetailsStub.resolves(mockTx);
+
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        insertAccountLogStub.resolves({ creationTime: testCreationTime });
+        
+        const testLogTime = moment();
+        momentStub.returns(testLogTime);
+
+        const requestBody = {
+            adminUserId: testAdminId,
+            systemWideUserId: testUserId,
+            transactionId: testTxId,
+            fieldToUpdate: 'TRANSACTION',
+            newAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            reasonToLog: 'Saving event completed, at different EFT amount'
+        };
+
+        const testEvent = helper.wrapEvent(requestBody, testAdminId, 'SYSTEM_ADMIN');
+
+        adjustTxAmountStub.resolves({ updatedTime: testLogTime.format(), ...requestBody.newAmount });
+
+        const resultOfUpdate = await handler.manageUser(testEvent);
+        const resultBody = helper.standardOkayChecks(resultOfUpdate, true);
+        
+        const expectedResult = { result: 'SUCCESS', updateLog: { updatedTime: testLogTime.format(), ...requestBody.newAmount }};
+        expect(resultBody).to.deep.equal(expectedResult);
+
+        expect(fetchTxDetailsStub).to.have.been.calledOnceWithExactly(testTxId);
+        expect(adjustTxAmountStub).to.have.been.calledOnceWithExactly({
+            transactionId: testTxId,
+            newAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' }
+        });
+
+        const expectedUserEventLogOptions = {
+            initiator: testAdminId,
+            timestamp: testLogTime.valueOf(),
+            context: {
+                transactionId: testTxId,
+                accountId: testAccountId,
+                transactionType: 'USER_SAVING_EVENT',
+                transactionStatus: 'PENDING',
+                humanReference: 'JSAVE111',
+                timeInMillis: testLogTime.valueOf(),
+                oldAmount: { amount: 5000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                newAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                reason: 'Saving event completed, at different EFT amount'
+            }
+        };
+
+        const expectedAccountLog = {
+            transactionId: testTxId,
+            accountId: testAccountId,
+            adminUserId: testAdminId,
+            logType: 'ADMIN_UPDATED_TX',
+            logContext: {
+                reason: 'Saving event completed, at different EFT amount',
+                oldAmount: { amount: 5000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                newAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' }
+            }
+        };
+
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'ADMIN_UPDATED_TX', expectedUserEventLogOptions);
         expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedAccountLog);
     });
 
@@ -715,7 +844,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         const expectedResult = {
             statusCode: 400,
             headers: helper.expectedHeaders,
-            body: JSON.stringify('Error, transaction ID needed and valid transaction status')
+            body: JSON.stringify('Error, invalid transaction status')
         };
 
         const requiredProperties = ['transactionId', 'newTxStatus'];

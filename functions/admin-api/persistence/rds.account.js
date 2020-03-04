@@ -47,6 +47,28 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
     return resultOfCount[0]['count'];
 };
 
+// reversed order here because most likely to call this with no timestamps
+module.exports.listAccounts = async (includeNoSave = true, sinceMoment = null, untilMoment = null) => {
+    const accountTable = config.get('tables.accountTable');
+    const transactionTable = config.get('tables.transactionTable');
+
+    const start = sinceMoment ? sinceMoment.format() : moment(0).format();
+    const end = untilMoment ? untilMoment.format() : 'current_timestamp';
+    const values = ['USER_SAVING_EVENT', 'SETTLED', start, end];
+
+    const joinType = includeNoSave ? 'left join' : 'inner join';
+
+    const selectQuery = `select ${accountTable}.account_id, human_ref, ${accountTable}.creation_time, count(transaction_id) from ` + 
+            `${accountTable} ${joinType} ${transactionTable} on ${accountTable}.account_id = ${transactionTable}.account_id ` +
+            `where transaction_type = $1 and settlement_status = $2 and ${accountTable}.creation_time between $3 and $4` + 
+            `group by ${accountTable}.account_id`;
+
+    logger('Assembled select query: ', selectQuery);
+    const resultOfList = await rdsConnection.selectQuery(selectQuery, values);
+    logger('Result of selection: ', resultOfList[0]);
+    return resultOfList.map((row) => camelCaseKeys(row));
+};
+
 module.exports.fetchPendingTransactionsForAllUsers = async (startTime, endTime) => {
     logger(`Fetching pending transactions for all users between start time: ${startTime} and end time: ${endTime}`);
 
@@ -148,6 +170,20 @@ module.exports.adjustTxStatus = async ({ transactionId, newTxStatus, logContext 
     logger('Updating tx status, values: ', [newTxStatus, transactionId]);
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [newTxStatus, transactionId]);
     logger('Result of transaction update: ', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
+        ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
+};
+
+// todo : validation against prior
+module.exports.adjustTxAmount = async ({ transactionId, newAmount }) => {
+    logger('Adjusting transaction: ', transactionId, ', with these values: ', newAmount);
+    const updateQuery = `update ${config.get('tables.transactionTable')} set amount = $1, unit = $2, currency = $3 ` +
+        `where transaction_id = $4 returning amount, unit, currency, updated_time`;
+    const updateValues = [newAmount.amount, newAmount.unit, newAmount.currency, transactionId];
+
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
+    logger('Result of update: ', resultOfUpdate);
 
     return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
         ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
