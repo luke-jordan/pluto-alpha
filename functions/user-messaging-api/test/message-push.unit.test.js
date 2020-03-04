@@ -27,6 +27,7 @@ const deletePushTokenStub = sinon.stub();
 const assembleMessageStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 const publishUserEventStub = sinon.stub();
+const sendSmsStub = sinon.stub();
 
 class MockExpo {
     constructor () {
@@ -56,7 +57,8 @@ const handler = proxyquire('../message-push-handler', {
     },
     'expo-server-sdk': { Expo: MockExpo },
     'publish-common': {
-        'publishUserEvent': publishUserEventStub
+        'publishUserEvent': publishUserEventStub,
+        'sendSms': sendSmsStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -444,38 +446,34 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
 describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
     const testUserId = uuid();
-    const testClientId = uuid();
-    const testFloatId = uuid();
     const testInstructionId = uuid();
-
-    const testNationalId = '91122594738373';
-    const testCountryCode = 'ZAF';
 
     const testUpdateTime = moment().format(); 
 
     const template = '<p>Greetings {{user}}. Welcome to Jupiter.</p>';
 
-    const testUserProfile = {
+    const testPhoneProfile = {
         systemWideUserId: testUserId,
-        creationTimeEpochMillis: moment().valueOf(),
-        clientId: testClientId,
-        floatId: testFloatId,
-        defaultCurrency: 'USD',
-        defaultTimezone: 'America/New_York',
         personalName: 'John',
         familyName: 'Doe',
-        phoneNumber: '278384748264',
-        emailAddress: 'user@email.com',
-        countryCode: testCountryCode,
-        nationalId: testNationalId,
-        userStatus: 'CREATED',
-        kycStatus: 'CONTACT_VERIFIED',
-        securedStatus: 'PASSWORD_SET',
-        updatedTimeEpochMillis: moment().valueOf()
+        phoneNumber: '278384748264'
+    };
+
+    const testEmailProfile = {
+        systemWideUserId: testUserId,
+        personalName: 'Jane',
+        familyName: 'Doe',
+        emailAddress: 'user@email.com'
     };
 
     const mockUserMessage = () => ({
         destinationUserId: uuid(),
+        display: {
+            type: 'CARD',
+            titleType: 'EMPHASIS',
+            iconType: 'BOOST_ROCKET',
+            backupSms: 'Greetings. Welcome to Jupiter.'
+        },
         messageBody: template,
         messageTitle: 'Welcome to Jupiter',
         messageId: uuid(),
@@ -486,6 +484,12 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         messageId: uuid(),
         title: 'Welcome to jupiter. ',
         body: 'Greetings. Welcome to jupiter.',
+        display: {
+            type: 'CARD',
+            titleType: 'EMPHASIS',
+            iconType: 'BOOST_ROCKET',
+            backupSms: 'Greetings. Welcome to Jupiter.'
+        },
         priority: 1
     };
 
@@ -497,13 +501,17 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage(), mockUserMessage(), mockUserMessage(), mockUserMessage()]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
         
-        const numberProfileCalls = 4;
-        const profileResponse = helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) });
-        Array(numberProfileCalls).fill().forEach((_, index) => lamdbaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
+        const numberEmailProfileCalls = 2;
+        const profileResponse = helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) });
+        Array(numberEmailProfileCalls).fill().forEach((_, index) => lamdbaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
+        lamdbaInvokeStub.onCall(2).returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) })});
+        lamdbaInvokeStub.onCall(3).returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) })});
+
         
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
+        sendSmsStub.resolves({ result: 'SUCCESS' });
 
         const expectedResult = { channel: 'EMAIL', result: 'SUCCESS', numberSent: 4 };
 
