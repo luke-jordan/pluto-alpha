@@ -6,8 +6,9 @@ const opsUtil = require('ops-util-common');
 const dynamo = require('./persistence/dynamodb');
 const rds = require('./persistence/rds');
 const csvFile = require('./persistence/csvfile');
-const DecimalLight = require('decimal.js-light');
 const constants = require('./constants');
+
+const DecimalLight = require('decimal.js-light');
 
 const calculatePercent = (total, account) => (new DecimalLight(account)).dividedBy(total);
 
