@@ -66,7 +66,7 @@ const handler = proxyquire('../message-push-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingOutboundMessagesStub,
-    bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub, publishUserEventStub, lamdbaInvokeStub);
+    bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub, publishUserEventStub, lamdbaInvokeStub, sendSmsStub);
 
 describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
     const mockCreationTime = moment().format();
@@ -669,13 +669,18 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     });
 
     it('Sends emails and push messages to specific users', async () => {
+        const testEmailProfile = { ...testUserProfile };
+        const testPhoneProfile = { ...testUserProfile };
+        Reflect.deleteProperty(testPhoneProfile, 'emailAddress');
+        testPhoneProfile.systemWideUserId = uuid();
+
         const expectedEmail = {
             messageId: testUserId,
             to: 'user@email.com',
             from: 'hello@jupitersave.com',
             subject: 'Welcome to jupiter.',
-            text: 'Greetings. Welcome to jupiter.',
-            html: '<p>Greetings. Welcome to jupiter.</p>'
+            text: 'Greetings. Welcome to Jupiter.',
+            html: '<p>Greetings. Welcome to Jupiter.</p>'
         };
 
         const expectedWrapper = {
@@ -692,10 +697,12 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) }) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) }) });
+        lamdbaInvokeStub.onThirdCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) }) });
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         publishUserEventStub.resolves({ result: 'SUCCESS' });
+        sendSmsStub.resolves({ result: 'SUCCESS' });
 
         getPushTokenStub.resolves({ [testUserId]: persistedToken });
         chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
@@ -703,14 +710,15 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         const expectedResult = [
             { channel: 'PUSH', result: 'SUCCESS', numberSent: 2 },
-            { channel: 'EMAIL', result: 'SUCCESS', numberSent: 2 }
+            { channel: 'EMAIL', result: 'SUCCESS', numberSent: 3 }
         ];
 
         const testParams = {
-            systemWideUserIds: [testUserId, testUserId],
+            systemWideUserIds: [testUserId, testUserId, testUserId],
             provider: mockProvider,
             title: 'Welcome to jupiter.',
-            body: '<p>Greetings. Welcome to jupiter.</p>'
+            body: '<p>Greetings. Welcome to Jupiter.</p>',
+            backupSms: 'Greetings. Welcome to Jupiter.'
         };
 
         const result = await handler.sendOutboundMessages(testParams);
@@ -721,14 +729,16 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+        expect(lamdbaInvokeStub.callCount).to.deep.equal(4);
 
-        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId, testUserId], mockProvider);
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId, testUserId, testUserId], mockProvider);
         expect(chunkPushNotificationsStub).to.have.been.calledOnce;
 
         expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
+
+        expect(sendSmsStub).to.have.been.calledOnceWithExactly({ phoneNumber: '+278384748264', message: 'Greetings. Welcome to Jupiter.' });
 
         expect(assembleMessageStub).have.not.been.called;
         expect(publishUserEventStub).have.not.been.called;

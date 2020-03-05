@@ -257,7 +257,7 @@ const sendPendingEmailMsgs = async () => {
         const mappedContacts = userContactDetails.reduce((map, profile) => ({ ...map, [profile.destinationUserId]: { ...profile }}), {});
 
         const assembledMessages = await Promise.all(messagesToSend.map((msg) => pickMessageBody(msg)));
-        logger('And assembled messages: ', assembledMessages);
+        // logger('And assembled messages: ', assembledMessages);
 
         const messages = assembledMessages.map((msg) => {
             if (mappedContacts[msg.destinationUserId].emailAddress) {
@@ -273,7 +273,7 @@ const sendPendingEmailMsgs = async () => {
 
             return {
                 phoneNumber: `+${mappedContacts[msg.destinationUserId].phoneNumber}`,
-                message: msg.display.backupSms // document where this backup sms is retrieved
+                message: msg.display.backupSms
             };
         });
 
@@ -307,19 +307,40 @@ const sendPendingEmailMsgs = async () => {
 
 const sendEmailsToSpecificUsers = async (params) => {
     const destinationUserIds = params.systemWideUserIds;
-    const emailAddresses = await Promise.all(destinationUserIds.map((userId) => fetchUserContactDetail(userId)));
+    const userContactDetails = await Promise.all(destinationUserIds.map((userId) => fetchUserContactDetail(userId)));
+    logger('Got mapped contacts:', userContactDetails);
 
-    const messages = emailAddresses.map((email) => ({
-        messageId: email.destinationUserId, // allows target function to return user ids associated with failed messages
-        to: email.emailAddress,
-        from: config.get('email.fromAddress'),
-        subject: params.title,
-        text: striptags(params.body),
-        html: params.body
-    }));
+    const messages = userContactDetails.map((contact) => {
+        if (contact.emailAddress) {
+            return {
+                messageId: contact.destinationUserId,
+                to: contact.emailAddress,
+                from: config.get('email.fromAddress'),
+                subject: params.title,
+                text: striptags(params.body),
+                html: params.body
+            };
+        }
 
-    const resultOfSend = await dispatchEmailMessages(messages);
+        if (params.backupSms) {
+            return {
+                phoneNumber: `+${contact.phoneNumber}`,
+                message: params.backupSms
+            };
+        }
+
+        return null;
+
+    }).filter((msg) => msg !== null);
+
+    const resultOfSend = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
     logger('Result of email sending: ', resultOfSend);
+
+    const smsMessages = messages.filter((msg) => Reflect.has(msg, 'phoneNumber'));
+    if (smsMessages.length !== 0) {
+        const smsResult = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
+        logger('Result of sms dispatch', smsResult);
+    }
 
     if (Reflect.has(resultOfSend, 'result') && resultOfSend.result === 'SUCCESS') {
         const successfulMsgs = destinationUserIds.filter((userId) => !resultOfSend.failedMessageIds.includes(userId));
