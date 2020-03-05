@@ -8,6 +8,10 @@
         },
         "eventsEmailAddress": "insert_default_email"
     },
+    "lambdas": {
+        "sendEmailMessages": "email_send",
+        "sendSmsMessages": ""
+    },
     "crypto": {
         "algo": "sha256",
         "secret": "abcdefg",

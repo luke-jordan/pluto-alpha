@@ -5,6 +5,8 @@ const config = require('config');
 const format = require('string-format');
 const path = require('path');
 
+const request = require('request-promise');
+
 const opsUtil = require('ops-util-common');
 
 const htmlToText = require('html-to-text');
@@ -449,5 +451,48 @@ module.exports.sendEmailMessages = async (event) => {
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERR', message: err.message };
+    }
+};
+
+/**
+ * This function sends sms messages via the Twilio api. It accepts a message and a phone number, assembles the request,
+ * then hits up the Twilio API.
+ */
+module.exports.sendSmsMessage = async (event) => {
+    try {
+        if (opsUtil.isWarmup(event)) {
+            return { result: 'Empty invocation' };
+        }
+
+        const { message, phoneNumber } = opsUtil.extractParamsFromEvent(event);
+
+        const options = {
+            method: 'POST',
+            url: format(config.get('twilio.endpoint'), config.get('twilio.accountSid')),
+            data: {
+                body: message,
+                from: config.get('twilio.number'),
+                to: phoneNumber 
+            },
+            auth: {
+                username: config.get('twilio.accountSid'),
+                password: config.get('twilio.authToken')
+            },
+            json: true
+        };
+
+        logger('Assembled request:', options);
+        const result = await request(options);
+        logger('Got result:', result);
+
+        if (result.statusCode && result.statusCode === 200) {
+            return { result: 'SUCCESS' };
+        }
+
+        return { result: 'FAILURE' };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { statusCode: 500 };
     }
 };

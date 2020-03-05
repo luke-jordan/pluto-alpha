@@ -98,5 +98,11 @@
         "sandbox": {
             "off": false
         }
+    },
+    "twilio": {
+        "endpoint": "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
+        "accountSid": "ACd6623e2d2341f89f6ac3225effff4600",
+        "authToken": "56b0a34b1d3fa92e8fd83cbdfadd3e63",
+        "number": "+14156107197"
     }
 }

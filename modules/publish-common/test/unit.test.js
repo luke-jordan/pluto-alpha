@@ -16,7 +16,9 @@ chai.use(require('sinon-chai'));
 
 const proxyquire = require('proxyquire');
 
+const uuidStub = sinon.stub();
 const momentStub = sinon.stub();
+const lamdbaInvokeStub = sinon.stub();
 const getObjectStub = sinon.stub();
 const sendEmailStub = sinon.stub();
 const snsPublishStub = sinon.stub();
@@ -32,6 +34,12 @@ class MockS3Client {
     }
 }
 
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
+    }
+}
+
 class MockSesClient {
     constructor () { 
         this.sendEmail = sendEmailStub; 
@@ -40,24 +48,35 @@ class MockSesClient {
 
 const eventPublisher = proxyquire('../index', {
     'moment': momentStub,
-    'aws-sdk': { 
+    'aws-sdk': {
+        'Lambda': MockLambdaClient,
         'SNS': MockSNS,
         'SES': MockSesClient,
         'S3': MockS3Client
-    }
+    },
+    'uuid/v4': uuidStub
 });
 
 const resetStubs = () => {
+    uuidStub.reset();
     momentStub.reset();
     snsPublishStub.reset();
     getObjectStub.reset();
     sendEmailStub.reset();
+    lamdbaInvokeStub.reset();
 };
 
 describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
     const testTime = moment();
     const testUserId = uuid();
+
+    const mockLambdaResponse = (body, statusCode = 200) => ({
+        Payload: JSON.stringify({
+            statusCode,
+            body: JSON.stringify(body)
+        })
+    });
 
     const expectedHash = (eventType) => crypto.createHmac(config.get('crypto.algo'), config.get('crypto.secret')).
         update(`${config.get('crypto.secret')}_${eventType}`).
@@ -94,7 +113,6 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         snsPublishStub.returns({ promise: () => dummySnsResult });
 
         const publishResult = await eventPublisher.publishUserEvent(testUserId, 'ADD_CASH_INITITIATED');
-        logger('Result of publish: ', publishResult);
 
         expect(publishResult).to.exist;
         expect(publishResult).to.deep.equal({ result: 'SUCCESS' });
@@ -102,84 +120,88 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
     });
 
     it('Sends system email', async () => {
+        const testMessageId = uuid();
+        const targetEmails = ['user1@email.com', 'user2@email.com'];
+
         const templateBucket = config.has('templates.bucket') ? config.get('templates.bucket') : 'staging.jupiter.templates';
         const templateKey = 'test_template';
 
         const testTemplate = '<p>Greetings {}, from Jupiter.</p>';
         getObjectStub.withArgs({ Bucket: templateBucket, Key: templateKey }).returns({ promise: () => ({ Body: { toString: () => testTemplate }})});
-        sendEmailStub.returns({ promise: () => 'Email sent' });
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        uuidStub.returns(testMessageId);
 
-        const expectedEmail = {
-            Destination: {
-                ToAddresses: ['user1@email.com', 'user2@email.com']
-            },
-            Message: {
-                Body: {
-                    Html: { Data: '<p>Greetings Jacob, from Jupiter.</p>' },
-                    Text: { Data: 'Jupiter system email.' }
-                },
-                Subject: { Data: 'Salutations' }
-            },
-            Source: 'system@jupitersave.com',
-            ReplyToAddresses: ['system@jupitersave.com'],
-            ReturnPath: 'system@jupitersave.com'
+        const expectedInvocation = {
+            FunctionName: 'email_send',
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+                emailMessages: targetEmails.map((emailAddress) => ({
+                    from: 'system@jupitersave.com',
+                    html: '<p>Greetings Jacob, from Jupiter.</p>',
+                    messageId: testMessageId,
+                    subject: 'Salutations',
+                    text: 'Jupiter system email.',
+                    to: emailAddress
+                })
+            )})
         };
 
         const emailDetails = {
             originAddress: 'system@jupitersave.com',
             subject: 'Salutations',
-            toList: ['user1@email.com', 'user2@email.com'],
+            toList: targetEmails,
             bodyTemplateKey: templateKey,
             templateVariables: 'Jacob'
         };
 
         const resultOfDispatch = await eventPublisher.sendSystemEmail(emailDetails);
-        logger('Result of system email dispatch:', resultOfDispatch);
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: templateBucket, Key: templateKey });
-        expect(sendEmailStub).to.have.been.calledOnceWithExactly(expectedEmail);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('System email dispatch uses default source address where none is provided', async () => {
+        const testMessageId = uuid();
+        const targetEmails = ['user1@email.com', 'user2@email.com'];
+
         const templateBucket = config.has('templates.bucket') ? config.get('templates.bucket') : 'staging.jupiter.templates';
         const templateKey = 'test_template';
 
         const testTemplate = '<p>Greetings {}, from Jupiter.</p>';
         getObjectStub.withArgs({ Bucket: templateBucket, Key: templateKey }).returns({ promise: () => ({ Body: { toString: () => testTemplate }})});
-        sendEmailStub.returns({ promise: () => 'Email sent' });
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        uuidStub.returns(testMessageId);
 
-        const expectedEmail = {
-            Destination: {
-                ToAddresses: ['user1@email.com', 'user2@email.com']
-            },
-            Message: {
-                Body: {
-                    Html: { Data: '<p>Greetings Jacob, from Jupiter.</p>' },
-                    Text: { Data: 'Jupiter system email.' }
-                },
-                Subject: { Data: 'Salutations' }
-            },
-            Source: 'insert_default_email',
-            ReplyToAddresses: ['insert_default_email'],
-            ReturnPath: 'insert_default_email'
+        const expectedInvocation = {
+            FunctionName: 'email_send',
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+                emailMessages: targetEmails.map((emailAddress) => ({
+                    from: config.get('publishing.eventsEmailAddress'),
+                    html: '<p>Greetings Jacob, from Jupiter.</p>',
+                    messageId: testMessageId,
+                    subject: 'Salutations',
+                    text: 'Jupiter system email.',
+                    to: emailAddress
+                })
+            )})
         };
 
         const emailDetails = {
             subject: 'Salutations',
-            toList: ['user1@email.com', 'user2@email.com'],
+            toList: targetEmails,
             bodyTemplateKey: templateKey,
             templateVariables: 'Jacob'
         };
 
         const resultOfDispatch = await eventPublisher.sendSystemEmail(emailDetails);
-        logger('Result of system email dispatch:', resultOfDispatch);
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: templateBucket, Key: templateKey });
-        expect(sendEmailStub).to.have.been.calledOnceWithExactly(expectedEmail);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Handles the publication of multiple user events at once', async () => {
@@ -189,7 +211,6 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         snsPublishStub.returns({ promise: () => dummySnsResult });
 
         const resultOfDispatch = await eventPublisher.publishMultiUserEvent(userIds, 'USER_LOGIN');
-        logger('Result of multiple event publish:', resultOfDispatch);
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ successCount: 3, failureCount: 0 });
@@ -215,7 +236,6 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         snsPublishStub.throws(new Error('Publish error'));
 
         const resultOfDispatch = await eventPublisher.publishMultiUserEvent(userIds, 'USER_LOGIN');
-        logger('Result of multiple event publish:', resultOfDispatch);
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'FAILURE' });

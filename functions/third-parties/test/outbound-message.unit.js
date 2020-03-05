@@ -5,6 +5,8 @@ const config = require('config');
 const uuid = require('uuid/v4');
 const path = require('path');
 
+const moment = require('moment');
+
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
 const chai = require('chai');
@@ -12,6 +14,7 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
+const requestStub = sinon.stub();
 const sendGridStub = sinon.stub();
 const setApiKeyStub = sinon.stub();
 const setSubstitutionsStub = sinon.stub();
@@ -23,7 +26,8 @@ class MockS3Client {
     }
 }
 
-const handler = proxyquire('../email-handler', {
+const handler = proxyquire('../outbound-message-handler', {
+    'request-promise': requestStub,
     'aws-sdk': { 'S3': MockS3Client },
     '@sendgrid/mail': {
         'send': sendGridStub,
@@ -1078,4 +1082,71 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
     });
 
+});
+
+describe('*** UNIT TEST SMS FUNCTION ***', async () => {
+    const testPhoneNumber = '+27643534501';
+    const testMessage = 'Greetings from Jupiter.';
+
+    const testMessageId = uuid();
+
+    const testCurrentTime = moment();
+    const testUpdateTime = testCurrentTime.add(5, 'minutes');
+
+    const mockTwilioResponse = {
+        'account_sid': config.get('twilio.accountSid'),
+        'api_version': '2010-04-01',
+        'body': 'body',
+        'date_created': testCurrentTime.format(),
+        'date_sent': testCurrentTime.format(),
+        'date_updated': testUpdateTime.format(),
+        'direction': 'outbound-api',
+        'error_code': null,
+        'error_message': null,
+        'from': '+15017122661',
+        'messaging_service_sid': uuid(),
+        'num_media': '0',
+        'num_segments': '1',
+        'price': null,
+        'price_unit': null,
+        'sid': uuid(),
+        'status': 'sent',
+        'subresource_uris': {
+            'media': `/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages/${testMessageId}/Media.json`
+        },
+        'to': '+15558675310',
+        'uri': `/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages/${testMessageId}.json`
+    };
+
+    beforeEach(() => {
+        resetStubs(requestStub);
+    });
+
+    it('Sends sms messages', async () => {
+        const expectedOptions = {
+            method: 'POST',
+            url: `https://api.twilio.com/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages.json`,
+            data: {
+                body: testMessage,
+                from: config.get('twilio.number'),
+                to: testPhoneNumber
+            },
+            auth: {
+                username: config.get('twilio.accountSid'),
+                password: config.get('twilio.authToken')
+            },
+            json: true
+        };
+
+        requestStub.resolves({ statusCode: 200, body: mockTwilioResponse });
+
+        const testEvent = { phoneNumber: testPhoneNumber, message: testMessage };
+
+        const resultOfDispatch = await handler.sendSmsMessage(testEvent);
+
+        expect(resultOfDispatch).to.exist;
+        expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
+
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+    });
 });
