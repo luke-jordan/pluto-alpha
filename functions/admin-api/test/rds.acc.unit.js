@@ -125,7 +125,8 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
             `where transaction_type = $1 and settlement_status = $2 and account_data.core_account_ledger.creation_time between $3 and $4 ` + 
             `group by account_data.core_account_ledger.account_id`;
     
-        const expectedValues = ['USER_SAVING_EVENT', 'SETTLED', moment(0).format(), 'current_timestamp'];
+        // current_timestamp does not play well with formatting in this way, so matching any string
+        const expectedValues = ['USER_SAVING_EVENT', 'SETTLED', moment(0).format(), sinon.match.string]; 
         queryStub.resolves([{ 'account_id': 'account1' }, { 'account_id': 'account2' }]);
 
         const userList = await persistence.listAccounts();

@@ -54,7 +54,7 @@ module.exports.listAccounts = async (includeNoSave = true, sinceMoment = null, u
     const transactionTable = config.get('tables.transactionTable');
 
     const start = sinceMoment ? sinceMoment.format() : moment(0).format();
-    const end = untilMoment ? untilMoment.format() : 'current_timestamp';
+    const end = untilMoment ? untilMoment.format() : moment().format();
     const values = ['USER_SAVING_EVENT', 'SETTLED', start, end];
 
     const joinType = includeNoSave ? 'left join' : 'inner join';
