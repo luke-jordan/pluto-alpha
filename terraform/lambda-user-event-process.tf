@@ -136,17 +136,17 @@ resource "aws_iam_role_policy_attachment" "user_event_process_secret_get" {
 ////////////////// SUBSCRIPTION TO TOPIC //////////////////////////////////////////////////////////////
 
 resource "aws_sns_topic_subscription" "user_event_process_lambda" {
-  topic_arn = "${var.user_event_topic_arn[terraform.workspace]}"
+  topic_arn = var.user_event_topic_arn[terraform.workspace]
   protocol = "lambda"
-  endpoint = "${aws_lambda_function.user_event_process.arn}"
+  endpoint = aws_lambda_function.user_event_process.arn
 }
 
 resource "aws_lambda_permission" "with_sns" {
     statement_id = "EventProcessAllowExecutionFromSNS"
     action = "lambda:InvokeFunction"
-    function_name = "${aws_lambda_function.user_event_process.function_name}"
+    function_name = aws_lambda_function.user_event_process.function_name
     principal = "sns.amazonaws.com"
-    source_arn = "${var.user_event_topic_arn[terraform.workspace]}"
+    source_arn = var.user_event_topic_arn[terraform.workspace]
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

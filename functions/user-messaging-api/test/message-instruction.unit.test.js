@@ -89,7 +89,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: testTime.format(),
         messagePriority: instruction.messagePriority,
-        flags: instruction.presentationType === 'EVENT_DRIVEN' ? [instruction.eventTypeCategory] : []
+        flags: instruction.presentationType === 'EVENT_DRIVEN' ? [`EVENT_TYPE::${instruction.eventTypeCategory}`] : []
     });
 
     const commonAssertions = (result, statusCode, expectedResult) => {

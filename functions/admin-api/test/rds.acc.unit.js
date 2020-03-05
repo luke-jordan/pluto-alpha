@@ -116,6 +116,25 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
     });
 
+    it('Fetches a list of current users', async () => {
+
+        const expectedQuery = `select account_data.core_account_ledger.account_id, human_ref, ` +
+            `account_data.core_account_ledger.creation_time, count(transaction_id) from ` + 
+            `account_data.core_account_ledger left join transaction_data.core_transaction_ledger on ` +
+            `account_data.core_account_ledger.account_id = transaction_data.core_transaction_ledger.account_id ` +
+            `where transaction_type = $1 and settlement_status = $2 and account_data.core_account_ledger.creation_time between $3 and $4 ` + 
+            `group by account_data.core_account_ledger.account_id`;
+    
+        // current_timestamp does not play well with formatting in this way, so matching any string
+        const expectedValues = ['USER_SAVING_EVENT', 'SETTLED', moment(0).format(), sinon.match.string]; 
+        queryStub.resolves([{ 'account_id': 'account1' }, { 'account_id': 'account2' }]);
+
+        const userList = await persistence.listAccounts();
+        expect(userList).to.deep.equal([{ accountId: 'account1' }, { accountId: 'account2' }]);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
+    });
+
     it('Fetches a users pending transactions', async () => {
         const testUserId = uuid();
         const startDate = moment();
@@ -274,6 +293,32 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         };
 
         const resultOfUpdate = await persistence.adjustTxStatus(params);
+        logger('Result of transaction update:', resultOfUpdate);
+        
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(expectedResult);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, updateValues);
+    });
+
+    it('Adjusts transaction amount', async () => {
+        const testUpdatedTime = moment().format();
+
+        const testTransactionId = uuid();
+
+        const updateQuery = 'update transaction_data.core_transaction_ledger set amount = $1, unit = $2, currency = $3 where ' +
+            'transaction_id = $4 returning amount, unit, currency, updated_time';
+        const updateValues = [10000, 'HUNDREDTH_CENT', 'USD', testTransactionId];
+
+        updateRecordStub.resolves({ rows: [{ 'amount': 10000, 'unit': 'HUNDREDTH_CENT', 'currency': 'USD', 'updated_time': testUpdatedTime }] });
+
+        const expectedResult = { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD', updatedTime: testUpdatedTime };
+
+        const params = {
+            transactionId: testTransactionId,
+            newAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' }
+        };
+
+        const resultOfUpdate = await persistence.adjustTxAmount(params);
         logger('Result of transaction update:', resultOfUpdate);
         
         expect(resultOfUpdate).to.exist;
