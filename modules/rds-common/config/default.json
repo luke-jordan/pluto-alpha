@@ -9,5 +9,11 @@
         "testUser": "jupitertest",
         "testPassword": "verylongpassword"
     },
+    "secrets": {
+        "enabled": false,
+        "names": {
+            "jupitertest": "somesecret"
+        }
+    },
     "RdsConnection": { }
 }

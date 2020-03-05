@@ -1,9 +1,9 @@
 'use strict';
 
-const { QueryError, CommitError, NoValuesError } = require('../errors');
+const importFresh = require('import-fresh');
 
 const logger = require('debug')('jupiter:rds-common:unit-test');
-const config = require('config');
+const config = importFresh('config');
 
 const chai = require('chai');
 const sinon = require('sinon');
@@ -12,7 +12,7 @@ const chaiAsPromised = require('chai-as-promised');
 
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const queryStub = sinon.stub();
 const releaseStub = sinon.stub();
@@ -45,6 +45,8 @@ const RdsConnection = proxyquire('../index', {
     'pg': { Pool: MockPostgres },
     '@noCallThru': true
 });
+
+const { QueryError, CommitError, NoValuesError } = require('../errors');
 
 const expectTxWrapping = (expectedTxEnd) => {
     expect(queryStub).to.have.been.calledWithExactly('BEGIN');
@@ -388,25 +390,6 @@ describe('*** UNIT TEST RESTRICTED FREE FORM INSERT ***', () => {
         expect(properResult).to.exist;
         expect(queryStub).to.have.been.calledWith(queries[0].template, queries[0].values);
         expect(queryStub).to.have.been.calledWith(queries[1].template, queries[1].values);
-    });
-
-});
-
-describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
-    
-    let rdsClient = { };
-
-    before(() => {
-        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
-    });
-
-    afterEach(() => {
-        clearStubHistory();
-    });
-
-    it('Calling end pool drains it', async () => {
-        await rdsClient.endPool();
-        expect(endStub).to.have.been.calledOnce;
     });
 
 });
