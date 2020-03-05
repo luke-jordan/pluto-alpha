@@ -22,21 +22,19 @@ class MockSecretsManager {
     }
 }
 
-const obtainFreshConnection = (dbConfig) => {
+const obtainFreshConnection = () => {
     const RdsConnection = proxyquire('../index', {
         'pg': { Pool: poolConstructorStub },
         'aws-sdk': { 'SecretsManager': MockSecretsManager },
         '@noCallThru': true
     });
     
-    return new RdsConnection(dbConfig, { enabled: true });
+    return new RdsConnection(config.get('db'), { enabled: true });
 };
 
 describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
     
     let rdsClient = { };
-
-    const dbConfig = { db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword') };
 
     beforeEach(() => {
         poolConstructorStub.reset();
@@ -51,7 +49,7 @@ describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
         getSecretStub.yields(false, { SecretString: JSON.stringify(mockSecret) });
         connectStub.returns('Connection established');
 
-        rdsClient = obtainFreshConnection(dbConfig);
+        rdsClient = obtainFreshConnection();
         const connection = await rdsClient._getConnection(10, 50);
         expect(connection).to.deep.equal('Connection established');
         expect(getSecretStub).to.have.been.calledOnceWith({ SecretId: 'somesecret' });
@@ -63,7 +61,7 @@ describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
         getSecretStub.onSecondCall().yields(false, { SecretString: JSON.stringify(mockSecret) });
         connectStub.returns('Connection established');
 
-        rdsClient = obtainFreshConnection(dbConfig);
+        rdsClient = obtainFreshConnection();
         const connection = await rdsClient._getConnection(10, 50);
         expect(connection).to.deep.equal('Connection established');
         expect(getSecretStub).to.have.been.calledTwice;
@@ -82,7 +80,7 @@ describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
         
         connectStub.returns('Connection established');
 
-        rdsClient = obtainFreshConnection(dbConfig);
+        rdsClient = obtainFreshConnection();
         const connection = await rdsClient._getConnection(10);
         expect(connection).to.deep.equal('Connection established');
         expect(getSecretStub).to.have.been.calledTwice;
@@ -99,12 +97,12 @@ describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
             '@noCallThru': true
         });
         
-        const firstClient = new RdsConnection(dbConfig, { enabled: true });
+        const firstClient = new RdsConnection(config.get('db'), { enabled: true });
         const connection = await firstClient._getConnection(10, 50);
         
         expect(connection).to.deep.equal('Connection established');
 
-        const secondClient = new RdsConnection(dbConfig, { enabled: true });
+        const secondClient = new RdsConnection(config.get('db'), { enabled: true });
 
         const secondConnect = await secondClient._getConnection(10, 50);
         expect(secondConnect).to.deep.equal('Connection established');

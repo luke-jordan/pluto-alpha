@@ -84,7 +84,7 @@ describe('Basic query pass through', () => {
 
     before(() => {
         queryStub.withArgs('SELECT 1').returns(select1result);
-        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
+        rdsClient = new RdsConnection(config.get('db'));
     });
 
     afterEach(() => {
@@ -155,7 +155,7 @@ describe('*** UNIT TEST BULK ROW INSERTION ***', () => {
 
     let rdsClient = { };
     before(() => {
-        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
+        rdsClient = new RdsConnection(config.get('db'));
     });
 
     beforeEach(() => {
@@ -281,7 +281,7 @@ describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
 
     let rdsClient = { };
     before(() => { 
-        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
+        rdsClient = new RdsConnection(config.get('db'));
     });
     beforeEach(() => clearStubHistory());
 
@@ -349,7 +349,7 @@ describe('*** UNIT TEST RESTRICTED FREE FORM INSERT ***', () => {
 
     let rdsClient = { };
     before(() => {
-        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
+        rdsClient = new RdsConnection(config.get('db'));
     });
 
     beforeEach(() => {
@@ -399,7 +399,7 @@ describe('Error handling, including connection release, non-parameterized querie
     let rdsClient = { };
 
     before(() => {
-        rdsClient = new RdsConnection({db: config.get('db.testDb'), user: config.get('db.testUser'), password: config.get('db.testPassword')});
+        rdsClient = new RdsConnection(config.get('db'));
     });
 
     beforeEach(() => {

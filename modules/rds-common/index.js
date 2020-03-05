@@ -59,32 +59,26 @@ class RdsConnection {
      * @property {number} port Optiona. As above.
      * @param {object} secretsConfig (Optional) Allows override to enforce secrets config, mostly for testing (as otherwise, config hell)
      */
-    constructor (dbConfigs, secretsConfig) {
+    constructor (dbConfig, secretsConfig) {
         const self = this;
 
         logger('***** INITIALIZING DB CLIENT POOL ***********');
         
-        const defaultConfigs = {
-            database: 'plutotest', user: 'plutotest', password: 'verylongpassword', host: 'localhost', port: '5432' 
-        };
-        
-        // pattern is nicely explained here: https://github.com/lorenwest/node-config/wiki/Sub-Module-Configuration
-        config.util.extendDeep(defaultConfigs, dbConfigs);
-        config.util.setModuleDefaults('RdsConnection', defaultConfigs);
+        self.dbConfig = dbConfig;
 
         // eslint-disable-next-line no-extra-parens
         self.useSecret = secretsMgmtEnabled || (secretsConfig && secretsConfig.enabled);
-        logger('Connecting with user: ', config.get('RdsConnection.user'), ' secret mgmt enabled: ', self.useSecret);
+        logger('Connecting with user: ', self.dbConfig.user, ' secret mgmt enabled: ', self.useSecret);
         
         if (this.useSecret) {
             logger('Secrets management enabled, fetching');
-            self._fetchUserAndPwordFromSecrets(config.get('RdsConnection.user'));    
+            self._fetchUserAndPwordFromSecrets(self.dbConfig.user);    
         } else {
             self._initializePool({});
         }
     }
 
-    async _attemptSecretRetrieval (secretId) {
+    static async _attemptSecretRetrieval (secretId) {
         logger('Attempting secret retrieval ....');
         return new Promise((resolve, reject) => {
             secretsClient.getSecretValue({ SecretId: secretId }, (err, fetchedSecretData) => {
@@ -115,7 +109,7 @@ class RdsConnection {
 
         try {
             logger('No cached credentials, attempting to retrieve');
-            const { user, password } = await self._attemptSecretRetrieval(config.get(`secrets.names.${rdsUserName}`));
+            const { user, password } = await RdsConnection._attemptSecretRetrieval(config.get(`secrets.names.${rdsUserName}`));
             self._initializePool({ userOverride: user, pwordOverride: password });
         } catch (err) {
             logger('Connection failure to obtain secrets, error: ', err);
@@ -129,20 +123,20 @@ class RdsConnection {
         retrievedPass = null;
         secretVoided = true;
         logger('Voided cached secret retrieved credentials, trying again');
-        self._fetchUserAndPwordFromSecrets(config.get('RdsConnection.user'));
+        self._fetchUserAndPwordFromSecrets(self.dbConfig.user);
     }
 
     _initializePool ({ userOverride, pwordOverride }) {
         const self = this;
 
-        const userToUse = userOverride || config.get('RdsConnection.user'); 
-        const pwordToUse = pwordOverride || config.get('RdsConnection.password'); 
+        const userToUse = userOverride || self.dbConfig.user; 
+        const pwordToUse = pwordOverride || self.dbConfig.password; 
 
         try {
             self._pool = new Pool({
-                host: config.get('RdsConnection.host'),
-                port: config.get('RdsConnection.port'),
-                database: config.get('RdsConnection.database'),
+                host: self.dbConfig.host,
+                port: self.dbConfig.port,
+                database: self.dbConfig.database,
                 user: userToUse,
                 password: pwordToUse
             });
@@ -181,7 +175,7 @@ class RdsConnection {
     }
 
 
-    async onlyAllowAudienceWorkerRole (client) {
+    static async onlyAllowAudienceWorkerRole (client) {
         const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
         const thisRoleResult = await client.query('select current_role');
         const connectedRole = thisRoleResult.rows[0]['current_role'];
@@ -384,7 +378,7 @@ class RdsConnection {
 
         let results = null;
         const client = await this._getConnection();
-        await this.onlyAllowAudienceWorkerRole(client);
+        await RdsConnection.onlyAllowAudienceWorkerRole(client);
 
         try {
             await client.query('BEGIN');
@@ -477,7 +471,7 @@ class RdsConnection {
      */
     async freeFormInsert (queries) {
         const client = await this._getConnection();
-        await this.onlyAllowAudienceWorkerRole(client);
+        await RdsConnection.onlyAllowAudienceWorkerRole(client);
 
         const allowedTables = ['audience_data.audience', 'audience_data.audience_account_join'];
         const queryTest = (query) => allowedTables.some((table) => query.template.startsWith(`insert into ${table}`));
