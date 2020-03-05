@@ -48,6 +48,7 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
 };
 
 // reversed order here because most likely to call this with no timestamps
+// todo : require client-float on here
 module.exports.listAccounts = async (includeNoSave = true, sinceMoment = null, untilMoment = null) => {
     const accountTable = config.get('tables.accountTable');
     const transactionTable = config.get('tables.transactionTable');
@@ -60,10 +61,11 @@ module.exports.listAccounts = async (includeNoSave = true, sinceMoment = null, u
 
     const selectQuery = `select ${accountTable}.account_id, human_ref, ${accountTable}.creation_time, count(transaction_id) from ` + 
             `${accountTable} ${joinType} ${transactionTable} on ${accountTable}.account_id = ${transactionTable}.account_id ` +
-            `where transaction_type = $1 and settlement_status = $2 and ${accountTable}.creation_time between $3 and $4` + 
+            `where transaction_type = $1 and settlement_status = $2 and ${accountTable}.creation_time between $3 and $4 ` + 
             `group by ${accountTable}.account_id`;
 
     logger('Assembled select query: ', selectQuery);
+    logger('Assembled select values: ', values);
     const resultOfList = await rdsConnection.selectQuery(selectQuery, values);
     logger('Result of selection: ', resultOfList[0]);
     return resultOfList.map((row) => camelCaseKeys(row));

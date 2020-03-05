@@ -122,7 +122,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
             `account_data.core_account_ledger.creation_time, count(transaction_id) from ` + 
             `account_data.core_account_ledger left join transaction_data.core_transaction_ledger on ` +
             `account_data.core_account_ledger.account_id = transaction_data.core_transaction_ledger.account_id ` +
-            `where transaction_type = $1 and settlement_status = $2 and account_data.core_account_ledger.creation_time between $3 and $4` + 
+            `where transaction_type = $1 and settlement_status = $2 and account_data.core_account_ledger.creation_time between $3 and $4 ` + 
             `group by account_data.core_account_ledger.account_id`;
     
         const expectedValues = ['USER_SAVING_EVENT', 'SETTLED', moment(0).format(), 'current_timestamp'];
