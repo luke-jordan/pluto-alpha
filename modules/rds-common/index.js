@@ -7,16 +7,39 @@ const config = require('config');
 const decamelize = require('decamelize');
 
 const sleep = require('util').promisify(setTimeout);
-const secretsWaitInterval = 100;
 
 const { Pool } = require('pg');
 const format = require('pg-format');
 
 const AWS = require('aws-sdk');
+AWS.config.update({
+    region: config.get('aws.region'),
+    maxRetries: 5,
+    httpOptions: {
+        timeout: 5000,
+        connectTimeout: 2000
+    }
+});
+
+const secretsClient = new AWS.SecretsManager();
 
 const { QueryError, CommitError, NoValuesError } = require('./errors');
 
 const decamelizeKeys = (object, separator) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, separator)]: object[key] }), {});
+
+// making this globally available, on redesign to handle errors better
+const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
+
+// to avoid multiple calls to AWS SecretsManager (could possibly move into class, but putting here is no loss, and putting in class
+// will require a more detailed consideration of lambda container handling than present time allows)
+let retrievedUser = null;
+let retrievedPass = null;
+let secretVoided = false;
+
+const MAX_RETRY_ATTEMPTS = 4;
+
+const MAX_WAIT_PERIOD = 3000;
+const DEFAULT_SECRET_WAIT_INTERVAL = 100;
 
 /**
  * This provides wrapping, abstraction, and simplification for interacting with 
@@ -28,81 +51,112 @@ class RdsConnection {
 
     /**
      * Creates a client to the relevant RDS host and initiates work on it
-     * @param {string} db The relevant DB for this client (host is either specified below or global instance is used)
-     * @param {string} user The user, the remainder of the client assumes this has the correct permissions
-     * @param {string} password Password for the given user. If secret mgmt is enabled this will be ignored. 
-     * @param {string} host Optional. A specified host, otherwise global default for environment is used.
-     * @param {number} port Optiona. As above.
+     * @param {object} dbConfigs DB configuration properties, required 
+     * @property {string} db The relevant DB for this client (host is either specified below or global instance is used)
+     * @property {string} user The user, the remainder of the client assumes this has the correct permissions
+     * @property {string} password Password for the given user. If secret mgmt is enabled this will be ignored. 
+     * @property {string} host Optional. A specified host, otherwise global default for environment is used.
+     * @property {number} port Optiona. As above.
+     * @param {object} secretsConfig (Optional) Allows override to enforce secrets config, mostly for testing (as otherwise, config hell)
      */
-    constructor (dbConfigs) {
+    constructor (dbConfig, secretsConfig) {
         const self = this;
-        
-        const defaultConfigs = {
-            database: 'plutotest', user: 'plutotest', password: 'verylongpassword', host: 'localhost', port: '5432' 
-        };
-        
-        // pattern is nicely explained here: https://github.com/lorenwest/node-config/wiki/Sub-Module-Configuration
-        config.util.extendDeep(defaultConfigs, dbConfigs);
-        config.util.setModuleDefaults('RdsConnection', defaultConfigs);
 
-        const secretsMgmtEnabled = config.has('secrets.enabled') ? config.get('secrets.enabled') : false;
-        logger('Connecting with user: ', config.get('RdsConnection.user'), ' secret mgmt enabled: ', secretsMgmtEnabled);
+        logger('***** INITIALIZING DB CLIENT POOL ***********');
         
-        if (secretsMgmtEnabled) {
+        self.dbConfig = dbConfig;
+
+        // eslint-disable-next-line no-extra-parens
+        self.useSecret = secretsMgmtEnabled || (secretsConfig && secretsConfig.enabled);
+        logger('Connecting with user: ', self.dbConfig.user, ' secret mgmt enabled: ', self.useSecret);
+        
+        if (this.useSecret) {
             logger('Secrets management enabled, fetching');
-            self._obtainSecretPword(config.get('RdsConnection.user'));    
+            self._fetchUserAndPwordFromSecrets(self.dbConfig.user);    
         } else {
             self._initializePool({});
         }
     }
 
-    _obtainSecretPword (rdsUserName) {
-        const self = this;
-        
-        const secretName = config.get(`secrets.names.${rdsUserName}`);
-        logger('Fetching secret with name: ', secretName);
-        const secretsClient = new AWS.SecretsManager({ region: config.get('aws.region') });        
-        secretsClient.getSecretValue({ 'SecretId': secretName }, (err, fetchedSecretData) => {
-            if (err) {
-                logger('Error retrieving auth secret for RDS: ', err);
-                throw err;
-            }
-            // Decrypts secret using the associated KMS CMK.
-            // Depending on whether the secret is a string or binary, one of these fields will be populated.
-            logger('No error, got the secret, moving onward');
-            if ('SecretString' in fetchedSecretData) {
-                const secret = JSON.parse(fetchedSecretData.SecretString);
-                self._initializePool({ userOverride: secret.username, pwordOverride: secret.password });
-            } else {
-                const buff = Buffer.from(fetchedSecretData.SecretBinary, 'base64');
-                const decodedBinarySecret = buff.toString('ascii');
-                self._initializePool(decodedBinarySecret);
-            }
+    static async _attemptSecretRetrieval (secretId) {
+        logger('Attempting secret retrieval ....');
+        return new Promise((resolve, reject) => {
+            secretsClient.getSecretValue({ SecretId: secretId }, (err, fetchedSecretData) => {
+                logger('Error inside secrets promise? : ', err);
+                if (err) {
+                    reject(err);
+                }
+                
+                const { username, password } = JSON.parse(fetchedSecretData.SecretString);
+                retrievedUser = username;
+                retrievedPass = password;
+                resolve({ user: username, password: password });    
+            });
         });
+    }
+
+    async _fetchUserAndPwordFromSecrets (rdsUserName, retryAttemptNumber = 0) {
+        const self = this;
+
+        if (retryAttemptNumber >= MAX_RETRY_ATTEMPTS) {
+            throw Error(`Secrets Manager connection failed after ${retryAttemptNumber} attempts`);
+        }
+
+        if (retrievedUser && retrievedPass) {
+            self._initializePool({ userOverride: retrievedUser, pwordOverride: retrievedPass });
+            return;
+        }
+
+        try {
+            logger('No cached credentials, attempting to retrieve');
+            const { user, password } = await RdsConnection._attemptSecretRetrieval(config.get(`secrets.names.${rdsUserName}`));
+            self._initializePool({ userOverride: user, pwordOverride: password });
+        } catch (err) {
+            logger('Connection failure to obtain secrets, error: ', err);
+            this._fetchUserAndPwordFromSecrets(rdsUserName, retryAttemptNumber + 1);
+        }
+    }
+
+    _voidCachedPwordAndRetry () {
+        const self = this;
+        retrievedUser = null;
+        retrievedPass = null;
+        secretVoided = true;
+        logger('Voided cached secret retrieved credentials, trying again');
+        self._fetchUserAndPwordFromSecrets(self.dbConfig.user);
     }
 
     _initializePool ({ userOverride, pwordOverride }) {
         const self = this;
 
-        const userToUse = userOverride || config.get('RdsConnection.user'); 
-        const pwordToUse = pwordOverride || config.get('RdsConnection.password'); 
+        const userToUse = userOverride || self.dbConfig.user; 
+        const pwordToUse = pwordOverride || self.dbConfig.password; 
 
-        self._pool = new Pool({
-            host: config.get('RdsConnection.host'),
-            port: config.get('RdsConnection.port'),
-            database: config.get('RdsConnection.database'),
-            user: userToUse,
-            password: pwordToUse
-        });
-        
-        logger('Set up pool, ready to initiate connections');
+        try {
+            self._pool = new Pool({
+                host: self.dbConfig.host,
+                port: self.dbConfig.port,
+                database: self.dbConfig.database,
+                user: userToUse,
+                password: pwordToUse
+            });
+            
+            logger('Set up pool, ready to initiate connections');
+        } catch (err) {
+            logger('Failed to connect, error: ', err);
+            if (self.useSecret && !secretVoided) {
+                this._voidCachedPwordAndRetry();
+            }
+        }
     }
 
-    async _getConnection () {
+    async _getConnection (waitInterval = DEFAULT_SECRET_WAIT_INTERVAL, maxWait = MAX_WAIT_PERIOD) {
         const self = this;
-        while (!self._pool) {
+        let waitTime = 0;
+        while (!self._pool && waitTime < maxWait) {
             logger('No pool yet, waiting ...');
-            await sleep(secretsWaitInterval);
+            waitTime += waitInterval;
+            await sleep(waitInterval);
         }
         return self._pool.connect();
     }
@@ -121,7 +175,7 @@ class RdsConnection {
     }
 
 
-    async onlyAllowAudienceWorkerRole (client) {
+    static async onlyAllowAudienceWorkerRole (client) {
         const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
         const thisRoleResult = await client.query('select current_role');
         const connectedRole = thisRoleResult.rows[0]['current_role'];
@@ -324,7 +378,7 @@ class RdsConnection {
 
         let results = null;
         const client = await this._getConnection();
-        await this.onlyAllowAudienceWorkerRole(client);
+        await RdsConnection.onlyAllowAudienceWorkerRole(client);
 
         try {
             await client.query('BEGIN');
@@ -417,7 +471,7 @@ class RdsConnection {
      */
     async freeFormInsert (queries) {
         const client = await this._getConnection();
-        await this.onlyAllowAudienceWorkerRole(client);
+        await RdsConnection.onlyAllowAudienceWorkerRole(client);
 
         const allowedTables = ['audience_data.audience', 'audience_data.audience_account_join'];
         const queryTest = (query) => allowedTables.some((table) => query.template.startsWith(`insert into ${table}`));

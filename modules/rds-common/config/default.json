@@ -5,9 +5,15 @@
     "db": {
         "host": "localhost",
         "port": "5432",
-        "testDb": "jupitertest",
-        "testUser": "jupitertest",
-        "testPassword": "verylongpassword"
+        "database": "jupitertest",
+        "user": "jupitertest",
+        "password": "verylongpassword"
+    },
+    "secrets": {
+        "enabled": false,
+        "names": {
+            "jupitertest": "somesecret"
+        }
     },
     "RdsConnection": { }
 }
