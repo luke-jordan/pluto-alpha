@@ -137,8 +137,10 @@ const createPersistableObject = (instruction, creatingUserId) => {
     const presentationType = instruction.presentationType;
     const processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_GENERATING' : 'CREATED';
 
-    const flags = presentationType === 'EVENT_DRIVEN' ? [instruction.eventTypeCategory] : [];
+    const flags = presentationType === 'EVENT_DRIVEN' ? [`EVENT_TYPE::${instruction.eventTypeCategory}`] : [];
     logger('Object created with flags: ', flags);
+
+    logger('Message instruction templates: ', JSON.stringify(instruction.templates));
 
     return {
         instructionId,

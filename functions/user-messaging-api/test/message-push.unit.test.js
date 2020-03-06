@@ -27,6 +27,7 @@ const deletePushTokenStub = sinon.stub();
 const assembleMessageStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 const publishUserEventStub = sinon.stub();
+const sendSmsStub = sinon.stub();
 
 class MockExpo {
     constructor () {
@@ -56,7 +57,8 @@ const handler = proxyquire('../message-push-handler', {
     },
     'expo-server-sdk': { Expo: MockExpo },
     'publish-common': {
-        'publishUserEvent': publishUserEventStub
+        'publishUserEvent': publishUserEventStub,
+        'sendSms': sendSmsStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -64,7 +66,7 @@ const handler = proxyquire('../message-push-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(sendPushNotificationsAsyncStub, chunkPushNotificationsStub, getPendingOutboundMessagesStub,
-    bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub, publishUserEventStub, lamdbaInvokeStub);
+    bulkUpdateStatusStub, getPushTokenStub, insertPushTokenStub, deletePushTokenStub, assembleMessageStub, publishUserEventStub, lamdbaInvokeStub, sendSmsStub);
 
 describe('*** UNIT TESTING PUSH TOKEN INSERTION HANDLER ***', () => {
     const mockCreationTime = moment().format();
@@ -444,38 +446,34 @@ describe('*** UNIT TESTING PUSH NOTIFICATION SENDING ***', () => {
 
 describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
     const testUserId = uuid();
-    const testClientId = uuid();
-    const testFloatId = uuid();
     const testInstructionId = uuid();
-
-    const testNationalId = '91122594738373';
-    const testCountryCode = 'ZAF';
 
     const testUpdateTime = moment().format(); 
 
     const template = '<p>Greetings {{user}}. Welcome to Jupiter.</p>';
 
-    const testUserProfile = {
+    const testPhoneProfile = {
         systemWideUserId: testUserId,
-        creationTimeEpochMillis: moment().valueOf(),
-        clientId: testClientId,
-        floatId: testFloatId,
-        defaultCurrency: 'USD',
-        defaultTimezone: 'America/New_York',
         personalName: 'John',
         familyName: 'Doe',
-        phoneNumber: '278384748264',
-        emailAddress: 'user@email.com',
-        countryCode: testCountryCode,
-        nationalId: testNationalId,
-        userStatus: 'CREATED',
-        kycStatus: 'CONTACT_VERIFIED',
-        securedStatus: 'PASSWORD_SET',
-        updatedTimeEpochMillis: moment().valueOf()
+        phoneNumber: '278384748264'
+    };
+
+    const testEmailProfile = {
+        systemWideUserId: testUserId,
+        personalName: 'Jane',
+        familyName: 'Doe',
+        emailAddress: 'user@email.com'
     };
 
     const mockUserMessage = () => ({
         destinationUserId: uuid(),
+        display: {
+            type: 'CARD',
+            titleType: 'EMPHASIS',
+            iconType: 'BOOST_ROCKET',
+            backupSms: 'Greetings. Welcome to Jupiter.'
+        },
         messageBody: template,
         messageTitle: 'Welcome to Jupiter',
         messageId: uuid(),
@@ -486,6 +484,12 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         messageId: uuid(),
         title: 'Welcome to jupiter. ',
         body: 'Greetings. Welcome to jupiter.',
+        display: {
+            type: 'CARD',
+            titleType: 'EMPHASIS',
+            iconType: 'BOOST_ROCKET',
+            backupSms: 'Greetings. Welcome to Jupiter.'
+        },
         priority: 1
     };
 
@@ -497,13 +501,17 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage(), mockUserMessage(), mockUserMessage(), mockUserMessage()]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
         
-        const numberProfileCalls = 4;
-        const profileResponse = helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) });
-        Array(numberProfileCalls).fill().forEach((_, index) => lamdbaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
+        const numberEmailProfileCalls = 2;
+        const profileResponse = helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) });
+        Array(numberEmailProfileCalls).fill().forEach((_, index) => lamdbaInvokeStub.onCall(index).returns({ promise: () => profileResponse }));
+        lamdbaInvokeStub.onCall(2).returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) })});
+        lamdbaInvokeStub.onCall(3).returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) })});
+
         
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
+        sendSmsStub.resolves({ result: 'SUCCESS' });
 
         const expectedResult = { channel: 'EMAIL', result: 'SUCCESS', numberSent: 4 };
 
@@ -661,13 +669,18 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     });
 
     it('Sends emails and push messages to specific users', async () => {
+        const testEmailProfile = { ...testUserProfile };
+        const testPhoneProfile = { ...testUserProfile };
+        Reflect.deleteProperty(testPhoneProfile, 'emailAddress');
+        testPhoneProfile.systemWideUserId = uuid();
+
         const expectedEmail = {
             messageId: testUserId,
             to: 'user@email.com',
             from: 'hello@jupitersave.com',
             subject: 'Welcome to jupiter.',
-            text: 'Greetings. Welcome to jupiter.',
-            html: '<p>Greetings. Welcome to jupiter.</p>'
+            text: 'Greetings. Welcome to Jupiter.',
+            html: '<p>Greetings. Welcome to Jupiter.</p>'
         };
 
         const expectedWrapper = {
@@ -684,10 +697,12 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
-        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
-        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) }) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testEmailProfile) }) });
+        lamdbaInvokeStub.onThirdCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) }) });
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
         publishUserEventStub.resolves({ result: 'SUCCESS' });
+        sendSmsStub.resolves({ result: 'SUCCESS' });
 
         getPushTokenStub.resolves({ [testUserId]: persistedToken });
         chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
@@ -695,14 +710,15 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         const expectedResult = [
             { channel: 'PUSH', result: 'SUCCESS', numberSent: 2 },
-            { channel: 'EMAIL', result: 'SUCCESS', numberSent: 2 }
+            { channel: 'EMAIL', result: 'SUCCESS', numberSent: 3 }
         ];
 
         const testParams = {
-            systemWideUserIds: [testUserId, testUserId],
+            systemWideUserIds: [testUserId, testUserId, testUserId],
             provider: mockProvider,
             title: 'Welcome to jupiter.',
-            body: '<p>Greetings. Welcome to jupiter.</p>'
+            body: '<p>Greetings. Welcome to Jupiter.</p>',
+            backupSms: 'Greetings. Welcome to Jupiter.'
         };
 
         const result = await handler.sendOutboundMessages(testParams);
@@ -713,14 +729,16 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc('profile_fetch', false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+        expect(lamdbaInvokeStub.callCount).to.deep.equal(4);
 
-        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId, testUserId], mockProvider);
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId, testUserId, testUserId], mockProvider);
         expect(chunkPushNotificationsStub).to.have.been.calledOnce;
 
         expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
+
+        expect(sendSmsStub).to.have.been.calledOnceWithExactly({ phoneNumber: '+278384748264', message: 'Greetings. Welcome to Jupiter.' });
 
         expect(assembleMessageStub).have.not.been.called;
         expect(publishUserEventStub).have.not.been.called;

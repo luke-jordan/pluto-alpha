@@ -473,6 +473,7 @@ module.exports.manageUser = async (event) => {
         if (params.fieldToUpdate === 'TRANSACTION') {
             logger('Updating a transaction, tell RDS to execute and return');
             const checkForError = validateTxUpdate(params);
+            logger('Do we have an error ? : ', checkForError);
             if (checkForError) {
                 return checkForError;
             } 
