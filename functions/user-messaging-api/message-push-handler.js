@@ -195,11 +195,11 @@ const sendPendingPushMsgs = async () => {
     }
 };
 
-const fetchUserEmail = async (systemWideUserId) => {
+const fetchUserContactDetail = async (destinationUserId) => {
     const profileFetchLambdaInvoke = {
         FunctionName: config.get('lambdas.fetchProfile'),
         InvocationType: 'RequestResponse',
-        Payload: stringify({ systemWideUserId, includeContactMethod: true })
+        Payload: stringify({ systemWideUserId: destinationUserId, includeContactMethod: true })
     };
 
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
@@ -208,7 +208,16 @@ const fetchUserEmail = async (systemWideUserId) => {
     const userProfile = JSON.parse(profilePayload.body);
     logger('User profile fetch result: ', userProfile);
     
-    return userProfile.emailAddress ? { systemWideUserId, emailAddress: userProfile.emailAddress } : null;
+    const result = { destinationUserId };
+    if (Reflect.has(userProfile, 'emailAddress')) {
+        result.emailAddress = userProfile.emailAddress;
+    }
+
+    if (Reflect.has(userProfile, 'phoneNumber')) {
+        result.phoneNumber = userProfile.phoneNumber;
+    }
+
+    return result;
 };
 
 const dispatchEmailMessages = async (emailMessages) => {
@@ -229,6 +238,8 @@ const dispatchEmailMessages = async (emailMessages) => {
     return JSON.parse(resultOfSend.Payload);
 };
 
+// In the event of a message being sent to a user without an email, an sms back up message is sent to the user.
+// This sms message is found in the message display property (display.backupSms)
 const sendPendingEmailMsgs = async () => {
         const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL');
         if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
@@ -242,30 +253,40 @@ const sendPendingEmailMsgs = async () => {
         
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
-        const emailAddresses = await Promise.all(destinationUserIds.map((userId) => fetchUserEmail(userId)));
-        logger('Received email addresses: ', emailAddresses);
-        const destinationMap = emailAddresses.filter((email) => email !== null)
-            .reduce((obj, emailAndUserId) => ({ ...obj, [emailAndUserId.systemWideUserId]: emailAndUserId.emailAddress }), {});
-        logger('Assembled destination map: ', destinationMap);
+        const userContactDetails = await Promise.all(destinationUserIds.map((userId) => fetchUserContactDetail(userId)));
+        const mappedContacts = userContactDetails.reduce((map, profile) => ({ ...map, [profile.destinationUserId]: { ...profile }}), {});
 
         const assembledMessages = await Promise.all(messagesToSend.map((msg) => pickMessageBody(msg)));
-        logger('And assembled messages: ', assembledMessages);
+        // logger('And assembled messages: ', assembledMessages);
 
-        const messages = assembledMessages.map((msg) => ({
-            messageId: msg.messageId,
-            to: destinationMap[msg.destinationUserId],
-            from: config.get('email.fromAddress'),
-            subject: msg.title,
-            text: striptags(msg.body),
-            html: msg.body
-        }));
+        const messages = assembledMessages.map((msg) => {
+            if (mappedContacts[msg.destinationUserId].emailAddress) {
+                return {
+                    messageId: msg.messageId,
+                    to: mappedContacts[msg.destinationUserId].emailAddress,
+                    from: config.get('email.fromAddress'),
+                    subject: msg.title,
+                    text: striptags(msg.body),
+                    html: msg.body
+                };
+            }
 
-        const resultOfSend = await dispatchEmailMessages(messages);
-        logger('Result of email sending: ', resultOfSend);
+            return {
+                phoneNumber: `+${mappedContacts[msg.destinationUserId].phoneNumber}`,
+                message: msg.display.backupSms
+            };
+        });
 
-        if (Reflect.has(resultOfSend, 'result') && resultOfSend.result === 'SUCCESS') {
-            const successfulMsgs = assembledMessages.filter((msg) => !resultOfSend.failedMessageIds.includes(msg.messageId)); 
-            const successfulMsgIds = messageIds.filter((msgId) => !resultOfSend.failedMessageIds.includes(msgId));
+        const emailResult = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
+        logger('Result of sms dispatch', emailResult);
+
+        const smsMessages = messages.filter((msg) => Reflect.has(msg, 'phoneNumber'));
+        const smsResult = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
+        logger('Result of sms dispatch', smsResult);
+ 
+        if (Reflect.has(emailResult, 'result') && emailResult.result === 'SUCCESS') {
+            const successfulMsgs = assembledMessages.filter((msg) => !emailResult.failedMessageIds.includes(msg.messageId)); 
+            const successfulMsgIds = messageIds.filter((msgId) => !emailResult.failedMessageIds.includes(msgId));
 
             const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(successfulMsgIds, 'SENT');
             logger('Final update worked? : ', updateToProcessed);
@@ -284,22 +305,42 @@ const sendPendingEmailMsgs = async () => {
     }
 };
 
-// TODO THIS IS WRONG -- IT WAS SPECIFIED THAT THIS SHOULD STILL PICK THE MESSAGE ID NOT BE FREE FORM. FIX.
 const sendEmailsToSpecificUsers = async (params) => {
     const destinationUserIds = params.systemWideUserIds;
-    const emailAddresses = await Promise.all(destinationUserIds.map((userId) => fetchUserEmail(userId)));
+    const userContactDetails = await Promise.all(destinationUserIds.map((userId) => fetchUserContactDetail(userId)));
+    logger('Got mapped contacts:', userContactDetails);
 
-    const messages = emailAddresses.map((email) => ({
-        messageId: email.systemWideUserId, // allows target function to return user ids associated with failed messages
-        to: email.emailAddress,
-        from: config.get('email.fromAddress'),
-        subject: params.title,
-        text: striptags(params.body),
-        html: params.body
-    }));
+    const messages = userContactDetails.map((contact) => {
+        if (contact.emailAddress) {
+            return {
+                messageId: contact.destinationUserId,
+                to: contact.emailAddress,
+                from: config.get('email.fromAddress'),
+                subject: params.title,
+                text: striptags(params.body),
+                html: params.body
+            };
+        }
 
-    const resultOfSend = await dispatchEmailMessages(messages);
+        if (params.backupSms) {
+            return {
+                phoneNumber: `+${contact.phoneNumber}`,
+                message: params.backupSms
+            };
+        }
+
+        return null;
+
+    }).filter((msg) => msg !== null);
+
+    const resultOfSend = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
     logger('Result of email sending: ', resultOfSend);
+
+    const smsMessages = messages.filter((msg) => Reflect.has(msg, 'phoneNumber'));
+    if (smsMessages.length !== 0) {
+        const smsResult = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
+        logger('Result of sms dispatch', smsResult);
+    }
 
     if (Reflect.has(resultOfSend, 'result') && resultOfSend.result === 'SUCCESS') {
         const successfulMsgs = destinationUserIds.filter((userId) => !resultOfSend.failedMessageIds.includes(userId));
