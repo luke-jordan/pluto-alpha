@@ -73,7 +73,6 @@ describe('*** UNIT TEST EVENT TRIGGERED MESSAGES ***', () => {
         messagePriority: 100
     };
 
-
     const expectedInsertionRows = (quantity, start = 1) => Array(quantity).fill().map((_, i) => ({ insertionId: start + i, creationTime: mockCreationTime }));
 
     const wrapEventSns = (event) => ({
@@ -131,7 +130,7 @@ describe('*** UNIT TEST EVENT TRIGGERED MESSAGES ***', () => {
 
     });
 
-    it('Catched thrown errors', async () => {
+    it('Catches thrown errors', async () => {
 
         findMsgInstructionByFlagStub.throws(new Error('Error'));
     

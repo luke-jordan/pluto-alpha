@@ -464,15 +464,19 @@ module.exports.sendSmsMessage = async (event) => {
             return { result: 'Empty invocation' };
         }
 
+        if (config.has('twilio.mock') && config.get('twilio.mock') === 'ON') {
+            return { result: 'SUCCESS' };
+        }
+
         const { message, phoneNumber } = opsUtil.extractParamsFromEvent(event);
 
         const options = {
             method: 'POST',
-            url: format(config.get('twilio.endpoint'), config.get('twilio.accountSid')),
-            data: {
-                body: message,
-                from: config.get('twilio.number'),
-                to: phoneNumber 
+            uri: format(config.get('twilio.endpoint'), config.get('twilio.accountSid')),
+            form: {
+                Body: message,
+                From: config.get('twilio.number'),
+                To: phoneNumber 
             },
             auth: {
                 username: config.get('twilio.accountSid'),

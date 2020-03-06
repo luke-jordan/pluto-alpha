@@ -1125,11 +1125,11 @@ describe('*** UNIT TEST SMS FUNCTION ***', async () => {
     it('Sends sms messages', async () => {
         const expectedOptions = {
             method: 'POST',
-            url: `https://api.twilio.com/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages.json`,
-            data: {
-                body: testMessage,
-                from: config.get('twilio.number'),
-                to: testPhoneNumber
+            uri: `https://api.twilio.com/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages`,
+            form: {
+                Body: testMessage,
+                From: config.get('twilio.number'),
+                To: testPhoneNumber
             },
             auth: {
                 username: config.get('twilio.accountSid'),
@@ -1147,6 +1147,8 @@ describe('*** UNIT TEST SMS FUNCTION ***', async () => {
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
 
-        expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+        if (config.has('twilio.mock') && config.get('twilio.mock') === 'OFF') {
+            expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+        }
     });
 });
