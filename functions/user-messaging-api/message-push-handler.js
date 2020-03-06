@@ -272,10 +272,14 @@ const sendPendingEmailMsgs = async () => {
                 };
             }
 
-            return {
-                phoneNumber: `+${mappedContacts[msg.destinationUserId].phoneNumber}`,
-                message: msg.backupSms
-            };
+            if (msg.display && msg.display.backupSms) {
+                return {
+                    phoneNumber: `+${mappedContacts[msg.destinationUserId].phoneNumber}`,
+                    message: msg.display.backupSms
+                };
+            }
+
+            return {}; // to avoid null errors
         });
 
         const emailResult = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
