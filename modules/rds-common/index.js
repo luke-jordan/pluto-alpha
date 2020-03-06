@@ -82,7 +82,7 @@ class RdsConnection {
         logger('Attempting secret retrieval ....');
         return new Promise((resolve, reject) => {
             secretsClient.getSecretValue({ SecretId: secretId }, (err, fetchedSecretData) => {
-                logger('Error inside secrets promise: ', err);
+                logger('Error inside secrets promise? : ', err);
                 if (err) {
                     reject(err);
                 }

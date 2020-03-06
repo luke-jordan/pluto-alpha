@@ -203,7 +203,7 @@ const fetchUserContactDetail = async (destinationUserId) => {
     };
 
     const profileFetchResult = await lambda.invoke(profileFetchLambdaInvoke).promise();
-    logger('Raw profile fetch result: ', profileFetchResult);
+    // logger('Raw profile fetch result: ', profileFetchResult);
     const profilePayload = JSON.parse(profileFetchResult['Payload']);
     const userProfile = JSON.parse(profilePayload.body);
     logger('User profile fetch result: ', userProfile);
@@ -247,9 +247,9 @@ const sendPendingEmailMsgs = async () => {
         }
 
         const messageIds = messagesToSend.map((msg) => msg.messageId);
-        logger('Alright, processing emails: ', messageIds);
+        logger('Alright, processing emails and SMSs: ', messageIds);
         const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-        logger('Email state lock done? : ', stateLock);
+        logger('Email state lock done? : ', stateLock.rowCount);
         
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
@@ -258,8 +258,9 @@ const sendPendingEmailMsgs = async () => {
 
         const assembledMessages = await Promise.all(messagesToSend.map((msg) => pickMessageBody(msg)));
         // logger('And assembled messages: ', assembledMessages);
-
+        
         const messages = assembledMessages.map((msg) => {
+            logger('Creating from message: ', msg);
             if (mappedContacts[msg.destinationUserId].emailAddress) {
                 return {
                     messageId: msg.messageId,
@@ -278,7 +279,7 @@ const sendPendingEmailMsgs = async () => {
         });
 
         const emailResult = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
-        logger('Result of sms dispatch', emailResult);
+        logger('Result of email dispatch', emailResult);
 
         const smsMessages = messages.filter((msg) => Reflect.has(msg, 'phoneNumber'));
         const smsResult = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
