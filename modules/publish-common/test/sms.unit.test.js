@@ -46,7 +46,7 @@ describe('*** UNIT TEST GENERIC SMS FUNCTION ***', () => {
 
     it('Sends sms message', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
-        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendSmsMessages'), true, mockLambdaPayload);
+        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
@@ -59,7 +59,7 @@ describe('*** UNIT TEST GENERIC SMS FUNCTION ***', () => {
 
     it('Fails on bad Lambda response', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
-        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendSmsMessages'), true, mockLambdaPayload);
+        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'ERROR' }, 500)});
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
@@ -72,7 +72,7 @@ describe('*** UNIT TEST GENERIC SMS FUNCTION ***', () => {
 
     it('Catches thrown error', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
-        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendSmsMessages'), true, mockLambdaPayload);
+        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
         lamdbaInvokeStub.throws(new Error('Connection error'));
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });

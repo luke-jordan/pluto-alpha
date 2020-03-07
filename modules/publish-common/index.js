@@ -6,6 +6,7 @@ const logger = require('debug')('jupiter:logging-module:main');
 const config = require('config');
 const moment = require('moment');
 
+const htmlToText = require('html-to-text');
 const stringify = require('json-stable-stringify');
 const format = require('string-format');
 const uuid = require('uuid/v4');
@@ -91,14 +92,14 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
 
 module.exports.sendSms = async ({ phoneNumber, message }) => {
     try {    
-        const dispatchInvocation = wrapLambdaInvocation(config.get('lambdas.sendSmsMessages'), { phoneNumber, message }, false);
-        const resultOfDispatch = await lambda.invoke(dispatchInvocation).promise();
-        logger('Result of transfer: ', resultOfDispatch);
+        const smsInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { phoneNumber, message }, false);
+        const resultOfSms = await lambda.invoke(smsInvocation).promise();
+        logger('Result of transfer: ', resultOfSms);
 
-        const dispatchPayload = JSON.parse(resultOfDispatch['Payload']);
-        if (dispatchPayload['statusCode'] === 200) {
-            const dispatchBody = JSON.parse(dispatchPayload.body);
-            logger('Got sms dispatch result body:', dispatchBody);
+        const smsResultPayload = JSON.parse(resultOfSms['Payload']);
+        if (smsResultPayload['statusCode'] === 200) {
+            const smsResultBody = JSON.parse(smsResultPayload.body);
+            logger('Got sms result body:', smsResultBody);
             return { result: 'SUCCESS' };
         }
 
@@ -131,7 +132,7 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
 
     const template = await exports.obtainTemplate(bodyTemplateKey);
     const html = format(template, templateVariables);
-    const text = 'Jupiter system email.'; // generic (Google shows in preview)
+    const text = htmlToText.fromString(html, { wordwrap: false });
 
     const emailMessages = toList.map((recipient) => ({
         messageId: uuid(),
@@ -143,7 +144,7 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     }));
 
     logger('Asembled emails:', emailMessages);
-    const emailInvocation = wrapLambdaInvocation(config.get('lambdas.sendEmailMessages'), { emailMessages }, false);
+    const emailInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { emailMessages }, false);
     const resultOfEmail = await lambda.invoke(emailInvocation).promise();
     logger('Result of transfer: ', resultOfEmail);
 

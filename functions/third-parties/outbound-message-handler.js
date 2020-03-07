@@ -460,11 +460,7 @@ module.exports.sendEmailMessages = async (event) => {
  */
 module.exports.sendSmsMessage = async (event) => {
     try {
-        if (opsUtil.isWarmup(event)) {
-            return { result: 'Empty invocation' };
-        }
-
-        if (config.has('twilio.mock') && config.get('twilio.mock') === 'ON') {
+        if (!config.has('twilio.mock') && config.get('twilio.mock') !== 'OFF') {
             return { result: 'SUCCESS' };
         }
 
@@ -476,7 +472,7 @@ module.exports.sendSmsMessage = async (event) => {
             form: {
                 Body: message,
                 From: config.get('twilio.number'),
-                To: phoneNumber 
+                To: `+${phoneNumber}` 
             },
             auth: {
                 username: config.get('twilio.accountSid'),
@@ -485,7 +481,7 @@ module.exports.sendSmsMessage = async (event) => {
             json: true
         };
 
-        logger('Assembled request:', options);
+        logger('Assembled options:', options);
         const result = await request(options);
         logger('Got result:', result);
 

@@ -140,7 +140,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
                     html: '<p>Greetings Jacob, from Jupiter.</p>',
                     messageId: testMessageId,
                     subject: 'Salutations',
-                    text: 'Jupiter system email.',
+                    text: 'Greetings Jacob, from Jupiter.',
                     to: emailAddress
                 })
             )})
@@ -183,7 +183,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
                     html: '<p>Greetings Jacob, from Jupiter.</p>',
                     messageId: testMessageId,
                     subject: 'Salutations',
-                    text: 'Jupiter system email.',
+                    text: 'Greetings Jacob, from Jupiter.',
                     to: emailAddress
                 })
             )})
