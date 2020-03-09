@@ -496,3 +496,18 @@ module.exports.sendSmsMessage = async (event) => {
         return { statusCode: 500 };
     }
 };
+
+module.exports.handleOutboundMessages = async (event) => {
+    const params = opsUtil.extractParamsFromEvent(event);
+
+    if (params.emailMessages || JSON.stringify(params) === '{}') {
+        return await exports.sendEmailMessages(event);
+    }
+
+    if (params.phoneNumber) {
+        return await exports.sendSmsMessage(event);
+    }
+
+    // logger('FATAL_ERROR: Unrecognized event:', event);
+    return { result: 500 };
+};

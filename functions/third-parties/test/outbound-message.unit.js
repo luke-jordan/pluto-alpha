@@ -929,7 +929,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
     });
 
     it('Handled warm up event', async () => {
-        const result = await handler.sendEmailMessages({ });
+        const result = await handler.handleOutboundMessages({ });
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'Empty invocation' });
@@ -946,7 +946,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages: [validEmailEvent(testMessageId), validEmailEvent(testMessageId), validEmailEvent(testMessageId)]
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
         expect(result).to.deep.equal(expectedResult);
 
         expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
@@ -968,7 +968,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailWrapper: testWrapper
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
         expect(result).to.deep.equal({ result: 'SUCCESS', failedMessageIds: [] });
 
         const expectedWrappedMessage = '<html><title></title><body><p>Greetings. Welcome to jupiter</p></body></html>';
@@ -994,7 +994,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
 
-        const result = await handler.sendEmailMessages({ emailMessages });
+        const result = await handler.handleOutboundMessages({ emailMessages });
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
@@ -1024,7 +1024,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         sendGridStub.onFirstCall().resolves([{ error: 'Internal error' }]);
         sendGridStub.resolves(sendgridOkayChunk());
 
-        const result = await handler.sendEmailMessages({ emailMessages });
+        const result = await handler.handleOutboundMessages({ emailMessages });
 
         expect(result).to.exist;
 
@@ -1057,7 +1057,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages: [invalidEmailEvent, invalidEmailEvent, invalidEmailEvent]
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
@@ -1074,7 +1074,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages: [validEmailEvent(testMessageId), validEmailEvent(testMessageId), validEmailEvent(testMessageId)]
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
@@ -1142,7 +1142,7 @@ describe('*** UNIT TEST SMS FUNCTION ***', async () => {
 
         const testEvent = { phoneNumber: testPhoneNumber, message: testMessage };
 
-        const resultOfDispatch = await handler.sendSmsMessage(testEvent);
+        const resultOfDispatch = await handler.handleOutboundMessages(testEvent);
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
