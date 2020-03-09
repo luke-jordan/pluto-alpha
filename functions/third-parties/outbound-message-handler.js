@@ -501,13 +501,13 @@ module.exports.handleOutboundMessages = async (event) => {
     const params = opsUtil.extractParamsFromEvent(event);
 
     if (params.emailMessages || JSON.stringify(params) === '{}') {
-        return await exports.sendEmailMessages(event);
+        return exports.sendEmailMessages(event);
     }
 
     if (params.phoneNumber) {
-        return await exports.sendSmsMessage(event);
+        return exports.sendSmsMessage(event);
     }
 
     // logger('FATAL_ERROR: Unrecognized event:', event);
-    return { result: 500 };
+    return { result: 'FAILURE' };
 };
