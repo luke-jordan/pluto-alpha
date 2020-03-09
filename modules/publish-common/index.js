@@ -134,6 +134,7 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     const html = format(template, templateVariables);
     const text = htmlToText.fromString(html, { wordwrap: false });
 
+    // message id property allows lambda to return failed message ids
     const emailMessages = toList.map((recipient) => ({
         messageId: uuid(),
         to: recipient,
