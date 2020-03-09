@@ -239,7 +239,7 @@ const dispatchEmailMessages = async (emailMessages) => {
 };
 
 // In the event of a message being sent to a user without an email, an sms back up message is sent to the user.
-// This sms message is found in the message display property (display.backupSms)
+// This sms message is found in the message display property (backupSms in the template)
 const sendPendingEmailMsgs = async () => {
         const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL');
         if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
@@ -249,7 +249,7 @@ const sendPendingEmailMsgs = async () => {
         const messageIds = messagesToSend.map((msg) => msg.messageId);
         logger('Alright, processing emails and SMSs: ', messageIds);
         const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-        logger('Email state lock done? : ', stateLock.rowCount);
+        logger('Email state lock done? : ', stateLock ? stateLock.rowCount : false);
         
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
@@ -272,10 +272,14 @@ const sendPendingEmailMsgs = async () => {
                 };
             }
 
-            return {
-                phoneNumber: `+${mappedContacts[msg.destinationUserId].phoneNumber}`,
-                message: msg.display.backupSms
-            };
+            if (msg.display && msg.display.backupSms) {
+                return {
+                    phoneNumber: `+${mappedContacts[msg.destinationUserId].phoneNumber}`,
+                    message: msg.display.backupSms
+                };
+            }
+
+            return {}; // to avoid null errors
         });
 
         const emailResult = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
