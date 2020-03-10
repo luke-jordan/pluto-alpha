@@ -127,24 +127,6 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION RDS UTIL ***', () => {
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockInstructionId]);
     });
 
-    it('should get message instructions that match specified audience and presentation type', async () => {
-        const mockInstructionId = uuid();
-        const mockInstruction = createPersistableInstruction(mockInstructionId);
-        const mockSelectArgs = [
-            `select * from ${config.get('tables.messageInstructionTable')} where presentation_type = $1 and active = true and end_time > current_timestamp and audience_type in ($2) and processed_status in ($3)`,
-            ['ALL_USERS', 'RECURRING', 'READY_TO_SEND']
-        ];
-        selectQueryStub.withArgs(...mockSelectArgs).returns([mockInstruction, mockInstruction, mockInstruction]);
-        const expectedResult = [mockInstruction, mockInstruction, mockInstruction];
-
-        const result = await instructionsRds.getInstructionsByType('ALL_USERS', ['RECURRING'], ['READY_TO_SEND']);
-        logger('Result of instruction extraction from db:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
-    });
-
     it('should update message instruction', async () => {
         const mockInstructionId = uuid();
         const mockUpdateRecordArgs = {

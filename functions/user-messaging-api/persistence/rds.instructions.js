@@ -50,34 +50,6 @@ module.exports.getMessageInstruction = async (instructionId) => {
     return camelCaseKeys(response[0]);
 };
 
-/**
- * Used for obtaining messages during regular processing or at user start
- */
-module.exports.getInstructionsByType = async (presentationType, audienceTypes, processedStatuses) => {
-    let query = `select * from ${config.get('tables.messageInstructionTable')} where presentation_type = $1 ` + 
-        `and active = true and end_time > current_timestamp`;
-    let values = [presentationType];
-
-    let paramStartIndex = 2;
-    if (Array.isArray(audienceTypes) && audienceTypes.length > 0) {
-        query = `${query} and audience_type in (${opsUtil.extractArrayIndices(audienceTypes, paramStartIndex)})`;
-        values = values.concat(audienceTypes);
-        paramStartIndex += audienceTypes.length;
-    }
-
-    if (Array.isArray(processedStatuses) && processedStatuses.length > 0) {
-        query = `${query} and processed_status in (${opsUtil.extractArrayIndices(processedStatuses, paramStartIndex)})`;
-        values = values.concat(processedStatuses);
-        paramStartIndex += processedStatuses.length;
-    }
-
-    logger(`Finding message instructions using query: ${query}, and values: ${JSON.stringify(values)}`);
-    const response = await rdsConnection.selectQuery(query, values);
-    logger('Got this back from user message instruction extraction:', response);
-
-    return response.map((instruction) => camelCaseKeys(instruction));
-};
-
 // used to find event-based messages
 module.exports.findMsgInstructionTriggeredByEvent = async (eventType) => {
     const query = `select instruction_id, trigger_parameters from ${config.get('tables.messageInstructionTable')} where ` +

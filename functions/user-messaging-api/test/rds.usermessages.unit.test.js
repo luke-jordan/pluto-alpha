@@ -256,6 +256,23 @@ describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {
         momentStub.returns({ subtract: () => mockDurationClause, format: () => mockDurationClause.format() });
     });
 
+    it('should get message instructions that match specified audience and presentation type', async () => {
+        const mockInstruction = { instructionId: mockInstructionId, presentationType: 'RECURRING' }; // and the rest
+        const mockSelectArgs = [
+            `select * from ${config.get('tables.messageInstructionTable')} where presentation_type = $1 and active = true and end_time > current_timestamp and audience_type in ($2) and processed_status in ($3)`,
+            ['ALL_USERS', 'RECURRING', 'READY_TO_SEND']
+        ];
+        selectQueryStub.withArgs(...mockSelectArgs).returns([mockInstruction, mockInstruction, mockInstruction]);
+        const expectedResult = [mockInstruction, mockInstruction, mockInstruction];
+
+        const result = await persistence.getInstructionsByType('ALL_USERS', ['RECURRING'], ['READY_TO_SEND']);
+        logger('Result of instruction extraction from db:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
+    });
+
     it('Finds user ids that are not disqualified by recurrence parameters', async () => {
         const mockUnfilteredId = uuid();
         const minIntervalSelectArgs = [
