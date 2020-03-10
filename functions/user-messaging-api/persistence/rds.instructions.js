@@ -2,7 +2,6 @@
 
 const logger = require('debug')('jupiter:user-notifications:rds');
 const config = require('config');
-const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
 const camelCaseKeys = require('camelcase-keys');
@@ -131,12 +130,6 @@ module.exports.updateMessageInstruction = async (instructionId, valuesToUpdate) 
     logger('Result of message instruction update:', response);
 
     return response.map((updateResult) => camelCaseKeys(updateResult));
-};
-
-module.exports.updateInstructionState = async (instructionId, newProcessedStatus) => {
-    const currentTime = moment().format();
-    const valueMap = { processedStatus: newProcessedStatus, lastProcessedTime: currentTime };
-    return exports.updateMessageInstruction(instructionId, valueMap);
 };
 
 module.exports.alterInstructionMessageStates = async (instructionId, oldStatuses, newStatus, endTime) => {

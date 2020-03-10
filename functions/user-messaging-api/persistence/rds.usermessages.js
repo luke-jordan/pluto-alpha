@@ -132,6 +132,20 @@ module.exports.filterUserIdsForRecurrence = async (userIds, { instructionId, rec
     return userIds.filter((id) => !idsToFilter.includes(id));
 };
 
+module.exports.updateInstructionState = async (instructionId, newProcessedStatus) => {
+    const currentTime = moment().format();
+
+    const table = config.get('tables.messageInstructionTable');
+    const key = { instructionId };
+    const value = { processedStatus: newProcessedStatus, lastProcessedTime: currentTime };
+    const returnClause = 'updated_time';
+
+    const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });
+    logger('Result of message instruction update:', response);
+
+    return response.map((updateResult) => camelCaseKeys(updateResult));
+};
+
 // ////////////////////////////////////////////////////////////////////////////////
 // ///////////////////////// USER MESSAGE FETCHING ///////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////

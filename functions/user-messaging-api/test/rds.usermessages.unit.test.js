@@ -20,8 +20,8 @@ const testFollowingMsgId = uuid();
 const testBoostId = uuid();
 const testUserId = uuid();
 
-const updateRecordStub = sinon.stub();
 const selectQueryStub = sinon.stub();
+const updateRecordStub = sinon.stub();
 const multiTableStub = sinon.stub();
 const multiUpdateInsertStub = sinon.stub();
 
@@ -33,6 +33,7 @@ class MockRdsConnection {
         this.updateRecord = updateRecordStub;
         this.largeMultiTableInsert = multiTableStub;
         this.multiTableUpdateAndInsert = multiUpdateInsertStub;
+        this.updateRecordObject = updateRecordStub;
     }
 }
 
@@ -242,7 +243,7 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
 
 });
 
-describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {
+describe('*** UNIT TEST BASIC INSTRUCTION OPERATIONS NEEDED BY USER MESSAGES ***', () => {
 
     const mockUserId = uuid();
     const mockInstructionId = uuid();
@@ -285,6 +286,28 @@ describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
         expect(selectQueryStub).to.have.been.calledOnceWithExactly(...mockSelectArgs);
+    });
+
+    it('Updates instruction state', async () => {
+        const mockCurrentTime = moment().format();
+        const mockUpdateRecordArgs = {
+            table: config.get('tables.messageInstructionTable'),
+            key: { instructionId: mockInstructionId },
+            value: { processedStatus: 'READY_TO_SEND', lastProcessedTime: mockCurrentTime },
+            returnClause: 'updated_time'
+        };
+
+        momentStub.returns({ format: () => mockCurrentTime });
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
+
+        // sync with new imlementation
+        const resultOfUpdate = await persistence.updateInstructionState(mockInstructionId, 'READY_TO_SEND');
+        logger('Result of message instruction update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([{ updateTime: '2049-06-22T07:38:30.016Z' }]);
+        expect(momentStub).to.have.been.calledOnce;
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });
 
     it('Finds user ids that are not disqualified by recurrence parameters', async () => {

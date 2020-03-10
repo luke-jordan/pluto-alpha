@@ -134,29 +134,6 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION RDS UTIL ***', () => {
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });
 
-    it('Updates instruction state', async () => {
-        const mockInstructionId = uuid();
-        const mockCurrentTime = moment().format();
-        const mockUpdateRecordArgs = {
-            table: config.get('tables.messageInstructionTable'),
-            key: { instructionId: mockInstructionId },
-            value: { processedStatus: 'READY_TO_SEND', lastProcessedTime: mockCurrentTime },
-            returnClause: 'updated_time'
-        };
-
-        momentStub.returns({ format: () => mockCurrentTime });
-        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
-
-        // sync with new imlementation
-        const resultOfUpdate = await instructionsRds.updateInstructionState(mockInstructionId, 'READY_TO_SEND');
-        logger('Result of message instruction update:', resultOfUpdate);
-
-        expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal([{ updateTime: '2049-06-22T07:38:30.016Z' }]);
-        expect(momentStub).to.have.been.calledOnce;
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
-    });
-
     it('Alters instruction message state', async () => {
         const mockMessageId = uuid();
         const mockInstructionId = uuid();

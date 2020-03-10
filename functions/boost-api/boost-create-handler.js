@@ -58,12 +58,27 @@ const convertParamsToRedemptionCondition = (gameParams) => {
     return conditions;
 };
 
-const extractStatusConditions = (gameParams) => {
+const isInitialStatusBefore = (initialStatus, comparisonStatus) => {
+    if (!initialStatus) {
+        return true;
+    }
+
+    const statusOrder = ['CREATED', 'OFFERED', 'UNLOCKED', 'REDEEMED'];
+    return statusOrder.indexOf(initialStatus) < statusOrder.indexOf(comparisonStatus);
+};
+
+const extractStatusConditions = (gameParams, initialStatus) => {
     // all games start with this
     const statusConditions = {};
-    statusConditions['OFFERED'] = ['message_instruction_created'];
-    statusConditions['UNLOCKED'] = [gameParams.entryCondition];
-    statusConditions['REDEEMED'] = convertParamsToRedemptionCondition(gameParams);
+    if (isInitialStatusBefore(initialStatus, 'OFFERED')) {
+        statusConditions['OFFERED'] = ['message_instruction_created'];
+    }
+    if (isInitialStatusBefore(initialStatus, 'UNLOCKED')) {
+        statusConditions['UNLOCKED'] = [gameParams.entryCondition];
+    }
+    if (isInitialStatusBefore(initialStatus, 'REDEEMED')) {
+        statusConditions['REDEEMED'] = convertParamsToRedemptionCondition(gameParams);
+    }
     return statusConditions;
 };
 
@@ -334,9 +349,9 @@ module.exports.createBoost = async (event) => {
     logger('Boost source: ', params.boostSource, 'and creating user: ', params.creatingUserId);
 
     // todo : more validation & error throwing here, e.g., if neither exists
-    logger('Game params: ', params.gameParams);
+    logger('Game params: ', params.gameParams, ' and default status: ', params.initialStatus);
     if (!params.statusConditions && params.gameParams) {
-        params.statusConditions = extractStatusConditions(params.gameParams);
+        params.statusConditions = extractStatusConditions(params.gameParams, params.initialStatus);
     }
 
     let messageInstructionIds = [];
