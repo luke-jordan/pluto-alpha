@@ -80,8 +80,8 @@ module.exports.getInstructionsByType = async (presentationType, audienceTypes, p
 
 // used to find event-based messages
 module.exports.findMsgInstructionTriggeredByEvent = async (eventType) => {
-    const query = `select instruction_id, trigger_context from ${config.get('tables.messageInstructionTable')} where ` +
-        `trigger_context -> 'triggerEvent' ? $1 and active = true and end_time > current_timestamp ` +
+    const query = `select instruction_id, trigger_parameters from ${config.get('tables.messageInstructionTable')} where ` +
+        `trigger_parameters -> 'triggerEvent' ? $1 and active = true and end_time > current_timestamp ` +
         `and presentation_type = $2 order by creation_time desc`;
     const results = await rdsConnection.selectQuery(query, [eventType, 'EVENT_DRIVEN']);
     logger('Found instructions for event? : ', results);
@@ -90,7 +90,7 @@ module.exports.findMsgInstructionTriggeredByEvent = async (eventType) => {
 
 module.exports.findMsgInstructionHaltedByEvent = async (eventType) => {
     const query = `select instruction_id from ${config.get('tables.messageInstructionTable')} where ` +
-        `trigger_context -> 'haltingEvent' ? $1`;
+        `trigger_parameters -> 'haltingEvent' ? $1`;
     const results = await rdsConnection.selectQuery(query, [eventType]);
     return results.map((result) => result['instruction_id']); 
 };

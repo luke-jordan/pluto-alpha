@@ -144,7 +144,7 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
 
         const mockInstruction = {
             instructionId: mockInstructionId,
-            triggerContext: {
+            triggerParameters: {
                 triggerEvent: ['MANUAL_EFT_INITIATED'],
                 haltingEvent: ['SAVING_PAYMENT_SUCCESSFUL'],
                 messageSchedule: {
@@ -186,7 +186,7 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
 
         const mockInstruction = {
             instructionId: mockInstructionId,
-            triggerContext: {
+            triggerParameters: {
                 triggerEvent: ['MANUAL_EFT_INITIATED'],
                 haltingEvent: ['SAVING_PAYMENT_SUCCESSFUL'],
                 messageSchedule: {
@@ -227,7 +227,7 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
 
         const mockInstruction = {
             instructionId: mockInstructionId,
-            triggerContext: {
+            triggerParameters: {
                 triggerEvent: ['MANUAL_EFT_INITIATED'],
                 haltingEvent: ['SAVING_PAYMENT_SUCCESSFUL'],
                 messageSchedule: {

@@ -74,7 +74,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION RDS UTIL ***', () => {
         endTime: '2061-01-09T11:47:41.596Z',
         lastProcessedTime: '2060-11-11T11:47:41.596Z',
         messagePriority: 0,
-        triggerContext: {
+        triggerParameters: {
             triggerEvent: ['MANUAL_EFT_INITIATED'],
             haltingEvent: ['SAVING_PAYMENT_SUCCESSFUL'],
             messageSchedule: {
@@ -302,14 +302,14 @@ describe('*** UNIT TEST INSTRUCTION PICKING', async () => {
     beforeEach(() => resetStubs());
 
     it('Finds message instructions by event type', async () => {
-        const expectedQuery = `select instruction_id, trigger_context from ${config.get('tables.messageInstructionTable')} where ` +
-            `trigger_context -> 'triggerEvent' ? $1 and active = true and end_time > current_timestamp ` +
+        const expectedQuery = `select instruction_id, trigger_parameters from ${config.get('tables.messageInstructionTable')} where ` +
+            `trigger_parameters -> 'triggerEvent' ? $1 and active = true and end_time > current_timestamp ` +
             `and presentation_type = $2 order by creation_time desc`;
         
         const mockContext = { triggerEvent: 'SAVING_PAYMENT_SUCCESSFUL' };
-        const mockInstruction = { instructionId: testInstructionId, triggerContext: mockContext };
+        const mockInstruction = { instructionId: testInstructionId, triggerParameters: mockContext };
 
-        selectQueryStub.resolves([{ 'instruction_id': testInstructionId, 'trigger_context': mockContext }]);
+        selectQueryStub.resolves([{ 'instruction_id': testInstructionId, 'trigger_parameters': mockContext }]);
 
         const result = await instructionsRds.findMsgInstructionTriggeredByEvent('SAVING_PAYMENT_SUCCESSFUL');
         logger('Result of instruction extraction by flag:', result);
@@ -320,8 +320,8 @@ describe('*** UNIT TEST INSTRUCTION PICKING', async () => {
     });
 
     it('Returns empty array where no instruction matches flag', async () => {
-        const expectedQuery = `select instruction_id, trigger_context from ${config.get('tables.messageInstructionTable')} where ` +
-            `trigger_context -> 'triggerEvent' ? $1 and active = true and end_time > current_timestamp ` +
+        const expectedQuery = `select instruction_id, trigger_parameters from ${config.get('tables.messageInstructionTable')} where ` +
+            `trigger_parameters -> 'triggerEvent' ? $1 and active = true and end_time > current_timestamp ` +
             `and presentation_type = $2 order by creation_time desc`;
         selectQueryStub.resolves([]);
 
@@ -336,7 +336,7 @@ describe('*** UNIT TEST INSTRUCTION PICKING', async () => {
         // we want to be careful on this to definitely halt messages, so leave out remaining filters (e.g., active etc)
         // false positives here will be much less damaging to user perceptions than false negatives
         const expectedQuery = `select instruction_id from ${config.get('tables.messageInstructionTable')} where ` +
-            `trigger_context -> 'haltingEvent' ? $1`;
+            `trigger_parameters -> 'haltingEvent' ? $1`;
 
         selectQueryStub.resolves([{ 'instruction_id': testInstructionId }]);
 

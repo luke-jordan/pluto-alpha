@@ -89,7 +89,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: testTime.format(),
         messagePriority: instruction.messagePriority,
-        triggerContext: instruction.presentationType === 'EVENT_DRIVEN' ? { triggerEvent: [instruction.eventTypeCategory] } : {}
+        triggerParameters: instruction.presentationType === 'EVENT_DRIVEN' ? { triggerEvent: [instruction.eventTypeCategory] } : {}
     });
 
     const commonAssertions = (result, statusCode, expectedResult) => {
@@ -218,7 +218,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         mockInstruction.presentationType = 'EVENT_DRIVEN';
         mockInstruction.eventTypeCategory = 'MANUAL_EFT_INITIATED';
 
-        const mockTriggerContext = {
+        const mockTriggerParameters = {
             triggerEvent: ['MANUAL_EFT_INITIATED'],
             haltingEvent: ['SAVING_PAYMENT_SUCCESSFUL'],
             messageSchedule: {
@@ -227,7 +227,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
                 fixed: { hour: 16, minute: 0 }
             }
         };
-        mockInstruction.triggerContext = mockTriggerContext;
+        mockInstruction.triggerParameters = mockTriggerParameters;
 
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
@@ -240,7 +240,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         });
 
         const testInstruction = mockPersistableObject(mockInstruction);      
-        testInstruction.triggerContext = mockTriggerContext; 
+        testInstruction.triggerParameters = mockTriggerParameters; 
 
         expect(insertMessageInstructionStub).to.have.been.calledOnceWithExactly(testInstruction);
         expect(lamdbaInvokeStub).to.not.have.been.called;

@@ -21,13 +21,13 @@ const createMsgInvocation = (instructionDestinationPairs) => ({
 });
 
 const processInstructionForUser = (instruction, destinationUserId) => {
-    const { instructionId, triggerContext } = instruction;
-    if (!triggerContext || !triggerContext.messageSchedule) {
+    const { instructionId, triggerParameters } = instruction;
+    if (!triggerParameters || !triggerParameters.messageSchedule) {
         return { instructionId, destinationUserId };
     }
 
     const messageMoment = moment();
-    const { type, offset, fixed } = triggerContext.messageSchedule;
+    const { type, offset, fixed } = triggerParameters.messageSchedule;
     
     if (type === 'RELATIVE') {
         messageMoment.add(offset.number, offset.unit);
