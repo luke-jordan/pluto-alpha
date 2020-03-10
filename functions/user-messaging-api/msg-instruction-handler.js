@@ -137,8 +137,13 @@ const createPersistableObject = (instruction, creatingUserId) => {
     const presentationType = instruction.presentationType;
     const processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_GENERATING' : 'CREATED';
 
-    const flags = presentationType === 'EVENT_DRIVEN' ? [`EVENT_TYPE::${instruction.eventTypeCategory}`] : [];
-    logger('Object created with flags: ', flags);
+    // const flags = presentationType === 'EVENT_DRIVEN' ? [`EVENT_TYPE::${instruction.eventTypeCategory}`] : [];
+    const triggerContext = instruction.triggerContext || {};
+    if (instruction.presentationType === 'EVENT_DRIVEN' && !instruction.triggerContext) {
+        triggerContext.triggerEvent = [instruction.eventTypeCategory];
+    }
+
+    logger('Object created with trigger context: ', triggerContext);
 
     logger('Message instruction templates: ', JSON.stringify(instruction.templates));
 
@@ -156,7 +161,7 @@ const createPersistableObject = (instruction, creatingUserId) => {
         recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: moment().format(),
         messagePriority,
-        flags
+        triggerContext
     };
 };
 

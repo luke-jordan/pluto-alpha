@@ -26,9 +26,9 @@ module.exports.extractQueryClause = (keys) => keys.map((key) => decamelize(key))
 
 module.exports.extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 
-module.exports.standardOkayChecks = (result, expectedResult) => {
+module.exports.standardOkayChecks = (result, expectedResult, statusCode = 200) => {
     expect(result).to.exist;
-    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('statusCode', statusCode);
     expect(result).to.have.property('body');
     const parsedResult = JSON.parse(result.body);
     if (expectedResult) {

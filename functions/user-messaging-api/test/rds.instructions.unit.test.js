@@ -56,6 +56,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION RDS UTIL ***', () => {
     const instructionTable = config.get('tables.messageInstructionTable');
     const messageTable = config.get('tables.userMessagesTable');
     
+    // bit of a hybrid but just to check all of it gets in
     const createPersistableInstruction = (instructionId) => ({
         instructionId: instructionId,
         presentationType: 'RECURRING',
@@ -72,7 +73,16 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION RDS UTIL ***', () => {
         startTime: '2050-09-01T11:47:41.596Z',
         endTime: '2061-01-09T11:47:41.596Z',
         lastProcessedTime: '2060-11-11T11:47:41.596Z',
-        messagePriority: 0
+        messagePriority: 0,
+        triggerContext: {
+            triggerEvent: ['MANUAL_EFT_INITIATED'],
+            haltingEvent: ['SAVING_PAYMENT_SUCCESSFUL'],
+            messageSchedule: {
+                type: 'FIXED',
+                offset: { unit: 'day', number: 1 },
+                fixed: { hour: 16, minute: 0 }
+            }
+        }
     });
 
     beforeEach(() => {
