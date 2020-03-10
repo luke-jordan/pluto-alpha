@@ -174,7 +174,6 @@ class RdsConnection {
         logger('Pool has drained');
     }
 
-
     static async onlyAllowAudienceWorkerRole (client) {
         const allowedRoles = ['audience_worker', 'audience_worker_clone']; // for AWS SM; also not in config because want to be hard coded
         const thisRoleResult = await client.query('select current_role');
@@ -272,7 +271,7 @@ class RdsConnection {
             throw new QueryError('Error! No update values found');
         }
     }
-
+    
     /**
      * 
      * @param {string} queryTemplate The template for the insert query. NOTE: Must include the column list (this is not extracted from the 

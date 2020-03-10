@@ -11,7 +11,8 @@
   "license": "ISC",
   "dependencies": {
     "config": "^3.2.2",
-    "debug": "^4.1.1"
+    "debug": "^4.1.1",
+    "decamelize": "^4.0.0"
   },
   "devDependencies": {
     "eslint": "^6.0.1",

@@ -3,6 +3,8 @@
 const logger = require('debug')('jupiter:ops:common');
 const config = require('config');
 
+const decamelize = require('decamelize');
+
 // format: from key into values, e.g., UNIT_MULTIPLIERS[WHOLE_CURRENCY][WHOLE_CENT] = 100;
 const ADMISSABLE_UNITS = ['WHOLE_CURRENCY', 'WHOLE_CENT', 'HUNDREDTH_CENT'];
 
@@ -191,3 +193,8 @@ module.exports.extractPathAndParams = (event) => {
     logger('Event is not http, must be another lambda, return event itself');
     return event;
 };
+
+// couple of helper methods for assembling SQL insertions; could go in rds-common/index, but that would
+// then mess around, a lot, with call throughs, etc., so just placing them here
+module.exports.extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
+module.exports.extractColumnTemplate = (keys) =>  keys.map((key) => `$\{${key}}`).join(', ');

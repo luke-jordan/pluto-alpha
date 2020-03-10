@@ -84,6 +84,7 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
 
 module.exports.sendSms = async ({ phoneNumber, message }) => {
     try {
+        logger(`Sending SMS to ${phoneNumber}, content: ${message}`);
         const params = {
             Message: message,
             MessageStructure: 'string',

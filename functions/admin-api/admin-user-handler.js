@@ -107,6 +107,7 @@ const obtainUserBalance = async (userProfile) => {
     const balanceLambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.fetchUserBalance'), balancePayload);
 
     const userBalanceResult = await lambda.invoke(balanceLambdaInvocation).promise();
+    logger('User balance result, raw: ', userBalanceResult);
     return extractLambdaBody(userBalanceResult);
 };
 

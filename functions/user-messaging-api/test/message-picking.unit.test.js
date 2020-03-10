@@ -41,7 +41,7 @@ class MockLambdaClient {
 }
 
 const handler = proxyquire('../message-picking-handler', {
-    './persistence/rds.msgpicker': {
+    './persistence/rds.usermessages': {
         'getNextMessage': getMessagesStub, 
         'getUserAccountFigure': getAccountFigureStub,
         'updateUserMessage': updateMessageStub,
@@ -94,7 +94,6 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Fills in message templates properly', async () => {
-        logger('HUUUUH MAT: ', testUserId);
         const expectedMessage = 'Hello Luke Jordan. Did you know you have earned $100 in interest since you opened your account in July 2019?';
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_full_name}. Did you know you have earned #{total_interest} in interest since you opened your account in #{opened_date}?' 
@@ -129,7 +128,6 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Fills in account balances properly', async () => {
-        logger('HUUUUH ABT: ', testUserId);
         const testDestinationUserId = uuid();
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
         getMessagesStub.withArgs(testDestinationUserId, ['CARD']).resolves([{
@@ -165,7 +163,6 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     });
 
     it('Handles last capitalization properly', async () => {
-        logger('HUUUUH LCT: ', testUserId);
         const expectedMessage = 'Hello Luke. This week you got paid $10.05 in interest';
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(
             'Hello #{user_first_name}. This week you got paid #{last_capitalization} in interest'
@@ -485,6 +482,16 @@ describe('*** UNIT TESTING MESSAGE PROCESSING *** Update message acknowledged st
         });
     });
 
+    it('Handles event processor superceding a message', async () => {
+        updateMessageStub.withArgs(testMsgId, { processedStatus: 'SUPERCEDED' }).resolves({ updatedTime: testUpdatedTime });
+
+        const event = { messageId: testMsgId, newStatus: 'SUPERCEDED' };
+        const updateResult = await handler.updateUserMessage(event);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal({ statusCode: 200 });
+    });
+
     it('Handles user fetching a message', async () => {
         updateMessageStub.withArgs(testMsgId, { processedStatus: 'FETCHED' }).resolves({ updatedTime: testUpdatedTime });
 
@@ -515,7 +522,7 @@ describe('*** UNIT TESTING MESSAGE PROCESSING *** Update message acknowledged st
 
     it('Fails on missing authorization', async () => {
         const event = { messageId: testMsgId, userAction: 'FETCHED' };
-        const updateResult = await handler.updateUserMessage(event);
+        const updateResult = await handler.updateUserMessage({ httpMethod: 'POST', body: JSON.stringify(event) });
         logger('Result of update: ', updateResult);
 
         expect(updateResult).to.exist;
