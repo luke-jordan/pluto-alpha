@@ -2,7 +2,6 @@
 
 const logger = require('debug')('jupiter:user-notifications:create-msg-instruction-test');
 const uuid = require('uuid/v4');
-const config = require('config');
 const moment = require('moment');
 const stringify = require('json-stable-stringify');
 
