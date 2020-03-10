@@ -43,12 +43,12 @@ class MockLambdaClient {
 }
 
 const handler = proxyquire('../message-push-handler', {
-    './persistence/rds.notifications': {
+    './persistence/rds.pushtokens': {
         'getPushTokens': getPushTokenStub,
         'insertPushToken': insertPushTokenStub,
         'deletePushToken': deletePushTokenStub
     },
-    './persistence/rds.msgpicker': {
+    './persistence/rds.usermessages': {
         'getPendingOutboundMessages': getPendingOutboundMessagesStub,
         'bulkUpdateStatus': bulkUpdateStatusStub
     },

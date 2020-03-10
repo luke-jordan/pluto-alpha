@@ -288,8 +288,6 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 // messages (the most complex), and much else.
 describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
 
-    beforeEach(() => resetStubs());
-
     const testBoostId = uuid();
     const testMsgInstructId = uuid();
     const testCreatingUserId = uuid();
@@ -455,15 +453,17 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(lamdbaInvokeStub).to.have.not.been.called;
     };
 
+    beforeEach(() => {
+        resetStubs();
+        momentStub.reset();
+    });
+
     it('Happy path creates a game boost, including setting up the messages', async () => {
-    
         const mockResultFromRds = {
             boostId: testBoostId,
             persistedTimeMillis: testPersistedTime.valueOf(),
             numberOfUsersEligible: 100
         };
-
-        mockBoostToFromPersistence.boostId = testBoostId;
 
         momentStub.onFirstCall().returns(testStartTime);
         momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
@@ -475,16 +475,54 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const expectedMsgInstruct = assembleMessageInstruction();
 
         // now we do the call
-        const resultOfCreate = await handler.createBoost(testBodyOfEvent);
+        const resultOfCreate = await handler.createBoost({ ...testBodyOfEvent });
         expect(resultOfCreate).to.exist;
         expect(resultOfCreate).to.deep.equal(expectedResult);
 
         // then set up invocation checks
-        Reflect.deleteProperty(mockBoostToFromPersistence, 'boostId');
+        const expectedBoostToRds = { ...mockBoostToFromPersistence };
         
-        expect(insertBoostStub).to.have.been.calledOnceWithExactly(mockBoostToFromPersistence);
+        expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoostToRds);
         const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
         
+        expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+    });
+
+    it('Happy path creates a game boost, with default status unlocked', async () => {
+        const alreadyUnlockedBoost = { ...testBodyOfEvent };
+        alreadyUnlockedBoost.initialStatus = 'UNLOCKED';
+    
+        const mockResultFromRds = {
+            boostId: testBoostId,
+            persistedTimeMillis: testPersistedTime.valueOf(),
+            numberOfUsersEligible: 100
+        };
+
+        momentStub.onFirstCall().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
+        insertBoostStub.resolves(mockResultFromRds);
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+        alterBoostStub.resolves({ updatedTime: moment() });
+
+        const expectedResult = { ...mockResultFromRds, messageInstructions: mockMsgIdDict };
+        const expectedMsgInstruct = assembleMessageInstruction();
+
+        // now we do the call
+        const resultOfCreate = await handler.createBoost(alreadyUnlockedBoost);
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal(expectedResult);
+
+        // then set up invocation checks
+        const expectedBoost = { ...mockBoostToFromPersistence };
+        expectedBoost.defaultStatus = 'UNLOCKED';
+        expectedBoost.statusConditions = { 
+            REDEEMED: ['number_taps_greater_than #{20::20000}']
+        };
+        
+        expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
+
+        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
     });

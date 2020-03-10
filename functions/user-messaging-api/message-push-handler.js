@@ -9,8 +9,8 @@ const opsUtil = require('ops-util-common');
 const stringify = require('json-stable-stringify');
 const striptags = require('striptags');
 
-const rdsMainUtil = require('./persistence/rds.notifications');
-const rdsPickerUtil = require('./persistence/rds.msgpicker');
+const rdsMainUtil = require('./persistence/rds.pushtokens');
+const rdsPickerUtil = require('./persistence/rds.usermessages');
 
 const msgUtil = require('./msg.util');
 const msgPicker = require('./message-picking-handler');
