@@ -31,7 +31,7 @@ class MockLambdaClient {
 }
 
 const handler = proxyquire('../msg-instruction-handler', {
-    './persistence/rds.notifications': {
+    './persistence/rds.instructions': {
         'insertMessageInstruction': insertMessageInstructionStub,
         'getMessageInstruction': getMessageInstructionStub,
         'updateMessageInstruction': updateMessageInstructionStub,
@@ -125,6 +125,8 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             }),
             requestContext: testHelper.requestContext(mockUserId)
         };
+
+        momentStub.returns(moment());
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
@@ -241,39 +243,6 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
     });
 
-    it('Inserts instruction for scheduled once off message', async () => {
-        const mockEvent = {
-            body: JSON.stringify({
-                presentationType: 'ONCE_OFF',
-                audienceType: 'ALL_USERS',
-                templates: { template: { 'DEFAULT': testRecurringTemplate }},
-                audienceId: mockAudienceId,
-                recurrenceParameters: null,
-                messagePriority: 0,
-                startTime: moment().add(2, 'days').format(),
-                holdFire: true
-            }),
-            requestContext: testHelper.requestContext(mockUserId)
-        };
-        insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
-
-        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
-        logger('Result of message instruction creation:', resultOfInsertion);
-
-        expect(resultOfInsertion).to.exist;
-        expect(resultOfInsertion).to.have.property('statusCode', 200);
-        expect(resultOfInsertion).to.have.property('headers');
-        expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
-        expect(resultOfInsertion).to.have.property('body');
-        const body = JSON.parse(resultOfInsertion.body);
-        expect(body).to.have.property('processResult', 'INSTRUCT_STORED');
-        expect(body).to.have.property('message');
-        expect(body.message).to.have.property('instructionId', mockInstructionId);
-        expect(body.message).to.have.property('creationTime', mockCreationTime);
-        expect(insertMessageInstructionStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.not.been.called;
-    });
-
     it('Handles message sequences', async () => {
         const anchorMessage = { ...testRecurringTemplate };
         anchorMessage.followsPriorMessage = false;
@@ -294,6 +263,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
             requestContext: testHelper.requestContext(mockUserId)
         };
 
+        momentStub.returns(moment());
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
         const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
@@ -634,13 +604,6 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
     const mockAudienceId = uuid();
 
-    const instructionHandler = proxyquire('../msg-instruction-handler', {
-        './persistence/rds.notifications': {
-            'insertMessageInstruction': insertMessageInstructionStub
-        },
-        '@noCallThru': true
-    });
-
     beforeEach(() => {
         testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
             getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
@@ -661,14 +624,18 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
             }),
             requestContext: testHelper.requestContext(mockUserId)
         };
+
+        momentStub.returns(moment());
+        momentStub.withArgs(testStartTime.format()).returns(testStartTime);
         insertMessageInstructionStub.resolves([{ instructionId: mockInstructionId, creationTime: mockCreationTime }]);
 
-        const resultOfInsertion = await instructionHandler.insertMessageInstruction(mockEvent);
+        const resultOfInsertion = await handler.insertMessageInstruction(mockEvent);
         logger('Result of message instruction creation:', resultOfInsertion);
 
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('statusCode', 200);
         expect(resultOfInsertion).to.have.property('headers');
+
         expect(resultOfInsertion.headers).to.deep.equal(testHelper.expectedHeaders);
         expect(resultOfInsertion).to.have.property('body');
         const body = JSON.parse(resultOfInsertion.body);

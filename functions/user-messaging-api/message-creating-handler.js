@@ -5,8 +5,9 @@ const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
-const rdsUtil = require('./persistence/rds.notifications');
+const msgPersistence = require('./persistence/rds.usermessages');
 const msgUtil = require('./msg.util');
+
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 const publisher = require('publish-common');
@@ -18,8 +19,6 @@ const STANDARD_PARAMS = [
     'opened_date',
     'total_interest'
 ];
-
-const extractSnsMessage = async (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
 
 /**
  * NOTE: This is only for custom params supplied with the message-creation event. System defined params should be left alone.
@@ -116,7 +115,7 @@ const generateAndAppendMessageSequence = (rows, { destinationUserId, templateSeq
     rows.push(...msgsForUser);
 };
 
-const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) => {
+const createAndStoreMsgsForUserIds = async ({ userIds, instruction, timeToSend, parameters}) => {
     if (!Array.isArray(userIds) || userIds.length === 0) {
         logger('No users match this selection criteria, exiting');
         return [];
@@ -128,29 +127,32 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
     }
     
     let rows = [];
-    
     const topLevelKey = Object.keys(templates)[0];
 
     // i.e., if the instruction holds a sequence of messages (like in a boost offer), generate all of those for each user, else just the one
     if (topLevelKey === 'template') {
         logger('Constructing messages from template: ', templates.template);
-        rows = userIds.map((destinationUserId) => (
-            generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
+        rows = userIds.map((destinationUserId) => (generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
     } else if (topLevelKey === 'sequence') {
         const templateSequence = templates.sequence;
-        userIds.
-            forEach((userId) => generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
+        userIds.forEach((userId) => generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
     }
     
-    logger(`created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
+    logger(`Created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
     
     if (!rows || rows.length === 0) {
         logger('No user messages generated, exiting');
         return { instructionId: instruction.instructionId, result: 'NO_USERS' };
     }
 
+    const sendTime = timeToSend ? timeToSend.format() : instruction.startTime;
+    logger('Send time constructed as: ', sendTime);
+    rows.forEach((row) => {
+        row.startTime = sendTime;
+    });
+
     const rowKeys = Object.keys(rows[0]);
-    const resultOfPersistence = await rdsUtil.insertUserMessages(rows, rowKeys);
+    const resultOfPersistence = await msgPersistence.insertUserMessages(rows, rowKeys);
 
     const userLogOptions = {
         context: {
@@ -171,26 +173,35 @@ const createAndStoreMsgsForUserIds = async (userIds, instruction, parameters) =>
  * @param {object} instructionDetail An object containing the following properties: instructionId, destinationUserId, and parameters. These are elaborated below.
  * @property {string} instructionId The instruction id assigned during instruction creation.
  * @property {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's audience ID property.
+ * @property {number} scheduledTimeEpochMillis Optional. This overrides the start time of the instruction, so user-specific message is scheduled
  * @property {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.
  */
-const processNonRecurringInstruction = async ({ instructionId, destinationUserId, parameters }) => {
-    logger('Processing instruction with ID: ', instructionId);
-    const instruction = await rdsUtil.getMessageInstruction(instructionId);
+const processNonRecurringInstruction = async (instructionInvocation) => {
+    const { instructionId, destinationUserId, scheduledTimeEpochMillis, parameters } = instructionInvocation;
+    logger('Processing instruction invoked as: ', instructionInvocation);
 
-    if (moment(instruction.startTime).valueOf() > moment().valueOf()) {
+    const instruction = await msgPersistence.getMessageInstruction(instructionId);
+    const timeToSendMillis = scheduledTimeEpochMillis || moment().valueOf();
+    logger('Time to send millis: ', timeToSendMillis);
+
+    // todo : possibly replace by just making time to send the max of these (but then would need to do complex updates if instruction changes)
+    if (!scheduledTimeEpochMillis && moment(instruction.startTime).valueOf() > timeToSendMillis) {
         return { instructionId, processResult: 'INSTRUCTION_SCHEDULED' };
     }
     
-    const userIds = destinationUserId ? [destinationUserId] : await rdsUtil.getUserIds(instruction.audienceId);
+    const userIds = destinationUserId ? [destinationUserId] : await msgPersistence.getUserIdsForAudience(instruction.audienceId);
     logger(`Retrieved ${userIds.length} user id(s) for instruction`);
     
-    const insertionResponse = await createAndStoreMsgsForUserIds(userIds, instruction, parameters);
+    const timeToSend = moment(timeToSendMillis);
+    logger('Time to send: ', timeToSend);
+    const insertionResponse = await createAndStoreMsgsForUserIds({ userIds, instruction, timeToSend: moment(timeToSendMillis), parameters });
+
     if (!Array.isArray(insertionResponse) || insertionResponse.length === 0) {
         return { instructionId, insertionResponse };
     }
     
     // todo : check if there is only the one user
-    const updateInstructionResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_GENERATED');
+    const updateInstructionResult = await msgPersistence.updateInstructionState(instructionId, 'MESSAGES_GENERATED');
     logger('Update result: ', updateInstructionResult);
     
     const handlerResponse = {
@@ -259,20 +270,20 @@ const generateRecurringMessages = async (recurringInstruction) => {
     const audienceId = recurringInstruction.audienceId;
     await sendRequestToRefreshAudience(audienceId);
 
-    const userIds = await rdsUtil.getUserIds(audienceId);
-    const usersForMessages = await rdsUtil.filterUserIdsForRecurrence(userIds, recurringInstruction);
+    const userIds = await msgPersistence.getUserIdsForAudience(audienceId);
+    const usersForMessages = await msgPersistence.filterUserIdsForRecurrence(userIds, recurringInstruction);
    
-    const userMessages = await createAndStoreMsgsForUserIds(usersForMessages, recurringInstruction);
+    const userMessages = await createAndStoreMsgsForUserIds({ userIds: usersForMessages, instruction: recurringInstruction });
     if (!Array.isArray(userMessages) || userMessages.length === 0) {
         return { instructionId, userMessages };
     }
 
     if (recurringInstruction.processedStatus !== 'MESSAGES_GENERATED') {
-        const updateStatusResult = await rdsUtil.updateInstructionState(instructionId, 'MESSAGES_GENERATED');
+        const updateStatusResult = await msgPersistence.updateInstructionState(instructionId, 'MESSAGES_GENERATED');
         logger('Result of updating status: ', updateStatusResult);
     }
 
-    const updateProcessedTime = await rdsUtil.updateMessageInstruction(instructionId, { lastProcessedTime: moment().format() });
+    const updateProcessedTime = await msgPersistence.updateMessageInstruction(instructionId, { lastProcessedTime: moment().format() });
 
     return {
         instructionId: recurringInstruction.instructionId,
@@ -292,14 +303,14 @@ module.exports.createFromPendingInstructions = async () => {
         // this is just going to go in and find the pending instructions and then transform them
         // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
         // include within a fail-safe check that once-off messages are not regenerated when they already exist (simple count should do)
-        const unprocessedOnceOffsReady = await rdsUtil.getInstructionsByType('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
+        const unprocessedOnceOffsReady = await msgPersistence.getInstructionsByType('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
         logger('Would process these once off messages: ', unprocessedOnceOffsReady);
 
         // const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructions: [{ instructionId: instruction.instructionId }]}));
         
         // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next
         // which implies: first get the recurring instructions, then expire old messages, then add new to the queue; okay.
-        const obtainRecurringMessages = await rdsUtil.getInstructionsByType('RECURRING');
+        const obtainRecurringMessages = await msgPersistence.getInstructionsByType('RECURRING');
         logger('Obtained recurring instruction: ', obtainRecurringMessages);
 
         const recurringPromises = obtainRecurringMessages.map((instruction) => generateRecurringMessages(instruction));
@@ -315,79 +326,5 @@ module.exports.createFromPendingInstructions = async () => {
     } catch (err) {
         logger('FATAL_ERROR', err);
         return { result: 'ERROR', message: err.message };
-    }
-};
-
-
-/**
- * This function accepts a system wide user id. It then retrieves all recurring messages targeted at all users and includes the recieved
- * user id in the table of reciepients. This function essentially includes a new user into the loop, or the system wide 'mailing list'.
- * After running this function, the user should be able to recieve system wide recurring messages like everyone else.
- * @param {object} event An object containing the users system wide id.
- * @property {string} systemWideUserId The users system wide id.
- */
-// module.exports.syncUserMessages = async (event) => {
-//     try {
-//         const params = msgUtil.extractEventBody(event);
-//         const systemWideUserId = params.systemWideUserId; // validation
-//         logger('Got user id:', systemWideUserId);
-//         const instructions = await rdsUtil.getInstructionsByType('RECURRING', ['ALL_USERS']);
-//         logger('Got instructions:', instructions);
-//         let rows = [];
-//         for (let i = 0; i < instructions.length; i++) {
-//             instructions[i].requestDetails = params;
-//             const result = await assembleUserMessages(instructions[i], systemWideUserId);
-//             rows = [...rows, ...result];
-//         }
-//         logger('Assembled user messages:', rows);
-//         const rowKeys = Object.keys(rows[0]);
-//         logger('Got keys:', rowKeys);
-//         const insertionResponse = await rdsUtil.insertUserMessages(rows, rowKeys);
-//         logger('User messages insertion resulted in:', insertionResponse);
-//         return {
-//             statusCode: 200,
-//             body: JSON.stringify({
-//                 message: insertionResponse
-//             })
-//         };
-//     } catch (err) {
-//         logger('FATAL_ERROR:', err);
-//         return {
-//             statusCode: 500,
-//             body: JSON.stringify({ message: err.message })
-//         };
-//     }
-// };
-
-/**
- * This function is triggered on user events. If the event is not in any black list and a message instruction
- * for the event exists, the instruction is processed and the resulting message is sent to the user.
- */
-module.exports.createFromUserEvent = async (snsEvent) => {
-    try {
-        const eventBody = await extractSnsMessage(snsEvent);
-        const eventType = eventBody.eventType;
-
-        const blackList = [
-            ...config.get('security.defaultBlacklist'),
-            ...config.get('security.additionalBlacklist')
-        ];
-
-        if (blackList.includes(eventType)) {
-            return { statusCode: 200 };
-        }
-
-        const instructionIds = await rdsUtil.findMsgInstructionByFlag(eventType);
-
-        if (instructionIds !== null && instructionIds.length !== 0) {
-            await exports.createUserMessages({ instructions: instructionIds.map((instructionId) => (
-                { instructionId: instructionId, destinationUserId: eventBody.userId }))});
-        }
-
-        return { statusCode: 200 };
-
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return { statusCode: 500 };
     }
 };

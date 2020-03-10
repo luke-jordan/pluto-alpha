@@ -6,7 +6,7 @@ const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
-const rdsUtil = require('./persistence/rds.notifications');
+const rdsUtil = require('./persistence/rds.instructions');
 const msgUtil = require('./msg.util');
 
 const AWS = require('aws-sdk');
@@ -130,7 +130,7 @@ const createPersistableObject = (instruction, creatingUserId) => {
     
     const instructionId = uuid();
     const startTime = instruction.startTime || moment().format();
-    const endTime = instruction.endTime || moment().add(500, 'years').format();
+    const endTime = instruction.endTime || moment().clone().add(500, 'years').format(); // clone is just to be careful with mutations
     logger('Received message priority: ', instruction.messagePriority);
     const messagePriority = instruction.messagePriority || 0;
 
@@ -173,10 +173,12 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
 
     // second, if there was no test instruction, then unless we have an explicit 'hold', we create the messages for 
     // once off messages right away (on assumption they should go out)
+
     const holdOffInstructed = typeof params.holdFire === 'boolean' && params.holdFire;
     logger(`Fire off now? Presentation type: ${params.presentationType} and hold off instructed ? : ${holdOffInstructed}`);
     const isScheduled = moment(params.startTime).valueOf() > moment().valueOf();
     logger(`Is message scheduled for future delivery?: ${isScheduled}`);
+    
     if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed && !isScheduled) {
         const lambdaPaylod = { instructions: [{ instructionId }]};
         const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, lambdaPaylod)).promise();
