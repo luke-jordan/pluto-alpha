@@ -4,7 +4,7 @@
   "description": "Functions for creating and working with user notifications",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* mocha",
+    "test": "DEBUG=jupiter:*:test nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
