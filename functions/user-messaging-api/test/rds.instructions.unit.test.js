@@ -113,20 +113,6 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION RDS UTIL ***', () => {
         expect(insertRecordsStub).to.have.been.calledOnceWithExactly(...mockInsertRecordsArgs);
     });
 
-    it('should get message instruction', async () => {
-        const mockInstructionId = uuid();
-        const expectedQuery = `select * from ${instructionTable} where instruction_id = $1`;
-        selectQueryStub.withArgs(expectedQuery, [mockInstructionId]).returns([createPersistableInstruction(mockInstructionId)]);
-        const expectedResult = createPersistableInstruction(mockInstructionId);
-
-        const result = await instructionsRds.getMessageInstruction(mockInstructionId);
-        logger('Result of instruction extraction from db:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal(expectedResult);
-        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockInstructionId]);
-    });
-
     it('should update message instruction', async () => {
         const mockInstructionId = uuid();
         const mockUpdateRecordArgs = {

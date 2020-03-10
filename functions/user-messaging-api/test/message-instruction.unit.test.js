@@ -17,7 +17,6 @@ const testHelper = require('./message.test.helper');
 
 const insertMessageInstructionStub = sinon.stub();
 const updateMessageInstructionStub = sinon.stub();
-const getMessageInstructionStub = sinon.stub();
 const getCurrentInstructionsStub = sinon.stub();
 const alterInstructionStatesStub = sinon.stub();
 const momentStub = sinon.stub();
@@ -33,7 +32,6 @@ class MockLambdaClient {
 const handler = proxyquire('../msg-instruction-handler', {
     './persistence/rds.instructions': {
         'insertMessageInstruction': insertMessageInstructionStub,
-        'getMessageInstruction': getMessageInstructionStub,
         'updateMessageInstruction': updateMessageInstructionStub,
         'getCurrentInstructions': getCurrentInstructionsStub,
         'alterInstructionMessageStates': alterInstructionStatesStub,
@@ -97,7 +95,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     };
 
     beforeEach(() => {
-        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub,
             getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
         resetEvent();
         uuidStub.returns(mockInstructionId);
@@ -567,7 +565,7 @@ describe('*** UNIT TEST SCHEDULED MESSAGE INSERTION ***', () => {
     const mockAudienceId = uuid();
 
     beforeEach(() => {
-        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, 
             getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
         uuidStub.returns(mockInstructionId);
     });
@@ -612,7 +610,7 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
     const mockUpdateTime = '2049-06-22T07:38:30.016Z';
 
     beforeEach(() => {
-        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, 
             getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
     });
 
@@ -715,73 +713,6 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
     });
 });
 
-describe('*** UNIT TESTING MESSAGE INSTRUCTION EXTRACTION ***', () => {
-
-    const mockInstructionId = uuid();
-    const mockInstructionIdOnError = uuid();
-    const mockAudienceId = uuid();
-    const boostId = uuid();
-
-    const mockPersistedInstuction = (instructionId) => ({
-        instructionId: instructionId,
-        presentationType: 'ONCE_OFF',
-        active: true,
-        audienceType: 'ALL_USERS',
-        templates: { 
-            default: config.get('instruction.templates.default'),
-            otherTemplates: null
-        },
-        audienceId: mockAudienceId,
-        recurrenceInstruction: null,
-        responseAction: 'VIEW_HISTORY',
-        responseContext: { boostId: boostId },
-        startTime: '2050-09-01T11:47:41.596Z',
-        endTime: '2061-01-09T11:47:41.596Z',
-        messagePriority: 0
-    });
-
-    const commonAssertions = (result, statusCode, expectedResult) => {
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(statusCode);
-        expect(result).to.have.property('body');
-        const parsedResult = JSON.parse(result.body);
-        expect(parsedResult).to.deep.equal(expectedResult);
-    };
-
-    beforeEach(() => {
-        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
-            getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
-    });
-
-    it('should read message instruction from database', async () => {
-        getMessageInstructionStub.withArgs(mockInstructionId).returns(mockPersistedInstuction(mockInstructionId));
-        const expectedResult = { message: mockPersistedInstuction(mockInstructionId) };
-        const mockEvent = {
-            instructionId: mockInstructionId
-        };
-
-        const result = await handler.getMessageInstruction(mockEvent);
-        logger('Result of message instruction extraction:', result);
-
-        commonAssertions(result, 200, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId);
-    });
-
-    it('should throw an error on persistence error (or general error)', async () => {
-        getMessageInstructionStub.withArgs(mockInstructionIdOnError).throws(new Error('A persistence derived error.'));
-        const expectedResult = { message: 'A persistence derived error.' };
-        const mockEvent = {
-            instructionId: mockInstructionIdOnError
-        };
-
-        const result = await handler.getMessageInstruction(mockEvent);
-        logger('Result of message instruction extraction:', result);
-
-        commonAssertions(result, 500, expectedResult);
-        expect(getMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionIdOnError);
-    });
-});
-
 describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
     const mockUserId = uuid();
     const mockActiveInstruction = {
@@ -802,7 +733,7 @@ describe('*** UNIT TESTING MESSAGE LISTING ****', () => {
     };
 
     beforeEach(() => {
-        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, getMessageInstructionStub,
+        testHelper.resetStubs(insertMessageInstructionStub, updateMessageInstructionStub, 
             getCurrentInstructionsStub, alterInstructionStatesStub, lamdbaInvokeStub, momentStub, uuidStub);
     });
 

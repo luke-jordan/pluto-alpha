@@ -256,6 +256,20 @@ describe('*** UNIT TEST USER ID RECURRENCE FILTER ***', () => {
         momentStub.returns({ subtract: () => mockDurationClause, format: () => mockDurationClause.format() });
     });
 
+    it('should get message instruction', async () => {
+        const expectedQuery = `select * from ${config.get('tables.messageInstructionTable')} where instruction_id = $1`;
+        
+        selectQueryStub.withArgs(expectedQuery, [mockInstructionId]).returns([{ 'instruction_id': mockInstructionId }]);
+        const expectedResult = { instructionId: mockInstructionId };
+
+        const result = await persistence.getMessageInstruction(mockInstructionId);
+        logger('Result of instruction extraction from db:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+        expect(selectQueryStub).to.have.been.calledOnceWithExactly(expectedQuery, [mockInstructionId]);
+    });
+
     it('should get message instructions that match specified audience and presentation type', async () => {
         const mockInstruction = { instructionId: mockInstructionId, presentationType: 'RECURRING' }; // and the rest
         const mockSelectArgs = [

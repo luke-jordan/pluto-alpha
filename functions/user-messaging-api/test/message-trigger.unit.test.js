@@ -12,7 +12,6 @@ const proxyquire = require('proxyquire').noCallThru();
 
 const testHelper = require('./message.test.helper');
 
-const fetchMsgInstructionStub = sinon.stub();
 const findMsgInstructionByFlagStub = sinon.stub();
 const findMsgToHaltStub = sinon.stub();
 const findMsgIdsStub = sinon.stub();
@@ -30,7 +29,6 @@ const mockUserId = uuid();
 
 const handler = proxyquire('../message-trigger-handler', {
     './persistence/rds.instructions': {
-        'getMessageInstruction': fetchMsgInstructionStub,
         'findMsgInstructionTriggeredByEvent': findMsgInstructionByFlagStub,
         'findMsgInstructionHaltedByEvent': findMsgToHaltStub,
         'getMessageIdsForInstructions': findMsgIdsStub, 
@@ -46,7 +44,7 @@ const wrapEventSns = (event) => ({
     Records: [{ Sns: { Message: JSON.stringify(event) }}]
 });
 
-const resetStubs = () => testHelper.resetStubs(fetchMsgInstructionStub, findMsgInstructionByFlagStub, findMsgToHaltStub, lambdaInvokeStub);
+const resetStubs = () => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, lambdaInvokeStub);
 
 describe('*** UNIT TEST SIMPLE EVENT TRIGGERED MESSAGES ***', () => {
 
@@ -134,7 +132,7 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
 
     const mockInstructionId = uuid();
 
-    beforeEach(() => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, fetchMsgInstructionStub, lambdaInvokeStub, momentStub));
+    beforeEach(() => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, lambdaInvokeStub, momentStub));
 
     it('Creates message based on triggering event, for time in future, hours and minutes', async () => {
         const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'MANUAL_EFT_INITIATED' });
@@ -251,7 +249,7 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
 
 describe('*** UNIT TEST CANCEL TRIGGERED MESSAGES ON HALT EVENT ***', () => {
 
-    beforeEach(() => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, fetchMsgInstructionStub, lambdaInvokeStub, momentStub));
+    beforeEach(() => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, lambdaInvokeStub, momentStub));
 
     it('Cancels messages (multiple) when halting event arrives', async () => {
         const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });

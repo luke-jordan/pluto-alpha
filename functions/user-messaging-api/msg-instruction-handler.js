@@ -291,34 +291,6 @@ module.exports.updateInstruction = async (event) => {
     }
 };
 
-/**
- * This function accepts an instruction id and returns the associated message instruction from the database.
- * @param {object} event An object containing the id of the instruction to be retrieved.
- * @property {string} instructionId The message instruction ID assigned during instruction creation.
- */
-module.exports.getMessageInstruction = async (event) => {
-    try {
-        logger('Fetching message instruction');
-        const params = msgUtil.extractEventBody(event);
-        logger('Parameters for instruction fetch: ', params);
-        const instructionId = params.instructionId;
-        const databaseResponse = await rdsUtil.getMessageInstruction(instructionId);
-        logger('Result of message instruction extraction:', databaseResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: databaseResponse
-            })
-        };
-
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return { statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
-    }
-};
-
 /** 
  * This function (which will only be available to users with the right roles/permissions) will list currently active messages,
  * i.e., those that are marked as active, and, optionally, those that still have messages unread by users

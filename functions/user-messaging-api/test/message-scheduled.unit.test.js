@@ -12,7 +12,6 @@ const proxyquire = require('proxyquire').noCallThru();
 
 const testHelper = require('./message.test.helper');
 
-const getMessageInstructionStub = sinon.stub();
 const getUserIdsStub = sinon.stub();
 const insertUserMessagesStub = sinon.stub();
 const getInstructionsByTypeStub = sinon.stub();
@@ -33,7 +32,6 @@ class MockLambdaClient {
 
 const handler = proxyquire('../message-creating-handler', {
     './persistence/rds.usermessages': {
-        'getMessageInstruction': getMessageInstructionStub,
         'getUserIdsForAudience': getUserIdsStub,
         'insertUserMessages': insertUserMessagesStub,
         'getInstructionsByType': getInstructionsByTypeStub,
@@ -69,7 +67,7 @@ const testRefreshAudienceResponse = {
     result: `Refreshed audience id: ${mockAudienceId} successfully`
 };
 
-const resetStubs = () => testHelper.resetStubs(getInstructionsByTypeStub, getMessageInstructionStub, filterUserIdsForRecurrenceStub,
+const resetStubs = () => testHelper.resetStubs(getInstructionsByTypeStub, filterUserIdsForRecurrenceStub,
     getUserIdsStub, insertUserMessagesStub, updateInstructionStateStub, updateMessageInstructionStub, lambdaInvokeStub, momentStub);
 
 describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
@@ -105,7 +103,6 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
 
     it('Sends pending instructions', async () => {
         getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
-        getMessageInstructionStub.resolves(mockInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));
@@ -158,7 +155,6 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         lambdaInvokeStub.withArgs(argsForRefreshAudienceLambda).returns({ promise: () => testHelper.mockLambdaResponse(testRefreshAudienceResponse) });
 
         getInstructionsByTypeStub.resolves([testScheduledMsgInstruction, testScheduledMsgInstruction]);
-        getMessageInstructionStub.resolves(testScheduledMsgInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));
@@ -191,7 +187,6 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
 
     it('Handles empty recurring messages', async () => {
         getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
-        getMessageInstructionStub.resolves(mockInstruction);
         getUserIdsStub.resolves([]);
     
         const result = await handler.createFromPendingInstructions();
@@ -276,7 +271,6 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
 
         lambdaInvokeStub.withArgs(argsForRefreshAudienceLambda).returns({ promise: () => testHelper.mockLambdaResponse(testRefreshAudienceResponse) });
         getInstructionsByTypeStub.resolves([testScheduledMsgInstruction, testScheduledMsgInstruction]);
-        getMessageInstructionStub.resolves(testScheduledMsgInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));
@@ -327,7 +321,6 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         lambdaInvokeStub.withArgs(argsForRefreshAudienceLambda).returns({ promise: () => testHelper.mockLambdaResponse(testRefreshAudienceResponse) });
 
         getInstructionsByTypeStub.resolves([testScheduledMsgInstruction, testScheduledMsgInstruction]);
-        getMessageInstructionStub.resolves(testScheduledMsgInstruction);
         filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
         getUserIdsStub.resolves(createMockUserIds(10));
         insertUserMessagesStub.resolves(expectedInsertionRows(10));

@@ -36,20 +36,6 @@ module.exports.insertMessageInstruction = async (persistableObject) => {
     return databaseResponse.rows.map((insertionResult) => camelCaseKeys(insertionResult));
 };
 
-/**
- * This function accepts an instruction ID and returns a message instruction from the database.
- * @param {string} instructionId The message instruction ID assigned during instruction creation.
- */
-module.exports.getMessageInstruction = async (instructionId) => {
-    const query = `select * from ${config.get('tables.messageInstructionTable')} where instruction_id = $1`;
-    const value = [instructionId];
-
-    const response = await rdsConnection.selectQuery(query, value);
-    // logger('Got this back from user message instruction extraction:', response);
-
-    return camelCaseKeys(response[0]);
-};
-
 // used to find event-based messages
 module.exports.findMsgInstructionTriggeredByEvent = async (eventType) => {
     const query = `select instruction_id, trigger_parameters from ${config.get('tables.messageInstructionTable')} where ` +

@@ -56,6 +56,20 @@ module.exports.getUserIdsForAudience = async (audienceId) => {
 };
 
 /**
+ * This function accepts an instruction ID and returns a message instruction from the database.
+ * @param {string} instructionId The message instruction ID assigned during instruction creation.
+ */
+module.exports.getMessageInstruction = async (instructionId) => {
+    const query = `select * from ${config.get('tables.messageInstructionTable')} where instruction_id = $1`;
+    const value = [instructionId];
+
+    const response = await rdsConnection.selectQuery(query, value);
+    // logger('Got this back from user message instruction extraction:', response);
+
+    return camelCaseKeys(response[0]);
+};
+
+/**
  * Used for obtaining messages during regular processing or at user start
  */
 module.exports.getInstructionsByType = async (presentationType, audienceTypes, processedStatuses) => {
