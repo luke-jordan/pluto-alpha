@@ -134,7 +134,7 @@ module.exports.initiatePendingSave = async (event) => {
     
     // we default to Ozow, for now
     const paymentProvider = saveInformation.paymentProvider || 'OZOW';
-    logger('********** Payment provider: ', paymentProvider);
+    logger('Payment provider: ', paymentProvider);
 
     const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId); // we need this anyway
 
