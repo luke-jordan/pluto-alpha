@@ -2,6 +2,8 @@
 
 const logger = require('debug')('jupiter:third-parties:sendgrid');
 const config = require('config');
+const uuid = require('uuid/v4');
+
 const format = require('string-format');
 const path = require('path');
 
@@ -148,13 +150,13 @@ const addMessageIdIfMissing = (emailMessage) => {
     if (!emailMessage.messageId) {
         emailMessage.messageId = uuid();
     }
-}
+    return emailMessage;
+};
 
 const validateEmailMessages = (emailMessages) => {
     const requiredProperties = ['to', 'from', 'subject', 'text', 'html'];
-    return emailMessages
-        .filter((email) => hasValidProperties(email, 'email', requiredProperties))
-        .map((email) => addMessageIdIfMissing(email));
+    return emailMessages.filter((email) => hasValidProperties(email, 'email', requiredProperties)).
+        map((email) => addMessageIdIfMissing(email));
 };
 
 const chunkDispatchRecipients = (destinationArray) => {
@@ -429,6 +431,7 @@ module.exports.sendEmailMessages = async (event) => {
             validMessages = wrapHtmlinTemplate(validMessages, wrapperTemplate); 
         }
 
+        logger('Validated messages: ', validMessages);
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
         

@@ -68,7 +68,8 @@ const eventHandler = proxyquire('../event-handler', {
         'SQS': MockSQSClient,
         'S3': MockS3Client,
         'SNS': MockSnsClient,
-        'config': { update: () => { } }
+        // eslint-disable-next-line no-empty-function
+        'config': { update: () => ({}) }
     },
     'ioredis': MockRedis,
     './persistence/rds': {

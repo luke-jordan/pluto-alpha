@@ -149,7 +149,7 @@ const assembleEmailParameters = ({ toAddresses, subject, htmlBody, textBody }) =
     from: sourceEmail,
     subject,
     html: htmlBody,
-    text: textBody,
+    text: textBody
 });
 
 const profileLink = (bankReference) => {
