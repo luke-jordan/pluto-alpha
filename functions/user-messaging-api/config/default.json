@@ -16,7 +16,7 @@
     "lambdas": {
         "generateUserMessages": "message_user_create_once",
         "updateMessageStatus": "message_user_process",
-        "sendEmailMessages": "email_send",
+        "sendEmailMessages": "outbound_comms_send",
         "fetchProfile": "profile_fetch",
         "fetchAccountAggregate": "user_history_aggregate",
         "audienceHandler": "audience_selection"

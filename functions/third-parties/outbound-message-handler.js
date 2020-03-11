@@ -144,9 +144,17 @@ const hasValidProperties = (object, type, requiredProperties) => {
     }
 };
 
+const addMessageIdIfMissing = (emailMessage) => {
+    if (!emailMessage.messageId) {
+        emailMessage.messageId = uuid();
+    }
+}
+
 const validateEmailMessages = (emailMessages) => {
-    const requiredProperties = ['messageId', 'to', 'from', 'subject', 'text', 'html'];
-    return emailMessages.filter((email) => hasValidProperties(email, 'email', requiredProperties));
+    const requiredProperties = ['to', 'from', 'subject', 'text', 'html'];
+    return emailMessages
+        .filter((email) => hasValidProperties(email, 'email', requiredProperties))
+        .map((email) => addMessageIdIfMissing(email));
 };
 
 const chunkDispatchRecipients = (destinationArray) => {

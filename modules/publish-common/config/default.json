@@ -9,7 +9,7 @@
         "eventsEmailAddress": "insert_default_email"
     },
     "lambdas": {
-        "sendOutboundMessages": "email_send"
+        "sendOutboundMessages": "outbound_comms_send"
     },
     "crypto": {
         "algo": "sha256",

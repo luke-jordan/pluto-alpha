@@ -132,7 +132,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         uuidStub.returns(testMessageId);
 
         const expectedInvocation = {
-            FunctionName: 'email_send',
+            FunctionName: 'outbound_comms_send',
             InvocationType: 'Event',
             Payload: JSON.stringify({
                 emailMessages: targetEmails.map((emailAddress) => ({
@@ -175,7 +175,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         uuidStub.returns(testMessageId);
 
         const expectedInvocation = {
-            FunctionName: 'email_send',
+            FunctionName: 'outbound_comms_send',
             InvocationType: 'Event',
             Payload: JSON.stringify({
                 emailMessages: targetEmails.map((emailAddress) => ({

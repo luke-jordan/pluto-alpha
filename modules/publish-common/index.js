@@ -122,6 +122,18 @@ module.exports.obtainTemplate = async (templateName) => {
     return templateText;
 };
 
+module.exports.safeEmailSendPlain = async (emailMessage, sync = false) => {
+    try {
+        const emailInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { emailMessages: [emailMessage] }, sync);
+        const emailResult = await lambda.invoke(emailInvocation).promise();
+        logger('Sent email: ', emailResult);
+        return { result: 'SUCCESS' };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { result: 'FAILURE' };
+    }
+}
+
 module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTemplateKey, templateVariables }) => {
     let sourceEmail = 'noreply@jupitersave.com';
     
