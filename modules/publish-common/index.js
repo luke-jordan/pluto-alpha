@@ -132,7 +132,7 @@ module.exports.safeEmailSendPlain = async (emailMessage, sync = false) => {
         logger('FATAL_ERROR: ', err);
         return { result: 'FAILURE' };
     }
-}
+};
 
 module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTemplateKey, templateVariables }) => {
     let sourceEmail = 'noreply@jupitersave.com';
