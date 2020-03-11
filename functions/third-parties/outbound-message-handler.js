@@ -496,11 +496,11 @@ module.exports.sendSmsMessage = async (event) => {
         const result = await request(options);
         logger('Got result:', result);
 
-        if (result.statusCode && result.statusCode === 200) {
-            return { result: 'SUCCESS' };
+        if (result['error_code'] || result['error_message']) {
+            return { result: 'FAILURE', message: result['error_message'] };
         }
 
-        return { result: 'FAILURE' };
+        return { result: 'SUCCESS' };
 
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -510,6 +510,7 @@ module.exports.sendSmsMessage = async (event) => {
 
 module.exports.handleOutboundMessages = async (event) => {
     const params = opsUtil.extractParamsFromEvent(event);
+    logger('Sending outbound message, with event: ', event);
 
     if (params.emailMessages || JSON.stringify(params) === '{}') {
         return exports.sendEmailMessages(event);

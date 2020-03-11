@@ -1138,7 +1138,7 @@ describe('*** UNIT TEST SMS FUNCTION ***', async () => {
             json: true
         };
 
-        requestStub.resolves({ statusCode: 200, body: mockTwilioResponse });
+        requestStub.resolves(mockTwilioResponse);
 
         const testEvent = { phoneNumber: testPhoneNumber, message: testMessage };
 

@@ -7,7 +7,7 @@ resource "aws_lambda_function" "outbound_comms_send" {
 
   function_name                  = "${var.outbound_comms_send_lambda_function_name}"
   role                           = "${aws_iam_role.outbound_comms_send_role.arn}"
-  handler                        = "outbound-message-handler.sendEmailMessages"
+  handler                        = "outbound-message-handler.handleOutboundMessages"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
@@ -34,9 +34,9 @@ resource "aws_lambda_function" "outbound_comms_send" {
                 }
               },
               "twilio": {
-                "accountSid": "",
-                "authToken": "",
-                "number": "",
+                "accountSid": "${var.twilio_sid[terraform.workspace]}",
+                "authToken": "${var.twilio_token[terraform.workspace]}",
+                "number": "${var.twilio_number[terraform.workspace]}",
                 "mock": "OFF"
               }
           }
