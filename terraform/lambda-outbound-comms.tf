@@ -1,12 +1,12 @@
-variable "email_send_lambda_function_name" {
-  default = "email_send"
+variable "outbound_comms_send_lambda_function_name" {
+  default = "outbound_comms_send"
   type = "string"
 }
 
-resource "aws_lambda_function" "email_send" {
+resource "aws_lambda_function" "outbound_comms_send" {
 
-  function_name                  = "${var.email_send_lambda_function_name}"
-  role                           = "${aws_iam_role.email_send_role.arn}"
+  function_name                  = "${var.outbound_comms_send_lambda_function_name}"
+  role                           = "${aws_iam_role.outbound_comms_send_role.arn}"
   handler                        = "outbound-message-handler.sendEmailMessages"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
@@ -32,17 +32,23 @@ resource "aws_lambda_function" "email_send" {
                 "sandbox": {
                   "off": terraform.workspace == "master"
                 }
+              },
+              "twilio": {
+                "accountSid": "",
+                "authToken": "",
+                "number": "",
+                "mock": "OFF"
               }
           }
       )}"
     }
   }
   
-  depends_on = [aws_cloudwatch_log_group.email_send]
+  depends_on = [aws_cloudwatch_log_group.outbound_comms_send]
 }
 
-resource "aws_iam_role" "email_send_role" {
-  name = "${var.email_send_lambda_function_name}_role_${terraform.workspace}"
+resource "aws_iam_role" "outbound_comms_send_role" {
+  name = "${var.outbound_comms_send_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -61,8 +67,8 @@ resource "aws_iam_role" "email_send_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "email_send" {
-  name = "/aws/lambda/${var.email_send_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "outbound_comms_send" {
+  name = "/aws/lambda/${var.outbound_comms_send_lambda_function_name}"
   retention_in_days = 3
 
   tags = {
@@ -70,34 +76,34 @@ resource "aws_cloudwatch_log_group" "email_send" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "email_send_basic_execution_policy" {
-  role = aws_iam_role.email_send_role.name
+resource "aws_iam_role_policy_attachment" "outbound_comms_send_basic_execution_policy" {
+  role = aws_iam_role.outbound_comms_send_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "email_send_template_access_policy" {
-  role = aws_iam_role.email_send_role.name
+resource "aws_iam_role_policy_attachment" "outbound_comms_send_template_access_policy" {
+  role = aws_iam_role.outbound_comms_send_role.name
   policy_arn = aws_iam_policy.templates_s3_access.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_email_send" {
-  log_group_name = "${aws_cloudwatch_log_group.email_send.name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_outbound_comms_send" {
+  log_group_name = "${aws_cloudwatch_log_group.outbound_comms_send.name}"
   metric_transformation {
-    name = "${var.email_send_lambda_function_name}_fatal_api_alarm"
+    name = "${var.outbound_comms_send_lambda_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.email_send_lambda_function_name}_fatal_api_alarm"
+  name = "${var.outbound_comms_send_lambda_function_name}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_email_send" {
-  alarm_name = "${var.email_send_lambda_function_name}_fatal_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_outbound_comms_send" {
+  alarm_name = "${var.outbound_comms_send_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_email_send.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_outbound_comms_send.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
@@ -105,22 +111,22 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_email_send" {
   alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
 }
 
-resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_email_send" {
-  log_group_name = "${aws_cloudwatch_log_group.email_send.name}"
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_outbound_comms_send" {
+  log_group_name = "${aws_cloudwatch_log_group.outbound_comms_send.name}"
   metric_transformation {
-    name = "${var.email_send_lambda_function_name}_security_api_alarm"
+    name = "${var.outbound_comms_send_lambda_function_name}_security_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.email_send_lambda_function_name}_security_api_alarm"
+  name = "${var.outbound_comms_send_lambda_function_name}_security_api_alarm"
   pattern = "SECURITY_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_email_send" {
-  alarm_name = "${var.email_send_lambda_function_name}_security_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_outbound_comms_send" {
+  alarm_name = "${var.outbound_comms_send_lambda_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_email_send.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_outbound_comms_send.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
