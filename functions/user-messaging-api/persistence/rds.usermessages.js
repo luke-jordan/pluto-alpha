@@ -152,7 +152,7 @@ module.exports.updateInstructionProcessedTime = async (instructionId, lastProces
     const response = await rdsConnection.updateRecordObject(assembleUpdateParams(instructionId, { lastProcessedTime }));
     logger('Response of updating processed time: ', response);
     return response.length > 0 ? response.map((updateResult) => camelCaseKeys(updateResult))[0] : null;
-}
+};
 
 // ////////////////////////////////////////////////////////////////////////////////
 // ///////////////////////// USER MESSAGE FETCHING ///////////////////////////////
