@@ -91,12 +91,17 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     }
 };
 
-module.exports.sendSms = async ({ phoneNumber, message }) => {
+module.exports.sendSms = async ({ phoneNumber, message, sendSync }) => {
     try {    
-        const smsInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { phoneNumber, message }, false);
+        const invokeSync = sendSync || false;
+        const smsInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { phoneNumber, message }, invokeSync);
         const resultOfSms = await lambda.invoke(smsInvocation).promise();
         logger('Result of transfer: ', resultOfSms);
 
+        if (!invokeSync && resultOfSms['StatusCode'] === 202) {
+            return { result: 'SUCCESS' };
+        }
+    
         const smsResultPayload = JSON.parse(resultOfSms['Payload']);
         if (smsResultPayload['statusCode'] === 200) {
             const smsResultBody = JSON.parse(smsResultPayload.body);

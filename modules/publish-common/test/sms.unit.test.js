@@ -44,10 +44,23 @@ describe('*** UNIT TEST GENERIC SMS FUNCTION ***', () => {
         lamdbaInvokeStub.reset();
     });
 
-    it('Sends sms message', async () => {
+    it('Sends sms message, sync', async () => {
+        const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
+        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), false, mockLambdaPayload);
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+
+        const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage, sendSync: true });
+  
+        expect(resultOfDispatch).to.exist;
+        expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+    });
+
+    it('Sends sms message, async', async () => {
         const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
         const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
-        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202, Payload: ''}) });
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
   
