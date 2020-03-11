@@ -5,6 +5,8 @@ const config = require('config');
 const format = require('string-format');
 const path = require('path');
 
+const request = require('request-promise');
+
 const opsUtil = require('ops-util-common');
 
 const htmlToText = require('html-to-text');
@@ -450,4 +452,62 @@ module.exports.sendEmailMessages = async (event) => {
         logger('FATAL_ERROR:', err);
         return { result: 'ERR', message: err.message };
     }
+};
+
+/**
+ * This function sends sms messages via the Twilio api. It accepts a message and a phone number, assembles the request,
+ * then hits up the Twilio API.
+ */
+module.exports.sendSmsMessage = async (event) => {
+    try {
+        if (!config.has('twilio.mock') && config.get('twilio.mock') !== 'OFF') {
+            return { result: 'SUCCESS' };
+        }
+
+        const { message, phoneNumber } = opsUtil.extractParamsFromEvent(event);
+
+        const options = {
+            method: 'POST',
+            uri: format(config.get('twilio.endpoint'), config.get('twilio.accountSid')),
+            form: {
+                Body: message,
+                From: config.get('twilio.number'),
+                To: `+${phoneNumber}` 
+            },
+            auth: {
+                username: config.get('twilio.accountSid'),
+                password: config.get('twilio.authToken')
+            },
+            json: true
+        };
+
+        logger('Assembled options:', options);
+        const result = await request(options);
+        logger('Got result:', result);
+
+        if (result.statusCode && result.statusCode === 200) {
+            return { result: 'SUCCESS' };
+        }
+
+        return { result: 'FAILURE' };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { statusCode: 500 };
+    }
+};
+
+module.exports.handleOutboundMessages = async (event) => {
+    const params = opsUtil.extractParamsFromEvent(event);
+
+    if (params.emailMessages || JSON.stringify(params) === '{}') {
+        return exports.sendEmailMessages(event);
+    }
+
+    if (params.phoneNumber) {
+        return exports.sendSmsMessage(event);
+    }
+
+    // logger('FATAL_ERROR: Unrecognized event:', event);
+    return { result: 'FAILURE' };
 };

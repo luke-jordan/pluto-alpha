@@ -336,9 +336,8 @@ const sendEmailsToSpecificUsers = async (params) => {
             };
         }
 
-        return null;
-
-    }).filter((msg) => msg !== null);
+        return {};
+    });
 
     const resultOfSend = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
     logger('Result of email sending: ', resultOfSend);

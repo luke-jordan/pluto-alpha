@@ -1,7 +1,7 @@
 'use strict';
 
-const logger = require('debug')('jupiter:sms:unit');
-const uuid = require('uuid/v4');
+// const logger = require('debug')('jupiter:sms:unit');
+const config = require('config');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -10,15 +10,16 @@ chai.use(require('sinon-chai'));
 
 const proxyquire = require('proxyquire');
 
-const snsPublishStub = sinon.stub();
-class MockSNS {
+const lamdbaInvokeStub = sinon.stub();
+
+class MockLambdaClient {
     constructor () {
-        this.publish = snsPublishStub;
+        this.invoke = lamdbaInvokeStub;
     }
 }
 
 const eventPublisher = proxyquire('../index', {
-    'aws-sdk': { 'SNS': MockSNS }
+    'aws-sdk': { 'Lambda': MockLambdaClient }
 });
 
 describe('*** UNIT TEST GENERIC SMS FUNCTION ***', () => {
@@ -26,60 +27,60 @@ describe('*** UNIT TEST GENERIC SMS FUNCTION ***', () => {
     const testPhoneNumber = '+278923344351';
     const testMessage = 'Greetings user. Welcome to Jupiter.';
 
-    const expectSnsArgs = {
-        Message: testMessage,
-        MessageStructure: 'string',
-        PhoneNumber: testPhoneNumber
-    };
+    const wrapLambdaInvoc = (functionName, async, payload) => ({
+        FunctionName: functionName,
+        InvocationType: async ? 'Event' : 'RequestResponse',
+        Payload: JSON.stringify(payload)
+    });
+
+    const mockLambdaResponse = (body, statusCode = 200) => ({
+        Payload: JSON.stringify({
+            statusCode,
+            body: JSON.stringify(body)
+        })
+    });
 
     beforeEach(() => {
-        snsPublishStub.reset();
+        lamdbaInvokeStub.reset();
     });
 
     it('Sends sms message', async () => {
-    
-        const testSnsResponse = {
-            ResponseMetadata: { RequestId: uuid() },
-            MessageId: uuid()
-        };
-
-        snsPublishStub.returns({ promise: () => testSnsResponse });
+        const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
+        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
-        logger('Result of sms dispatch:', resultOfDispatch);
-
+  
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
 
-        expect(snsPublishStub).to.have.been.calledOnceWithExactly(expectSnsArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
-    it('Fails on bad SNS response', async () => {
-        const testSnsResponse = {
-            ResponseMetadata: { RequestId: uuid() }
-        };
-
-        snsPublishStub.returns({ promise: () => testSnsResponse });
+    it('Fails on bad Lambda response', async () => {
+        const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
+        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
+        lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'ERROR' }, 500)});
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
-        logger('Result of sms dispatch:', resultOfDispatch);
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'FAILURE' });
 
-        expect(snsPublishStub).to.have.been.calledOnceWithExactly(expectSnsArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('Catches thrown error', async () => {
-        snsPublishStub.throws(new Error('Connection error'));
+        const mockLambdaPayload = { message: testMessage, phoneNumber: testPhoneNumber };
+        const expectedInvocation = wrapLambdaInvoc(config.get('lambdas.sendOutboundMessages'), true, mockLambdaPayload);
+        lamdbaInvokeStub.throws(new Error('Connection error'));
 
         const resultOfDispatch = await eventPublisher.sendSms({ phoneNumber: testPhoneNumber, message: testMessage });
-        logger('Result of sms dispatch:', resultOfDispatch);
 
         expect(resultOfDispatch).to.exist;
         expect(resultOfDispatch).to.deep.equal({ result: 'FAILURE' });
 
-        expect(snsPublishStub).to.have.been.calledOnceWithExactly(expectSnsArgs);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
 });

@@ -6,14 +6,17 @@ const logger = require('debug')('jupiter:logging-module:main');
 const config = require('config');
 const moment = require('moment');
 
-const stringify = require('json-stable-stringify');
+const htmlToText = require('html-to-text');
 const format = require('string-format');
+
+const uuid = require('uuid/v4');
+const stringify = require('json-stable-stringify');
 
 const AWS = require('aws-sdk');
 const sns = new AWS.SNS({ region: config.get('aws.region') });
 
-const ses = new AWS.SES();
 const s3 = new AWS.S3();
+const lambda = new AWS.Lambda();
 
 // config's biggest weakness is its handling of modules, which blows. there is a complex way
 // to set defaults but it requires a constructor pattern, so far as I can tell. hence, doing this. 
@@ -27,6 +30,12 @@ const generateHashForEvent = (eventType) => {
         digest(getCryptoConfigOrDefault('digest', 'hex'));
     return generatedHash;
 };
+
+const wrapLambdaInvocation = (functionName, payload, sync = true) => ({
+    FunctionName: functionName,
+    InvocationType: sync ? 'RequestResponse' : 'Event',
+    Payload: stringify(payload)
+});
 
 module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
     try {
@@ -83,22 +92,20 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
 };
 
 module.exports.sendSms = async ({ phoneNumber, message }) => {
-    try {
-        logger(`Sending SMS to ${phoneNumber}, content: ${message}`);
-        const params = {
-            Message: message,
-            MessageStructure: 'string',
-            PhoneNumber: phoneNumber
-        };
-    
-        const resultOfDispatch = await sns.publish(params).promise();
-        logger('Result of SMS dispatch:', resultOfDispatch);
-        if (typeof resultOfDispatch === 'object' && Reflect.has(resultOfDispatch, 'MessageId')) {
+    try {    
+        const smsInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { phoneNumber, message }, false);
+        const resultOfSms = await lambda.invoke(smsInvocation).promise();
+        logger('Result of transfer: ', resultOfSms);
+
+        const smsResultPayload = JSON.parse(resultOfSms['Payload']);
+        if (smsResultPayload['statusCode'] === 200) {
+            const smsResultBody = JSON.parse(smsResultPayload.body);
+            logger('Got sms result body:', smsResultBody);
             return { result: 'SUCCESS' };
         }
 
-        logger('FATAL_ERROR: ', params);
         return { result: 'FAILURE' };
+
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'FAILURE' };
@@ -115,20 +122,6 @@ module.exports.obtainTemplate = async (templateName) => {
     return templateText;
 };
 
-const assembleEmailParameters = ({ sourceEmail, toList, subject, htmlBody, textBody }) => ({
-    Destination: {
-        ToAddresses: toList
-    },
-    Message: { Body: { 
-        Html: { Data: htmlBody },
-        Text: { Data: textBody }
-    },
-    Subject: { Data: subject }},
-    Source: sourceEmail,
-    ReplyToAddresses: [sourceEmail],
-    ReturnPath: sourceEmail
-});
-
 module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTemplateKey, templateVariables }) => {
     let sourceEmail = 'noreply@jupitersave.com';
     
@@ -139,20 +132,31 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     }
 
     const template = await exports.obtainTemplate(bodyTemplateKey);
-    const htmlBody = format(template, templateVariables);
-    const textBody = 'Jupiter system email.'; // generic (Google shows in preview)
+    const html = format(template, templateVariables);
+    const text = htmlToText.fromString(html, { wordwrap: false });
 
-    const sesInvocation = assembleEmailParameters({
-        sourceEmail,
-        toList,
+    // message id property allows lambda to return failed message ids
+    const emailMessages = toList.map((recipient) => ({
+        messageId: uuid(),
+        to: recipient,
+        from: sourceEmail,
         subject,
-        htmlBody,
-        textBody
-    });
+        html,
+        text
+    }));
 
-    const emailResult = await ses.sendEmail(sesInvocation).promise();
+    logger('Asembled emails:', emailMessages);
+    const emailInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { emailMessages }, false);
+    const resultOfEmail = await lambda.invoke(emailInvocation).promise();
+    logger('Result of transfer: ', resultOfEmail);
 
-    logger('Result of email send: ', emailResult);
+    const dispatchPayload = JSON.parse(resultOfEmail['Payload']);
+    if (dispatchPayload['statusCode'] === 200) {
+        const dispatchBody = JSON.parse(dispatchPayload.body);
+        logger('Got email result body:', dispatchBody);
+        
+        return { result: 'SUCCESS' };
+    }
     
-    return { result: 'SUCCESS' };
+    return { result: 'FAILURE' };
 };
