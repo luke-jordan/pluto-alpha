@@ -119,7 +119,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         expect(snsPublishStub).to.have.been.calledOnceWithExactly(happyPublish);
     });
 
-    it('Sends system email', async () => {
+    it('Sends system email, sync lambda call', async () => {
         const testMessageId = uuid();
         const targetEmails = ['user1@email.com', 'user2@email.com'];
 
@@ -129,6 +129,50 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         const testTemplate = '<p>Greetings {}, from Jupiter.</p>';
         getObjectStub.withArgs({ Bucket: templateBucket, Key: templateKey }).returns({ promise: () => ({ Body: { toString: () => testTemplate }})});
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse({ result: 'SUCCESS' })});
+        uuidStub.returns(testMessageId);
+
+        const expectedInvocation = {
+            FunctionName: 'outbound_comms_send',
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({
+                emailMessages: targetEmails.map((emailAddress) => ({
+                    from: 'system@jupitersave.com',
+                    html: '<p>Greetings Jacob, from Jupiter.</p>',
+                    messageId: testMessageId,
+                    subject: 'Salutations',
+                    text: 'Greetings Jacob, from Jupiter.',
+                    to: emailAddress
+                })
+            )})
+        };
+
+        const emailDetails = {
+            originAddress: 'system@jupitersave.com',
+            subject: 'Salutations',
+            toList: targetEmails,
+            bodyTemplateKey: templateKey,
+            templateVariables: 'Jacob',
+            sendSync: true
+        };
+
+        const resultOfDispatch = await eventPublisher.sendSystemEmail(emailDetails);
+
+        expect(resultOfDispatch).to.exist;
+        expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
+        expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: templateBucket, Key: templateKey });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+    });
+
+    it('Sends system email, async lambda call', async () => {
+        const testMessageId = uuid();
+        const targetEmails = ['user1@email.com', 'user2@email.com'];
+
+        const templateBucket = config.has('templates.bucket') ? config.get('templates.bucket') : 'staging.jupiter.templates';
+        const templateKey = 'test_template';
+
+        const testTemplate = '<p>Greetings {}, from Jupiter.</p>';
+        getObjectStub.withArgs({ Bucket: templateBucket, Key: templateKey }).returns({ promise: () => ({ Body: { toString: () => testTemplate }})});
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202, Payload: ''}) });
         uuidStub.returns(testMessageId);
 
         const expectedInvocation = {

@@ -163,7 +163,7 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     const resultOfEmail = await lambda.invoke(emailInvocation).promise();
     logger('Result of transfer: ', resultOfEmail);
 
-    if (invokeSync && resultOfEmail['StatusCode'] === 202) {
+    if (!invokeSync && resultOfEmail['StatusCode'] === 202) {
         return { result: 'SUCCESS' };
     }
 
