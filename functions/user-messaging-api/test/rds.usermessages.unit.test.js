@@ -305,7 +305,7 @@ describe('*** UNIT TEST BASIC INSTRUCTION OPERATIONS NEEDED BY USER MESSAGES ***
         logger('Result of message instruction update:', resultOfUpdate);
 
         expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal([{ updateTime: '2049-06-22T07:38:30.016Z' }]);
+        expect(resultOfUpdate).to.deep.equal({ updateTime: '2049-06-22T07:38:30.016Z' });
         expect(momentStub).to.have.been.calledOnce;
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });
