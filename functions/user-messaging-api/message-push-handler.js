@@ -231,7 +231,7 @@ const dispatchEmailMessages = async (emailMessages) => {
         };
     }
 
-    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), payload, true);
+    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendOutboundMessages'), payload, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
 

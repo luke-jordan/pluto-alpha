@@ -134,7 +134,7 @@ module.exports.safeEmailSendPlain = async (emailMessage, sync = false) => {
     }
 };
 
-module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTemplateKey, templateVariables }) => {
+module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTemplateKey, templateVariables, sendSync }) => {
     let sourceEmail = 'noreply@jupitersave.com';
     
     if (originAddress) {
@@ -158,11 +158,16 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     }));
 
     logger('Asembled emails:', emailMessages);
-    const emailInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { emailMessages }, false);
+    const invokeSync = sendSync || false;
+    const emailInvocation = wrapLambdaInvocation(config.get('lambdas.sendOutboundMessages'), { emailMessages }, invokeSync);
     const resultOfEmail = await lambda.invoke(emailInvocation).promise();
     logger('Result of transfer: ', resultOfEmail);
 
-    const dispatchPayload = JSON.parse(resultOfEmail['Payload']);
+    if (invokeSync && resultOfEmail['StatusCode'] === 202) {
+        return { result: 'SUCCESS' };
+    }
+
+    const dispatchPayload = JSON.parse(resultOfEmail['Payload']);    
     if (dispatchPayload['statusCode'] === 200) {
         const dispatchBody = JSON.parse(dispatchPayload.body);
         logger('Got email result body:', dispatchBody);
