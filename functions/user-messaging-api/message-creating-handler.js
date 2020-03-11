@@ -116,55 +116,67 @@ const generateAndAppendMessageSequence = (rows, { destinationUserId, templateSeq
 };
 
 const createAndStoreMsgsForUserIds = async ({ userIds, instruction, timeToSend, parameters}) => {
-    if (!Array.isArray(userIds) || userIds.length === 0) {
-        logger('No users match this selection criteria, exiting');
-        return [];
-    }
-
-    const templates = instruction.templates;
-    if (typeof templates !== 'object' || Object.keys(templates).length !== 1) {
-        throw new Error('Malformed template instruction: ', instruction.templates);
-    }
-    
-    let rows = [];
-    const topLevelKey = Object.keys(templates)[0];
-
-    // i.e., if the instruction holds a sequence of messages (like in a boost offer), generate all of those for each user, else just the one
-    if (topLevelKey === 'template') {
-        logger('Constructing messages from template: ', templates.template);
-        rows = userIds.map((destinationUserId) => (generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
-    } else if (topLevelKey === 'sequence') {
-        const templateSequence = templates.sequence;
-        userIds.forEach((userId) => generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
-    }
-    
-    logger(`Created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
-    
-    if (!rows || rows.length === 0) {
-        logger('No user messages generated, exiting');
-        return { instructionId: instruction.instructionId, result: 'NO_USERS' };
-    }
-
-    const sendTime = timeToSend ? timeToSend.format() : instruction.startTime;
-    logger('Send time constructed as: ', sendTime);
-    rows.forEach((row) => {
-        row.startTime = sendTime;
-    });
-
-    const rowKeys = Object.keys(rows[0]);
-    const resultOfPersistence = await msgPersistence.insertUserMessages(rows, rowKeys);
-
-    const userLogOptions = {
-        context: {
-            templates,
-            parameters
+    try {
+        if (!Array.isArray(userIds) || userIds.length === 0) {
+            logger('No users match this selection criteria, exiting');
+            return [];
         }
-    };
 
-    const resultOfLogPublishing = await publisher.publishMultiUserEvent(userIds, 'MESSAGE_CREATED', userLogOptions);
-    logger('Result of publishing user logs: ', resultOfLogPublishing);
+        const templates = instruction.templates;
+        if (typeof templates !== 'object' || Object.keys(templates).length !== 1) {
+            throw new Error('Malformed template instruction: ', instruction.templates);
+        }
+        
+        let rows = [];
+        const topLevelKey = Object.keys(templates)[0];
 
-    return resultOfPersistence;
+        // i.e., if the instruction holds a sequence of messages (like in a boost offer), generate all of those for each user, else just the one
+        if (topLevelKey === 'template') {
+            logger('Constructing messages from template: ', templates.template);
+            rows = userIds.map((destinationUserId) => (generateMessageFromTemplate({ destinationUserId, template: templates.template, instruction, parameters })));
+        } else if (topLevelKey === 'sequence') {
+            const templateSequence = templates.sequence;
+            userIds.forEach((userId) => generateAndAppendMessageSequence(rows, { destinationUserId: userId, templateSequence, instruction, parameters }));        
+        }
+        
+        logger(`Created ${rows.length} user message rows. The first row looks like: ${JSON.stringify(rows[0])}`);
+        
+        if (!rows || rows.length === 0) {
+            logger('No user messages generated, exiting');
+            return { instructionId: instruction.instructionId, result: 'NO_USERS' };
+        }
+
+        const sendTime = timeToSend ? timeToSend.format() : instruction.startTime;
+        logger('Send time constructed as: ', sendTime);
+        rows.forEach((row) => {
+            row.startTime = sendTime;
+        });
+
+        const rowKeys = Object.keys(rows[0]);
+        const resultOfPersistence = await msgPersistence.insertUserMessages(rows, rowKeys);
+
+        const userLogOptions = {
+            context: {
+                templates,
+                parameters
+            }
+        };
+
+        const resultOfLogPublishing = await publisher.publishMultiUserEvent(userIds, 'MESSAGE_CREATED', userLogOptions);
+        logger('Result of publishing user logs: ', resultOfLogPublishing);
+
+        return resultOfPersistence;
+    } catch (err) {
+        logger('Instruction error:', err.message);
+        const resultOfUpdate = await msgPersistence.updateInstructionState(instruction.instructionId, 'EXPIRED');
+        logger(`Result of setting instruction processed status to 'EXPIRED':`, resultOfUpdate);
+        const deactivationResult = await msgPersistence.deactivateInstruction(instruction.instructionId);
+        logger('Result of instruction deactivation:', deactivationResult);
+        const logContext = { context: { userIds, instruction, timeToSend, parameters }};
+        await publisher.publishUserEvent(instruction.creatingUserId, 'MESSAGE_INSTRUCTION_FAILED', logContext);
+
+        return resultOfUpdate;
+    }
 };
 
 /**

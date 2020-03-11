@@ -296,17 +296,18 @@ module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructi
 };
 
 // And last, we update. todo : update all of them?
-const fireOffMsgStatusUpdate = async (userMessages, requestContext, destinationUserId) => {
-    const updateMsgPayload = {
-        requestContext,
-        body: JSON.stringify({ messageId: userMessages[0].messageId, userAction: 'FETCHED' })
-    };
+const fireOffMsgStatusUpdate = async (userMessages, requestContext, eventContext, destinationUserId) => {
+    const messageIds = userMessages.map((message) => message.messageId);
+    const { userAction, eventType } = eventContext;
 
-    const updateMsgLambdaParams = {
+    const updateInvocations = messageIds.map((messageId) => ({
         FunctionName: config.get('lambdas.updateMessageStatus'),
         InvocationType: 'Event',
-        Payload: JSON.stringify(updateMsgPayload) 
-    };
+        Payload: JSON.stringify({
+            requestContext,
+            body: JSON.stringify({ messageId, userAction })
+        }) 
+    }));
 
     const logContext = {
         requestContext,
@@ -314,9 +315,9 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext, destinationU
     };
 
     logger('Invoking Lambda to update message status, and publishing user log');
-    const invocationPromise = lambda.invoke(updateMsgLambdaParams).promise();
-    const publishPromise = publisher.publishUserEvent(destinationUserId, 'MESSAGE_FETCHED', { context: logContext });
-    const [invocationResult, publishResult] = await Promise.all([invocationPromise, publishPromise]);
+    const invocationPromises = updateInvocations.map((invocation) => lambda.invoke(invocation).promise());
+    const publishPromise = publisher.publishUserEvent(destinationUserId, eventType, { context: logContext });
+    const [invocationResult, publishResult] = await Promise.all([...invocationPromises, publishPromise]);
     logger('Completed invocation: ', invocationResult);
     logger('And log publish result: ', publishResult);
 };
@@ -352,7 +353,8 @@ module.exports.getNextMessageForUser = async (event) => {
         const resultBody = { messagesToDisplay: userMessages };
 
         if (Array.isArray(userMessages) && userMessages.length > 0) {
-            await fireOffMsgStatusUpdate(userMessages, event.requestContext);
+            const eventContext = { userAction: 'FETCHED', eventType: 'MESSAGE_FETCHED' };
+            await fireOffMsgStatusUpdate(userMessages, event.requestContext, eventContext);
         }
 
         logger(JSON.stringify(resultBody));
@@ -409,6 +411,11 @@ module.exports.updateUserMessage = async (event) => {
             case 'SUPERCEDED': {
                 // todo : possibly also change the end time
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'SUPERCEDED' });
+                response = { statusCode: 200 };
+                break;
+            }
+            case 'EXPIRED': {
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'EXPIRED' });
                 response = { statusCode: 200 };
                 break;
             }

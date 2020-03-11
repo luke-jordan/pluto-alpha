@@ -146,6 +146,20 @@ module.exports.updateInstructionState = async (instructionId, newProcessedStatus
     return response.map((updateResult) => camelCaseKeys(updateResult));
 };
 
+module.exports.deactivateInstruction = async (instructionId) => {
+    const currentTime = moment().format();
+
+    const table = config.get('tables.messageInstructionTable');
+    const key = { instructionId };
+    const value = { active: false, lastProcessedTime: currentTime };
+    const returnClause = 'updated_time';
+
+    const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });
+    logger('Result of message instruction deactivation:', response);
+
+    return response.map((updateResult) => camelCaseKeys(updateResult));
+};
+
 // ////////////////////////////////////////////////////////////////////////////////
 // ///////////////////////// USER MESSAGE FETCHING ///////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////

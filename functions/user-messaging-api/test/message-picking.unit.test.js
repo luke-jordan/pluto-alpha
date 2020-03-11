@@ -388,17 +388,17 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
     it('Fetches and assembles a set of two simple boost messages correctly', async () => {
         const mockEvent = testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER');
 
-        const mockInvocation = {
+        const mockInvocation = (messageId) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
             InvocationType: 'Event',
             Payload: JSON.stringify({
                 requestContext: mockEvent.requestContext,
-                body: JSON.stringify({ messageId: firstMsgFromRds.messageId, userAction: 'FETCHED' })
+                body: JSON.stringify({ messageId, userAction: 'FETCHED' })
             }) 
-        };
+        });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
@@ -408,24 +408,26 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(bodyOfFetch.messagesToDisplay[0]).to.deep.equal(expectedFirstMessage);
         expect(bodyOfFetch.messagesToDisplay[1]).to.deep.equal(expectedSecondMsg);
         expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId));
     });
 
     it('Within flow message parameter works', async () => {
         const requestContext = { authorizer: { systemWideUserId: testUserId }};
         const queryStringParameters = { anchorMessageId: testMsgId };
 
-        const mockInvocation = {
+        const mockInvocation = (messageId) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
             InvocationType: 'Event',
             Payload: JSON.stringify({
                 requestContext,
-                body: JSON.stringify({ messageId: firstMsgFromRds.messageId, userAction: 'FETCHED' })
+                body: JSON.stringify({ messageId, userAction: 'FETCHED' })
             }) 
-        };
+        });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
         logger('Result of assembly:', fetchResult);
@@ -434,30 +436,55 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
         expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId));
+    });
+
+    it.skip('Expires failed messages', async () => {
+        const requestContext = { authorizer: { systemWideUserId: testUserId} };
+        const queryStringParameters = { anchorMessageId: testMsgId };
+
+        const mockInvocation = (messageId, userAction) => ({
+            FunctionName: config.get('lambdas.updateMessageStatus'),
+            InvocationType: 'Event',
+            Payload: JSON.stringify({
+                requestContext,
+                body: JSON.stringify({ messageId, userAction })
+            })
+        });
+
+        getMessagesStub.onFirstCall().resolves([firstMsgFromRds]);
+        getMessagesStub.onSecondCall().throws(new Error('Error retrieving message'));
+        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+
+        const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
+        logger('Result of assembly on error:', fetchResult);
     });
 
     it('Sorts same priority messages by creation time properly', async () => {
         const mockEvent = testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER');
 
-        const mockInvocation = {
+        const mockInvocation = (messageId) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
             InvocationType: 'Event',
             Payload: JSON.stringify({
                 requestContext: mockEvent.requestContext,
-                body: JSON.stringify({ messageId: firstMsgFromRds.messageId, userAction: 'FETCHED' })
-            }) 
-        };
+                body: JSON.stringify({ messageId, userAction: 'FETCHED' })
+            })
+        });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
         
         const fetchResult = await handler.getNextMessageForUser(testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER'));
         expect(fetchResult).to.exist;
         const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
         expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage, expectedSecondMsg] });
         expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(mockInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId));
     });
 
 });
