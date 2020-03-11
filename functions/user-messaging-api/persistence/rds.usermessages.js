@@ -132,18 +132,26 @@ module.exports.filterUserIdsForRecurrence = async (userIds, { instructionId, rec
     return userIds.filter((id) => !idsToFilter.includes(id));
 };
 
+const assembleUpdateParams = (instructionId, value) => ({
+    table: config.get('tables.messageInstructionTable'),
+    key: { instructionId },
+    value,
+    returnClause: 'updated_time'
+});
+
 module.exports.updateInstructionState = async (instructionId, newProcessedStatus) => {
     const currentTime = moment().format();
-
-    const table = config.get('tables.messageInstructionTable');
-    const key = { instructionId };
     const value = { processedStatus: newProcessedStatus, lastProcessedTime: currentTime };
-    const returnClause = 'updated_time';
-
-    const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });
+    const response = await rdsConnection.updateRecordObject(assembleUpdateParams(instructionId, value));
     logger('Result of message instruction update:', response);
 
-    return response.map((updateResult) => camelCaseKeys(updateResult));
+    return response.length > 0 ? response.map((updateResult) => camelCaseKeys(updateResult))[0] : null;
+};
+
+module.exports.updateInstructionProcessedTime = async (instructionId, lastProcessedTime) => {
+    const response = await rdsConnection.updateRecordObject(assembleUpdateParams(instructionId, { lastProcessedTime }));
+    logger('Response of updating processed time: ', response);
+    return response.length > 0 ? response.map((updateResult) => camelCaseKeys(updateResult))[0] : null;
 };
 
 // ////////////////////////////////////////////////////////////////////////////////

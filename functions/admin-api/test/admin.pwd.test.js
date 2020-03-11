@@ -25,7 +25,7 @@ class MockLambdaClient {
     }
 }
 
-const handler = proxyquire('../admin-user-handler', {
+const handler = proxyquire('../admin-user-manage', {
     'publish-common': {
         'publishUserEvent': publishEventStub,
         'sendSystemEmail': sendEmailStub,

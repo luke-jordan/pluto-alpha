@@ -49,6 +49,11 @@ const stdProperties = {
         description: 'Human reference',
         expects: 'stringMultiple',
         table: 'accountTable'
+    },
+    pendingCount: {
+        type: 'aggregate',
+        description: 'Number of pending',
+        expects: 'number'
     }
 };
 
@@ -61,9 +66,9 @@ module.exports.fetchAvailableProperties = () => {
 
 const convertEpochToFormat = (epochMilli) => moment(parseInt(epochMilli, 10)).format();
 
-const convertSaveCountToColumns = (condition) => {
+const convertTxCountToColumns = (condition, txStatus) => {
     const columnConditions = [
-        { prop: 'settlement_status', op: 'is', value: 'SETTLED' },
+        { prop: 'settlement_status', op: 'is', value: txStatus },
         { prop: 'transaction_type', op: 'is', value: 'USER_SAVING_EVENT' }
     ];
 
@@ -83,6 +88,10 @@ const convertSaveCountToColumns = (condition) => {
         ]
     };
 };
+
+const convertSaveCountToColumns = (condition) => convertTxCountToColumns(condition, 'SETTLED');
+
+const convertPendingCountToColumns = (condition) => convertTxCountToColumns(condition, 'PENDING');
 
 const convertSumBalanceToColumns = (condition) => {
     const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
@@ -125,6 +134,7 @@ const convertSumBalanceToColumns = (condition) => {
 
 const columnConverters = {
     saveCount: (condition) => convertSaveCountToColumns(condition),
+    pendingCount: (condition) => convertPendingCountToColumns(condition),
     currentBalance: (condition) => convertSumBalanceToColumns(condition),
     lastSaveTime: (condition) => ({
        conditions: [

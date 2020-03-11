@@ -36,6 +36,7 @@
         "createReferralCode": "referral_create",
         "modifyReferralCode": "referral_modify",
         "verifyReferralCode": "referral_verify",
+        "saveInitiate": "save_initiate",
         "sendOutboundMessages": "outbound_comms_send"
     },
     "email": {

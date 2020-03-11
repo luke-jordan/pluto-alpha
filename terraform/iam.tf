@@ -557,6 +557,7 @@ resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
+                "${aws_lambda_function.save_initiate.arn}",
                 "${aws_lambda_function.save_admin_settle.arn}",
                 "${aws_lambda_function.outbound_comms_send.arn}"
             ]
