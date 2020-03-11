@@ -9,8 +9,8 @@ const opsUtil = require('ops-util-common');
 const stringify = require('json-stable-stringify');
 const striptags = require('striptags');
 
-const rdsMainUtil = require('./persistence/rds.notifications');
-const rdsPickerUtil = require('./persistence/rds.msgpicker');
+const rdsMainUtil = require('./persistence/rds.pushtokens');
+const rdsPickerUtil = require('./persistence/rds.usermessages');
 
 const msgUtil = require('./msg.util');
 const msgPicker = require('./message-picking-handler');
@@ -231,7 +231,7 @@ const dispatchEmailMessages = async (emailMessages) => {
         };
     }
 
-    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendEmailMessages'), payload, true);
+    const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendOutboundMessages'), payload, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
 
@@ -261,6 +261,7 @@ const sendPendingEmailMsgs = async () => {
         
         const messages = assembledMessages.map((msg) => {
             logger('Creating from message: ', msg);
+            logger('Mapped contact: ', mappedContacts[msg.destinationUserId]);
             if (mappedContacts[msg.destinationUserId].emailAddress) {
                 return {
                     messageId: msg.messageId,
@@ -281,7 +282,7 @@ const sendPendingEmailMsgs = async () => {
 
             return {}; // to avoid null errors
         });
-
+        
         const emailResult = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
         logger('Result of email dispatch', emailResult);
 
@@ -289,6 +290,7 @@ const sendPendingEmailMsgs = async () => {
         const smsResult = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
         logger('Result of sms dispatch', smsResult);
  
+        // todo : fix this to also set to "sent" the ones with just SMSs or no email address or SMS
         if (Reflect.has(emailResult, 'result') && emailResult.result === 'SUCCESS') {
             const successfulMsgs = assembledMessages.filter((msg) => !emailResult.failedMessageIds.includes(msg.messageId)); 
             const successfulMsgIds = messageIds.filter((msgId) => !emailResult.failedMessageIds.includes(msgId));
@@ -334,9 +336,8 @@ const sendEmailsToSpecificUsers = async (params) => {
             };
         }
 
-        return null;
-
-    }).filter((msg) => msg !== null);
+        return {};
+    });
 
     const resultOfSend = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
     logger('Result of email sending: ', resultOfSend);

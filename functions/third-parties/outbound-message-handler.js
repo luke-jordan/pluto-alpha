@@ -2,8 +2,12 @@
 
 const logger = require('debug')('jupiter:third-parties:sendgrid');
 const config = require('config');
+const uuid = require('uuid/v4');
+
 const format = require('string-format');
 const path = require('path');
+
+const request = require('request-promise');
 
 const opsUtil = require('ops-util-common');
 
@@ -142,9 +146,17 @@ const hasValidProperties = (object, type, requiredProperties) => {
     }
 };
 
+const addMessageIdIfMissing = (emailMessage) => {
+    if (!emailMessage.messageId) {
+        emailMessage.messageId = uuid();
+    }
+    return emailMessage;
+};
+
 const validateEmailMessages = (emailMessages) => {
-    const requiredProperties = ['messageId', 'to', 'from', 'subject', 'text', 'html'];
-    return emailMessages.filter((email) => hasValidProperties(email, 'email', requiredProperties));
+    const requiredProperties = ['to', 'from', 'subject', 'text', 'html'];
+    return emailMessages.filter((email) => hasValidProperties(email, 'email', requiredProperties)).
+        map((email) => addMessageIdIfMissing(email));
 };
 
 const chunkDispatchRecipients = (destinationArray) => {
@@ -419,6 +431,7 @@ module.exports.sendEmailMessages = async (event) => {
             validMessages = wrapHtmlinTemplate(validMessages, wrapperTemplate); 
         }
 
+        logger('Validated messages: ', validMessages);
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
         
@@ -450,4 +463,63 @@ module.exports.sendEmailMessages = async (event) => {
         logger('FATAL_ERROR:', err);
         return { result: 'ERR', message: err.message };
     }
+};
+
+/**
+ * This function sends sms messages via the Twilio api. It accepts a message and a phone number, assembles the request,
+ * then hits up the Twilio API.
+ */
+module.exports.sendSmsMessage = async (event) => {
+    try {
+        if (!config.has('twilio.mock') && config.get('twilio.mock') !== 'OFF') {
+            return { result: 'SUCCESS' };
+        }
+
+        const { message, phoneNumber } = opsUtil.extractParamsFromEvent(event);
+
+        const options = {
+            method: 'POST',
+            uri: format(config.get('twilio.endpoint'), config.get('twilio.accountSid')),
+            form: {
+                Body: message,
+                From: config.get('twilio.number'),
+                To: `+${phoneNumber}` 
+            },
+            auth: {
+                username: config.get('twilio.accountSid'),
+                password: config.get('twilio.authToken')
+            },
+            json: true
+        };
+
+        logger('Assembled options:', options);
+        const result = await request(options);
+        logger('Got result:', result);
+
+        if (result['error_code'] || result['error_message']) {
+            return { result: 'FAILURE', message: result['error_message'] };
+        }
+
+        return { result: 'SUCCESS' };
+
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { statusCode: 500 };
+    }
+};
+
+module.exports.handleOutboundMessages = async (event) => {
+    const params = opsUtil.extractParamsFromEvent(event);
+    logger('Sending outbound message, with event: ', event);
+
+    if (params.emailMessages || JSON.stringify(params) === '{}') {
+        return exports.sendEmailMessages(event);
+    }
+
+    if (params.phoneNumber) {
+        return exports.sendSmsMessage(event);
+    }
+
+    // logger('FATAL_ERROR: Unrecognized event:', event);
+    return { result: 'FAILURE' };
 };

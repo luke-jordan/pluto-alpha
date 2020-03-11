@@ -9,15 +9,17 @@ const chai = require('chai');
 const sinon = require('sinon');
 const expect = chai.expect;
 chai.use(require('sinon-chai'));
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const helper = require('./test.helper');
 
 const lamdbaInvokeStub = sinon.stub();
-const sendEmailStub = sinon.stub();
 const getObjectStub = sinon.stub();
 const sqsSendStub = sinon.stub();
+const snsPublishStub = sinon.stub();
 const getQueueUrlStub = sinon.stub();
+
+const sendEmailStub = sinon.stub();
 const sendSmsStub = sinon.stub();
 
 const getHumanRefStub = sinon.stub();
@@ -34,9 +36,9 @@ class MockLambdaClient {
     }
 }
 
-class MockSesClient {
+class MockSnsClient {
     constructor () { 
-        this.sendEmail = sendEmailStub; 
+        this.publish = snsPublishStub; 
     }
 }
 
@@ -63,9 +65,11 @@ class MockRedis {
 const eventHandler = proxyquire('../event-handler', {
     'aws-sdk': {
         'Lambda': MockLambdaClient,
-        'SES': MockSesClient,
         'SQS': MockSQSClient,
-        'S3': MockS3Client
+        'S3': MockS3Client,
+        'SNS': MockSnsClient,
+        // eslint-disable-next-line no-empty-function
+        'config': { update: () => ({}) }
     },
     'ioredis': MockRedis,
     './persistence/rds': {
@@ -77,6 +81,7 @@ const eventHandler = proxyquire('../event-handler', {
     },
     'publish-common': {
         'sendSms': sendSmsStub,
+        'safeEmailSendPlain': sendEmailStub,
         '@noCallThru': true
     }
 });
@@ -95,8 +100,8 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
     beforeEach(() => {
         helper.resetStubs(
-            lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, sendEmailStub, updateTagsStub, updateTxFlagsStub, 
-            fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub
+            lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, 
+            fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub, sendEmailStub, sendSmsStub
         );
 
         getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'some-queue'}) });
@@ -278,7 +283,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         lamdbaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
-        sendEmailStub.returns({ promise: () => 'Email sent' });
+        sendEmailStub.resolves({ result: 'SUCCESS' });
 
         const resultOfCall = await eventHandler.handleUserEvent(wrapEventSns(saveStartEvent));
         expect(resultOfCall).to.deep.equal({ statusCode: 200 }); 
@@ -290,6 +295,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const testAccountNumber = 'POL1';
         const timeNow = moment().valueOf();
         const testUpdateTime = moment();
+
         const activeStubs = [lamdbaInvokeStub, getObjectStub, sendEmailStub, updateTxFlagsStub, fetchBSheetAccStub];
 
         const configureStubs = (bsheetInvocation) => {
@@ -297,7 +303,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
 
             getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
-            sendEmailStub.returns({ promise: () => 'Email sent' });
+            sendEmailStub.resolves({ result: 'SUCCESS' });
             
             fetchBSheetAccStub.resolves('POL1');
             updateTxFlagsStub.resolves({ updatedTime: testUpdateTime });
@@ -328,7 +334,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
 
         savingEvent.context.saveCount = 1;
         configureStubs(investmentInvocation);
-        sendEmailStub.throws({ promise: () => new Error('Error sending email') });
+        sendEmailStub.resolves({ result: 'FAILURE' });
         resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);

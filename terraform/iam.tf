@@ -436,7 +436,8 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             "Resource": [
                 "${aws_lambda_function.boost_event_process.arn}",
                 "${aws_lambda_function.balance_sheet_acc_create.arn}",
-                "${aws_lambda_function.balance_sheet_acc_update.arn}"
+                "${aws_lambda_function.balance_sheet_acc_update.arn}",
+                "${aws_lambda_function.outbound_comms_send.arn}"
             ]
         },
         {
@@ -459,17 +460,6 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             ],
             "Resource": [
                 "${aws_sqs_queue.user_event_dlq.arn}"
-            ]
-        },
-        {
-            "Sid": "EmailSend",
-            "Effect": "Allow",
-            "Action": [
-                "ses:SendEmail"
-            ],
-            "Resource": [
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_ses_identity[terraform.workspace]}"
             ]
         },
         {
@@ -501,18 +491,8 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.float_accrue.arn}"
-            ]
-        },
-        {
-            "Sid": "EmailSend",
-            "Effect": "Allow",
-            "Action": [
-                "ses:SendEmail"
-            ],
-            "Resource": [
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_ses_identity[terraform.workspace]}"
+                "${aws_lambda_function.float_accrue.arn}",
+                "${aws_lambda_function.outbound_comms_send.arn}"
             ]
         },
         {
@@ -545,7 +525,7 @@ resource "aws_iam_policy" "message_push_lambda_policy" {
             ],
             "Resource": [
                 "${aws_lambda_function.user_history_aggregate.arn}",
-                "${aws_lambda_function.email_send.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}"
             ]
         },
         {
@@ -578,7 +558,7 @@ resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
             ],
             "Resource": [
                 "${aws_lambda_function.save_admin_settle.arn}",
-                "${aws_lambda_function.email_send.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}"
             ]
         },
         {
@@ -588,17 +568,6 @@ resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
                 "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
-        },
-        {
-            "Sid": "EmailSend",
-            "Effect": "Allow",
-            "Action": [
-                "ses:SendEmail"
-            ],
-            "Resource": [
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/jupitersave.com",
-                "arn:aws:ses:${var.aws_default_region[terraform.workspace]}:455943420663:identity/${var.events_source_ses_identity[terraform.workspace]}"
-            ]
         }
     ]
 }
@@ -826,6 +795,30 @@ resource "aws_iam_policy" "admin_log_write_policy" {
             ],
             "Resource": [
                 "${aws_dynamodb_table.admin_log_table.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "lambda_invoke_outbound_comms_send" {
+    name = "outbound_comms_send_lambda_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ReferralLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.outbound_comms_send.arn}"
             ]
         }
     ]

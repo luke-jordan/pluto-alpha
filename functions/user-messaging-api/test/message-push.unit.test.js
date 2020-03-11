@@ -43,12 +43,12 @@ class MockLambdaClient {
 }
 
 const handler = proxyquire('../message-push-handler', {
-    './persistence/rds.notifications': {
+    './persistence/rds.pushtokens': {
         'getPushTokens': getPushTokenStub,
         'insertPushToken': insertPushTokenStub,
         'deletePushToken': deletePushTokenStub
     },
-    './persistence/rds.msgpicker': {
+    './persistence/rds.usermessages': {
         'getPendingOutboundMessages': getPendingOutboundMessagesStub,
         'bulkUpdateStatus': bulkUpdateStatusStub
     },
@@ -593,7 +593,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     };
 
     const emailMessagesInvocation = {
-        FunctionName: 'email_send',
+        FunctionName: 'outbound_comms_send',
         InvocationType: 'RequestResponse',
         LogType: 'None',
         Payload: stringify({
@@ -689,7 +689,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         };
 
         const expectedInvocation = {
-            FunctionName: 'email_send',
+            FunctionName: 'outbound_comms_send',
             InvocationType: 'RequestResponse',
             LogType: 'None',
             Payload: stringify({ emailMessages: [expectedEmail, expectedEmail], emailWrapper: expectedWrapper })

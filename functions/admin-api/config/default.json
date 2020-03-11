@@ -35,7 +35,8 @@
         "statusUpdate": "profile_status_update",
         "createReferralCode": "referral_create",
         "modifyReferralCode": "referral_modify",
-        "verifyReferralCode": "referral_verify"
+        "verifyReferralCode": "referral_verify",
+        "sendOutboundMessages": "outbound_comms_send"
     },
     "email": {
         "systemStats": {

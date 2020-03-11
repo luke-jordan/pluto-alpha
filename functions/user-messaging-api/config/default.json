@@ -16,10 +16,10 @@
     "lambdas": {
         "generateUserMessages": "message_user_create_once",
         "updateMessageStatus": "message_user_process",
-        "sendEmailMessages": "email_send",
         "fetchProfile": "profile_fetch",
         "fetchAccountAggregate": "user_history_aggregate",
-        "audienceHandler": "audience_selection"
+        "audienceHandler": "audience_selection",
+        "sendOutboundMessages": "outbound_comms_send"
     },
     "db": {
         "host": "localhost",

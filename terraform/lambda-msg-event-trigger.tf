@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_event_process" {
 
   function_name                  = "${var.message_event_process_function_name}"
   role                           = "${aws_iam_role.message_event_process_role.arn}"
-  handler                        = "message-creating-handler.createFromUserEvent"
+  handler                        = "message-trigger-handler.createFromUserEvent"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 900
@@ -95,9 +95,14 @@ resource "aws_iam_role_policy_attachment" "message_event_process_vpc_execution_p
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "message_event_process_event_publish_policy" {
+resource "aws_iam_role_policy_attachment" "message_event_message_create_policy" {
   role = aws_iam_role.message_event_process_role.name
-  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
+  policy_arn = aws_iam_policy.lambda_invoke_message_create_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "message_event_message_process_policy" {
+  role = aws_iam_role.message_event_process_role.name
+  policy_arn = aws_iam_policy.lambda_invoke_message_process_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "message_event_process_transaction_secret_get" {

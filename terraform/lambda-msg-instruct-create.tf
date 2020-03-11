@@ -77,29 +77,29 @@ resource "aws_cloudwatch_log_group" "message_instruct_create" {
 }
 
 resource "aws_iam_role_policy_attachment" "message_instruct_create_basic_execution_policy" {
-  role = "${aws_iam_role.message_instruct_create_role.name}"
+  role = aws_iam_role.message_instruct_create_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "message_instruct_create_vpc_execution_policy" {
-  role = "${aws_iam_role.message_instruct_create_role.name}"
+  role = aws_iam_role.message_instruct_create_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "message_instruct_message_create_policy" {
-  role = "${aws_iam_role.message_instruct_create_role.name}"
+  role = aws_iam_role.message_instruct_create_role.name
   policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "message_instruct_create_secret_get" {
-  role = "${aws_iam_role.message_instruct_create_role.name}"
+  role = aws_iam_role.message_instruct_create_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_message_instruct_create" {
-  log_group_name = "${aws_cloudwatch_log_group.message_instruct_create.name}"
+  log_group_name = aws_cloudwatch_log_group.message_instruct_create.name
   metric_transformation {
     name = "${var.message_instruct_create_lambda_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
@@ -113,16 +113,16 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_message_instruct_crea
   alarm_name = "${var.message_instruct_create_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_message_instruct_create.name}"
+  metric_name = aws_cloudwatch_log_metric_filter.fatal_metric_filter_message_instruct_create.name
   namespace = "lambda_errors"
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.fatal_errors_topic.arn]
 }
 
 resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_message_instruct_create" {
-  log_group_name = "${aws_cloudwatch_log_group.message_instruct_create.name}"
+  log_group_name = aws_cloudwatch_log_group.message_instruct_create.name
   metric_transformation {
     name = "${var.message_instruct_create_lambda_function_name}_security_api_alarm"
     namespace = "lambda_errors"
@@ -136,10 +136,10 @@ resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_message_instruct_c
   alarm_name = "${var.message_instruct_create_lambda_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_message_instruct_create.name}"
+  metric_name = aws_cloudwatch_log_metric_filter.security_metric_filter_message_instruct_create.name
   namespace = "lambda_errors"
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }

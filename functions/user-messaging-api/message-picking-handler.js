@@ -6,8 +6,9 @@ const moment = require('moment');
 
 const util = require('util');
 const publisher = require('publish-common');
+const opsUtil = require('ops-util-common');
 
-const persistence = require('./persistence/rds.msgpicker');
+const persistence = require('./persistence/rds.usermessages');
 const dynamo = require('dynamo-common');
 const userProfileTable = config.get('tables.dynamoProfileTable');
 
@@ -366,18 +367,18 @@ module.exports.getNextMessageForUser = async (event) => {
  * Simple (ish) method for updating a message once it has been delivered, etc.
  * @param {object} event An object containing the request context and request body. The body has message id and user action properties, detailed below.
  * @property {object} requestContext An object containing the callers system wide user id, role, and permissions. The event will not be processed without a valid request context. 
- * @property {string} body.messageId The messageId of the message to me updated.
- * @property {string} body.userAction The value to update the message option with. Valid values in this context are FETCHED and DISMISSED.
+ * @property {parameter} messageId The messageId of the message to me updated.
+ * @property {parameter} userAction The value to update the message with. Valid values in this context are FETCHED and DISMISSED.
+ * @property {parameter} newStatus The value to set the message status.
  */
 module.exports.updateUserMessage = async (event) => {
     try {
-        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
-        if (!userDetails) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
             return { statusCode: 403 };
         }
 
         // todo : validate that the message corresponds to the user ID
-        const { messageId, userAction } = JSON.parse(event.body);
+        const { messageId, userAction, newStatus } = opsUtil.extractParamsFromEvent(event);
         logger('Processing message ID update, based on user action: ', userAction);
 
         if (!messageId || messageId.length === 0) {
@@ -386,7 +387,9 @@ module.exports.updateUserMessage = async (event) => {
 
         let response = { };
         let updateResult = null;
-        switch (userAction) {
+
+        const updateType = userAction || newStatus;
+        switch (updateType) {
             case 'FETCHED': {
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'FETCHED' });
                 logger('Result of updating message: ', updateResult);
@@ -400,6 +403,12 @@ module.exports.updateUserMessage = async (event) => {
             }
             case 'ACTED': {
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'ACTED' });
+                response = { statusCode: 200 };
+                break;
+            }
+            case 'SUPERCEDED': {
+                // todo : possibly also change the end time
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'SUPERCEDED' });
                 response = { statusCode: 200 };
                 break;
             }

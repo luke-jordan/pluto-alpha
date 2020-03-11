@@ -18,7 +18,6 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 
 // for dispatching the mails & DLQ & invoking other lambdas
-const ses = new AWS.SES();
 const sqs = new AWS.SQS();
 const sns = new AWS.SNS();
 const s3 = new AWS.S3();
@@ -146,32 +145,16 @@ const formatAmountText = (amountText) => {
 };
 
 const assembleEmailParameters = ({ toAddresses, subject, htmlBody, textBody }) => ({
-    Destination: { ToAddresses: toAddresses },
-    Message: {
-        Body: {
-            Html: { Data: htmlBody },
-            Text: { Data: textBody }
-        },
-        Subject: { Data: subject }
-    },
-    Source: sourceEmail,
-    ReplyToAddresses: [sourceEmail],
-    ReturnPath: sourceEmail
+    to: toAddresses,
+    from: sourceEmail,
+    subject,
+    html: htmlBody,
+    text: textBody
 });
 
 const profileLink = (bankReference) => {
     const profileSearch = `users?searchValue=${encodeURIComponent(bankReference)}&searchType=bankReference`;
     return `${config.get('publishing.adminSiteUrl')}/#/${profileSearch}`;
-};
-
-const safeSendEmail = async (emailToSend) => {
-    try {
-        // logger('Sending event email: ', emailToSend);
-        const emailResult = await ses.sendEmail(emailToSend).promise();
-        logger('Email sending result: ', emailResult);
-    } catch (err) {
-        logger('Email sending conked out: ', err);
-    }    
 };
 
 const sendEftInboundEmail = async (eventContext) => {
@@ -195,7 +178,7 @@ const sendEftInboundEmail = async (eventContext) => {
     const emailParams = { toAddresses, subject: 'EFT transfer initiated', htmlBody, textBody };
     
     const emailToSend = assembleEmailParameters(emailParams);
-    return safeSendEmail(emailToSend);
+    return publisher.safeEmailSendPlain(emailToSend);
 };
 
 const assembleSaveEmail = async (eventBody) => {
@@ -216,7 +199,6 @@ const assembleSaveEmail = async (eventBody) => {
             countText = `${saveContext.saveCount}th`; 
     }
 
-    logger('HUUUUUH? : ', saveContext.savedAmount);
     const templateVariables = {
         savedAmount: formatAmountText(saveContext.savedAmount),
         saveCountText: countText,
@@ -238,7 +220,10 @@ const assembleSaveEmail = async (eventBody) => {
 
 const sendSaveSucceededEmail = async (eventBody) => {
     const emailToSend = await assembleSaveEmail(eventBody);
-    return safeSendEmail(emailToSend);
+    logger('Assembled email to send: ', emailToSend);
+    const emailResult = await publisher.safeEmailSendPlain(emailToSend);
+    logger('And email result: ', emailResult);
+    return emailResult;
 };
 
 // handling withdrawals by sending email
@@ -263,7 +248,7 @@ const safeWithdrawalEmail = async (eventBody, userProfile, bankAccountDetails) =
     });
     
     try {
-        const emailResult = await ses.sendEmail(emailParams).promise();
+        const emailResult = await publisher.safeEmailSendPlain(emailParams);
         logger('Result of sending email: ', emailResult);
     } catch (err) {
         // we want the rest to execute, so we manually publish to the dlq, and alert admins
@@ -291,7 +276,7 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails) => {
         subject: 'Jupiter withdrawal cancelled', 
         htmlBody, textBody
     });
-    const emailResult = await ses.sendEmail(emailParams).promise();
+    const emailResult = await publisher.sendEmail(emailParams);
     logger('Result of sending email: ', emailResult);
 };
 

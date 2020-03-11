@@ -6,7 +6,7 @@ const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
-const rdsUtil = require('./persistence/rds.notifications');
+const rdsUtil = require('./persistence/rds.instructions');
 const msgUtil = require('./msg.util');
 
 const AWS = require('aws-sdk');
@@ -130,15 +130,20 @@ const createPersistableObject = (instruction, creatingUserId) => {
     
     const instructionId = uuid();
     const startTime = instruction.startTime || moment().format();
-    const endTime = instruction.endTime || moment().add(500, 'years').format();
+    const endTime = instruction.endTime || moment().clone().add(500, 'years').format(); // clone is just to be careful with mutations
     logger('Received message priority: ', instruction.messagePriority);
     const messagePriority = instruction.messagePriority || 0;
 
     const presentationType = instruction.presentationType;
     const processedStatus = presentationType === 'ONCE_OFF' ? 'READY_FOR_GENERATING' : 'CREATED';
 
-    const flags = presentationType === 'EVENT_DRIVEN' ? [`EVENT_TYPE::${instruction.eventTypeCategory}`] : [];
-    logger('Object created with flags: ', flags);
+    // const flags = presentationType === 'EVENT_DRIVEN' ? [`EVENT_TYPE::${instruction.eventTypeCategory}`] : [];
+    const triggerParameters = instruction.triggerParameters || {};
+    if (instruction.presentationType === 'EVENT_DRIVEN' && !instruction.triggerParameters) {
+        triggerParameters.triggerEvent = [instruction.eventTypeCategory];
+    }
+
+    logger('Object created with trigger context: ', triggerParameters);
 
     logger('Message instruction templates: ', JSON.stringify(instruction.templates));
 
@@ -156,7 +161,7 @@ const createPersistableObject = (instruction, creatingUserId) => {
         recurrenceParameters: instruction.recurrenceParameters,
         lastProcessedTime: moment().format(),
         messagePriority,
-        flags
+        triggerParameters
     };
 };
 
@@ -173,10 +178,12 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
 
     // second, if there was no test instruction, then unless we have an explicit 'hold', we create the messages for 
     // once off messages right away (on assumption they should go out)
+
     const holdOffInstructed = typeof params.holdFire === 'boolean' && params.holdFire;
     logger(`Fire off now? Presentation type: ${params.presentationType} and hold off instructed ? : ${holdOffInstructed}`);
     const isScheduled = moment(params.startTime).valueOf() > moment().valueOf();
     logger(`Is message scheduled for future delivery?: ${isScheduled}`);
+    
     if (params.presentationType === 'ONCE_OFF' && !holdOffInstructed && !isScheduled) {
         const lambdaPaylod = { instructions: [{ instructionId }]};
         const fireResult = await lambda.invoke(msgUtil.lambdaInvocation(createMessagesFunction, lambdaPaylod)).promise();
@@ -281,34 +288,6 @@ module.exports.updateInstruction = async (event) => {
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return msgUtil.wrapHttpResponse({ message: err.message }, 500);
-    }
-};
-
-/**
- * This function accepts an instruction id and returns the associated message instruction from the database.
- * @param {object} event An object containing the id of the instruction to be retrieved.
- * @property {string} instructionId The message instruction ID assigned during instruction creation.
- */
-module.exports.getMessageInstruction = async (event) => {
-    try {
-        logger('Fetching message instruction');
-        const params = msgUtil.extractEventBody(event);
-        logger('Parameters for instruction fetch: ', params);
-        const instructionId = params.instructionId;
-        const databaseResponse = await rdsUtil.getMessageInstruction(instructionId);
-        logger('Result of message instruction extraction:', databaseResponse);
-        return {
-            statusCode: 200,
-            body: JSON.stringify({
-                message: databaseResponse
-            })
-        };
-
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return { statusCode: 500,
-            body: JSON.stringify({ message: err.message })
-        };
     }
 };
 

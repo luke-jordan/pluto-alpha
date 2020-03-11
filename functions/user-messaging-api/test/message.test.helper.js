@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:boosts:tests');
 const stringify = require('json-stable-stringify');
+const decamelize = require('decamelize');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -21,9 +22,13 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, role) => ({
     }
 });
 
-module.exports.standardOkayChecks = (result, expectedResult) => {
+module.exports.extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
+
+module.exports.extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
+
+module.exports.standardOkayChecks = (result, expectedResult, statusCode = 200) => {
     expect(result).to.exist;
-    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('statusCode', statusCode);
     expect(result).to.have.property('body');
     const parsedResult = JSON.parse(result.body);
     if (expectedResult) {

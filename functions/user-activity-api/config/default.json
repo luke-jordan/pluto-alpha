@@ -56,7 +56,8 @@
         "fetchProfile": "profile_fetch",
         "createBalanceSheetAccount": "balance_sheet_acc_create",
         "addTxToBalanceSheet": "balance_sheet_acc_update",
-        "userBankVerify": "bank_account_verify"
+        "userBankVerify": "bank_account_verify",
+        "sendOutboundMessages": "outbound_comms_send"
     },
     "payment": {
         "test": false,
