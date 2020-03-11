@@ -4,7 +4,7 @@
   "description": "Wrapper methods for publishing to SNS or other data queues",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=jupiter:* nyc mocha",
+    "test": "DEBUG=jupiter:*:test nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
@@ -14,6 +14,7 @@
     "aws-sdk": "^2.507.0",
     "config": "^3.2.2",
     "debug": "^4.1.1",
+    "html-to-text": "^5.1.1",
     "json-stable-stringify": "^1.0.1",
     "moment": "^2.24.0",
     "string-format": "^2.0.0"

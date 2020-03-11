@@ -7,7 +7,7 @@ resource "aws_lambda_function" "email_send" {
 
   function_name                  = "${var.email_send_lambda_function_name}"
   role                           = "${aws_iam_role.email_send_role.arn}"
-  handler                        = "email-handler.sendEmailMessages"
+  handler                        = "outbound-message-handler.sendEmailMessages"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15

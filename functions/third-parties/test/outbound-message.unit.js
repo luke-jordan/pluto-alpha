@@ -5,6 +5,8 @@ const config = require('config');
 const uuid = require('uuid/v4');
 const path = require('path');
 
+const moment = require('moment');
+
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
 const chai = require('chai');
@@ -12,6 +14,7 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
+const requestStub = sinon.stub();
 const sendGridStub = sinon.stub();
 const setApiKeyStub = sinon.stub();
 const setSubstitutionsStub = sinon.stub();
@@ -23,7 +26,8 @@ class MockS3Client {
     }
 }
 
-const handler = proxyquire('../email-handler', {
+const handler = proxyquire('../outbound-message-handler', {
+    'request-promise': requestStub,
     'aws-sdk': { 'S3': MockS3Client },
     '@sendgrid/mail': {
         'send': sendGridStub,
@@ -925,7 +929,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
     });
 
     it('Handled warm up event', async () => {
-        const result = await handler.sendEmailMessages({ });
+        const result = await handler.handleOutboundMessages({ });
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'Empty invocation' });
@@ -942,7 +946,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages: [validEmailEvent(testMessageId), validEmailEvent(testMessageId), validEmailEvent(testMessageId)]
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
         expect(result).to.deep.equal(expectedResult);
 
         expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
@@ -964,7 +968,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailWrapper: testWrapper
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
         expect(result).to.deep.equal({ result: 'SUCCESS', failedMessageIds: [] });
 
         const expectedWrappedMessage = '<html><title></title><body><p>Greetings. Welcome to jupiter</p></body></html>';
@@ -990,7 +994,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
 
-        const result = await handler.sendEmailMessages({ emailMessages });
+        const result = await handler.handleOutboundMessages({ emailMessages });
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
@@ -1020,7 +1024,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         sendGridStub.onFirstCall().resolves([{ error: 'Internal error' }]);
         sendGridStub.resolves(sendgridOkayChunk());
 
-        const result = await handler.sendEmailMessages({ emailMessages });
+        const result = await handler.handleOutboundMessages({ emailMessages });
 
         expect(result).to.exist;
 
@@ -1053,7 +1057,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages: [invalidEmailEvent, invalidEmailEvent, invalidEmailEvent]
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
@@ -1070,7 +1074,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages: [validEmailEvent(testMessageId), validEmailEvent(testMessageId), validEmailEvent(testMessageId)]
         };
 
-        const result = await handler.sendEmailMessages(testEvent);
+        const result = await handler.handleOutboundMessages(testEvent);
 
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
@@ -1078,4 +1082,73 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
     });
 
+});
+
+describe('*** UNIT TEST SMS FUNCTION ***', async () => {
+    const testPhoneNumber = '+27643534501';
+    const testMessage = 'Greetings from Jupiter.';
+
+    const testMessageId = uuid();
+
+    const testCurrentTime = moment();
+    const testUpdateTime = testCurrentTime.add(5, 'minutes');
+
+    const mockTwilioResponse = {
+        'account_sid': config.get('twilio.accountSid'),
+        'api_version': '2010-04-01',
+        'body': 'body',
+        'date_created': testCurrentTime.format(),
+        'date_sent': testCurrentTime.format(),
+        'date_updated': testUpdateTime.format(),
+        'direction': 'outbound-api',
+        'error_code': null,
+        'error_message': null,
+        'from': '+15017122661',
+        'messaging_service_sid': uuid(),
+        'num_media': '0',
+        'num_segments': '1',
+        'price': null,
+        'price_unit': null,
+        'sid': uuid(),
+        'status': 'sent',
+        'subresource_uris': {
+            'media': `/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages/${testMessageId}/Media.json`
+        },
+        'to': '+15558675310',
+        'uri': `/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages/${testMessageId}.json`
+    };
+
+    beforeEach(() => {
+        resetStubs(requestStub);
+    });
+
+    it('Sends sms messages', async () => {
+        const expectedOptions = {
+            method: 'POST',
+            uri: `https://api.twilio.com/2010-04-01/Accounts/${config.get('twilio.accountSid')}/Messages`,
+            form: {
+                Body: testMessage,
+                From: config.get('twilio.number'),
+                To: testPhoneNumber
+            },
+            auth: {
+                username: config.get('twilio.accountSid'),
+                password: config.get('twilio.authToken')
+            },
+            json: true
+        };
+
+        requestStub.resolves({ statusCode: 200, body: mockTwilioResponse });
+
+        const testEvent = { phoneNumber: testPhoneNumber, message: testMessage };
+
+        const resultOfDispatch = await handler.handleOutboundMessages(testEvent);
+
+        expect(resultOfDispatch).to.exist;
+        expect(resultOfDispatch).to.deep.equal({ result: 'SUCCESS' });
+
+        if (config.has('twilio.mock') && config.get('twilio.mock') === 'OFF') {
+            expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+        }
+    });
 });

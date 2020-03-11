@@ -98,5 +98,12 @@
         "sandbox": {
             "off": false
         }
+    },
+    "twilio": {
+        "endpoint": "https://api.twilio.com/2010-04-01/Accounts/{}/Messages.json",
+        "accountSid": "",
+        "authToken": "",
+        "number": "",
+        "mock": "ON"
     }
 }
