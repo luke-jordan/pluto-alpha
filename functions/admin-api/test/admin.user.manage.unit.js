@@ -279,7 +279,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         const resultBody = helper.standardOkayChecks(resultOfUpdate);
         expect(resultBody).to.deep.equal({ result: 'SUCCESS', saveDetails: mockSaveResult });
 
-        const expectedInvokeBody = { accountId: testAccountId, amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
+        const expectedInvokeBody = { accountId: testAccountId, amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD', systemWideUserId: testUserId };
         const expectedInvokeEvent = { requestContext: testEvent.requestContext, body: stringify(expectedInvokeBody) };
         const expectedInvocation = helper.wrapLambdaInvoc('save_initiate', false, expectedInvokeEvent);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
