@@ -156,13 +156,8 @@ module.exports.updateInstructionProcessedTime = async (instructionId, lastProces
 
 module.exports.deactivateInstruction = async (instructionId) => {
     const currentTime = moment().format();
-
-    const table = config.get('tables.messageInstructionTable');
-    const key = { instructionId };
     const value = { active: false, lastProcessedTime: currentTime };
-    const returnClause = 'updated_time';
-
-    const response = await rdsConnection.updateRecordObject({ table, key, value, returnClause });
+    const response = await rdsConnection.updateRecordObject(assembleUpdateParams(instructionId, value));
     logger('Result of message instruction deactivation:', response);
 
     return response.map((updateResult) => camelCaseKeys(updateResult));

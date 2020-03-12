@@ -441,9 +441,12 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId));
     });
 
-    it.skip('Expires failed messages', async () => {
+    it('Expires failed messages', async () => {
         const requestContext = { authorizer: { systemWideUserId: testUserId} };
         const queryStringParameters = { anchorMessageId: testMsgId };
+
+        const failingMsg = { ...secondMsgFromRds };
+        failingMsg.messageBody = 'Hello #{user_full_name}. Welcome to Jupiter.';
 
         const mockInvocation = (messageId, userAction) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
@@ -454,12 +457,19 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
             })
         });
 
-        getMessagesStub.onFirstCall().resolves([firstMsgFromRds]);
-        getMessagesStub.onSecondCall().throws(new Error('Error retrieving message'));
-        lamdbaInvokeStub.withArgs(mockInvocation).returns({ promise: () => ({ result: 'SUCCESS' })});
+        getMessagesStub.onFirstCall().resolves([firstMsgFromRds, failingMsg]);
+        lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
 
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
         logger('Result of assembly on error:', fetchResult);
+
+        expect(fetchResult).to.exist;
+        const bodyOfFetch = testHelper.standardOkayChecks(fetchResult);
+        expect(bodyOfFetch).to.deep.equal({ messagesToDisplay: [expectedFirstMessage] });
+        expect(getMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, 'FETCHED'));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, 'EXPIRED'));
     });
 
     it('Sorts same priority messages by creation time properly', async () => {

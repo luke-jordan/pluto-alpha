@@ -310,6 +310,26 @@ describe('*** UNIT TEST BASIC INSTRUCTION OPERATIONS NEEDED BY USER MESSAGES ***
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });
 
+    it('Updates instruction proccessed time', async () => {
+        const mockLastProcessedTime = moment().format();
+
+        const mockUpdateRecordArgs = {
+            table: config.get('tables.messageInstructionTable'),
+            key: { instructionId: mockInstructionId },
+            value: { lastProcessedTime: mockLastProcessedTime },
+            returnClause: 'updated_time'
+        };
+
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
+       
+        const resultOfUpdate = await persistence.updateInstructionProcessedTime(mockInstructionId, mockLastProcessedTime);
+        logger('Result of processed time update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal({ updateTime: '2049-06-22T07:38:30.016Z' });
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
+    });
+
     it('Deactivates message instruction', async () => {
         const mockCurrentTime = moment().format();
         const mockUpdateRecordArgs = {
