@@ -313,7 +313,7 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext, destinationU
         messages: userMessages
     };
 
-    logger('Invoking Lambda to update message status, and publishing user log');
+    logger('Invoking Lambda to update message status, and publishing user log, for user: ', destinationUserId);
     const invocationPromise = lambda.invoke(updateMsgLambdaParams).promise();
     const publishPromise = publisher.publishUserEvent(destinationUserId, 'MESSAGE_FETCHED', { context: logContext });
     const [invocationResult, publishResult] = await Promise.all([invocationPromise, publishPromise]);
@@ -352,7 +352,7 @@ module.exports.getNextMessageForUser = async (event) => {
         const resultBody = { messagesToDisplay: userMessages };
 
         if (Array.isArray(userMessages) && userMessages.length > 0) {
-            await fireOffMsgStatusUpdate(userMessages, event.requestContext);
+            await fireOffMsgStatusUpdate(userMessages, event.requestContext, destinationUserId);
         }
 
         logger(JSON.stringify(resultBody));
