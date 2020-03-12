@@ -287,11 +287,14 @@ const sendPendingEmailMsgs = async () => {
         logger('Result of email dispatch', emailResult);
 
         const smsMessages = messages.filter((msg) => Reflect.has(msg, 'phoneNumber'));
-        const smsResult = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
-        logger('Result of sms dispatch', smsResult);
+        const smsResults = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
+        logger('Result of sms dispatch', smsResults);
  
         // todo : fix this to also set to "sent" the ones with just SMSs or no email address or SMS
-        if (Reflect.has(emailResult, 'result') && emailResult.result === 'SUCCESS') {
+        const emailSuccess = emailResult && emailResult.result === 'SUCCESS';
+        const smsSuccess = smsResults && smsResults.some((result) => result === 'SUCCESS');
+        if (emailSuccess || smsSuccess) {
+            // we currently assume all SMSs are sent (they are async dispatched), or at least market to avoid repeat
             const successfulMsgs = assembledMessages.filter((msg) => !emailResult.failedMessageIds.includes(msg.messageId)); 
             const successfulMsgIds = messageIds.filter((msgId) => !emailResult.failedMessageIds.includes(msgId));
 
