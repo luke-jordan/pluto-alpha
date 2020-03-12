@@ -299,7 +299,7 @@ const sendPendingEmailMsgs = async () => {
             const successfulMsgs = emailResult.failedMessageIds 
                 ? assembledMessages.filter((msg) => !emailResult.failedMessageIds.includes(msg.messageId)) : assembledMessages; 
             const successfulMsgIds = emailResult.failedMessageIds 
-                ? messageIds.filter((msgId) => !emailResult.failedMessageIds.includes(msgId)) : assembledMessages;
+                ? messageIds.filter((msgId) => !emailResult.failedMessageIds.includes(msgId)) : messageIds;
 
             const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(successfulMsgIds, 'SENT');
             logger('Final update worked? : ', updateToProcessed);

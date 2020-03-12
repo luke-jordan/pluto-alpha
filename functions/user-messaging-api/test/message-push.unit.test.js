@@ -553,6 +553,9 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         // Stub args are asserted in handler.sendOutbandMessages tests.
         expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL');
         expect(bulkUpdateStatusStub).to.have.been.calledTwice;
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([mockMessage.messageId], 'SENDING');
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([mockMessage.messageId], 'SENT');
+
         expect(lamdbaInvokeStub.callCount).to.equal(2);
         expect(assembleMessageStub.callCount).to.equal(1);
     });
