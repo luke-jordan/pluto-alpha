@@ -1,6 +1,7 @@
 'use strict';
 
-const logger = require('debug')('jupiter:user-notifications:user-message-handler');
+const logger = require('debug')('jupiter:message:trigger');
+
 const config = require('config');
 const moment = require('moment');
 const stringify = require('json-stable-stringify');
@@ -86,6 +87,10 @@ module.exports.createFromUserEvent = async (snsEvent) => {
     try {
         const eventBody = await extractSnsMessage(snsEvent);
         const { eventType, userId } = eventBody;
+
+        if (!userId) {
+            throw Error('Event does not include a specific user ID');
+        }
 
         const blackList = [
             ...config.get('security.defaultBlacklist'),

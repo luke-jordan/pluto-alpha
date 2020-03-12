@@ -233,8 +233,10 @@ module.exports.updateUserMessage = async (messageId, updateValues) => {
 
 /* Batch updates status */
 module.exports.bulkUpdateStatus = async (messageIds, newStatus) => {
+    logger('Updating messageIds : ', messageIds);
     const idIndices = messageIds.map((_, idx) => `$${idx + 2}`).join(', ');
     const updateQuery = `update ${userMessageTable} set processed_status = $1 where message_id in (${idIndices})`;
+    logger('Logging what should have been logged: ', updateQuery);
     const values = [newStatus, ...messageIds];
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, values);
     return resultOfUpdate;

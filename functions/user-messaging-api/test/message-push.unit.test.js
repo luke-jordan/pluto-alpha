@@ -528,6 +528,38 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         expect(assembleMessageStub.callCount).to.equal(4);
     });
 
+    it('Sends pending SMS backup routes', async () => {
+        const mockMessage = mockUserMessage();
+
+        getPendingOutboundMessagesStub.resolves([mockMessage]);
+        bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
+        
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testPhoneProfile) })});
+
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'ERR', message: 'No valid emails found' })});
+
+        assembleMessageStub.resolves(mockMessageBase);
+        publishUserEventStub.resolves({ result: 'SUCCESS' });
+        sendSmsStub.resolves({ result: 'SUCCESS' });
+
+        const expectedResult = { channel: 'EMAIL', result: 'SUCCESS', numberSent: 1 };
+
+        const result = await handler.sendEmailMessages();
+        logger('Result of email dispatch:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        // Stub args are asserted in handler.sendOutbandMessages tests.
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL');
+        expect(bulkUpdateStatusStub).to.have.been.calledTwice;
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([mockMessage.messageId], 'SENDING');
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([mockMessage.messageId], 'SENT');
+
+        expect(lamdbaInvokeStub.callCount).to.equal(2);
+        expect(assembleMessageStub.callCount).to.equal(1);
+    });
+
     it('Returns where no pending emails are found', async () => {
         getPendingOutboundMessagesStub.resolves([]);
 
