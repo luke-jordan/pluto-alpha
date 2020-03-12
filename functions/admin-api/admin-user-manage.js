@@ -95,14 +95,14 @@ const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, contex
     return publisher.publishUserEvent(systemWideUserId, eventType, logOptions);
 };
 
-const initiateTransaction = async (parameters, requestContext) => {
+const initiateTransaction = async (systemWideUserId, parameters, requestContext) => {
     logger('Initiating a transaction with parameters: ', parameters);
 
     const { accountId, amount, unit, currency } = parameters;
     const lambdaRequestPayload = {
         requestContext,
         body: stringify({
-            accountId, amount, unit, currency
+            accountId, amount, unit, currency, systemWideUserId
         })
     };
 
@@ -360,7 +360,11 @@ module.exports.manageUser = async (event) => {
                 return checkForError;
             }
 
-            resultOfUpdate = await (params.transactionId ? handleTxUpdate(params) : initiateTransaction(params.parameters, event.requestContext));
+
+            resultOfUpdate = await (params.transactionId 
+                ? handleTxUpdate(params) 
+                : initiateTransaction(params.systemWideUserId, params.parameters, event.requestContext)
+            );
         }
 
         if (params.fieldToUpdate === 'KYC' || params.fieldToUpdate === 'STATUS' || params.fieldToUpdate === 'REGULATORY') {

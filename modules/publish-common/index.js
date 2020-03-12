@@ -39,6 +39,10 @@ const wrapLambdaInvocation = (functionName, payload, sync = true) => ({
 
 module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
     try {
+        if (!userId) {
+            throw Error('Publish event called without a user ID');
+        }
+
         logger('Publishing user event to topic');
         const eventTime = options.timestamp || moment().valueOf();
         const eventToPublish = {
@@ -70,7 +74,8 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         logger('PUBLISHING_ERROR: Published message: ', messageForQueue);
         return { result: 'FAILURE' };
     } catch (err) {
-        logger('PUBLISHING_ERROR: ', err);
+        // we need to know if these are not going out
+        logger('FATAL_ERROR: ', err);
         return { result: 'FAILURE' };
     }
 };
