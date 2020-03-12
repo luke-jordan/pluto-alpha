@@ -215,6 +215,44 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
         expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, paymentProvider: 'MANUAL_EFT', bankRef: 'JUPSAVER31-00001' });
+        expect(publishStub).to.have.been.calledOnceWithExactly(testUserId, 'SAVING_EVENT_INITIATED', sinon.match.any);
+        testHelper.expectNoCalls(getPaymentUrlStub);
+    });
+
+    // todo : actually use account owner (swtich in general)
+    it('When called by admin, uses passed system wide user ID', async () => {
+        const testUserSavingId = uuid();
+
+        const saveEventToWrapper = testSavePendingBase();
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        saveEventToWrapper.paymentProvider = 'MANUAL_EFT';
+        saveEventToWrapper.systemWideUserId = testUserSavingId;
+        momentStub.returns(testTimeInitiated);
+
+        addSavingsRdsStub.resolves({ transactionDetails: mockTxDetails });
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
+        generateBankRefStub.returns('JUPSAVER31-00001');
+        
+        const mockBankDetails = { bankName: 'FNB', beneficiaryName: 'Jupiter Stokvel' };
+        getFloatVarsStub.resolves({ bankDetails: mockBankDetails });
+        
+        const testAdminContext = { ...testAuthContext };
+        testAdminContext.authorizer.role = 'SYSTEM_ADMIN';
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        logger('Received: ', resultOfWrapperCall);
+
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        expect(saveBody).to.deep.equal({ 
+            transactionDetails: mockTxDetails,
+            humanReference: 'JUPSAVER31-00001',
+            bankDetails: { ...mockBankDetails, useReference: 'JUPSAVER31-00001' }
+        });
+
+        expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, paymentProvider: 'MANUAL_EFT', bankRef: 'JUPSAVER31-00001' });
+        expect(publishStub).to.have.been.calledOnceWithExactly(testUserSavingId, 'SAVING_EVENT_INITIATED', sinon.match.any);
         testHelper.expectNoCalls(getPaymentUrlStub);
     });
 
