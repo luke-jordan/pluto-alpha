@@ -7,7 +7,7 @@ resource "aws_lambda_function" "admin_user_count" {
 
   function_name                  = "${var.admin_user_count_lambda_function_name}"
   role                           = "${aws_iam_role.admin_user_count_role.arn}"
-  handler                        = "admin-user-handler.fetchUserCounts"
+  handler                        = "admin-user-query.fetchUserCounts"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15

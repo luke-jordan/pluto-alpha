@@ -7,7 +7,7 @@ resource "aws_lambda_function" "admin_user_manage" {
 
   function_name                  = "${var.admin_user_manage_lambda_function_name}"
   role                           = "${aws_iam_role.admin_user_manage_role.arn}"
-  handler                        = "admin-user-handler.manageUser"
+  handler                        = "admin-user-manage.manageUser"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 30

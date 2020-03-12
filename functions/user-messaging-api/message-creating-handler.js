@@ -295,7 +295,7 @@ const generateRecurringMessages = async (recurringInstruction) => {
         logger('Result of updating status: ', updateStatusResult);
     }
 
-    const updateProcessedTime = await msgPersistence.updateMessageInstruction(instructionId, { lastProcessedTime: moment().format() });
+    const updateProcessedTime = await msgPersistence.updateInstructionProcessedTime(instructionId, moment().format());
 
     return {
         instructionId: recurringInstruction.instructionId,
