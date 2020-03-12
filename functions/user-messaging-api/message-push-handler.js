@@ -292,11 +292,14 @@ const sendPendingEmailMsgs = async () => {
  
         // todo : fix this to also set to "sent" the ones with just SMSs or no email address or SMS
         const emailSuccess = emailResult && emailResult.result === 'SUCCESS';
-        const smsSuccess = smsResults && smsResults.some((result) => result === 'SUCCESS');
+        const smsSuccess = smsResults && smsResults.some(({ result }) => result === 'SUCCESS');
+        logger(`Email success?  : ${emailSuccess}, and SMS success ? : ${smsSuccess}`);
         if (emailSuccess || smsSuccess) {
             // we currently assume all SMSs are sent (they are async dispatched), or at least market to avoid repeat
-            const successfulMsgs = assembledMessages.filter((msg) => !emailResult.failedMessageIds.includes(msg.messageId)); 
-            const successfulMsgIds = messageIds.filter((msgId) => !emailResult.failedMessageIds.includes(msgId));
+            const successfulMsgs = emailResult.failedMessageIds 
+                ? assembledMessages.filter((msg) => !emailResult.failedMessageIds.includes(msg.messageId)) : assembledMessages; 
+            const successfulMsgIds = emailResult.failedMessageIds 
+                ? messageIds.filter((msgId) => !emailResult.failedMessageIds.includes(msgId)) : assembledMessages;
 
             const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(successfulMsgIds, 'SENT');
             logger('Final update worked? : ', updateToProcessed);
