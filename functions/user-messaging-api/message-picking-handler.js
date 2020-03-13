@@ -156,23 +156,17 @@ const fillInTemplate = async (template, destinationUserId) => {
     return completedTemplate;
 };
 
-const fireOffMsgStatusUpdate = async (userMessages, requestContext, eventContext, destinationUserId) => {
+const fireOffMsgStatusUpdate = async (userMessages, destinationUserId, eventContext) => {
     const messageIds = userMessages.map((message) => message.messageId);
     const { userAction, eventType } = eventContext;
 
     const updateInvocations = messageIds.map((messageId) => ({
         FunctionName: config.get('lambdas.updateMessageStatus'),
         InvocationType: 'Event',
-        Payload: JSON.stringify({
-            requestContext,
-            body: JSON.stringify({ messageId, userAction })
-        }) 
+        Payload: JSON.stringify({ messageId, userAction })
     }));
 
-    const logContext = {
-        requestContext,
-        messages: userMessages
-    };
+    const logContext = { messages: userMessages };
 
     logger('Invoking Lambda to update message status, and publishing user log');
     const invocationPromises = updateInvocations.map((invocation) => lambda.invoke(invocation).promise());
@@ -195,7 +189,7 @@ const fireOffMsgStatusUpdate = async (userMessages, requestContext, eventContext
  * @property {Object} actionContext An object containing optional actions to be run during message assembly. For example { triggerBalanceFetch: true, boostId: '61af5b66-ad7a...' }
  * @property {Object} messageSequence An object containing details such as messages to display on the success of the current message. An example object: { msgOnSuccess: '61af5b66-ad7a...' }
  */
-module.exports.assembleMessage = async (msgDetails, requestContext = {}) => {
+module.exports.assembleMessage = async (msgDetails) => {
     try {
         const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
         const messageBase = {
@@ -234,7 +228,7 @@ module.exports.assembleMessage = async (msgDetails, requestContext = {}) => {
     } catch (err) {
         logger('Message assembly error:', err);
         const eventContext = { userAction: 'EXPIRED', eventType: 'MESSAGE_FAILED' };
-        await fireOffMsgStatusUpdate([msgDetails], requestContext, eventContext);
+        await fireOffMsgStatusUpdate([msgDetails], msgDetails.destinationUserId, eventContext);
         return {};
     }
  
@@ -293,7 +287,6 @@ const determineAnchorMsg = (openingMessages) => {
     return messagesWithHighestPriority[0];
 };
 
-
 /**
  * This function fetches and fills in the next message in a sequence of messages.
  * @param {string} destinationUserId The messages destination user id.
@@ -348,21 +341,20 @@ module.exports.getNextMessageForUser = async (event) => {
             return { statusCode: 403 };
         }
         const destinationUserId = userDetails.systemWideUserId;
-        const requestContext = event.requestContext;
         
         // here we have multiple flow options: either we have an 'anchor message' that starts the sequence, or we have
         // a message instruction ID, which then produces all the messages for the user that follow that message, or
         // we have an instruction ID, in which case we pull the messages for that instruction
         const queryParams = event.queryStringParameters || {};
         const { withinFlowFromMsgId, instructionId } = queryParams;
-        
-        const userMessages = await exports.fetchAndFillInNextMessage({ destinationUserId, withinFlowFromMsgId, instructionId, requestContext });
+
+        const userMessages = await exports.fetchAndFillInNextMessage({ destinationUserId, withinFlowFromMsgId, instructionId });
         logger('Retrieved user messages: ', userMessages);
         const resultBody = { messagesToDisplay: userMessages };
 
         if (Array.isArray(userMessages) && userMessages.length > 0) {
             const eventContext = { userAction: 'FETCHED', eventType: 'MESSAGE_FETCHED' };
-            await fireOffMsgStatusUpdate(userMessages, requestContext, eventContext);
+            await fireOffMsgStatusUpdate(userMessages, destinationUserId, eventContext);
         }
 
         logger(JSON.stringify(resultBody));

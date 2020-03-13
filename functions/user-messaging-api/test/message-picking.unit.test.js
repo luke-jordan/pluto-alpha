@@ -23,7 +23,7 @@ const publishEventStub = sinon.stub();
 
 const fetchDynamoRowStub = sinon.stub();
 
-const resetStubs = () => testHelper.resetStubs(getMessagesStub, getAccountFigureStub, updateMessageStub, fetchDynamoRowStub, lamdbaInvokeStub);
+const resetStubs = () => testHelper.resetStubs(getMessagesStub, getAccountFigureStub, updateMessageStub, fetchDynamoRowStub, lamdbaInvokeStub, publishEventStub);
 
 const profileTable = config.get('tables.dynamoProfileTable');
 
@@ -102,12 +102,16 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 1000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
 
-        const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
+        const authContext = { authorizer: { systemWideUserId: testUserId }};
+        const filledMessage = await handler.getNextMessageForUser({ requestContext: authContext });
         logger('Filled message: ', filledMessage);
-        expect(filledMessage).to.exist;
-        expect(filledMessage[0].body).to.equal(expectedMessage);
+        const filledMessageBody = testHelper.standardOkayChecks(filledMessage);
+        const messageBody = filledMessageBody.messagesToDisplay[0].body;
+        expect(messageBody).to.equal(expectedMessage);
 
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('interest::HUNDREDTH_CENT::USD::0'));
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(assembleLambdaInvoke('interest::HUNDREDTH_CENT::USD::0'));
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'MESSAGE_FETCHED', sinon.match.any);
     });
 
     it('Fills in message templates properly, happy path 2', async () => {
@@ -206,6 +210,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
     it('Sorts messages by priority properly', async () => {
         const expectedMessage = 'Hello Luke. Your balance this week after earning more interest and boosts is $8,000.';
         const temlpate = 'Hello #{user_first_name}. Your balance this week after earning more interest and boosts is #{current_balance}.';
+        
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([minimalMsgFromTemplate(temlpate, 10), minimalMsgFromTemplate(temlpate, 5)]);
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 800000, unit: 'WHOLE_CENT', currency: 'USD' }] });
@@ -303,6 +308,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
 
     const firstMsgFromRds = {
         messageId: testMsgId,
+        destinationUserId: testUserId,
         messageTitle: 'Boost available!',
         messageBody: 'Hello! Jupiter is now live. To celebrate, if you add $10, you get $10 boost',
         creationTime: testCreationTime,
@@ -318,6 +324,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
 
     const secondMsgFromRds = {
         messageId: testSuccessMsgId,
+        destinationUserId: testUserId,
         messageTitle: 'Congratulations!',
         messageBody: 'You earned a boost! Jupiter rewards you for saving, not spending',
         creationTime: testCreationTime,
@@ -332,6 +339,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
 
     const anotherHighPriorityMsg = {
         messageId: uuid(),
+        destinationUserId: testUserId,
         messageTitle: 'Congratulations on something else!',
         messageBody: 'You earned a boost! But you should not see this yet',
         creationTime: moment().subtract(1, 'minutes'),
@@ -386,15 +394,10 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
     beforeEach(() => resetStubs());
 
     it('Fetches and assembles a set of two simple boost messages correctly', async () => {
-        const mockEvent = testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER');
-
         const mockInvocation = (messageId) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
             InvocationType: 'Event',
-            Payload: JSON.stringify({
-                requestContext: mockEvent.requestContext,
-                body: JSON.stringify({ messageId, userAction: 'FETCHED' })
-            }) 
+            Payload: JSON.stringify({ messageId, userAction: 'FETCHED' })
         });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
@@ -420,10 +423,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         const mockInvocation = (messageId) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
             InvocationType: 'Event',
-            Payload: JSON.stringify({
-                requestContext,
-                body: JSON.stringify({ messageId, userAction: 'FETCHED' })
-            }) 
+            Payload: JSON.stringify({ messageId, userAction: 'FETCHED' })
         });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds]);
@@ -439,6 +439,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId));
         expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId));
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_FETCHED', sinon.match.any);
     });
 
     it('Expires failed messages', async () => {
@@ -451,14 +452,12 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         const mockInvocation = (messageId, userAction) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
             InvocationType: 'Event',
-            Payload: JSON.stringify({
-                requestContext,
-                body: JSON.stringify({ messageId, userAction })
-            })
+            Payload: JSON.stringify({ messageId, userAction })
         });
 
         getMessagesStub.onFirstCall().resolves([firstMsgFromRds, failingMsg]);
         lamdbaInvokeStub.returns({ promise: () => ({ result: 'SUCCESS' })});
+        publishEventStub.resolves({ result: 'SUCCESS' });
 
         const fetchResult = await handler.getNextMessageForUser({ queryStringParameters, requestContext });
         logger('Result of assembly on error:', fetchResult);
@@ -470,18 +469,17 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(firstMsgFromRds.messageId, 'FETCHED'));
         expect(lamdbaInvokeStub).to.have.been.calledWith(mockInvocation(secondMsgFromRds.messageId, 'EXPIRED'));
+        expect(publishEventStub).to.have.been.calledTwice;
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_FAILED', sinon.match.any);
+        expect(publishEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_FETCHED', sinon.match.any);
+        // add publish args assertions, through out ops
     });
 
     it('Sorts same priority messages by creation time properly', async () => {
-        const mockEvent = testHelper.wrapEvent({ }, testUserId, 'ORDINARY_USER');
-
         const mockInvocation = (messageId) => ({
             FunctionName: config.get('lambdas.updateMessageStatus'),
             InvocationType: 'Event',
-            Payload: JSON.stringify({
-                requestContext: mockEvent.requestContext,
-                body: JSON.stringify({ messageId, userAction: 'FETCHED' })
-            })
+            Payload: JSON.stringify({ messageId, userAction: 'FETCHED' })
         });
 
         getMessagesStub.withArgs(testUserId, ['CARD']).resolves([firstMsgFromRds, secondMsgFromRds, anotherHighPriorityMsg]);
