@@ -55,7 +55,8 @@ const assemblePaymentInfo = async (saveInformation, transactionId) => {
   const accountStemAndCount = await persistence.fetchInfoForBankRef(saveInformation.accountId);
   const accountInfo = {
     bankRefStem: accountStemAndCount.humanRef,
-    priorSaveCount: accountStemAndCount.count
+    priorSaveCount: accountStemAndCount.count,
+    ownerUserId: accountStemAndCount.ownerUserId
   };
 
   const amountDict = {
@@ -159,9 +160,8 @@ module.exports.initiatePendingSave = async (event) => {
 
     logger('Validated request, publishing user event');
     const eventParams = { transactionId, initiationResult, saveInformation };
-    // todo : instead just pull owner Id from account Id (once cached etc)
-    const isForOtherUser = ['SYSTEM_ADMIN', 'SYSTEM_WORKER'].includes(authParams.role) && typeof saveInformation.systemWideUserId === 'string' && saveInformation.systemWideUserId.length > 0;
-    const systemWideUserId = isForOtherUser ? saveInformation.systemWideUserId : authParams.systemWideUserId;
+    // to make sure the published event is matched to the right user
+    const systemWideUserId = paymentInfo.accountInfo.ownerUserId;
     await publisher.publishUserEvent(systemWideUserId, 'SAVING_EVENT_INITIATED', { context: eventParams });
 
     return { statusCode: 200, body: JSON.stringify(initiationResult) };

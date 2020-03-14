@@ -251,14 +251,14 @@ const fetchMsgSequenceIds = (anchorMessage) => {
     return thisAndFollowingIds.concat(otherMsgIds);
 };
 
-const assembleSequence = async (anchorMessage, retrievedMessages, requestContext) => {
+const assembleSequence = async (anchorMessage, retrievedMessages) => {
     const sequenceIds = fetchMsgSequenceIds(anchorMessage, retrievedMessages);
     logger('Retrieved sequence IDs: ', sequenceIds);
     // this is a slightly inefficient double iteration, but it's in memory and the lists are going to be very small
     // in almost all cases, never more than a few messages (active/non-expired filter means only a handful at a time)
     // monitor and if that becomes untrue, then ajust, e.g., go to persistence or cache to extract IDs
     const sequenceMsgDetails = sequenceIds.map((msgId) => retrievedMessages.find((msg) => msg.messageId === msgId));
-    return Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails, requestContext)));
+    return Promise.all(sequenceMsgDetails.map((messageDetails) => exports.assembleMessage(messageDetails)));
 };
 
 const determineAnchorMsg = (openingMessages) => {
@@ -292,7 +292,7 @@ const determineAnchorMsg = (openingMessages) => {
  * @param {string} destinationUserId The messages destination user id.
  * @param {string} withinFlowFromMsgId The messageId of the last message in the sequence to be processed prior to the current one.
  */
-module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructionId, withinFlowFromMsgId, requestContext }) => {
+module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructionId, withinFlowFromMsgId }) => {
     logger('Initiating message retrieval, of just card notifications, for user: ', destinationUserId);
     const retrievedMessages = await (instructionId 
         ? persistence.getInstructionMessage(destinationUserId, instructionId)
@@ -317,7 +317,7 @@ module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructi
         anchorMessage = determineAnchorMsg(openingMessages);
     }
 
-    const assembledMessages = await assembleSequence(anchorMessage, retrievedMessages, requestContext);
+    const assembledMessages = await assembleSequence(anchorMessage, retrievedMessages);
     logger('Message retrieval complete');
     return assembledMessages.filter((message) => JSON.stringify(message) !== '{}');
 };

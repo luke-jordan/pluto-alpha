@@ -71,7 +71,7 @@ module.exports.fetchInfoForBankRef = async (accountId) => {
     const accountTable = config.get('tables.accountLedger');
     const txTable = config.get('tables.accountTransactions');
     // note: left join in case this is first save ...
-    const query = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
+    const query = `select owner_user_id, human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
         `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 and ` + 
         `transaction_type in ($2, $3) group by human_ref`;
     const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT', 'WITHDRAWAL']); // so we don't count accruals
