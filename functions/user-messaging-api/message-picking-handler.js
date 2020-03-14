@@ -226,7 +226,7 @@ module.exports.assembleMessage = async (msgDetails) => {
         messageBase.actionContext = actionContextForReturn;
         return messageBase;
     } catch (err) {
-        logger('Message assembly error:', err);
+        logger('FATAL_ERROR:', err);
         const eventContext = { userAction: 'EXPIRED', eventType: 'MESSAGE_FAILED' };
         await fireOffMsgStatusUpdate([msgDetails], msgDetails.destinationUserId, eventContext);
         return {};

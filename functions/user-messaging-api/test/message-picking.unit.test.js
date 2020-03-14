@@ -472,7 +472,6 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY *** Boost based, complex assembly',
         expect(publishEventStub).to.have.been.calledTwice;
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_FAILED', sinon.match.any);
         expect(publishEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_FETCHED', sinon.match.any);
-        // add publish args assertions, through out ops
     });
 
     it('Sorts same priority messages by creation time properly', async () => {

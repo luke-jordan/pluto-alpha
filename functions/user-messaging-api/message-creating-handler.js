@@ -167,7 +167,7 @@ const createAndStoreMsgsForUserIds = async ({ userIds, instruction, timeToSend, 
 
         return resultOfPersistence;
     } catch (err) {
-        logger('Instruction error:', err.message);
+        logger('FATAL_ERROR:', err.message);
         const resultOfUpdate = await msgPersistence.updateInstructionState(instruction.instructionId, 'EXPIRED');
         logger(`Result of setting instruction processed status to 'EXPIRED':`, resultOfUpdate);
         const deactivationResult = await msgPersistence.deactivateInstruction(instruction.instructionId);

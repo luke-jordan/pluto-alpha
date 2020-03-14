@@ -58,6 +58,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
     const mockInstructionId = uuid();
     const mockUserId = uuid();
     const mockBoostId = uuid();
+    const testUserId = uuid();
 
     const testTime = moment();
     const mockCreationTime = '2049-06-22T07:38:30.016Z';
@@ -71,6 +72,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
 
     const mockInstruction = {
         instructionId: mockInstructionId,
+        creatingUserId: testUserId,
         presentationType: 'ONCE_OFF',
         active: true,
         audienceType: 'ALL_USERS',
@@ -196,6 +198,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(getUserIdsStub).to.have.been.calledOnceWithExactly(mockAudienceId);
         expect(updateInstructionStateStub).to.have.been.calledOnceWithExactly(mockInstructionId, 'EXPIRED');
         expect(deactivateInstructionStub).to.have.been.calledWith(mockInstructionId);
+        publishEventStub(testUserId, 'MESSAGE_INSTRUCTION_FAILED', sinon.match.any);
     });
 
     it('should use other templates over default where provided', async () => {
