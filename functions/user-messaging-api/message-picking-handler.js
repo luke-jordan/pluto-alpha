@@ -372,12 +372,12 @@ module.exports.getUserHistoricalMessages = async (event) => {
             return { statusCode: 403 };
         }
 
-        const params = opsUtil.extractQueryParams(event);
+        const { displayTypes } = opsUtil.extractQueryParams(event);
 
-        const displayTypes = params.displayTypes ? params.displayTypes : ['CARD'];
+        const messageTypes = displayTypes ? displayTypes : ['CARD'];
         const destinationUserId = userDetails.systemWideUserId;
 
-        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, displayTypes);
+        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, messageTypes);
         const lastDisplayedBody = userMessages.map((message) => ({ ...message, displayedBody: message.lastDisplayedBody || message.messageBody }));
         logger('Got user messages:', lastDisplayedBody);
 
