@@ -65,6 +65,19 @@ resource "aws_security_group" "sg_db_5432_ingress" {
   }
 }
 
+resource "aws_security_group" "sg_sm_vpce_ingress" {
+  name = "${terraform.workspace}-sm-vpc-sg"
+
+  vpc_id = aws_vpc.main.id
+
+  ingress {
+    from_port = 433
+    to_port = 433
+    protocol = "tcp"
+    security_groups = [aws_security_group.sg_db_access_sg.id]
+  }
+}
+
 /* Security Group for resources that want to access the Database */
 resource "aws_security_group" "sg_db_access_sg" {
   vpc_id      = "${aws_vpc.main.id}"

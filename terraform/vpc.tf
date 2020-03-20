@@ -20,7 +20,7 @@ resource "aws_vpc_endpoint" "security_manager" {
   
   subnet_ids = [for subnet in aws_subnet.private : subnet.id]
 
-  security_group_ids = [aws_security_group.sg_db_access_sg.id]
+  security_group_ids = [aws_security_group.sg_sm_vpce_ingress.id]
 
   private_dns_enabled = true
 }

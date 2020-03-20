@@ -68,6 +68,19 @@ describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
         // expect(getSecretStub).to.have.been.calledWith({ SecretId: 'somesecret' });        
     });
 
+    it('Retries if first call gives null SecretString', async () => {
+        const mockSecret = { username: 'jupiter-secret-user', password: 'jupiter-password' };
+        
+        getSecretStub.onFirstCall().yields(false, null);
+        getSecretStub.onSecondCall().yields(false, { SecretString: JSON.stringify(mockSecret) });
+        connectStub.returns('Connection established');
+
+        rdsClient = obtainFreshConnection();
+        const connection = await rdsClient._getConnection(10, 50);
+        expect(connection).to.deep.equal('Connection established');
+        expect(getSecretStub).to.have.been.calledTwice;        
+    });
+
     it('Retries if prior cached credentials are invalid', async () => {
         const mockOldSecret = { username: 'jupiter-secret-user', password: 'jupiter-password' };
         const mockNewSecret = { username: 'jupiter-secret-user-clone', password: 'jupiter-password-rotated' };
