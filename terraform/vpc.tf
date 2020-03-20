@@ -3,7 +3,26 @@ data "aws_availability_zones" "available" {}
 
 resource "aws_vpc" "main" {
   cidr_block = "172.17.0.0/16"
+  enable_dns_hostnames = true
+  enable_dns_support = true
   
+  tags = {
+    Name = "staging_ops_main"
+  }
+}
+
+# Add an endpoint for Security Manager
+
+resource "aws_vpc_endpoint" "security_manager" {
+  vpc_id        = aws_vpc.main.id
+  service_name  = "com.amazonaws.${var.aws_default_region[terraform.workspace]}.secretsmanager"
+  vpc_endpoint_type = "Interface"
+  
+  subnet_ids = [for subnet in aws_subnet.private : subnet.id]
+
+  security_group_ids = [aws_security_group.sg_db_access_sg.id]
+
+  private_dns_enabled = true
 }
 
 # Create var.az_count private subnets, each in a different AZ

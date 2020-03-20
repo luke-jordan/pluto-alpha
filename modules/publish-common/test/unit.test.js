@@ -94,6 +94,9 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
     const wellFormedSnsPublish = (userId, eventType, options) => ({
         Message: stringify(wellFormedEvent(userId, eventType, options)),
+        MessageAttributes: {
+            'eventType': { DataType: 'String', StringValue: eventType }
+        },
         Subject: eventType,
         TopicArn: config.get('publishing.userEvents.topicArn')
     });
@@ -267,6 +270,9 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
                 timestamp: testTime.valueOf(),
                 userId: testUserId
             }),
+            MessageAttributes: {
+                'eventType': { DataType: 'String', StringValue: 'USER_LOGIN' }
+            },
             Subject: 'USER_LOGIN',
             TopicArn: config.get('publishing.userEvents.topicArn')
         };
