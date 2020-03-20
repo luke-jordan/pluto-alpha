@@ -154,6 +154,15 @@ module.exports.updateInstructionProcessedTime = async (instructionId, lastProces
     return response.length > 0 ? response.map((updateResult) => camelCaseKeys(updateResult))[0] : null;
 };
 
+module.exports.deactivateInstruction = async (instructionId) => {
+    const currentTime = moment().format();
+    const value = { active: false, lastProcessedTime: currentTime };
+    const response = await rdsConnection.updateRecordObject(assembleUpdateParams(instructionId, value));
+    logger('Result of message instruction deactivation:', response);
+
+    return response.map((updateResult) => camelCaseKeys(updateResult));
+};
+
 // ////////////////////////////////////////////////////////////////////////////////
 // ///////////////////////// USER MESSAGE FETCHING ///////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////
