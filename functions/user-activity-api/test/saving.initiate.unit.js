@@ -136,10 +136,15 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         floatId: testFloatId
     };
 
-    const testBankRefInfo = { humanRef: 'JUPSAVER31', count: 10 };
+    const testBankRefInfo = {
+        ownerUserId: testUserId,
+        humanRef: 'JUPSAVER31',
+        count: 10
+    };
+
     const expectedPaymentInfo = {
         transactionId: testTransactionId,
-        accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10 },
+        accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10, ownerUserId: testUserId },
         amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
     };
 
@@ -252,7 +257,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
         expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, paymentProvider: 'MANUAL_EFT', bankRef: 'JUPSAVER31-00001' });
-        expect(publishStub).to.have.been.calledOnceWithExactly(testUserSavingId, 'SAVING_EVENT_INITIATED', sinon.match.any);
+        expect(publishStub).to.have.been.calledOnceWithExactly(testUserId, 'SAVING_EVENT_INITIATED', sinon.match.any);
         testHelper.expectNoCalls(getPaymentUrlStub);
     });
 
@@ -330,7 +335,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
         const expectedPaymentInfoTest = {
             transactionId: testTransactionId,
-            accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10 },
+            accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10, ownerUserId: testUserId },
             amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
         };
 
@@ -364,6 +369,12 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         
     it('Stores pending, if no payment information', async () => {
         const saveEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
+
+        const expectedPaymentInfoTest = {
+            transactionId: testTransactionId,
+            accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10, ownerUserId: testUserId },
+            amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
+        };
         
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
         fetchInfoForBankRefStub.resolves(testBankRefInfo);
@@ -378,6 +389,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(saveBody).to.deep.equal(expectedResponseBody);
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
         expect(findFloatOrIdStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfoTest);
         expect(findMatchingTxStub).to.have.not.been.called;
     });
 
@@ -385,6 +397,12 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const saveEvent = JSON.parse(JSON.stringify(testSavePendingBase()));
         saveEvent.floatId = testFloatId;
         saveEvent.clientId = testClientId;
+
+        const expectedPaymentInfoTest = {
+            transactionId: testTransactionId,
+            accountInfo: { bankRefStem: 'JUPSAVER31', priorSaveCount: 10, ownerUserId: testUserId },
+            amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
+        };
 
         logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
         fetchInfoForBankRefStub.resolves(testBankRefInfo);
@@ -398,6 +416,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const saveBody = JSON.parse(saveResult.body);
         expect(saveBody).to.deep.equal(expectedResponseBody);
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
+        expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfoTest);
         expect(findFloatOrIdStub).to.not.have.been.called;
         expect(findMatchingTxStub).to.have.not.been.called;
     });

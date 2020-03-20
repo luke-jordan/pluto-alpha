@@ -317,17 +317,17 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         const accountTable = config.get('tables.accountLedger');
         const txTable = config.get('tables.accountTransactions');
 
-        const selectQuery = `select human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
+        const selectQuery = `select human_ref, owner_user_id, count(transaction_id) from ${accountTable} left join ${txTable} ` +
             `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 ` + 
-            `and transaction_type in ($2, $3) group by human_ref`;
+            `and transaction_type in ($2, $3) group by human_ref, owner_user_id`;
 
-        queryStub.resolves([{ 'human_ref': 'BUS123', 'count': 2 }]);
+        queryStub.resolves([{ 'human_ref': 'BUS123', 'count': 2, 'owner_user_id': testUserId }]);
 
         const bankRefInfo = await rds.fetchInfoForBankRef(testAccountId);
         logger('Result of reference info extraction:', bankRefInfo);
 
         expect(bankRefInfo).to.exist;
-        expect(bankRefInfo).to.deep.equal({ humanRef: 'BUS123', count: 2 });
+        expect(bankRefInfo).to.deep.equal({ humanRef: 'BUS123', count: 2, ownerUserId: testUserId });
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testAccountId, 'USER_SAVING_EVENT', 'WITHDRAWAL']);
     });
 

@@ -139,6 +139,14 @@ resource "aws_sns_topic_subscription" "user_event_process_lambda" {
   topic_arn = var.user_event_topic_arn[terraform.workspace]
   protocol = "lambda"
   endpoint = aws_lambda_function.user_event_process.arn
+
+  filter_policy = "${jsonencode({
+    "eventType": [
+      {
+        "anything-but": ["USER_LOGIN", "MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT"]
+      }
+    ]
+  })}"
 }
 
 resource "aws_lambda_permission" "with_sns" {

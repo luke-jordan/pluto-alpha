@@ -310,6 +310,47 @@ describe('*** UNIT TEST BASIC INSTRUCTION OPERATIONS NEEDED BY USER MESSAGES ***
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });
 
+    it('Updates instruction proccessed time', async () => {
+        const mockLastProcessedTime = moment().format();
+
+        const mockUpdateRecordArgs = {
+            table: config.get('tables.messageInstructionTable'),
+            key: { instructionId: mockInstructionId },
+            value: { lastProcessedTime: mockLastProcessedTime },
+            returnClause: 'updated_time'
+        };
+
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
+       
+        const resultOfUpdate = await persistence.updateInstructionProcessedTime(mockInstructionId, mockLastProcessedTime);
+        logger('Result of processed time update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal({ updateTime: '2049-06-22T07:38:30.016Z' });
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
+    });
+
+    it('Deactivates message instruction', async () => {
+        const mockCurrentTime = moment().format();
+        const mockUpdateRecordArgs = {
+            table: config.get('tables.messageInstructionTable'),
+            key: { instructionId: mockInstructionId },
+            value: { active: false, lastProcessedTime: mockCurrentTime },
+            returnClause: 'updated_time'
+        };
+
+        momentStub.returns({ format: () => mockCurrentTime });
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
+
+        const resultOfUpdate = await persistence.deactivateInstruction(mockInstructionId);
+        logger('Result of message instruction update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([{ updateTime: '2049-06-22T07:38:30.016Z' }]);
+        expect(momentStub).to.have.been.calledOnce;
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
+    });
+
     it('Finds user ids that are not disqualified by recurrence parameters', async () => {
         const mockUnfilteredId = uuid();
         const minIntervalSelectArgs = [

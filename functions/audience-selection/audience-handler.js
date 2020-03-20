@@ -161,7 +161,7 @@ const columnConverters = {
     }),
     humanReference: (condition) => ({
         conditions: [
-            { op: condition.op, prop: 'human_ref', value: condition.value }
+            { op: condition.op, prop: 'human_ref', value: condition.value.toUpperCase() }
         ]
     })
 };
