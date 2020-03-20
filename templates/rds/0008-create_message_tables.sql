@@ -31,6 +31,7 @@ create table if not exists message_data.user_message (
     instruction_id uuid not null references message_data.message_instruction(instruction_id),
     message_title varchar(255) not null,
     message_body text not null,
+    last_displayed_body text not null,
     start_time timestamp with time zone not null,
     end_time timestamp with time zone not null,
     message_priority int not null,

@@ -192,6 +192,17 @@ module.exports.getNextMessage = async (destinationUserId, messageTypes) => {
     return result.map((msg) => transformMsg(msg));
 };
 
+module.exports.fetchUserHistoricalMessages = async (destinationUserId, messageTypes) => {
+    const values = [destinationUserId, ...messageTypes];
+    const typeIndices = opsUtil.extractArrayIndices(messageTypes, 2);
+
+    const query = `select * from ${userMessageTable} where destination_user_id = $1 and display ->> 'type' in (${typeIndices})`;
+    
+    const result = await rdsConnection.selectQuery(query, values);
+    logger('Retrieved past user messages from RDS: ', result);
+    return result.map((msg) => transformMsg(msg));
+};
+
 module.exports.getPendingOutboundMessages = async (messageType) => {
     const query = `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
         `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2`;

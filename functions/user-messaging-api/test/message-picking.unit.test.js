@@ -537,6 +537,20 @@ describe('*** UNIT TESTING MESSAGE PROCESSING *** Update message acknowledged st
         expect(updateResult).to.deep.equal({ statusCode: 200 });
     });
 
+    it('Handles last displayed body, where present', async () => {
+        const testDisplayedBody = 'Welcome to Jupiter.';
+        updateMessageStub.withArgs(testMsgId, { lastDisplayedBody: testDisplayedBody }).resolves({ updatedTime: testUpdatedTime });
+        updateMessageStub.withArgs(testMsgId, { processedStatus: 'FETCHED' }).resolves({ updatedTime: testUpdatedTime });
+
+        const event = { messageId: testMsgId, userAction: 'FETCHED', lastDisplayedBody: testDisplayedBody };
+        const updateResult = await handler.updateUserMessage(testHelper.wrapEvent(event, testUserId, 'ORDINARY_USER'));
+        logger('Result of update: ', updateResult);
+
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal({ statusCode: 200 });
+        expect(updateMessageStub).to.have.been.calledTwice;
+    });
+
     it('Gives an appropriate error on unknown user action', async () => {
         const badEvent = { messageId: testMsgId, userAction: 'BADVALUE' };
         const errorResult = await handler.updateUserMessage(testHelper.wrapEvent(badEvent, testUserId, 'ORDINARY_USER'));

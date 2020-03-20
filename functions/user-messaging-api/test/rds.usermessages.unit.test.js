@@ -165,13 +165,25 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
             `processed_status = $2 and end_time > current_timestamp and start_time < current_timestamp and ` + 
             `deliveries_done < deliveries_max and display ->> 'type' in ($3)`;
         
-            selectQueryStub.resolves([msgRawFromRds]);
+        selectQueryStub.resolves([msgRawFromRds]);
 
         const resultOfFetch = await persistence.getNextMessage(testUserId, ['CARD']);
         logger('Result of fetch: ', resultOfFetch);
 
         expect(resultOfFetch).to.deep.equal([expectedTransformedMsg]);
         expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING', 'CARD']);
+    });
+
+    it('Finds past user messages of display type', async () => {
+        const expectedQuery = `select * from ${userMessageTable} where destination_user_id = $1 and display ->> 'type' in ($2)`;
+    
+        selectQueryStub.resolves([msgRawFromRds]);
+
+        const resultOfFetch = await persistence.fetchUserHistoricalMessages(testUserId, ['CARD']);
+        logger('Result of fetch: ', resultOfFetch);
+
+        expect(resultOfFetch).to.deep.equal([expectedTransformedMsg]);
+        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'CARD']);
     });
 
     it('Finds pending push messages', async () => {
