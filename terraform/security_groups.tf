@@ -71,8 +71,8 @@ resource "aws_security_group" "sg_sm_vpce_ingress" {
   vpc_id = aws_vpc.main.id
 
   ingress {
-    from_port = 433
-    to_port = 433
+    from_port = 443
+    to_port = 443
     protocol = "tcp"
     security_groups = [aws_security_group.sg_db_access_sg.id]
   }

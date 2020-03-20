@@ -317,9 +317,9 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         const accountTable = config.get('tables.accountLedger');
         const txTable = config.get('tables.accountTransactions');
 
-        const selectQuery = `select owner_user_id, human_ref, count(transaction_id) from ${accountTable} left join ${txTable} ` +
+        const selectQuery = `select human_ref, owner_user_id, count(transaction_id) from ${accountTable} left join ${txTable} ` +
             `on ${accountTable}.account_id = ${txTable}.account_id where ${accountTable}.account_id = $1 ` + 
-            `and transaction_type in ($2, $3) group by human_ref`;
+            `and transaction_type in ($2, $3) group by human_ref, owner_user_id`;
 
         queryStub.resolves([{ 'human_ref': 'BUS123', 'count': 2, 'owner_user_id': testUserId }]);
 
