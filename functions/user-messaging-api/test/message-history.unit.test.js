@@ -79,7 +79,7 @@ describe('*** UNIT TEST MESSAGE HISTORY ***', () => {
         ];
 
         const requestContext = { authorizer: { systemWideUserId: testUserId }};
-        const queryStringParameters = { systemWideUserId: testUserId, displayType: 'CARD' };
+        const queryStringParameters = { systemWideUserId: testUserId, displayTypes: 'CARD' };
         
         const fetchResult = await handler.getUserHistoricalMessages({ queryStringParameters, requestContext });
 
@@ -92,7 +92,7 @@ describe('*** UNIT TEST MESSAGE HISTORY ***', () => {
         getUserMessagesStub.throws(new Error('Error'));
 
         const requestContext = { authorizer: { systemWideUserId: testUserId }};
-        const queryStringParameters = { systemWideUserId: testUserId, displayType: 'CARD' };
+        const queryStringParameters = { systemWideUserId: testUserId, displayTypes: 'CARD' };
         
         const fetchResult = await handler.getUserHistoricalMessages({ queryStringParameters, requestContext });
 

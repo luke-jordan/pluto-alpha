@@ -374,14 +374,13 @@ module.exports.getUserHistoricalMessages = async (event) => {
 
         const params = opsUtil.extractQueryParams(event);
 
-        const displayType = params.displayTypes ? params.displayTypes : ['CARD'];
+        const displayTypes = params.displayTypes ? params.displayTypes : ['CARD'];
         const destinationUserId = userDetails.systemWideUserId;
 
-        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, displayType);
+        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, displayTypes);
         const lastDisplayedBody = userMessages.map((message) => ({ ...message, displayedBody: message.lastDisplayedBody || message.messageBody }));
         logger('Got user messages:', lastDisplayedBody);
 
-        logger(JSON.stringify(lastDisplayedBody));
         return { statusCode: 200, body: JSON.stringify(lastDisplayedBody) };
 
     } catch (err) {
@@ -405,9 +404,7 @@ module.exports.updateUserMessage = async (event) => {
         }
 
         // todo : validate that the message corresponds to the user ID
-        const params = opsUtil.extractParamsFromEvent(event);
-
-        const { messageId, userAction, newStatus, lastDisplayedBody } = params;
+        const { messageId, userAction, newStatus, lastDisplayedBody } = opsUtil.extractParamsFromEvent(event);
         logger('Processing message ID update, based on user action: ', userAction);
 
         if (lastDisplayedBody) {
