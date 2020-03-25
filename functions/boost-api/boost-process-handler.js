@@ -29,8 +29,6 @@ const EVENT_TYPE_CONDITION_MAP = {
     'USER_GAME_COMPLETION': ['number_taps_greater_than']
 };
 
-// todo: boost status heirarchy list
-
 // this takes the event and creates the arguments to pass to persistence to get applicable boosts, i.e.,
 // those that still have budget remaining and are in offered or pending state for this user
 const extractFindBoostKey = (event) => {
@@ -310,7 +308,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
 
     logger('Publish result: ', publishPromises);
     return publishPromises;
-}; 
+};
 
 const createBoostAccounts = async (boost, accountId) => {
     const { boostId, statusConditions } = boost;
