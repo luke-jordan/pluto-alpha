@@ -103,6 +103,21 @@ module.exports.findBoost = async (attributes) => {
     return boostsRetrieved.map(transformBoostFromRds);
 };
 
+module.exports.fetchActiveBoostsForEvent = async (accountId) => {
+    const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_time ` +
+        `and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
+
+    const queryValues = [accountId];
+
+    const boostsRetrieved = await rdsConnection.selectQuery(findBoostQuery, queryValues);
+    logger('Retrived boosts:', boostsRetrieved);
+    if (boostsRetrieved.length === 0) {
+        return [];
+    }
+
+    return boostsRetrieved.map(transformBoostFromRds);
+};
+
 /** 
  * Method that finds the account IDs and user IDs in a given state for a list of boosts. Requires at least one boost ID is provided, as well as at 
  * least one of a status or a list of accountIDs. If passed a list of account IDs, it returns all those accounts relevant to the boost, along with 
@@ -376,6 +391,26 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
+module.exports.insertBoostAccount = async (boostId, accountId, boostStatus) => {
+    const insertQuery = `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`;
+    const columnTemplate = '${boostId}, ${accountId}, ${boostStatus}';
+    const boostRow = { boostId, accountId, boostStatus };
+    
+    const resultOfInsertion = await rdsConnection.insertRecords(insertQuery, columnTemplate, [boostRow]);
+    logger('Result of insertion:', resultOfInsertion);
+
+    const persistedTime = moment(resultOfInsertion.rows[0]['creation_time']);
+    
+    const resultObject = {
+        boostId,
+        accountId,
+        persistedTimeMillis: persistedTime.valueOf()
+    };
+
+    logger('Returning:', resultObject);
+    return resultObject;
+};
+
 /**
  * Used to persist the message instructions, and to then set the boost to offered for those accounts
  */
@@ -406,6 +441,14 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
     }
 
     return { updatedTime };
+};
+
+
+module.exports.getAccountIdForUser = async (systemWideUserId) => {
+    const tableName = config.get('tables.accountLedger');
+    const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
+    const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
 };
 
 // ///////////////////////////////////////////////////////////////

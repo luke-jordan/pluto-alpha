@@ -19,6 +19,9 @@ const updateBoostAccountStub = sinon.stub();
 const alterBoostStub = sinon.stub();
 const updateRedeemedStub = sinon.stub();
 const findAccountStub = sinon.stub();
+const getAccountIdForUserStub = sinon.stub();
+const fetchActiveBoostsStub = sinon.stub();
+const insertBoostAccountsStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
@@ -40,7 +43,10 @@ const handler = proxyquire('../boost-process-handler', {
         'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
         'alterBoost': alterBoostStub,
-        'updateBoostAmountRedeemed': updateRedeemedStub
+        'updateBoostAmountRedeemed': updateRedeemedStub,
+        'getAccountIdForUser': getAccountIdForUserStub,
+        'fetchActiveBoostsForEvent': fetchActiveBoostsStub,
+        'insertBoostAccount': insertBoostAccountsStub
     },
     './persistence/rds.admin.boost.js': {
         'findAccountsForUser': findAccountStub
@@ -57,7 +63,8 @@ const handler = proxyquire('../boost-process-handler', {
 
 const resetStubs = () => testHelper.resetStubs(
     insertBoostStub, findBoostStub, fetchBoostStub, findAccountsStub, 
-    updateBoostAccountStub, alterBoostStub, publishStub, lamdbaInvokeStub, updateRedeemedStub
+    updateBoostAccountStub, alterBoostStub, publishStub, lamdbaInvokeStub, updateRedeemedStub,
+    getAccountIdForUserStub, fetchActiveBoostsStub, insertBoostAccountsStub
 );
 
 const testStartTime = moment();
@@ -125,6 +132,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testReferredUser], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
+        fetchActiveBoostsStub.resolves([]);
         
         // then we will have to do a condition check, after which decide that the boost has been redeemed
         // and get the accounts that are affected by the redemption
@@ -230,6 +238,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     beforeEach(() => resetStubs());
 
     const testRedemptionMsgId = uuid();
+    const testBoostId = uuid();
 
     const mockBoostToFromPersistence = {
         creatingUserId: testMktingAdmin,
@@ -250,13 +259,36 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         messageInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId, status: 'REDEEMED' }]
     };
 
+    const boostCreatedByEvent = {
+        boostId: testBoostId,
+        creatingUserId: testMktingAdmin,
+        boostType: 'SIMPLE',
+        boostCategory: 'TIME_LIMITED',
+        boostAmount: 100000,
+        boostUnit: 'HUNDREDTH_CENT',
+        boostCurrency: 'USD',
+        fromBonusPoolId: 'primary_bonus_pool',
+        fromFloatId: 'primary_cash',
+        forClientId: 'some_client_co',
+        boostStartTime: testStartTime,
+        boostEndTime: testEndTime,
+        statusConditions: {
+            OFFERED: ['event_occurs '],
+            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+            REDEEMED: ['number_taps_greater_than #{10::10000}']
+        },
+        boostAudienceSelection: `random_sample #{0.33} from #{'{"clientId": "some_client_co"}'}`,
+        defaultStatus: 'CREATED',
+        messageInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId, status: 'REDEEMED' }]
+    };
+
     it('Happy path awarding a boost after a user has saved enough', async () => {
         const testUserId = uuid();
         const timeSaveCompleted = moment();
+        const mockPersistedTime = moment();
         
         const testAccountId = uuid();
         const testSavingTxId = uuid();
-        const testBoostId = uuid();
         
         const testEvent = {
             accountId: testAccountId,
@@ -275,7 +307,9 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
-        
+        fetchActiveBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
+        insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
+
         const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: ['OFFERED', 'PENDING'] };
         findAccountsStub.withArgs(findAccountArgs).resolves([{
             boostId: testBoostId,
@@ -358,9 +392,135 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
+
         expect(resultOfEventRecord).to.exist;
         
         expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
+        expect(fetchActiveBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(insertBoostAccountsStub).to.have.been.calledWith(testBoostId, testAccountId, 'OFFERED');
+        expect(insertBoostAccountsStub).to.have.been.calledTwice;
+        expect(getAccountIdForUserStub).to.have.not.been.called;
+    });
+
+    it('Extracts account id for user id where not provided', async () => {
+        const testUserId = uuid();
+        const timeSaveCompleted = moment();
+        const mockPersistedTime = moment();
+        
+        const testAccountId = uuid();
+        const testSavingTxId = uuid();
+        
+        const testEvent = {
+            userId: testUserId,
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            timeInMillis: timeSaveCompleted.valueOf(),
+            eventContext: {
+                transactionId: testSavingTxId,
+                savedAmount: '5000000::HUNDREDTH_CENT::USD',
+                firstSave: false
+            }
+        };
+
+        const boostFromPersistence = { ...mockBoostToFromPersistence };
+        boostFromPersistence.boostId = testBoostId;
+        
+        // first, see if this account has offered or pending boosts against it
+        const expectedKey = { accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
+        findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
+        fetchActiveBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
+        insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
+        getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
+
+        const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: ['OFFERED', 'PENDING'] };
+        findAccountsStub.withArgs(findAccountArgs).resolves([{
+            boostId: testBoostId,
+            accountUserMap: { 
+                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+            }
+        }]);
+
+        // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the float allocation lambda
+        const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
+            instructions: [{
+                identifier: testBoostId,
+                floatId: mockBoostToFromPersistence.fromFloatId,
+                fromId: mockBoostToFromPersistence.fromBonusPoolId,
+                fromType: 'BONUS_POOL',
+                transactionType: 'BOOST_REDEMPTION',
+                relatedEntityType: 'BOOST_REDEMPTION',
+                currency: mockBoostToFromPersistence.boostCurrency,
+                unit: mockBoostToFromPersistence.boostUnit,
+                settlementStatus: 'SETTLED',
+                allocType: 'BOOST_REDEMPTION',
+                allocState: 'SETTLED',
+                recipients: [
+                    { recipientId: testAccountId, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
+                ]
+            }]
+        });
+
+        const expectedAllocationResult = {
+            [testBoostId]: {
+                result: 'SUCCESS',
+                floatTxIds: [uuid(), uuid()],
+                accountTxIds: [uuid()]
+            }
+        };
+
+        lamdbaInvokeStub.withArgs(expectedAllocationInvocation).returns({ 
+            promise: () => testHelper.mockLambdaResponse(expectedAllocationResult)
+        });
+
+        // then we update the boost to being redeemed, and insert the relevant logs
+        const updateProcessedTime = moment();
+        const testUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: [testAccountId],
+            newStatus: 'REDEEMED',
+            stillActive: true,
+            logType: 'STATUS_CHANGE',
+            logContext: { newStatus: 'REDEEMED', boostAmount: 100000, transactionId: testSavingTxId }
+        }; 
+        updateBoostAccountStub.withArgs([testUpdateInstruction]).resolves([{ boostId: testBoostId, updatedTime: updateProcessedTime }]);
+
+        // then we get the message instructions for each of the users, example within instruction:
+        // message: 'Congratulations! We have boosted your savings by R10. Keep saving to keep earning more boosts!',
+        const triggerMessagesInvocation = testHelper.wrapLambdaInvoc('message_user_create_once', true, {
+            instructions: [{
+                instructionId: testRedemptionMsgId,
+                destinationUserId: testUserId,
+                parameters: { boostAmount: '$10' },
+                triggerBalanceFetch: true
+            }]
+        });
+        lamdbaInvokeStub.withArgs(triggerMessagesInvocation).returns({ promise: () => testHelper.mockLambdaResponse({ result: 'SUCCESS' }) });
+
+        // then we do a user log, on each side (tested via the expect call underneath)
+        const publishOptions = {
+            initiator: testUserId,
+            context: {
+                accountId: testAccountId,
+                boostAmount: '100000::HUNDREDTH_CENT::USD',
+                boostId: testBoostId,
+                boostType: 'SIMPLE',
+                boostCategory: 'TIME_LIMITED',
+                boostUpdateTimeMillis: updateProcessedTime.valueOf(),
+                transferResults: expectedAllocationResult[testBoostId],
+                triggeringEventContext: testEvent.eventContext
+            }
+        };
+        publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
+
+        const resultOfEventRecord = await handler.processEvent(testEvent);
+        logger('Result of record: ', resultOfEventRecord);
+
+        expect(resultOfEventRecord).to.exist;
+        
+        expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
+        expect(fetchActiveBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(insertBoostAccountsStub).to.have.been.calledWith(testBoostId, testAccountId, 'OFFERED');
+        expect(insertBoostAccountsStub).to.have.been.calledTwice;
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
     });
 
     it('Fails where event currency and status condition currency do not match', async () => {
@@ -369,7 +529,6 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         
         const testAccountId = uuid();
         const testSavingTxId = uuid();
-        const testBoostId = uuid();
         
         const testEvent = {
             accountId: testAccountId,
@@ -388,6 +547,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
+        fetchActiveBoostsStub.resolves([]);
         
         const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: ['OFFERED', 'PENDING'] };
         findAccountsStub.withArgs(findAccountArgs).resolves([{
