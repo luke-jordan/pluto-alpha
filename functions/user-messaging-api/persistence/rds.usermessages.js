@@ -167,16 +167,21 @@ module.exports.deactivateInstruction = async (instructionId) => {
 // ///////////////////////// USER MESSAGE FETCHING ///////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////
 
-const transformMsg = (msgRawFromRds) => {
+const transformMsg = (msgRawFromRds, removeKeys = true) => {
     const msgObject = camelCaseKeys(msgRawFromRds);
     // convert timestamps to moments
     msgObject.creationTime = moment(msgObject.creationTime);
     msgObject.startTime = moment(msgObject.startTime);
     msgObject.endTime = moment(msgObject.endTime);
     // remove some unnecessary objects
-    const keysToRemove = ['deliveriesDone', 'deliveriesMax', 'flags', 'instructionId', 'processedStatus', 'updatedTime'];
-    return Object.keys(msgObject).filter((key) => keysToRemove.indexOf(key) < 0).
-        reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
+    if (removeKeys) {
+        const keysToRemove = ['deliveriesDone', 'deliveriesMax', 'flags', 'instructionId', 'processedStatus', 'updatedTime'];
+        return Object.keys(msgObject).filter((key) => keysToRemove.indexOf(key) < 0).
+            reduce((obj, key) => ({ ...obj, [key]: msgObject[key] }), {});
+    }
+
+    return msgObject;
+    
 };
 
 module.exports.getNextMessage = async (destinationUserId, messageTypes) => {
@@ -190,6 +195,18 @@ module.exports.getNextMessage = async (destinationUserId, messageTypes) => {
     const result = await rdsConnection.selectQuery(query, values);
     logger('Retrieved next message from RDS: ', result);
     return result.map((msg) => transformMsg(msg));
+};
+
+module.exports.fetchUserHistoricalMessages = async (destinationUserId, messageTypes) => {
+    const values = [destinationUserId, 'SUPERCEDED', ...messageTypes];
+    const typeIndices = opsUtil.extractArrayIndices(messageTypes, 3);
+
+    const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status != $2 ` +
+        `and display ->> 'type' in (${typeIndices})`;
+    
+    const result = await rdsConnection.selectQuery(query, values);
+    logger('Retrieved past user messages from RDS: ', result);
+    return result.map((msg) => transformMsg(msg, false));
 };
 
 module.exports.getPendingOutboundMessages = async (messageType) => {
