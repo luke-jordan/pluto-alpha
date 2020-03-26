@@ -103,7 +103,7 @@ module.exports.findBoost = async (attributes) => {
     return boostsRetrieved.map(transformBoostFromRds);
 };
 
-module.exports.fetchActiveBoostsForEvent = async (accountId) => {
+module.exports.fetchUncreatedActiveBoostsForAccount = async (accountId) => {
     const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_time ` +
         `and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
 
@@ -391,20 +391,23 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
-module.exports.insertBoostAccount = async (boostId, accountId, boostStatus) => {
-    const insertQuery = `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`;
-    const columnTemplate = '${boostId}, ${accountId}, ${boostStatus}';
-    const boostRow = { boostId, accountId, boostStatus };
-    
-    const resultOfInsertion = await rdsConnection.insertRecords(insertQuery, columnTemplate, [boostRow]);
+module.exports.insertBoostAccount = async (boostIds, accountId, boostStatus) => {
+    const boostAccountJoins = boostIds.map((boostId) => ({ boostId, accountId, boostStatus }));
+    const boostJoinQueryDef = {
+        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
+        columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
+        rows: boostAccountJoins
+    };
+
+    const resultOfInsertion = await rdsConnection.largeMultiTableInsert([boostJoinQueryDef]);
     logger('Result of insertion:', resultOfInsertion);
 
-    const persistedTime = moment(resultOfInsertion.rows[0]['creation_time']);
-    
+    const persistedTime = moment(resultOfInsertion[0][0]['creation_time']);
+
     const resultObject = {
-        boostId,
+        persistedTimeMillis: persistedTime.valueOf(),
         accountId,
-        persistedTimeMillis: persistedTime.valueOf()
+        boostIds
     };
 
     logger('Returning:', resultObject);

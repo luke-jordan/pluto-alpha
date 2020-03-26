@@ -288,16 +288,20 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const insertBoostQuery = `insert into ${boostUserTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`;
         const columnTemplate = '${boostId}, ${accountId}, ${boostStatus}';
         const boostRow = { boostId: testBoostId, accountId: testAccountId, boostStatus: testBoostStatus };
+    
+        const boostQueryDef = { query: insertBoostQuery, columnTemplate, rows: [boostRow, boostRow] };
 
-        insertStub.withArgs(insertBoostQuery, columnTemplate, [boostRow]).resolves({ command: 'INSERT', rows: [{ 'creation_time': testCreationTime }]});
+        multiTableStub.resolves([
+            [{ 'insertion_id': 100, 'creation_time': moment().format() }, { 'insertion_id': 101, 'creation_time': moment().format() }]
+        ]);
 
-        const expectedResult = { boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: moment(testCreationTime).valueOf() };
+        const expectedResult = { boostIds: [testBoostId, testBoostId], accountId: testAccountId, persistedTimeMillis: moment(testCreationTime).valueOf() };
 
-        const resultOfInsertion = await rds.insertBoostAccount(testBoostId, testAccountId, testBoostStatus);
+        const resultOfInsertion = await rds.insertBoostAccount([testBoostId, testBoostId], testAccountId, testBoostStatus);
 
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.deep.equal(expectedResult);
-        expect(insertStub).to.have.been.calledOnceWithExactly(insertBoostQuery, columnTemplate, [boostRow]);
+        expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
     });
 
 });
@@ -447,7 +451,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
 
         queryStub.withArgs(findBoostQuery, [testAccountId]).resolves([boostFromPersistence]);
 
-        const findBoostResponse = await rds.fetchActiveBoostsForEvent(testAccountId);
+        const findBoostResponse = await rds.fetchUncreatedActiveBoostsForAccount(testAccountId);
 
         expect(findBoostResponse).to.exist;
         expect(findBoostResponse).to.deep.equal([expectedBoostResult]);

@@ -310,35 +310,32 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
     return publishPromises;
 };
 
-const createBoostAccounts = async (boost, accountId) => {
-    const { boostId, statusConditions } = boost;
+const isStatusMetByEvent = (statusCondition) => statusCondition.substring(0, statusCondition.indexOf(' ')) === 'event_occurs';
+
+const shouldCreateBoostForAccount = (boost) => {
+    const statusConditions = boost.statusConditions;
     logger('Got status conditions:', statusConditions);
-
-    const metConditions = Object.keys(statusConditions).filter((key) => {
-        const condition = statusConditions[key][0];
-        const conditionType = condition.substring(0, condition.indexOf(' '));
-        logger('Evaluating condition:', conditionType);
-        return key !== 'REDEEMED' && conditionType === 'event_occurs';
-    });
-
-    logger(`Found met conditions: ${metConditions}`);
-    if (metConditions.length === 0) {
-        return 'NO_BOOSTS_FOUND';
-    }
-
-    return Promise.all(metConditions.map((condition) => persistence.insertBoostAccount(boostId, accountId, condition)));    
+    
+    // To guard against accidentally redeeming a boost to all and sundry, check statuses except for REDEEMED
+    const statusesToCheck = Object.keys(statusConditions).filter((statusCondition) => statusCondition !== 'REDEEMED');
+    return statusesToCheck.some((statusCondition) => isStatusMetByEvent(statusConditions[statusCondition][0]));
 };
 
-const findBoostsCreatedByEvent = async (event) => {
+const createBoostsTriggeredByEvent = async (event) => {
     const accountId = event.accountId;
 
     // select all boosts that are active, but not present in the user-boost table for this user/account
-    const boostFetchResult = await persistence.fetchActiveBoostsForEvent(accountId);
+    const boostFetchResult = await persistence.fetchUncreatedActiveBoostsForAccount(accountId);
     logger('Found active boosts:', boostFetchResult);
 
     // Then check the status conditions until finding one that is triggered by this event
-    // To guard against accidentally redeeming a boost to all and sundry, check statuses except for REDEEMED
-    return Promise.all(boostFetchResult.map((boost) => createBoostAccounts(boost, accountId)));
+    const boostsToCreate = boostFetchResult.filter((boost) => shouldCreateBoostForAccount(boost)).map((boost) => boost.boostId);
+    logger('Boosts to create:', boostsToCreate);
+    if (boostsToCreate.length === 0) {
+        return 'NO_BOOSTS_CREATED';
+    }
+
+    return persistence.insertBoostAccount(boostsToCreate, accountId, 'CREATED');
 };
 
 const processEventForCreatedBoosts = async (event) => {
@@ -453,7 +450,7 @@ module.exports.processEvent = async (event) => {
     }
 
     // find boosts that do not already have an entry for this user, and are created by this event
-    const creationResult = await findBoostsCreatedByEvent(event);
+    const creationResult = await createBoostsTriggeredByEvent(event);
     logger('Result of boost-account creation creation:', creationResult);
 
     const resultToReturn = await processEventForCreatedBoosts(event);

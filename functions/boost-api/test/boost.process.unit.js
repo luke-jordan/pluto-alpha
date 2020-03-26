@@ -20,7 +20,7 @@ const alterBoostStub = sinon.stub();
 const updateRedeemedStub = sinon.stub();
 const findAccountStub = sinon.stub();
 const getAccountIdForUserStub = sinon.stub();
-const fetchActiveBoostsStub = sinon.stub();
+const fetchUncreatedBoostsStub = sinon.stub();
 const insertBoostAccountsStub = sinon.stub();
 
 const momentStub = sinon.stub();
@@ -45,7 +45,7 @@ const handler = proxyquire('../boost-process-handler', {
         'alterBoost': alterBoostStub,
         'updateBoostAmountRedeemed': updateRedeemedStub,
         'getAccountIdForUser': getAccountIdForUserStub,
-        'fetchActiveBoostsForEvent': fetchActiveBoostsStub,
+        'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
         'insertBoostAccount': insertBoostAccountsStub
     },
     './persistence/rds.admin.boost.js': {
@@ -64,7 +64,7 @@ const handler = proxyquire('../boost-process-handler', {
 const resetStubs = () => testHelper.resetStubs(
     insertBoostStub, findBoostStub, fetchBoostStub, findAccountsStub, 
     updateBoostAccountStub, alterBoostStub, publishStub, lamdbaInvokeStub, updateRedeemedStub,
-    getAccountIdForUserStub, fetchActiveBoostsStub, insertBoostAccountsStub
+    getAccountIdForUserStub, fetchUncreatedBoostsStub, insertBoostAccountsStub
 );
 
 const testStartTime = moment();
@@ -132,7 +132,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testReferredUser], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
-        fetchActiveBoostsStub.resolves([]);
+        fetchUncreatedBoostsStub.resolves([]);
         
         // then we will have to do a condition check, after which decide that the boost has been redeemed
         // and get the accounts that are affected by the redemption
@@ -307,7 +307,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
-        fetchActiveBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
+        fetchUncreatedBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
         insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
 
         const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: ['OFFERED', 'PENDING'] };
@@ -396,9 +396,8 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(resultOfEventRecord).to.exist;
         
         expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
-        expect(fetchActiveBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(insertBoostAccountsStub).to.have.been.calledWith(testBoostId, testAccountId, 'OFFERED');
-        expect(insertBoostAccountsStub).to.have.been.calledTwice;
+        expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId, testBoostId], testAccountId, 'CREATED');
         expect(getAccountIdForUserStub).to.have.not.been.called;
     });
 
@@ -427,7 +426,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
-        fetchActiveBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
+        fetchUncreatedBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
         insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
 
@@ -517,9 +516,8 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(resultOfEventRecord).to.exist;
         
         expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
-        expect(fetchActiveBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(insertBoostAccountsStub).to.have.been.calledWith(testBoostId, testAccountId, 'OFFERED');
-        expect(insertBoostAccountsStub).to.have.been.calledTwice;
+        expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId, testBoostId], testAccountId, 'CREATED');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
     });
 
@@ -547,7 +545,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testAccountId], boostStatus: ['OFFERED', 'PENDING'], active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
-        fetchActiveBoostsStub.resolves([]);
+        fetchUncreatedBoostsStub.resolves([]);
         
         const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: ['OFFERED', 'PENDING'] };
         findAccountsStub.withArgs(findAccountArgs).resolves([{
