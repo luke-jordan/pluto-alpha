@@ -79,7 +79,7 @@ class RdsConnection {
     }
 
     static async _attemptSecretRetrieval (secretId) {
-        logger('Attempting secret retrieval ....');
+        logger('Attempting secret retrieval ...., secret Id: ', secretId);
         return new Promise((resolve, reject) => {
             secretsClient.getSecretValue({ SecretId: secretId }, (err, fetchedSecretData) => {
                 logger('Error inside secrets promise? : ', err);
@@ -87,6 +87,7 @@ class RdsConnection {
                     reject(err);
                 }
 
+                logger('Fetched secret data: ', fetchedSecretData);
                 if (!fetchedSecretData || !fetchedSecretData.SecretString) {
                     reject(new Error('Failed first call'));
                 }

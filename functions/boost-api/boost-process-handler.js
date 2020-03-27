@@ -45,7 +45,7 @@ const equalizeAmounts = (amountString) => {
     const unitMultipliers = {
         'HUNDREDTH_CENT': 1,
         'WHOLE_CENT': 100,
-        'WHOLE_CURRENCY': 100 * 100 
+        'WHOLE_CURRENCY': 100 * 100
     };
     return parseInt(amountArray[0], 10) * unitMultipliers[amountArray[1]];
 };
