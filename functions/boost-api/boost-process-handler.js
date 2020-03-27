@@ -84,10 +84,14 @@ const testCondition = (event, statusCondition) => {
     
     const { eventType, eventContext } = event;
 
-    if (!EVENT_TYPE_CONDITION_MAP[eventType] || !EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType)) {
+    const isEventTriggeredButForbidden = (conditionType === 'event_occurs' && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));
+
+    const isNonEventTriggeredButForbidden = (conditionType !== 'event_occurs' && (!EVENT_TYPE_CONDITION_MAP[eventType] || !EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType)));
+
+    if (isEventTriggeredButForbidden || isNonEventTriggeredButForbidden) {
         return false;
     }
-
+    
     switch (conditionType) {
         case 'save_event_greater_than':
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue), ' and amount from event: ', equalizeAmounts(eventContext.savedAmount));
@@ -104,6 +108,9 @@ const testCondition = (event, statusCondition) => {
             return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
         case 'number_taps_greater_than':
             return evaluateGameResponse(eventContext, parameterValue);
+        case 'event_occurs':
+            logger('Checking if event type matches condition type');
+            return eventType === 'ACCOUNT_OPENED';
         default:
             return false;
     }
@@ -310,15 +317,15 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
     return publishPromises;
 };
 
-const isStatusMetByEvent = (statusCondition) => statusCondition.substring(0, statusCondition.indexOf(' ')) === 'event_occurs';
+// ACCOUNT_OPENED: ['event_occurs']
 
-const shouldCreateBoostForAccount = (boost) => {
+const shouldCreateBoostForAccount = (event, boost) => {
     const statusConditions = boost.statusConditions;
     logger('Got status conditions:', statusConditions);
     
     // To guard against accidentally redeeming a boost to all and sundry, check statuses except for REDEEMED
     const statusesToCheck = Object.keys(statusConditions).filter((statusCondition) => statusCondition !== 'REDEEMED');
-    return statusesToCheck.some((statusCondition) => isStatusMetByEvent(statusConditions[statusCondition][0]));
+    return statusesToCheck.some((statusCondition) => testCondition(event, statusConditions[statusCondition][0]));
 };
 
 const createBoostsTriggeredByEvent = async (event) => {
@@ -329,7 +336,7 @@ const createBoostsTriggeredByEvent = async (event) => {
     logger('Found active boosts:', boostFetchResult);
 
     // Then check the status conditions until finding one that is triggered by this event
-    const boostsToCreate = boostFetchResult.filter((boost) => shouldCreateBoostForAccount(boost)).map((boost) => boost.boostId);
+    const boostsToCreate = boostFetchResult.filter((boost) => shouldCreateBoostForAccount(event, boost)).map((boost) => boost.boostId);
     logger('Boosts to create:', boostsToCreate);
     if (boostsToCreate.length === 0) {
         return 'NO_BOOSTS_CREATED';

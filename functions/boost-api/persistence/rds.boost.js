@@ -111,9 +111,6 @@ module.exports.fetchUncreatedActiveBoostsForAccount = async (accountId) => {
 
     const boostsRetrieved = await rdsConnection.selectQuery(findBoostQuery, queryValues);
     logger('Retrived boosts:', boostsRetrieved);
-    if (boostsRetrieved.length === 0) {
-        return [];
-    }
 
     return boostsRetrieved.map(transformBoostFromRds);
 };

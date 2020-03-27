@@ -397,11 +397,11 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         
         expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId, testBoostId], testAccountId, 'CREATED');
+        expect(insertBoostAccountsStub).to.have.not.been.called;
         expect(getAccountIdForUserStub).to.have.not.been.called;
     });
 
-    it('Extracts account id for user id where not provided', async () => {
+    it('Awards boost on account opened, extracts account id for user id where not provided', async () => {
         const testUserId = uuid();
         const timeSaveCompleted = moment();
         const mockPersistedTime = moment();
@@ -411,7 +411,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         
         const testEvent = {
             userId: testUserId,
-            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventType: 'ACCOUNT_OPENED',
             timeInMillis: timeSaveCompleted.valueOf(),
             eventContext: {
                 transactionId: testSavingTxId,
@@ -515,7 +515,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         expect(resultOfEventRecord).to.exist;
         
-        expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
+        expect(publishStub).to.have.not.been.called;
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId, testBoostId], testAccountId, 'CREATED');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
