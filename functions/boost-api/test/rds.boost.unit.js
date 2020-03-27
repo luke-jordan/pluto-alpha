@@ -50,6 +50,7 @@ const boostLogTable = config.get('tables.boostLogTable');
 describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-user records', () => {
 
     const testBoostId = uuid();
+    const testAccountId = uuid();
     const testAudienceId = uuid();
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
     const testRedemptionMsgs = [{ accountId: 'ALL', msgInstructionId: uuid() }];
@@ -280,6 +281,29 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(multiTableArgs[0]).to.deep.equal(insertFirstDef);
     });
 
+    it('Inserts boost-account', async () => {
+        const testBoostStatus = 'CREATED';
+        const testCreationTime = moment().format();
+
+        const insertBoostQuery = `insert into ${boostUserTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`;
+        const columnTemplate = '${boostId}, ${accountId}, ${boostStatus}';
+        const boostRow = { boostId: testBoostId, accountId: testAccountId, boostStatus: testBoostStatus };
+    
+        const boostQueryDef = { query: insertBoostQuery, columnTemplate, rows: [boostRow, boostRow] };
+
+        multiTableStub.resolves([
+            [{ 'insertion_id': 100, 'creation_time': moment().format() }, { 'insertion_id': 101, 'creation_time': moment().format() }]
+        ]);
+
+        const expectedResult = { boostIds: [testBoostId, testBoostId], accountId: testAccountId, persistedTimeMillis: moment(testCreationTime).valueOf() };
+
+        const resultOfInsertion = await rds.insertBoostAccount([testBoostId, testBoostId], testAccountId, testBoostStatus);
+
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.deep.equal(expectedResult);
+        expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
+    });
+
 });
 
 describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses / logs', () => {
@@ -419,6 +443,19 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         expect(findBoostResponse).to.be.an('array').of.length(3);
         // testHelper.logNestedMatches(expectedResult[0], findBoostResponse[0]);
         expect(sinon.match(expectedResult).test(findBoostResponse)).to.be.true;
+    });
+
+    it('Finds boost created by event', async () => {
+        const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_time ` +
+            `and boost_id not in (select boost_id from ${boostUserTable} where account_id = $1)`; 
+
+        queryStub.withArgs(findBoostQuery, [testAccountId]).resolves([boostFromPersistence]);
+
+        const findBoostResponse = await rds.fetchUncreatedActiveBoostsForAccount(testAccountId);
+
+        expect(findBoostResponse).to.exist;
+        expect(findBoostResponse).to.deep.equal([expectedBoostResult]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(findBoostQuery, [testAccountId]);
     });
 
     // boosts only ever affect (1) all related accounts of a certain current status in relation to that boost, or (2) a specific account
@@ -688,6 +725,18 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
 
         expect(result).to.be.null;
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['TEST_FLAG']);
+    });
+
+    it('Finds account for user id', async () => {
+        const testUserId = uuid();
+        const accountIdQuery = `select account_id from ${config.get('tables.accountLedger')} where owner_user_id = $1 order by creation_time desc limit 1`;
+        queryStub.withArgs(accountIdQuery, [testUserId]).resolves([{ 'account_id': testAccountId }]);
+
+        const accountIdResult = await rds.getAccountIdForUser(testUserId);
+
+        expect(accountIdResult).to.exist;
+        expect(accountIdResult).to.deep.equal(testAccountId);
+        expect(queryStub).to.have.been.calledOnceWithExactly(accountIdQuery, [testUserId]);
     });
 
 });

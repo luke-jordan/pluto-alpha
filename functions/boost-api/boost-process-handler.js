@@ -84,10 +84,14 @@ const testCondition = (event, statusCondition) => {
     
     const { eventType, eventContext } = event;
 
-    if (!EVENT_TYPE_CONDITION_MAP[eventType] || !EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType)) {
+    const isEventTriggeredButForbidden = (conditionType === 'event_occurs' && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));
+
+    const isNonEventTriggeredButForbidden = (conditionType !== 'event_occurs' && (!EVENT_TYPE_CONDITION_MAP[eventType] || !EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType)));
+
+    if (isEventTriggeredButForbidden || isNonEventTriggeredButForbidden) {
         return false;
     }
-
+    
     switch (conditionType) {
         case 'save_event_greater_than':
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue), ' and amount from event: ', equalizeAmounts(eventContext.savedAmount));
@@ -104,6 +108,9 @@ const testCondition = (event, statusCondition) => {
             return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
         case 'number_taps_greater_than':
             return evaluateGameResponse(eventContext, parameterValue);
+        case 'event_occurs':
+            logger('Checking if event type matches condition type');
+            return eventType === 'ACCOUNT_OPENED';
         default:
             return false;
     }
@@ -310,21 +317,33 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
     return publishPromises;
 };
 
-/**
- * note: possibly in time we can put this on an SQS queue, for now using a somewhat
- * generic handler for any boost relevant response (add cash, solve game, etc)
- * @param {object} event An event object containing the request context and request body.
- * @property {string} userId The users id.
- * @property {string} accountId The account id. Either the user id or the account id must be provided.
- */
-module.exports.processEvent = async (event) => {
-    logger('Processing boost event: ', event);
+const shouldCreateBoostForAccount = (event, boost) => {
+    const statusConditions = boost.statusConditions;
+    logger('Got status conditions:', statusConditions);
+    
+    // To guard against accidentally redeeming a boost to all and sundry, check statuses except for REDEEMED
+    const statusesToCheck = Object.keys(statusConditions).filter((statusCondition) => statusCondition !== 'REDEEMED');
+    return statusesToCheck.some((statusCondition) => testCondition(event, statusConditions[statusCondition][0]));
+};
 
-    // first, we check if there is a pending boost for this account, or user, if we only have that
-    if (!event.accountId && !event.userId) {
-        return { statusCode: status('Bad request'), body: 'Function requires at least a user ID or accountID' };
+const createBoostsTriggeredByEvent = async (event) => {
+    const accountId = event.accountId;
+
+    // select all boosts that are active, but not present in the user-boost table for this user/account
+    const boostFetchResult = await persistence.fetchUncreatedActiveBoostsForAccount(accountId);
+    logger('Found active boosts:', boostFetchResult);
+
+    // Then check the status conditions until finding one that is triggered by this event
+    const boostsToCreate = boostFetchResult.filter((boost) => shouldCreateBoostForAccount(event, boost)).map((boost) => boost.boostId);
+    logger('Boosts to create:', boostsToCreate);
+    if (boostsToCreate.length === 0) {
+        return 'NO_BOOSTS_CREATED';
     }
 
+    return persistence.insertBoostAccount(boostsToCreate, accountId, 'CREATED');
+};
+
+const processEventForCreatedBoosts = async (event) => {
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
     logger('Found these open boosts: ', offeredOrPendingBoosts);
 
@@ -346,7 +365,7 @@ module.exports.processEvent = async (event) => {
 
     if (!boostsForStatusChange || boostsForStatusChange.length === 0) {
         logger('Boosts found, but none triggered to change, so exiting');
-        return { statusCode: status('Ok'), body: JSON.stringify({ boostsTriggered: 0 })};
+        return { boostsTriggered: 0 };
     }
 
     logger('At least one boost was triggered. First step is to extract affected accounts, then tell the float to transfer from bonus pool');
@@ -409,11 +428,37 @@ module.exports.processEvent = async (event) => {
     const resultOfFinalCalls = await Promise.all(finalPromises);
     logger('Result of final calls: ', resultOfFinalCalls);
 
-    const resultToReturn = {
+    return {
         result: 'SUCCESS',
         resultOfTransfers,
         resultOfUpdates
     };
+};
+
+/**
+ * note: possibly in time we can put this on an SQS queue, for now using a somewhat
+ * generic handler for any boost relevant response (add cash, solve game, etc)
+ * @param {object} event An event object containing the request context and request body.
+ * @property {string} userId The users id.
+ * @property {string} accountId The account id. Either the user id or the account id must be provided.
+ */
+module.exports.processEvent = async (event) => {
+    logger('Processing boost event: ', event);
+
+    // first, we check if there is a pending boost for this account, or user, if we only have that
+    if (!event.accountId && !event.userId) {
+        return { statusCode: status('Bad request'), body: 'Function requires at least a user ID or accountID' };
+    }
+
+    if (!event.accountId) {
+        event.accountId = await persistence.getAccountIdForUser(event.userId);
+    }
+
+    // find boosts that do not already have an entry for this user, and are created by this event
+    const creationResult = await createBoostsTriggeredByEvent(event);
+    logger('Result of boost-account creation creation:', creationResult);
+
+    const resultToReturn = await processEventForCreatedBoosts(event);
 
     return {
         statusCode: 200,
