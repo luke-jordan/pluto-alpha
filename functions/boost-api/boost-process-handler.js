@@ -317,8 +317,6 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
     return publishPromises;
 };
 
-// ACCOUNT_OPENED: ['event_occurs']
-
 const shouldCreateBoostForAccount = (event, boost) => {
     const statusConditions = boost.statusConditions;
     logger('Got status conditions:', statusConditions);
