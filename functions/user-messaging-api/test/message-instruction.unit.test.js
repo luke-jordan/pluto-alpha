@@ -634,6 +634,52 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         expect(alterInstructionStatesStub).to.have.not.been.called;
     });
 
+    it('Updates triggered parameters', async () => {
+        const mockEndTime = moment();
+
+        const mockEvent = {
+            instructionId: mockInstructionId,
+            updateValues: {
+                audienceType: 'GROUP',
+                templates: {
+                    template: {
+                        DEFAULT: {
+                            title: 'Testing payment succeeded',
+                            body: '<p>Checking if this trigger works</p>',
+                            display: { type: 'EMAIL' },
+                            actionToTake: 'ADD_CASH',
+                            actionContext: { addCashPreFilled: '10' }
+                        }
+                    }
+                },
+                messagePriority: 50,
+                presentationType: 'EVENT_DRIVEN',
+                endTime: mockEndTime.format(),
+                eventTypeCategory: 'EVENT_TYPE::ADMIN_SETTLED_SAVE',
+                triggerParameters: {
+                    triggerEvent: ['EVENT_TYPE::ADMIN_SETTLED_SAVE'],
+                    haltingEvent: ['EVENT_TYPE::REDEEMED'],
+                    messageSchedule: { type: 'RELATIVE', offset: { unit: 'hours', number: 2 } }
+                }
+            },
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        updateMessageInstructionStub.withArgs(mockInstructionId, { ...mockEvent.updateValues }).returns([{ insertionId: mockInsertionId, updateTime: mockUpdateTime }]);
+        alterInstructionStatesStub.resolves({ result: 'SUCCESS' });
+
+        const resultOfUpdate = await handler.updateInstruction(mockEvent);
+        logger('Result of message instruction deactivation:', resultOfUpdate);
+
+        testHelper.standardOkayChecks(resultOfUpdate, [{
+            insertionId: mockInsertionId,
+            updateTime: mockUpdateTime
+        }]);
+
+        expect(updateMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId, { ...mockEvent.updateValues });
+        expect(alterInstructionStatesStub).to.have.not.been.called;
+    });
+
     it('Updates message instruction and alters instruction message state', async () => {
         updateMessageInstructionStub.withArgs(mockInstructionId, { active: false }).returns([{ insertionId: mockInsertionId, updateTime: mockUpdateTime }]);
         alterInstructionStatesStub.resolves({ result: 'SUCCESS' });
