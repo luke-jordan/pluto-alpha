@@ -157,13 +157,12 @@ const fillInTemplate = async (template, destinationUserId) => {
 };
 
 const fireOffMsgStatusUpdate = async (userMessages, destinationUserId, eventContext) => {
-    const messageIds = userMessages.map((message) => message.messageId);
     const { userAction, eventType } = eventContext;
 
-    const updateInvocations = messageIds.map((messageId) => ({
+    const updateInvocations = userMessages.map((message) => ({
         FunctionName: config.get('lambdas.updateMessageStatus'),
         InvocationType: 'Event',
-        Payload: JSON.stringify({ messageId, userAction })
+        Payload: JSON.stringify({ messageId: message.messageId, userAction, lastDisplayedBody: message.body })
     }));
 
     const logContext = { messages: userMessages };
@@ -336,7 +335,7 @@ module.exports.getNextMessageForUser = async (event) => {
             logger('Warmup trigger, just keep live and exit');
         }
 
-        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        const userDetails = opsUtil.extractUserDetails(event);
         if (!userDetails) {
             return { statusCode: 403 };
         }
@@ -365,6 +364,30 @@ module.exports.getNextMessageForUser = async (event) => {
     }
 };
 
+module.exports.getUserHistoricalMessages = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { displayTypes } = opsUtil.extractQueryParams(event);
+
+        const messageTypes = displayTypes ? displayTypes : ['CARD'];
+        const destinationUserId = userDetails.systemWideUserId;
+
+        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, messageTypes);
+        const lastDisplayedBody = userMessages.map((message) => ({ ...message, displayedBody: message.lastDisplayedBody || message.messageBody }));
+        logger('Got user messages:', lastDisplayedBody);
+
+        return { statusCode: 200, body: JSON.stringify(lastDisplayedBody) };
+
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500, body: JSON.stringify(err.message) };
+    }
+};
+
 /**
  * Simple (ish) method for updating a message once it has been delivered, etc.
  * @param {object} event An object containing the request context and request body. The body has message id and user action properties, detailed below.
@@ -380,8 +403,13 @@ module.exports.updateUserMessage = async (event) => {
         }
 
         // todo : validate that the message corresponds to the user ID
-        const { messageId, userAction, newStatus } = opsUtil.extractParamsFromEvent(event);
+        const { messageId, userAction, newStatus, lastDisplayedBody } = opsUtil.extractParamsFromEvent(event);
         logger('Processing message ID update, based on user action: ', userAction);
+
+        if (lastDisplayedBody) {
+            const resultOfUpdate = await persistence.updateUserMessage(messageId, { lastDisplayedBody });
+            logger('Result of message update:', resultOfUpdate);
+        }
 
         if (!messageId || messageId.length === 0) {
             return { statusCode: 400 };
