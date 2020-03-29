@@ -400,8 +400,14 @@ const handleAccountOpenedEvent = async (eventBody) => {
     const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
     logger(`Result of user account update: ${accountUpdateResult}`);
 
+    
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
-    await Promise.all(notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` })));
+    const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
+
+    const boostProcessInvocation = assembleBoostProcessInvocation(eventBody);
+    finalProcesses.push(lambda.invoke(boostProcessInvocation).promise());
+
+    await Promise.all(finalProcesses);
 };
 
 const handleSaveInitiatedEvent = async (eventBody) => {

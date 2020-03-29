@@ -11,6 +11,15 @@ const corsHeaders = {
     'Access-Control-Allow-Origin': allowedCors
 };
 
+module.exports.ACTIVE_BOOST_STATUS = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING'];
+
+module.exports.EVENT_TYPE_CONDITION_MAP = {
+    'SAVING_PAYMENT_SUCCESSFUL': ['save_event_greater_than', 'save_completed_by', 'first_save_by'],
+    'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
+    'USER_GAME_COMPLETION': ['number_taps_greater_than'],
+    'BOOST_EXPIRED': ['number_taps_in_first_N'],
+};
+
 module.exports.extractUserDetails = (event) => (event.requestContext ? event.requestContext.authorizer : null);
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
 
