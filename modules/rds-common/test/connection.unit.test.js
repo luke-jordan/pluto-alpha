@@ -68,7 +68,7 @@ describe('*** UNIT TEST BASIC POOL MGMT ***', () => {
         // expect(getSecretStub).to.have.been.calledWith({ SecretId: 'somesecret' });        
     });
 
-    it('Retries if first call gives null SecretString', async () => {
+    it('Retries if first call gives null SecretData', async () => {
         const mockSecret = { username: 'jupiter-secret-user', password: 'jupiter-password' };
         
         getSecretStub.onFirstCall().yields(false, null);

@@ -156,14 +156,13 @@ const fillInTemplate = async (template, destinationUserId) => {
     return completedTemplate;
 };
 
-const fireOffMsgStatusUpdate = async (userMessages, destinationUserId, eventContext, lastDisplayedBody) => {
-    const messageIds = userMessages.map((message) => message.messageId);
+const fireOffMsgStatusUpdate = async (userMessages, destinationUserId, eventContext) => {
     const { userAction, eventType } = eventContext;
 
-    const updateInvocations = messageIds.map((messageId) => ({
+    const updateInvocations = userMessages.map((message) => ({
         FunctionName: config.get('lambdas.updateMessageStatus'),
         InvocationType: 'Event',
-        Payload: JSON.stringify({ messageId, userAction, lastDisplayedBody })
+        Payload: JSON.stringify({ messageId: message.messageId, userAction, lastDisplayedBody: message.body })
     }));
 
     const logContext = { messages: userMessages };
