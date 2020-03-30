@@ -88,7 +88,11 @@ class RdsConnection {
                 }
 
                 if (!fetchedSecretData || !fetchedSecretData.SecretString) {
-                    reject(new Error('Failed first call'));
+                    reject(new Error('CONNECTION_ERROR: Secret Data empty, retry'));
+                }
+
+                if (fetchedSecretData === null || typeof fetchedSecretData.SecretString !== 'string' || fetchedSecretData.SecretString.length > 0) {
+                    reject(new Error('Failed on null secret data'));
                 }
                 
                 const { username, password } = JSON.parse(fetchedSecretData.SecretString);
