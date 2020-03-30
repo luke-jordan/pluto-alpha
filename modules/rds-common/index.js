@@ -86,6 +86,10 @@ class RdsConnection {
                 if (err) {
                     reject(err);
                 }
+
+                if (!fetchedSecretData || !fetchedSecretData.SecretString) {
+                    reject(new Error('Failed first call'));
+                }
                 
                 const { username, password } = JSON.parse(fetchedSecretData.SecretString);
                 retrievedUser = username;

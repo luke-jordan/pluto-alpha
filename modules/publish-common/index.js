@@ -55,8 +55,16 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             hash: generateHashForEvent(eventType)
         };
 
+        const msgAttributes = {
+            'eventType': {
+                DataType: 'String',
+                StringValue: eventType
+            }
+        };
+    
         const messageForQueue = {
             Message: stringify(eventToPublish),
+            MessageAttributes: msgAttributes,
             Subject: eventType,
             TopicArn: config.get('publishing.userEvents.topicArn')
         };

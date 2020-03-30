@@ -97,9 +97,9 @@ resource "aws_iam_role_policy_attachment" "message_user_process_transaction_secr
 ////////////////// TRIGGER FOR PROCESSING //////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_event_target" "trigger_msg_process_five_minutes" {
-    rule = "${aws_cloudwatch_event_rule.ops_every_five_minutes.name}"
-    target_id = "${aws_lambda_function.message_user_process.id}"
-    arn = "${aws_lambda_function.message_user_process.arn}"
+    rule = aws_cloudwatch_event_rule.ops_every_five_minutes.name
+    target_id = aws_lambda_function.message_user_process.id
+    arn = aws_lambda_function.message_user_process.arn
 }
 
 resource "aws_lambda_permission" "allow_cloudwatch_to_call_message_process" {

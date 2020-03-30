@@ -26,8 +26,7 @@ jobs:
           command: |
             mv .circleci/package-merge.js ./
             node package-merge.js modules
-            npm i --package-lock-only
-            # npm i --package-lock-only && npm audit fix --package-lock-only
+            npm i --package-lock-only && npm audit fix --package-lock-only
 
       # _Only_ use exact key matching here, else subsequent script will skip install spuriously
       - restore_cache:
@@ -79,8 +78,7 @@ jobs:
 
             node package-merge.js functions
 
-            npm i --package-lock-only
-            # npm i --package-lock-only && npm audit fix --package-lock-only
+            npm i --package-lock-only && npm audit fix --package-lock-only
             
       # As above, only use exact matching here, else subsequent will be incorrect
       - restore_cache:

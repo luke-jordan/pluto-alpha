@@ -143,6 +143,29 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
         'flags': []
     };
 
+    const expectedRawMsg = {
+        messageId: testMsgId,
+        creationTime: moment(testStartTime.format()),
+        destinationUserId: testUserId,
+        instructionId: msgRawFromRds['instruction_id'],
+        messageTitle: 'Boost available!',
+        messageBody: 'Hello! Jupiter is now live. To celebrate, if you add $10, you get $10 boost',
+        startTime: moment(testStartTime.format()),
+        endTime: moment(testExpiryMoment.format()),
+        messagePriority: 20,
+        updatedTime: moment().subtract(1, 'minutes').format(),
+        processedStatus: 'READY_FOR_SENDING',
+        displayType: 'CARD',
+        displayInstructions: { titleType: 'EMPHASIS', iconType: 'BOOST_ROCKET' },
+        actionContext: { actionToTake: 'ADD_CASH', boostId: testBoostId },
+        followsPriorMsg: false,
+        hasFollowingMsg: true,
+        followingMessages: { msgOnSuccess: testFollowingMsgId },
+        deliveriesMax: 5,
+        deliveriesDone: 1,
+        flags: []
+    };
+
     const expectedTransformedMsg = {
         messageId: testMsgId,
         destinationUserId: testUserId,
@@ -165,13 +188,26 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
             `processed_status = $2 and end_time > current_timestamp and start_time < current_timestamp and ` + 
             `deliveries_done < deliveries_max and display ->> 'type' in ($3)`;
         
-            selectQueryStub.resolves([msgRawFromRds]);
+        selectQueryStub.resolves([msgRawFromRds]);
 
         const resultOfFetch = await persistence.getNextMessage(testUserId, ['CARD']);
         logger('Result of fetch: ', resultOfFetch);
 
         expect(resultOfFetch).to.deep.equal([expectedTransformedMsg]);
         expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'READY_FOR_SENDING', 'CARD']);
+    });
+
+    it('Finds past user messages of display type', async () => {
+        const expectedQuery = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status != $2 ` +
+            `and display ->> 'type' in ($3)`;
+    
+        selectQueryStub.resolves([msgRawFromRds]);
+
+        const resultOfFetch = await persistence.fetchUserHistoricalMessages(testUserId, ['CARD']);
+        logger('Result of fetch: ', resultOfFetch);
+
+        expect(resultOfFetch).to.deep.equal([expectedRawMsg]);
+        expect(selectQueryStub).to.have.been.calledWith(expectedQuery, [testUserId, 'SUPERCEDED', 'CARD']);
     });
 
     it('Finds pending push messages', async () => {
@@ -306,6 +342,47 @@ describe('*** UNIT TEST BASIC INSTRUCTION OPERATIONS NEEDED BY USER MESSAGES ***
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal({ updateTime: '2049-06-22T07:38:30.016Z' });
+        expect(momentStub).to.have.been.calledOnce;
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
+    });
+
+    it('Updates instruction proccessed time', async () => {
+        const mockLastProcessedTime = moment().format();
+
+        const mockUpdateRecordArgs = {
+            table: config.get('tables.messageInstructionTable'),
+            key: { instructionId: mockInstructionId },
+            value: { lastProcessedTime: mockLastProcessedTime },
+            returnClause: 'updated_time'
+        };
+
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
+       
+        const resultOfUpdate = await persistence.updateInstructionProcessedTime(mockInstructionId, mockLastProcessedTime);
+        logger('Result of processed time update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal({ updateTime: '2049-06-22T07:38:30.016Z' });
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
+    });
+
+    it('Deactivates message instruction', async () => {
+        const mockCurrentTime = moment().format();
+        const mockUpdateRecordArgs = {
+            table: config.get('tables.messageInstructionTable'),
+            key: { instructionId: mockInstructionId },
+            value: { active: false, lastProcessedTime: mockCurrentTime },
+            returnClause: 'updated_time'
+        };
+
+        momentStub.returns({ format: () => mockCurrentTime });
+        updateRecordStub.withArgs(mockUpdateRecordArgs).returns([{ 'update_time': '2049-06-22T07:38:30.016Z' }]);
+
+        const resultOfUpdate = await persistence.deactivateInstruction(mockInstructionId);
+        logger('Result of message instruction update:', resultOfUpdate);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([{ updateTime: '2049-06-22T07:38:30.016Z' }]);
         expect(momentStub).to.have.been.calledOnce;
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });

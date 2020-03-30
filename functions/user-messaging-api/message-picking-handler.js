@@ -156,6 +156,25 @@ const fillInTemplate = async (template, destinationUserId) => {
     return completedTemplate;
 };
 
+const fireOffMsgStatusUpdate = async (userMessages, destinationUserId, eventContext) => {
+    const { userAction, eventType } = eventContext;
+
+    const updateInvocations = userMessages.map((message) => ({
+        FunctionName: config.get('lambdas.updateMessageStatus'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify({ messageId: message.messageId, userAction, lastDisplayedBody: message.body })
+    }));
+
+    const logContext = { messages: userMessages };
+
+    logger('Invoking Lambda to update message status, and publishing user log');
+    const invocationPromises = updateInvocations.map((invocation) => lambda.invoke(invocation).promise());
+    const publishPromise = publisher.publishUserEvent(destinationUserId, eventType, { context: logContext });
+    const [invocationResult, publishResult] = await Promise.all([...invocationPromises, publishPromise]);
+    logger('Completed invocation: ', invocationResult);
+    logger('And log publish result: ', publishResult);
+};
+
 /**
  * This function assembles user messages into a persistable object. It accepts a messageDetails object as its only argument.
  * @param {Object} messageDetails An object containing the message details. This object contains the following properties:
@@ -170,40 +189,48 @@ const fillInTemplate = async (template, destinationUserId) => {
  * @property {Object} messageSequence An object containing details such as messages to display on the success of the current message. An example object: { msgOnSuccess: '61af5b66-ad7a...' }
  */
 module.exports.assembleMessage = async (msgDetails) => {
-    const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
-    const messageBase = {
-        messageId: msgDetails.messageId,
-        title: msgDetails.messageTitle,
-        body: completedMessageBody,
-        priority: msgDetails.messagePriority,
-        display: msgDetails.display,
-        persistedTimeMillis: msgDetails.creationTime.valueOf(),
-        hasFollowingMessage: msgDetails.hasFollowingMessage
-    };
+    try {
+        const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
+        const messageBase = {
+            messageId: msgDetails.messageId,
+            title: msgDetails.messageTitle,
+            body: completedMessageBody,
+            priority: msgDetails.messagePriority,
+            display: msgDetails.display,
+            persistedTimeMillis: msgDetails.creationTime.valueOf(),
+            hasFollowingMessage: msgDetails.hasFollowingMessage
+        };
+        
+        let actionContextForReturn = { };
+        if (msgDetails.actionContext) {
+            messageBase.actionToTake = msgDetails.actionContext.actionToTake;
+            messageBase.triggerBalanceFetch = msgDetails.actionContext.triggerBalanceFetch;
+            const strippedContext = JSON.parse(JSON.stringify(msgDetails.actionContext));
+            Reflect.deleteProperty(strippedContext, 'actionToTake');
+            Reflect.deleteProperty(strippedContext, 'triggerBalanceFetch');
+            actionContextForReturn = { ...actionContextForReturn, ...strippedContext };   
+        }
+        
+        if (msgDetails.messageSequence) {
+            const sequenceDict = msgDetails.messageSequence;
+            messageBase.messageSequence = sequenceDict;
+            const thisMessageIdentifier = Object.keys(sequenceDict).find((key) => sequenceDict[key] === msgDetails.messageId);
+            messageBase.identifier = thisMessageIdentifier;
+        }
     
-    let actionContextForReturn = { };
-    if (msgDetails.actionContext) {
-        messageBase.actionToTake = msgDetails.actionContext.actionToTake;
-        messageBase.triggerBalanceFetch = msgDetails.actionContext.triggerBalanceFetch;
-        const strippedContext = JSON.parse(JSON.stringify(msgDetails.actionContext));
-        Reflect.deleteProperty(strippedContext, 'actionToTake');
-        Reflect.deleteProperty(strippedContext, 'triggerBalanceFetch');
-        actionContextForReturn = { ...actionContextForReturn, ...strippedContext };   
-    }
+        if (!msgDetails.followsPriorMessage) {
+            actionContextForReturn = { ...actionContextForReturn, sequenceExpiryTimeMillis: msgDetails.endTime.valueOf() };
+        }
     
-    if (msgDetails.messageSequence) {
-        const sequenceDict = msgDetails.messageSequence;
-        messageBase.messageSequence = sequenceDict;
-        const thisMessageIdentifier = Object.keys(sequenceDict).find((key) => sequenceDict[key] === msgDetails.messageId);
-        messageBase.identifier = thisMessageIdentifier;
+        messageBase.actionContext = actionContextForReturn;
+        return messageBase;
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        const eventContext = { userAction: 'EXPIRED', eventType: 'MESSAGE_FAILED' };
+        await fireOffMsgStatusUpdate([msgDetails], msgDetails.destinationUserId, eventContext);
+        return {};
     }
-
-    if (!msgDetails.followsPriorMessage) {
-        actionContextForReturn = { ...actionContextForReturn, sequenceExpiryTimeMillis: msgDetails.endTime.valueOf() };
-    }
-
-    messageBase.actionContext = actionContextForReturn;
-    return messageBase;
+ 
 };
 
 const fetchMsgSequenceIds = (anchorMessage) => {
@@ -259,7 +286,6 @@ const determineAnchorMsg = (openingMessages) => {
     return messagesWithHighestPriority[0];
 };
 
-
 /**
  * This function fetches and fills in the next message in a sequence of messages.
  * @param {string} destinationUserId The messages destination user id.
@@ -292,33 +318,7 @@ module.exports.fetchAndFillInNextMessage = async ({ destinationUserId, instructi
 
     const assembledMessages = await assembleSequence(anchorMessage, retrievedMessages);
     logger('Message retrieval complete');
-    return assembledMessages;
-};
-
-// And last, we update. todo : update all of them?
-const fireOffMsgStatusUpdate = async (userMessages, requestContext, destinationUserId) => {
-    const updateMsgPayload = {
-        requestContext,
-        body: JSON.stringify({ messageId: userMessages[0].messageId, userAction: 'FETCHED' })
-    };
-
-    const updateMsgLambdaParams = {
-        FunctionName: config.get('lambdas.updateMessageStatus'),
-        InvocationType: 'Event',
-        Payload: JSON.stringify(updateMsgPayload) 
-    };
-
-    const logContext = {
-        requestContext,
-        messages: userMessages
-    };
-
-    logger('Invoking Lambda to update message status, and publishing user log, for user: ', destinationUserId);
-    const invocationPromise = lambda.invoke(updateMsgLambdaParams).promise();
-    const publishPromise = publisher.publishUserEvent(destinationUserId, 'MESSAGE_FETCHED', { context: logContext });
-    const [invocationResult, publishResult] = await Promise.all([invocationPromise, publishPromise]);
-    logger('Completed invocation: ', invocationResult);
-    logger('And log publish result: ', publishResult);
+    return assembledMessages.filter((message) => JSON.stringify(message) !== '{}');
 };
 
 /**
@@ -335,7 +335,7 @@ module.exports.getNextMessageForUser = async (event) => {
             logger('Warmup trigger, just keep live and exit');
         }
 
-        const userDetails = event.requestContext ? event.requestContext.authorizer : null;
+        const userDetails = opsUtil.extractUserDetails(event);
         if (!userDetails) {
             return { statusCode: 403 };
         }
@@ -346,17 +346,42 @@ module.exports.getNextMessageForUser = async (event) => {
         // we have an instruction ID, in which case we pull the messages for that instruction
         const queryParams = event.queryStringParameters || {};
         const { withinFlowFromMsgId, instructionId } = queryParams;
-        
+
         const userMessages = await exports.fetchAndFillInNextMessage({ destinationUserId, withinFlowFromMsgId, instructionId });
         logger('Retrieved user messages: ', userMessages);
         const resultBody = { messagesToDisplay: userMessages };
 
         if (Array.isArray(userMessages) && userMessages.length > 0) {
-            await fireOffMsgStatusUpdate(userMessages, event.requestContext, destinationUserId);
+            const eventContext = { userAction: 'FETCHED', eventType: 'MESSAGE_FETCHED' };
+            await fireOffMsgStatusUpdate(userMessages, destinationUserId, eventContext);
         }
 
         logger(JSON.stringify(resultBody));
         return { statusCode: 200, body: JSON.stringify(resultBody) };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500, body: JSON.stringify(err.message) };
+    }
+};
+
+module.exports.getUserHistoricalMessages = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { displayTypes } = opsUtil.extractQueryParams(event);
+
+        const messageTypes = displayTypes ? displayTypes : ['CARD'];
+        const destinationUserId = userDetails.systemWideUserId;
+
+        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, messageTypes);
+        const lastDisplayedBody = userMessages.map((message) => ({ ...message, displayedBody: message.lastDisplayedBody || message.messageBody }));
+        logger('Got user messages:', lastDisplayedBody);
+
+        return { statusCode: 200, body: JSON.stringify(lastDisplayedBody) };
+
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500, body: JSON.stringify(err.message) };
@@ -378,8 +403,13 @@ module.exports.updateUserMessage = async (event) => {
         }
 
         // todo : validate that the message corresponds to the user ID
-        const { messageId, userAction, newStatus } = opsUtil.extractParamsFromEvent(event);
+        const { messageId, userAction, newStatus, lastDisplayedBody } = opsUtil.extractParamsFromEvent(event);
         logger('Processing message ID update, based on user action: ', userAction);
+
+        if (lastDisplayedBody) {
+            const resultOfUpdate = await persistence.updateUserMessage(messageId, { lastDisplayedBody });
+            logger('Result of message update:', resultOfUpdate);
+        }
 
         if (!messageId || messageId.length === 0) {
             return { statusCode: 400 };
@@ -409,6 +439,11 @@ module.exports.updateUserMessage = async (event) => {
             case 'SUPERCEDED': {
                 // todo : possibly also change the end time
                 updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'SUPERCEDED' });
+                response = { statusCode: 200 };
+                break;
+            }
+            case 'EXPIRED': {
+                updateResult = await persistence.updateUserMessage(messageId, { processedStatus: 'EXPIRED' });
                 response = { statusCode: 200 };
                 break;
             }

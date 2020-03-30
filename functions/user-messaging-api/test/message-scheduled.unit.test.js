@@ -143,34 +143,6 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         logger('Result of pending instruction handling:', result);
     });
 
-    it('Fails on invalid template', async () => {
-        const mockBadInstruction = {
-            instructionId: mockInstructionId,
-            audienceId: mockAudienceId,
-            templates: '{ template: { DEFAULT: recurringMsgTemplate }}'
-        };
-
-        lambdaInvokeStub.withArgs(argsForRefreshAudienceLambda).returns({ promise: () => testHelper.mockLambdaResponse(testRefreshAudienceResponse) });
-
-        getInstructionsByTypeStub.resolves([mockInstruction, mockBadInstruction]);
-        filterUserIdsForRecurrenceStub.resolves(createMockUserIds(10));
-        getUserIdsStub.resolves(createMockUserIds(10));
-
-        const result = await handler.createFromPendingInstructions();
-        logger('Result on malformed template:', result);
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'ERROR', message: 'Malformed template instruction: ' });
-        expect(getInstructionsByTypeStub).to.have.been.calledWith('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
-        expect(filterUserIdsForRecurrenceStub).to.have.been.calledTwice;
-        expect(getUserIdsStub).to.have.been.calledWith(mockAudienceId);
-        expect(lambdaInvokeStub).to.have.been.calledWithExactly(argsForRefreshAudienceLambda);
-        expect(lambdaInvokeStub).to.have.been.callCount(2);
-        expect(insertUserMessagesStub).to.have.been.calledOnce; // i.e., with the good instruction
-        expect(updateInstructionStateStub).to.have.not.been.called;
-        expect(updateProcessedTimeStub).to.have.not.been.called;
-    });
-
     it('Catches thrown errors', async () => {
         getInstructionsByTypeStub.rejects(new Error('ProcessError'));
         
