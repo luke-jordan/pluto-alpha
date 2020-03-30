@@ -59,7 +59,7 @@ const evaluateGameTournament = (event, parameterValue) => {
     return topList.includes(event.accountId);
 };
 
-const testCondition = (event, statusCondition) => {
+module.exports.testCondition = (event, statusCondition) => {
     logger('Status condition: ', statusCondition);
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
     const parameterMatch = statusCondition.match(/#{(.*)}/);
@@ -102,9 +102,9 @@ const testCondition = (event, statusCondition) => {
     }
 };
 
-module.exports.testConditionsForStatus = (event, statusConditions) => statusConditions.every((condition) => testCondition(event, condition));
+module.exports.testConditionsForStatus = (event, statusConditions) => statusConditions.every((condition) => exports.testCondition(event, condition));
 
 module.exports.extractStatusChangesMet = (event, boost) => {
     const statusConditions = boost.statusConditions;
-    return Object.keys(statusConditions).filter((key) => testConditionsForStatus(event, statusConditions[key]));
+    return Object.keys(statusConditions).filter((key) => exports.testConditionsForStatus(event, statusConditions[key]));
 };

@@ -16,9 +16,11 @@ const findBoostStub = sinon.stub();
 const fetchBoostStub = sinon.stub();
 const findAccountsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
+const updateBoostRedeemedStub = sinon.stub();
 const alterBoostStub = sinon.stub();
-const updateRedeemedStub = sinon.stub();
-const findAccountStub = sinon.stub();
+
+const redemptionHandlerStub = sinon.stub();
+
 const getAccountIdForUserStub = sinon.stub();
 const fetchUncreatedBoostsStub = sinon.stub();
 const insertBoostAccountsStub = sinon.stub();
@@ -26,12 +28,6 @@ const insertBoostAccountsStub = sinon.stub();
 const momentStub = sinon.stub();
 
 const publishStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
-class MockLambdaClient {
-    constructor () {
-        this.invoke = lamdbaInvokeStub;
-    }
-}
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -42,13 +38,17 @@ const handler = proxyquire('../boost-process-handler', {
         'fetchBoost': fetchBoostStub,
         'findAccountsForBoost': findAccountsStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
+        'updateBoostAmountRedeemed': updateBoostRedeemedStub,
         'alterBoost': alterBoostStub,
         'getAccountIdForUser': getAccountIdForUserStub,
         'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
         'insertBoostAccount': insertBoostAccountsStub
     },
-    'aws-sdk': {
-        'Lambda': MockLambdaClient  
+    './boost-redemption-handler': {
+        'redeemOrRevokeBoosts': redemptionHandlerStub
+    },
+    './condition-tester': {
+        '@noCallThru': false,
     },
     'publish-common': {
         'publishUserEvent': publishStub
@@ -59,7 +59,7 @@ const handler = proxyquire('../boost-process-handler', {
 
 const resetStubs = () => testHelper.resetStubs(
     insertBoostStub, findBoostStub, fetchBoostStub, findAccountsStub, 
-    updateBoostAccountStub, alterBoostStub, publishStub, lamdbaInvokeStub, updateRedeemedStub,
+    updateBoostAccountStub, alterBoostStub, publishStub, 
     getAccountIdForUserStub, fetchUncreatedBoostsStub, insertBoostAccountsStub
 );
 
@@ -134,7 +134,6 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
         
         // then we will have to do a condition check, after which decide that the boost has been redeemed
         // and get the accounts that are affected by the redemption
-        
         findAccountsStub.withArgs({ boostIds: [testBoostId], status: expectedStatusCheck }).resolves([{ 
             boostId: testBoostId,
             accountUserMap: {
@@ -142,9 +141,22 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
                 [testReferringUser]: { userId: testOriginalUserId, status: 'PENDING' }
             }
         }]);
+
+        // then we update the boost statuses
+        const updateProcessedTime = moment();
+        const testUpdateInstruction = [{
+            boostId: testBoostId,
+            accountIds: [testReferredUser, testReferringUser],
+            newStatus: 'REDEEMED',
+            stillActive: false,
+            logType: 'STATUS_CHANGE',
+            logContext: { newStatus: 'REDEEMED', boostAmount: 100000, transactionId: uuid() }
+        }];
+        // logger('Expecting update instructions: ', testUpdateInstruction);
+        updateBoostAccountStub.withArgs(testUpdateInstruction).resolves([{ boostId: testBoostId, updatedTime: updateProcessedTime }]);
         
         // then we hand over to the boost redemption handler, which does a lot of stuff
-
+        redemptionHandlerStub.resolves({ [testBoostId]:  { result: 'SUCCESS' }});
 
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
@@ -233,12 +245,15 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         fetchUncreatedBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
         insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
 
+        redemptionHandlerStub.resolves([{ transferTransactionId: 'some-id' }]);
+
         const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: expectedStatusCheck };
+        const mockAccountUserMap = { 
+            [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+        }; 
         findAccountsStub.withArgs(findAccountArgs).resolves([{
             boostId: testBoostId,
-            accountUserMap: { 
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
-            }
+            accountUserMap: mockAccountUserMap
         }]);
 
         // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the float allocation lambda
@@ -247,8 +262,18 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         logger('Result of record: ', resultOfEventRecord);
 
         expect(resultOfEventRecord).to.exist;
-        
-        expect(publishStub).to.be.calledWithExactly(testUserId, 'BOOST_REDEEMED', publishOptions);
+
+        const expectedAccountDict = { [testBoostId]: { ...mockAccountUserMap }};
+        const expectedRedemptionCall = { 
+            redemptionBoosts: [boostFromPersistence], 
+            revocationBoosts: [], 
+            affectedAccountsDict: expectedAccountDict, 
+            event: testEvent
+        };
+
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
+        expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
+
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(insertBoostAccountsStub).to.have.not.been.called;
         expect(getAccountIdForUserStub).to.have.not.been.called;
@@ -298,7 +323,6 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
         
         expect(findBoostStub).to.have.been.calledOnceWithExactly(expectedKey);
-        expect(lamdbaInvokeStub).to.not.have.been.called;
         expect(updateBoostAccountStub).to.have.been.calledOnce;
     });
 

@@ -22,6 +22,7 @@ module.exports.EVENT_TYPE_CONDITION_MAP = {
 
 module.exports.extractUserDetails = (event) => (event.requestContext ? event.requestContext.authorizer : null);
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
+module.exports.extractBoostIds = (boosts) => boosts.map((boost) => boost.boostId);
 
 module.exports.extractQueryParams = (event) => {
     // logger('Event query string params: ', event.queryStringParameters);

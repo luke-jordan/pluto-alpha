@@ -1,40 +1,14 @@
 'use strict';
 
+const logger = require('debug')('jupiter:boost:redemption');
+const config = require('config');
+const moment = require('moment');
 const stringify = require('json-stable-stringify');
 
 const publisher = require('publish-common');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
-
-
-// note: only has to deal with two cases at the moment:
-// either the redemption is made just for the user in question, or for the whole target of the boost, but the latter
-// is only possible on 'INDIVIDUAL' or 'GROUP' boosts (eg in the case of referrals, later on, friend saving
-// const decamelizeKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [decamelize(key, '_')]: object[key] }), {});
-
-const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
-    const selectPromises = boosts.map((boost) => {
-        const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
-        const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
-        const findAccountsParams = { boostIds: [boost.boostId], status: util.ACTIVE_BOOST_STATUS };
-        if (restrictToInitiator) {
-            findAccountsParams.accountIds = [initiatingAccountId];
-        }
-        logger('Assembled params: ', findAccountsParams);
-        try {
-            return persistence.findAccountsForBoost(findAccountsParams);
-        } catch (err) {
-            logger('FATAL_ERROR:', err);
-            return { };
-        }
-    });
-
-    const affectedAccountArray = await Promise.all(selectPromises);
-    logger('Affected accounts: ', affectedAccountArray);
-    return affectedAccountArray.map((result) => result[0]).
-        reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
-};
 
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
 // further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
@@ -159,7 +133,6 @@ const generateMessageSendInvocation = (messageInstructions) => ({
 
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event }) => {
     const eventType = `BOOST_REDEEMED`;
-    logger('WTF: ', event.eventContext);
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
         const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
@@ -179,8 +152,18 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
     return publishPromises;
 };
 
-export async function redeemOrRevokeBoosts(boostsToRedeem, boostsToRevoke, affectedAccountsDict) {
-
+/**
+ * Complicated thing in here is affectedAccountsDict. It stores, for each boost, the accounts whose statusses have been changed. Format:
+ * The affectedAccountsDict has as its top level keys the boost IDs for the boosts that have been triggered.
+ * The value of each entry is a map, referred to as accountUserMap, in which the keys are the accountIds that have been triggered,
+ * and the value is the final dict, containing the userId of the owner of the account, and the _current_ (not the triggered) status
+ * (to clarify the last -- if the user is in status PENDING, and has just fulfilled the conditions for REDEEMED, the status in the dict
+ * will be PENDING) 
+ */
+module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoosts, affectedAccountsDict, event }) => {
+    const boostsToRedeem = redemptionBoosts || [];
+    const boostsToRevoke = revocationBoosts || [];
+    
     logger('Boosts to redeem: ', boostsToRedeem);
     const redeemInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
     logger('***** Transfer instructions: ', redeemInstructions);
@@ -206,19 +189,12 @@ export async function redeemOrRevokeBoosts(boostsToRedeem, boostsToRevoke, affec
         logger('Obtained message promise');
         finalPromises.push(messagePromise);
     }
-
-    const boostsRedeemedIds = boostsToRedeem.map((boost) => boost.boostId);
-    if (boostsRedeemedIds.length > 0) {
-        const updateRedeemedAmount = persistence.updateBoostAmountRedeemed(boostsRedeemedIds);
-        finalPromises.push(updateRedeemedAmount);
-    }
     
     boostsToRedeem.forEach((boost) => {
         const boostId = boost.boostId;
-        const boostUpdateTime = (resultOfUpdates.filter((row) => row.boostId === boostId)[0]).updatedTime;
         finalPromises = finalPromises.concat(createPublishEventPromises({ 
             boost,
-            boostUpdateTime,
+            boostUpdateTime: moment().valueOf(), // could pass it along etc., but not worth the precision at this point
             affectedAccountsUserDict: affectedAccountsDict[boostId],
             transferResults: resultOfTransfers[boostId],
             event

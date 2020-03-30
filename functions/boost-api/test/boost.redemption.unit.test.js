@@ -1,5 +1,8 @@
 'use strict';
 
+const uuid = require('uuid/v4');
+const moment = require('moment');
+
 const testHelper = require('./boost.test.helper');
 
 const sinon = require('sinon');
@@ -9,6 +12,7 @@ chai.use(require('sinon-chai'));
 
 const publishStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+
 class MockLambdaClient {
     constructor () {
         this.invoke = lamdbaInvokeStub;
@@ -18,9 +22,6 @@ class MockLambdaClient {
 const proxyquire = require('proxyquire').noCallThru();
 
 const handler = proxyquire('../boost-redemption-handler', {
-    './persistence/rds.boost': {
-        'updateBoostAmountRedeemed': updateRedeemedStub,
-    },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
     },
@@ -29,29 +30,43 @@ const handler = proxyquire('../boost-redemption-handler', {
     },
 });
 
+const testBoostId = uuid();
+const testFloatId = 'some-float';
+const testBonusPoolId = 'some-pool';
+
 describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
     beforeEach(() => testHelper.resetStubs(lamdbaInvokeStub, publishStub));
 
     it('Redeem a referral boost', async () => {
-        
-            // then we invoke the float allocation lambda
+        const testReferredAccountId = uuid();
+        const testReferringAccountId = uuid();
+
+        const testReferredUserId = uuid();
+        const testReferringUserId = uuid();
+
+        const testReferringMsgId = uuid();
+        const testReferredMsgId = uuid();
+
+        const testAmount = 10 * 100 * 100;
+
+        // invoke the float allocation lambda
         const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
             instructions: [{
                 identifier: testBoostId,
-                floatId: mockBoostToFromPersistence.fromFloatId,
-                fromId: mockBoostToFromPersistence.fromBonusPoolId,
+                floatId: testFloatId,
+                fromId: testBonusPoolId,
                 fromType: 'BONUS_POOL',
-                currency: mockBoostToFromPersistence.boostCurrency,
-                unit: mockBoostToFromPersistence.boostUnit,
+                currency: 'USD',
+                unit: 'HUNDREDTH_CENT',
                 transactionType: 'BOOST_REDEMPTION',
                 relatedEntityType: 'BOOST_REDEMPTION',
                 settlementStatus: 'SETTLED',
                 allocType: 'BOOST_REDEMPTION',
                 allocState: 'SETTLED',
                 recipients: [
-                    { recipientId: testReferredUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' },
-                    { recipientId: testReferringUser, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
+                    { recipientId: testReferredAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' },
+                    { recipientId: testReferringAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' }
                 ]
             }]
         });
@@ -64,78 +79,97 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.withArgs(expectedAllocationInvocation).returns({ 
-            promise: () => testHelper.mockLambdaResponse(expectedAllocationResult)
-        });
-
-        // then we update the boost to being redeemed, and insert the relevant logs
-        const updateProcessedTime = moment();
-        const testUpdateInstruction = [{
-            boostId: testBoostId,
-            accountIds: [testReferredUser, testReferringUser],
-            newStatus: 'REDEEMED',
-            stillActive: false,
-            logType: 'STATUS_CHANGE',
-            logContext: { newStatus: 'REDEEMED', boostAmount: 100000, transactionId: testSavingTxId }
-        }];
-        // logger('Expecting update instructions: ', testUpdateInstruction);
-        updateBoostAccountStub.withArgs(testUpdateInstruction).resolves([{ boostId: testBoostId, updatedTime: updateProcessedTime }]);
-
+        lamdbaInvokeStub.onFirstCall().returns({  promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
+        
         // then we get the message instructions for each of the users, example within instruction:
         // message: `Congratulations! By signing up using your friend's referral code, you have earned a R10 boost to your savings`,
         // message: 'Congratulations! Busani Ndlovu has signed up to Jupiter using your referral code, earning you a R10 boost to your savings',
         const triggerMessagesInvocation = testHelper.wrapLambdaInvoc('message_user_create_once', true, {
             instructions: [{
                 instructionId: testReferringMsgId,
-                destinationUserId: testOriginalUserId,
+                destinationUserId: testReferringUserId,
                 parameters: { boostAmount: '$10' },
                 triggerBalanceFetch: true
             }, {
                 instructionId: testReferredMsgId,
-                destinationUserId: testUserId,
+                destinationUserId: testReferredUserId,
                 parameters: { boostAmount: '$10' },
                 triggerBalanceFetch: true
             }]
         });
 
-        logger('Expected message invocation: ', triggerMessagesInvocation);
-        lamdbaInvokeStub.withArgs(triggerMessagesInvocation).returns({ promise: () => testHelper.mockLambdaResponse({ result: 'SUCCESS' }) });
+        // logger('Expected message invocation: ', triggerMessagesInvocation);
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => testHelper.mockLambdaResponse({ result: 'SUCCESS' }) });
 
         // then we do a user log, on each side (tested via the expect call underneath)
         const publishOptions = {
-            initiator: testUserId,
+            initiator: testReferredUserId,
             context: {
                 boostId: testBoostId,
-                boostUpdateTimeMillis: updateProcessedTime.valueOf(),
+                boostUpdateTimeMillis: moment().valueOf(),
                 transferResults: expectedAllocationResult[testBoostId],
-                eventContext: testEvent.eventContext
+                eventContext: 'SAVING_EVENT_COMPLETED'
             }
         };
-        publishStub.withArgs(testUserId, 'REFERRAL_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
-        publishStub.withArgs(testOriginalUserId, 'REFERRAL_REDEEMED', publishOptions).resolves({ result: 'SUCCESS' });
+        publishStub.withArgs(testReferredUserId, 'REFERRAL_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
+        publishStub.withArgs(testReferringUserId, 'REFERRAL_REDEEMED', publishOptions).resolves({ result: 'SUCCESS' });
 
-        const resultOfRedemption = await handler.redeemBoost();
+        const mockBoost = {
+            boostId: testBoostId,
+            boostAmount: testAmount,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromFloatId: testFloatId,
+            fromBonusPoolId: testBonusPoolId,
+            messageInstructions: [
+                { accountId: testReferringAccountId, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
+                { accountId: testReferredAccountId, msgInstructionId: testReferredMsgId, status: 'REDEEMED' }
+            ],
+            flags: ['REDEEM_ALL_AT_ONCE']    
+        };
+
+        const mockAccountMap = {
+            [testBoostId]: {
+                [testReferredAccountId]: { userId: testReferredUserId, status: 'PENDING' },
+                [testReferringAccountId]: { userId: testReferringUserId, status: 'PENDING' },
+            }
+        }
+
+        const mockEvent = { 
+            redemptionBoosts: [mockBoost], 
+            affectedAccountsDict: mockAccountMap, 
+            event: { accountId: testReferredAccountId, eventType: 'SAVING_EVENT_COMPLETED' }
+        };
+        const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
 
         expect(resultOfRedemption).to.exist;
+        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
+
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedAllocationInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWith(triggerMessagesInvocation);
     });
 
     it('Redeem a simple boost, from user saving enough', async () => {
+        const testUserId = uuid();
+        const testAccountId = uuid();
+        const testAmount = 20 * 100 * 100;
 
         const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
             instructions: [{
                 identifier: testBoostId,
-                floatId: mockBoostToFromPersistence.fromFloatId,
-                fromId: mockBoostToFromPersistence.fromBonusPoolId,
+                floatId: testFloatId,
+                fromId: testBonusPoolId,
                 fromType: 'BONUS_POOL',
                 transactionType: 'BOOST_REDEMPTION',
                 relatedEntityType: 'BOOST_REDEMPTION',
-                currency: mockBoostToFromPersistence.boostCurrency,
-                unit: mockBoostToFromPersistence.boostUnit,
+                currency: 'USD',
+                unit: 'HUNDREDTH_CENT',
                 settlementStatus: 'SETTLED',
                 allocType: 'BOOST_REDEMPTION',
                 allocState: 'SETTLED',
                 recipients: [
-                    { recipientId: testAccountId, amount: mockBoostToFromPersistence.boostAmount, recipientType: 'END_USER_ACCOUNT' }
+                    { recipientId: testAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' }
                 ]
             }]
         });
@@ -148,33 +182,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.withArgs(expectedAllocationInvocation).returns({ 
-            promise: () => testHelper.mockLambdaResponse(expectedAllocationResult)
-        });
-
-        // then we update the boost to being redeemed, and insert the relevant logs
-        const updateProcessedTime = moment();
-        const testUpdateInstruction = {
-            boostId: testBoostId,
-            accountIds: [testAccountId],
-            newStatus: 'REDEEMED',
-            stillActive: true,
-            logType: 'STATUS_CHANGE',
-            logContext: { newStatus: 'REDEEMED', boostAmount: 100000, transactionId: testSavingTxId }
-        }; 
-        updateBoostAccountStub.withArgs([testUpdateInstruction]).resolves([{ boostId: testBoostId, updatedTime: updateProcessedTime }]);
-
-        // then we get the message instructions for each of the users, example within instruction:
-        // message: 'Congratulations! We have boosted your savings by R10. Keep saving to keep earning more boosts!',
-        const triggerMessagesInvocation = testHelper.wrapLambdaInvoc('message_user_create_once', true, {
-            instructions: [{
-                instructionId: testRedemptionMsgId,
-                destinationUserId: testUserId,
-                parameters: { boostAmount: '$10' },
-                triggerBalanceFetch: true
-            }]
-        });
-        lamdbaInvokeStub.withArgs(triggerMessagesInvocation).returns({ promise: () => testHelper.mockLambdaResponse({ result: 'SUCCESS' }) });
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
 
         // then we do a user log, on each side (tested via the expect call underneath)
         const publishOptions = {
@@ -185,12 +193,50 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 boostId: testBoostId,
                 boostType: 'SIMPLE',
                 boostCategory: 'TIME_LIMITED',
-                boostUpdateTimeMillis: updateProcessedTime.valueOf(),
+                boostUpdateTimeMillis: moment().valueOf(),
                 transferResults: expectedAllocationResult[testBoostId],
-                triggeringEventContext: testEvent.eventContext
+                triggeringEventContext: 'SAVING_EVENT_COMPLETED'
             }
         };
         publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
+
+        const mockBoost = {
+            boostId: testBoostId,
+            boostAmount: testAmount,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromFloatId: testFloatId,
+            fromBonusPoolId: testBonusPoolId,
+            messageInstructions: [],
+            flags: []    
+        };
+
+        const mockAccountMap = {
+            [testBoostId]: {
+                [testAccountId]: { userId: testUserId, status: 'OFFERED' },
+            }
+        }
+
+        const mockEvent = { 
+            redemptionBoosts: [mockBoost], 
+            affectedAccountsDict: mockAccountMap, 
+            event: { accountId: testAccountId, eventType: 'SAVING_EVENT_COMPLETED' }
+        };
+
+        const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
+
+        expect(resultOfRedemption).to.exist;
+        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+    });
+
+    it('Handles revocation', async () => {
+
+    });
+
+    // extreme corner case but possibly user does something that earns a boost, then flips to other
+    it('Handles both', async () => {
 
     });
 

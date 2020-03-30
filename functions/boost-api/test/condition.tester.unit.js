@@ -6,7 +6,7 @@ chai.use(require('sinon-chai'));
 
 const tester = require('../condition-tester');
 
-describe.only('*** TESTING CONDITIONS ****', () => {
+describe('*** TESTING CONDITIONS ****', () => {
 
     it('Checks event trigger properly', () => {
         const condition = 'event_occurs #{USER_CREATED_ACCOUNT}';

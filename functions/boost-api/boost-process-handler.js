@@ -1,10 +1,11 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:handler');
-const config = require('config');
+// const config = require('config');
 
 const status = require('statuses');
 
+const boostRedemptionHandler = require('./boost-redemption-handler');
 const persistence = require('./persistence/rds.boost');
 
 const util = require('./boost.util');
@@ -37,8 +38,33 @@ const shouldCreateBoostForAccount = (event, boost) => {
     return statusesToCheck.some((statusCondition) => conditionTester.testCondition(event, statusConditions[statusCondition][0]));
 };
 
+const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
+    const selectPromises = boosts.map((boost) => {
+        const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
+        const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
+        const findAccountsParams = { boostIds: [boost.boostId], status: util.ACTIVE_BOOST_STATUS };
+        if (restrictToInitiator) {
+            findAccountsParams.accountIds = [initiatingAccountId];
+        }
+        logger('Assembled params: ', findAccountsParams);
+        try {
+            return persistence.findAccountsForBoost(findAccountsParams);
+        } catch (err) {
+            logger('FATAL_ERROR:', err);
+            return { };
+        }
+    });
+
+    const affectedAccountArray = await Promise.all(selectPromises);
+    logger('Affected accounts: ', affectedAccountArray);
+    return affectedAccountArray.map((result) => result[0]).
+        reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
+};
+
+// //////////////////////////// PRIMARY METHODS ///////////////////////////////////////////
+
 const createBoostsTriggeredByEvent = async (event) => {
-    const accountId = event.accountId;
+    const { accountId } = event;
 
     // select all boosts that are active, but not present in the user-boost table for this user/account
     const boostFetchResult = await persistence.fetchUncreatedActiveBoostsForAccount(accountId);
@@ -84,20 +110,27 @@ const processEventForCreatedBoosts = async (event) => {
     const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange);
     logger('Retrieved affected accounts and user IDs: ', affectedAccountsDict);
 
-    // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
-    const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
-    
-    // then we also check for withdrawal boosts
-    const boostsToRevoke = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REVOKED') >= 0);
-
-    const resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(boostsToRedeem, boostsToRevoke, affectedAccountsDict);
-
     // then we update the statuses of the boosts to redeemed
     const transactionId = event.eventContext ? event.eventContext.transactionId : null;
     const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, transactionId);
     logger('Sending these update instructions to persistence: ', updateInstructions);
+
     const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('Result of update operation: ', resultOfUpdates);
+
+    // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
+    const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
+    // then we also check for withdrawal boosts
+    const boostsToRevoke = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REVOKED') >= 0);
+
+    let resultOfTransfers = [];
+    if (boostsToRedeem.length > 0 || boostsToRevoke.length > 0) {
+        const redemptionCall = { redemptionBoosts: boostsToRedeem, revocationBoosts: boostsToRevoke, affectedAccountsDict: affectedAccountsDict, event };
+        resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
+        // could do this inside boost redemption handler, but then have to give it persistence connection, and not worth solving that now
+        const boostsToUpdateRedemption = [...util.extractBoostIds(boostsToRedeem), ...util.extractBoostIds(boostsToRevoke)];
+        persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);
+    }
 
     return {
         result: 'SUCCESS',
@@ -129,9 +162,9 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
     });
 };
 
-const handleExpiredBoost = (boostId) => {
-    const 
-};
+// const handleExpiredBoost = (boostId) => {
+//     const 
+// };
 
 /**
  * Generic handler for any boost relevant response (add cash, solve game, etc)
@@ -222,8 +255,8 @@ module.exports.processUserBoostResponse = async (event) => {
         let resultOfTransfer = {};
         if (isBoostRedemption) {
             // do this first, as if it fails, we do not want to proceed
-            const transferInstruction = generateFloatTransferInstructions(accountDict, boost);
-            resultOfTransfer = await triggerFloatTransfers([transferInstruction]);
+            const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: accountDict, event: { accountId, eventType }};
+            resultOfTransfer = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
             logger('Boost process-redemption, result of transfer: ', resultOfTransfer);
         }
 
@@ -239,18 +272,7 @@ module.exports.processUserBoostResponse = async (event) => {
    
         if (statusResult.includes('REDEEMED')) {
             resultBody.amountAllocated = { amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency };
-            const updateRedeemedAmountPromise = persistence.updateBoostAmountRedeemed([boostId]);
-            const boostUpdateTime = resultOfUpdates[0].updatedTime;
-            const eventForPublishing = { eventContext: params, accountId };
-            logger('Sending in event for publishing: ', eventForPublishing);
-            const publishEventPromise = createPublishEventPromises({ 
-                boost,
-                boostUpdateTime,
-                affectedAccountsUserDict: { [accountId]: { userId: systemWideUserId }},
-                transferResults: resultOfTransfer[boostId],
-                event: eventForPublishing
-            });
-            await Promise.all([updateRedeemedAmountPromise, publishEventPromise]);
+            await persistence.updateBoostAmountRedeemed([boostId]);
         }
 
         return {
