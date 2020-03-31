@@ -404,7 +404,8 @@ const handleAccountOpenedEvent = async (eventBody) => {
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
 
-    const boostProcessInvocation = assembleBoostProcessInvocation(eventBody);
+    const boostEvent = { ...eventBody, context: { accountId: accountInfo[0].accountId }};
+    const boostProcessInvocation = assembleBoostProcessInvocation(boostEvent);
     finalProcesses.push(lambda.invoke(boostProcessInvocation).promise());
 
     await Promise.all(finalProcesses);

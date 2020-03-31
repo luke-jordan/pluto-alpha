@@ -173,10 +173,15 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             humanRef: 'MKZ0010'
         });
 
+        // todo: bit of a code smell here but not significant enough to divert for the moment
+        const boostPayload = { eventType: 'USER_CREATED_ACCOUNT', accountId: 'some-id', eventContext: { accountId: 'some-id' }};
+        const boostInvocation = helper.wrapLambdaInvoc('boost_event_process', true, boostPayload);
+
         sendSmsStub.resolves({ result: 'SUCCESS' });
         getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id' }]);
         redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => ({ StatusCode: 202 })});
         updateTagsStub.resolves({ updatedTime: testUpdateTime });
 
         const snsEvent = wrapEventSns({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT' });
@@ -187,7 +192,11 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
         expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
+        
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWith(boostInvocation);
+
         expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::MKZ0010');
         notificationContacts.forEach((contact) => {
             expect(sendSmsStub).to.have.been.calledWith({ phoneNumber: contact, message: 'New Jupiter account opened. Human reference: MKZ0010' });

@@ -30,13 +30,13 @@ const calculateCompoundInterestUsingDayInterval = (amount, interestRateAsBigNumb
 };
 
 const calculateNumberOfDaysPassedSinceDateAndToday = (givenDate) => {
-    const givenDateFormatted = moment(givenDate, 'YYYY-MM-DD');
+    const givenDateFormatted = moment(givenDate).startOf('day');
     const dateOfToday = moment().startOf('day');
     logger(`Calculate number of days since start of date: ${givenDate} and start of today: ${dateOfToday}`);
 
     const numberOfDaysPassedSinceDate = moment.duration(dateOfToday.diff(givenDateFormatted)).asDays();
     logger(`Number of days since date: ${givenDate} and today: ${dateOfToday}. Result: ${numberOfDaysPassedSinceDate}`);
-    return numberOfDaysPassedSinceDate;
+    return Math.round(numberOfDaysPassedSinceDate);
 };
 
 module.exports.calculateEstimatedInterestEarned = (transactionInformation, calculationUnit = 'HUNDREDTH_CENT', interestRate) => {
