@@ -80,6 +80,30 @@ const createBoostsTriggeredByEvent = async (event) => {
     return persistence.insertBoostAccount(boostsToCreate, accountId, 'CREATED');
 };
 
+const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
+    logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
+    return alteredBoosts.map((boost) => {
+        const boostId = boost.boostId;
+        const boostStatusSorted = boostStatusChangeDict[boostId].sort(util.statusSorter);
+        const highestStatus = boostStatusSorted[0];
+        const isChangeRedemption = highestStatus === 'REDEEMED';
+        const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
+        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount };
+        if (transactionId) {
+            logContext.transactionId = transactionId;
+        }
+
+        return {
+            boostId,
+            accountIds: Object.keys(affectedAccountsUsersDict[boostId]),
+            newStatus: highestStatus,
+            stillActive: !(isChangeRedemption && appliesToAll),
+            logType: 'STATUS_CHANGE',
+            logContext
+        };
+    });
+};
+
 const processEventForCreatedBoosts = async (event) => {
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
     logger('Found these open boosts: ', offeredOrPendingBoosts);
@@ -115,9 +139,6 @@ const processEventForCreatedBoosts = async (event) => {
     const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, transactionId);
     logger('Sending these update instructions to persistence: ', updateInstructions);
 
-    const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
-    logger('Result of update operation: ', resultOfUpdates);
-
     // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
     const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
     // then we also check for withdrawal boosts
@@ -127,9 +148,16 @@ const processEventForCreatedBoosts = async (event) => {
     if (boostsToRedeem.length > 0 || boostsToRevoke.length > 0) {
         const redemptionCall = { redemptionBoosts: boostsToRedeem, revocationBoosts: boostsToRevoke, affectedAccountsDict: affectedAccountsDict, event };
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
+    }
+
+    // a little ugly with the repeat if statements, but we want to make sure if the redemption call fails, the user is not updated to redeemed spuriously 
+    const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
+    logger('Result of update operation: ', resultOfUpdates);
+
+    if (resultOfTransfers.length > 0) {
         // could do this inside boost redemption handler, but then have to give it persistence connection, and not worth solving that now
         const boostsToUpdateRedemption = [...util.extractBoostIds(boostsToRedeem), ...util.extractBoostIds(boostsToRevoke)];
-        persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);
+        persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);        
     }
 
     return {
@@ -137,29 +165,6 @@ const processEventForCreatedBoosts = async (event) => {
         resultOfTransfers,
         resultOfUpdates
     };
-};
-
-const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
-    logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
-    return alteredBoosts.map((boost) => {
-        const boostId = boost.boostId;
-        const highestStatus = boostStatusChangeDict[boostId][0]; // but needs a sort
-        const isChangeRedemption = highestStatus === 'REDEEMED';
-        const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
-        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount };
-        if (transactionId) {
-            logContext.transactionId = transactionId;
-        }
-
-        return {
-            boostId,
-            accountIds: Object.keys(affectedAccountsUsersDict[boostId]),
-            newStatus: highestStatus,
-            stillActive: !(isChangeRedemption && appliesToAll),
-            logType: 'STATUS_CHANGE',
-            logContext
-        };
-    });
 };
 
 // const handleExpiredBoost = (boostId) => {
@@ -180,7 +185,7 @@ module.exports.processEvent = async (event) => {
     if (event.eventType === 'BOOST_EXPIRED') {
         const { context } = event;
         if (!context || !context.boostId) {
-            logger('FATAL_ERROR: Boost expired event without boost ID')
+            logger('FATAL_ERROR: Boost expired event without boost ID');
             return { statusCode: 200 }; // let it pass
         }
     }
@@ -191,6 +196,7 @@ module.exports.processEvent = async (event) => {
     }
 
     if (!event.accountId) {
+        // eslint-disable-next-line require-atomic-updates
         event.accountId = await persistence.getAccountIdForUser(event.userId);
     }
 

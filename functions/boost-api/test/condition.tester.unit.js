@@ -22,7 +22,7 @@ describe('*** TESTING CONDITIONS ****', () => {
         const mockUserResponseList = [
             { accountId: 'account-id-1', logContext: { numberTaps: 20, timeTakenMillis: 10000 } },
             { accountId: 'account-id-2', logContext: { numberTaps: 10, timeTakenMillis: 10000 } },
-            { accountId: 'account-id-3', logContext: { numberTaps: 40, timeTakenMillis: 10000 } },
+            { accountId: 'account-id-3', logContext: { numberTaps: 40, timeTakenMillis: 10000 } }
         ];
 
         const eventContext = { accountTapList: mockUserResponseList };

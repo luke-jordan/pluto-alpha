@@ -24,7 +24,7 @@ const handler = proxyquire('../boost-process-handler', {
         'fetchBoost': fetchBoostStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
         'updateBoostAmountRedeemed': updateBoostRedeemedStub,
-        'getAccountIdForUser': getAccountIdForUserStub,
+        'getAccountIdForUser': getAccountIdForUserStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub

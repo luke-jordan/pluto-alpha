@@ -207,4 +207,4 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     logger('Result of final calls: ', resultOfFinalCalls);
 
     return resultOfTransfers;
-}
+};

@@ -25,11 +25,6 @@ module.exports.listUserBoosts = async (event) => {
         if (!authParams || !authParams.systemWideUserId) {
             return util.wrapHttpResponse({ message: 'User ID not found in context' }, status('Forbidden'));
         }
-
-        const params = util.extractQueryParams(event);
-        if (params.dryRun && params.dryRun === true) {
-            return util.wrapHttpResponse(util.dryRunResponse);
-        }
     
         const systemWideUserId = authParams.systemWideUserId;
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
@@ -64,11 +59,9 @@ module.exports.listChangedBoosts = async (event) => {
         const listActiveBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, excludedForActive);
 
         const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));
-        console.log('Expired cut off: ', expiredCutOff);
-
+        
         const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
         const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, expiredCutOff, excludedForExpired);
-        console.log('And expired: ', expiredCutOff);
         
         return util.wrapHttpResponse([...listActiveBoosts, ...listExpiredBoosts]);
     } catch (err) {

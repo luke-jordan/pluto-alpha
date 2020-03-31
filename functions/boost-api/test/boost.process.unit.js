@@ -47,9 +47,6 @@ const handler = proxyquire('../boost-process-handler', {
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
     },
-    './condition-tester': {
-        '@noCallThru': false,
-    },
     'publish-common': {
         'publishUserEvent': publishStub
     },
@@ -156,7 +153,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
         updateBoostAccountStub.withArgs(testUpdateInstruction).resolves([{ boostId: testBoostId, updatedTime: updateProcessedTime }]);
         
         // then we hand over to the boost redemption handler, which does a lot of stuff
-        redemptionHandlerStub.resolves({ [testBoostId]:  { result: 'SUCCESS' }});
+        redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
 
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
@@ -289,7 +286,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const testEvent = {
             userId: testUserId,
             eventType: 'USER_CREATED_ACCOUNT',
-            timeInMillis: timeSaveCompleted.valueOf(),
+            timeInMillis: timeSaveCompleted.valueOf()
         };
         
         // first, see if this account has offered or pending boosts against it
@@ -323,7 +320,15 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
         
         expect(findBoostStub).to.have.been.calledOnceWithExactly(expectedKey);
-        expect(updateBoostAccountStub).to.have.been.calledOnce;
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([{
+            boostId: testBoostId,
+            accountIds: [testAccountId],
+            newStatus: 'UNLOCKED',
+            stillActive: true,
+            logType: 'STATUS_CHANGE',
+            logContext: { boostAmount: boostCreatedByEvent.boostAmount, newStatus: 'UNLOCKED' }
+        }]);
+
     });
 
     it('Fails where event currency and status condition currency do not match', async () => {

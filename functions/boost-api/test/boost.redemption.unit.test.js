@@ -27,7 +27,7 @@ const handler = proxyquire('../boost-redemption-handler', {
     },
     'publish-common': {
         'publishUserEvent': publishStub
-    },
+    }
 });
 
 const testBoostId = uuid();
@@ -79,7 +79,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.onFirstCall().returns({  promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
         
         // then we get the message instructions for each of the users, example within instruction:
         // message: `Congratulations! By signing up using your friend's referral code, you have earned a R10 boost to your savings`,
@@ -131,9 +131,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const mockAccountMap = {
             [testBoostId]: {
                 [testReferredAccountId]: { userId: testReferredUserId, status: 'PENDING' },
-                [testReferringAccountId]: { userId: testReferringUserId, status: 'PENDING' },
+                [testReferringAccountId]: { userId: testReferringUserId, status: 'PENDING' }
             }
-        }
+        };
 
         const mockEvent = { 
             redemptionBoosts: [mockBoost], 
@@ -213,9 +213,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' },
+                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
             }
-        }
+        };
 
         const mockEvent = { 
             redemptionBoosts: [mockBoost], 

@@ -1,8 +1,6 @@
 'use strict';
 
 const config = require('config');
-const moment = require('moment');
-const uuid = require('uuid/v4');
 // const logger = require('debug')('jupiter:message:util');
 
 const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
@@ -13,16 +11,23 @@ const corsHeaders = {
 
 module.exports.ACTIVE_BOOST_STATUS = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING'];
 
+// note: keep an eye on sort order of final statusses, but at present this seems right
+module.exports.ALL_BOOST_STATUS_SORTED = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED'];
+
 module.exports.EVENT_TYPE_CONDITION_MAP = {
     'SAVING_PAYMENT_SUCCESSFUL': ['save_event_greater_than', 'save_completed_by', 'first_save_by'],
     'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
     'USER_GAME_COMPLETION': ['number_taps_greater_than'],
-    'BOOST_EXPIRED': ['number_taps_in_first_N'],
+    'BOOST_EXPIRED': ['number_taps_in_first_N']
 };
 
 module.exports.extractUserDetails = (event) => (event.requestContext ? event.requestContext.authorizer : null);
+
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
+
 module.exports.extractBoostIds = (boosts) => boosts.map((boost) => boost.boostId);
+
+module.exports.statusSorter = (status1, status2) => exports.ALL_BOOST_STATUS_SORTED.indexOf(status2) - exports.ALL_BOOST_STATUS_SORTED.indexOf(status1);
 
 module.exports.extractQueryParams = (event) => {
     // logger('Event query string params: ', event.queryStringParameters);
@@ -57,24 +62,3 @@ module.exports.errorResponse = (err) => ({
     body: JSON.stringify(err.message)
 });
 
-const MockBoostResponse = {
-    boostId: uuid(),
-    creatingUserId: '',
-    label: 'DRY RUN BOOST',
-    active: true,
-    boostType: 'SIMPLE',
-    boostCategory: 'TIME_LIMITED',
-    boostAmount: 100000,
-    boostUnit: 'HUNDREDTH_CENT',
-    boostCurrency: 'USD',
-    boostRedeemed: 600000,
-    fromFloatId: 'primary_cash',
-    forClientId: 'some_client_co',
-    startTime: moment().format(),
-    endTime: moment().add(1, 'week').format(),
-    statusConditions: { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] },
-    initialStatus: 'PENDING'
-};
-
-
-module.exports.dryRunResponse = [MockBoostResponse, MockBoostResponse, MockBoostResponse];
