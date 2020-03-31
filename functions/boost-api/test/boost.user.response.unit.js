@@ -14,6 +14,7 @@ const fetchBoostStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const updateBoostRedeemedStub = sinon.stub();
 const getAccountIdForUserStub = sinon.stub();
+const insertBoostLogStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 
@@ -24,7 +25,8 @@ const handler = proxyquire('../boost-process-handler', {
         'fetchBoost': fetchBoostStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
         'updateBoostAmountRedeemed': updateBoostRedeemedStub,
-        'getAccountIdForUser': getAccountIdForUserStub
+        'getAccountIdForUser': getAccountIdForUserStub,
+        'insertBoostAccountLogs': insertBoostLogStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
@@ -38,7 +40,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
     const testUserId = uuid();
     const testAccountId = uuid();
 
-    beforeEach(() => testHelper.resetStubs(fetchBoostStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub));
+    beforeEach(() => testHelper.resetStubs(fetchBoostStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub));
 
     it('Redeems when game is won', async () => {
         const testEvent = {
@@ -65,7 +67,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
-        getAccountIdForUserStub.resolves([testAccountId]);
+        getAccountIdForUserStub.resolves(testAccountId);
         redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
         
         const mockUpdateProcessedTime = moment();
@@ -79,13 +81,18 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
         const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
         // logger('Result of user boost response processing:', result);
-        expect(result).to.exist;
-        expect(result.statusCode).to.deep.equal(200);
-        expect(result.body).to.deep.equal(JSON.stringify(expectedResult));
+        const resultBody = testHelper.standardOkayChecks(result);
+        expect(resultBody).to.deep.equal(expectedResult);
 
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
         
-        const expectedLogContext = { submittedParams: testEvent, processType: 'USER', newStatus: 'REDEEMED', boostAmount: 50000 };
+        const expectedLogContext = { 
+            submittedParams: testEvent, 
+            processType: 'USER', 
+            newStatus: 'REDEEMED', 
+            boostAmount: 50000 
+        };
+        
         const expectedUpdateInstruction = {
             boostId: testBoostId,
             accountIds: [testAccountId],
@@ -95,8 +102,76 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             logContext: expectedLogContext
         };
 
+        const expectedGameLog = { boostId: testBoostId, accountId: testAccountId, logType: 'GAME_RESPONSE', logContext: { numberTaps: 20, timeTakenInMillis: 9000 }};
+
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
+    });
+
+    it('Records response properly if it is a tournament for later, and involves status change', async () => {
+        const testEvent = {
+            eventType: 'USER_GAME_COMPLETION',
+            boostId: testBoostId,
+            numberTaps: 20,
+            timeTakenMillis: 9000
+        };
+    
+        const boostAsRelevant = {
+            boostId: testBoostId,
+            boostType: 'GAME',
+            boostCategory: 'TAP_SCREEN',
+            boostCurrency: 'USD',
+            boostUnit: 'HUNDREDTH_CENT',
+            boostAmount: 50000,
+            fromFloatId: 'test-float',
+            fromBonusPoolId: 'test-bonus-pool',
+            statusConditions: {
+                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+                PENDING: ['number_taps_greater_than #{0::10000}'],
+                REDEEMED: ['number_taps_in_first_N #{2::10000}']
+            }
+        };
+
+        fetchBoostStub.resolves(boostAsRelevant);
+        getAccountIdForUserStub.resolves(testAccountId);
+
+        updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: moment().valueOf() }]);
+
+        const expectedLogContext = { 
+            boostAmount: 50000,
+            processType: 'USER', 
+            newStatus: 'PENDING', 
+            submittedParams: testEvent
+        };
+
+        const expectedUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: [testAccountId],
+            newStatus: 'PENDING',
+            stillActive: true,
+            logType: 'STATUS_CHANGE',
+            logContext: expectedLogContext
+        };
+
+        const expectedResult = { 
+            result: 'TRIGGERED', 
+            statusMet: ['PENDING']
+        };
+
+        const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
+        const resultBody = testHelper.standardOkayChecks(result);
+        expect(resultBody).to.deep.equal(expectedResult);
+
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        const expectedGameLog = { boostId: testBoostId, accountId: testAccountId, logType: 'GAME_RESPONSE', logContext: { numberTaps: 20, timeTakenInMillis: 9000 }};
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
+
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedUpdateInstruction]);
+        expect(redemptionHandlerStub).to.not.have.been.called;
+        expect(updateBoostRedeemedStub).to.not.have.been.called;
+        
     });
 
     it('Fails when not enough taps', async () => {
@@ -120,12 +195,6 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(result.statusCode).to.deep.equal(200);
         expect(result.body).to.deep.equal(JSON.stringify({ result: 'NO_CHANGE' }));
 
-    });
-
-    it('Handles test run', async () => {
-        const result = await handler.processUserBoostResponse();
-        expect(result).to.exist;
-        expect(result).to.deep.equal({ statusCode: 400 });
     });
 
     it('Fails on missing authorization', async () => {

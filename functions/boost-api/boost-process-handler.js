@@ -9,8 +9,11 @@ const boostRedemptionHandler = require('./boost-redemption-handler');
 const persistence = require('./persistence/rds.boost');
 
 const util = require('./boost.util');
-
 const conditionTester = require('./condition-tester');
+
+const publisher = require('publish-common');
+
+const GAME_RESPONSE = 'GAME_RESPONSE';
 
 const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
@@ -167,9 +170,110 @@ const processEventForCreatedBoosts = async (event) => {
     };
 };
 
-// const handleExpiredBoost = (boostId) => {
-//     const 
-// };
+const checkIfAccountWinsTournament = (accountId, redemptionConditions, boostLogs) => {
+    const eventContext = { accountTapList: boostLogs };
+    const event = { eventType: 'BOOST_EXPIRED', accountId, eventContext };
+    return conditionTester.testConditionsForStatus(event, redemptionConditions);
+};
+
+const sortAndRankBestScores = (boostGameLogs, accountIds) => {
+    // first, create a map that has the unique highest score
+    const highScoreMap = new Map();
+    boostGameLogs.forEach((log) => {
+        const { accountId, logContext } = log;
+        const { numberTaps } = logContext; // todo : remove ones over time
+        if (!highScoreMap.has(accountId) || highScoreMap.get(accountId) < numberTaps) {
+            highScoreMap.set(accountId, numberTaps);
+        }
+    });
+
+    logger('High score map: ', highScoreMap);
+    // eslint-disable-next-line id-length
+    const sortedEntries = [...highScoreMap.values()].sort((a, b) => b - a);
+    logger('Entry scores, sorted: ', sortedEntries);
+
+    const getAccountIdRanking = (accountId) => ({ 
+        numberTaps: highScoreMap.get(accountId), 
+        ranking: sortedEntries.indexOf(highScoreMap.get(accountId)) + 1 
+    });
+
+    return accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: getAccountIdRanking(accountId) }), {});
+};
+
+const generateRedemptionAccountMap = async (boostId, winningAccounts) => {
+    const findAccountParams = { boostIds: [boostId], accountIds: winningAccounts, status: util.ACTIVE_BOOST_STATUS };
+    const accountInfo = await persistence.findAccountsForBoost(findAccountParams);
+
+    return { [boostId]: accountInfo[0].accountUserMap };
+};
+
+const expireAccountsForBoost = async (boostId, specifiedAccountIds) => {
+    const accountIds = specifiedAccountIds || null; // null makes it all of them
+    const accountsToExpire = await persistence.findAccountsForBoost({ boostIds: [boostId], status: util.ACTIVE_BOOST_STATUS, accountIds });
+    const accountMap = accountsToExpire[0].accountUserMap;
+    
+    const updateInstruction = { boostId, newStatus: 'EXPIRED', accountIds: Object.keys(accountMap) };
+    const resultOfExpiration = await persistence.updateBoostAccountStatus([updateInstruction]);
+    logger('Result of expiring boosts: ', resultOfExpiration);
+
+    const userIds = [...new Set(Object.values(accountMap).map((entry) => entry.userId))];
+    publisher.publishMultiUserEvent(userIds, 'BOOST_EXPIRED', { context: { boostId }});
+};
+
+const handleExpiredBoost = async (boostId) => {
+    const [boost, boostGameLogs] = await Promise.all([persistence.fetchBoost(boostId), persistence.findLogsForBoost(boostId, GAME_RESPONSE)]);
+    logger('Processing boost for expiry: ', boost);
+
+    if (boost.boostType !== 'GAME' || !boostGameLogs) {
+        // just expire the boosts and be done
+        await expireAccountsForBoost(boostId);
+        return { resultCode: 200, body: 'Not a game, or no responses' };
+    }
+
+    const { statusConditions } = boost;
+    if (!statusConditions || !statusConditions.REDEEMED) {
+        await expireAccountsForBoost(boostId);
+        return { resultCode: 200, body: 'No redemption condition' };
+    }
+    
+    const accountIds = [...new Set(boostGameLogs.map((log) => log.accountId))];
+    logger('Account IDs with responses: ', accountIds);
+
+    // not the most efficient thing in the world, but it will not happen often, and we can optimize later
+    const winningAccounts = accountIds.filter((accountId) => checkIfAccountWinsTournament(accountId, statusConditions.REDEEMED, boostGameLogs));
+    if (winningAccounts.length > 0) {
+        const redemptionAccountDict = await generateRedemptionAccountMap(boostId, winningAccounts);
+        logger('Redemption account dict: ', redemptionAccountDict);
+        const redemptionEvent = { eventType: 'BOOST_TOURNAMENT_WON', boostId };
+        const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: redemptionAccountDict, event: redemptionEvent };
+        const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
+        logger('Result of redemptions for winners: ', resultOfRedemptions);
+        const redemptionUpdate = { boostId, accountIds: winningAccounts, logType: 'STATUS_CHANGE', newStatus: 'REDEEMED' };
+        const resultOfRedeemUpdate = await persistence.updateBoostAccountStatus([redemptionUpdate]);
+        logger('And result of redemption account update: ', resultOfRedeemUpdate);
+        const winningUserIds = Object.values(redemptionAccountDict[boostId]).map((entry) => entry.userId);
+        await publisher.publishMultiUserEvent(winningUserIds, 'BOOST_TOURNAMENT_WON', { context: { boostId }});
+    }
+
+    const remainingAccounts = accountIds.filter((accountId) => !winningAccounts.includes(accountId));
+    logger('Will expire these remaining accounts: ', remainingAccounts);
+    const resultOfUpdate = await expireAccountsForBoost(boostId, remainingAccounts);
+    logger('Result of expiry update: ', resultOfUpdate);
+
+    // as above, inefficient, but to neaten up later
+    const sortedAndRankedAccounts = sortAndRankBestScores(boostGameLogs, accountIds);
+    logger('Sorted and ranked accounts: ', sortedAndRankedAccounts); 
+    const resultLogs = accountIds.map((accountId) => ({
+        boostId,
+        accountId,
+        logType: 'GAME_OUTCOME',
+        logContext: sortedAndRankedAccounts[accountId]
+    }));
+    const resultOfLogInsertion = await persistence.insertBoostAccountLogs(resultLogs);
+    logger('Finally, result of log insertion: ', resultOfLogInsertion);
+
+    return { statusCode: 200, boostsRedeemed: winningAccounts.length };
+};
 
 /**
  * Generic handler for any boost relevant response (add cash, solve game, etc)
@@ -182,12 +286,8 @@ const processEventForCreatedBoosts = async (event) => {
 module.exports.processEvent = async (event) => {
     logger('Processing boost event: ', event);
 
-    if (event.eventType === 'BOOST_EXPIRED') {
-        const { context } = event;
-        if (!context || !context.boostId) {
-            logger('FATAL_ERROR: Boost expired event without boost ID');
-            return { statusCode: 200 }; // let it pass
-        }
+    if (event.eventType === 'BOOST_EXPIRED' && event.boostId) {
+        return handleExpiredBoost(event.boostId);        
     }
 
     // second, we check if there is a pending boost for this account, or user, if we only have that
@@ -218,12 +318,7 @@ module.exports.processEvent = async (event) => {
  * @property {number} timeTaken The amount of time taken to complete the game (in seconds)  
  */
 module.exports.processUserBoostResponse = async (event) => {
-    try {
-        if (!event) {
-            logger('Test run on lambda, exiting');
-            return { statusCode: 400 };
-        }
-        
+    try {        
         const userDetails = util.extractUserDetails(event);
         if (!userDetails) {
             return { statusCode: status('Forbidden') };
@@ -233,7 +328,7 @@ module.exports.processUserBoostResponse = async (event) => {
         logger('Event params: ', params);
 
         const { systemWideUserId } = userDetails;
-        const { boostId } = params;
+        const { boostId, eventType } = params;
 
         // todo : make sure boost is available for this account ID
         const [boost, accountId] = await Promise.all([
@@ -243,10 +338,15 @@ module.exports.processUserBoostResponse = async (event) => {
 
         logger('Fetched boost: ', boost);
 
-        const { eventType } = params;
         const statusEvent = { eventType, eventContext: params };
-
         const statusResult = conditionTester.extractStatusChangesMet(statusEvent, boost);
+
+        if (boost.boostType === 'GAME' && eventType === 'USER_GAME_COMPLETION') {
+            const gameLogContext = { numberTaps: params.numberTaps, timeTakenInMillis: params.timeTakenMillis };
+            const boostLog = { boostId: boost.boostId, accountId, logType: 'GAME_RESPONSE', logContext: gameLogContext };
+            await persistence.insertBoostAccountLogs([boostLog]);            
+        }
+        
         if (statusResult.length === 0) {
             return { statusCode: 200, body: JSON.stringify({ result: 'NO_CHANGE' })};
         }
@@ -256,10 +356,8 @@ module.exports.processUserBoostResponse = async (event) => {
 
         const resultBody = { result: 'TRIGGERED', statusMet: statusResult };
 
-        const isBoostRedemption = statusResult.includes('REDEEMED');
-
         let resultOfTransfer = {};
-        if (isBoostRedemption) {
+        if (statusResult.includes('REDEEMED')) {
             // do this first, as if it fails, we do not want to proceed
             const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: accountDict, event: { accountId, eventType }};
             resultOfTransfer = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
@@ -272,7 +370,9 @@ module.exports.processUserBoostResponse = async (event) => {
 
         const updateInstructions = generateUpdateInstructions([boost], boostStatusDict, accountDict);
         logger('Sending this update instruction to persistence: ', updateInstructions);
-        updateInstructions[0].logContext = { ...updateInstructions[0].logContext, processType: 'USER', submittedParams: params };
+        
+        const adjustedLogContext = { ...updateInstructions[0].logContext, processType: 'USER', submittedParams: params };
+        updateInstructions[0].logContext = adjustedLogContext;
         const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
         logger('Result of update operation: ', resultOfUpdates);
    

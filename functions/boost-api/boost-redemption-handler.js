@@ -27,7 +27,7 @@ const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = 
         currency: boost.boostCurrency,
         unit: boost.boostUnit,
         identifier: boost.boostId,
-        relatedEntityType: 'BOOST_REDEMPTION',
+        relatedEntityType: transactionType,
         allocType: transactionType, // for float allocation
         allocState: 'SETTLED',
         transactionType, // for matching account records
@@ -131,8 +131,8 @@ const generateMessageSendInvocation = (messageInstructions) => ({
     Payload: stringify({ instructions: messageInstructions })
 });
 
-const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event }) => {
-    const eventType = `BOOST_REDEEMED`;
+const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation }) => {
+    const eventType = isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED';
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
         const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
@@ -141,7 +141,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
             boostType: boost.boostType,
             boostCategory: boost.boostCategory,
             boostUpdateTimeMillis: boostUpdateTime.valueOf(),
-            boostAmount: `${boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
+            boostAmount: `${isRevocation ? -boost.boostAmount : boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
             transferResults,
             triggeringEventContext: event.eventContext
         };
@@ -190,16 +190,17 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
         finalPromises.push(messagePromise);
     }
     
-    boostsToRedeem.forEach((boost) => {
-        const boostId = boost.boostId;
-        finalPromises = finalPromises.concat(createPublishEventPromises({ 
-            boost,
-            boostUpdateTime: moment().valueOf(), // could pass it along etc., but not worth the precision at this point
-            affectedAccountsUserDict: affectedAccountsDict[boostId],
-            transferResults: resultOfTransfers[boostId],
-            event
-        }));
+    const mapBoostToEventPublish = (boost, isRevocation) => createPublishEventPromises({ 
+        boost,
+        boostUpdateTime: moment().valueOf(), // could pass it along etc., but not worth the precision at this point
+        affectedAccountsUserDict: affectedAccountsDict[boost.boostId],
+        transferResults: resultOfTransfers[boost.boostId],
+        event,
+        isRevocation
     });
+
+    finalPromises = finalPromises.concat(boostsToRedeem.map((boost) => mapBoostToEventPublish(boost, false)));
+    finalPromises = finalPromises.concat(boostsToRevoke.map((boost) => mapBoostToEventPublish(boost, true)));
 
     logger('Final promises: ', finalPromises);
     // then: fire all of them off, and we are done

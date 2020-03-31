@@ -52,10 +52,10 @@ const evaluateGameTournament = (event, parameterValue) => {
     const { accountTapList } = event.eventContext;
     const withinTimeList = accountTapList.filter((response) => gameResponseFilter(response.logContext, maxTimeMillis));
     const sortedList = withinTimeList.sort((response1, response2) => response2.logContext.numberTaps - response1.logContext.numberTaps);
-    logger('Evaluating game tournament results, sorted list: ', sortedList);
+    // logger('Evaluating game tournament results, sorted list: ', sortedList);
 
     const topList = sortedList.slice(0, selectTop).map((response) => response.accountId);
-    logger('And top accounts: ', topList, ' checked against: ', event.accountId);
+    logger('Tournament top accounts: ', topList, ' checked against: ', event.accountId);
     return topList.includes(event.accountId);
 };
 

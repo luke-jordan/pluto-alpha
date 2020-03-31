@@ -121,7 +121,7 @@ module.exports.fetchUncreatedActiveBoostsForAccount = async (accountId) => {
  * their userID and current status for the boost. If passed a status, it returns all account IDs and user IDs in that status for the boost. Returns 
  * these in a dict, with the boost ID specified (for processing thereafter) and an account - user - status map, keyed by account ID
  * @param {array} boostId A list of boost IDs for the query. Can be just a single element
- * @param {array} accountId A list of account IDs to filter by
+ * @param {array} accountIds A list of account IDs to filter by
  * @param {array} status A list of statuses that the account IDs must be in 
  */
 module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) => {
@@ -169,6 +169,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     });
     logger('Assembled: ', resultObject);
     return resultObject;
+};
+
+module.exports.findLogsForBoost = async (boostId, logType) => {
+    // for the moment, nothing fancy
+    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and log_type = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, logType]);
+    return resultOfQuery.map((row) => camelizeKeys(row));
 };
 
 // todo : validation / catching of status downgrade in here
@@ -252,6 +259,18 @@ module.exports.updateBoostAccountStatus = async (instructions) => {
     const resultOfAll = await Promise.all(updatePromises);
     logger('And all together: ', resultOfAll);
     return resultOfAll;
+};
+
+module.exports.insertBoostAccountLogs = async (boostLogs) => {
+    const queryDef = constructLogDefinition(['boostId', 'accountId', 'logType', 'logContext'], boostLogs);
+    logger('Inserting boost log using: ', queryDef);
+    const resultOfQuery = await rdsConnection.insertRecords(queryDef.query, queryDef.columnTemplate, queryDef.rows);
+    logger('And with this result: ', resultOfQuery);
+    if (!resultOfQuery || !resultOfQuery.rows) {
+        return [];
+    }
+
+    return resultOfQuery.rows.map((row) => ({ logId: row['log_id'], creationTime: moment(row['creation_time']) }));
 };
 
 module.exports.updateBoostAmountRedeemed = async (boostIds) => {
