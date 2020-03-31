@@ -131,7 +131,6 @@ module.exports.expireHangingTransactions = async () => {
 
 module.exports.expireBoosts = async () => {
     const boostMasterTable = config.get('tables.boostMasterTable');
-    const boostJoinTable = config.get('tables.boostJoinTable');
     
     const updateBoostQuery = `update ${boostMasterTable} set active = $1 where active = true and ` + 
         `end_time < current_timestamp returning boost_id`;
@@ -142,15 +141,8 @@ module.exports.expireBoosts = async () => {
         return [];
     }
 
-    // note : could do boost_id in above query, but would rather go for a bit of redundancy and slight inneficiency in the
-    // query and ensure a bit of robustness, especially in night time batch job. can evaluate again in future
-    const updateAccountBoosts = `update ${boostJoinTable} set boost_status = $1 where boost_status not in ($2, $3, $4) and ` +
-        `boost_id in (select boost_id from ${boostMasterTable} where active = $5) returning boost_id, account_id`;
-    const resultOfUpdate = await rdsConnection.updateRecord(updateAccountBoosts, ['EXPIRED', 'REDEEMED', 'REVOKED', 'EXPIRED', false]);
-    logger('Result of updating boost account status: ', resultOfUpdate);
-
-    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
-        ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
+    return typeof updateBoostResult === 'object' && Array.isArray(updateBoostResult.rows) 
+        ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
 };
 
 module.exports.fetchUserIdsForAccounts = async (accountIds) => {
