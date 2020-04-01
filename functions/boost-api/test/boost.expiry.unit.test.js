@@ -82,12 +82,21 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         findBoostLogsStub.resolves(mockUserResponseList);
 
         const formAccountResponse = (accountUserMap) => [{ boostId: testBoostId, accountUserMap }];
+        
+        // todo : clean up, bit of a mess (should only need one call then pass the map around)
         findAccountsStub.onFirstCall().resolves(formAccountResponse({
             'account-id-3': { userId: 'some-user-id', status: 'PENDING' },
             'account-id-1': { userId: 'some-user-id2', status: 'PENDING' }
         }));
         findAccountsStub.onSecondCall().resolves(formAccountResponse({
-            'account-id-2': { userId: 'some-user-id3', status: 'PENDING' }
+            'account-id-2': { userId: 'some-user-id3', status: 'PENDING' },
+            'account-id-3': { userId: 'some-user-id', status: 'PENDING' },
+            'account-id-1': { userId: 'some-user-id2', status: 'PENDING' },
+            'account-id-4': { userId: 'some-user-id4', status: 'PENDING' }
+        }));
+        findAccountsStub.onThirdCall().resolves(formAccountResponse({
+            'account-id-2': { userId: 'some-user-id3', status: 'PENDING' },
+            'account-id-4': { userId: 'some-user-id4', status: 'PENDING' }
         }));
 
         const resultOfExpiry = await handler.processEvent(testEvent);
@@ -97,9 +106,10 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(findBoostLogsStub).to.have.been.calledOnceWithExactly(testBoostId, 'GAME_RESPONSE');
         
         const expectedFindAccountParams = (accountIds) => ({ boostIds: [testBoostId], accountIds, status: ACTIVE_BOOST_STATUS });
-        expect(findAccountsStub).to.have.been.calledTwice;
+        expect(findAccountsStub).to.have.been.calledThrice;
         expect(findAccountsStub).to.have.been.calledWith(expectedFindAccountParams(['account-id-1', 'account-id-3']));
-        expect(findAccountsStub).to.have.been.calledWith(expectedFindAccountParams(['account-id-2']));
+        expect(findAccountsStub).to.have.been.calledWith({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS });
+        expect(findAccountsStub).to.have.been.calledWith(expectedFindAccountParams(['account-id-2', 'account-id-4']));
 
         const expectedRedemptionMap = {
             [testBoostId]: {
@@ -121,7 +131,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
         const expectedExpiredUpdate = {
             boostId: testBoostId,
-            accountIds: ['account-id-2'],
+            accountIds: ['account-id-2', 'account-id-4'],
             newStatus: 'EXPIRED',
             logType: 'STATUS_CHANGE'
         };
@@ -143,7 +153,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(publishMultiUserStub).to.have.been.calledTwice;
         const publishOptions = { context: { boostId: testBoostId }};
         expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_TOURNAMENT_WON', publishOptions);
-        expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id3'], 'BOOST_EXPIRED', publishOptions);
+        expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id3', 'some-user-id4'], 'BOOST_EXPIRED', publishOptions);
     });
 
     it('Expires all accounts for non-game boost', async () => {

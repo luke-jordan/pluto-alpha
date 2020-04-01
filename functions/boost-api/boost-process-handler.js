@@ -172,7 +172,9 @@ const processEventForCreatedBoosts = async (event) => {
 
 const checkIfAccountWinsTournament = (accountId, redemptionConditions, boostLogs) => {
     const eventContext = { accountTapList: boostLogs };
+    logger('Created event context: ', eventContext);
     const event = { eventType: 'BOOST_EXPIRED', accountId, eventContext };
+    logger('Checking for tournament win, sending in event: ', event);
     return conditionTester.testConditionsForStatus(event, redemptionConditions);
 };
 
@@ -236,11 +238,13 @@ const handleExpiredBoost = async (boostId) => {
         return { resultCode: 200, body: 'No redemption condition' };
     }
     
-    const accountIds = [...new Set(boostGameLogs.map((log) => log.accountId))];
-    logger('Account IDs with responses: ', accountIds);
+    const accountIdsThatResponded = [...new Set(boostGameLogs.map((log) => log.accountId))];
+    
+    logger('Account IDs with responses: ', accountIdsThatResponded);
 
     // not the most efficient thing in the world, but it will not happen often, and we can optimize later
-    const winningAccounts = accountIds.filter((accountId) => checkIfAccountWinsTournament(accountId, statusConditions.REDEEMED, boostGameLogs));
+    const winningAccounts = accountIdsThatResponded.filter((accountId) => checkIfAccountWinsTournament(accountId, statusConditions.REDEEMED, boostGameLogs));
+    
     if (winningAccounts.length > 0) {
         const redemptionAccountDict = await generateRedemptionAccountMap(boostId, winningAccounts);
         logger('Redemption account dict: ', redemptionAccountDict);
@@ -255,15 +259,18 @@ const handleExpiredBoost = async (boostId) => {
         await publisher.publishMultiUserEvent(winningUserIds, 'BOOST_TOURNAMENT_WON', { context: { boostId }});
     }
 
-    const remainingAccounts = accountIds.filter((accountId) => !winningAccounts.includes(accountId));
+    const allAccountMap = await persistence.findAccountsForBoost({ boostIds: [boostId], status: util.ACTIVE_BOOST_STATUS });
+    const allAccountIds = Object.keys(allAccountMap[0].accountUserMap);
+    
+    const remainingAccounts = allAccountIds.filter((accountId) => !winningAccounts.includes(accountId));
     logger('Will expire these remaining accounts: ', remainingAccounts);
     const resultOfUpdate = await expireAccountsForBoost(boostId, remainingAccounts);
     logger('Result of expiry update: ', resultOfUpdate);
 
     // as above, inefficient, but to neaten up later
-    const sortedAndRankedAccounts = sortAndRankBestScores(boostGameLogs, accountIds);
+    const sortedAndRankedAccounts = sortAndRankBestScores(boostGameLogs, accountIdsThatResponded);
     logger('Sorted and ranked accounts: ', sortedAndRankedAccounts); 
-    const resultLogs = accountIds.map((accountId) => ({
+    const resultLogs = accountIdsThatResponded.map((accountId) => ({
         boostId,
         accountId,
         logType: 'GAME_OUTCOME',
