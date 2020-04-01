@@ -41,7 +41,7 @@ const transformBoostFromRds = (boost) => {
 
 module.exports.fetchBoost = async (boostId) => {
     const rawResult = await rdsConnection.selectQuery(`select * from ${boostTable} where boost_id = $1`, [boostId]);
-    return rawResult.length === 0 ? null : camelizeKeys(rawResult[0]);
+    return rawResult.length === 0 ? null : transformBoostFromRds(rawResult[0]);
 };
 
 /**
@@ -57,6 +57,7 @@ module.exports.findBoost = async (attributes) => {
         accountPortion.values.push(accountId);
         accountPortion.indices.push(index + 1);
     });
+
     const numberAccount = accountPortion.indices.length;
     const statusPortion = { values: [], indices: [] };
     attributes.boostStatus.forEach((status, index) => {

@@ -109,6 +109,10 @@ const assembleMessageForInstruction = (boost, boostInstruction, affectedAccountU
 
 const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
     const boostMessageInstructions = boost.messageInstructions;
+    if (!boostMessageInstructions) {
+        return [];
+    }
+    
     logger('Boost msg instructions: ', boostMessageInstructions);
     logger('Affected account dict: ', affectedAccountUserDict);
     const assembledMessages = [];
