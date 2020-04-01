@@ -133,13 +133,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     let runningIndex = boostIds.length + 1;
     let runningValues = [].concat(boostIds);
     
-    if (accountIds) {
+    if (accountIds && accountIds.length > 0) {
         querySuffix = `${querySuffix} and ${accountsTable}.account_id in (${extractArrayIndices(accountIds, runningIndex)})`;
         runningValues = runningValues.concat(accountIds);
         runningIndex += accountIds.length;
     }
 
-    if (status) {
+    if (status && status.length > 0) {
         querySuffix = `${querySuffix} and boost_status in (${extractArrayIndices(status, runningIndex)})`;
         runningValues = runningValues.concat(status);
         runningIndex += status.length;

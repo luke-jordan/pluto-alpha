@@ -255,6 +255,32 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         expect(findUserAccountMap).to.deep.equal(expectedResult);
     });
 
+    it('Finds all for a boost if empty account IDs list', async () => {
+        const testAccountId2 = uuid();
+        const testUserIds = [uuid(), uuid()];
+        const [testUserId1, testUserId2] = testUserIds;
+        const expectedResult = [{
+            boostId: testBoostId,
+            accountUserMap: {
+                [testAccountId]: { userId: testUserId1, status: 'PENDING' },
+                [testAccountId2]: { userId: testUserId2, status: 'PENDING' }
+            }
+        }];
+
+        const retrieveAccountsQuery = `select boost_id, ${accountTable}.account_id, owner_user_id, boost_status from ` +
+            `${boostUserTable} inner join ${accountTable} on ${boostUserTable}.account_id = ${accountTable}.account_id ` +
+            `where boost_id in ($1) and boost_status in ($2) order by boost_id, account_id`;
+
+        const testInput = { boostIds: [testBoostId], accountIds: [], status: ['PENDING'] };
+
+        const mockPersistenceReturn = [testAccountId, testAccountId2].map((accountId, index) => accountUserIdRow(accountId, testUserIds[index], 'PENDING'));
+        queryStub.withArgs(retrieveAccountsQuery, [testBoostId, 'PENDING']).resolves(mockPersistenceReturn);
+
+        const findUserAccountMap = await rds.findAccountsForBoost(testInput);
+        expect(findUserAccountMap).to.exist;
+        expect(findUserAccountMap).to.deep.equal(expectedResult);
+    });
+
 
     it('Throws error if the account ID to which to limit does not exist', async () => {
         const expectedError = 'Account id not found';
