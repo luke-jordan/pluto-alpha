@@ -122,7 +122,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const expectedExpiredUpdate = {
             boostId: testBoostId,
             accountIds: ['account-id-2'],
-            newStatus: 'EXPIRED'
+            newStatus: 'EXPIRED',
+            logType: 'STATUS_CHANGE'
         };
 
         const expectedLogObject = (accountId, ranking, numberTaps) => ({ 
@@ -177,7 +178,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const expectedFindParams = { boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: null };
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(expectedFindParams);
 
-        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED' };
+        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED', logType: 'STATUS_CHANGE' };
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedExpireInstruct]);
 
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
@@ -218,7 +219,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const expectedFindParams = { boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: null };
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(expectedFindParams);
 
-        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED' };
+        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED', logType: 'STATUS_CHANGE' };
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedExpireInstruct]);
 
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
@@ -263,7 +264,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const expectedFindParams = { boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: null };
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(expectedFindParams);
 
-        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED' };
+        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED', logType: 'STATUS_CHANGE' };
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedExpireInstruct]);
 
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});

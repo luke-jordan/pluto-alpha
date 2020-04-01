@@ -87,7 +87,7 @@ class RdsConnection {
                     reject(err);
                 }
 
-                logger('Fetched secret data: ', fetchedSecretData);
+                logger('Fetched secret data, is not null? ', fetchedSecretData !== null);
                 if (!fetchedSecretData || !fetchedSecretData.SecretString) {
                     reject(new Error('CONNECTION_ERROR: Secret Data empty, retry'));
                 }

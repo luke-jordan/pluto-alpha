@@ -212,7 +212,7 @@ const expireAccountsForBoost = async (boostId, specifiedAccountIds) => {
     const accountsToExpire = await persistence.findAccountsForBoost({ boostIds: [boostId], status: util.ACTIVE_BOOST_STATUS, accountIds });
     const accountMap = accountsToExpire[0].accountUserMap;
     
-    const updateInstruction = { boostId, newStatus: 'EXPIRED', accountIds: Object.keys(accountMap) };
+    const updateInstruction = { boostId, newStatus: 'EXPIRED', accountIds: Object.keys(accountMap), logType: 'STATUS_CHANGE' };
     const resultOfExpiration = await persistence.updateBoostAccountStatus([updateInstruction]);
     logger('Result of expiring boosts: ', resultOfExpiration);
 
