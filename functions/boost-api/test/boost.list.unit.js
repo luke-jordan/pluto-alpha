@@ -101,21 +101,6 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
 
     });
 
-    it('Handles dry run', async () => {
-        fetchBoostStub.withArgs(testAccountId).resolves([expectedBoostResult, expectedBoostResult]);
-        findAccountsStub.resolves([testAccountId]);
-
-        const resultOfListing = await handler.listUserBoosts(wrapEvent({dryRun: true}, testUserId, 'ORDINARY_USER'));
-        logger('Boost listing resulted in:', resultOfListing);
-
-        expect(resultOfListing).to.exist;
-        expect(resultOfListing).to.have.property('statusCode', 200);
-        expect(resultOfListing.body).to.exist;
-        expect(resultOfListing.headers).to.deep.equal(helper.expectedHeaders);
-        expect(fetchBoostStub).to.have.not.been.called;
-        expect(findAccountsStub).to.have.not.been.called;
-    });
-
     it('Fails on missing user id in context', async () => {
         const resultOfListing = await handler.listUserBoosts(wrapEvent({}, null, 'ORDINARY_USER'));
         logger('Boost listing resulted in:', resultOfListing);

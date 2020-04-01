@@ -1,14 +1,19 @@
 'use strict';
 
+const logger = require('debug')('jupiter:interest:test');
+const moment = require('moment');
+
 const chai = require('chai');
 const sinon = require('sinon');
 const uuid = require('uuid');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
-const moment = require('moment');
+
 const DecimalLight = require('decimal.js-light');
 const fetchFloatVarsForBalanceCalcStub = sinon.stub();
+
 const DAYS_IN_A_YEAR = 365;
+
 const handler = require('../interest-helper');
 
 describe('*** Unit Test Admin User Handler ***', () => {
@@ -20,7 +25,8 @@ describe('*** Unit Test Admin User Handler ***', () => {
     it('Interest handler calculates interest successfully', async () => {
         const testCalculationUnit = 'HUNDREDTH_CENT';
         const testCurrency = 'ZAR';
-        const testSettlementTime = moment(new Date()).add(-5, 'days').startOf('day');
+
+        const testSettlementTime = moment().subtract(5, 'days');
 
         const testTransactionInformation = {
             clientId: testClientId,
@@ -33,10 +39,14 @@ describe('*** Unit Test Admin User Handler ***', () => {
 
         const testNumberOfDaysPassedSinceDate = 5;
         const testInterestRate = 0.01875;
-        const testAmountAsBigNumber = new DecimalLight(testTransactionInformation.amount);
-        const testBaseCompoundRate = new DecimalLight(1).plus(testInterestRate);
-        const testBaseCompoundRateAfterGivenDays = testBaseCompoundRate.pow(new DecimalLight(testNumberOfDaysPassedSinceDate).dividedBy(DAYS_IN_A_YEAR));
-        const testCompoundInterest = new DecimalLight(testAmountAsBigNumber.times(testBaseCompoundRateAfterGivenDays).minus(testAmountAsBigNumber).valueOf()).toNumber();
+
+        const testAmountAsD = new DecimalLight(testTransactionInformation.amount);
+        const testCompoundRate = new DecimalLight(1 + testInterestRate).
+            pow(new DecimalLight(testNumberOfDaysPassedSinceDate).dividedBy(DAYS_IN_A_YEAR));
+        
+        logger('Compounded rate: ', testCompoundRate.valueOf());
+        const testCompoundInterest = testAmountAsD.times(testCompoundRate).minus(testAmountAsD).toNumber();
+        logger('Should be: ', testCompoundInterest);
 
         const expectedResult = {
             amount: testCompoundInterest,

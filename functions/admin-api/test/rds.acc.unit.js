@@ -186,43 +186,22 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Expires boosts', async () => {
-        const testBoostId = uuid();
-        const testAccountId = uuid();
-
-        const boostMasterTable = config.get('tables.boostMasterTable');
-        const boostJoinTable = config.get('tables.boostJoinTable');
-
         const firstUpdateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
-        const secondUpdateQuery = `update ${boostJoinTable} set boost_status = $1 where boost_status not in ($2, $3, $4) and ` +
-            `boost_id in (select boost_id from ${boostMasterTable} where active = $5) returning boost_id, account_id`;
-        const updateValues = ['EXPIRED', 'REDEEMED', 'REVOKED', 'EXPIRED', false];
 
         updateRecordStub.onFirstCall().resolves({
             'rows': [
-                { 'boost_id': testBoostId },
-                { 'boost_id': testBoostId },
-                { 'boost_id': testBoostId }
+                { 'boost_id': 'boost-1' },
+                { 'boost_id': 'boost-2' },
+                { 'boost_id': 'boost-3' }
             ],
             rowCount: 3
         });
 
-        updateRecordStub.resolves({ 'rows': [
-            { 'boost_id': testBoostId, 'account_id': testAccountId },
-            { 'boost_id': testBoostId, 'account_id': testAccountId },
-            { 'boost_id': testBoostId, 'account_id': testAccountId }
-        ]});
-
-        const expectedRow = { boostId: testBoostId, accountId: testAccountId };
-
         const resultOfUpdate = await persistence.expireBoosts();
-        logger('Result of boost cull:', resultOfUpdate);
-        logger('Args:', updateRecordStub.getCall(1).args);
-       
+        
         expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal([expectedRow, expectedRow, expectedRow]);
-        expect(updateRecordStub).to.have.been.calledTwice;
-        expect(updateRecordStub).to.to.have.been.calledWith(firstUpdateQuery, [false]);
-        expect(updateRecordStub).to.to.have.been.calledWith(secondUpdateQuery, updateValues);
+        expect(resultOfUpdate).to.deep.equal(['boost-1', 'boost-2', 'boost-3']);
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(firstUpdateQuery, [false]);
     });
 
     it('Boost culling exits where no boost found for update', async () => {

@@ -103,13 +103,25 @@ module.exports.findBoost = async (attributes) => {
     return boostsRetrieved.map(transformBoostFromRds);
 };
 
+module.exports.fetchUncreatedActiveBoostsForAccount = async (accountId) => {
+    const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_time ` +
+        `and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
+
+    const queryValues = [accountId];
+
+    const boostsRetrieved = await rdsConnection.selectQuery(findBoostQuery, queryValues);
+    logger('Retrived boosts:', boostsRetrieved);
+
+    return boostsRetrieved.map(transformBoostFromRds);
+};
+
 /** 
  * Method that finds the account IDs and user IDs in a given state for a list of boosts. Requires at least one boost ID is provided, as well as at 
  * least one of a status or a list of accountIDs. If passed a list of account IDs, it returns all those accounts relevant to the boost, along with 
  * their userID and current status for the boost. If passed a status, it returns all account IDs and user IDs in that status for the boost. Returns 
  * these in a dict, with the boost ID specified (for processing thereafter) and an account - user - status map, keyed by account ID
  * @param {array} boostId A list of boost IDs for the query. Can be just a single element
- * @param {array} accountId A list of account IDs to filter by
+ * @param {array} accountIds A list of account IDs to filter by
  * @param {array} status A list of statuses that the account IDs must be in 
  */
 module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) => {
@@ -157,6 +169,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     });
     logger('Assembled: ', resultObject);
     return resultObject;
+};
+
+module.exports.findLogsForBoost = async (boostId, logType) => {
+    // for the moment, nothing fancy
+    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and log_type = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, logType]);
+    return resultOfQuery.map((row) => camelizeKeys(row));
 };
 
 // todo : validation / catching of status downgrade in here
@@ -240,6 +259,18 @@ module.exports.updateBoostAccountStatus = async (instructions) => {
     const resultOfAll = await Promise.all(updatePromises);
     logger('And all together: ', resultOfAll);
     return resultOfAll;
+};
+
+module.exports.insertBoostAccountLogs = async (boostLogs) => {
+    const queryDef = constructLogDefinition(['boostId', 'accountId', 'logType', 'logContext'], boostLogs);
+    logger('Inserting boost log using: ', queryDef);
+    const resultOfQuery = await rdsConnection.insertRecords(queryDef.query, queryDef.columnTemplate, queryDef.rows);
+    logger('And with this result: ', resultOfQuery);
+    if (!resultOfQuery || !resultOfQuery.rows) {
+        return [];
+    }
+
+    return resultOfQuery.rows.map((row) => ({ logId: row['log_id'], creationTime: moment(row['creation_time']) }));
 };
 
 module.exports.updateBoostAmountRedeemed = async (boostIds) => {
@@ -376,6 +407,29 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
+module.exports.insertBoostAccount = async (boostIds, accountId, boostStatus) => {
+    const boostAccountJoins = boostIds.map((boostId) => ({ boostId, accountId, boostStatus }));
+    const boostJoinQueryDef = {
+        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
+        columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
+        rows: boostAccountJoins
+    };
+
+    const resultOfInsertion = await rdsConnection.largeMultiTableInsert([boostJoinQueryDef]);
+    logger('Result of insertion:', resultOfInsertion);
+
+    const persistedTime = moment(resultOfInsertion[0][0]['creation_time']);
+
+    const resultObject = {
+        persistedTimeMillis: persistedTime.valueOf(),
+        accountId,
+        boostIds
+    };
+
+    logger('Returning:', resultObject);
+    return resultObject;
+};
+
 /**
  * Used to persist the message instructions, and to then set the boost to offered for those accounts
  */
@@ -406,6 +460,14 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
     }
 
     return { updatedTime };
+};
+
+
+module.exports.getAccountIdForUser = async (systemWideUserId) => {
+    const tableName = config.get('tables.accountLedger');
+    const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
+    const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
 };
 
 // ///////////////////////////////////////////////////////////////
