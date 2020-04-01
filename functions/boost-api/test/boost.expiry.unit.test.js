@@ -224,4 +224,49 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
     });
 
+    it('Also if no one played', async () => {
+        const testEvent = {
+            eventType: 'BOOST_EXPIRED',
+            boostId: testBoostId
+        };
+
+        const mockBoost = {
+            boostId: testBoostId,
+            boostType: 'GAME',
+            boostCategory: 'TAP_THE_SCREEN',
+            boostCurrency: 'USD',
+            boostUnit: 'HUNDREDTH_CENT',
+            boostAmount: 50000,
+            statusConditions: {
+                'OFFERED': ['something'],
+                'REDEEMED': ['number_taps_in_first_N #{2::10000}']   
+            }
+        };
+
+        fetchBoostStub.resolves(mockBoost);
+        findBoostLogsStub.resolves([]);
+
+        findAccountsStub.resolves([{
+            boostId: testBoostId,
+            accountUserMap: {
+                'account-id-1': { userId: 'some-user-id', status: 'OFFERED' },
+                'account-id-2': { userId: 'some-user-id2', status: 'OFFERED' }
+            }
+        }]);
+
+
+        const resultOfExpiry = await handler.processEvent(testEvent);
+        expect(resultOfExpiry).to.exist;
+        
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        const expectedFindParams = { boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: null };
+        expect(findAccountsStub).to.have.been.calledOnceWithExactly(expectedFindParams);
+
+        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED' };
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedExpireInstruct]);
+
+        expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
+    });
+
 });

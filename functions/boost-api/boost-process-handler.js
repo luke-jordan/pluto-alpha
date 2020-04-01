@@ -224,7 +224,7 @@ const handleExpiredBoost = async (boostId) => {
     const [boost, boostGameLogs] = await Promise.all([persistence.fetchBoost(boostId), persistence.findLogsForBoost(boostId, GAME_RESPONSE)]);
     logger('Processing boost for expiry: ', boost);
 
-    if (boost.boostType !== 'GAME' || !boostGameLogs) {
+    if (boost.boostType !== 'GAME' || !boostGameLogs || boostGameLogs.length === 0) {
         // just expire the boosts and be done
         await expireAccountsForBoost(boostId);
         return { resultCode: 200, body: 'Not a game, or no responses' };
