@@ -112,7 +112,7 @@ const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
     if (!boostMessageInstructions) {
         return [];
     }
-    
+
     logger('Boost msg instructions: ', boostMessageInstructions);
     logger('Affected account dict: ', affectedAccountUserDict);
     const assembledMessages = [];
@@ -137,8 +137,8 @@ const generateMessageSendInvocation = (messageInstructions) => ({
 
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation }) => {
     const eventType = isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED';
+    logger('Affected accounts user dict: ', affectedAccountsUserDict);
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
-        const initiator = affectedAccountsUserDict[event.accountId]['userId'];
         const context = {
             accountId,
             boostId: boost.boostId,
@@ -149,7 +149,11 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
             transferResults,
             triggeringEventContext: event.eventContext
         };
-        return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, { initiator, context });
+        const options = { context };
+        if (event.accountId && affectedAccountsUserDict[event.accountId]) {
+            options.initiator = affectedAccountsUserDict[event.accountId]['userId'];
+        }
+        return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, options);
     });
 
     logger('Publish result: ', publishPromises);
