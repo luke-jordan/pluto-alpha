@@ -140,7 +140,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             boostId: testBoostId,
             accountId,
             logType: 'GAME_OUTCOME',
-            logContext: { ranking, numberTaps }
+            logContext: { ranking, numberTaps, topScore: 40 }
         });
         const expectedLogs = [expectedLogObject('account-id-1', 2, 20), expectedLogObject('account-id-2', 3, 10), expectedLogObject('account-id-3', 1, 40)];
 

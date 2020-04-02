@@ -196,7 +196,8 @@ const sortAndRankBestScores = (boostGameLogs, accountIds) => {
 
     const getAccountIdRanking = (accountId) => ({ 
         numberTaps: highScoreMap.get(accountId), 
-        ranking: sortedEntries.indexOf(highScoreMap.get(accountId)) + 1 
+        ranking: sortedEntries.indexOf(highScoreMap.get(accountId)) + 1,
+        topScore: sortedEntries[0]
     });
 
     return accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: getAccountIdRanking(accountId) }), {});
