@@ -27,7 +27,7 @@ class MockRdsConnection {
     }
 }
 
-const rds = proxyquire('../persistence/rds.admin.boost', {
+const rds = proxyquire('../persistence/rds.boost.list', {
     'rds-common': MockRdsConnection,
     'uuid/v4': uuidStub,
     '@noCallThru': true
@@ -267,5 +267,15 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
 
         const result = await rds.findAccountsForUser(testUserId);
         logger('Got user accounts:', result);
+    });
+
+    it('Fetches logs appropriately', async () => {
+        queryStub.resolves([{ 'log_id': 'log1', 'log_type': 'GAME_OUTCOME', 'account_id': 'account-1', 'boost_id': 'boost-1' }]);
+
+        const result = await rds.fetchUserBoostLogs('account-1', ['boost-1'], 'GAME_OUTCOME');
+        expect(result).to.deep.equal([{ logId: 'log1', logType: 'GAME_OUTCOME', accountId: 'account-1', boostId: 'boost-1' }]);
+
+        const expectedQuery = `select * from boost_data.boost_log where account_id = $1 and log_type = $2 and boost_id in ($3)`;
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['account-1', 'GAME_OUTCOME', 'boost-1']);
     });
 });

@@ -76,6 +76,10 @@ const extractStatusConditions = (gameParams, initialStatus) => {
     if (isInitialStatusBefore(initialStatus, 'UNLOCKED')) {
         statusConditions['UNLOCKED'] = [gameParams.entryCondition];
     }
+    if (isInitialStatusBefore(initialStatus, 'PENDING') && gameParams.numberWinners) {
+        // this is a tournament, so add a pending condition, which is taps above 0
+        statusConditions['PENDING'] = [`number_taps_greater_than #{0::${gameParams.timeLimitSeconds * 1000}}`];
+    }
     if (isInitialStatusBefore(initialStatus, 'REDEEMED')) {
         statusConditions['REDEEMED'] = convertParamsToRedemptionCondition(gameParams);
     }
