@@ -353,7 +353,7 @@ module.exports.processUserBoostResponse = async (event) => {
         const statusResult = conditionTester.extractStatusChangesMet(statusEvent, boost);
 
         if (boost.boostType === 'GAME' && eventType === 'USER_GAME_COMPLETION') {
-            const gameLogContext = { numberTaps: params.numberTaps, timeTakenInMillis: params.timeTakenMillis };
+            const gameLogContext = { numberTaps: params.numberTaps, timeTakenMillis: params.timeTakenMillis };
             const boostLog = { boostId: boost.boostId, accountId, logType: 'GAME_RESPONSE', logContext: gameLogContext };
             await persistence.insertBoostAccountLogs([boostLog]);
         }

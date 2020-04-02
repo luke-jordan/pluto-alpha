@@ -63,7 +63,7 @@ const isInitialStatusBefore = (initialStatus, comparisonStatus) => {
         return true;
     }
 
-    const statusOrder = ['CREATED', 'OFFERED', 'UNLOCKED', 'REDEEMED'];
+    const statusOrder = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED'];
     return statusOrder.indexOf(initialStatus) < statusOrder.indexOf(comparisonStatus);
 };
 
