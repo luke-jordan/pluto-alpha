@@ -197,6 +197,52 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
     });
 
+    it('Records response properly if it is a tournament for later, but no status change', async () => {
+        const testEvent = {
+            eventType: 'USER_GAME_COMPLETION',
+            boostId: testBoostId,
+            numberTaps: 20,
+            timeTakenMillis: 9000
+        };
+    
+        const boostAsRelevant = {
+            boostId: testBoostId,
+            boostType: 'GAME',
+            boostCategory: 'TAP_SCREEN',
+            boostCurrency: 'USD',
+            boostUnit: 'HUNDREDTH_CENT',
+            boostAmount: 50000,
+            fromFloatId: 'test-float',
+            fromBonusPoolId: 'test-bonus-pool',
+            boostEndTime: moment().endOf('day'),
+            statusConditions: {
+                REDEEMED: ['number_taps_in_first_N #{2::10000}']
+            }
+        };
+
+        fetchBoostStub.resolves(boostAsRelevant);
+        getAccountIdForUserStub.resolves(testAccountId);
+
+        const expectedResult = { 
+            result: 'TOURNAMENT_ENTERED', 
+            endTime: moment().endOf('day').valueOf()
+        };
+
+        const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
+        const resultBody = testHelper.standardOkayChecks(result);
+        expect(resultBody).to.deep.equal(expectedResult);
+
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        const expectedGameLog = { boostId: testBoostId, accountId: testAccountId, logType: 'GAME_RESPONSE', logContext: { numberTaps: 20, timeTakenInMillis: 9000 }};
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
+
+        expect(updateBoostAccountStub).to.not.have.been.called;
+        expect(redemptionHandlerStub).to.not.have.been.called;
+        expect(updateBoostRedeemedStub).to.not.have.been.called;
+        
+    });
+
     it('Fails on missing authorization', async () => {
         const testEvent = { testParam: 'TEST_VAL' };
         const result = await handler.processUserBoostResponse(testEvent);

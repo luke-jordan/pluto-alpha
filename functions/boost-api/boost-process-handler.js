@@ -320,6 +320,9 @@ module.exports.processEvent = async (event) => {
     };
 };
 
+const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusConditions.REDEEMED && 
+    boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N'));
+
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
  * @property {number} numberTaps The number of taps (if a boost game)
@@ -352,11 +355,12 @@ module.exports.processUserBoostResponse = async (event) => {
         if (boost.boostType === 'GAME' && eventType === 'USER_GAME_COMPLETION') {
             const gameLogContext = { numberTaps: params.numberTaps, timeTakenInMillis: params.timeTakenMillis };
             const boostLog = { boostId: boost.boostId, accountId, logType: 'GAME_RESPONSE', logContext: gameLogContext };
-            await persistence.insertBoostAccountLogs([boostLog]);            
+            await persistence.insertBoostAccountLogs([boostLog]);
         }
         
         if (statusResult.length === 0) {
-            return { statusCode: 200, body: JSON.stringify({ result: 'NO_CHANGE' })};
+            const returnResult = isBoostTournament(boost) ? { result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() } : { result: 'NO_CHANGE' };
+            return { statusCode: 200, body: JSON.stringify(returnResult)};
         }
 
         const accountDict = { [boostId]: { [accountId]: systemWideUserId }};
