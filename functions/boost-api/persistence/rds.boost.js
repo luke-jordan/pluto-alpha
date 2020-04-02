@@ -105,7 +105,7 @@ module.exports.findBoost = async (attributes) => {
 };
 
 module.exports.fetchUncreatedActiveBoostsForAccount = async (accountId) => {
-    const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_time ` +
+    const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_timestamp ` +
         `and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
 
     const queryValues = [accountId];

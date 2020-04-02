@@ -187,7 +187,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     });
 
     it('Finds boost created by event', async () => {
-        const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_time ` +
+        const findBoostQuery = `select distinct(boost_id) from ${boostTable} where active = true and end_time > current_timestamp ` +
             `and boost_id not in (select boost_id from ${boostUserTable} where account_id = $1)`; 
 
         queryStub.withArgs(findBoostQuery, [testAccountId]).resolves([boostFromPersistence]);
