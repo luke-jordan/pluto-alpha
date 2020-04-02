@@ -174,3 +174,5 @@ resource "aws_lambda_permission" "allow_cloudwatch_daytime_to_call_ops_admin_sch
     principal = "events.amazonaws.com"
     source_arn = aws_cloudwatch_event_rule.ops_admin_daytime.arn
 }
+
+/////////////////// CLOUD WATCH FOR FREQUENT BOOST EXPIRY ///////////////////////

@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:boosts:list-test');
+const logger = require('debug')('jupiter:boosts:list:test');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
@@ -14,11 +14,13 @@ const helper = require('./boost.test.helper');
 
 const fetchBoostStub = sinon.stub();
 const findAccountsStub = sinon.stub();
+const fetchBoostLogsStub = sinon.stub();
 
 const handler = proxyquire('../boost-list-handler', {
-    './persistence/rds.admin.boost': {
+    './persistence/rds.boost.list': {
         'fetchUserBoosts': fetchBoostStub,
         'findAccountsForUser': findAccountsStub,
+        'fetchUserBoostLogs': fetchBoostLogsStub,
         '@noCallThru': true
     },
     '@noCallThru': true
@@ -27,10 +29,7 @@ const handler = proxyquire('../boost-list-handler', {
 const wrapEvent = (params, systemWideUserId, role) => ({
     queryStringParameters: params,
     requestContext: {
-        authorizer: {
-            systemWideUserId,
-            role
-        }
+        authorizer: { systemWideUserId, role }
     }
 });
 
@@ -63,7 +62,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
     };
 
     beforeEach(() => {
-        helper.resetStubs(fetchBoostStub, findAccountsStub);
+        helper.resetStubs(fetchBoostStub, findAccountsStub, fetchBoostLogsStub);
     });
 
     it('Lists all user boosts, active and inactive', async () => {
@@ -79,6 +78,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         expect(resultOfListing.body).to.deep.equal(JSON.stringify([expectedBoostResult, expectedBoostResult]));
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(fetchBoostLogsStub).to.not.have.been.called;
     });
 
     it('Checks for boosts with recently changed status', async () => {
@@ -89,31 +89,62 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         fetchBoostStub.onSecondCall().resolves([expiredBoostResult]);
 
         const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
+        const resultBody = helper.standardOkayChecks(resultOfChangeFetch);
+        logger('Result body: ', resultBody);
 
-        expect(resultOfChangeFetch).to.exist;
-        expect(resultOfChangeFetch).to.have.property('statusCode', 200);
-        expect(resultOfChangeFetch).to.have.property('body', JSON.stringify([expectedBoostResult, expiredBoostResult]));
+        expect(resultBody).to.deep.equal([expectedBoostResult, expiredBoostResult]);
         
         expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED', 'EXPIRED']);
         expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED']);
 
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
-
+        expect(fetchBoostLogsStub).to.not.have.been.called;
     });
 
-    it('Handles dry run', async () => {
-        fetchBoostStub.withArgs(testAccountId).resolves([expectedBoostResult, expectedBoostResult]);
+    it('Attach game outcome result to game logs, won tournament', async () => {
+        const gameBoost = { ...expectedBoostResult };
+        gameBoost.boostType = 'GAME';
+        gameBoost.boostStatus = 'REDEEMED';
+
         findAccountsStub.resolves([testAccountId]);
+        fetchBoostStub.onFirstCall().resolves([gameBoost]);
+        fetchBoostStub.onSecondCall().resolves([]);
 
-        const resultOfListing = await handler.listUserBoosts(wrapEvent({dryRun: true}, testUserId, 'ORDINARY_USER'));
-        logger('Boost listing resulted in:', resultOfListing);
+        const mockLockContext = { numberTaps: 10, ranking: 1 };
+        const mockGameLog = { accountId: testAccountId, boostId: testBoostId, logType: 'GAME_OUTCOME', logContext: mockLockContext };
+        fetchBoostLogsStub.resolves([mockGameLog]);
 
-        expect(resultOfListing).to.exist;
-        expect(resultOfListing).to.have.property('statusCode', 200);
-        expect(resultOfListing.body).to.exist;
-        expect(resultOfListing.headers).to.deep.equal(helper.expectedHeaders);
-        expect(fetchBoostStub).to.have.not.been.called;
-        expect(findAccountsStub).to.have.not.been.called;
+        const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
+        const bodyOfResult = helper.standardOkayChecks(resultOfChangeFetch);
+
+        const expectedBoost = { ...gameBoost, gameLogs: [mockGameLog] }; 
+        const fetchedBoost = bodyOfResult[0];
+        expect(fetchedBoost).to.deep.equal(expectedBoost);
+
+        expect(fetchBoostLogsStub).to.have.been.calledOnceWithExactly(testAccountId, [testBoostId], 'GAME_OUTCOME');
+    });
+
+    it('Attach game outcome result to game logs, lost tournament', async () => {
+        const gameBoost = { ...expectedBoostResult };
+        gameBoost.boostType = 'GAME';
+        gameBoost.boostStatus = 'EXPIRED';
+
+        findAccountsStub.resolves([testAccountId]);
+        fetchBoostStub.onFirstCall().resolves([]);
+        fetchBoostStub.onSecondCall().resolves([gameBoost]);
+
+        const mockLockContext = { numberTaps: 3, ranking: 4 };
+        const mockGameLog = { accountId: testAccountId, boostId: testBoostId, logType: 'GAME_OUTCOME', logContext: mockLockContext };
+        fetchBoostLogsStub.resolves([mockGameLog]);
+
+        const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
+        const bodyOfResult = helper.standardOkayChecks(resultOfChangeFetch);
+
+        const expectedBoost = { ...gameBoost, gameLogs: [mockGameLog] }; 
+        const fetchedBoost = bodyOfResult[0];
+        expect(fetchedBoost).to.deep.equal(expectedBoost);
+
+        expect(fetchBoostLogsStub).to.have.been.calledOnceWithExactly(testAccountId, [testBoostId], 'GAME_OUTCOME');
     });
 
     it('Fails on missing user id in context', async () => {

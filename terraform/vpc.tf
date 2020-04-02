@@ -7,12 +7,11 @@ resource "aws_vpc" "main" {
   enable_dns_support = true
   
   tags = {
-    Name = "staging_ops_main"
+    Name = "${terraform.workspace}_ops_main"
   }
 }
 
 # Add an endpoint for Security Manager
-
 resource "aws_vpc_endpoint" "security_manager" {
   vpc_id        = aws_vpc.main.id
   service_name  = "com.amazonaws.${var.aws_default_region[terraform.workspace]}.secretsmanager"

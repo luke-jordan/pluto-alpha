@@ -527,6 +527,52 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
     });
 
+    it('Happy path creates a game boost, and sets up conditions for tournament', async () => {
+        const tournParams = {
+            gameType: 'CHASE_ARROW',
+            timeLimitSeconds: 20,
+            numberWinners: 20,
+            entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
+        };
+
+        const tournamentBoost = { ...testBodyOfEvent, gameParams: tournParams };
+    
+        const mockResultFromRds = {
+            boostId: testBoostId,
+            persistedTimeMillis: testPersistedTime.valueOf(),
+            numberOfUsersEligible: 100
+        };
+
+        momentStub.onFirstCall().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
+        insertBoostStub.resolves(mockResultFromRds);
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+        alterBoostStub.resolves({ updatedTime: moment() });
+
+        const expectedResult = { ...mockResultFromRds, messageInstructions: mockMsgIdDict };
+        const expectedMsgInstruct = assembleMessageInstruction();
+
+        // now we do the call
+        const resultOfCreate = await handler.createBoost(tournamentBoost);
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal(expectedResult);
+
+        // then set up invocation checks
+        const expectedBoost = { ...mockBoostToFromPersistence, gameParams: tournParams };
+        expectedBoost.statusConditions = { 
+            OFFERED: ['message_instruction_created'],
+            UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
+            PENDING: ['number_taps_greater_than #{0::20000}'],
+            REDEEMED: ['number_taps_in_first_N #{20::20000}']
+        };
+        
+        expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
+
+        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
+        expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+    });
+
     it('Handles test call', async () => {
         const resultOfCreate = await handler.createBoost();
         expect(resultOfCreate).to.exist;

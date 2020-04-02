@@ -492,7 +492,8 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
             ],
             "Resource": [
                 "${aws_lambda_function.float_accrue.arn}",
-                "${aws_lambda_function.outbound_comms_send.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}",
+                "${aws_lambda_function.boost_event_process.arn}"
             ]
         },
         {

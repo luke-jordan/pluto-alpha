@@ -37,7 +37,8 @@
         "modifyReferralCode": "referral_modify",
         "verifyReferralCode": "referral_verify",
         "saveInitiate": "save_initiate",
-        "sendOutboundMessages": "outbound_comms_send"
+        "sendOutboundMessages": "outbound_comms_send",
+        "boostProcessEvent": "boost_event_process"
     },
     "email": {
         "systemStats": {

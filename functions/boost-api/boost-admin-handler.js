@@ -3,7 +3,7 @@
 const logger = require('debug')('jupiter:boosts:create');
 // const config = require('config');
 
-const persistence = require('./persistence/rds.admin.boost');
+const persistence = require('./persistence/rds.boost.list');
 const util = require('./boost.util');
 
 /**

@@ -79,7 +79,7 @@ class RdsConnection {
     }
 
     static async _attemptSecretRetrieval (secretId) {
-        logger('Attempting secret retrieval ....');
+        logger('Attempting secret retrieval ...., secret Id: ', secretId);
         return new Promise((resolve, reject) => {
             secretsClient.getSecretValue({ SecretId: secretId }, (err, fetchedSecretData) => {
                 logger('Error inside secrets promise? : ', err);
@@ -87,11 +87,12 @@ class RdsConnection {
                     reject(err);
                 }
 
+                logger('Fetched secret data, is not null? ', fetchedSecretData !== null);
                 if (!fetchedSecretData || !fetchedSecretData.SecretString) {
                     reject(new Error('CONNECTION_ERROR: Secret Data empty, retry'));
                 }
 
-                if (fetchedSecretData === null || typeof fetchedSecretData.SecretString !== 'string' || fetchedSecretData.SecretString.length > 0) {
+                if (fetchedSecretData === null || typeof fetchedSecretData.SecretString !== 'string' || fetchedSecretData.SecretString.length === 0) {
                     reject(new Error('Failed on null secret data'));
                 }
                 

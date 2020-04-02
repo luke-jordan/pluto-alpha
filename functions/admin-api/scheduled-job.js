@@ -4,10 +4,12 @@ const logger = require('debug')('jupiter:admin:scheduled');
 const config = require('config');
 const moment = require('moment');
 const DecimalLight = require('decimal.js-light');
+
 const rdsAccount = require('./persistence/rds.account');
 const rdsFloat = require('./persistence/rds.float');
 const dynamoFloat = require('./persistence/dynamo.float');
 const floatConsistency = require('./admin-float-consistency');
+
 const opsUtil = require('ops-util-common');
 const publisher = require('publish-common');
 const stringFormat = require('string-format');
@@ -32,23 +34,12 @@ const expireBoosts = async () => {
         return { result: 'NO_BOOSTS' };
     }
 
-    const accountIds = expiredBoosts.map((row) => row.accountId);
-    const userIdsExpired = await rdsAccount.fetchUserIdsForAccounts(accountIds);
-    
-    const boostExpireUserIds = { };
-    expiredBoosts.forEach((row) => {
-        if (!Object.keys(boostExpireUserIds).includes(row.boostId)) {
-            boostExpireUserIds[row.boostId] = [];
-        }
-        const userId = userIdsExpired[row.accountId];
-        boostExpireUserIds[row.boostId].push(userId);
-    });
-
-    const boostIds = Object.keys(boostExpireUserIds);
-    const logPublishPromises = boostIds.map((boostId) => (
-        publisher.publishMultiUserEvent(boostExpireUserIds[boostId], 'BOOST_EXPIRED', { context: { boostId }})
-    ));
-    await Promise.all(logPublishPromises);
+    const boostProcessInvocations = expiredBoosts.map((boostId) => ({
+        FunctionName: config.get('lambdas.boostProcessEvent'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify({ boostId, eventType: 'BOOST_EXPIRED' })
+    })).map((invocation) => lambda.invoke(invocation).promise());
+    await Promise.all(boostProcessInvocations);
     return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };
 };
 

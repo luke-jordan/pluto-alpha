@@ -17,7 +17,7 @@ const updateBoostStub = sinon.stub();
 const proxyquire = require('proxyquire').noCallThru();
 
 const handler = proxyquire('../boost-admin-handler', {
-    './persistence/rds.admin.boost': {
+    './persistence/rds.boost.list': {
         'listBoosts': listBoostsStub,
         'updateBoost': updateBoostStub
     },

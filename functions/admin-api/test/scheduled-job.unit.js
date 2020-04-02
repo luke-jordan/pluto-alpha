@@ -201,25 +201,19 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
     });
 
     it('should run regular job - expire boosts successfully when boosts exist', async () => {
-       const testEvent = {
-           specificOperations: ['EXPIRE_BOOSTS']
-       };
-       const testAccountId = uuid();
+       const testEvent = { specificOperations: ['EXPIRE_BOOSTS'] };
        const testBoostId = uuid();
-       const expectedBoosts = [{ boostId: testBoostId, accountId: testAccountId }];
-       const testUserIdAccounts = { accountId: testAccountId };
-
-       expireBoostsStub.withArgs().resolves(expectedBoosts);
-       fetchUserIdsForAccountsStub.withArgs().resolves(testUserIdAccounts);
-       publishMultiUserEventStub.withArgs().resolves({});
-
+       
+       expireBoostsStub.withArgs().resolves([testBoostId]);
+       lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+       
        const result = await handler.runRegularJobs(testEvent);
-       expect(result).to.exist;
-       expect(result).to.have.property('statusCode', 200);
-       expect(result.body).to.deep.equal([{ result: 'EXPIRED_BOOSTS', boostsExpired: expectedBoosts.length }]);
+       expect(result).to.deep.equal({ statusCode: 200, body: [{ result: 'EXPIRED_BOOSTS', boostsExpired: 1 }]});
+       
        expect(expireBoostsStub).to.have.been.calledOnce;
-       expect(fetchUserIdsForAccountsStub).to.have.been.calledOnceWithExactly([testAccountId]);
-       expect(publishMultiUserEventStub).to.have.been.calledOnce;
+       
+       const expectedInvocation = helper.wrapLambdaInvoc('boost_event_process', true, { boostId: testBoostId, eventType: 'BOOST_EXPIRED' });
+       expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
     it('should run regular job - check floats successfully', async () => {

@@ -7,7 +7,7 @@ const moment = require('moment');
 const status = require('statuses');
 const util = require('./boost.util');
 
-const persistence = require('./persistence/rds.admin.boost');
+const persistence = require('./persistence/rds.boost.list');
 
 const fetchUserDefaultAccount = async (systemWideUserId) => {
     logger('Fetching user accounts for user ID: ', systemWideUserId);
@@ -24,11 +24,6 @@ module.exports.listUserBoosts = async (event) => {
         const authParams = event.requestContext.authorizer;
         if (!authParams || !authParams.systemWideUserId) {
             return util.wrapHttpResponse({ message: 'User ID not found in context' }, status('Forbidden'));
-        }
-
-        const params = util.extractQueryParams(event);
-        if (params.dryRun && params.dryRun === true) {
-            return util.wrapHttpResponse(util.dryRunResponse);
         }
     
         const systemWideUserId = authParams.systemWideUserId;
@@ -48,6 +43,40 @@ module.exports.listUserBoosts = async (event) => {
     }
 };
 
+const addLogsToBoost = (boost, boostGameLogs) => {
+    boost.gameLogs = boostGameLogs.filter((log) => log.boostId === boost.boostId);
+    return boost;
+};
+
+const addLogsToGameBoosts = async (gameBoosts, allBoosts, accountId) => {
+    const boostIds = gameBoosts.map((boost) => boost.boostId);
+    const gameLogs = await persistence.fetchUserBoostLogs(accountId, boostIds, 'GAME_OUTCOME');
+    const assembledGameBoosts = gameBoosts.map((boost) => addLogsToBoost(boost, gameLogs));
+    const nonGameBoosts = allBoosts.filter((boost) => boost.boostStatus !== 'REDEEMED' || boost.boostType !== 'GAME');
+    return [...assembledGameBoosts, ...nonGameBoosts];
+};
+
+const obtainSortedAndLoggedActiveBoosts = async (accountId) => {
+    // todo : make this pattern more sensible, also do some sorting
+    const changeCutOff = moment().subtract(config.get('time.changeCutOff.number'), config.get('time.changeCutOff.unit'));
+    const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED'];
+    
+    const listActiveBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, excludedForActive);
+
+    // if a boost has been redeemed, and it is a game, we attach game outcome logs to tell the user how they did, else just return all
+    const redeemedGameBoosts = listActiveBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
+    return redeemedGameBoosts.length > 0 ? addLogsToGameBoosts(redeemedGameBoosts, listActiveBoosts, accountId) : listActiveBoosts;    
+};
+
+const obtainSortedAndLoggedExpiredBoosts = async (accountId) => {
+    const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));        
+    const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
+    const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, expiredCutOff, excludedForExpired);
+
+    const expiredGameBoosts = listExpiredBoosts.filter((boost) => boost.boostStatus === 'EXPIRED' && boost.boostType === 'GAME');
+    return expiredGameBoosts.length > 0 ? addLogsToGameBoosts(expiredGameBoosts, listExpiredBoosts, accountId) : listExpiredBoosts;
+};
+
 module.exports.listChangedBoosts = async (event) => {
     try {
         const authParams = event.requestContext.authorizer;
@@ -58,15 +87,10 @@ module.exports.listChangedBoosts = async (event) => {
         const { systemWideUserId } = authParams;
         const accountId = await fetchUserDefaultAccount(systemWideUserId);
 
-        // todo : make this pattern more sensible
-        const changeCutOff = moment().subtract(config.get('time.changeCutOff.number'), config.get('time.changeCutOff.unit'));
-        const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED'];
-        const listActiveBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, excludedForActive);
-
-        const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));
-        const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
-        const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, expiredCutOff, excludedForExpired);
-
+        const [listActiveBoosts, listExpiredBoosts] = await Promise.all([
+            obtainSortedAndLoggedActiveBoosts(accountId), obtainSortedAndLoggedExpiredBoosts(accountId)
+        ]);
+        
         return util.wrapHttpResponse([...listActiveBoosts, ...listExpiredBoosts]);
     } catch (err) {
         logger('FATAL_ERROR: ', err);

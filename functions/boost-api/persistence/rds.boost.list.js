@@ -121,3 +121,11 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
     logger('Result of account find query: ', resultOfQuery);
     return resultOfQuery.map((row) => row['account_id']);
 };
+
+module.exports.fetchUserBoostLogs = async (accountId, boostIds, logType) => {
+    const fixedParams = 2;
+    const findQuery = `select * from ${config.get('tables.boostLogTable')} where account_id = $1 and log_type = $2 and ` +
+        `boost_id in (${extractArrayIndices(boostIds, fixedParams + 1)})`;
+    const resultOfQuery = await rdsConnection.selectQuery(findQuery, [accountId, logType, ...boostIds]);
+    return resultOfQuery.map((row) => camelizeKeys(row)); 
+};
