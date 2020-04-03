@@ -395,8 +395,18 @@ const dispatchEmailMessageChunk = async (chunk) => {
         const messageIdResults = chunk.map((msg, index) => ({ messageId: msg.messageId, statusCode: extractedMails[index].statusCode }));
         
         return { result: 'SUCCESS', messageIdResults };
-    } catch (err) {
-        logger('FATAL_ERROR: ', err);
+    } catch (error) {
+        logger('FATAL_ERROR: ', error);
+        if (error.response) {
+            // Extract error msg
+            const { message, code, response } = error;
+            logger(`Error code: ${code}, and message: ${message}`);
+        
+            // Extract response msg
+            const { headers, body } = response;
+            logger('Error headers: ', headers);
+            logger('Error body: ', body);
+        }
         const messageIds = chunk.map((msg) => msg.messageId);
         return { result: 'ERROR', messageIds };
     }

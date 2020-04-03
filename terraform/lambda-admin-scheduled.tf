@@ -176,3 +176,15 @@ resource "aws_lambda_permission" "allow_cloudwatch_daytime_to_call_ops_admin_sch
 }
 
 /////////////////// CLOUD WATCH FOR FREQUENT BOOST EXPIRY ///////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_boost_expiry_frequent" {
+    rule = aws_cloudwatch_event_rule.ops_every_five_minutes.name
+    target_id = aws_lambda_function.ops_admin_scheduled.id
+    arn = aws_lambda_function.ops_admin_scheduled.arn
+
+    input = jsonencode(
+      {
+        specificOperations = ["EXPIRE_BOOSTS"]
+      }
+    )
+}

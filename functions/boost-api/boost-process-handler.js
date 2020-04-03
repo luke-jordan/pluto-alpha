@@ -363,7 +363,7 @@ module.exports.processUserBoostResponse = async (event) => {
             return { statusCode: 200, body: JSON.stringify(returnResult)};
         }
 
-        const accountDict = { [boostId]: { [accountId]: systemWideUserId }};
+        const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};
         const boostStatusDict = { [boostId]: statusResult };
 
         const resultBody = { result: 'TRIGGERED', statusMet: statusResult };

@@ -85,6 +85,14 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(resultBody).to.deep.equal(expectedResult);
 
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly({
+            redemptionBoosts: [boostAsRelevant],
+            affectedAccountsDict: {
+                [testBoostId]: { [testAccountId]: { userId: testUserId }}
+            },
+            event: { accountId: testAccountId, eventType: 'USER_GAME_COMPLETION' }
+        });
         
         const expectedLogContext = { 
             submittedParams: testEvent, 
