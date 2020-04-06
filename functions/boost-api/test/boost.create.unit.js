@@ -57,7 +57,7 @@ const handler = proxyquire('../boost-create-handler', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub);
+const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub, publishMultiStub);
 
 const testStartTime = moment();
 const testEndTime = moment().add(7, 'days');
@@ -575,6 +575,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+
+        expect(publishMultiStub).to.have.been.called;
     });
 
     it('Happy path creates a game boost, which is triggered later', async () => {
@@ -638,6 +640,9 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(mockMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, false);
+
+        expect(findAccountsStub).to.not.have.been.called;
+        expect(publishMultiStub).to.not.have.been.called;
     });
 
     it('Handles test call', async () => {

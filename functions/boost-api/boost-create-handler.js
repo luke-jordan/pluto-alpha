@@ -430,20 +430,23 @@ module.exports.createBoost = async (event) => {
     logger('Result of RDS call: ', persistedBoost);
 
     const { boostId, accountIds } = persistedBoost;
-    const logParams = {
-        accountIds,
-        boostId,
-        boostType,
-        boostCategory,
-        boostAmountDict: {
-            boostAmount: parseInt(boostAmountDetails[0], 10),
-            boostUnit: boostAmountDetails[1],
-            boostCurrency: boostAmountDetails[2]
-        },
-        initiator: params.creatingUserId
-    };
-    logger('Publishing user logs with params: ', logParams);
-    await publishBoostUserLogs(logParams);
+
+    if (Array.isArray(accountIds) && accountIds.length > 0) {
+        const logParams = {
+            accountIds,
+            boostId,
+            boostType,
+            boostCategory,
+            boostAmountDict: {
+                boostAmount: parseInt(boostAmountDetails[0], 10),
+                boostUnit: boostAmountDetails[1],
+                boostCurrency: boostAmountDetails[2]
+            },
+            initiator: params.creatingUserId
+        };
+        logger('Publishing user logs with params: ', logParams);
+        await publishBoostUserLogs(logParams);
+    }
 
     // logger('Do we have messages ? :', params.messagesToCreate);
     if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
