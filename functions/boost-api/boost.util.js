@@ -29,6 +29,9 @@ module.exports.extractBoostIds = (boosts) => boosts.map((boost) => boost.boostId
 
 module.exports.statusSorter = (status1, status2) => exports.ALL_BOOST_STATUS_SORTED.indexOf(status2) - exports.ALL_BOOST_STATUS_SORTED.indexOf(status1);
 
+module.exports.hasConditionType = (statusConditions, status, conditionType) => Array.isArray(statusConditions[status]) &&
+    statusConditions[status].some((condition) => condition.startsWith(conditionType));
+
 module.exports.extractQueryParams = (event) => {
     // logger('Event query string params: ', event.queryStringParameters);
     if (typeof event.queryStringParameters === 'object' && event.queryStringParameters !== null) {

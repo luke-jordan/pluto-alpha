@@ -188,3 +188,11 @@ resource "aws_cloudwatch_event_target" "trigger_boost_expiry_frequent" {
       }
     )
 }
+
+resource "aws_lambda_permission" "allow_cloudwatch_regular_to_call_ops_admin_scheduled" {
+    statement_id = "AllowRegularAdminExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.ops_admin_scheduled.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.ops_every_five_minutes.arn
+}

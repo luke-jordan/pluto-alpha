@@ -543,17 +543,19 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('Fails on missing eventTypeCategory where instruction presentationType is EVENT_DRIVEN', async () => {
-        Reflect.deleteProperty(mockInstruction, 'eventTypeCategory');
-        mockInstruction.presentationType = 'EVENT_DRIVEN';
+        const thisInstruction = { ...mockInstruction };
+        Reflect.deleteProperty(thisInstruction, 'eventTypeCategory');
+        Reflect.deleteProperty(thisInstruction, 'triggerParameters');
+        thisInstruction.presentationType = 'EVENT_DRIVEN';
 
-        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
+        const resultOfInsertion = await handler.insertMessageInstruction(thisInstruction);
         logger('Result of message instruction insertion on missing event type category:', resultOfInsertion);
 
         const expectedMessage = 'Instructions for event driven must specify the event type';
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
         
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;     
+        expect(lamdbaInvokeStub).to.have.not.been.called;
     });
 });
 

@@ -47,4 +47,3 @@ module.exports.lambdaInvocation = (functionName, payload, requestResponse = fals
     LogType: logs ? 'Tail' : 'None',
     Payload: stringify(payload)
 });
-

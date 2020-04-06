@@ -86,6 +86,32 @@ const extractStatusConditions = (gameParams, initialStatus) => {
     return statusConditions;
 };
 
+const safeList = (conditionList) => (Array.isArray(conditionList) ? conditionList : []);
+const safeMerge = (gameConditions, passedConditions, condition) => [...safeList(gameConditions[condition]), ...safeList(passedConditions[condition])];
+
+const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
+    if (!passedConditions || Object.keys(passedConditions).length === 0) {
+        return extractStatusConditions(gameParams, initialStatus);
+    }
+
+    let gameInitialStatus = initialStatus;
+    if (initialStatus === 'UNCREATED') {
+        const triggeredStatus = Object.keys(passedConditions).
+            filter((boostStatus) => util.hasConditionType(passedConditions, boostStatus, 'event_occurs')).sort(util.statusSorter);
+        gameInitialStatus = triggeredStatus.length > 0 ? triggeredStatus[0] : initialStatus;
+    }
+    
+    logger('Game initial status: ', gameInitialStatus);
+    const gameConditions = extractStatusConditions(gameParams, gameInitialStatus);
+    
+    logger('Merging: ', gameConditions, 'and: ', passedConditions);
+    const mergedConditions = util.ALL_BOOST_STATUS_SORTED.filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
+        reduce((obj, boostStatus) => ({ ...obj, [boostStatus]: safeMerge(gameConditions, passedConditions, boostStatus)}), {});
+
+    logger('Merged status conditions: ', mergedConditions);
+    return mergedConditions;
+};
+
 // finds and uses existing message templates based on provided flags, in escalating series, given need to parallel process
 // todo :: there will be a bunch of unnecessary queries in here, so particularly zip up the findMsgInstructionByFlag to take multiple flags
 // and hence consolidate into a single operation / query, but can do later
@@ -132,7 +158,7 @@ const obtainDefaultMessageInstructions = async (messageInstructionFlags) => {
  */
 const createMsgInstructionFromDefinition = (messageDefinition, boostParams, gameParams) => {
     // first, assemble the basic parameters. note: boost status is not used 
-    logger('Assembling message instruction from: ', messageDefinition);
+    // logger('Assembling message instruction from: ', messageDefinition);
 
     const msgPayload = {
         creatingUserId: boostParams.creatingUserId,
@@ -143,7 +169,10 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
         endTime: boostParams.boostEndTime.format(),
         messagePriority: DEFAULT_BOOST_PRIORITY
     };
-    logger('Base of message payload: ', msgPayload);
+
+    if (messageDefinition.presentationType === 'EVENT_DRIVEN') {
+        msgPayload.triggerParameters = messageDefinition.triggerParameters;
+    }
         
     // then, if the message defines a sequence, assemble those templates together
     if (messageDefinition.isMessageSequence) {
@@ -178,7 +207,7 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
 };
 
 const assembleMsgLamdbaInvocation = async (msgPayload) => {
-    logger('Sending payload to messsage instruction create: ', msgPayload);
+    // logger('Sending payload to messsage instruction create: ', msgPayload);
     const messageInstructInvocation = {
         FunctionName: config.get('lambdas.messageInstruct'),
         InvocationType: 'RequestResponse',
@@ -352,12 +381,6 @@ module.exports.createBoost = async (event) => {
     logger(`Boost start time: ${boostStartTime.format()} and end time: ${boostEndTime.format()}`);
     logger('Boost source: ', params.boostSource, 'and creating user: ', params.creatingUserId);
 
-    // todo : more validation & error throwing here, e.g., if neither exists
-    logger('Game params: ', params.gameParams, ' and default status: ', params.initialStatus);
-    if (!params.statusConditions && params.gameParams) {
-        params.statusConditions = extractStatusConditions(params.gameParams, params.initialStatus);
-    }
-
     let messageInstructionIds = [];
     // many boosts will just do it this way, or else will use the more complex one below
     if (params.redemptionMsgInstructions) {
@@ -383,11 +406,10 @@ module.exports.createBoost = async (event) => {
         fromBonusPoolId: params.boostSource.bonusPoolId,
         fromFloatId: params.boostSource.floatId,
         forClientId: params.boostSource.clientId,
-        statusConditions: params.statusConditions,
+        defaultStatus: params.initialStatus || 'CREATED',
         audienceId,
         boostAudienceType,
-        messageInstructionIds,
-        defaultStatus: params.initialStatus || 'CREATED'
+        messageInstructionIds
     };
 
     if (boostType === 'REFERRAL') {
@@ -399,24 +421,36 @@ module.exports.createBoost = async (event) => {
         instructionToRds.gameParams = params.gameParams;
     }
 
+    // todo : more validation & error throwing here, e.g., if neither exists
+    logger('Game params: ', params.gameParams, ' and default status: ', params.initialStatus);
+    if (params.gameParams) {
+        instructionToRds.statusConditions = mergeStatusConditions(params.gameParams, params.statusConditions, params.initialStatus);
+    } else {
+        instructionToRds.statusConditions = params.statusConditions;
+    }
+
     // logger('Sending to persistence: ', instructionToRds);
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
 
-    const logParams = {
-        accountIds: persistedBoost.accountIds,
-        boostId: persistedBoost.boostId,
-        boostType,
-        boostCategory,
-        boostAmountDict: {
-            boostAmount: parseInt(boostAmountDetails[0], 10),
-            boostUnit: boostAmountDetails[1],
-            boostCurrency: boostAmountDetails[2]
-        },
-        initiator: params.creatingUserId
-    };
-    logger('Publishing user logs with params: ', logParams);
-    await publishBoostUserLogs(logParams);
+    const { boostId, accountIds } = persistedBoost;
+
+    if (Array.isArray(accountIds) && accountIds.length > 0) {
+        const logParams = {
+            accountIds,
+            boostId,
+            boostType,
+            boostCategory,
+            boostAmountDict: {
+                boostAmount: parseInt(boostAmountDetails[0], 10),
+                boostUnit: boostAmountDetails[1],
+                boostCurrency: boostAmountDetails[2]
+            },
+            initiator: params.creatingUserId
+        };
+        logger('Publishing user logs with params: ', logParams);
+        await publishBoostUserLogs(logParams);
+    }
 
     // logger('Do we have messages ? :', params.messagesToCreate);
     if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
@@ -440,7 +474,7 @@ module.exports.createBoost = async (event) => {
         const messageInstructionResults = await Promise.all(messageInvocations);
         logger('Result of message instruct invocation: ', messageInstructionResults);
                 
-        const updatedBoost = await persistence.setBoostMessages(persistedBoost.boostId, messageInstructionResults, true);
+        const updatedBoost = await persistence.setBoostMessages(persistedBoost.boostId, messageInstructionResults, accountIds.length > 0);
         logger('And result of update: ', updatedBoost);
         persistedBoost.messageInstructions = messageInstructionResults;
     }
