@@ -586,14 +586,13 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
             winningThreshold: 50
         };
 
+        const mockMsgTrigger = { triggerEvent: ['USER_CREATED_ACCOUNT'] };
         const eventMessageBody = {
             boostStatus: 'ALL',
             isMessageSequence: false,
             presentationType: 'EVENT_DRIVEN',
             template: messageTemplates.UNLOCKED,
-            triggerParameters: {
-                triggerEvent: ['USER_CREATED_ACCOUNT']
-            }
+            triggerParameters: mockMsgTrigger
         };    
 
         const eventBoost = { 
@@ -635,7 +634,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
 
         const expectedTemplate = { template: { DEFAULT: messageTemplates.UNLOCKED }};
-        const mockMsgInstruct = { ...expectedMsgInstruct, actionToTake: 'PLAY_GAME', presentationType: 'EVENT_DRIVEN', templates: expectedTemplate };
+        const mockMsgInstruct = { ...expectedMsgInstruct, actionToTake: 'PLAY_GAME', presentationType: 'EVENT_DRIVEN', triggerParameters: mockMsgTrigger, templates: expectedTemplate };
         
         const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(mockMsgInstruct);

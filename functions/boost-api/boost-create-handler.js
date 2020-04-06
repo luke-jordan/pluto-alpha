@@ -169,6 +169,10 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
         endTime: boostParams.boostEndTime.format(),
         messagePriority: DEFAULT_BOOST_PRIORITY
     };
+
+    if (messageDefinition.presentationType === 'EVENT_DRIVEN') {
+        msgPayload.triggerParameters = messageDefinition.triggerParameters;
+    }
         
     // then, if the message defines a sequence, assemble those templates together
     if (messageDefinition.isMessageSequence) {
