@@ -218,8 +218,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         // then, the instruction for the user - boost join entries
         const expectedSecondQuery = `insert into ${boostUserTable} (${extractQueryClause(boostUserKeys)}) values %L returning insertion_id, creation_time`;
         const expectedJoinTableRows = [
-            { boostId: testBoostId, accountId: testEligibleAccountId, boostStatus: 'CREATED' },
-            { boostId: testBoostId, accountId: testSecondAccountId, boostStatus: 'CREATED' }
+            { boostId: testBoostId, accountId: testEligibleAccountId, boostStatus: 'OFFERED' },
+            { boostId: testBoostId, accountId: testSecondAccountId, boostStatus: 'OFFERED' }
         ];
         const expectedSecondDef = { query: expectedSecondQuery, columnTemplate: extractColumnTemplate(boostUserKeys), rows: expectedJoinTableRows};
 
@@ -245,6 +245,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             fromFloatId: 'primary_float',
             boostStartTime: testBoostStartTime,
             boostEndTime: testBoostEndTime,
+            defaultStatus: 'OFFERED',
             statusConditions: testStatusCondition,
             boostAudienceType: 'GENERAL',
             audienceId: testAudienceId,

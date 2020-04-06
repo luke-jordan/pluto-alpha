@@ -386,9 +386,13 @@ module.exports.createBoost = async (event) => {
         statusConditions: params.statusConditions,
         audienceId,
         boostAudienceType,
-        messageInstructionIds,
-        defaultStatus: params.initialStatus || 'CREATED'
+        messageInstructionIds
     };
+
+    // this is to handle event based boosts
+    if (params.initialStatus !== 'UNCREATED') {
+        instructionToRds.defaultStatus = params.initialStatus || 'CREATED';
+    }
 
     if (boostType === 'REFERRAL') {
         instructionToRds.flags = ['REDEEM_ALL_AT_ONCE'];

@@ -331,7 +331,7 @@ const extractAccountIds = async (audienceId) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const accountIds = await extractAccountIds(boostDetails.audienceId);
+    const accountIds = await (boostDetails.defaultStatus ? extractAccountIds(boostDetails.audienceId) : []);
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();
@@ -379,18 +379,23 @@ module.exports.insertBoost = async (boostDetails) => {
     };
 
     logger('Inserting boost: ', boostObject);
+    
+    const queryDefs = [boostQueryDef];
 
-    const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
-    const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));
-    const boostJoinQueryDef = {
-        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
-        columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
-        rows: boostAccountJoins
-    };
+    if (accountIds.length > 0) {
+        const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
+        const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));
+        const boostJoinQueryDef = {
+            query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
+            columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
+            rows: boostAccountJoins
+        };
+        queryDefs.push(boostJoinQueryDef);
+    }
 
     // logger('Sending to insertion: ', boostQueryDef);
 
-    const resultOfInsertion = await rdsConnection.largeMultiTableInsert([boostQueryDef, boostJoinQueryDef]);
+    const resultOfInsertion = await rdsConnection.largeMultiTableInsert(queryDefs);
     // logger('Insertion result: ', resultOfInsertion); // spews a lot of line
 
     // first query, first row, creation time
