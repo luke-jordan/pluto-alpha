@@ -331,7 +331,7 @@ const extractAccountIds = async (audienceId) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const accountIds = await (boostDetails.defaultStatus ? extractAccountIds(boostDetails.audienceId) : []);
+    const accountIds = await (boostDetails.defaultStatus === 'UNCREATED' ? [] : extractAccountIds(boostDetails.audienceId));
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();
@@ -404,9 +404,12 @@ module.exports.insertBoost = async (boostDetails) => {
     const resultObject = {
         boostId: resultOfInsertion[0][0]['boost_id'],
         persistedTimeMillis: persistedTime.valueOf(),
-        numberOfUsersEligible: resultOfInsertion[1].length,
         accountIds
     };
+
+    if (resultOfInsertion.length > 1) {
+        resultObject.numberOfUsersEligible = resultOfInsertion[1].length;
+    }
 
     logger('Returning: ', resultObject);
     return resultObject;

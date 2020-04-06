@@ -162,7 +162,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
     });
 
     it('Insert a game based boost and construct the two entry logs', async () => {
-
         const testBoostStartTime = moment();
         const testBoostEndTime = moment();
 
@@ -273,6 +272,98 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const multiTableArgs = multiTableStub.getCall(0).args[0];
         expect(multiTableArgs[1]).to.deep.equal(expectedSecondDef);
         expect(multiTableArgs[0]).to.deep.equal(insertFirstDef);
+    });
+
+    it('Inserts event-based boost without inserting account records', async () => {
+        const testBoostStartTime = moment();
+        const testBoostEndTime = moment();
+
+        const testInstructionId = uuid();
+        const testCreatingUserId = uuid();
+
+        const mockCreateConditions = {
+            UNLOCKED: ['event_occurs #{USER_CREATED_ACCOUNT}'],
+            REDEEMED: ['number_taps_greater_than_N #{20:20000}']
+        };
+
+        const testGameParams = {
+            gameType: 'CHASE_ARROW',
+            timeLimitSeconds: 20,
+            winningThreshold: 20,
+            instructionBand: 'Tap the screen as many times as you can in 20 seconds'
+        };
+    
+        uuidStub.onFirstCall().returns(testBoostId);
+
+        const expectedFirstRow = {
+            boostId: testBoostId,
+            creatingUserId: testCreatingUserId,
+            label: 'Midweek arrow chase!',
+            startTime: testBoostStartTime.format(),
+            endTime: testBoostEndTime.format(),
+            boostType: 'GAME',
+            boostCategory: 'CHASE_THE_ARROW',
+            boostAmount: 100000,
+            boostBudget: 200000, // i.e., twice the amount
+            boostRedeemed: 0,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            fromFloatId: 'primary_float',
+            forClientId: 'some_client_co',
+            boostAudienceType: 'GENERAL',
+            audienceId: testAudienceId,
+            statusConditions: mockCreateConditions,
+            messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
+            gameParams: testGameParams
+        };
+
+        const expectedKeys = Object.keys(expectedFirstRow);
+        const expectedFirstQuery = `insert into ${boostTable} (${extractQueryClause(expectedKeys)}) values %L returning boost_id, creation_time`;
+        const expectedColumnTemplate = extractColumnTemplate(expectedKeys);
+        const insertFirstDef = { query: expectedFirstQuery, columnTemplate: expectedColumnTemplate, rows: [expectedFirstRow]};
+
+        // then transact them
+        const insertionTime = moment();
+        // this is not great but Sinon matching is just the worst thing in the world and is failing abysmally on complex matches, hence
+        multiTableStub.resolves([
+            [{ 'boost_id': testBoostId, 'creation_time': insertionTime.format() }]
+        ]);
+
+        const testInstruction = {
+            creatingUserId: testCreatingUserId,
+            label: 'Midweek arrow chase!',
+            boostType: 'GAME',
+            boostCategory: 'CHASE_THE_ARROW',
+            boostAmount: 100000,
+            boostBudget: 200000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            forClientId: 'some_client_co',
+            fromFloatId: 'primary_float',
+            boostStartTime: testBoostStartTime,
+            boostEndTime: testBoostEndTime,
+            defaultStatus: 'UNCREATED',
+            statusConditions: mockCreateConditions,
+            boostAudienceType: 'GENERAL',
+            audienceId: testAudienceId,
+            redemptionMsgInstructions: testRedemptionMsgs,
+            messageInstructionIds: [testInstructionId, testInstructionId],
+            gameParams: testGameParams 
+        };
+
+        const resultOfInsertion = await rds.insertBoost(testInstruction);
+
+        // then respond with the number of users, and the boost ID itself, along with when it was persisted (given psql limitations, to nearest second)
+        const expectedMillis = insertionTime.startOf('second').valueOf();
+        expect(resultOfInsertion).to.exist;
+        expect(resultOfInsertion).to.have.property('boostId', testBoostId);
+        expect(resultOfInsertion).to.have.property('persistedTimeMillis', expectedMillis);
+
+        expect(resultOfInsertion.accountIds).to.deep.equal([]);
+
+        expect(multiTableStub).to.have.been.calledOnceWithExactly([insertFirstDef]);
     });
 
     it('Inserts boost-account', async () => {
