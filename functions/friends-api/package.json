@@ -11,13 +11,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "camelcase": "^5.3.1",
     "config": "^3.1.0",
     "debug": "^4.1.1",
-    "ioredis": "^4.14.1",
-    "uuid": "^3.3.2"
+    "ioredis": "^4.14.1"
   },
   "devDependencies": {
+    "uuid": "^3.3.2",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "chai-uuid": "^1.0.6",
