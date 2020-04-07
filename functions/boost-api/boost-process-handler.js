@@ -366,7 +366,7 @@ module.exports.processUserBoostResponse = async (event) => {
         const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};
         const boostStatusDict = { [boostId]: statusResult };
 
-        const resultBody = { result: 'TRIGGERED', statusMet: statusResult };
+        const resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf() };
 
         let resultOfTransfer = {};
         if (statusResult.includes('REDEEMED')) {

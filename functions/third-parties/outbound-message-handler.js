@@ -14,6 +14,13 @@ const opsUtil = require('ops-util-common');
 const htmlToText = require('html-to-text');
 
 const sendGridMail = require('@sendgrid/mail');
+
+const {
+    classes: {
+      Mail,
+    },
+  } = require('@sendgrid/helpers');
+
 const AWS = require('aws-sdk');
 
 const s3 = new AWS.S3();
@@ -377,7 +384,7 @@ module.exports.sendEmails = async (event) => {
 
 const dispatchEmailMessageChunk = async (chunk) => {
     try {
-        logger('Sending chunk of mails: ', chunk);
+        // logger('Sending chunk of mails: ', chunk);
         const defaultFrom = config.get('sendgrid.fromAddress');
         // being very careful here
         const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.get('sendgrid.sandbox.off');
@@ -386,7 +393,12 @@ const dispatchEmailMessageChunk = async (chunk) => {
             { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
         )); 
 
-        logger('Assembled payload: ', payload);
+        logger('Assembled payload: ', JSON.stringify(payload));
+
+        const debugMail = Mail.create(payload);
+        const mailBody = Array.isArray(debugMail) ? debugMail.map((mail) => mail.toJSON()) : 'ERROR';
+        logger('Debug mail body: ', JSON.stringify(mailBody));
+
         const result = await sendGridMail.send(payload);
         logger('Result: ', JSON.stringify(result));
         logger('Extracted results, first: ', result.map((insideResult) => insideResult[0].toJSON()));
