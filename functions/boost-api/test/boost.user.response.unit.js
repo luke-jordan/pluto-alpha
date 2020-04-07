@@ -59,6 +59,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostAmount: 50000,
             fromFloatId: 'test-float',
             fromBonusPoolId: 'test-bonus-pool',
+            boostEndTime: moment().endOf('day'),
             statusConditions: {
                 OFFERED: ['message_instruction_created'],
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
@@ -76,6 +77,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         const expectedResult = { 
             result: 'TRIGGERED', 
             statusMet: ['REDEEMED'], 
+            endTime: boostAsRelevant.boostEndTime.valueOf(),
             amountAllocated: { amount: 50000, unit: 'HUNDREDTH_CENT', currency: 'USD' }
         };
 
@@ -134,6 +136,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostAmount: 50000,
             fromFloatId: 'test-float',
             fromBonusPoolId: 'test-bonus-pool',
+            boostEndTime: moment().endOf('day'),
             statusConditions: {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 PENDING: ['number_taps_greater_than #{0::10000}'],
@@ -164,7 +167,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
         const expectedResult = { 
             result: 'TRIGGERED', 
-            statusMet: ['PENDING']
+            statusMet: ['PENDING'],
+            endTime: boostAsRelevant.boostEndTime.valueOf()
         };
 
         const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
