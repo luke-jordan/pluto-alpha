@@ -17,8 +17,8 @@ const sendGridMail = require('@sendgrid/mail');
 
 const {
     classes: {
-      Mail,
-    },
+      Mail
+    }
   } = require('@sendgrid/helpers');
 
 const AWS = require('aws-sdk');
