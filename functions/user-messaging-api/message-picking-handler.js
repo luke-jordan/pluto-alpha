@@ -376,7 +376,7 @@ module.exports.getUserHistoricalMessages = async (event) => {
         const messageTypes = displayTypes ? displayTypes : ['CARD'];
         const destinationUserId = userDetails.systemWideUserId;
 
-        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, messageTypes);
+        const userMessages = await persistence.fetchUserHistoricalMessages(destinationUserId, messageTypes, true);
         const lastDisplayedBody = userMessages.map((message) => ({ ...message, displayedBody: message.lastDisplayedBody || message.messageBody }));
         logger('Got user messages:', lastDisplayedBody);
 

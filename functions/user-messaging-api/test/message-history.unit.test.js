@@ -85,7 +85,7 @@ describe('*** UNIT TEST MESSAGE HISTORY ***', () => {
 
         expect(fetchResult).to.exist;
         testHelper.standardOkayChecks(fetchResult, expectedResult);
-        expect(getUserMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD']);
+        expect(getUserMessagesStub).to.have.been.calledOnceWithExactly(testUserId, ['CARD'], true);
     });
 
     it('Handles thrown errors', async () => {
