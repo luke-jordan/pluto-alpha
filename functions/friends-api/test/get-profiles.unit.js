@@ -26,6 +26,7 @@ class MockRdsConnection {
         this.selectQuery = queryStub;
     }
 }
+
 class MockRedis {
     constructor () { 
         this.get = redisGetStub;
@@ -34,11 +35,11 @@ class MockRedis {
 }
 
 const persistence = proxyquire('../persistence/get-profiles', {
-    'dynamo-common': {
-        fetchSingleRow: fetchStub
-    },
     'ioredis': MockRedis,
     'rds-common': MockRdsConnection,
+    'dynamo-common': {
+        'fetchSingleRow': fetchStub
+    },
     '@noCallThru': true
 });
 
@@ -48,7 +49,7 @@ const resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
-describe.only('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
+describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     const testSystemId = uuid();
     const testAccountId = uuid();
 
@@ -75,7 +76,7 @@ describe.only('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     };
 
     beforeEach(() => {
-        resetStubs(fetchStub, redisGetStub, redisSetStub);
+        resetStubs(fetchStub, queryStub, redisGetStub, redisSetStub);
     });
 
     it('Fetches user profile from db, given user id', async () => {
@@ -121,5 +122,18 @@ describe.only('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchUserProfile({ accountIds: [testAccountId, testAccountId] });
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
+    });
+
+    it('Gets the user ids of a users friends', async () => {
+        const testAcceptedUserId = uuid();
+        const friendsTable = config.get('tables.friendsTable');
+
+        const selectQuery = `select accepted_user_id from ${friendsTable} where initiated_user_id = $1`;
+        queryStub.withArgs(selectQuery, [testSystemId]).resolves([{ 'accepted_user_id': testAcceptedUserId }]);
+
+        const fetchResult = await persistence.getFriendIdsForUser({ systemWideUserId: testSystemId });
+        expect(fetchResult).to.exist;
+        expect(fetchResult).to.deep.equal([testAcceptedUserId]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSystemId]);
     });
 });

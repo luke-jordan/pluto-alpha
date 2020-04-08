@@ -1,4 +1,7 @@
 {
+    "aws": {
+        "region": "us-east-1"
+    },
     "db": {
         "user": "friends_api_worker",
         "host": "localhost",
@@ -8,6 +11,8 @@
     },
     "tables": {
         "accountTable": "account_data.core_account_ledger",
+        "friendsTable": "friends_data.core_friend_relationship",
+        "friendRequestTable": "friends_data.friend_request",
         "dynamoProfileTable": "UserProfileTable"
     },
     "cache": {

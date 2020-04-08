@@ -4,31 +4,16 @@ const logger = require('debug')('jupiter:friends:dynamo');
 const config = require('config');
 
 const dynamoCommon = require('dynamo-common');
-const Redis = require('ioredis');
+
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
+
+const Redis = require('ioredis');
 
 const PROFILE_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.profile');
 const USER_ID_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.userId');
 
 const relevantProfileColumns = [];
-
-const initiateCacheConnection = async (keyPrefix) => {
-    logger('Initiating connection to cache');
-    try {
-        const connectionToCache = new Redis({ 
-            port: config.get('cache.port'), 
-            host: config.get('cache.host'), 
-            retryStrategy: () => `dont retry`, 
-            keyPrefix
-        });
-        logger('Successfully initiated connection to cache');
-        return connectionToCache;
-    } catch (error) {
-        logger(`Error while initiating connection to cache. Error: ${JSON.stringify(error.message)}`);
-        return null;
-    }
-};
 
 const fetchUserProfileFromDB = async (systemWideUserId) => {
     logger(`Fetching profile for user id: ${systemWideUserId} from table: ${config.get('tables.dynamoProfileTable')}`);
@@ -47,6 +32,31 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
     const query = `select owner_user_id from ${accountTable} where account_id = $1`;
     const fetchResult = await rdsConnection.selectQuery(query, [accountId]);
     return fetchResult[0]['owner_user_id'];
+};
+
+const fetchAcceptedUserIdsForUser = async (systemWideUserId) => {
+    const friendsTable = config.get('tables.friendsTable');
+    const query = `select accepted_user_id from ${friendsTable} where initiated_user_id = $1`;
+    const fetchedUserIds = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    
+    return fetchedUserIds.map((userId) => userId['accepted_user_id']);
+};
+
+const initiateCacheConnection = async (keyPrefix) => {
+    logger('Initiating connection to cache');
+    try {
+        const connectionToCache = new Redis({ 
+            port: config.get('cache.port'), 
+            host: config.get('cache.host'), 
+            retryStrategy: () => `dont retry`, 
+            keyPrefix
+        });
+        logger('Successfully initiated connection to cache');
+        return connectionToCache;
+    } catch (error) {
+        logger(`Error while initiating connection to cache. Error: ${JSON.stringify(error.message)}`);
+        return null;
+    }
 };
 
 const fetchUserDetailsFromCache = async (key, keyPrefix) => {
@@ -103,7 +113,7 @@ const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
 };
 
 /**
- * This function fetches a users profile. It accepts either the users system id or an array of the users accound ids
+ * This function fetches a user's profile. It accepts either the users system id or an array of the users accound ids
  * @param {object} params An object either of the form { systemWideUserId: '6802ad23-e9...' } or { accountIds: ['d7387b3a-40...', '30cae50a-2e...', ...]}
  */
 module.exports.fetchUserProfile = async (params) => {
@@ -124,4 +134,17 @@ module.exports.fetchUserProfile = async (params) => {
     logger('Got user id:', systemWideUserId);
 
     return fetchUserProfileFromCacheOrDB(systemWideUserId);
+};
+
+/**
+ * This function accepts a user id and returns the user ids of the users friends.
+ * @param {object} params An object of the form { systemWideUserId: 'e9a83c01-9d...' }
+ */
+module.exports.getFriendIdsForUser = async (params) => {
+    if (!params.systemWideUserId) {
+        throw new Error('Error! Missing user identifier');
+    }
+
+    const systemWideUserId = params.systemWideUserId;
+    return fetchAcceptedUserIdsForUser(systemWideUserId);
 };
