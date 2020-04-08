@@ -172,9 +172,9 @@ const processEventForCreatedBoosts = async (event) => {
 
 const checkIfAccountWinsTournament = (accountId, redemptionConditions, boostLogs) => {
     const eventContext = { accountTapList: boostLogs };
-    logger('Created event context: ', eventContext);
+    // logger('Created event context: ', eventContext);
     const event = { eventType: 'BOOST_EXPIRED', accountId, eventContext };
-    logger('Checking for tournament win, sending in event: ', event);
+    // logger('Checking for tournament win, sending in event: ', event);
     return conditionTester.testConditionsForStatus(event, redemptionConditions);
 };
 

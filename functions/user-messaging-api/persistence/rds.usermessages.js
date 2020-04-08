@@ -204,6 +204,9 @@ module.exports.fetchUserHistoricalMessages = async (destinationUserId, messageTy
     const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status != $2 ` +
         `and display ->> 'type' in (${typeIndices})${onlyWithStoredBody ? ' and last_displayed_body is not null' : ''}`;
     
+    logger('Fetching historical messages with query: ', query);
+    logger('And with values: ', values);
+
     const result = await rdsConnection.selectQuery(query, values);
     logger('Retrieved past user messages from RDS: ', result);
     return result.map((msg) => transformMsg(msg, false));
