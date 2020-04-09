@@ -166,14 +166,15 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     const text = htmlToText.fromString(html, { wordwrap: false });
 
     // message id property allows lambda to return failed message ids
-    const emailMessages = toList.map((recipient) => ({
+    // using array on "to" because Sendgrid is weird about near-identical emails, and admins can know each other
+    const emailMessages = [{
         messageId: uuid(),
-        to: recipient,
+        to: toList,
         from: sourceEmail,
         subject,
         html,
         text
-    }));
+    }];
 
     logger('Asembled emails:', emailMessages);
     const invokeSync = sendSync || false;

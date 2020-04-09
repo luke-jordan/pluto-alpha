@@ -533,7 +533,7 @@ resource "aws_api_gateway_method" "message_user_history" {
 
 resource "aws_lambda_permission" "message_user_history" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.message_user_fetch.function_name}"
+  function_name = "${aws_lambda_function.message_user_history.function_name}"
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
@@ -545,7 +545,7 @@ resource "aws_api_gateway_integration" "message_user_history" {
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.message_user_fetch.invoke_arn}"
+  uri                     = "${aws_lambda_function.message_user_history.invoke_arn}"
 }
 
 // STORE PUSH NOTIFICATION TOKEN FOR USER
