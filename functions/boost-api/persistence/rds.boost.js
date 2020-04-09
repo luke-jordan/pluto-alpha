@@ -168,7 +168,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
         }
         return ({ boostId, accountUserMap });
     });
-    logger('Assembled: ', resultObject);
+    // logger('Assembled: ', resultObject);
     return resultObject;
 };
 
@@ -250,7 +250,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, s
 
     // this sorts in descending, so latest is in first position
     const sortedArray = timesOfOperations.sort((timeA, timeB) => timeB.valueOf() - timeA.valueOf());
-    logger('Sorted properly? : ', sortedArray);
+    // logger('Sorted properly? : ', sortedArray);
     return { boostId, updatedTime: sortedArray[0] };
 };
 
