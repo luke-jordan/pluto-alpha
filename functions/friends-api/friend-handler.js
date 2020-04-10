@@ -100,7 +100,7 @@ module.exports.addFriendship = async (event) => {
 };
 
 /**
- * This functions deactivates a friendhip.
+ * This functions deactivates a friendship.
  * @param {object} event
  * @property {string} relationshipId The id of the relationship to be deactivated.
  */
