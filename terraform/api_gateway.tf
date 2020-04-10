@@ -515,6 +515,39 @@ resource "aws_api_gateway_integration" "message_process" {
   uri                     = "${aws_lambda_function.message_user_process.invoke_arn}"
 }
 
+// FETCH USER MESSAGE HISTORY
+
+resource "aws_api_gateway_resource" "message_user_history" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = "${aws_api_gateway_resource.message_path_root.id}"
+  path_part   = "history"
+}
+
+resource "aws_api_gateway_method" "message_user_history" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = "${aws_api_gateway_resource.message_user_history.id}"
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "message_user_history" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.message_user_history.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "message_user_history" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  resource_id = "${aws_api_gateway_method.message_user_history.resource_id}"
+  http_method = "${aws_api_gateway_method.message_user_history.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.message_user_history.invoke_arn}"
+}
+
 // STORE PUSH NOTIFICATION TOKEN FOR USER
 
 resource "aws_api_gateway_resource" "message_token_manage" {

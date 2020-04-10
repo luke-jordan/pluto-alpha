@@ -138,15 +138,15 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
             FunctionName: 'outbound_comms_send',
             InvocationType: 'RequestResponse',
             Payload: JSON.stringify({
-                emailMessages: targetEmails.map((emailAddress) => ({
+                emailMessages: [{
                     from: 'system@jupitersave.com',
                     html: '<p>Greetings Jacob, from Jupiter.</p>',
                     messageId: testMessageId,
                     subject: 'Salutations',
                     text: 'Greetings Jacob, from Jupiter.',
-                    to: emailAddress
-                })
-            )})
+                    to: targetEmails
+                }]
+            })
         };
 
         const emailDetails = {
@@ -182,15 +182,15 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
             FunctionName: 'outbound_comms_send',
             InvocationType: 'Event',
             Payload: JSON.stringify({
-                emailMessages: targetEmails.map((emailAddress) => ({
+                emailMessages: [{
                     from: 'system@jupitersave.com',
                     html: '<p>Greetings Jacob, from Jupiter.</p>',
                     messageId: testMessageId,
                     subject: 'Salutations',
                     text: 'Greetings Jacob, from Jupiter.',
-                    to: emailAddress
-                })
-            )})
+                    to: targetEmails
+                }]
+            })
         };
 
         const emailDetails = {
@@ -225,15 +225,15 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
             FunctionName: 'outbound_comms_send',
             InvocationType: 'Event',
             Payload: JSON.stringify({
-                emailMessages: targetEmails.map((emailAddress) => ({
+                emailMessages: [{
                     from: config.get('publishing.eventsEmailAddress'),
                     html: '<p>Greetings Jacob, from Jupiter.</p>',
                     messageId: testMessageId,
                     subject: 'Salutations',
                     text: 'Greetings Jacob, from Jupiter.',
-                    to: emailAddress
-                })
-            )})
+                    to: targetEmails
+                }]
+            })
         };
 
         const emailDetails = {

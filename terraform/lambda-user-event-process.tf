@@ -143,7 +143,7 @@ resource "aws_sns_topic_subscription" "user_event_process_lambda" {
   filter_policy = "${jsonencode({
     "eventType": [
       {
-        "anything-but": ["USER_LOGIN", "MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT"]
+        "anything-but": ["USER_LOGIN", "MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT", "BOOST_CREATED_GAME", "BOOST_CREATED_SIMPLE", "BOOST_EXPIRED"]
       }
     ]
   })}"

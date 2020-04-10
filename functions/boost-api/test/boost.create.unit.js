@@ -57,7 +57,7 @@ const handler = proxyquire('../boost-create-handler', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub);
+const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, findAccountsStub, updateBoostAccountStub, alterBoostStub, lamdbaInvokeStub, publishMultiStub);
 
 const testStartTime = moment();
 const testEndTime = moment().add(7, 'days');
@@ -443,6 +443,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         processResult: 'FIRED_INSTRUCT',
         message: { instructionId: testMsgInstructId, creationTimeMillis: moment().valueOf() }
     };
+
     const mockMsgIdDict = [{ accountId: 'ALL', status: 'ALL', msgInstructionId: testMsgInstructId }];
 
     // logger('Here is the test event: ', JSON.stringify(testBodyOfEvent));
@@ -462,7 +463,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const mockResultFromRds = {
             boostId: testBoostId,
             persistedTimeMillis: testPersistedTime.valueOf(),
-            numberOfUsersEligible: 100
+            numberOfUsersEligible: 100,
+            accountIds: [uuid(), uuid()]
         };
 
         momentStub.onFirstCall().returns(testStartTime);
@@ -496,7 +498,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const mockResultFromRds = {
             boostId: testBoostId,
             persistedTimeMillis: testPersistedTime.valueOf(),
-            numberOfUsersEligible: 100
+            numberOfUsersEligible: 100,
+            accountIds: [uuid(), uuid()]
         };
 
         momentStub.onFirstCall().returns(testStartTime);
@@ -540,7 +543,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const mockResultFromRds = {
             boostId: testBoostId,
             persistedTimeMillis: testPersistedTime.valueOf(),
-            numberOfUsersEligible: 100
+            numberOfUsersEligible: 100,
+            accountIds: [uuid(), uuid()]
         };
 
         momentStub.onFirstCall().returns(testStartTime);
@@ -571,6 +575,73 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+
+        expect(publishMultiStub).to.have.been.called;
+    });
+
+    it('Happy path creates a game boost, which is triggered later', async () => {
+        const eventGameParams = {
+            gameType: 'CHASE_ARROW',
+            timeLimitSeconds: 10,
+            winningThreshold: 50
+        };
+
+        const mockMsgTrigger = { triggerEvent: ['USER_CREATED_ACCOUNT'] };
+        const eventMessageBody = {
+            boostStatus: 'ALL',
+            isMessageSequence: false,
+            presentationType: 'EVENT_DRIVEN',
+            template: messageTemplates.UNLOCKED,
+            triggerParameters: mockMsgTrigger
+        };    
+
+        const eventBoost = { 
+            ...testBodyOfEvent,
+            initialStatus: 'UNCREATED',
+            statusConditions: { UNLOCKED: ['event_occurs #{USER_CREATED_ACCOUNT}'] },
+            gameParams: eventGameParams,
+            messagesToCreate: [eventMessageBody]
+        };
+    
+        const mockResultFromRds = {
+            boostId: testBoostId,
+            persistedTimeMillis: testPersistedTime.valueOf(),
+            accountIds: []
+        };
+
+        momentStub.onFirstCall().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
+
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+
+        insertBoostStub.resolves(mockResultFromRds);
+        alterBoostStub.resolves({ updatedTime: moment() });
+
+        const expectedResult = { ...mockResultFromRds, messageInstructions: mockMsgIdDict };
+        const expectedMsgInstruct = assembleMessageInstruction();
+
+        const resultOfCreate = await handler.createBoost(eventBoost);
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal(expectedResult);
+
+        // then set up invocation checks
+        const expectedBoost = { ...mockBoostToFromPersistence, defaultStatus: 'UNCREATED', gameParams: eventGameParams };
+        expectedBoost.statusConditions = { 
+            UNLOCKED: ['event_occurs #{USER_CREATED_ACCOUNT}'],
+            REDEEMED: ['number_taps_greater_than #{50::10000}']
+        };
+        
+        expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
+
+        const expectedTemplate = { template: { DEFAULT: messageTemplates.UNLOCKED }};
+        const mockMsgInstruct = { ...expectedMsgInstruct, actionToTake: 'PLAY_GAME', presentationType: 'EVENT_DRIVEN', triggerParameters: mockMsgTrigger, templates: expectedTemplate };
+        
+        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
+        expect(lambdaPayload).to.deep.equal(mockMsgInstruct);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, false);
+
+        expect(findAccountsStub).to.not.have.been.called;
+        expect(publishMultiStub).to.not.have.been.called;
     });
 
     it('Handles test call', async () => {

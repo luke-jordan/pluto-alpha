@@ -172,9 +172,9 @@ const processEventForCreatedBoosts = async (event) => {
 
 const checkIfAccountWinsTournament = (accountId, redemptionConditions, boostLogs) => {
     const eventContext = { accountTapList: boostLogs };
-    logger('Created event context: ', eventContext);
+    // logger('Created event context: ', eventContext);
     const event = { eventType: 'BOOST_EXPIRED', accountId, eventContext };
-    logger('Checking for tournament win, sending in event: ', event);
+    // logger('Checking for tournament win, sending in event: ', event);
     return conditionTester.testConditionsForStatus(event, redemptionConditions);
 };
 
@@ -366,7 +366,7 @@ module.exports.processUserBoostResponse = async (event) => {
         const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};
         const boostStatusDict = { [boostId]: statusResult };
 
-        const resultBody = { result: 'TRIGGERED', statusMet: statusResult };
+        const resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf() };
 
         let resultOfTransfer = {};
         if (statusResult.includes('REDEEMED')) {

@@ -904,7 +904,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
 
     const chunkSize = config.get('sendgrid.chunkSize');
     const sendgridOkayResponse = [{ toJSON: () => ({ statusCode: 200 })}];
-    const sendgridOkayChunk = (numberMsgs = chunkSize) => Array(numberMsgs).fill(sendgridOkayResponse);
+    // const sendgridOkayChunk = (numberMsgs = chunkSize) => Array(numberMsgs).fill(sendgridOkayResponse);
 
     const validEmailEvent = (messageId = uuid()) => ({
         messageId,
@@ -938,7 +938,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
     });
 
     it('Sends out emails', async () => {
-        sendGridStub.resolves(sendgridOkayChunk(3));
+        sendGridStub.resolves(sendgridOkayResponse);
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
 
@@ -949,7 +949,8 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         const result = await handler.handleOutboundMessages(testEvent);
         expect(result).to.deep.equal(expectedResult);
 
-        expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
+        expect(sendGridStub).to.have.been.calledThrice;
+        expect(sendGridStub).to.have.been.calledWith(validEmailMessage);
     });
 
     it('Sends out emails with template wrapper', async () => {
@@ -958,7 +959,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         const mockWrapper = '<html><title></title><body>{htmlBody}</body></html>';
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockWrapper }})});
-        sendGridStub.resolves(sendgridOkayChunk(numberMessages));
+        sendGridStub.resolves(sendgridOkayResponse);
 
         const testMessages = Array(numberMessages).fill(validEmailEvent(testMessageId));
         const testWrapper = { s3bucket: 'email.templates', s3key: 'wrapper.html' };
@@ -975,13 +976,14 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         const expectedMessages = Array(numberMessages).fill(validEmailMessage).map((msg) => ({ ...msg, 'html': expectedWrappedMessage }));
         
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: 'email.templates', Key: 'wrapper.html' });
-        expect(sendGridStub).to.have.been.calledOnceWithExactly(expectedMessages);
+        expect(sendGridStub).to.have.been.callCount(4);
+        expectedMessages.forEach((msg, index) => expect(sendGridStub.getCall(index).args[0]).to.deep.equal(msg));
     });
 
     it('Handles payload chunking where third party rate limit is exceeded', async () => {
         const emailMessages = [];
         
-        const baseChunks = 2;
+        const baseChunks = 1;
         const trailingChunkSize = 652;
         const numberMessages = baseChunks * chunkSize + trailingChunkSize;
 
@@ -989,7 +991,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages.push(validEmailEvent(testMessageId));
         }
 
-        sendGridStub.resolves(sendgridOkayChunk());
+        sendGridStub.resolves(sendgridOkayResponse);
         // sendGridStub.onCall(3).resolves(sendgridOkayChunk(trailingChunkSize));
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
@@ -999,30 +1001,21 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        expect(sendGridStub).to.have.been.calledThrice;
-
-        const firstCall = sendGridStub.getCall(0).args[0];
-        expect(firstCall.length).to.equal(1000);
-
-        const secondCall = sendGridStub.getCall(1).args[0];
-        expect(secondCall.length).to.equal(1000);
-
-        const thirdCall = sendGridStub.getCall(2).args[0];
-        expect(thirdCall.length).to.equal(652);
+        // todo : when this becomes an issue, insert a backoff/delay, and test fo rit
+        expect(sendGridStub).to.have.been.callCount(numberMessages);
     });
 
     it('Isolated failures and returns failed message ids to caller', async () => {
         const emailMessages = [];
 
-        const numberChunks = 3;
-        const numberMessages = numberChunks * chunkSize;
+        const numberMessages = 3;
 
         while (emailMessages.length < numberMessages) {
             emailMessages.push(validEmailEvent());
         }
 
-        sendGridStub.onFirstCall().resolves([{ error: 'Internal error' }]);
-        sendGridStub.resolves(sendgridOkayChunk());
+        sendGridStub.onFirstCall().rejects('Error, internal error');
+        sendGridStub.resolves(sendgridOkayResponse);
 
         const result = await handler.handleOutboundMessages({ emailMessages });
 
@@ -1031,18 +1024,9 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.have.property('result', 'PARTIAL');
         expect(result).to.have.property('failedMessageIds');
 
-        expect(result.failedMessageIds.length).to.deep.equal(1000);
+        expect(result.failedMessageIds.length).to.deep.equal(1);
 
         expect(sendGridStub).to.have.been.calledThrice;
-
-        const firstCall = sendGridStub.getCall(0).args[0];
-        expect(firstCall.length).to.equal(1000);
-
-        const secondCall = sendGridStub.getCall(1).args[0];
-        expect(secondCall.length).to.equal(1000);
-
-        const thirdCall = sendGridStub.getCall(2).args[0];
-        expect(thirdCall.length).to.equal(1000);
     });
 
     it('Fails where no valid emails are found', async () => {
@@ -1079,7 +1063,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        expect(sendGridStub).to.have.been.calledOnceWithExactly([validEmailMessage, validEmailMessage, validEmailMessage]);
+        expect(sendGridStub).to.have.been.calledThrice;
     });
 
 });

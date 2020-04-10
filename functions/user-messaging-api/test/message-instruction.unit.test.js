@@ -543,17 +543,19 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION INSERTION ***', () => {
     });
 
     it('Fails on missing eventTypeCategory where instruction presentationType is EVENT_DRIVEN', async () => {
-        Reflect.deleteProperty(mockInstruction, 'eventTypeCategory');
-        mockInstruction.presentationType = 'EVENT_DRIVEN';
+        const thisInstruction = { ...mockInstruction };
+        Reflect.deleteProperty(thisInstruction, 'eventTypeCategory');
+        Reflect.deleteProperty(thisInstruction, 'triggerParameters');
+        thisInstruction.presentationType = 'EVENT_DRIVEN';
 
-        const resultOfInsertion = await handler.insertMessageInstruction(mockInstruction);
+        const resultOfInsertion = await handler.insertMessageInstruction(thisInstruction);
         logger('Result of message instruction insertion on missing event type category:', resultOfInsertion);
 
         const expectedMessage = 'Instructions for event driven must specify the event type';
         testHelper.standardOkayChecks(resultOfInsertion, { message: expectedMessage }, 500);
         
         expect(insertMessageInstructionStub).to.have.not.been.called;
-        expect(lamdbaInvokeStub).to.have.not.been.called;     
+        expect(lamdbaInvokeStub).to.have.not.been.called;
     });
 });
 
@@ -631,6 +633,52 @@ describe('*** UNIT TESTING MESSAGE INSTRUCTION UPDATE ***', () => {
         }]);
 
         expect(updateMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId, { });
+        expect(alterInstructionStatesStub).to.have.not.been.called;
+    });
+
+    it('Updates triggered parameters', async () => {
+        const mockEndTime = moment();
+
+        const mockEvent = {
+            instructionId: mockInstructionId,
+            updateValues: {
+                audienceType: 'GROUP',
+                templates: {
+                    template: {
+                        DEFAULT: {
+                            title: 'Testing payment succeeded',
+                            body: '<p>Checking if this trigger works</p>',
+                            display: { type: 'EMAIL' },
+                            actionToTake: 'ADD_CASH',
+                            actionContext: { addCashPreFilled: '10' }
+                        }
+                    }
+                },
+                messagePriority: 50,
+                presentationType: 'EVENT_DRIVEN',
+                endTime: mockEndTime.format(),
+                eventTypeCategory: 'EVENT_TYPE::ADMIN_SETTLED_SAVE',
+                triggerParameters: {
+                    triggerEvent: ['EVENT_TYPE::ADMIN_SETTLED_SAVE'],
+                    haltingEvent: ['EVENT_TYPE::REDEEMED'],
+                    messageSchedule: { type: 'RELATIVE', offset: { unit: 'hours', number: 2 } }
+                }
+            },
+            requestContext: testHelper.requestContext(mockUserId)
+        };
+
+        updateMessageInstructionStub.withArgs(mockInstructionId, { ...mockEvent.updateValues }).returns([{ insertionId: mockInsertionId, updateTime: mockUpdateTime }]);
+        alterInstructionStatesStub.resolves({ result: 'SUCCESS' });
+
+        const resultOfUpdate = await handler.updateInstruction(mockEvent);
+        logger('Result of message instruction deactivation:', resultOfUpdate);
+
+        testHelper.standardOkayChecks(resultOfUpdate, [{
+            insertionId: mockInsertionId,
+            updateTime: mockUpdateTime
+        }]);
+
+        expect(updateMessageInstructionStub).to.have.been.calledOnceWithExactly(mockInstructionId, { ...mockEvent.updateValues });
         expect(alterInstructionStatesStub).to.have.not.been.called;
     });
 

@@ -168,7 +168,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
         }
         return ({ boostId, accountUserMap });
     });
-    logger('Assembled: ', resultObject);
+    // logger('Assembled: ', resultObject);
     return resultObject;
 };
 
@@ -250,7 +250,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, s
 
     // this sorts in descending, so latest is in first position
     const sortedArray = timesOfOperations.sort((timeA, timeB) => timeB.valueOf() - timeA.valueOf());
-    logger('Sorted properly? : ', sortedArray);
+    // logger('Sorted properly? : ', sortedArray);
     return { boostId, updatedTime: sortedArray[0] };
 };
 
@@ -331,7 +331,7 @@ const extractAccountIds = async (audienceId) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const accountIds = await extractAccountIds(boostDetails.audienceId);
+    const accountIds = await (boostDetails.defaultStatus === 'UNCREATED' ? [] : extractAccountIds(boostDetails.audienceId));
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();
@@ -379,18 +379,23 @@ module.exports.insertBoost = async (boostDetails) => {
     };
 
     logger('Inserting boost: ', boostObject);
+    
+    const queryDefs = [boostQueryDef];
 
-    const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
-    const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));
-    const boostJoinQueryDef = {
-        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
-        columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
-        rows: boostAccountJoins
-    };
+    if (accountIds.length > 0) {
+        const initialStatus = boostDetails.defaultStatus || 'CREATED'; // thereafter: OFFERED (when message sent), PENDING (almost done), COMPLETE
+        const boostAccountJoins = accountIds.map((accountId) => ({ boostId, accountId, boostStatus: initialStatus }));
+        const boostJoinQueryDef = {
+            query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
+            columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
+            rows: boostAccountJoins
+        };
+        queryDefs.push(boostJoinQueryDef);
+    }
 
     // logger('Sending to insertion: ', boostQueryDef);
 
-    const resultOfInsertion = await rdsConnection.largeMultiTableInsert([boostQueryDef, boostJoinQueryDef]);
+    const resultOfInsertion = await rdsConnection.largeMultiTableInsert(queryDefs);
     // logger('Insertion result: ', resultOfInsertion); // spews a lot of line
 
     // first query, first row, creation time
@@ -399,9 +404,12 @@ module.exports.insertBoost = async (boostDetails) => {
     const resultObject = {
         boostId: resultOfInsertion[0][0]['boost_id'],
         persistedTimeMillis: persistedTime.valueOf(),
-        numberOfUsersEligible: resultOfInsertion[1].length,
         accountIds
     };
+
+    if (resultOfInsertion.length > 1) {
+        resultObject.numberOfUsersEligible = resultOfInsertion[1].length;
+    }
 
     logger('Returning: ', resultObject);
     return resultObject;

@@ -5,6 +5,8 @@ jobs:
       - image: circleci/node:10
         environment:
     
+    resource_class: medium
+
     working_directory: ~/app
 
     steps:

@@ -14,6 +14,13 @@ const opsUtil = require('ops-util-common');
 const htmlToText = require('html-to-text');
 
 const sendGridMail = require('@sendgrid/mail');
+
+const {
+    classes: {
+      Mail
+    }
+  } = require('@sendgrid/helpers');
+
 const AWS = require('aws-sdk');
 
 const s3 = new AWS.S3();
@@ -367,7 +374,6 @@ module.exports.sendEmails = async (event) => {
             ...dispatchResult.reduce((failedArray, result) => [...failedArray, ...result.invalidDestinations], [])
         ];
 
-
         return { result: 'SUCCESS', failedAddresses };
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -375,26 +381,19 @@ module.exports.sendEmails = async (event) => {
     }
 };
 
-const dispatchEmailMessageChunk = async (chunk) => {
+// sendgrid support are saying we have to do this -- looking for an alternate email provider
+const dispatchSingleEmail = async (msg, sandbox, defaultFrom) => {
     try {
-        logger('Sending chunk of mails: ', chunk);
-        const defaultFrom = config.get('sendgrid.fromAddress');
-        // being very careful here
-        const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.get('sendgrid.sandbox.off');
-        const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: !sandboxOff } }};
-        const payload = chunk.map((msg) => (
-            { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox } // filters out messageId property
-        )); 
-
-        logger('Assembled payload: ', payload);
-        const result = await sendGridMail.send(payload);
-        logger('Result: ', JSON.stringify(result));
-        logger('Extracted results, first: ', result.map((insideResult) => insideResult[0].toJSON()));
-
-        const extractedMails = result.map((internalResult) => internalResult[0].toJSON());
-        const messageIdResults = chunk.map((msg, index) => ({ messageId: msg.messageId, statusCode: extractedMails[index].statusCode }));
+        const payload = { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox }; // filters out messageId property
         
-        return { result: 'SUCCESS', messageIdResults };
+        const debugMail = Mail.create(payload);
+        const mailBody = debugMail.toJSON();
+        logger('API request body: ', JSON.stringify(mailBody));
+
+        const mailResult = await sendGridMail.send(payload);
+
+        logger('API result: ', JSON.stringify(mailResult));
+        return mailResult[0].toJSON();
     } catch (error) {
         logger('FATAL_ERROR: ', error);
         if (error.response) {
@@ -407,6 +406,25 @@ const dispatchEmailMessageChunk = async (chunk) => {
             logger('Error headers: ', headers);
             logger('Error body: ', body);
         }
+        return { statusCode: 400 };
+    }
+};
+
+const dispatchEmailMessageChunk = async (chunk) => {
+    try {
+        // logger('Sending chunk of mails: ', chunk);
+        const defaultFrom = config.get('sendgrid.fromAddress');
+        // being very careful here
+        const sandboxOff = config.has('sendgrid.sandbox.off') && typeof config.get('sendgrid.sandbox.off') === 'boolean' && config.get('sendgrid.sandbox.off');
+        const sandbox = { 'mail_settings': { 'sandbox_mode': { enable: !sandboxOff } }};
+        
+        const mailSendPromises = chunk.map((msg) => dispatchSingleEmail(msg, sandbox, defaultFrom));
+        const mailSendResults = await Promise.all(mailSendPromises);
+
+        const messageIdResults = chunk.map((msg, index) => ({ messageId: msg.messageId, statusCode: mailSendResults[index].statusCode }));        
+        return { result: 'SUCCESS', messageIdResults };
+    } catch (error) {
+        logger('FATAL_ERROR: ', error);
         const messageIds = chunk.map((msg) => msg.messageId);
         return { result: 'ERROR', messageIds };
     }

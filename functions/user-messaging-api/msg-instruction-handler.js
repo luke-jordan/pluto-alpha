@@ -98,6 +98,8 @@ module.exports.validateMessageInstruction = (instruction) => {
     const templateValidationResult = templateType === 'template' ? validateMessageTemplate(instruction.templates) : validateMessageSequence(instruction.templates); 
     logger('Template validation result:', templateValidationResult);
 
+    const hasTriggerEvent = instruction.triggerParameters && Array.isArray(instruction.triggerParameters.triggerEvent) && instruction.triggerParameters.triggerEvent.length > 0;
+
     switch (true) {
         case instruction.presentationType === 'RECURRING' && !instruction.recurrenceParameters:
             throw new Error('recurrenceParameters is required where presentationType is set to RECURRING.');
@@ -105,7 +107,7 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error('Audience ID required on indivdual notification.');
         case instruction.audienceType === 'GROUP' && !instruction.audienceId:
             throw new Error('Audience ID required on group notification.');
-        case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory:
+        case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory && !hasTriggerEvent:
             throw new Error('Instructions for event driven must specify the event type');
         default:
             logger('Validation passed for message instruction');

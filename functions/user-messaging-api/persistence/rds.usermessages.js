@@ -197,13 +197,16 @@ module.exports.getNextMessage = async (destinationUserId, messageTypes) => {
     return result.map((msg) => transformMsg(msg));
 };
 
-module.exports.fetchUserHistoricalMessages = async (destinationUserId, messageTypes) => {
+module.exports.fetchUserHistoricalMessages = async (destinationUserId, messageTypes, onlyWithStoredBody = false) => {
     const values = [destinationUserId, 'SUPERCEDED', ...messageTypes];
     const typeIndices = opsUtil.extractArrayIndices(messageTypes, 3);
 
     const query = `select * from ${userMessageTable} where destination_user_id = $1 and processed_status != $2 ` +
-        `and display ->> 'type' in (${typeIndices})`;
+        `and display ->> 'type' in (${typeIndices})${onlyWithStoredBody ? ' and last_displayed_body is not null' : ''}`;
     
+    logger('Fetching historical messages with query: ', query);
+    logger('And with values: ', values);
+
     const result = await rdsConnection.selectQuery(query, values);
     logger('Retrieved past user messages from RDS: ', result);
     return result.map((msg) => transformMsg(msg, false));
