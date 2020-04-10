@@ -17,12 +17,14 @@ const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
 const insertStub = sinon.stub();
+const updateStub = sinon.stub();
 const uuidStub = sinon.stub();
 
 
 class MockRdsConnection {
     constructor () {
         this.insertRecords = insertStub;
+        this.updateRecord = updateStub;
     }
 }
 
@@ -33,7 +35,7 @@ const persistence = proxyquire('../persistence/handle-profiles', {
 
 
 describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
-    const friendsTable = config.get('tables.friendsTable');
+    const friendTable = config.get('tables.friendTable');
     const friendRequestTable = config.get('tables.friendRequestTable');
 
     const testIniatedUserId = uuid();
@@ -43,7 +45,7 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
     const testRelationshipId = uuid();
 
     beforeEach(() => {
-        helper.resetStubs(insertStub, uuidStub);
+        helper.resetStubs(insertStub, updateStub, uuidStub);
     });
 
     it('Inserts friend request, filters out extra params', async () => {
@@ -62,18 +64,36 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
         expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, columnTemplate, [queryObject]);
     });
 
-    it('Inserts friendship properrly', async () => {
-        const insertQuery = `insert into ${friendsTable} (relationship_id, initiated_user_id, accepted_user_id) values %L returning relationship_id`;
-        const columnTemplate = '${relationshipId}, ${initiatedUserId}, ${acceptedUserId}';
-        const friendshipObject = { relationshipId: testRelationshipId, initiatedUserId: testIniatedUserId, acceptedUserId: testAcceptedUserId };
+    it('Inserts friendship properly', async () => {
+        const insertQuery = `insert into ${friendTable} (relationship_id, initiated_user_id, accepted_user_id, relationship_status) ` +
+            `values %L returning relationship_id`;
+        const columnTemplate = '${relationshipId}, ${initiatedUserId}, ${acceptedUserId}, ${relationshipStatus}';
+        const friendshipObject = {
+            relationshipId: testRelationshipId,
+            initiatedUserId: testIniatedUserId,
+            acceptedUserId: testAcceptedUserId,
+            relationshipStatus: 'ACTIVE'
+        };
 
         uuidStub.returns(testRelationshipId);
-        insertStub.resolves({ rows: [{ 'relationship_id': testRelationshipId }] });
+        insertStub.withArgs(insertQuery, columnTemplate, [friendshipObject]).resolves({ rows: [{ 'relationship_id': testRelationshipId }] });
 
         const insertResult = await persistence.insertFriendship(testIniatedUserId, testAcceptedUserId);
         expect(insertResult).to.exist;
         expect(insertResult).to.deep.equal({ relationshipId: testRelationshipId });
         expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, columnTemplate, [friendshipObject]);
+    });
+
+    it('Deactivates friendship', async () => {
+        const updateQuery = `update ${friendTable} set relationship_status = $1 where relationship_id = $2 returning relationship_id`;
+        const updateValues = ['DEACTIVATED', testRelationshipId];
+
+        updateStub.withArgs(updateQuery, updateValues).resolves({ rows: [{ 'relationship_id': testRelationshipId }] });
+
+        const updateResult = await persistence.deactivateFriendship(testRelationshipId);
+        expect(updateResult).to.exist;
+        expect(updateResult).to.deep.equal({ relationshipId: testRelationshipId });
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['DEACTIVATED', testRelationshipId]);
     });
 
 });

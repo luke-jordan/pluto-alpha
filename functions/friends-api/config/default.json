@@ -11,7 +11,7 @@
     },
     "tables": {
         "accountTable": "account_data.core_account_ledger",
-        "friendsTable": "friends_data.core_friend_relationship",
+        "friendTable": "friends_data.core_friend_relationship",
         "friendRequestTable": "friends_data.friend_request",
         "dynamoProfileTable": "UserProfileTable"
     },

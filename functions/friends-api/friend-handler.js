@@ -6,8 +6,6 @@ const persistence = require('./persistence/get-profiles');
 const profileHandler = require('./persistence/handle-profiles');
 const opsUtil = require('ops-util-common');
 
-const extractSnsMessage = async (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
-
 /**
  * This functions accepts a users system id and returns the user's friends.
  * @param {object} event
@@ -22,7 +20,8 @@ module.exports.obtainFriends = async (event) => {
         
         let systemWideUserId = '';
         if (userDetails.role === 'SYSTEM_ADMIN') {
-            systemWideUserId = opsUtil.extractQueryParams(event).systemWideUserId;
+            const params = opsUtil.extractParamsFromEvent(event);
+            systemWideUserId = params.systemWideUserId ? params.systemWideUserId : userDetails.systemWideUserId;
         } else {
             systemWideUserId = userDetails.systemWideUserId;
         }
@@ -34,7 +33,7 @@ module.exports.obtainFriends = async (event) => {
         const profilesForFriends = await Promise.all(profileRequests);
         logger('Got user profiles:', profilesForFriends);
     
-        return opsUtil.wrapResponse({ [systemWideUserId]: profilesForFriends });
+        return opsUtil.wrapResponse(profilesForFriends);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -50,10 +49,12 @@ module.exports.obtainFriends = async (event) => {
  */
 module.exports.addFriendRequest = async (event) => {
     try {
-        const { systemWideUserId } = opsUtil.extractUserDetails(event);
-        if (!systemWideUserId) {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
             return { statusCode: 403 };
         }
+
+        const { systemWideUserId } = userDetails;
     
         const params = opsUtil.extractParamsFromEvent(event);
         if (!params.targetUserId && !params.targetContactDetails) {
@@ -72,22 +73,18 @@ module.exports.addFriendRequest = async (event) => {
 };
 
 /**
- * This function persists a new friendship. It is triggered by a method that also flips the friend request to approved, but it may also be called directly.
+ * This function persists a new friendship. Triggered by a method that also flips the friend request to approved, but may also be called directly.
  * @param {object} event
  * @property {string} initiatedUserId Required. The user id of the user who initiated the friendship.
  * @property {string} acceptedUserId Required. The user id of the user who accepted the friendship.
  */
 module.exports.addFriendship = async (event) => {
     try {
-        let params = {};
-        const userDetails = opsUtil.extractUserDetails(event);
-        if (userDetails) {
-            params = opsUtil.extractParamsFromEvent(event);
-        } else {
-            params = extractSnsMessage(event);
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
+            return { statusCode: 403 };
         }
-    
-        const { initiatedUserId, acceptedUserId } = params;    
+
+        const { initiatedUserId, acceptedUserId } = opsUtil.extractParamsFromEvent(event);
         if (!initiatedUserId || !acceptedUserId) {
             throw new Error('Error! Missing initiatedUserId or acceptedUserId');
         }
@@ -95,6 +92,33 @@ module.exports.addFriendship = async (event) => {
         const resultOfInsertion = await profileHandler.insertFriendship(initiatedUserId, acceptedUserId);
         logger('Result of friendship insertion:', resultOfInsertion);
     
+        return opsUtil.wrapResponse({ result: 'SUCCESS' });
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
+
+/**
+ * This functions deactivates a friendhip.
+ * @param {object} event
+ * @property {string} relationshipId The id of the relationship to be deactivated.
+ */
+module.exports.removeFriendship = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { relationshipId } = opsUtil.extractParamsFromEvent(event);
+        if (!relationshipId) {
+            throw new Error('Error! Missing relationshipId');
+        }
+
+        const resultOfRemoval = await profileHandler.deactivateFriendship(relationshipId);
+        logger('Result of friendship removal:', resultOfRemoval);
+
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
         logger('FATAL_ERROR:', err);

@@ -4,7 +4,6 @@
 
 const config = require('config');
 const uuid = require('uuid/v4');
-const moment = require('moment');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -43,7 +42,14 @@ const persistence = proxyquire('../persistence/get-profiles', {
     '@noCallThru': true
 });
 
-const expectedProfileColumns = [];
+const expectedProfileColumns = [
+    'systemWideUserId',
+    'personalName',
+    'familyName',
+    'calledName',
+    'emailAddress',
+    'phoneNumber'
+];
 
 const resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
@@ -57,22 +63,11 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
 
     const expectedUserProfile = {
         systemWideUserId: testSystemId,
-        creationTimeEpochMillis: moment().valueOf(),
-        clientId: 'test_client_id',
-        floatId: 'test_float_id',
-        defaultCurrency: 'USD',
-        defaultTimezone: 'America/New_York',
         personalName: 'Li',
         familyName: 'Er',
         phoneNumber: '16061110000',
         calledName: 'Lao Tzu',
-        emailAddress: 'laotzu@tao.com',
-        countryCode: 'USA',
-        nationalId: '10O320324I023',
-        userStatus: 'CREATED',
-        kycStatus: 'CONTACT_VERIFIED',
-        securedStatus: 'PASSWORD_SET',
-        updatedTimeEpochMillis: moment().valueOf()
+        emailAddress: 'laotzu@tao.com'
     };
 
     beforeEach(() => {
@@ -126,9 +121,9 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
 
     it('Gets the user ids of a users friends', async () => {
         const testAcceptedUserId = uuid();
-        const friendsTable = config.get('tables.friendsTable');
+        const friendTable = config.get('tables.friendTable');
 
-        const selectQuery = `select accepted_user_id from ${friendsTable} where initiated_user_id = $1`;
+        const selectQuery = `select accepted_user_id from ${friendTable} where initiated_user_id = $1`;
         queryStub.withArgs(selectQuery, [testSystemId]).resolves([{ 'accepted_user_id': testAcceptedUserId }]);
 
         const fetchResult = await persistence.getFriendIdsForUser({ systemWideUserId: testSystemId });

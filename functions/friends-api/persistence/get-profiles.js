@@ -13,7 +13,14 @@ const Redis = require('ioredis');
 const PROFILE_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.profile');
 const USER_ID_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.userId');
 
-const relevantProfileColumns = [];
+const relevantProfileColumns = [
+    'systemWideUserId',
+    'personalName',
+    'familyName',
+    'calledName',
+    'emailAddress',
+    'phoneNumber'
+];
 
 const fetchUserProfileFromDB = async (systemWideUserId) => {
     logger(`Fetching profile for user id: ${systemWideUserId} from table: ${config.get('tables.dynamoProfileTable')}`);
@@ -35,8 +42,8 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
 };
 
 const fetchAcceptedUserIdsForUser = async (systemWideUserId) => {
-    const friendsTable = config.get('tables.friendsTable');
-    const query = `select accepted_user_id from ${friendsTable} where initiated_user_id = $1`;
+    const friendTable = config.get('tables.friendTable');
+    const query = `select accepted_user_id from ${friendTable} where initiated_user_id = $1`;
     const fetchedUserIds = await rdsConnection.selectQuery(query, [systemWideUserId]);
     
     return fetchedUserIds.map((userId) => userId['accepted_user_id']);
