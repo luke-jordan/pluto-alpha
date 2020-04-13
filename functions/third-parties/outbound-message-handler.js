@@ -382,6 +382,7 @@ module.exports.sendEmails = async (event) => {
 };
 
 // sendgrid support are saying we have to do this -- looking for an alternate email provider
+// also, just in case, resetting the API key in here
 const dispatchSingleEmail = async (msg, sandbox, defaultFrom) => {
     try {
         const payload = { to: msg.to, from: msg.from || defaultFrom, subject: msg.subject, text: msg.text, html: msg.html, ...sandbox }; // filters out messageId property
@@ -462,8 +463,12 @@ module.exports.sendEmailMessages = async (event) => {
         logger('Validated messages: ', validMessages);
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
+
+        // doing this here, because hunch is global var and SDK are not playing nice (next option is remove SDK and just use request)
+        sendGridMail.setApiKey(config.get('sendgrid.apiKey'));
+        sendGridMail.setSubstitutionWrappers('{{', '}}');        
         
-        logger('Created chunks of length:', messageChunks.map((chunk) => chunk.length));
+        logger('Set SDK config, created chunks of length:', messageChunks.map((chunk) => chunk.length));
         const dispatchResult = await Promise.all(messageChunks.map((chunk) => dispatchEmailMessageChunk(chunk)));
 
         const failedChunks = dispatchResult.map((chunk) => {
