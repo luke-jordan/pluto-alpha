@@ -85,15 +85,18 @@ class RdsConnection {
                 logger('Error inside secrets promise? : ', err);
                 if (err) {
                     reject(err);
+                    return;
                 }
 
                 logger('Fetched secret data, is not null? ', fetchedSecretData !== null);
                 if (!fetchedSecretData || !fetchedSecretData.SecretString) {
                     reject(new Error('CONNECTION_ERROR: Secret Data empty, retry'));
+                    return;
                 }
 
                 if (fetchedSecretData === null || typeof fetchedSecretData.SecretString !== 'string' || fetchedSecretData.SecretString.length === 0) {
                     reject(new Error('Failed on null secret data'));
+                    return;
                 }
                 
                 const { username, password } = JSON.parse(fetchedSecretData.SecretString);
