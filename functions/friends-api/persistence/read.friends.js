@@ -3,12 +3,14 @@
 const logger = require('debug')('jupiter:friends:dynamo');
 const config = require('config');
 
-const dynamoCommon = require('dynamo-common');
+const camelCaseKeys = require('camelcase-keys');
 
+const dynamoCommon = require('dynamo-common');
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const Redis = require('ioredis');
+const redis = new Redis({ port: config.get('cache.port'), host: config.get('cache.host') });
 
 const PROFILE_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.profile');
 const USER_ID_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.userId');
@@ -49,68 +51,36 @@ const fetchAcceptedUserIdsForUser = async (systemWideUserId) => {
     return fetchedUserIds.map((userId) => userId['accepted_user_id']);
 };
 
-const initiateCacheConnection = async (keyPrefix) => {
-    logger('Initiating connection to cache');
-    try {
-        const connectionToCache = new Redis({ 
-            port: config.get('cache.port'), 
-            host: config.get('cache.host'), 
-            retryStrategy: () => `dont retry`, 
-            keyPrefix
-        });
-        logger('Successfully initiated connection to cache');
-        return connectionToCache;
-    } catch (error) {
-        logger(`Error while initiating connection to cache. Error: ${JSON.stringify(error.message)}`);
-        return null;
-    }
-};
-
-const fetchUserDetailsFromCache = async (key, keyPrefix) => {
-    logger(`Fetching user detail from cache`);
-    const cache = await initiateCacheConnection(keyPrefix);
-    if (!cache || cache.status === 'connecting') {
-        return { cache: null, responseFromCache: null };
-    }
-
-    const responseFromCache = await cache.get(key);
-    return { cache, responseFromCache };
-};
-
 const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     logger(`Fetching 'user profile' from database or cache`);
 
-    const keyPrefix = `${config.get('cache.keyPrefixes.profile')}::`;
-    const { cache, responseFromCache } = await fetchUserDetailsFromCache(systemWideUserId, keyPrefix);
+    const key = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
+    const responseFromCache = await redis.get(key);
     
     if (!responseFromCache) {
         logger(`Profile for '${systemWideUserId}' NOT found in cache. Searching DB`);
         const userProfile = await fetchUserProfileFromDB(systemWideUserId);
-        if (cache) {
-            await cache.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
-            logger(`Successfully fetched 'user profile' from database and stored in cache`);
-        }
+        await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
+        logger(`Successfully fetched 'user profile' from database and stored in cache`);
 
         return userProfile;
     }
     
     logger(`Successfully fetched 'user profile' from cache`);
-    return responseFromCache;
+    return JSON.parse(responseFromCache);
 };
 
 const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
     logger(`Fetching 'user id' from database or cache`);
 
-    const keyPrefix = `${config.get('cache.keyPrefixes.userId')}::`;
-    const { cache, responseFromCache } = await fetchUserDetailsFromCache(accountId, keyPrefix);
+    const key = `${config.get('cache.keyPrefixes.userId')}::${accountId}`;
+    const responseFromCache = await redis.get(key);
 
     if (!responseFromCache) {
         logger('Account user id not found in cache. Searching DB');
         const systemWideUserId = await fetchUserIdForAccountFromDB(accountId);
-        if (cache) {
-            await cache.set(accountId, systemWideUserId, 'EX', USER_ID_CACHE_TTL_IN_SECONDS);
-            logger('Successfully stored user id in cache');
-        }
+        await redis.set(accountId, systemWideUserId, 'EX', USER_ID_CACHE_TTL_IN_SECONDS);
+        logger('Successfully stored user id in cache');
 
         return systemWideUserId;
     }
@@ -154,4 +124,14 @@ module.exports.getFriendIdsForUser = async (params) => {
 
     const systemWideUserId = params.systemWideUserId;
     return fetchAcceptedUserIdsForUser(systemWideUserId);
+};
+
+module.exports.fetchFriendshipRequest = async (requestId) => {
+    const friendRequestTable = config.get('tables.friendRequestTable');
+    const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
+
+    const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestId]);
+    logger('Fetched friend request:', fetchResult);
+
+    return fetchResult.length > 0 ? camelCaseKeys(fetchResult[0]) : null;
 };

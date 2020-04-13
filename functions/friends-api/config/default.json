@@ -20,8 +20,8 @@
         "detailsTTL": 900,
         "host": "localhost",
         "keyPrefixes": {
-            "profile": "USER_PROFILE",
-            "userId": "USER_ID"
+            "profile": "FRIENDS_PROFILE",
+            "userId": "FRIENDS_USER_ID"
         },
         "ttls": {
             "profile": 25200,

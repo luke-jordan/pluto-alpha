@@ -28,7 +28,7 @@ class MockRdsConnection {
     }
 }
 
-const persistence = proxyquire('../persistence/handle-profiles', {
+const persistence = proxyquire('../persistence/write.friends', {
     'rds-common': MockRdsConnection,
     'uuid/v4': uuidStub    
 });
