@@ -104,6 +104,7 @@ jobs:
           command: |
 
             echo "Executing all lints, tests"
+            /bin/sh execute_test_lint.sh functions/friends-api
             /bin/sh execute_test_lint.sh functions/float-api
             /bin/sh execute_test_lint.sh functions/user-activity-api
             /bin/sh execute_test_lint.sh functions/user-existence-api
