@@ -10,7 +10,11 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const Redis = require('ioredis');
-const redis = new Redis({ port: config.get('cache.port'), host: config.get('cache.host') });
+const redis = new Redis({
+    port: config.get('cache.port'),
+    host: config.get('cache.host'),
+    retryStrategy: () => `dont retry`
+});
 
 const PROFILE_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.profile');
 const USER_ID_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.userId');
