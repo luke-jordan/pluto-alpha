@@ -63,9 +63,6 @@ module.exports.addFriendshipRequest = async (event) => {
 
         if (!params.targetUserId) {
             const targetUser = await persistenceRead.fetchUserByContactDetail(params.targetContactDetails);
-            if (!targetUser) {
-                throw new Error(`No user found with contact detail: ${params.targetContactDetails}`);
-            }
             params.targetUserId = targetUser.systemWideUserId;
         }
     
