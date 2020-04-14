@@ -13,7 +13,9 @@
         "accountTable": "account_data.core_account_ledger",
         "friendTable": "friends_data.core_friend_relationship",
         "friendRequestTable": "friends_data.friend_request",
-        "dynamoProfileTable": "UserProfileTable"
+        "profileTable": "UserProfileTable",
+        "phoneTable": "UserPhoneTable",
+        "emailTable": "UserEmailTable"
     },
     "cache": {
         "port": 6739,

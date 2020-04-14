@@ -12,6 +12,7 @@ const expect = chai.expect;
 
 const helper = require('./test-helper');
 
+const fetchUserStub = sinon.stub();
 const getFriendsStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
@@ -28,6 +29,7 @@ const testRequestId = uuid();
 
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
+        'fetchUserByContactDetail': fetchUserStub,
         'fetchFriendshipRequest': fetchRequestStub,
         'getFriendIdsForUser': getFriendsStub,
         'fetchUserProfile': fetchProfileStub
@@ -39,7 +41,7 @@ const handler = proxyquire('../friend-handler', {
     }
 });
 
-const resetStubs = () => helper.resetStubs(getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub, deactivateFriendshipStub);
+const resetStubs = () => helper.resetStubs(fetchUserStub, getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub, deactivateFriendshipStub);
 
 describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
@@ -102,7 +104,8 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 });
 
 
-describe('*** UNIT TEST ADD FRIEND REQUEST ***', () => {
+describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
+    const testContactDetail = 'user@email.com';
 
     beforeEach(() => {
         resetStubs();
@@ -115,6 +118,19 @@ describe('*** UNIT TEST ADD FRIEND REQUEST ***', () => {
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS' }));
         expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly({ initiatedUserId: testIniatedUserId, targetUserId: testTargetUserId });
+    });
+
+    it('Finds target user id where absent and contact detail is provided', async () => {
+        const insertionArgs = { initiatedUserId: testIniatedUserId, targetUserId: testTargetUserId, targetContactDetails: testContactDetail };
+        fetchUserStub.withArgs(testContactDetail).resolves({ systemWideUserId: testTargetUserId });
+        insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: uuid() });
+
+        const testEvent = helper.wrapEvent({ targetContactDetails: testContactDetail }, testIniatedUserId, 'ORDINARY_USER');
+        const insertionResult = await handler.addFriendshipRequest(testEvent);
+
+        expect(insertionResult).to.exist;
+        expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS' }));
+        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
     });
 
     it('Rejects unauthorized requests', async () => {
@@ -135,7 +151,7 @@ describe('*** UNIT TEST ADD FRIEND REQUEST ***', () => {
 
 });
 
-describe('*** UNIT TEST ADD FRIENDSHIP ***', () => {
+describe('*** UNIT TEST FRIENDSHIP INSERTION ***', () => {
 
     beforeEach(() => {
         resetStubs();
@@ -187,7 +203,7 @@ describe('*** UNIT TEST ADD FRIENDSHIP ***', () => {
 
 });
 
-describe('*** UNIT TEST REMOVE FRIENDSHIP ***', () => {
+describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
 
     beforeEach(() => {
         resetStubs();

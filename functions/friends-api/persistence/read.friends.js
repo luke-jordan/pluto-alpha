@@ -20,17 +20,17 @@ const PROFILE_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.profile');
 const USER_ID_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.userId');
 
 const relevantProfileColumns = [
-    'systemWideUserId',
-    'personalName',
-    'familyName',
-    'calledName',
-    'emailAddress',
-    'phoneNumber'
+    'system_wide_user_id',
+    'personal_name',
+    'family_name',
+    'called_name',
+    'emai_adress',
+    'phone_number'
 ];
 
 const fetchUserProfileFromDB = async (systemWideUserId) => {
-    logger(`Fetching profile for user id: ${systemWideUserId} from table: ${config.get('tables.dynamoProfileTable')}`);
-    const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.dynamoProfileTable'), { systemWideUserId }, relevantProfileColumns);
+    logger(`Fetching profile for user id: ${systemWideUserId} from table: ${config.get('tables.profileTable')}`);
+    const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.profileTable'), { systemWideUserId }, relevantProfileColumns);
     logger('Result from DynamoDB: ', rowFromDynamo);
 
     if (!rowFromDynamo) {
@@ -130,6 +130,10 @@ module.exports.getFriendIdsForUser = async (params) => {
     return fetchAcceptedUserIdsForUser(systemWideUserId);
 };
 
+/**
+ * This function fetches a friendship request by its request id.
+ * @param {string} requestId The friendships request id.
+ */
 module.exports.fetchFriendshipRequest = async (requestId) => {
     const friendRequestTable = config.get('tables.friendRequestTable');
     const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
@@ -138,4 +142,20 @@ module.exports.fetchFriendshipRequest = async (requestId) => {
     logger('Fetched friend request:', fetchResult);
 
     return fetchResult.length > 0 ? camelCaseKeys(fetchResult[0]) : null;
+};
+
+/**
+ * This function searches the user id associated with a contact detail.
+ * @param {string} contactDetail Either the phone number or email address of the user whose system id is sought.
+ */
+module.exports.fetchUserByContactDetail = async (contactDetail) => {
+    logger('Searching for user with contact detail', contactDetail);
+    const phoneQuery = dynamoCommon.fetchSingleRow(config.get('tables.phoneTable'), { phoneNumber: contactDetail });
+    const emailQuery = dynamoCommon.fetchSingleRow(config.get('tables.emailTable'), { emailAddress: contactDetail });
+
+    const resultFromDynamo = await Promise.all([phoneQuery, emailQuery]);
+    logger('Dynamo search for user by contact resulted in:', resultFromDynamo);
+
+    const itemFromDynamo = resultFromDynamo.filter((result) => typeof result === 'object' && Object.keys(result).length > 0);
+    return itemFromDynamo.length > 0 ? camelCaseKeys(itemFromDynamo[0]) : null;
 };

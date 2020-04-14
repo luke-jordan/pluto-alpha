@@ -41,12 +41,12 @@ const persistence = proxyquire('../persistence/read.friends', {
 });
 
 const expectedProfileColumns = [
-    'systemWideUserId',
-    'personalName',
-    'familyName',
-    'calledName',
-    'emailAddress',
-    'phoneNumber'
+    'system_wide_user_id',
+    'personal_name',
+    'family_name',
+    'called_name',
+    'emai_adress',
+    'phone_number'
 ];
 
 describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
@@ -55,7 +55,9 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     const testInitiatedUserId = uuid();
     const testAccountId = uuid();
 
-    const profileTable = config.get('tables.dynamoProfileTable');
+    const profileTable = config.get('tables.profileTable');
+    const phoneTable = config.get('tables.phoneTable');
+    const emailTable = config.get('tables.emailTable');
 
     const expectedUserProfile = {
         systemWideUserId: testSystemId,
@@ -141,5 +143,18 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testRequestId]);
+    });
+
+    it('Fetches user by contact detail', async () => {
+        const testContactDetail = 'user@email.com';
+        fetchStub.withArgs(emailTable, { emailAddress: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
+        fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetail }).resolves({ });
+
+        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
+        expect(fetchStub).to.have.been.calledTwice;
+        expect(fetchStub).to.have.been.calledWith(emailTable, { emailAddress: testContactDetail });
+        expect(fetchStub).to.have.been.calledWith(phoneTable, { phoneNumber: testContactDetail });
     });
 });

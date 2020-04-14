@@ -60,6 +60,14 @@ module.exports.addFriendshipRequest = async (event) => {
         if (!params.targetUserId && !params.targetContactDetails) {
             throw new Error('Error! targetUserId or targetContactDetails must be provided');
         }
+
+        if (!params.targetUserId) {
+            const targetUser = await persistenceRead.fetchUserByContactDetail(params.targetContactDetails);
+            if (!targetUser) {
+                throw new Error(`No user found with contact detail: ${params.targetContactDetails}`);
+            }
+            params.targetUserId = targetUser.systemWideUserId;
+        }
     
         const friendRequestParams = { initiatedUserId: systemWideUserId, ...params };
         const resultOfInsertion = await persistenceWrite.insertFriendRequest(friendRequestParams);
