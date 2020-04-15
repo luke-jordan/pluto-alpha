@@ -145,16 +145,22 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testRequestId]);
     });
 
-    it('Fetches user by contact detail', async () => {
+    it('Fetches user by email', async () => {
         const testContactDetail = 'user@email.com';
         fetchStub.withArgs(emailTable, { emailAddress: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
-        fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetail }).resolves({ });
+        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
+        expect(fetchStub).to.have.been.calledOnceWithExactly(emailTable, { emailAddress: testContactDetail });
+    });
+
+    it('Fetches user by email', async () => {
+        const testContactDetail = '27632390812';
+        fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
 
         const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
-        expect(fetchStub).to.have.been.calledTwice;
-        expect(fetchStub).to.have.been.calledWith(emailTable, { emailAddress: testContactDetail });
-        expect(fetchStub).to.have.been.calledWith(phoneTable, { phoneNumber: testContactDetail });
+        expect(fetchStub).to.have.been.calledOnceWithExactly(phoneTable, { phoneNumber: testContactDetail });
     });
 });

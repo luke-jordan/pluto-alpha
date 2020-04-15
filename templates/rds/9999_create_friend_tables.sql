@@ -14,11 +14,15 @@ create table if not exists friends_data.core_friend_relationship (
 
 create table if not exists friends_data.friend_request (
     request_id uuid not null primary key,
+    request_status varchar (100) check (request_status in ('PENDING', 'ACCEPTED', 'REJECTED')),
     initiated_user_id uuid not null references friends_data.core_friend_relationship(initiated_user_id),
     target_user_id uuid,
     target_contact_details jsonb,
+    request_code varchar (100),
     request_type varchar (100)
 );
+
+create index if not exists idx_request_status on friends_data.friend_request (request_status);
 
 create table if not exists friend_data.friend_log (
     log_id uuid not null primary key,

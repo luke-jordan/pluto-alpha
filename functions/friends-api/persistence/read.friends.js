@@ -148,14 +148,17 @@ module.exports.fetchFriendshipRequest = async (requestId) => {
  * This function searches the user id associated with a contact detail.
  * @param {string} contactDetail Either the phone number or email address of the user whose system id is sought.
  */
-module.exports.fetchUserByContactDetail = async (contactDetail) => {
-    logger('Searching for user with contact detail', contactDetail);
-    const phoneQuery = dynamoCommon.fetchSingleRow(config.get('tables.phoneTable'), { phoneNumber: contactDetail });
-    const emailQuery = dynamoCommon.fetchSingleRow(config.get('tables.emailTable'), { emailAddress: contactDetail });
+module.exports.fetchUserByContactDetail = async (contactDetail, contactType) => {
+    let itemFromDynamo = {};
+    if (contactType === 'PHONE') {
+        itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.phoneTable'), { phoneNumber: contactDetail });
+    }
+    
+    if (contactType === 'EMAIL') {
+        itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.emailTable'), { emailAddress: contactDetail });
+    }
 
-    const resultFromDynamo = await Promise.all([phoneQuery, emailQuery]);
-    logger('Dynamo search for user by contact resulted in:', resultFromDynamo);
-
-    const itemFromDynamo = resultFromDynamo.filter((result) => typeof result === 'object' && Object.keys(result).length > 0);
-    return itemFromDynamo.length > 0 ? camelCaseKeys(itemFromDynamo[0]) : null;
+    logger('Dynamo search for user by contact resulted in:', itemFromDynamo);
+        return typeof itemFromDynamo === 'object' && Object.keys(itemFromDynamo).length > 0
+            ? itemFromDynamo : null;
 };

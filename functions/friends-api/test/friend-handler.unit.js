@@ -212,14 +212,14 @@ describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
     it('Persists new friendship', async () => {
         deactivateFriendshipStub.withArgs(testRelationshipId).resolves({ relationshipId: uuid() });
         const testEvent = { relationshipId: testRelationshipId };
-        const removalResult = await handler.removeFriendship(helper.wrapEvent(testEvent, testSystemId, 'ORDINARY_USER'));
+        const removalResult = await handler.deactivateFriendship(helper.wrapEvent(testEvent, testSystemId, 'ORDINARY_USER'));
         expect(removalResult).to.exist;
         expect(removalResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS' }));
         expect(deactivateFriendshipStub).to.have.been.calledOnceWithExactly(testRelationshipId);
     });
 
     it('Rejects unauthorized requests', async () => {
-        const removalResult = await handler.removeFriendship({ relationshipId: testRelationshipId });
+        const removalResult = await handler.deactivateFriendship({ relationshipId: testRelationshipId });
         expect(removalResult).to.exist;
         expect(removalResult).to.deep.equal({ statusCode: 403 });
         expect(deactivateFriendshipStub).to.have.not.been.called;
@@ -227,7 +227,7 @@ describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
 
     it('Fails on invalid parameters', async () => {
         const expectedResult = { message: 'Error! Missing relationshipId' };
-        const removalResult = await handler.removeFriendship(helper.wrapEvent({ }, testSystemId, 'ORDINARY_USER'));
+        const removalResult = await handler.deactivateFriendship(helper.wrapEvent({ }, testSystemId, 'ORDINARY_USER'));
         expect(removalResult).to.exist;
         expect(removalResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(deactivateFriendshipStub).to.have.not.been.called;

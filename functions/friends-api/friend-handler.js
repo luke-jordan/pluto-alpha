@@ -1,6 +1,8 @@
 'use strict';
 
 const logger = require('debug')('jupiter:friends:main');
+const validator = require('validator');
+const hri = require('human-readable-ids').hri;
 
 const persistenceRead = require('./persistence/read.friends');
 const persistenceWrite = require('./persistence/write.friends');
@@ -40,6 +42,49 @@ module.exports.obtainFriends = async (event) => {
     }
 };
 
+const handleSMSConfirmation = async (friendRequest) => {
+    const smsTemplate = {}; // get template
+    // send sms, throw error on failure
+    return { result: 'SUCCESS' };
+};
+
+const handleEmailConfirmation = async (friendRequest) => {
+    const emailTemplate = {}; // get template
+    // send email, throw error on failure
+    return { result: 'SUCCESS' };
+};
+
+const generateRequestCode = () => {
+    const generatedCode = hri.random().split('-');
+    // todo: validate request code is not used in any active requests
+    return `${generatedCode[0]}_${genaratedCode[1]}`.toUpperCase();
+}
+
+const identifyContactType = (contact) => {
+    if (validator.isEmail(contact)) {
+        return 'EMAIL';
+    }
+    if (validator.isMobilePhone(contact, ['en-ZA'])) {
+        return 'PHONE';
+    }
+
+    return null;
+};
+
+const handleUserNotFound = async (friendRequest, contactType) => {
+    const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
+    logger('Persisting friend request resulted in:', insertionResult);
+    // validate response from persistence
+
+    if (contactType === 'PHONE') {
+        return handleSMSConfirmation(friendRequest);
+    }
+
+    if (contactType === 'EMAIL') {
+        return handleEmailConfirmation(friendRequest);
+    }
+};
+
 /**
  * This function persists a new friendship request.
  * @param {object} event
@@ -56,19 +101,31 @@ module.exports.addFriendshipRequest = async (event) => {
 
         const { systemWideUserId } = userDetails;
     
-        const params = opsUtil.extractParamsFromEvent(event);
-        if (!params.targetUserId && !params.targetContactDetails) {
+        const friendRequest = opsUtil.extractParamsFromEvent(event);
+        if (!friendRequest.targetUserId && !friendRequest.targetContactDetails) {
             throw new Error('Error! targetUserId or targetContactDetails must be provided');
         }
 
-        if (!params.targetUserId) {
-            const targetUser = await persistenceRead.fetchUserByContactDetail(params.targetContactDetails);
-            params.targetUserId = targetUser.systemWideUserId;
+        friendRequest.initiatedUserId = systemWideUserId;
+
+        if (!friendRequest.targetUserId) {
+            const targetContactDetails = friendRequest.targetContactDetails;
+            const contactType = identifyContactType(targetContactDetails);
+            if (!contactType) {
+                throw new Error(`Invalid target contact: ${targetContactDetails}`);
+            }
+
+            const targetUserForFriendship = await persistenceRead.fetchUserByContactDetail(targetContactDetails, contactType);
+            if (!targetUserForFriendship) {
+                friendRequest.requestCode = generateRequestCode();
+                return handleUserNotFound(friendRequest, contactType);
+            }
+
+            friendRequest.targetUserId = targetUserForFriendship.systemWideUserId;
         }
     
-        const friendRequestParams = { initiatedUserId: systemWideUserId, ...params };
-        const resultOfInsertion = await persistenceWrite.insertFriendRequest(friendRequestParams);
-        logger('Result of friend request insertion:', resultOfInsertion);
+        const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
+        logger('Result of friend request insertion:', insertionResult);
     
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
@@ -80,8 +137,7 @@ module.exports.addFriendshipRequest = async (event) => {
 /**
  * This function persists a new friendship. Triggered by a method that also flips the friend request to approved, but may also be called directly.
  * @param {object} event
- * @property {string} initiatedUserId Required. The user id of the user who initiated the friendship.
- * @property {string} acceptedUserId Required. The user id of the user who accepted the friendship.
+ * @property {string} requestId Required. The The friendships request id.
  */
 module.exports.acceptFriendshipRequest = async (event) => {
     try {
@@ -122,7 +178,7 @@ module.exports.acceptFriendshipRequest = async (event) => {
  * @param {object} event
  * @property {string} relationshipId The id of the relationship to be deactivated.
  */
-module.exports.removeFriendship = async (event) => {
+module.exports.deactivateFriendship = async (event) => {
     try {
         const userDetails = opsUtil.extractUserDetails(event);
         if (!userDetails) {
