@@ -37,7 +37,7 @@ const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ..
 module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { keyName: 'VALUE' }, soughtAttributes = []) => {
 
     const caseConvertedKey = decamelizeKeys(keyValue);
-    logger('Transformed key: ', caseConvertedKey);
+    
     const params = {
         TableName: tableName,
         Key: caseConvertedKey
@@ -50,10 +50,8 @@ module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { ke
     logger('Passing parameters to docClient: ', params);
 
     try {
-        logger('Table name for DynamoDB ? :', params['TableName']);
         const ddbResult = await docC.get(params).promise();
         logger('Retrieved result: ', ddbResult);
-        logger('Type of result: ', typeof ddbResult);
         return nonEmptyReturnItem(ddbResult) ? camelCaseKeys(ddbResult.Item) : { };
     } catch (e) {
         logger('Error from AWS: ', e.message);

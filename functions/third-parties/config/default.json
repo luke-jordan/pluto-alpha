@@ -75,6 +75,7 @@
         ]
     },
     "sendgrid": {
+        "endpoint": "https://api.sendgrid.com/v3/mail/send",
         "apiKey": "",
         "chunkSize": 1000,
         "fromName": "Jupiter",

@@ -391,10 +391,23 @@ const dispatchSingleEmail = async (msg, sandbox, defaultFrom) => {
         const mailBody = debugMail.toJSON();
         logger('API request body: ', JSON.stringify(mailBody));
 
-        const mailResult = await sendGridMail.send(payload);
+        const options = {
+            method: 'POST',
+            uri: config.get('sendgrid.endpoint'),
+            headers: {
+                'Authorization': `Bearer ${config.get('sendgrid.apiKey')}`,
+                'Content-Type': 'application/json'
+            },
+            body: mailBody,
+            json: true
+        };
 
-        logger('API result: ', JSON.stringify(mailResult));
-        return mailResult[0].toJSON();
+        logger('Assembled options:', options);
+        const result = await request(options);
+        logger('Got result:', result);
+
+        logger('API result, raw: ', JSON.stringify(result));
+        return result;
     } catch (error) {
         logger('FATAL_ERROR: ', error);
         if (error.response) {

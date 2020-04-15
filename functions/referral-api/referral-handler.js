@@ -91,6 +91,24 @@ const updateUserProfile = async (systemWideUserId, referralCode) => {
 };
 
 /**
+ * Method to find out at present if referral codes are required for the country, and/or obtain a default
+ * @param {object} event Standard event object
+ * @property {string} countyCode The country in reference
+ */
+module.exports.status = async (event) => {
+    try {
+        const params = opsUtil.extractQueryParams(event);
+        logger('Received params: ', params);
+        const { countryCode } = params;
+        logger('Return for country code: ', countryCode);
+        const result = { codeRequired: true, defaultCode: 'RANDELAS' };
+        return { statusCode: status['OK'], body: JSON.stringify(result) };
+    } catch (err) {
+        return handleErrorAndReturn(err);
+    }
+};
+
+/**
  * @param {object} event An event objet containing a referral code, code type, the system wide id of its creator, and its expiry time in millieseconds.
  * @property {string} referralCode The referral code.
  * @property {string} codeType The code type.
