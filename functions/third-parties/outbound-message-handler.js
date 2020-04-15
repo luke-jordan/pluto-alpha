@@ -8,6 +8,7 @@ const format = require('string-format');
 const path = require('path');
 
 const request = require('request-promise');
+const tiny = require('tiny-json-http');
 
 const opsUtil = require('ops-util-common');
 
@@ -391,10 +392,19 @@ const dispatchSingleEmail = async (msg, sandbox, defaultFrom) => {
         const mailBody = debugMail.toJSON();
         logger('API request body: ', JSON.stringify(mailBody));
 
-        const mailResult = await sendGridMail.send(payload);
+        const options = {
+            url: config.get('sendgrid.endpoint'),
+            headers: {
+                'Authorization': `Bearer ${config.get('sendgrid.apiKey')}`,
+                'Content-Type': 'application/json'
+            },
+            data: mailBody
+        };
 
-        logger('API result: ', JSON.stringify(mailResult));
-        return mailResult[0].toJSON();
+        logger('Assembled options:', options);
+        const result = await tiny.post(options);
+        logger('API result: ', JSON.stringify(result));
+        return { statusCode: 200 };
     } catch (error) {
         logger('FATAL_ERROR: ', error);
         if (error.response) {
