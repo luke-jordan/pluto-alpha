@@ -53,8 +53,10 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     const testSystemId = uuid();
     const testTargetUserId = uuid();
     const testInitiatedUserId = uuid();
+    const testRequestId = uuid();
     const testAccountId = uuid();
 
+    const friendRequestTable = config.get('tables.friendRequestTable');
     const profileTable = config.get('tables.profileTable');
     const phoneTable = config.get('tables.phoneTable');
     const emailTable = config.get('tables.emailTable');
@@ -133,9 +135,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     });
 
     it('Fetches friendship requests', async () => {
-        const testRequestId = uuid();
-        const friendRequestTable = config.get('tables.friendRequestTable');
-
         const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
         queryStub.withArgs(selectQuery, [testRequestId]).resolves([{ 'initiated_user_id': testInitiatedUserId, 'target_user_id': testTargetUserId }]);
 
@@ -148,7 +147,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     it('Fetches user by email', async () => {
         const testContactDetail = 'user@email.com';
         fetchStub.withArgs(emailTable, { emailAddress: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
-        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail);
+        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail, 'EMAIL');
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
         expect(fetchStub).to.have.been.calledOnceWithExactly(emailTable, { emailAddress: testContactDetail });
@@ -158,9 +157,20 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const testContactDetail = '27632390812';
         fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
 
-        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail);
+        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail, 'PHONE');
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
         expect(fetchStub).to.have.been.calledOnceWithExactly(phoneTable, { phoneNumber: testContactDetail });
+    });
+
+    it('Asserts whether request code exists in active requests', async () => {
+        const testRequestCode = 'FLYING LOTUS';
+        const selectQuery = `select request_id from ${friendRequestTable} where request_code = $1 and request_status = $2`;
+        queryStub.withArgs(selectQuery, [testRequestCode, 'PENDING']).resolves([{ 'request_id': testRequestId }]);
+
+        const resultOfAssert = await persistence.requesteCodeExists(testRequestCode);
+        expect(resultOfAssert).to.exist;
+        expect(resultOfAssert).to.be.true;
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testRequestCode, 'PENDING']);
     });
 });

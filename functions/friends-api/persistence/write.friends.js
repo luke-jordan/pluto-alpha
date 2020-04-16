@@ -3,38 +3,52 @@
 const logger = require('debug')('jupiter:friends:dynamo');
 const config = require('config');
 const uuid = require('uuid/v4');
-
 const decamelize = require('decamelize');
-const camelCaseKeys = require('camelcase-keys');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const friendTable = config.get('tables.friendTable');
 const friendRequestTable = config.get('tables.friendRequestTable');
+const friendLogTable = config.get('tables.friendLogTable');
 
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 module.exports.insertFriendRequest = async (requestParams) => {
-    requestParams.requestId = uuid();
+    const requestId = uuid();
+    requestParams.requestId = requestId;
+    requestParams.requestStatus = 'PENDING';
 
-    const paramsToInclude = ['requestId', 'initiatedUserId', 'targetUserId', 'targetContactDetails', 'requestType'];
+    const paramsToInclude = ['requestId', 'requestStatus', 'initiatedUserId', 'targetUserId', 'targetContactDetails', 'requestCode', 'requestType'];
     /* eslint-disable no-confusing-arrow */
     const friendRequest = paramsToInclude.reduce((obj, param) => requestParams[param] ? { ...obj, [param]: requestParams[param] } : { ...obj }, {});
     /* eslint-disable no-confusing-arrow */ 
-    
-    const objectKeys = Object.keys(friendRequest);
-    const columnTemplate = extractColumnTemplate(objectKeys);
+    const friendReqKeys = Object.keys(friendRequest);
+    const friendQueryDef = {
+        query: `insert into ${friendRequestTable} (${extractColumnNames(friendReqKeys)}) values %L returning request_id, creation_time`,
+        columnTemplate: extractColumnTemplate(friendReqKeys),
+        rows: [friendRequest]
+    };
 
-    const insertQuery = `insert into ${friendRequestTable} (${extractColumnNames(objectKeys)}) values %L returning request_id`;
-    logger(`Sending insertion query: ${insertQuery} with column template: ${columnTemplate}`);
-    
-    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [friendRequest]);
-    logger('Result of insertion: ', resultOfInsert);
+    const logId = uuid();
+    const logRow = { logId, requestId, logType: 'FRIENDSHIP_REQUESTED', logContext: friendRequest };
+    const logKeys = Object.keys(logRow);
 
-    return typeof resultOfInsert === 'object' && Array.isArray(resultOfInsert.rows) 
-        ? camelCaseKeys(resultOfInsert.rows[0]) : null;
+    const logInsertDef = {
+        query: `insert into ${friendLogTable} (${extractColumnNames(logKeys)}) values %L returning log_id, creation_time`,
+        columnTemplate: extractColumnTemplate(logKeys),
+        rows: [logRow]
+    };
+
+    logger(`Sending out friend request query: ${friendQueryDef} and log query: ${logInsertDef} to rds`);
+    const insertionResult = await rdsConnection.largeMultiTableInsert([friendQueryDef, logInsertDef]);
+    logger('Result of insertion:', insertionResult);
+
+    const queryRequestId = insertionResult[0][0]['request_id'];
+    const queryLogId = insertionResult[1][0]['log_id'];
+
+    return { requestId: queryRequestId, logId: queryLogId };
 };
 
 module.exports.insertFriendship = async (initiatedUserId, acceptedUserId) => {
@@ -42,26 +56,56 @@ module.exports.insertFriendship = async (initiatedUserId, acceptedUserId) => {
     const relationshipStatus = 'ACTIVE';
 
     const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus };
+    const friendshipKeys = Object.keys(friendshipObject);
 
-    const objectKeys = Object.keys(friendshipObject);
-    const columnNames = extractColumnNames(objectKeys);
-    const columnTemplate = extractColumnTemplate(objectKeys);
+    const friendQueryDef = {
+        query: `insert into ${friendTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`,
+        columnTemplate: extractColumnTemplate(friendshipKeys),
+        rows: [friendshipObject]
+    };
 
-    const insertQuery = `insert into ${friendTable} (${columnNames}) values %L returning relationship_id`;
-    logger(`Sending insertion query: ${insertQuery} with column template: ${columnTemplate}`);
-    
-    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [friendshipObject]);
-    logger('Result of insertion: ', resultOfInsert);
+    const logId = uuid();
+    const logRow = { logId, relationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject };
+    const logKeys = Object.keys(logRow);
 
-    return typeof resultOfInsert === 'object' && Array.isArray(resultOfInsert.rows) 
-        ? camelCaseKeys(resultOfInsert.rows[0]) : null;
+    const logInsertDef = {
+        query: `insert into ${friendLogTable} (${extractColumnNames(logKeys)}) values %L returning log_id, creation_time`,
+        columnTemplate: extractColumnTemplate(logKeys),
+        rows: [logRow]
+    };
+
+    logger(`Sending out friend request query: ${friendQueryDef} and log query: ${logInsertDef} to rds`);
+    const insertionResult = await rdsConnection.largeMultiTableInsert([friendQueryDef, logInsertDef]);
+    logger('Result of insertion:', insertionResult);
+
+    const queryRelationshipId = insertionResult[0][0]['relationship_id'];
+    const queryLogId = insertionResult[1][0]['log_id'];
+
+    return { relationshipId: queryRelationshipId, logId: queryLogId };
 };
 
 module.exports.deactivateFriendship = async (relationshipId) => {
-    const updateQuery = `update ${friendTable} set relationship_status = $1 where relationship_id = $2 returning relationship_id`;
-    const updateResult = await rdsConnection.updateRecord(updateQuery, ['DEACTIVATED', relationshipId]);
-    logger('Result of straight update boosts: ', updateResult);
+    const updateFriendshipDef = { 
+        table: friendTable,
+        key: { relationshipId },
+        value: { relationshipStatus: 'DEACTIVATED' },
+        returnClause: 'updated_time'
+    };
+      
+    const logId = uuid();
+    const logRow = { logId, relationshipId, logType: 'FRIENDSHIP_DEACTIVATED', logContext: { relationshipId }};
+    const logKeys = Object.keys(logRow);
 
-    return typeof updateResult === 'object' && Array.isArray(updateResult.rows) 
-        ? camelCaseKeys(updateResult.rows[0]) : null;
+    const logInsertDef = {
+        query: `insert into ${friendLogTable} (${extractColumnNames(logKeys)}) values %L returning log_id, creation_time`,
+        columnTemplate: extractColumnTemplate(logKeys),
+        rows: [logRow]
+    };
+
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendshipDef], [logInsertDef]);
+    logger('Result of update and insertion:', resultOfOperations);
+
+    const updatedTime = resultOfOperations[0][0]['updated_time'];
+
+    return { updatedTime };
 };

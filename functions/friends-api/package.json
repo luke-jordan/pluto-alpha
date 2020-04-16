@@ -4,7 +4,7 @@
   "description": "API for joint savings",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:*:* nyc mocha",
+    "test": "DEBUG=jupiter:*:test nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
@@ -16,10 +16,11 @@
     "debug": "^4.1.1",
     "human-readable-ids": "^1.0.4",
     "ioredis": "^4.14.1",
-    "validator": "^13.0.0"
+    "string-format": "^2.0.0",
+    "validator": "^13.0.0",
+    "uuid": "^3.3.2"
   },
   "devDependencies": {
-    "uuid": "^3.3.2",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "chai-uuid": "^1.0.6",

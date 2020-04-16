@@ -1,8 +1,12 @@
 'use strict';
 
 const logger = require('debug')('jupiter:friends:main');
-const validator = require('validator');
+const config = require('config');
+
+const format = require('string-format');
 const hri = require('human-readable-ids').hri;
+const validator = require('validator');
+const publisher = require('publish-common');
 
 const persistenceRead = require('./persistence/read.friends');
 const persistenceWrite = require('./persistence/write.friends');
@@ -42,23 +46,42 @@ module.exports.obtainFriends = async (event) => {
     }
 };
 
-const handleSMSConfirmation = async (friendRequest) => {
-    const smsTemplate = {}; // get template
-    // send sms, throw error on failure
-    return { result: 'SUCCESS' };
+const handleUserNotFound = async (friendRequest, contactType) => {
+    const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
+    logger('Persisting friend request resulted in:', insertionResult);
+
+    const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendRequest.initiatedUserId });
+    const initiatedUserName = userProfile.calledName ? userProfile.calledName : userProfile.firstName;
+
+    let dispatchResult = null;
+    if (contactType === 'PHONE') {
+        const phoneNumber = friendRequest.targetContactDetails;
+        const dispatchMsg = format(config.get('sms.friendRequest.template'), initiatedUserName);
+        dispatchResult = await publisher.sendSms({ phoneNumber, message: dispatchMsg });
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { dispatchResult }});
+    }
+
+    if (contactType === 'EMAIL') {
+        dispatchResult = await publisher.sendSystemEmail({
+            subject: config.get('email.friendRequest.subject'),
+            toList: [friendRequest.targetContactDetails],
+            bodyTemplateKey: config.get('email.friendRequest.templateKey'),
+            templateVariables: { initiatedUserName }
+        });
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { dispatchResult }});
+    }
 };
 
-const handleEmailConfirmation = async (friendRequest) => {
-    const emailTemplate = {}; // get template
-    // send email, throw error on failure
-    return { result: 'SUCCESS' };
-};
-
-const generateRequestCode = () => {
+const generateRequestCode = async () => {
     const generatedCode = hri.random().split('-');
-    // todo: validate request code is not used in any active requests
-    return `${generatedCode[0]}_${genaratedCode[1]}`.toUpperCase();
-}
+    const assembledRequestCode = `${generatedCode[0]} ${generatedCode[1]}`.toUpperCase();
+    const isRequestCodeInUse = await persistenceRead.requesteCodeExists(assembledRequestCode);
+    if (isRequestCodeInUse) {
+        return generateRequestCode();
+    }
+
+    return assembledRequestCode;
+};
 
 const identifyContactType = (contact) => {
     if (validator.isEmail(contact)) {
@@ -69,20 +92,6 @@ const identifyContactType = (contact) => {
     }
 
     return null;
-};
-
-const handleUserNotFound = async (friendRequest, contactType) => {
-    const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
-    logger('Persisting friend request resulted in:', insertionResult);
-    // validate response from persistence
-
-    if (contactType === 'PHONE') {
-        return handleSMSConfirmation(friendRequest);
-    }
-
-    if (contactType === 'EMAIL') {
-        return handleEmailConfirmation(friendRequest);
-    }
 };
 
 /**
@@ -117,7 +126,7 @@ module.exports.addFriendshipRequest = async (event) => {
 
             const targetUserForFriendship = await persistenceRead.fetchUserByContactDetail(targetContactDetails, contactType);
             if (!targetUserForFriendship) {
-                friendRequest.requestCode = generateRequestCode();
+                friendRequest.requestCode = await generateRequestCode();
                 return handleUserNotFound(friendRequest, contactType);
             }
 
@@ -127,7 +136,7 @@ module.exports.addFriendshipRequest = async (event) => {
         const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
         logger('Result of friend request insertion:', insertionResult);
     
-        return opsUtil.wrapResponse({ result: 'SUCCESS' });
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult } });
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -160,9 +169,9 @@ module.exports.acceptFriendshipRequest = async (event) => {
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
         if (targetUserId === systemWideUserId) {
-            const resultOfInsertion = await persistenceWrite.insertFriendship(initiatedUserId, systemWideUserId);
-            logger('Result of friendship insertion:', resultOfInsertion);
-            return opsUtil.wrapResponse({ result: 'SUCCESS' });
+            const insertionResult = await persistenceWrite.insertFriendship(initiatedUserId, systemWideUserId);
+            logger('Result of friendship insertion:', insertionResult);
+            return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult }});
         }
     
         throw new Error('Accepting user is not friendship target');
@@ -190,12 +199,10 @@ module.exports.deactivateFriendship = async (event) => {
             throw new Error('Error! Missing relationshipId');
         }
 
-        const resultOfRemoval = await persistenceWrite.deactivateFriendship(relationshipId);
-        logger('Result of friendship removal:', resultOfRemoval);
+        const deactivationResult = await persistenceWrite.deactivateFriendship(relationshipId);
+        logger('Result of friendship deactivation:', deactivationResult);
 
-        // log event
-        // return result from db in final response
-        return opsUtil.wrapResponse({ result: 'SUCCESS' });
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { deactivationResult } });
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);

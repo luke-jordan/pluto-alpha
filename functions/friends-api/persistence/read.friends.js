@@ -137,7 +137,6 @@ module.exports.getFriendIdsForUser = async (params) => {
 module.exports.fetchFriendshipRequest = async (requestId) => {
     const friendRequestTable = config.get('tables.friendRequestTable');
     const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
-
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestId]);
     logger('Fetched friend request:', fetchResult);
 
@@ -161,4 +160,13 @@ module.exports.fetchUserByContactDetail = async (contactDetail, contactType) => 
     logger('Dynamo search for user by contact resulted in:', itemFromDynamo);
         return typeof itemFromDynamo === 'object' && Object.keys(itemFromDynamo).length > 0
             ? itemFromDynamo : null;
+};
+
+module.exports.requesteCodeExists = async (requestCode) => {
+    const friendRequestTable = config.get('tables.friendRequestTable');
+    const selectQuery = `select request_id from ${friendRequestTable} where request_code = $1 and request_status = $2`;
+    const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestCode, 'PENDING']);
+    logger('Found active friend requests using request code:', fetchResult);
+
+    return fetchResult.length > 0 && Reflect.has(fetchResult[0], 'request_id');
 };

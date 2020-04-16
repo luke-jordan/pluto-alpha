@@ -13,9 +13,13 @@
         "accountTable": "account_data.core_account_ledger",
         "friendTable": "friends_data.core_friend_relationship",
         "friendRequestTable": "friends_data.friend_request",
+        "friendLogTable": "friend_data.friend_log",
         "profileTable": "UserProfileTable",
         "phoneTable": "UserPhoneTable",
         "emailTable": "UserEmailTable"
+    },
+    "lambdas": {
+        "sendOutboundMessages": "outbound_comms_send"
     },
     "cache": {
         "port": 6739,
@@ -28,6 +32,17 @@
         "ttls": {
             "profile": 25200,
             "userId": 25200
+        }
+    },
+    "email": {
+        "friendRequest": {
+            "subject": "Jupiter Saving Buddies",
+            "templateKey": "emails/friendRequestEmail.html"
+        }
+    },
+    "sms": {
+        "friendRequest": {
+            "template": "Greetings. {} has invited you to save some lettuce with them. All things are better done together."
         }
     }
 }
