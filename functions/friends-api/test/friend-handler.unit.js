@@ -16,14 +16,15 @@ const expect = chai.expect;
 
 const helper = require('./test-helper');
 
-const hriStub = sinon.stub();
 const sendSmsStub = sinon.stub();
 const sendEmailStub = sinon.stub();
 const fetchUserStub = sinon.stub();
 const getFriendsStub = sinon.stub();
-const requesteCodeStub = sinon.stub();
+const randomWordStub = sinon.stub();
+const connectUserStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
+const fetchActiveCodesStub = sinon.stub();
 const insertFriendshipStub = sinon.stub();
 const insertFriendRequestStub = sinon.stub();
 const deactivateFriendshipStub = sinon.stub();
@@ -39,12 +40,13 @@ const testRequestId = uuid();
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchUserByContactDetail': fetchUserStub,
-        'fetchFriendshipRequest': fetchRequestStub,
+        'fetchActiveRequestCodes': fetchActiveCodesStub,
+        'fetchFriendshipRequestById': fetchRequestStub,
         'getFriendIdsForUser': getFriendsStub,
-        'requesteCodeExists': requesteCodeStub,
         'fetchUserProfile': fetchProfileStub
     },
     './persistence/write.friends': {
+        'connectUserToFriendRequest': connectUserStub,
         'insertFriendRequest': insertFriendRequestStub,
         'insertFriendship': insertFriendshipStub,
         'deactivateFriendship': deactivateFriendshipStub
@@ -54,14 +56,11 @@ const handler = proxyquire('../friend-handler', {
         'sendSms': sendSmsStub,
         '@noCallThru': true
     },
-    'human-readable-ids': {
-        'hri': {
-            'random': hriStub
-        }
-    }
+    'random-words': randomWordStub
 });
 
-const resetStubs = () => helper.resetStubs(fetchUserStub, getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub, deactivateFriendshipStub);
+const resetStubs = () => helper.resetStubs(fetchUserStub, getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub,
+    deactivateFriendshipStub, fetchActiveCodesStub, fetchRequestStub, randomWordStub, sendEmailStub, sendSmsStub, connectUserStub);
 
 describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
@@ -127,7 +126,6 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
 });
 
-
 describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
     const testProfile = {
@@ -138,7 +136,6 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         calledName: 'Yao Shu',
         emailAddress: 'yaoshu@orkhon.com'
     };
-
 
     beforeEach(() => {
         resetStubs();
@@ -157,7 +154,6 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
                 insertionResult: { requestId: testRequestId, logId: testLogId }
             }
         }));
-        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertArgs);
     });
 
     it('Finds target user id where absent and contact detail is provided', async () => {
@@ -175,12 +171,11 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
                 insertionResult: { requestId: testRequestId, logId: testLogId }
             }
         }));
-        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
     });
 
     it('Handles target user id not found, SMS route', async () => {
         const testContactDetail = '27632310922';
-        const insertionArgs = { initiatedUserId: testIniatedUserId, targetContactDetails: testContactDetail, requestCode: 'CLEVER EAGLE' };
+        const insertionArgs = { initiatedUserId: testIniatedUserId, targetContactDetails: testContactDetail, requestCode: 'CLIMATE LEG' };
         const sendSmsArgs = {
             phoneNumber: testContactDetail,
             message: format(config.get('sms.friendRequest.template'), testProfile.calledName)
@@ -190,20 +185,24 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testIniatedUserId }).resolves(testProfile);
         sendSmsStub.withArgs(sendSmsArgs).resolves({ result: 'SUCCESS' });
-        hriStub.returns('clever-eagle-22');
-
+        fetchActiveCodesStub.withArgs().resolves(['POETRY SHELLS', 'SENSE BANK', 'BEAR CELL']);
+        randomWordStub.onFirstCall().returns('BEAR CELL');
+        randomWordStub.onSecondCall().returns('CLIMATE LEG');
 
         const testEvent = helper.wrapEvent({ targetContactDetails: testContactDetail }, testIniatedUserId, 'ORDINARY_USER');
         const insertionResult = await handler.addFriendshipRequest(testEvent);
-        expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS', updateLog: { dispatchResult: { result: 'SUCCESS' }}}));
-        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
-        expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testIniatedUserId });
-        expect(sendSmsStub).to.have.been.calledOnceWithExactly(sendSmsArgs);
+        expect(insertionResult).to.deep.equal(helper.wrapResponse({
+            result: 'SUCCESS',
+            updateLog: {
+                insertionResult: { requestId: testRequestId, logId: testLogId },
+                dispatchResult: { result: 'SUCCESS' }
+            }
+        }));
     });
 
     it('Handles target user id not found, email route', async () => {
         const testContactDetail = 'juitsung@yuan.com';
-        const insertionArgs = { initiatedUserId: testIniatedUserId, targetContactDetails: testContactDetail, requestCode: 'CLEVER EAGLE' };
+        const insertionArgs = { initiatedUserId: testIniatedUserId, targetContactDetails: testContactDetail, requestCode: 'ORBIT PAGE' };
         const sendEmailArgs = {
             subject: config.get('email.friendRequest.subject'),
             toList: [testContactDetail],
@@ -215,14 +214,18 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testIniatedUserId }).resolves(testProfile);
         sendEmailStub.withArgs(sendEmailArgs).resolves({ result: 'SUCCESS' });
-        hriStub.returns('clever-eagle-22');
+        fetchActiveCodesStub.withArgs().resolves(['DRY SLABS', 'POETRY BEAN', 'COMPASS MAJOR']);
+        randomWordStub.returns('ORBIT PAGE');
 
         const testEvent = helper.wrapEvent({ targetContactDetails: testContactDetail }, testIniatedUserId, 'ORDINARY_USER');
         const insertionResult = await handler.addFriendshipRequest(testEvent);
-        expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS', updateLog: { dispatchResult: { result: 'SUCCESS' }}}));
-        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
-        expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testIniatedUserId });
-        expect(sendEmailStub).to.have.been.calledOnceWithExactly(sendEmailArgs);
+        expect(insertionResult).to.deep.equal(helper.wrapResponse({
+            result: 'SUCCESS',
+            updateLog: {
+                insertionResult: { requestId: testRequestId, logId: testLogId },
+                dispatchResult: { result: 'SUCCESS' }
+            }
+        }));
     });
 
     it('Rejects unauthorized requests', async () => {
@@ -243,6 +246,50 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
 });
 
+describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
+    const testRequestCode = 'BEAR CELL';
+    const testUpdatedTime = moment().format();
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('Connects target user to friend request', async () => {
+        connectUserStub.withArgs(testTargetUserId, testRequestCode).resolves([{ requestId: testRequestId, updatedTime: testUpdatedTime }]);
+        const testEvent = helper.wrapEvent({ requestCode: testRequestCode }, testTargetUserId, 'ORDINARY_USER');
+
+        const connectionResult = await handler.connectFriendshipRequest(testEvent);
+        expect(connectionResult).to.exist;
+        expect(connectionResult).to.deep.equal(helper.wrapResponse({
+            result: 'SUCCESS',
+            updateLog: {
+                updateResult: [{
+                    requestId: testRequestId,
+                    updatedTime: testUpdatedTime
+                }]
+            }
+        }));
+    });
+
+    it('Rejects unauthorized requests', async () => {
+        const connectionResult = await handler.addFriendshipRequest({ requestCode: testRequestCode });
+        expect(connectionResult).to.exist;
+        expect(connectionResult).to.deep.equal({ statusCode: 403 });
+        expect(connectUserStub).to.have.not.been.called;
+    });
+
+    it('Catches thrown errors', async () => {
+        const expectedResult = { message: `Error! No friend request found for request code: ${testRequestCode}` };
+        connectUserStub.withArgs(testTargetUserId, testRequestCode).resolves([]);
+
+        const testEvent = helper.wrapEvent({ requestCode: testRequestCode }, testTargetUserId, 'ORDINARY_USER');
+        const connectionResult = await handler.connectFriendshipRequest(testEvent);
+        expect(connectionResult).to.exist;
+        expect(connectionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
+    });
+
+});
+
 describe('*** UNIT TEST FRIENDSHIP INSERTION ***', () => {
 
     beforeEach(() => {
@@ -251,7 +298,7 @@ describe('*** UNIT TEST FRIENDSHIP INSERTION ***', () => {
 
     it('Persists new friendship', async () => {
         fetchRequestStub.withArgs(testRequestId).resolves({ initiatedUserId: testIniatedUserId, targetUserId: testTargetUserId });
-        insertFriendshipStub.withArgs(testIniatedUserId, testTargetUserId).resolves({ relationshipId: testRelationshipId, logId: testLogId });
+        insertFriendshipStub.withArgs(testRequestId, testIniatedUserId, testTargetUserId).resolves({ relationshipId: testRelationshipId, logId: testLogId });
         const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testTargetUserId, 'ORDINARY_USER'));
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse({
@@ -260,13 +307,12 @@ describe('*** UNIT TEST FRIENDSHIP INSERTION ***', () => {
                 insertionResult: { relationshipId: testRelationshipId, logId: testLogId }
             }
         }));
-        expect(insertFriendshipStub).to.have.been.calledOnceWithExactly(testIniatedUserId, testTargetUserId);
     });
 
     it('Fails where accepting user is not target user', async () => {
         fetchRequestStub.withArgs(testRequestId).resolves({ initiatedUserId: testIniatedUserId, targetUserId: testTargetUserId });
 
-        const expectedResult = { message: 'Accepting user is not friendship target' };
+        const expectedResult = { message: 'Error! Accepting user is not friendship target' };
         const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testAcceptedUserId, 'ORDINARY_USER'));
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
@@ -276,7 +322,7 @@ describe('*** UNIT TEST FRIENDSHIP INSERTION ***', () => {
     it('Fails on invalid request id', async () => {
         fetchRequestStub.withArgs(testRequestId).resolves();
 
-        const expectedResult = { message: `No friend request found for request id: ${testRequestId}` };
+        const expectedResult = { message: `Error! No friend request found for request id: ${testRequestId}` };
         const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testAcceptedUserId, 'ORDINARY_USER'));
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
@@ -303,14 +349,14 @@ describe('*** UNIT TEST FRIENDSHIP INSERTION ***', () => {
 });
 
 describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
-    const testUpdateTime = moment().format();
+    const testUpdatedTime = moment().format();
 
     beforeEach(() => {
         resetStubs();
     });
 
     it('Deactivates friendship', async () => {
-        deactivateFriendshipStub.withArgs(testRelationshipId).resolves({ updateTime: testUpdateTime });
+        deactivateFriendshipStub.withArgs(testRelationshipId).resolves({ updatedTime: testUpdatedTime });
 
         const testEvent = { relationshipId: testRelationshipId };
         const removalResult = await handler.deactivateFriendship(helper.wrapEvent(testEvent, testSystemId, 'ORDINARY_USER'));
@@ -318,10 +364,9 @@ describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
         expect(removalResult).to.deep.equal(helper.wrapResponse({
             result: 'SUCCESS',
             updateLog: {
-                deactivationResult: { updateTime: testUpdateTime }
+                deactivationResult: { updatedTime: testUpdatedTime }
             }
         }));
-        expect(deactivateFriendshipStub).to.have.been.calledOnceWithExactly(testRelationshipId);
     });
 
     it('Rejects unauthorized requests', async () => {
@@ -337,7 +382,6 @@ describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
         expect(removalResult).to.exist;
         expect(removalResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(deactivateFriendshipStub).to.have.not.been.called;
-
     });
 
 });

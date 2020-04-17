@@ -80,7 +80,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchUserProfile(profileFetchEvent);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
-        expect(fetchStub).to.have.been.calledOnceWithExactly(profileTable, profileFetchEvent, expectedProfileColumns);
     });
 
     it('Fetches user profile from db, given account ids', async () => {
@@ -131,17 +130,25 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.getFriendIdsForUser({ systemWideUserId: testSystemId });
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([testAcceptedUserId]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSystemId]);
     });
 
-    it('Fetches friendship requests', async () => {
+    it('Fetches friendship request by request id', async () => {
         const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
         queryStub.withArgs(selectQuery, [testRequestId]).resolves([{ 'initiated_user_id': testInitiatedUserId, 'target_user_id': testTargetUserId }]);
 
-        const resultOfFetch = await persistence.fetchFriendshipRequest(testRequestId);
+        const resultOfFetch = await persistence.fetchFriendshipRequestById(testRequestId);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testRequestId]);
+    });
+
+    it('Fetches friendship request by request code', async () => {
+        const testRequestCode = 'REASON MAGNET';
+        const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_code = $1`;
+        queryStub.withArgs(selectQuery, [testRequestCode]).resolves([{ 'initiated_user_id': testInitiatedUserId, 'target_user_id': testTargetUserId }]);
+
+        const resultOfFetch = await persistence.fetchFriendshipRequestByCode(testRequestCode);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
     });
 
     it('Fetches user by email', async () => {
@@ -150,7 +157,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail, 'EMAIL');
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
-        expect(fetchStub).to.have.been.calledOnceWithExactly(emailTable, { emailAddress: testContactDetail });
     });
 
     it('Fetches user by email', async () => {
@@ -160,17 +166,13 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail, 'PHONE');
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
-        expect(fetchStub).to.have.been.calledOnceWithExactly(phoneTable, { phoneNumber: testContactDetail });
     });
 
-    it('Asserts whether request code exists in active requests', async () => {
-        const testRequestCode = 'FLYING LOTUS';
-        const selectQuery = `select request_id from ${friendRequestTable} where request_code = $1 and request_status = $2`;
-        queryStub.withArgs(selectQuery, [testRequestCode, 'PENDING']).resolves([{ 'request_id': testRequestId }]);
-
-        const resultOfAssert = await persistence.requesteCodeExists(testRequestCode);
-        expect(resultOfAssert).to.exist;
-        expect(resultOfAssert).to.be.true;
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testRequestCode, 'PENDING']);
+    it('Fetches all active request codes', async () => {
+        const selectQuery = `select request_code from ${friendRequestTable} where request_status = $1`;
+        queryStub.withArgs(selectQuery, ['PENDING']).resolves([{ 'request_code': 'FLYING LOTUS' }, { 'request_code': 'ACTIVE MANTIS' }]);
+        const resultOfFetch = await persistence.fetchActiveRequestCodes();
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(['FLYING LOTUS', 'ACTIVE MANTIS']);
     });
 });

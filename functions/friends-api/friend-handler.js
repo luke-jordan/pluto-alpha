@@ -3,9 +3,10 @@
 const logger = require('debug')('jupiter:friends:main');
 const config = require('config');
 
-const format = require('string-format');
-const hri = require('human-readable-ids').hri;
 const validator = require('validator');
+const format = require('string-format');
+const randomWord = require('random-words');
+
 const publisher = require('publish-common');
 
 const persistenceRead = require('./persistence/read.friends');
@@ -58,7 +59,7 @@ const handleUserNotFound = async (friendRequest, contactType) => {
         const phoneNumber = friendRequest.targetContactDetails;
         const dispatchMsg = format(config.get('sms.friendRequest.template'), initiatedUserName);
         dispatchResult = await publisher.sendSms({ phoneNumber, message: dispatchMsg });
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { dispatchResult }});
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
     }
 
     if (contactType === 'EMAIL') {
@@ -68,16 +69,15 @@ const handleUserNotFound = async (friendRequest, contactType) => {
             bodyTemplateKey: config.get('email.friendRequest.templateKey'),
             templateVariables: { initiatedUserName }
         });
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { dispatchResult }});
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
     }
 };
 
 const generateRequestCode = async () => {
-    const generatedCode = hri.random().split('-');
-    const assembledRequestCode = `${generatedCode[0]} ${generatedCode[1]}`.toUpperCase();
-    const isRequestCodeInUse = await persistenceRead.requesteCodeExists(assembledRequestCode);
-    if (isRequestCodeInUse) {
-        return generateRequestCode();
+    const activeRequestCodes = await persistenceRead.fetchActiveRequestCodes();
+    let assembledRequestCode = randomWord({ exactly: 2, join: ' ' }).toUpperCase();
+    while (activeRequestCodes.includes(assembledRequestCode)) {
+        assembledRequestCode = randomWord({ exactly: 2, join: ' ' }).toUpperCase();
     }
 
     return assembledRequestCode;
@@ -121,7 +121,7 @@ module.exports.addFriendshipRequest = async (event) => {
             const targetContactDetails = friendRequest.targetContactDetails;
             const contactType = identifyContactType(targetContactDetails);
             if (!contactType) {
-                throw new Error(`Invalid target contact: ${targetContactDetails}`);
+                throw new Error(`Error! Invalid target contact: ${targetContactDetails}`);
             }
 
             const targetUserForFriendship = await persistenceRead.fetchUserByContactDetail(targetContactDetails, contactType);
@@ -137,6 +137,37 @@ module.exports.addFriendshipRequest = async (event) => {
         logger('Result of friend request insertion:', insertionResult);
     
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult } });
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
+
+/**
+ * This function completes a previously ambigious friend request, where a friend was requested using a contact detail not
+ * associated with any system user id. This function is called once the target user has confirmed they are are indeed the target for the
+ * friendship. It accepts a request code (to identify the request) and the target users system id. The friendship request is
+ * sought and the user id is added to its targetUserId field.
+ * @param {object} event
+ * @param {string} systemWideUserId The target/accepting users system wide id
+ * @param {string} requestCode The request code geneated during friend request creation. Used to find the persisted friend request.
+ */
+module.exports.connectFriendshipRequest = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { systemWideUserId } = userDetails;
+        const { requestCode } = opsUtil.extractParamsFromEvent(event);
+
+        const updateResult = await persistenceWrite.connectUserToFriendRequest(systemWideUserId, requestCode);
+        if (updateResult.length === 0) {
+            throw new Error(`Error! No friend request found for request code: ${requestCode}`);
+        }
+
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -161,20 +192,20 @@ module.exports.acceptFriendshipRequest = async (event) => {
             throw new Error('Error! Missing requestId');
         }
 
-        const friendshipRequest = await persistenceRead.fetchFriendshipRequest(requestId);
+        const friendshipRequest = await persistenceRead.fetchFriendshipRequestById(requestId);
         logger('Fetched friendship request:', friendshipRequest);
         if (!friendshipRequest) {
-            throw new Error(`No friend request found for request id: ${requestId}`);
+            throw new Error(`Error! No friend request found for request id: ${requestId}`);
         }
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
         if (targetUserId === systemWideUserId) {
-            const insertionResult = await persistenceWrite.insertFriendship(initiatedUserId, systemWideUserId);
+            const insertionResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId);
             logger('Result of friendship insertion:', insertionResult);
             return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult }});
         }
     
-        throw new Error('Accepting user is not friendship target');
+        throw new Error('Error! Accepting user is not friendship target');
         
     } catch (err) {
         logger('FATAL_ERROR:', err);

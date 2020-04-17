@@ -134,10 +134,23 @@ module.exports.getFriendIdsForUser = async (params) => {
  * This function fetches a friendship request by its request id.
  * @param {string} requestId The friendships request id.
  */
-module.exports.fetchFriendshipRequest = async (requestId) => {
+module.exports.fetchFriendshipRequestById = async (requestId) => {
     const friendRequestTable = config.get('tables.friendRequestTable');
     const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestId]);
+    logger('Fetched friend request:', fetchResult);
+
+    return fetchResult.length > 0 ? camelCaseKeys(fetchResult[0]) : null;
+};
+
+/**
+ * This function fetches a friendship request by its request code.
+ * @param {string} requestCode The friendships request code.
+ */
+module.exports.fetchFriendshipRequestByCode = async (requestCode) => {
+    const friendRequestTable = config.get('tables.friendRequestTable');
+    const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_code = $1`;
+    const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestCode]);
     logger('Fetched friend request:', fetchResult);
 
     return fetchResult.length > 0 ? camelCaseKeys(fetchResult[0]) : null;
@@ -162,11 +175,15 @@ module.exports.fetchUserByContactDetail = async (contactDetail, contactType) => 
             ? itemFromDynamo : null;
 };
 
-module.exports.requesteCodeExists = async (requestCode) => {
+/**
+ * This functions returns an array of active requests codes.
+ */
+module.exports.fetchActiveRequestCodes = async () => {
     const friendRequestTable = config.get('tables.friendRequestTable');
-    const selectQuery = `select request_id from ${friendRequestTable} where request_code = $1 and request_status = $2`;
-    const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestCode, 'PENDING']);
-    logger('Found active friend requests using request code:', fetchResult);
+    const selectQuery = `select request_code from ${friendRequestTable} where request_status = $1`;
+    const fetchResult = await rdsConnection.selectQuery(selectQuery, ['PENDING']);
+    logger('Found active friend requests:', fetchResult);
 
-    return fetchResult.length > 0 && Reflect.has(fetchResult[0], 'request_id');
+    return Array.isArray(fetchResult) && fetchResult.length > 0 
+        ? fetchResult.map((result) => result['request_code']) : [];
 };

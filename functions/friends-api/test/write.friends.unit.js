@@ -19,11 +19,12 @@ const proxyquire = require('proxyquire').noCallThru();
 
 const multiTableStub = sinon.stub();
 const multiOpStub = sinon.stub();
+const updateStub = sinon.stub();
 const uuidStub = sinon.stub();
-
 
 class MockRdsConnection {
     constructor () {
+        this.updateRecord = updateStub;
         this.largeMultiTableInsert = multiTableStub;
         this.multiTableUpdateAndInsert = multiOpStub;
     }
@@ -39,7 +40,7 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
     const friendTable = config.get('tables.friendTable');
     const friendRequestTable = config.get('tables.friendRequestTable');
 
-    const testInsertionTime = moment();
+    const testInsertionTime = moment().format();
     const testUpdaedTime = moment();
 
     const testLogId = uuid();
@@ -50,7 +51,7 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
     const testRelationshipId = uuid();
 
     beforeEach(() => {
-        helper.resetStubs(multiTableStub, multiOpStub, uuidStub);
+        helper.resetStubs(multiTableStub, multiOpStub, updateStub, uuidStub);
     });
 
     it('Inserts friend request, filters out extra params', async () => {
@@ -83,8 +84,8 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
         uuidStub.onFirstCall().returns(testRequestId);
         uuidStub.onSecondCall().returns(testLogId);
         multiTableStub.resolves([
-            [{ 'request_id': testRequestId, 'creation_time': testInsertionTime.format() }],
-            [{ 'log_id': testLogId, 'creation_time': testInsertionTime.format() }]
+            [{ 'request_id': testRequestId, 'creation_time': testInsertionTime }],
+            [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
 
         const testInsertParams = { initiatedUserId: testIniatedUserId, targetUserId: testTargetUserId, extra: 'param' };
@@ -94,7 +95,26 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
         expect(multiTableStub).to.have.been.calledOnceWithExactly([testFriendQueryDef, testLogDef]);
     });
 
+    it('Connects a user to a friends request', async () => {
+        const testRequestCode = 'ANCIENT COFFEE';
+        const updateQuery = `update ${friendRequestTable} set target_user_id = $1, request_code = null where request_code = $2 ` +
+            `returning request_id, updated_time`;
+        const updateValues = [testTargetUserId, testRequestCode];
+        updateStub.withArgs(updateQuery, updateValues).resolves({ rows: [{ 'request_id': testRequestId, 'updated_time': testUpdaedTime.format() }]});
+
+        const connectionResult = await persistence.connectUserToFriendRequest(testTargetUserId, testRequestCode);
+        expect(connectionResult).to.exist;
+        expect(connectionResult).to.deep.equal([{ requestId: testRequestId, updatedTime: testUpdaedTime.format() }]);
+    });
+
     it('Inserts friendship properly', async () => {
+        const friendReqUpdateDef = {
+            table: friendTable,
+            key: { requestId: testRequestId },
+            value: { requestStatus: 'ACCEPTED' },
+            returnClause: 'updated_time'
+        };
+
         const friendshipObject = {
             relationshipId: testRelationshipId,
             initiatedUserId: testIniatedUserId,
@@ -123,16 +143,18 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
 
         uuidStub.onFirstCall().returns(testRelationshipId);
         uuidStub.onSecondCall().returns(testLogId);
-        multiTableStub.resolves([
-            [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime.format() }],
-            [{ 'log_id': testLogId, 'creation_time': testInsertionTime.format() }]
+        multiOpStub.withArgs([friendReqUpdateDef], [testFriendQueryDef, testLogDef]).resolves([
+            [{ 'updated_time': testUpdaedTime.format()}],
+            [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }, { 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
 
-        const insertResult = await persistence.insertFriendship(testIniatedUserId, testAcceptedUserId);
+        const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId);
         expect(insertResult).to.exist;
-        expect(insertResult).to.deep.equal({ relationshipId: testRelationshipId, logId: testLogId });
-        expect(multiTableStub).to.have.been.calledOnceWithExactly([testFriendQueryDef, testLogDef]);
-
+        expect(insertResult).to.deep.equal({
+            updatedTime: testUpdaedTime.format(),
+            relationshipId: testRelationshipId,
+            logId: testLogId
+        });
     });
 
     it('Deactivates friendship', async () => {
@@ -159,7 +181,7 @@ describe('*** UNIT TEST HANDLE PROFILE PERSISTENCE FUNCTIONS ***', async () => {
         uuidStub.returns(testLogId);
         multiOpStub.resolves([
             [{ 'updated_time': testUpdaedTime.format()}],
-            [{ 'log': testLogId, 'creation_time': testInsertionTime.format() }]
+            [{ 'log': testLogId, 'creation_time': testInsertionTime }]
         ]);
         
         const updateResult = await persistence.deactivateFriendship(testRelationshipId);
