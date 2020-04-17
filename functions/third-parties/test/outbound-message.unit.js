@@ -1,11 +1,14 @@
 'use strict';
 
-// const logger = require('debug')('jupiter:third-parties:sendgrid-unit-test');
+const logger = require('debug')('jupiter:third-parties:sendgrid:test');
 const config = require('config');
 const uuid = require('uuid/v4');
 const path = require('path');
 
 const moment = require('moment');
+
+// we use this for the mail transform into request options
+const { classes: { Mail } } = require('@sendgrid/helpers');
 
 const sinon = require('sinon');
 const proxyquire = require('proxyquire');
@@ -15,6 +18,8 @@ chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
 const requestStub = sinon.stub();
+const tinyPostStub = sinon.stub();
+
 const sendGridStub = sinon.stub();
 const setApiKeyStub = sinon.stub();
 const setSubstitutionsStub = sinon.stub();
@@ -28,6 +33,10 @@ class MockS3Client {
 
 const handler = proxyquire('../outbound-message-handler', {
     'request-promise': requestStub,
+    'tiny-json-http': {
+        'post': tinyPostStub,
+        '@noCallThru': true
+    },
     'aws-sdk': { 'S3': MockS3Client },
     '@sendgrid/mail': {
         'send': sendGridStub,
@@ -903,7 +912,9 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
     const testMessageId = uuid();
 
     const chunkSize = config.get('sendgrid.chunkSize');
-    const sendgridOkayResponse = [{ toJSON: () => ({ statusCode: 200 })}];
+    const sendgridOkayResponse = { body: '', headers: { connection: 'close' }};
+    
+    // const sendgridOkayResponse = [{ toJSON: () => ({ statusCode: 200 })}];
     // const sendgridOkayChunk = (numberMsgs = chunkSize) => Array(numberMsgs).fill(sendgridOkayResponse);
 
     const validEmailEvent = (messageId = uuid()) => ({
@@ -924,8 +935,17 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         'mail_settings': { 'sandbox_mode': { 'enable': true }}
     };
 
+    const wrappedPost = (body) => ({
+        url: config.get('sendgrid.endpoint'),
+        headers: {
+            'Authorization': `Bearer ${config.get('sendgrid.apiKey')}`,
+            'Content-Type': 'application/json'
+        },
+        data: body
+    });
+
     beforeEach(() => {
-        resetStubs(sendGridStub);
+        resetStubs(sendGridStub, requestStub, tinyPostStub);
     });
 
     it('Handled warm up event', async () => {
@@ -934,11 +954,12 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.exist;
         expect(result).to.deep.equal({ result: 'Empty invocation' });
 
-        expect(sendGridStub).to.have.not.been.called;        
+        expect(sendGridStub).to.have.not.been.called;
+        expect(tinyPostStub).to.not.have.been.called;        
     });
 
     it('Sends out emails', async () => {
-        sendGridStub.resolves(sendgridOkayResponse);
+        tinyPostStub.resolves(sendgridOkayResponse);
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
 
@@ -949,8 +970,13 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         const result = await handler.handleOutboundMessages(testEvent);
         expect(result).to.deep.equal(expectedResult);
 
-        expect(sendGridStub).to.have.been.calledThrice;
-        expect(sendGridStub).to.have.been.calledWith(validEmailMessage);
+        expect(tinyPostStub).to.have.been.calledThrice;
+
+        const createdMail = Mail.create(validEmailMessage);
+        const mailBody = createdMail.toJSON();
+        
+        logger('Mail body: ', mailBody);
+        expect(tinyPostStub).to.have.been.calledWith(wrappedPost(mailBody));
     });
 
     it('Sends out emails with template wrapper', async () => {
@@ -959,7 +985,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         const mockWrapper = '<html><title></title><body>{htmlBody}</body></html>';
 
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockWrapper }})});
-        sendGridStub.resolves(sendgridOkayResponse);
+        tinyPostStub.resolves(sendgridOkayResponse);
 
         const testMessages = Array(numberMessages).fill(validEmailEvent(testMessageId));
         const testWrapper = { s3bucket: 'email.templates', s3key: 'wrapper.html' };
@@ -976,8 +1002,12 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         const expectedMessages = Array(numberMessages).fill(validEmailMessage).map((msg) => ({ ...msg, 'html': expectedWrappedMessage }));
         
         expect(getObjectStub).to.have.been.calledOnceWithExactly({ Bucket: 'email.templates', Key: 'wrapper.html' });
-        expect(sendGridStub).to.have.been.callCount(4);
-        expectedMessages.forEach((msg, index) => expect(sendGridStub.getCall(index).args[0]).to.deep.equal(msg));
+        expect(tinyPostStub).to.have.been.callCount(4);
+        expectedMessages.forEach((msg, index) => {
+            const createdMail = Mail.create(msg);
+            const mailBody = createdMail.toJSON();    
+            expect(tinyPostStub.getCall(index).args[0]).to.deep.equal(wrappedPost(mailBody));
+        });
     });
 
     it('Handles payload chunking where third party rate limit is exceeded', async () => {
@@ -991,7 +1021,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages.push(validEmailEvent(testMessageId));
         }
 
-        sendGridStub.resolves(sendgridOkayResponse);
+        tinyPostStub.resolves(sendgridOkayResponse);
         // sendGridStub.onCall(3).resolves(sendgridOkayChunk(trailingChunkSize));
 
         const expectedResult = { result: 'SUCCESS', failedMessageIds: [] };
@@ -1002,7 +1032,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.deep.equal(expectedResult);
 
         // todo : when this becomes an issue, insert a backoff/delay, and test fo rit
-        expect(sendGridStub).to.have.been.callCount(numberMessages);
+        expect(tinyPostStub).to.have.been.callCount(numberMessages);
     });
 
     it('Isolated failures and returns failed message ids to caller', async () => {
@@ -1014,8 +1044,8 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
             emailMessages.push(validEmailEvent());
         }
 
-        sendGridStub.onFirstCall().rejects('Error, internal error');
-        sendGridStub.resolves(sendgridOkayResponse);
+        tinyPostStub.onFirstCall().rejects('Error, internal error');
+        tinyPostStub.resolves(sendgridOkayResponse);
 
         const result = await handler.handleOutboundMessages({ emailMessages });
 
@@ -1026,7 +1056,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
 
         expect(result.failedMessageIds.length).to.deep.equal(1);
 
-        expect(sendGridStub).to.have.been.calledThrice;
+        expect(tinyPostStub).to.have.been.calledThrice;
     });
 
     it('Fails where no valid emails are found', async () => {
@@ -1046,11 +1076,11 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        expect(sendGridStub).to.have.not.been.called;
+        expect(tinyPostStub).to.have.not.been.called;
     });
 
     it('Catches thrown errors', async () => {
-        sendGridStub.throws(new Error('Dispatch error'));
+        tinyPostStub.throws(new Error('Dispatch error'));
 
         const expectedResult = { result: 'ERR', message: 'Dispatch error' };
 
@@ -1063,7 +1093,7 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        expect(sendGridStub).to.have.been.calledThrice;
+        expect(tinyPostStub).to.have.been.calledThrice;
     });
 
 });
