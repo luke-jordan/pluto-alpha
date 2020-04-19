@@ -48,9 +48,10 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
 };
 
 const fetchAcceptedUserIdsForUser = async (systemWideUserId) => {
-    const friendTable = config.get('tables.friendTable');
-    const query = `select accepted_user_id from ${friendTable} where initiated_user_id = $1`;
-    const fetchedUserIds = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    const friendshipTable = config.get('tables.friendshipTable');
+    const query = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
+    const fetchedUserIds = await rdsConnection.selectQuery(query, [systemWideUserId, 'ACTIVE']);
+    logger('Got user ids:', fetchedUserIds);
     
     return fetchedUserIds.map((userId) => userId['accepted_user_id']);
 };
@@ -62,11 +63,9 @@ const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     const responseFromCache = await redis.get(key);
     
     if (!responseFromCache) {
-        logger(`Profile for '${systemWideUserId}' NOT found in cache. Searching DB`);
         const userProfile = await fetchUserProfileFromDB(systemWideUserId);
         await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
         logger(`Successfully fetched 'user profile' from database and stored in cache`);
-
         return userProfile;
     }
     
@@ -81,11 +80,9 @@ const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
     const responseFromCache = await redis.get(key);
 
     if (!responseFromCache) {
-        logger('Account user id not found in cache. Searching DB');
         const systemWideUserId = await fetchUserIdForAccountFromDB(accountId);
         await redis.set(accountId, systemWideUserId, 'EX', USER_ID_CACHE_TTL_IN_SECONDS);
-        logger('Successfully stored user id in cache');
-
+        logger(`Successfully fetched 'user id' from db and stored in cache`);
         return systemWideUserId;
     }
     
@@ -132,11 +129,11 @@ module.exports.getFriendIdsForUser = async (params) => {
 
 /**
  * This function fetches a friendship request by its request id.
- * @param {string} requestId The friendships request id.
+ * @param {String} requestId The friendships request id.
  */
 module.exports.fetchFriendshipRequestById = async (requestId) => {
-    const friendRequestTable = config.get('tables.friendRequestTable');
-    const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
+    const friendReqTable = config.get('tables.friendRequestTable');
+    const selectQuery = `select initiated_user_id, target_user_id from ${friendReqTable} where request_id = $1`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestId]);
     logger('Fetched friend request:', fetchResult);
 
@@ -145,11 +142,11 @@ module.exports.fetchFriendshipRequestById = async (requestId) => {
 
 /**
  * This function fetches a friendship request by its request code.
- * @param {string} requestCode The friendships request code.
+ * @param {String} requestCode The friendships request code.
  */
 module.exports.fetchFriendshipRequestByCode = async (requestCode) => {
-    const friendRequestTable = config.get('tables.friendRequestTable');
-    const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_code = $1`;
+    const friendReqTable = config.get('tables.friendRequestTable');
+    const selectQuery = `select initiated_user_id, target_user_id from ${friendReqTable} where request_code = $1`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [requestCode]);
     logger('Fetched friend request:', fetchResult);
 
@@ -158,7 +155,7 @@ module.exports.fetchFriendshipRequestByCode = async (requestCode) => {
 
 /**
  * This function searches the user id associated with a contact detail.
- * @param {string} contactDetail Either the phone number or email address of the user whose system id is sought.
+ * @param {String} contactDetail Either the phone number or email address of the user whose system id is sought.
  */
 module.exports.fetchUserByContactDetail = async (contactDetail, contactType) => {
     let itemFromDynamo = {};
@@ -179,11 +176,24 @@ module.exports.fetchUserByContactDetail = async (contactDetail, contactType) => 
  * This functions returns an array of active requests codes.
  */
 module.exports.fetchActiveRequestCodes = async () => {
-    const friendRequestTable = config.get('tables.friendRequestTable');
-    const selectQuery = `select request_code from ${friendRequestTable} where request_status = $1`;
+    const friendReqTable = config.get('tables.friendRequestTable');
+    const selectQuery = `select request_code from ${friendReqTable} where request_status = $1`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, ['PENDING']);
     logger('Found active friend requests:', fetchResult);
 
     return Array.isArray(fetchResult) && fetchResult.length > 0 
         ? fetchResult.map((result) => result['request_code']) : [];
+};
+
+/**
+ * This function fetches a users pending friend requests, i.e. requests the user has not yet accepted or rejected
+ */
+module.exports.fetchFriendRequestsForUser = async (targetUserId) => {
+    const friendReqTable = config.get('tables.friendRequestTable');
+    const selectQuery = `select * from ${friendReqTable} where target_user_id = $1 and request_status = $2`;
+    const fetchResult = await rdsConnection.selectQuery(selectQuery, [targetUserId, 'PENDING']);
+    logger('Found requests for user:', fetchResult);
+
+    return Array.isArray(fetchResult) && fetchResult.length > 0 
+        ? fetchResult.map((result) => camelCaseKeys(result)) : [];
 };

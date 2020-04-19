@@ -16,7 +16,7 @@ const opsUtil = require('ops-util-common');
 /**
  * This functions accepts a users system id and returns the user's friends.
  * @param {object} event
- * @property {string} systemWideUserId Required. The user id of the user whose friends are to be extracted.
+ * @property {String} systemWideUserId Required. The user id of the user whose friends are to be extracted.
  */
 module.exports.obtainFriends = async (event) => {
     try {
@@ -69,6 +69,7 @@ const handleUserNotFound = async (friendRequest, contactType) => {
             bodyTemplateKey: config.get('email.friendRequest.templateKey'),
             templateVariables: { initiatedUserName }
         });
+
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
     }
 };
@@ -97,9 +98,9 @@ const identifyContactType = (contact) => {
 /**
  * This function persists a new friendship request.
  * @param {object} event
- * @property {string} initiatedUserId Required. The user id of the user initiating the friendship.
- * @property {string} targetUserId Required in the absence of targetContactDetails. The user id of the user whose friendship is being requested.
- * @property {string} targetContactDetails Required in the absence of targetUserId. Either the phone or email of the user whose friendship is being requested.
+ * @property {String} initiatedUserId Required. The user id of the user initiating the friendship.
+ * @property {String} targetUserId Required in the absence of targetContactDetails. The user id of the user whose friendship is being requested.
+ * @property {String} targetContactDetails Required in the absence of targetUserId. Either the phone or email of the user whose friendship is being requested.
  */
 module.exports.addFriendshipRequest = async (event) => {
     try {
@@ -149,8 +150,8 @@ module.exports.addFriendshipRequest = async (event) => {
  * friendship. It accepts a request code (to identify the request) and the target users system id. The friendship request is
  * sought and the user id is added to its targetUserId field.
  * @param {object} event
- * @param {string} systemWideUserId The target/accepting users system wide id
- * @param {string} requestCode The request code geneated during friend request creation. Used to find the persisted friend request.
+ * @param {String} systemWideUserId The target/accepting users system wide id
+ * @param {String} requestCode The request code geneated during friend request creation. Used to find the persisted friend request.
  */
 module.exports.connectFriendshipRequest = async (event) => {
     try {
@@ -174,10 +175,52 @@ module.exports.connectFriendshipRequest = async (event) => {
     }
 };
 
+const appendUserNameToRequest = async (friendRequest) => {
+    const systemWideUserId = friendRequest.initiatedUserId;
+    const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId });
+    friendRequest.initiatedUserName = userProfile.calledName
+        ? userProfile.calledName
+        : userProfile.firstName;
+
+    return friendRequest;
+};
+
+/**
+ * This function returns an array of friend requests a user has not yet accepted (or rejected). Friend requests are
+ * extracted for the system id in the request context.
+ */
+module.exports.findFriendRequestsForUser = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { systemWideUserId } = userDetails;
+
+        // get friend requests
+        const friendRequestsForUser = await persistenceRead.fetchFriendRequestsForUser(systemWideUserId);
+        logger('Got requests:', friendRequestsForUser);
+        if (friendRequestsForUser.length === 0) {
+            return opsUtil.wrapResponse(friendRequestsForUser); 
+        }
+
+        // for each request append the user name of the initiating user
+        const appendUserNames = friendRequestsForUser.map((request) => appendUserNameToRequest(request));
+        const transformedRequests = await Promise.all(appendUserNames);
+        logger('Transformed requests:', transformedRequests);
+
+        return opsUtil.wrapResponse(transformedRequests);
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
+
 /**
  * This function persists a new friendship. Triggered by a method that also flips the friend request to approved, but may also be called directly.
  * @param {object} event
- * @property {string} requestId Required. The The friendships request id.
+ * @property {String} requestId Required. The The friendships request id.
  */
 module.exports.acceptFriendshipRequest = async (event) => {
     try {
@@ -214,9 +257,35 @@ module.exports.acceptFriendshipRequest = async (event) => {
 };
 
 /**
+ * Proto-function intended to reject a friend request recieved by a user. The difference between this function and the 
+ * deactivateFriendship function is that this function rejects friendships that were never accepted.
+ * @param {object} event
+ * @property {String} initiatedUserId The system id of the user to be rejected as a friend.
+ */
+module.exports.rejectFriendshipRequest = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const targetUserId = userDetails.systemWideUserId;
+        const { initiatedUserId } = opsUtil.extractParamsFromEvent(event);
+
+        const rejectionResult = await persistenceWrite.rejectFriendshipRequest(targetUserId, initiatedUserId);
+        logger('Friendship rejection result:', rejectionResult);
+
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { rejectionResult }});
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
+
+/**
  * This functions deactivates a friendship.
  * @param {object} event
- * @property {string} relationshipId The id of the relationship to be deactivated.
+ * @property {String} relationshipId The id of the relationship to be deactivated.
  */
 module.exports.deactivateFriendship = async (event) => {
     try {

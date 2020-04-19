@@ -12,7 +12,8 @@ create table if not exists friends_data.core_friend_relationship (
     updated_time timestamp with time zone not null default current_timestamp,
     relationship_status varchar (100) not null,
     initiated_user_id uuid not null references friends_data.user_reference_table (user_id),
-    accepted_user_id uuid not null references friends_data.user_reference_table (user_id)
+    accepted_user_id uuid not null references friends_data.user_reference_table (user_id),
+    share_items text[] default '{}'
 );
 
 create table if not exists friends_data.friend_request (
@@ -23,8 +24,8 @@ create table if not exists friends_data.friend_request (
     initiated_user_id uuid not null references friends_data.core_friend_relationship (initiated_user_id),
     target_user_id uuid,
     target_contact_details jsonb,
-    request_code varchar (100),
-    request_type varchar (100)
+    request_type varchar (100) not null default 'CREATE',
+    request_code varchar (100)
 );
 
 create index if not exists idx_request_status on friends_data.friend_request (request_status);

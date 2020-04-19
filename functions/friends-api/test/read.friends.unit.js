@@ -3,6 +3,7 @@
 // const logger = require('debug')('jupiter:friends:test');
 const config = require('config');
 const uuid = require('uuid/v4');
+const moment = require('moment');
 
 const proxyquire = require('proxyquire');
 const sinon = require('sinon');
@@ -122,10 +123,10 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
 
     it('Gets the user ids of a users friends', async () => {
         const testAcceptedUserId = uuid();
-        const friendTable = config.get('tables.friendTable');
+        const friendshipTable = config.get('tables.friendshipTable');
 
-        const selectQuery = `select accepted_user_id from ${friendTable} where initiated_user_id = $1`;
-        queryStub.withArgs(selectQuery, [testSystemId]).resolves([{ 'accepted_user_id': testAcceptedUserId }]);
+        const selectQuery = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
+        queryStub.withArgs(selectQuery, [testSystemId, 'ACTIVE']).resolves([{ 'accepted_user_id': testAcceptedUserId }]);
 
         const resultOfFetch = await persistence.getFriendIdsForUser({ systemWideUserId: testSystemId });
         expect(resultOfFetch).to.exist;
@@ -135,7 +136,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     it('Fetches friendship request by request id', async () => {
         const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_id = $1`;
         queryStub.withArgs(selectQuery, [testRequestId]).resolves([{ 'initiated_user_id': testInitiatedUserId, 'target_user_id': testTargetUserId }]);
-
         const resultOfFetch = await persistence.fetchFriendshipRequestById(testRequestId);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
@@ -145,7 +145,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const testRequestCode = 'REASON MAGNET';
         const selectQuery = `select initiated_user_id, target_user_id from ${friendRequestTable} where request_code = $1`;
         queryStub.withArgs(selectQuery, [testRequestCode]).resolves([{ 'initiated_user_id': testInitiatedUserId, 'target_user_id': testTargetUserId }]);
-
         const resultOfFetch = await persistence.fetchFriendshipRequestByCode(testRequestCode);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
@@ -162,7 +161,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     it('Fetches user by email', async () => {
         const testContactDetail = '27632390812';
         fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
-
         const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail, 'PHONE');
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
@@ -174,5 +172,48 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchActiveRequestCodes();
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(['FLYING LOTUS', 'ACTIVE MANTIS']);
+    });
+
+    it('Fetches friend requests for user', async () => {
+        const testCreationTime = moment().format();
+        const testUpdatedTime = moment().format();
+
+        const friendRequestFromRds = {
+            'request_id': testRequestId,
+            'creation_time': testCreationTime,
+            'updated_time': testUpdatedTime,
+            'request_status': 'PENDING',
+            'initiated_user_id': testInitiatedUserId,
+            'targetUser_id': testTargetUserId,
+            'target_contact_details': {
+                'contactType': 'PHONE',
+                'contactMethod': '27850324843'
+            },
+            'request_type': 'CREATE',
+            'request_code': 'SPOOKY ACTION' // at a distance
+        };
+
+        const expectedFriendRequest = {
+            requestId: testRequestId,
+            creationTime: testCreationTime,
+            updatedTime: testUpdatedTime,
+            requestStatus: 'PENDING',
+            initiatedUserId: testInitiatedUserId,
+            targetUserId: testTargetUserId,
+            targetContactDetails: {
+                contactType: 'PHONE',
+                contactMethod: '27850324843'
+            },
+            requestType: 'CREATE',
+            requestCode: 'SPOOKY ACTION'
+        };
+
+        const selectQuery = `select * from ${friendRequestTable} where target_user_id = $1 and request_status = $2`;
+
+        queryStub.withArgs(selectQuery, [testTargetUserId, 'PENDING']).resolves([friendRequestFromRds]);
+
+        const resultOfFetch = await persistence.fetchFriendRequestsForUser(testTargetUserId);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([expectedFriendRequest]);
     });
 });

@@ -11,7 +11,7 @@
     },
     "tables": {
         "accountTable": "account_data.core_account_ledger",
-        "friendTable": "friends_data.core_friend_relationship",
+        "friendshipTable": "friends_data.core_friend_relationship",
         "friendRequestTable": "friends_data.friend_request",
         "friendLogTable": "friend_data.friend_log",
         "profileTable": "UserProfileTable",
