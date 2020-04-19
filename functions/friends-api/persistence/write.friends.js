@@ -80,8 +80,8 @@ module.exports.connectUserToFriendRequest = async (targetUserId, requestCode) =>
 
 /**
  * This function updates a friend requests status to REJECTED and logs the event.
- * @param {String} targetUserId The system id of the heartless rejecting user.
- * @param {String} initiatedUserId The system id of the sad and lonely rejected user.
+ * @param {String} targetUserId The system id of the rejecting user.
+ * @param {String} initiatedUserId The system id of the rejected user.
  */
 module.exports.rejectFriendshipRequest = async (targetUserId, initiatedUserId) => {
     const selectQuery = `select request_id from ${friendReqTable} where target_user_id = $1 and initiated_user_id = $2`;
