@@ -1,4 +1,9 @@
 {
+    "retry": {
+        "initialPeriod": 100,
+        "maxRetries": 5,
+        "maxRetryTime": 800
+    },
     "finworks": {
         "endpoints": {
             "rootUrl": "https://fwtest.jupitersave.com",
