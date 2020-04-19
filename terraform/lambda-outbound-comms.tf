@@ -10,7 +10,7 @@ resource "aws_lambda_function" "outbound_comms_send" {
   handler                        = "outbound-message-handler.handleOutboundMessages"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
-  timeout                        = 15
+  timeout                        = 180
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
@@ -38,6 +38,11 @@ resource "aws_lambda_function" "outbound_comms_send" {
                 "authToken": "${var.twilio_token[terraform.workspace]}",
                 "number": "${var.twilio_number[terraform.workspace]}",
                 "mock": "OFF"
+              },
+              "retry": {
+                "initialPeriod": 3000,
+                "maxRetries": 5,
+                "maxRetryTime": 120000
               }
           }
       )}"
