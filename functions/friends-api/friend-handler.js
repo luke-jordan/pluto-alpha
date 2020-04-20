@@ -123,7 +123,7 @@ module.exports.addFriendshipRequest = async (event) => {
             const contactMethod = friendRequest.targetContactDetails;
             const contactType = identifyContactType(contactMethod);
             if (!contactType) {
-                throw new Error(`Error! Invalid target contact: ${targetContactDetails}`);
+                throw new Error(`Error! Invalid target contact: ${contactMethod}`);
             }
 
             friendRequest.targetContactDetails = { contactType, contactMethod };
