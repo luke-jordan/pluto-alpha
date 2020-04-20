@@ -61,12 +61,16 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             requestId: testRequestId,
             requestStatus: 'PENDING',
             initiatedUserId: testIniatedUserId,
-            targetUserId: testTargetUserId
+            targetUserId: testTargetUserId,
+            targetContactDetails: {
+                contactType: 'EMAIL',
+                contactMethod: 'example@domain.com'
+            }
         };
 
         const testFriendQueryDef = {
-            query: `insert into ${friendReqTable} (request_id, request_status, initiated_user_id, target_user_id) values %L returning request_id, creation_time`,
-            columnTemplate: '${requestId}, ${requestStatus}, ${initiatedUserId}, ${targetUserId}',
+            query: `insert into ${friendReqTable} (request_id, request_status, initiated_user_id, target_user_id, target_contact_details) values %L returning request_id, creation_time`,
+            columnTemplate: '${requestId}, ${requestStatus}, ${initiatedUserId}, ${targetUserId}, ${targetContactDetails}',
             rows: [testFriendRequest]
         };
 
@@ -90,7 +94,16 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
 
-        const testInsertParams = { initiatedUserId: testIniatedUserId, targetUserId: testTargetUserId, extra: 'param' };
+        const testInsertParams = {
+            initiatedUserId: testIniatedUserId,
+            targetUserId: testTargetUserId,
+            targetContactDetails: {
+                contactType: 'EMAIL',
+                contactMethod: 'example@domain.com'
+            },
+            extra: 'param'
+        };
+
         const insertResult = await persistence.insertFriendRequest(testInsertParams);
         expect(insertResult).to.exist;
         expect(insertResult).to.deep.equal({ requestId: testRequestId, logId: testLogId });

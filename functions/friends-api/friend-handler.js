@@ -16,7 +16,7 @@ const opsUtil = require('ops-util-common');
 /**
  * This functions accepts a users system id and returns the user's friends.
  * @param {object} event
- * @property {String} systemWideUserId Required. The user id of the user whose friends are to be extracted.
+ * @property {String} systemWideUserId Required. The system id of the user whose friends are to be extracted.
  */
 module.exports.obtainFriends = async (event) => {
     try {
@@ -47,25 +47,26 @@ module.exports.obtainFriends = async (event) => {
     }
 };
 
-const handleUserNotFound = async (friendRequest, contactType) => {
+const handleUserNotFound = async (friendRequest) => {
     const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
     logger('Persisting friend request resulted in:', insertionResult);
 
     const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendRequest.initiatedUserId });
     const initiatedUserName = userProfile.calledName ? userProfile.calledName : userProfile.firstName;
 
+    const { contactType, contactMethod } = friendRequest.targetContactDetails;
+
     let dispatchResult = null;
     if (contactType === 'PHONE') {
-        const phoneNumber = friendRequest.targetContactDetails;
         const dispatchMsg = format(config.get('sms.friendRequest.template'), initiatedUserName);
-        dispatchResult = await publisher.sendSms({ phoneNumber, message: dispatchMsg });
+        dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
     }
 
     if (contactType === 'EMAIL') {
         dispatchResult = await publisher.sendSystemEmail({
             subject: config.get('email.friendRequest.subject'),
-            toList: [friendRequest.targetContactDetails],
+            toList: [contactMethod],
             bodyTemplateKey: config.get('email.friendRequest.templateKey'),
             templateVariables: { initiatedUserName }
         });
@@ -98,7 +99,7 @@ const identifyContactType = (contact) => {
 /**
  * This function persists a new friendship request.
  * @param {object} event
- * @property {String} initiatedUserId Required. The user id of the user initiating the friendship.
+ * @property {String} initiatedUserId Required. The user id of the user initiating the friendship. Defaults to the sytem id in the request header.
  * @property {String} targetUserId Required in the absence of targetContactDetails. The user id of the user whose friendship is being requested.
  * @property {String} targetContactDetails Required in the absence of targetUserId. Either the phone or email of the user whose friendship is being requested.
  */
@@ -118,17 +119,22 @@ module.exports.addFriendshipRequest = async (event) => {
 
         friendRequest.initiatedUserId = systemWideUserId;
 
-        if (!friendRequest.targetUserId) {
-            const targetContactDetails = friendRequest.targetContactDetails;
-            const contactType = identifyContactType(targetContactDetails);
+        if (friendRequest.targetContactDetails) {
+            const contactMethod = friendRequest.targetContactDetails;
+            const contactType = identifyContactType(contactMethod);
             if (!contactType) {
                 throw new Error(`Error! Invalid target contact: ${targetContactDetails}`);
             }
 
-            const targetUserForFriendship = await persistenceRead.fetchUserByContactDetail(targetContactDetails, contactType);
+            friendRequest.targetContactDetails = { contactType, contactMethod };
+        }
+
+        if (!friendRequest.targetUserId) {
+            const targetContactDetails = friendRequest.targetContactDetails;
+            const targetUserForFriendship = await persistenceRead.fetchUserByContactDetail(targetContactDetails);
             if (!targetUserForFriendship) {
                 friendRequest.requestCode = await generateRequestCode();
-                return handleUserNotFound(friendRequest, contactType);
+                return handleUserNotFound(friendRequest);
             }
 
             friendRequest.targetUserId = targetUserForFriendship.systemWideUserId;

@@ -157,14 +157,16 @@ module.exports.fetchFriendshipRequestByCode = async (requestCode) => {
  * This function searches the user id associated with a contact detail.
  * @param {String} contactDetail Either the phone number or email address of the user whose system id is sought.
  */
-module.exports.fetchUserByContactDetail = async (contactDetail, contactType) => {
+module.exports.fetchUserByContactDetail = async (targetContactDetails) => {
+    const { contactType, contactMethod } = targetContactDetails;
+    
     let itemFromDynamo = {};
     if (contactType === 'PHONE') {
-        itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.phoneTable'), { phoneNumber: contactDetail });
+        itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.phoneTable'), { phoneNumber: contactMethod });
     }
     
     if (contactType === 'EMAIL') {
-        itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.emailTable'), { emailAddress: contactDetail });
+        itemFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.emailTable'), { emailAddress: contactMethod });
     }
 
     logger('Dynamo search for user by contact resulted in:', itemFromDynamo);

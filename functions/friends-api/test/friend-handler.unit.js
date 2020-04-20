@@ -165,12 +165,12 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Finds target user id by contact detail where absent', async () => {
-        const testContactDetail = 'user@email.com';
-        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId, targetContactDetails: testContactDetail };
-        fetchUserStub.withArgs(testContactDetail).resolves({ systemWideUserId: testTargetUserId });
+        const testContactDetails = { contactType: 'EMAIL', contactMethod: 'user@email.com' };
+        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId, targetContactDetails: testContactDetails };
+        fetchUserStub.withArgs(testContactDetails).resolves({ systemWideUserId: testTargetUserId });
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: testContactDetail }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: 'user@email.com' }, testInitiatedUserId, 'ORDINARY_USER');
         const insertionResult = await handler.addFriendshipRequest(testEvent);
         
         expect(insertionResult).to.exist;
@@ -186,14 +186,14 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Handles target user id not found, SMS route', async () => {
-        const testContactDetail = '27632310922';
-        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetContactDetails: testContactDetail, requestCode: 'CLIMATE LEG' };
+        const testContactDetails = { contactType: 'PHONE', contactMethod: '27632310922' };
+        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetContactDetails: testContactDetails, requestCode: 'CLIMATE LEG' };
         const sendSmsArgs = {
-            phoneNumber: testContactDetail,
+            phoneNumber: testContactDetails.contactMethod,
             message: format(config.get('sms.friendRequest.template'), testProfile.calledName)
         };
 
-        fetchUserStub.withArgs(testContactDetail).resolves();
+        fetchUserStub.withArgs(testContactDetails).resolves();
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
         sendSmsStub.withArgs(sendSmsArgs).resolves({ result: 'SUCCESS' });
@@ -201,7 +201,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         randomWordStub.onFirstCall().returns('BEAR CELL');
         randomWordStub.onSecondCall().returns('CLIMATE LEG');
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: testContactDetail }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922' }, testInitiatedUserId, 'ORDINARY_USER');
         const insertionResult = await handler.addFriendshipRequest(testEvent);
         expect(insertionResult).to.deep.equal(helper.wrapResponse({
             result: 'SUCCESS',
@@ -213,23 +213,23 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Handles target user id not found, email route', async () => {
-        const testContactDetail = 'juitsung@yuan.com';
-        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetContactDetails: testContactDetail, requestCode: 'ORBIT PAGE' };
+        const testContactDetails = { contactType: 'EMAIL', contactMethod: 'juitsung@yuan.com' };
+        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetContactDetails: testContactDetails, requestCode: 'ORBIT PAGE' };
         const sendEmailArgs = {
             subject: config.get('email.friendRequest.subject'),
-            toList: [testContactDetail],
+            toList: [testContactDetails.contactMethod],
             bodyTemplateKey: config.get('email.friendRequest.templateKey'),
             templateVariables: { initiatedUserName: testProfile.calledName }
         };
 
-        fetchUserStub.withArgs(testContactDetail).resolves();
+        fetchUserStub.withArgs(testContactDetails).resolves();
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
         sendEmailStub.withArgs(sendEmailArgs).resolves({ result: 'SUCCESS' });
         fetchActiveCodesStub.withArgs().resolves(['DRY SLABS', 'POETRY BEAN', 'COMPASS MAJOR']);
         randomWordStub.returns('ORBIT PAGE');
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: testContactDetail }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: 'juitsung@yuan.com' }, testInitiatedUserId, 'ORDINARY_USER');
         const insertionResult = await handler.addFriendshipRequest(testEvent);
         expect(insertionResult).to.deep.equal(helper.wrapResponse({
             result: 'SUCCESS',

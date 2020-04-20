@@ -151,17 +151,17 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     });
 
     it('Fetches user by email', async () => {
-        const testContactDetail = 'user@email.com';
-        fetchStub.withArgs(emailTable, { emailAddress: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
-        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail, 'EMAIL');
+        const testContactDetails = { contactType: 'EMAIL', contactMethod: 'user@email.com' };
+        fetchStub.withArgs(emailTable, { emailAddress: testContactDetails.contactMethod }).resolves({ systemWideUserId: testTargetUserId });
+        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetails);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
     });
 
-    it('Fetches user by email', async () => {
-        const testContactDetail = '27632390812';
-        fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetail }).resolves({ systemWideUserId: testTargetUserId });
-        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetail, 'PHONE');
+    it('Fetches user by phone', async () => {
+        const testContactDetails = { contactType: 'PHONE', contactMethod: '27632390812' };
+        fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetails.contactMethod }).resolves({ systemWideUserId: testTargetUserId });
+        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetails);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
     });
