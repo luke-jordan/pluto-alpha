@@ -79,26 +79,26 @@ module.exports.connectUserToFriendRequest = async (targetUserId, requestCode) =>
 };
 
 /**
- * This function updates a friend requests status to REJECTED and logs the event.
- * @param {String} targetUserId The system id of the rejecting user.
- * @param {String} initiatedUserId The system id of the rejected user.
+ * This function updates a friend requests status to IGNOREED and logs the event.
+ * @param {String} targetUserId The system id of the ignoring user.
+ * @param {String} initiatedUserId The system id of the ignored user.
  */
-module.exports.rejectFriendshipRequest = async (targetUserId, initiatedUserId) => {
+module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) => {
     const selectQuery = `select request_id from ${friendReqTable} where target_user_id = $1 and initiated_user_id = $2`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [targetUserId, initiatedUserId]);
-    logger('Found request id for rejection:', fetchResult);
+    logger('Found request id fto be ignored:', fetchResult);
 
     const requestId = fetchResult[0]['request_id'];
 
     const updateFriendReqDef = {
         table: friendReqTable,
         key: { targetUserId, initiatedUserId },
-        value: { requestStatus: 'REJECTED' },
+        value: { requestStatus: 'IGNORED' },
         returnClause: 'updated_time'
     };
 
     const logId = uuid();
-    const logRow = { logId, requestId, logType: 'FRIENDSHIP_REJECTED', logContext: { targetUserId, initiatedUserId }};
+    const logRow = { logId, requestId, logType: 'FRIENDSHIP_IGNORED', logContext: { targetUserId, initiatedUserId }};
     const logKeys = Object.keys(logRow);
 
     const insertLogDef = {

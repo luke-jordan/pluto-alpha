@@ -98,6 +98,18 @@ module.exports.findMostCommonCurrency = async (accountId) => {
     return resultOfQuery.length > 0 ? resultOfQuery[0]['currency'] : null; 
 };
 
+module.exports.findAccounts = async () => {
+
+};
+
+module.exports.findAccountsForFloat = async (floatId) => {
+
+};
+
+module.exports.findAccountsForClient = async (clientId) => {
+
+};
+
 module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
     const findQuery = `select account_id from ${config.get('tables.accountLedger')} where owner_user_id = $1 order by creation_time desc`;
     const resultOfQuery = await rdsConnection.selectQuery(findQuery, [userId]);
@@ -161,6 +173,44 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, currency, lastTxTime };
 };
 
+module.exports.sumTotalAmountSaved = async (accountId, currency) => {
+    const accountTxTable = config.get('tables.accountTransactions');
+
+    const sumQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
+        `settlement_status = $3 and transaction_type = $4 group by unit`;
+
+    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT'];
+    logger('Summing with query: ', sumQuery, ' and params: ', params);
+
+    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
+    logger('Result of unit query: ', summedRows);
+    
+    const totalBalanceInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
+    logger('For account ID, RDS calculation yields result: ', totalBalanceInDefaultUnit);
+
+    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, currency };
+};
+
+module.exports.sumAmountSavedLastMonth = async (accountId, currency) => {
+    const tableToQuery = config.get('tables.accountTransactions');
+
+    const startTume = moment().startOf('month').subtract(1, 'month');
+    const endTime = moment().startOf('month');
+    
+    const sumQuery = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and ` +
+        `settlement_status = $3 and transaction_type = $4 and creation_time > $5 and creation_time < $6 group by unit`;
+
+    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT', startTume.unix(), endTime.unix()];
+    logger('Summing with query: ', sumQuery, ' and params: ', params);
+
+    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
+    logger('Result of unit query: ', summedRows);
+    
+    const totalBalanceInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
+    logger('For account ID, RDS calculation yields result: ', totalBalanceInDefaultUnit);
+
+    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, currency };
+};
 
 /**
  * This function updates a users account tags.

@@ -24,7 +24,7 @@ const randomWordStub = sinon.stub();
 const connectUserStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
-const rejectRequestStub = sinon.stub();
+const ignoreRequestStub = sinon.stub();
 const fetchAllRequestsStub = sinon.stub();
 const fetchActiveCodesStub = sinon.stub();
 const insertFriendshipStub = sinon.stub();
@@ -50,7 +50,7 @@ const handler = proxyquire('../friend-handler', {
     },
     './persistence/write.friends': {
         'connectUserToFriendRequest': connectUserStub,
-        'rejectFriendshipRequest': rejectRequestStub,
+        'ignoreFriendshipRequest': ignoreRequestStub,
         'insertFriendRequest': insertFriendRequestStub,
         'insertFriendship': insertFriendshipStub,
         'deactivateFriendship': deactivateFriendshipStub
@@ -65,7 +65,7 @@ const handler = proxyquire('../friend-handler', {
 
 const resetStubs = () => helper.resetStubs(fetchUserStub, getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub,
     deactivateFriendshipStub, fetchActiveCodesStub, fetchRequestStub, randomWordStub, sendEmailStub, sendSmsStub, connectUserStub,
-    fetchAllRequestsStub, rejectRequestStub);
+    fetchAllRequestsStub, ignoreRequestStub);
 
 describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
@@ -362,24 +362,24 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
 
 });
 
-describe('*** UNIT TEST FRIEND REQUEST REJECTION ***', () => {
+describe('*** UNIT TEST IGNORE FRIEND REQUEST ***', () => {
     const testUpdatedTime = moment().format();
 
     beforeEach(() => {
         resetStubs();
     });
 
-    it('Rejects a friend request properly', async () => {
-        rejectRequestStub.withArgs(testTargetUserId, testInitiatedUserId).resolves({ updatedTime: testUpdatedTime, logId: testLogId });
+    it('Ignores a friend request properly', async () => {
+        ignoreRequestStub.withArgs(testTargetUserId, testInitiatedUserId).resolves({ updatedTime: testUpdatedTime, logId: testLogId });
 
         const testEvent = helper.wrapEvent({ initiatedUserId: testInitiatedUserId }, testTargetUserId, 'ORDINARY_USER');
-        const rejectionResult = await handler.rejectFriendshipRequest(testEvent);
+        const resultOfIgnore = await handler.ignoreFriendshipRequest(testEvent);
 
-        expect(rejectionResult).to.exist;
-        expect(rejectionResult).to.deep.equal(helper.wrapResponse({
+        expect(resultOfIgnore).to.exist;
+        expect(resultOfIgnore).to.deep.equal(helper.wrapResponse({
             result: 'SUCCESS',
             updateLog: {
-                rejectionResult: {
+                resultOfIgnore: {
                     updatedTime: testUpdatedTime,
                     logId: testLogId
                 }
@@ -388,18 +388,18 @@ describe('*** UNIT TEST FRIEND REQUEST REJECTION ***', () => {
     });
 
     it('Rejects unauthorized requests', async () => {
-        const rejectionResult = await handler.rejectFriendshipRequest({ initiatedUserId: testInitiatedUserId });
-        expect(rejectionResult).to.exist;
-        expect(rejectionResult).to.deep.equal({ statusCode: 403 });
-        expect(rejectRequestStub).to.have.not.been.called;
+        const resultOfIgnore = await handler.ignoreFriendshipRequest({ initiatedUserId: testInitiatedUserId });
+        expect(resultOfIgnore).to.exist;
+        expect(resultOfIgnore).to.deep.equal({ statusCode: 403 });
+        expect(ignoreRequestStub).to.have.not.been.called;
     });
 
     it('Catches thrown errors', async () => {
-        rejectRequestStub.withArgs(testTargetUserId, testInitiatedUserId).throws(new Error('Error!'));
+        ignoreRequestStub.withArgs(testTargetUserId, testInitiatedUserId).throws(new Error('Error!'));
         const testEvent = helper.wrapEvent({ initiatedUserId: testInitiatedUserId }, testTargetUserId, 'ORDINARY_USER');
-        const rejectionResult = await handler.rejectFriendshipRequest(testEvent);
-        expect(rejectionResult).to.exist;
-        expect(rejectionResult).to.deep.equal(helper.wrapResponse({ message: 'Error!' }, 500));
+        const resultOfIgnore = await handler.ignoreFriendshipRequest(testEvent);
+        expect(resultOfIgnore).to.exist;
+        expect(resultOfIgnore).to.deep.equal(helper.wrapResponse({ message: 'Error!' }, 500));
     });
 
 });

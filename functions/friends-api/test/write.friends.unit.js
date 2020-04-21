@@ -206,21 +206,21 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         expect(multiOpStub).to.have.been.calledOnceWithExactly([testUpdateFriendshipDef], [testInsertLogDef]);
     });
 
-    it('Rejects friendship request properly', async () => {
+    it('Ignores friendship request properly', async () => {
         const updateFriendReqDef = {
             table: friendReqTable,
             key: {
                 targetUserId: testTargetUserId,
                 initiatedUserId: testIniatedUserId
             },
-            value: { requestStatus: 'REJECTED' },
+            value: { requestStatus: 'IGNORED' },
             returnClause: 'updated_time'
         };
 
         const testLogObject = {
             logId: testLogId,
             requestId: testRequestId,
-            logType: 'FRIENDSHIP_REJECTED',
+            logType: 'FRIENDSHIP_IGNORED',
             logContext: {
                 targetUserId: testTargetUserId,
                 initiatedUserId: testIniatedUserId
@@ -243,9 +243,9 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
         
-        const rejectionResult = await persistence.rejectFriendshipRequest(testTargetUserId, testIniatedUserId);
-        expect(rejectionResult).to.exist;
-        expect(rejectionResult).to.deep.equal({ updatedTime: testUpdatedTime, logId: testLogId });
+        const resultOfIgnore = await persistence.ignoreFriendshipRequest(testTargetUserId, testIniatedUserId);
+        expect(resultOfIgnore).to.exist;
+        expect(resultOfIgnore).to.deep.equal({ updatedTime: testUpdatedTime, logId: testLogId });
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, queryValues);
         expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef], [testInsertLogDef]);
     });

@@ -57,6 +57,7 @@ const handleUserNotFound = async (friendRequest) => {
     const { contactType, contactMethod } = friendRequest.targetContactDetails;
 
     let dispatchResult = null;
+
     if (contactType === 'PHONE') {
         const dispatchMsg = format(config.get('sms.friendRequest.template'), initiatedUserName);
         dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
@@ -89,6 +90,7 @@ const identifyContactType = (contact) => {
     if (validator.isEmail(contact)) {
         return 'EMAIL';
     }
+    
     if (validator.isMobilePhone(contact, ['en-ZA'])) {
         return 'PHONE';
     }
@@ -192,7 +194,7 @@ const appendUserNameToRequest = async (friendRequest) => {
 };
 
 /**
- * This function returns an array of friend requests a user has not yet accepted (or rejected). Friend requests are
+ * This function returns an array of friend requests a user has not yet accepted (or ignored). Friend requests are
  * extracted for the system id in the request context.
  */
 module.exports.findFriendRequestsForUser = async (event) => {
@@ -263,12 +265,12 @@ module.exports.acceptFriendshipRequest = async (event) => {
 };
 
 /**
- * Proto-function intended to reject a friend request recieved by a user. The difference between this function and the 
- * deactivateFriendship function is that this function rejects friendships that were never accepted.
+ * Proto-function intended to ignore a friend request recieved by a user. The difference between this function and the 
+ * deactivateFriendship function is that this function ignores friendships that were never accepted.
  * @param {object} event
- * @property {String} initiatedUserId The system id of the user to be rejected as a friend.
+ * @property {String} initiatedUserId The system id of the user to be ignored as a friend.
  */
-module.exports.rejectFriendshipRequest = async (event) => {
+module.exports.ignoreFriendshipRequest = async (event) => {
     try {
         const userDetails = opsUtil.extractUserDetails(event);
         if (!userDetails) {
@@ -278,10 +280,10 @@ module.exports.rejectFriendshipRequest = async (event) => {
         const targetUserId = userDetails.systemWideUserId;
         const { initiatedUserId } = opsUtil.extractParamsFromEvent(event);
 
-        const rejectionResult = await persistenceWrite.rejectFriendshipRequest(targetUserId, initiatedUserId);
-        logger('Friendship rejection result:', rejectionResult);
+        const updateResult = await persistenceWrite.ignoreFriendshipRequest(targetUserId, initiatedUserId);
+        logger('Friendship update result:', updateResult);
 
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { rejectionResult }});
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);

@@ -188,7 +188,7 @@ module.exports.fetchActiveRequestCodes = async () => {
 };
 
 /**
- * This function fetches a users pending friend requests, i.e. requests the user has not yet accepted or rejected
+ * This function fetches a users pending friend requests, i.e. requests the user has not yet accepted or ignored
  */
 module.exports.fetchFriendRequestsForUser = async (targetUserId) => {
     const friendReqTable = config.get('tables.friendRequestTable');
