@@ -10,7 +10,7 @@ resource "aws_lambda_function" "user_event_process" {
   handler                        = "event-handler.handleUserEvent"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
-  timeout                        = 15
+  timeout                        = 180
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"

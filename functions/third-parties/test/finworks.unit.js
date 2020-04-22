@@ -132,6 +132,24 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
 
+    it('Catches post error and retries', async () => {
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+        requestStub.onFirstCall().rejects('401 Maintenance Window');
+        requestStub.onSecondCall().resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
+
+        const testAccountNumber = 'FTS103';
+        const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
+        const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
+
+        const resultOfInvestement = await handler.addCash(testEvent);
+        logger('Investment result from third party:', resultOfInvestement);
+
+        expect(resultOfInvestement).to.exist;
+        expect(resultOfInvestement).to.deep.equal({ });
+        expect(getObjectStub).to.have.been.calledTwice;
+        expect(requestStub).to.have.been.calledTwice;
+    });
+
     it('Cathes add cash error', async () => {
         const testAccountNumber = 'POL23';
         const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');

@@ -658,17 +658,19 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
     it('It sends out push and email messages', async () => {
         getPendingOutboundMessagesStub.resolves([mockUserMessage]);
         bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
+
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        
         assembleMessageStub.resolves(mockMessageBase);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
 
         getPushTokenStub.resolves({ [testUserId]: persistedToken });
-        chunkPushNotificationsStub.returns(['expoChunk1', 'expoChunk2']);
+        chunkPushNotificationsStub.returns(['expoChunk1']);
         sendPushNotificationsAsyncStub.resolves(['sentTicket']);
 
         const expectedResult = [
-            { channel: 'PUSH', result: 'SUCCESS', numberSent: 2 },
+            { channel: 'PUSH', result: 'SUCCESS', numberSent: 1 },
             { channel: 'EMAIL', result: 'SUCCESS', numberSent: 1 }
         ];
 
@@ -691,13 +693,19 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
 
         expect(assembleMessageStub).to.have.been.calledWith(mockUserMessage);
-        expect(publishUserEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_PUSH_NOTIFICATION_SENT', { context: mockMessageBase });
+        
+        const pnLogContext = { ...mockMessageBase, channel: 'PUSH_NOTIFICATION' };
+        const emailLogContext = { ...mockMessageBase, channel: 'PUSH_NOTIFICATION' };
+
+        expect(publishUserEventStub).to.have.been.calledTwice;
+        expect(publishUserEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_SENT', { context: pnLogContext });
+        expect(publishUserEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_SENT', { context: emailLogContext });
+        
         expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId]);
         expect(chunkPushNotificationsStub).to.have.been.calledOnce;
 
-        expect(sendPushNotificationsAsyncStub).to.have.been.calledTwice;
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledOnce;
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
-        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk2');
     });
 
     it('Sends emails and push messages to specific users', async () => {

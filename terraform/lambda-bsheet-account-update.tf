@@ -10,7 +10,7 @@ resource "aws_lambda_function" "balance_sheet_acc_update" {
   handler                        = "finworks-handler.addTransaction"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
-  timeout                        = 15
+  timeout                        = 180
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"

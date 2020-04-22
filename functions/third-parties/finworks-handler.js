@@ -3,9 +3,13 @@
 const logger = require('debug')('jupiter:third-parties:finworks');
 const config = require('config');
 const util = require('util');
+
 const opsUtil = require('ops-util-common');
 const request = require('request-promise');
+
 const AWS = require('aws-sdk');
+
+const sleep = require('util').promisify(setTimeout);
 
 const s3 = new AWS.S3();
 
@@ -50,6 +54,36 @@ const assembleRequest = (method, endpoint, data) => {
     return options;
 };
 
+const executeRequestWithRetry = async (options, retryStatus) => {
+    try {
+        const response = await request(options);
+        logger('FinWorks response: ', response.toJSON());
+        return response;
+    } catch (err) {
+        if (!retryStatus) {
+            // first retry, so set and and return
+            const initialTime = config.get('retry.initialPeriod');
+            await sleep(initialTime);
+            const initialRetryStatus = { elapsedTime: initialTime, totalRetries: 1, lastWaitTime: initialTime };
+            return executeRequestWithRetry(options, initialRetryStatus);
+        }
+
+        const { elapsedTime, totalRetries, lastWaitTime } = retryStatus;
+        const waitTime = lastWaitTime * 2;
+        const tryAgain = (elapsedTime + waitTime) < config.get('retry.maxRetryTime') && totalRetries < config.get('retry.maxRetries'); 
+            
+        if (tryAgain) {
+            await sleep(waitTime);
+            const newElapsedTime = elapsedTime + waitTime;
+            const newRetries = totalRetries + 1;
+            const newRetryStatus = { elapsedTime: newElapsedTime, totalRetries: newRetries, lastWaitTime: waitTime };
+            return executeRequestWithRetry(options, newRetryStatus);
+        }
+
+        throw err;
+    }
+};
+
 module.exports.createAccount = async (event) => {
     try {
         const params = opsUtil.extractParamsFromEvent(event);
@@ -61,9 +95,8 @@ module.exports.createAccount = async (event) => {
         const endpoint = `${config.get('finworks.endpoints.rootUrl')}/${config.get('finworks.endpoints.accountCreation')}`;
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
 
-        const response = await request(options);
-        logger('Got response:', response.toJSON());
-
+        const response = await executeRequestWithRetry(options);
+        
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
             throw new Error(JSON.stringify(response.body));
         }
@@ -86,9 +119,9 @@ const assembleAddMoneyOptions = async (event, endPointTemplate) => {
     logger('Assembled endpoint:', endpoint);
 
     const options = assembleRequest('POST', endpoint, { body, crt, pem });
-    const response = await request(options);
+    const response = await executeRequestWithRetry(options);
 
-    logger('Got response:', response.toJSON());
+    // logger('Got response:', response.toJSON());
 
     if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
         throw new Error(JSON.stringify(response.body));
@@ -143,7 +176,7 @@ module.exports.sendWithdrawal = async (event) => {
 
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
         logger('Withdrawal request options: ', options);
-        const response = await request(options);
+        const response = await executeRequestWithRetry(options);
         logger('Got response:', response.toJSON());
 
         if (!SUCCESS_RESPONSES.includes(response.statusCode)) {
