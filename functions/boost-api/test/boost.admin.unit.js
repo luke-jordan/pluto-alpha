@@ -46,14 +46,13 @@ const wrapQueryParamEvent = (requestBody, systemWideUserId, role) => ({
 
 const resetStubs = () => testHelper.resetStubs(updateBoostStub, listBoostsStub);
 
-describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
+describe('*** UNIT TEST BOOST ADMIN READ FUNCTIONS ***', () => {
     const testUserId = uuid();
     const testBoostId = uuid();
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
 
     const testBoostStartTime = moment();
     const testBoostEndTime = moment();
-    const testUpdatedTime = moment().format();
 
     const testInstructionId = uuid();
     const testCreatingUserId = uuid();
@@ -150,9 +149,19 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
         expect(listBoostsStub).to.have.been.calledOnce;
     });
 
-    // ///////////////////////////////////////////////////////////////////////////////////////
-    // //////////////////////////// UPDATE INSTRUCTION TESTS /////////////////////////////////
-    // ///////////////////////////////////////////////////////////////////////////////////////
+});
+
+// ///////////////////////////////////////////////////////////////////////////////////////
+// //////////////////////////// UPDATE INSTRUCTION TESTS /////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////
+
+describe('*** UNIT TEST BOOST ADMIN WRITE (UPDATE) FUNCTIONS ***', () => {
+
+    const testBoostId = uuid();
+    const testUserId = uuid();
+    const testUpdatedTime = moment().format();
+
+    beforeEach(() => testHelper.resetStubs(updateBoostStub));
 
     it('Updates boost instruction', async () => {
         const expectedEventBody = { boostId: testBoostId, boostStatus: 'OFFERED' };
@@ -162,11 +171,11 @@ describe('*** UNIT TEST BOOST ADMIN FUNCTIONS ***', () => {
         const resultOfUpdate = await handler.updateInstruction(expectedEvent);
         logger('Result of boost update:', resultOfUpdate);
         logger('args:', updateBoostStub.getCall(0).args);
-        
-        expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate.statusCode).to.deep.equal(200);
+
+        const resultBody = testHelper.standardOkayChecks(resultOfUpdate);
         expect(resultOfUpdate.headers).to.deep.equal(testHelper.expectedHeaders);
-        expect(resultOfUpdate.body).to.deep.equal(JSON.stringify([{ updatedTime: testUpdatedTime }]));
+        
+        expect(resultBody).to.deep.equal([{ updatedTime: testUpdatedTime }]);
         expect(updateBoostStub).to.have.been.calledOnceWithExactly(expectedEventBody);
     });
 

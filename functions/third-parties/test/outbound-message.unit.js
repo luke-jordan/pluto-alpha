@@ -81,16 +81,6 @@ describe('*** UNIT TEST EMAIL MESSSAGE DISPATCH ***', async () => {
         resetStubs(sendGridStub, requestStub, tinyPostStub);
     });
 
-    it('Handled warm up event', async () => {
-        const result = await handler.handleOutboundMessages({ });
-
-        expect(result).to.exist;
-        expect(result).to.deep.equal({ result: 'Empty invocation' });
-
-        expect(sendGridStub).to.have.not.been.called;
-        expect(tinyPostStub).to.not.have.been.called;        
-    });
-
     it('Sends out emails', async () => {
         tinyPostStub.resolves(sendgridOkayResponse);
 

@@ -138,8 +138,8 @@ const chunkAndSendMessages = async (messages) => {
     };
 };
 
-const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, title, body }) => (
-    publisher.publishUserEvent(destinationUserId, 'MESSAGE_PUSH_NOTIFICATION_SENT', { context: { title, body, instructionId, messageId }})
+const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, title, body, channel }) => (
+    publisher.publishUserEvent(destinationUserId, 'MESSAGE_SENT', { context: { title, body, instructionId, messageId, channel }})
 );
 
 const sendPendingPushMsgs = async () => {
@@ -182,7 +182,7 @@ const sendPendingPushMsgs = async () => {
         const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENT');
         logger('Final update worked? : ', updateToProcessed);
 
-        const userLogPromises = assembledMessages.map((msg) => publishMessageSentLog(msg));
+        const userLogPromises = assembledMessages.map((msg) => publishMessageSentLog({ ...msg, channel: 'PUSH_NOTIFICATION' }));
         const resultOfLogPublish = await Promise.all(userLogPromises);
         logger('Result of publishing message push logs: ', resultOfLogPublish);
 
@@ -231,6 +231,7 @@ const dispatchEmailMessages = async (emailMessages) => {
         };
     }
 
+    logger('Sending payload to outbound comms: ', payload);
     const emailInvocation = msgUtil.lambdaInvocation(config.get('lambdas.sendOutboundMessages'), payload, true);
     const resultOfSend = await lambda.invoke(emailInvocation).promise();
     logger('Result of batch email send:', resultOfSend);
@@ -280,22 +281,27 @@ const sendPendingEmailMsgs = async () => {
                 };
             }
 
-            return {}; // to avoid null errors
+            return null;
         });
         
-        const emailResult = await dispatchEmailMessages(messages.filter((msg) => !Reflect.has(msg, 'phoneNumber')));
+        const emailFilter = (msg) => msg !== null && !Reflect.has(msg, 'phoneNumber');
+        const emailResult = await dispatchEmailMessages(messages.filter(emailFilter));
         logger('Result of email dispatch', emailResult);
 
-        const smsMessages = messages.filter((msg) => Reflect.has(msg, 'phoneNumber'));
-        const smsResults = await Promise.all(smsMessages.map((sms) => publisher.sendSms(sms)));
+        const phoneFilter = (msg) => msg !== null && Reflect.has(msg, 'phoneNumber');
+        const smsResults = await Promise.all(messages.filter(phoneFilter).map((sms) => publisher.sendSms(sms)));
         logger('Result of sms dispatch', smsResults);
  
         // todo : fix this to also set to "sent" the ones with just SMSs or no email address or SMS
         const emailSuccess = emailResult && emailResult.result === 'SUCCESS';
         const smsSuccess = smsResults && smsResults.some(({ result }) => result === 'SUCCESS');
         logger(`Email success?  : ${emailSuccess}, and SMS success ? : ${smsSuccess}`);
+        
         if (emailSuccess || smsSuccess) {
             // we currently assume all SMSs are sent (they are async dispatched), or at least market to avoid repeat
+            const failedMsgIds = emailResult.failedMessageIds || [];
+            const successfulEmails = messages.filter(emailFilter).filter((msg) => !failedMsgIds.includes(msg.messageId));
+            
             const successfulMsgs = emailResult.failedMessageIds 
                 ? assembledMessages.filter((msg) => !emailResult.failedMessageIds.includes(msg.messageId)) : assembledMessages; 
             const successfulMsgIds = emailResult.failedMessageIds 
@@ -304,8 +310,10 @@ const sendPendingEmailMsgs = async () => {
             const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(successfulMsgIds, 'SENT');
             logger('Final update worked? : ', updateToProcessed);
 
-            const userLogPromises = successfulMsgs.map((msg) => publishMessageSentLog(msg));
-            const resultOfLogPublish = await Promise.all(userLogPromises);
+            const emailLogs = successfulEmails.map((msg) => publishMessageSentLog({ ...msg, channel: 'EMAIL' }));
+            const smsLogs = messages.filter(phoneFilter).map((msg) => publishMessageSentLog({ ...msg, channel: 'SMS' }));
+            
+            const resultOfLogPublish = await Promise.all([...emailLogs, ...smsLogs]);
             logger('Result of publishing email message logs: ', resultOfLogPublish);
 
             return { channel: 'EMAIL', result: 'SUCCESS', numberSent: successfulMsgs.length };
