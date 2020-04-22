@@ -11,6 +11,7 @@
     "tables": {
         "accountTransactions": "transaction_data.core_transaction_ledger",
         "rewardTransactions": "transaction_data.core_transaction_ledger",
+        "friendshipTable": "friends_data.core_friend_relationship",
         "floatTransactions": "float_data.float_transaction_ledger",
         "accountLedger": "account_data.core_account_ledger",
         "accountLog": "account_data.account_log",
@@ -33,13 +34,15 @@
             "withdrawal": "WITHDRAWAL_DETAILS",
             "profile": "USER_PROFILE",
             "account": "ACCOUNT_DETAILS",
-            "clientFloat": "CLIENT_FLOAT"
+            "clientFloat": "CLIENT_FLOAT",
+            "savingsHeat": "SAVINGS_HEAT"
         },
         "ttls": {
             "withdrawal": 900,
             "profile": 25200,
             "account": 25200,
-            "clientFloat": 3600
+            "clientFloat": 3600,
+            "savingsHeat": 21600
         }
     },
     "projection": {

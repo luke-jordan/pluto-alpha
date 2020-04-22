@@ -356,3 +356,128 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
     });
 
 });
+
+describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
+    const testBalance = Math.floor(100 * 100 * 100 * Math.random());
+    const testBalanceCents = Math.round(testBalance);
+
+    const accountTxTable = config.get('tables.accountTransactions');
+
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('Fetches account ids', async () => {
+        const selectQuery = `select account_id from ${config.get('tables.accountLedger')} where frozen = $1`;
+        queryStub.withArgs(selectQuery, [false]).resolves([
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId }
+        ]);
+
+        const resultOfFetch = await rds.fetchAccounts();
+        logger('Result:', resultOfFetch);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([testAccountId, testAccountId, testAccountId, testAccountId]);
+    });
+
+    it('Fecthes account ids for float', async () => {
+        const selectQuery = `select account_id from ${config.get('tables.accountLedger')} where default_float_id = $1 and frozen = $2`;
+        queryStub.withArgs(selectQuery, [testFloatId, false]).resolves([
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId }
+        ]);
+
+        const resultOfFetch = await rds.findAccountsForFloat(testFloatId);
+        logger('Result:', resultOfFetch);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([testAccountId, testAccountId, testAccountId, testAccountId]);
+    });
+
+    it('Fetches account ids for client', async () => {
+        const selectQuery = `select account_id from ${config.get('tables.accountLedger')} where responsible_client_id = $1 and frozen = $2`;
+        queryStub.withArgs(selectQuery, [testClientId, false]).resolves([
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId },
+            { 'account_id': testAccountId }
+        ]);
+
+        const resultOfFetch = await rds.findAccountsForClient(testClientId);
+        logger('Result:', resultOfFetch);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([testAccountId, testAccountId, testAccountId, testAccountId]);
+    });
+
+    it('Sums total amount saved by user over lifetime', async () => {
+        const selectQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
+            `settlement_status = $3 and transaction_type = $4 group by unit`;
+        const selectValues = [testAccountId, 'ZAR', 'SETTLED', 'USER_SAVING_EVENT'];
+
+        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }]);
+        const expectedBalance = testBalance + (100 * testBalanceCents);
+
+        const resultOfSum = await rds.sumTotalAmountSaved(testAccountId, 'ZAR');
+        logger('Result:', resultOfSum);
+
+        expect(resultOfSum).to.exist;
+        expect(resultOfSum).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
+    });
+
+    it('Sums total amount saved by user over last month', async () => {
+        const selectQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
+            `settlement_status = $3 and transaction_type = $4 and creation_time > $5 and creation_time < $6 group by unit`;
+        const selectValues = [testAccountId, 'ZAR', 'SETTLED', 'USER_SAVING_EVENT', sinon.match.number, sinon.match.number];
+
+        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }]);
+        const expectedBalance = testBalance + (100 * testBalanceCents);
+
+        const resultOfSum = await rds.sumAmountSavedLastMonth(testAccountId, 'ZAR');
+        logger('Result:', resultOfSum);
+
+        expect(resultOfSum).to.exist;
+        expect(resultOfSum).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
+    });
+
+    it('Counts number of settled saved in previous month', async () => {
+        const selectQuery = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+            `transaction_type = $2 and settlement_status = $3 and creation_time > $4 and creation_time < $5`;
+        const selectValues = [testAccountId, 'USER_SAVING_EVENT', 'SETTLED', sinon.match.number, sinon.match.number];
+
+        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'count': 22 }]);
+        const resultOfCount = await rds.countSettledSavesForPrevMonth(testAccountId);
+
+        expect(resultOfCount).to.exist;
+        expect(resultOfCount).to.deep.equal(22);
+    });
+
+    it('Counts a users active saving buddies', async () => {
+        const selectQuery = `select count(relationship_id) from ${config.get('tables.friendshipTable')} where initiated_user_id = $1 or accepted_user_id = $2 ` +
+            `and relationship_status = $3`;
+        const selectValues = [testUserId, testUserId, 'ACTIVE'];
+
+        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'count': 7 }]);
+        const resultOfCount = await rds.countActiveSavingFriendsForUser(testUserId);
+
+        expect(resultOfCount).to.exist;
+        expect(resultOfCount).to.deep.equal(7);
+    });
+
+    it('Fetches account opened date', async () => {
+        const testCreationTime = moment().format();
+        const selectQuery = `select creation_time from ${config.get('tables.accountLedger')} where account_id = $1`;
+        queryStub.withArgs(selectQuery, [testAccountId]).resolves([{ 'creation_time': testCreationTime }]);
+
+        const resultOfFetch = await rds.getAccountOpenedDateForHeatCalc(testAccountId);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(testCreationTime);
+    });
+
+});

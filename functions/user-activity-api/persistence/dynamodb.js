@@ -93,23 +93,6 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     return fetchFloatVarsForBalanceCalcFromCacheOrDB(clientId, floatId);
 };
 
-module.exports.getAccountOpenedForHeatCalc = async (systemWideUserId) => {
-    const params = {
-        ExpressionAttributeValues: {
-            ':user_id_event_type': { S: `${systemWideUserId}::USER_CREATED_ACCOUNT` }
-        },
-        KeyConditionExpression: 'user_id_event_type = :user_id_event_type',
-        TableName: config.get('tables.userLogTable'),
-        ScanIndexForward: false,
-        Limit: 1
-    };
-
-    const result = await dynamoCommon.query(params).promise();
-    logger('Result from Dynamo:', result);
-    const monthOpenMillis = parseInt(result.Items[0].timestamp.N, 10);
-    return moment(monthOpenMillis).format();
-};
-
 module.exports.warmupCall = async () => {
     const emptyRow = await dynamoCommon.fetchSingleRow(config.get('tables.clientFloatVars'), { clientId: 'non', floatId: 'existent' });
     logger('Warmup result: ', emptyRow);

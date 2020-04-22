@@ -39,6 +39,8 @@ module.exports.obtainFriends = async (event) => {
         const profileRequests = userFriendIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
         const profilesForFriends = await Promise.all(profileRequests);
         logger('Got user profiles:', profilesForFriends);
+
+        // for each profile, append savings heat score, from cache or call to savings heat handler
     
         return opsUtil.wrapResponse(profilesForFriends);
     } catch (err) {
@@ -280,10 +282,10 @@ module.exports.ignoreFriendshipRequest = async (event) => {
         const targetUserId = userDetails.systemWideUserId;
         const { initiatedUserId } = opsUtil.extractParamsFromEvent(event);
 
-        const updateResult = await persistenceWrite.ignoreFriendshipRequest(targetUserId, initiatedUserId);
-        logger('Friendship update result:', updateResult);
+        const resultOfIgnore = await persistenceWrite.ignoreFriendshipRequest(targetUserId, initiatedUserId);
+        logger('Friendship update result:', resultOfIgnore);
 
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { resultOfIgnore }});
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
