@@ -5,7 +5,6 @@ const config = require('config');
 const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
-
 const persistence = require('./persistence/rds');
 
 const Redis = require('ioredis');
@@ -56,9 +55,9 @@ const calculateAndCacheHeatScore = async (accountId) => {
     logger(`Account opened date: ${accountOpenedDate}\nActive friendships: ${numberOfSavingFriendships}`);
 
     if (totalNumberOfSaves === 0) {
-        const heatScore = Number(0).toFixed(2);
-        await redis.set(accountId, heatScore, 'EX', CACHE_TTL_IN_SECONDS);
-        return { accountId, heatScore };
+        const savingsHeat = Number(0).toFixed(2);
+        await redis.set(accountId, savingsHeat, 'EX', CACHE_TTL_IN_SECONDS);
+        return { accountId, savingsHeat };
     }
 
     const activeMonths = Math.abs(moment(accountOpenedDate).diff(moment().startOf('month'), 'month'));
@@ -74,12 +73,13 @@ const calculateAndCacheHeatScore = async (accountId) => {
         numberOfSavingFriendships / 4
     ];
 
-    const heatScore = heatValues.reduce((partialSum, value) => partialSum + value, 0);
-    const roundedScore = Number(heatScore).toFixed(2);
+    const heatScore = heatValues.reduce((sum, value) => sum + value, 0);
+    const roundedScore = Number(heatScore).toFixed(2); // ensures only two decimal places
+    logger('Calculated heat score:', roundedScore);
 
     await redis.set(accountId, roundedScore, 'EX', CACHE_TTL_IN_SECONDS);
 
-    return { accountId, heatScore: roundedScore };
+    return { accountId, savingsHeat: roundedScore };
 };
 
 /**

@@ -19,7 +19,8 @@
         "emailTable": "UserEmailTable"
     },
     "lambdas": {
-        "sendOutboundMessages": "outbound_comms_send"
+        "sendOutboundMessages": "outbound_comms_send",
+        "calcSavingsHeat": "savings_heat_fetch"
     },
     "cache": {
         "port": 6739,
@@ -27,7 +28,8 @@
         "host": "localhost",
         "keyPrefixes": {
             "profile": "FRIENDS_PROFILE",
-            "userId": "FRIENDS_USER_ID"
+            "userId": "FRIENDS_USER_ID",
+            "savingsHeat": "SAVINGS_HEAT"
         },
         "ttls": {
             "profile": 25200,

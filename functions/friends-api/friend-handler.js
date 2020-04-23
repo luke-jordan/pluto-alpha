@@ -13,6 +13,49 @@ const persistenceRead = require('./persistence/read.friends');
 const persistenceWrite = require('./persistence/write.friends');
 const opsUtil = require('ops-util-common');
 
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
+
+const Redis = require('ioredis');
+const redis = new Redis({
+    port: config.get('cache.port'),
+    host: config.get('cache.host'),
+    retryStrategy: () => `dont retry`,
+    keyPrefix: `${config.get('cache.keyPrefixes.savingsHeat')}::`
+});
+
+const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
+
+const invokeLambda = (functionName, payload, sync = true) => ({
+    FunctionName: functionName,
+    InvocationType: sync ? 'RequestResponse' : 'Event',
+    Payload: JSON.stringify(payload)
+});
+
+const invokeSavingsHeatLambda = async (accountId) => {
+    const savingsHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingsHeat'), { accountId });
+    logger('Invoke savings heat lambda with arguments: ', savingsHeatLambdaInvoke);
+    const savingsHeatResult = await lambda.invoke(savingsHeatLambdaInvoke).promise();
+    logger('Result of savings heat calculation: ', savingsHeatResult);
+    const { savingsHeat } = extractLambdaBody(savingsHeatResult);
+    return savingsHeat;
+};
+
+const appendSavingsHeatToProfile = async (profile) => {
+    const systemWideUserId = profile.systemWideUserId;
+    const accountId = await persistenceRead.fetchAccountIdForUser(systemWideUserId);
+
+    const cachedSavingsHeat = await redis.get(accountId);
+    if (!cachedSavingsHeat || typeof cachedSavingsHeat !== 'string' || cachedSavingsHeat.length === 0) {
+        const savingsHeat = await invokeSavingsHeatLambda(accountId);
+        profile.savingsHeat = Number(savingsHeat);
+    } else {
+        profile.savingsHeat = Number(cachedSavingsHeat);
+    }
+
+    return profile;
+};
+
 /**
  * This functions accepts a users system id and returns the user's friends.
  * @param {object} event
@@ -34,19 +77,21 @@ module.exports.obtainFriends = async (event) => {
         }
     
         const userFriendIds = await persistenceRead.getFriendIdsForUser(systemWideUserId);
-        logger('Got user ids:', userFriendIds);
+        logger('Got friend system ids:', userFriendIds);
     
         const profileRequests = userFriendIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
-        const profilesForFriends = await Promise.all(profileRequests);
-        logger('Got user profiles:', profilesForFriends);
+        const friendProfiles = await Promise.all(profileRequests);
+        logger('Got friend profiles:', friendProfiles);
 
-        // for each profile, append savings heat score, from cache or call to savings heat handler
-    
-        return opsUtil.wrapResponse(profilesForFriends);
+        const profilesWithSavingsHeat = await Promise.all(friendProfiles.map((profile) => appendSavingsHeatToProfile(profile)));
+        logger('Transformed profiles:', profilesWithSavingsHeat);
+        
+        return opsUtil.wrapResponse(profilesWithSavingsHeat);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
     }
+
 };
 
 const handleUserNotFound = async (friendRequest) => {

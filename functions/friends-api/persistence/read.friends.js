@@ -44,7 +44,7 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
     const accountTable = config.get('tables.accountTable');
     const query = `select owner_user_id from ${accountTable} where account_id = $1`;
     const fetchResult = await rdsConnection.selectQuery(query, [accountId]);
-    return fetchResult[0]['owner_user_id'];
+    return fetchResult.length > 0 ? fetchResult[0]['owner_user_id'] : null;
 };
 
 const fetchAcceptedUserIdsForUser = async (systemWideUserId) => {
@@ -81,6 +81,7 @@ const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
 
     if (!responseFromCache) {
         const systemWideUserId = await fetchUserIdForAccountFromDB(accountId);
+        logger('Got account owner id', systemWideUserId);
         await redis.set(accountId, systemWideUserId, 'EX', USER_ID_CACHE_TTL_IN_SECONDS);
         logger(`Successfully fetched 'user id' from db and stored in cache`);
         return systemWideUserId;
@@ -198,4 +199,14 @@ module.exports.fetchFriendRequestsForUser = async (targetUserId) => {
 
     return Array.isArray(fetchResult) && fetchResult.length > 0 
         ? fetchResult.map((result) => camelCaseKeys(result)) : [];
+};
+
+/**
+ * Fetches account id associated with an system id. To be adapted to return all user accounts.
+ */
+module.exports.fetchAccountIdForUser = async (systemWideUserId) => {
+    const accountTable = config.get('tables.accountTable');
+    const selectQuery = `select account_id from ${accountTable} where owner_user_id = $1`;
+    const fetchResult = await rdsConnection.selectQuery(selectQuery, [systemWideUserId]);
+    return fetchResult.length > 0 ? fetchResult[0]['account_id'] : null;
 };

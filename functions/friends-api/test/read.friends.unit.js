@@ -58,6 +58,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     const testAccountId = uuid();
 
     const friendRequestTable = config.get('tables.friendRequestTable');
+    const accountTable = config.get('tables.accountTable');
     const profileTable = config.get('tables.profileTable');
     const phoneTable = config.get('tables.phoneTable');
     const emailTable = config.get('tables.emailTable');
@@ -109,7 +110,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     });
 
     it('Fetches user user from DB, given account id', async () => {
-        const accountTable = config.get('tables.accountTable');
         const selectQuery = `select owner_user_id from ${accountTable} where account_id = $1`;
 
         redisGetStub.withArgs(`${config.get('cache.keyPrefixes.userId')}::${testAccountId}`).resolves();
@@ -215,5 +215,13 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchFriendRequestsForUser(testTargetUserId);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedFriendRequest]);
+    });
+
+    it('Fetches account id for user', async () => {
+        const selectQuery = `select account_id from ${accountTable} where owner_user_id = $1`;
+        queryStub.withArgs(selectQuery, [testSystemId]).resolves([{ 'account_id': testAccountId }]);
+        const resultOfFetch = await persistence.fetchAccountIdForUser(testSystemId);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(testAccountId);
     });
 });

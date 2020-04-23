@@ -23,3 +23,15 @@ module.exports.wrapResponse = (body, statusCode = 200) => ({
     body: JSON.stringify(body)
 });
 
+module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
+    FunctionName: functionName,
+    InvocationType: async ? 'Event' : 'RequestResponse',
+    Payload: JSON.stringify(payload)
+});
+
+module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
+    Payload: JSON.stringify({
+        statusCode,
+        body: JSON.stringify(body)
+    })
+});

@@ -17,12 +17,15 @@ const expect = chai.expect;
 const helper = require('./test-helper');
 
 const sendSmsStub = sinon.stub();
+const redisGetStub = sinon.stub();
 const sendEmailStub = sinon.stub();
 const fetchUserStub = sinon.stub();
 const getFriendsStub = sinon.stub();
 const randomWordStub = sinon.stub();
 const connectUserStub = sinon.stub();
+const lamdbaInvokeStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
+const fetchAccountStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const ignoreRequestStub = sinon.stub();
 const fetchAllRequestsStub = sinon.stub();
@@ -33,11 +36,24 @@ const deactivateFriendshipStub = sinon.stub();
 
 const testLogId = uuid();
 const testSystemId = uuid();
+const testAccountId = uuid();
 const testInitiatedUserId = uuid();
 const testTargetUserId = uuid();
 const testAcceptedUserId = uuid();
 const testRelationshipId = uuid();
 const testRequestId = uuid();
+
+class MockRedis {
+    constructor () { 
+        this.get = redisGetStub;
+    }
+}
+
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
+    }
+}
 
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
@@ -45,6 +61,7 @@ const handler = proxyquire('../friend-handler', {
         'fetchUserByContactDetail': fetchUserStub,
         'fetchActiveRequestCodes': fetchActiveCodesStub,
         'fetchFriendshipRequestById': fetchRequestStub,
+        'fetchAccountIdForUser': fetchAccountStub,
         'getFriendIdsForUser': getFriendsStub,
         'fetchUserProfile': fetchProfileStub
     },
@@ -60,12 +77,16 @@ const handler = proxyquire('../friend-handler', {
         'sendSms': sendSmsStub,
         '@noCallThru': true
     },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient  
+    },
+    'ioredis': MockRedis,
     'random-words': randomWordStub
 });
 
 const resetStubs = () => helper.resetStubs(fetchUserStub, getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub,
     deactivateFriendshipStub, fetchActiveCodesStub, fetchRequestStub, randomWordStub, sendEmailStub, sendSmsStub, connectUserStub,
-    fetchAllRequestsStub, ignoreRequestStub);
+    fetchAllRequestsStub, ignoreRequestStub, fetchAccountStub, lamdbaInvokeStub, redisGetStub);
 
 describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
@@ -78,6 +99,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         emailAddress: 'liezi@tao.com'
     };
 
+    const expectedHeat = 23.71;
+    const expectedProfile = { ...testProfile, savingsHeat: expectedHeat };
+
     beforeEach(() => {
         resetStubs();
     });
@@ -85,31 +109,40 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
     it('Fetches user friends', async () => {
         getFriendsStub.withArgs(testSystemId).resolves([testAcceptedUserId, testAcceptedUserId, testAcceptedUserId]);
         fetchProfileStub.withArgs({ systemWideUserId: testAcceptedUserId }).resolves(testProfile);
+        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves(testAccountId);
+        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.calcSavingsHeat'), false, { accountId: testAccountId })).returns({
+            promise: () => helper.mockLambdaResponse({ accountId: testAccountId, savingsHeat: '23.71' })
+        });
+        redisGetStub.withArgs(testAccountId).resolves();
 
         const testEvent = helper.wrapEvent({}, testSystemId, 'ORDINARY_USER');
         const fetchResult = await handler.obtainFriends(testEvent);
         expect(fetchResult).to.exist;
-        expect(fetchResult).to.deep.equal(helper.wrapResponse([testProfile, testProfile, testProfile]));
+        expect(fetchResult).to.deep.equal(helper.wrapResponse([expectedProfile, expectedProfile, expectedProfile]));
     });
 
     it('Fetches admin friends too', async () => {
         getFriendsStub.withArgs(testSystemId).resolves([testAcceptedUserId, testAcceptedUserId, testAcceptedUserId]);
         fetchProfileStub.withArgs({ systemWideUserId: testAcceptedUserId }).resolves(testProfile);
+        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves(testAccountId);
+        redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
 
         const testEvent = helper.wrapEvent({}, testSystemId, 'SYSTEM_ADMIN');
         const fetchResult = await handler.obtainFriends(testEvent);
         expect(fetchResult).to.exist;
-        expect(fetchResult).to.deep.equal(helper.wrapResponse([testProfile, testProfile, testProfile]));
+        expect(fetchResult).to.deep.equal(helper.wrapResponse([expectedProfile, expectedProfile, expectedProfile]));
     });
 
     it('Fetches friends for admin provided user', async () => {
         getFriendsStub.withArgs(testInitiatedUserId).resolves([testAcceptedUserId, testAcceptedUserId, testAcceptedUserId]);
         fetchProfileStub.withArgs({ systemWideUserId: testAcceptedUserId }).resolves(testProfile);
+        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves(testAccountId);
+        redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
 
         const testEvent = helper.wrapEvent({ systemWideUserId: testInitiatedUserId }, testSystemId, 'SYSTEM_ADMIN');
         const fetchResult = await handler.obtainFriends(testEvent);
         expect(fetchResult).to.exist;
-        expect(fetchResult).to.deep.equal(helper.wrapResponse([testProfile, testProfile, testProfile]));
+        expect(fetchResult).to.deep.equal(helper.wrapResponse([expectedProfile, expectedProfile, expectedProfile]));
     });
 
     it('Rejects unauthorized requests', async () => {
@@ -203,6 +236,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
         const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922' }, testInitiatedUserId, 'ORDINARY_USER');
         const insertionResult = await handler.addFriendshipRequest(testEvent);
+        expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse({
             result: 'SUCCESS',
             updateLog: {

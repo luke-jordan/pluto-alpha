@@ -90,15 +90,15 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             details: [
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 },
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 },
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 }
             ]
         });
@@ -127,7 +127,7 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             details: [
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 }
             ]
         });
@@ -156,15 +156,15 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             details: [
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 },
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 },
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 }
             ]
         });
@@ -194,15 +194,15 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             details: [
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 },
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 },
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 }
             ]
         });
@@ -227,7 +227,7 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             details: [
                 {
                     accountId: testAccountId,
-                    heatScore: expectedScore
+                    savingsHeat: expectedScore
                 }
             ]
         });
