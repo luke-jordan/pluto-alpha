@@ -198,7 +198,8 @@ module.exports.assembleMessage = async (msgDetails) => {
             priority: msgDetails.messagePriority,
             display: msgDetails.display,
             persistedTimeMillis: msgDetails.creationTime.valueOf(),
-            hasFollowingMessage: msgDetails.hasFollowingMessage
+            hasFollowingMessage: msgDetails.hasFollowingMessage,
+            instructionId: msgDetails.instructionId // for logging & tracing
         };
         
         let actionContextForReturn = { };
