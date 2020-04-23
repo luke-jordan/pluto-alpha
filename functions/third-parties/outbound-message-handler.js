@@ -247,7 +247,7 @@ module.exports.handleOutboundMessages = async (event) => {
     const params = opsUtil.extractParamsFromEvent(event);
     logger('Sending outbound message, with event: ', event);
 
-    if (params.emailMessages || JSON.stringify(params) === '{}') {
+    if (Array.isArray(params.emailMessages) && params.emailMessages.length > 0) {
         return exports.sendEmailMessages(event);
     }
 
