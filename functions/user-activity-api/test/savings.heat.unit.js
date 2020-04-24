@@ -107,7 +107,7 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
         expect(redisSetStub).to.have.been.calledThrice;
     });
 
-    it('Calculates and caches savings heat for account id', async () => {
+    it('Calculates and caches savings heat for provided account ids', async () => {
         const expectedScore = '12.95';
 
         getOwnerInfoStub.withArgs(testAccountId).resolves({ ownerUserId: testSystemId });
@@ -119,7 +119,7 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
         sumTotalSavedStub.withArgs(testAccountId, 'ZAR').resolves(100000);
         sumSavedLastMonthStub.withArgs(testAccountId, 'ZAR').resolves(51000);
 
-        const resultOfCalc = await handler.calculateSavingsHeat({ accountId: testAccountId });
+        const resultOfCalc = await handler.calculateSavingsHeat({ accountIds: [testAccountId, testAccountId] });
 
         expect(resultOfCalc).to.exist;
         expect(resultOfCalc).to.deep.equal({
@@ -128,11 +128,16 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
                 {
                     accountId: testAccountId,
                     savingsHeat: expectedScore
+                },
+                {
+                    accountId: testAccountId,
+                    savingsHeat: expectedScore
                 }
             ]
         });
 
-        expect(redisSetStub).to.have.been.calledOnceWithExactly(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        expect(redisSetStub).to.have.been.calledWith(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        expect(redisSetStub).to.have.been.calledTwice;
     });
 
     it('Calculates and caches savings heat for float accounts', async () => {
@@ -220,7 +225,7 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
         countFriendsStub.withArgs(testSystemId).resolves(5);
         getAccOpenDateStub.withArgs(testAccountId).resolves(testAccountOpenedTime);
 
-        const resultOfCalc = await handler.calculateSavingsHeat({ accountId: testAccountId });
+        const resultOfCalc = await handler.calculateSavingsHeat({ accountIds: [testAccountId] });
         expect(resultOfCalc).to.exist;
         expect(resultOfCalc).to.deep.equal({
             result: 'SUCCESS',
@@ -238,11 +243,40 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
         expect(sumSavedLastMonthStub).to.have.not.been.called;
     });
 
-    // todo: Test effect of active months, also how to handle user who have only joined this month
+    it('Handles users with less than a month on Jupiter', async () => {
+        const testAccountOpenedDate = moment().subtract(3, 'days').format(); // NB
+        const expectedScore = '0.00';
+
+        getOwnerInfoStub.withArgs(testAccountId).resolves({ ownerUserId: testSystemId });
+        countSavesStub.resolves(0);
+        countSavesLastMonthStub.withArgs(testAccountId).resolves(1);
+        countFriendsStub.withArgs(testSystemId).resolves(5);
+        getAccOpenDateStub.withArgs(testAccountId).resolves(testAccountOpenedDate);
+
+        const resultOfCalc = await handler.calculateSavingsHeat({ accountIds: [testAccountId] });
+
+        expect(resultOfCalc).to.exist;
+        expect(resultOfCalc).to.deep.equal({
+            result: 'SUCCESS',
+            details: [
+                {
+                    accountId: testAccountId,
+                    savingsHeat: expectedScore
+                }
+            ]
+        });
+
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        expect(findCurrencyStub).to.have.not.been.called;
+        expect(sumTotalSavedStub).to.have.not.been.called;
+        expect(sumSavedLastMonthStub).to.have.not.been.called;
+    });
+
+    // todo: Test effect of active months
 
     it('Catches thrown errors', async () => {
         getOwnerInfoStub.withArgs(testAccountId).throws(new Error('Error!'));
-        const resultOfCalc = await handler.calculateSavingsHeat({ accountId: testAccountId });
+        const resultOfCalc = await handler.calculateSavingsHeat({ accountIds: [testAccountId] });
         expect(resultOfCalc).to.exist;
         expect(resultOfCalc).to.deep.equal({ result: 'ERROR', message: 'Error!' });
     });

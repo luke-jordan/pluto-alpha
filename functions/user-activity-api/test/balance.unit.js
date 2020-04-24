@@ -88,26 +88,12 @@ const expectedBalanceSubsequentDays = Array.from(Array(expectedNumberOfDays).key
     };
 });
 
-const redisGetStub = sinon.stub();
-const lamdbaInvokeStub = sinon.stub();
 const accountBalanceQueryStub = sinon.stub();
 const accountClientFloatStub = sinon.stub();
 const findAccountsForUserStub = sinon.stub();
 const countAvailableBoostStub = sinon.stub();
 const floatPrincipalVarsStub = sinon.stub();
 const fetchPendingTransactionsStub = sinon.stub();
-
-class MockRedis {
-    constructor () { 
-        this.get = redisGetStub;
-    }
-}
-
-class MockLambdaClient {
-    constructor () {
-        this.invoke = lamdbaInvokeStub;
-    }
-}
 
 const handler = proxyquire('../balance-handler', {
     './persistence/rds': { 
@@ -121,10 +107,6 @@ const handler = proxyquire('../balance-handler', {
         'fetchFloatVarsForBalanceCalc': floatPrincipalVarsStub,
         'warmupCall': sinon.stub() // no need to create another stub for this
     },
-    'aws-sdk': {
-        'Lambda': MockLambdaClient  
-    },
-    'ioredis': MockRedis,
     '@noCallThru': true
 });
 
@@ -149,7 +131,6 @@ const resetStubs = (historyOnly = true) => {
 describe('Fetches user balance and makes projections', () => {
 
     const testNumberBoosts = 3;
-    const expectedHeat = 11.01;
 
     const createUserIdEvent = (userId) => ({ 
         userId, 
@@ -188,8 +169,7 @@ describe('Fetches user balance and makes projections', () => {
         },
         balanceSubsequentDays: expectedBalanceSubsequentDays,
         availableBoostCount: testNumberBoosts, 
-        comparatorRates: testComparatorRates,
-        savingsHeat: 11.01
+        comparatorRates: testComparatorRates
     };
 
     // logger('Expected body: ', wellFormedResultBody);
@@ -215,13 +195,6 @@ describe('Fetches user balance and makes projections', () => {
         expectedBody.currentBalance = strippedBalance;
         return expectedBody;
     };
-
-    const mockLambdaResponse = (body, statusCode = 200) => ({
-        Payload: JSON.stringify({
-            statusCode,
-            body: JSON.stringify(body)
-        })
-    });
 
     before(() => {
         accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment).resolves({ 
@@ -253,10 +226,6 @@ describe('Fetches user balance and makes projections', () => {
     after(() => resetStubs(false));
 
     it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
-        lamdbaInvokeStub.withArgs(testHelper.wrapLambdaInvoc(config.get('lambdas.calcSavingsHeat'), false, { accountId: testAccountId })).returns({
-            promise: () => mockLambdaResponse({ accountId: testAccountId, savingsHeat: '11.01' })
-        });
-        redisGetStub.withArgs(testAccountId).resolves();
         const authEvent = JSON.parse(fs.readFileSync('./test/events/auth-event-balance.json'));
         // accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment);
         const balanceAndProjections = await handler.balanceWrapper(authEvent);
@@ -305,7 +274,6 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Obtains balance and future projections correctly when given an account ID', async () => {
-        redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
         const balanceAndProjections = await handler.balance({ 
             accountId: testAccountId,
             clientId: testClientId,
@@ -320,7 +288,6 @@ describe('Fetches user balance and makes projections', () => {
 
     it('Obtains PENDING transactions and balance and future projections correctly when given an account ID', async () => {
         fetchPendingTransactionsStub.withArgs(testAccountId).resolves(testPendingTransactions);
-        redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
         const expectedResult = { ...wellFormedResultBody, pendingTransactions: testPendingTransactions };
         const balanceAndProjections = await handler.balance({
             accountId: testAccountId,
@@ -339,7 +306,6 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Obtains balance and future projections correctly when given a system wide user ID, single and multiple accounts', async () => {
-        redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
         const balanceAndProjections = await handler.balance(createUserIdEvent(testUserId));
         checkResultIsWellFormed(balanceAndProjections);
     });
@@ -359,8 +325,6 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Obtains balance and future projections for default client and float when given an account Id or user Id', async () => {
-        redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
-
         const commonParams = {
             currency: 'USD',
             atEpochMillis: testTimeNow.valueOf(),
@@ -380,8 +344,6 @@ describe('Fetches user balance and makes projections', () => {
     });
 
     it('Obtains balance but leaves out future projections if days to project is is 0', async () => {
-        redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
-
         const zeroDaysParams = {
             userId: testUserId,
             currency: 'USD',

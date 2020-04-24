@@ -208,5 +208,7 @@ module.exports.fetchAccountIdForUser = async (systemWideUserId) => {
     const accountTable = config.get('tables.accountTable');
     const selectQuery = `select account_id from ${accountTable} where owner_user_id = $1`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [systemWideUserId]);
-    return fetchResult.length > 0 ? fetchResult[0]['account_id'] : null;
+    return fetchResult.length > 0
+        ? { [systemWideUserId]: fetchResult[0]['account_id'] }
+        : { };
 };

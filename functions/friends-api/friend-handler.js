@@ -32,28 +32,52 @@ const invokeLambda = (functionName, payload, sync = true) => ({
     Payload: JSON.stringify(payload)
 });
 
-const invokeSavingsHeatLambda = async (accountId) => {
-    const savingsHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingsHeat'), { accountId });
+const invokeSavingsHeatLambda = async (accountIds) => {
+    const savingsHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingsHeat'), { accountIds });
     logger('Invoke savings heat lambda with arguments: ', savingsHeatLambdaInvoke);
     const savingsHeatResult = await lambda.invoke(savingsHeatLambdaInvoke).promise();
     logger('Result of savings heat calculation: ', savingsHeatResult);
-    const { savingsHeat } = extractLambdaBody(savingsHeatResult);
-    return savingsHeat;
+    return extractLambdaBody(savingsHeatResult);
 };
 
-const appendSavingsHeatToProfile = async (profile) => {
-    const systemWideUserId = profile.systemWideUserId;
-    const accountId = await persistenceRead.fetchAccountIdForUser(systemWideUserId);
+const fetchSavingsHeatFromCache = async (accountId) => {
+    const savingsHeat = await redis.get(accountId);
+    return savingsHeat ? { accountId, savingsHeat } : null;
+};
 
-    const cachedSavingsHeat = await redis.get(accountId);
-    if (!cachedSavingsHeat || typeof cachedSavingsHeat !== 'string' || cachedSavingsHeat.length === 0) {
-        const savingsHeat = await invokeSavingsHeatLambda(accountId);
-        profile.savingsHeat = Number(savingsHeat);
-    } else {
-        profile.savingsHeat = Number(cachedSavingsHeat);
+const appendSavingsHeatToProfiles = async (profiles, userAndAccIds) => {
+    const accountIds = userAndAccIds.map((object) => Object.values(object)[0]);
+    logger('Got account ids:', accountIds);
+    
+    const cachedSavingsHeatForAccounts = await Promise.all(accountIds.map((accountId) => fetchSavingsHeatFromCache(accountId)));
+    const filteredSavingsHeatFromCache = cachedSavingsHeatForAccounts.filter((savingsHeat) => savingsHeat !== null);
+
+    const cachedAccounts = filteredSavingsHeatFromCache.map((savingsHeat) => savingsHeat.accountId);
+    logger('Got cached accounts:', cachedAccounts);
+    const uncachedAccounts = accountIds.filter((accountId) => !cachedAccounts.includes(accountId));
+
+    logger('Found cached savings heat:', filteredSavingsHeatFromCache);
+    logger('Found uncached accounts:', uncachedAccounts);
+
+    let savingsHeatFromLambda = [];
+    if (uncachedAccounts.length > 0) {
+        savingsHeatFromLambda = await invokeSavingsHeatLambda(uncachedAccounts);
     }
+    logger('Got savings heat from lambda:', savingsHeatFromLambda);
 
-    return profile;
+    const savingsHeatForAccounts = [...savingsHeatFromLambda, ...filteredSavingsHeatFromCache];
+    logger('Aggregated savings heat from cache and lambda:', savingsHeatForAccounts);
+
+    const profilesWithSavingsHeat = profiles.map((profile) => {
+        const profileAccountId = userAndAccIds.map((account) => account[profile.systemWideUserId])[0];
+        const savingsHeatObject = savingsHeatForAccounts.filter((savingsHeat) => savingsHeat.accountId === profileAccountId);
+        profile.savingsHeat = Number(savingsHeatObject[0].savingsHeat);
+        return profile;
+    });
+
+    logger('Got profiles with savings heat:', profilesWithSavingsHeat);
+
+    return profilesWithSavingsHeat;
 };
 
 /**
@@ -76,15 +100,17 @@ module.exports.obtainFriends = async (event) => {
             systemWideUserId = userDetails.systemWideUserId;
         }
     
-        const userFriendIds = await persistenceRead.getFriendIdsForUser(systemWideUserId);
-        logger('Got friend system ids:', userFriendIds);
+        const friendUserIds = await persistenceRead.getFriendIdsForUser(systemWideUserId);
+        logger('Got friend system ids:', friendUserIds);
     
-        const profileRequests = userFriendIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
+        const profileRequests = friendUserIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
         const friendProfiles = await Promise.all(profileRequests);
         logger('Got friend profiles:', friendProfiles);
 
-        const profilesWithSavingsHeat = await Promise.all(friendProfiles.map((profile) => appendSavingsHeatToProfile(profile)));
-        logger('Transformed profiles:', profilesWithSavingsHeat);
+        const userAndAccIds = await Promise.all(friendUserIds.map((userId) => persistenceRead.fetchAccountIdForUser(userId)));
+        logger('Got user-account id map:', userAndAccIds);
+
+        const profilesWithSavingsHeat = await appendSavingsHeatToProfiles(friendProfiles, userAndAccIds);
         
         return opsUtil.wrapResponse(profilesWithSavingsHeat);
     } catch (err) {

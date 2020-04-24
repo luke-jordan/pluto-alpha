@@ -11,45 +11,9 @@ const persistence = require('./persistence/rds');
 const dynamodb = require('./persistence/dynamodb');
 const opsUtil = require('ops-util-common');
 
-const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region') });
-
-const Redis = require('ioredis');
-const redis = new Redis({
-    port: config.get('cache.port'),
-    host: config.get('cache.host'),
-    keyPrefix: `${config.get('cache.keyPrefixes.savingsHeat')}::`
-});
-
 const invalidRequestResponse = (messageForBody) => ({ statusCode: 400, body: messageForBody });
 
 const ACCOUNT_NOT_FOUND_CODE = 404;
-
-const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-
-const invokeLambda = (functionName, payload, sync = true) => ({
-  FunctionName: functionName,
-  InvocationType: sync ? 'RequestResponse' : 'Event',
-  Payload: JSON.stringify(payload)
-});
-
-const invokeSavingsHeatLambda = async (accountId) => {
-  const savingsHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingsHeat'), { accountId });
-  logger('Invoke savings heat lambda with arguments: ', savingsHeatLambdaInvoke);
-  const savingsHeatResult = await lambda.invoke(savingsHeatLambdaInvoke).promise();
-  logger('Result of savings heat calculation: ', savingsHeatResult);
-  const { savingsHeat } = extractLambdaBody(savingsHeatResult);
-  return Number(savingsHeat);
-};
-
-const fetchSavingsHeat = async (accountId) => {
-  const cachedSavingsHeat = await redis.get(accountId);
-    if (!cachedSavingsHeat || typeof cachedSavingsHeat !== 'string' || cachedSavingsHeat.length === 0) {
-      return invokeSavingsHeatLambda(accountId);
-    }
-     
-    return Number(cachedSavingsHeat);
-};
 
 const fetchUserDefaultAccount = async (systemWideUserId) => {
   logger('Fetching user accounts for user ID: ', systemWideUserId);
@@ -110,8 +74,6 @@ const assembleBalanceForUser = async (accountId, currency, timeForBalance, float
     const currentBalanceAmount = new DecimalLight(startingBalance.amount).plus(accruedAmountPerSecond.times(secondsDifference));
 
     resultObject.currentBalance = createBalanceDict(currentBalanceAmount.toDecimalPlaces(0).toNumber(), unit, currency, timeForBalance);
-
-    resultObject.savingsHeat = await fetchSavingsHeat(accountId);
 
     if (daysToProject > 0) {
       let currentProjectedBalance = endOfTodayBalance;

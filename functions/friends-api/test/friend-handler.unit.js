@@ -107,13 +107,20 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
     });
 
     it('Fetches user friends', async () => {
+        const [firstAccId, secondAccId, thirdAccId] = [uuid(), uuid(), uuid()];
+        const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.calcSavingsHeat'), false, { accountIds: [secondAccId, thirdAccId] });
         getFriendsStub.withArgs(testSystemId).resolves([testAcceptedUserId, testAcceptedUserId, testAcceptedUserId]);
         fetchProfileStub.withArgs({ systemWideUserId: testAcceptedUserId }).resolves(testProfile);
-        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves(testAccountId);
-        lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.calcSavingsHeat'), false, { accountId: testAccountId })).returns({
-            promise: () => helper.mockLambdaResponse({ accountId: testAccountId, savingsHeat: '23.71' })
+        fetchAccountStub.onFirstCall().resolves({ [testProfile.systemWideUserId]: firstAccId });
+        fetchAccountStub.onSecondCall().resolves({ [testProfile.systemWideUserId]: secondAccId });
+        fetchAccountStub.onThirdCall().resolves({ [testProfile.systemWideUserId]: thirdAccId });
+        lamdbaInvokeStub.withArgs(lambdaArgs).returns({
+            promise: () => helper.mockLambdaResponse([
+                { accountId: uuid(), savingsHeat: `${expectedHeat}` },
+                { accountId: uuid(), savingsHeat: `${expectedHeat}` }
+            ])
         });
-        redisGetStub.withArgs(testAccountId).resolves();
+        redisGetStub.onFirstCall().resolves(`${expectedHeat}`);
 
         const testEvent = helper.wrapEvent({}, testSystemId, 'ORDINARY_USER');
         const fetchResult = await handler.obtainFriends(testEvent);
@@ -124,7 +131,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
     it('Fetches admin friends too', async () => {
         getFriendsStub.withArgs(testSystemId).resolves([testAcceptedUserId, testAcceptedUserId, testAcceptedUserId]);
         fetchProfileStub.withArgs({ systemWideUserId: testAcceptedUserId }).resolves(testProfile);
-        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves(testAccountId);
+        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves({ [testProfile.systemWideUserId]: testAccountId });
         redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
 
         const testEvent = helper.wrapEvent({}, testSystemId, 'SYSTEM_ADMIN');
@@ -136,7 +143,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
     it('Fetches friends for admin provided user', async () => {
         getFriendsStub.withArgs(testInitiatedUserId).resolves([testAcceptedUserId, testAcceptedUserId, testAcceptedUserId]);
         fetchProfileStub.withArgs({ systemWideUserId: testAcceptedUserId }).resolves(testProfile);
-        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves(testAccountId);
+        fetchAccountStub.withArgs(testProfile.systemWideUserId).resolves({ [testProfile.systemWideUserId]: testAccountId });
         redisGetStub.withArgs(testAccountId).resolves(`${expectedHeat}`);
 
         const testEvent = helper.wrapEvent({ systemWideUserId: testInitiatedUserId }, testSystemId, 'SYSTEM_ADMIN');

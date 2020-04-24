@@ -222,6 +222,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         queryStub.withArgs(selectQuery, [testSystemId]).resolves([{ 'account_id': testAccountId }]);
         const resultOfFetch = await persistence.fetchAccountIdForUser(testSystemId);
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal(testAccountId);
+        expect(resultOfFetch).to.deep.equal({ [testSystemId]: testAccountId });
     });
 });

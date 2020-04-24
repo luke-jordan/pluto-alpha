@@ -16,8 +16,12 @@ const redis = new Redis({
 
 const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.savingsHeat');
 
+// These multipliers are used in calculating the savings heat score. AVG_GROWTH_PERCENT shifts the decimal point
+// in the average growth percent (e.g 10 percent becomes 0.1). AVERAGE_GROWTH multiplies the adjusted average
+// growth in the amount a user saves. SAVES_PER_MONTH multiplies the users average number of saves per month. SAVES_LAST_MONTH
+// multiplies the users average number of saves over lifetime.
 const MULTIPLIERS = {
-    'AVG_GROWTH_PERCENT': 0.01,
+    'AVG_GROWTH_PERCENT': 0.01, 
     'AVERAGE_GROWTH': 10,
     'SAVES_PER_MONTH': 0.5,
     'SAVES_LAST_MONTH': 0.5
@@ -54,13 +58,14 @@ const calculateAndCacheHeatScore = async (accountId) => {
     logger(`Total savings: ${totalNumberOfSaves}\nNumber of savings last month: ${numberOfSavesLastMonth}`);
     logger(`Account opened date: ${accountOpenedDate}\nActive friendships: ${numberOfSavingFriendships}`);
 
-    if (totalNumberOfSaves === 0) {
+    const activeMonths = Math.abs(moment(accountOpenedDate).diff(moment().startOf('month'), 'month'));
+
+    if (totalNumberOfSaves === 0 || activeMonths === 0) {
         const savingsHeat = Number(0).toFixed(2);
         await redis.set(accountId, savingsHeat, 'EX', CACHE_TTL_IN_SECONDS);
         return { accountId, savingsHeat };
     }
 
-    const activeMonths = Math.abs(moment(accountOpenedDate).diff(moment().startOf('month'), 'month'));
     const avgNumberOfSavesPerMonth = totalNumberOfSaves / activeMonths;
     
     const avgGrowthInSavedAmount = await calculateGrowthInTotalAmountSaved(accountId, activeMonths);
@@ -93,28 +98,28 @@ const calculateAndCacheHeatScore = async (accountId) => {
  */
 module.exports.calculateSavingsHeat = async (event) => {
     try {
-        const { accountId, floatId, clientId } = opsUtil.extractParamsFromEvent(event);
+        const { accountIds, floatId, clientId } = opsUtil.extractParamsFromEvent(event);
 
-        let accountIds = [];
-        if (!accountId && !floatId && !clientId) {
-            accountIds = await persistence.fetchAccounts();
+        let accountIdsForCalc = [];
+        if (!accountIds && !floatId && !clientId) {
+            accountIdsForCalc = await persistence.fetchAccounts();
         }
     
-        if (accountId) {
-            accountIds = [accountId];
+        if (accountIds) {
+            accountIdsForCalc = accountIds;
         }
     
         if (floatId || clientId) {
             if (floatId) {
-                accountIds = await persistence.findAccountsForFloat(floatId);
+                accountIdsForCalc = await persistence.findAccountsForFloat(floatId);
             }
 
             if (clientId) {
-                accountIds = await persistence.findAccountsForClient(clientId);
+                accountIdsForCalc = await persistence.findAccountsForClient(clientId);
             }
         }
 
-        const heatCalculations = accountIds.map((account) => calculateAndCacheHeatScore(account));
+        const heatCalculations = accountIdsForCalc.map((account) => calculateAndCacheHeatScore(account));
         const resultOfCalculations = await Promise.all(heatCalculations);
         logger('Result of heat calculations:', resultOfCalculations);
 
