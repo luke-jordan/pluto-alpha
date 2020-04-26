@@ -116,9 +116,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchProfileStub.withArgs({ systemWideUserId: firstUserId }).resolves(mockProfile(firstUserId));
         fetchProfileStub.withArgs({ systemWideUserId: secondUserId }).resolves(mockProfile(secondUserId));
         fetchProfileStub.withArgs({ systemWideUserId: thirdUserId }).resolves(mockProfile(thirdUserId));
-        fetchAccountStub.onFirstCall().resolves({ [firstUserId]: firstAccId });
-        fetchAccountStub.onSecondCall().resolves({ [secondUserId]: secondAccId });
-        fetchAccountStub.onThirdCall().resolves({ [thirdUserId]: thirdAccId });
+        fetchAccountStub.withArgs(firstUserId).resolves({ [firstUserId]: firstAccId });
+        fetchAccountStub.withArgs(secondUserId).resolves({ [secondUserId]: secondAccId });
+        fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         lamdbaInvokeStub.withArgs(lambdaArgs).returns({
             promise: () => helper.mockLambdaResponse([
                 { accountId: secondAccId, savingsHeat: `${expectedSavingsHeat}` },
@@ -150,9 +150,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchProfileStub.withArgs({ systemWideUserId: firstUserId }).resolves(mockProfile(firstUserId));
         fetchProfileStub.withArgs({ systemWideUserId: secondUserId }).resolves(mockProfile(secondUserId));
         fetchProfileStub.withArgs({ systemWideUserId: thirdUserId }).resolves(mockProfile(thirdUserId));
-        fetchAccountStub.onFirstCall().resolves({ [firstUserId]: firstAccId });
-        fetchAccountStub.onSecondCall().resolves({ [secondUserId]: secondAccId });
-        fetchAccountStub.onThirdCall().resolves({ [thirdUserId]: thirdAccId });
+        fetchAccountStub.withArgs(firstUserId).resolves({ [firstUserId]: firstAccId });
+        fetchAccountStub.withArgs(secondUserId).resolves({ [secondUserId]: secondAccId });
+        fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
             JSON.stringify({ accountId: firstAccId, savingsHeat: `${expectedSavingsHeat}` }),
             JSON.stringify({ accountId: secondAccId, savingsHeat: `${expectedSavingsHeat}` }),
@@ -178,9 +178,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchProfileStub.withArgs({ systemWideUserId: firstUserId }).resolves(mockProfile(firstUserId));
         fetchProfileStub.withArgs({ systemWideUserId: secondUserId }).resolves(mockProfile(secondUserId));
         fetchProfileStub.withArgs({ systemWideUserId: thirdUserId }).resolves(mockProfile(thirdUserId));
-        fetchAccountStub.onFirstCall().resolves({ [firstUserId]: firstAccId });
-        fetchAccountStub.onSecondCall().resolves({ [secondUserId]: secondAccId });
-        fetchAccountStub.onThirdCall().resolves({ [thirdUserId]: thirdAccId });
+        fetchAccountStub.withArgs(firstUserId).resolves({ [firstUserId]: firstAccId });
+        fetchAccountStub.withArgs(secondUserId).resolves({ [secondUserId]: secondAccId });
+        fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
             JSON.stringify({ accountId: firstAccId, savingsHeat: `${expectedSavingsHeat}` }),
             JSON.stringify({ accountId: secondAccId, savingsHeat: `${expectedSavingsHeat}` }),
