@@ -64,9 +64,10 @@ const fetchUserName = async (systemWideUserId, userProfile, firstNameOnly = true
     if (userProfile.systemWideUserId === systemWideUserId) {
         profileToUse = userProfile;
     } else {
-        profileToUse = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId }, ['personal_name', 'family_name']);
+        profileToUse = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId }, ['personal_name', 'family_name', 'called_name']);
     }
-    return firstNameOnly ? profileToUse.personalName : `${profileToUse.personalName} ${profileToUse.familyName}`;
+    const userCalledName = profileToUse.calledName || profileToUse.personalName;
+    return firstNameOnly ? userCalledName : `${userCalledName} ${profileToUse.familyName}`;
 };
 
 const fetchAccountOpenDates = (userProfile, dateFormat) => {

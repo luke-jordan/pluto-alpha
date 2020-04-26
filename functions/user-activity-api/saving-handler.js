@@ -378,6 +378,12 @@ module.exports.checkPendingPayment = async (event) => {
       return { statusCode: 200, body: JSON.stringify(dummyResult) };
     }
 
+    if (transactionRecord.paymentProvider === 'MANUAL_EFT') {
+      // by definition, has not been marked as received, so must be pending
+      const pendingResponse = await handlePaymentPendingOrFailed('PAYMENT_PENDING', transactionRecord);
+      return { statusCode: 200, body: JSON.stringify(pendingResponse) };
+    }
+
     const statusCheckResult = await payment.checkPayment({ transactionId });
     logger('Result of check: ', statusCheckResult);
     
