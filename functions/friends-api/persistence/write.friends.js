@@ -86,7 +86,7 @@ module.exports.connectUserToFriendRequest = async (targetUserId, requestCode) =>
 module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) => {
     const selectQuery = `select request_id from ${friendReqTable} where target_user_id = $1 and initiated_user_id = $2`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [targetUserId, initiatedUserId]);
-    logger('Found request id fto be ignored:', fetchResult);
+    logger('Found unique id for request to be ignored', fetchResult);
 
     const requestId = fetchResult[0]['request_id'];
 

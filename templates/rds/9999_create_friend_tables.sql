@@ -13,7 +13,9 @@ create table if not exists friends_data.core_friend_relationship (
     relationship_status varchar (100) not null,
     initiated_user_id uuid not null references friends_data.user_reference_table (user_id),
     accepted_user_id uuid not null references friends_data.user_reference_table (user_id),
-    share_items text[] default '{}'
+    share_items text[] default '{}',
+    flags text[] default '{}',
+    tags text[] default '{}'
 );
 
 create table if not exists friends_data.friend_request (

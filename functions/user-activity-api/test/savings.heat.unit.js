@@ -103,7 +103,8 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             ]
         });
 
-        expect(redisSetStub).to.have.been.calledWith(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        const cachePayload = JSON.stringify({ accountId: testAccountId, savingsHeat: expectedScore });
+        expect(redisSetStub).to.have.been.calledWith(testAccountId, cachePayload, 'EX', CACHE_TTL_IN_SECONDS);
         expect(redisSetStub).to.have.been.calledThrice;
     });
 
@@ -136,7 +137,8 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             ]
         });
 
-        expect(redisSetStub).to.have.been.calledWith(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        const cachePayload = JSON.stringify({ accountId: testAccountId, savingsHeat: expectedScore });
+        expect(redisSetStub).to.have.been.calledWith(testAccountId, cachePayload, 'EX', CACHE_TTL_IN_SECONDS);
         expect(redisSetStub).to.have.been.calledTwice;
     });
 
@@ -174,7 +176,8 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             ]
         });
     
-        expect(redisSetStub).to.have.been.calledWith(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        const cachePayload = JSON.stringify({ accountId: testAccountId, savingsHeat: expectedScore });
+        expect(redisSetStub).to.have.been.calledWith(testAccountId, cachePayload, 'EX', CACHE_TTL_IN_SECONDS);
         expect(redisSetStub).to.have.been.calledThrice;
     });
 
@@ -211,8 +214,9 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
                 }
             ]
         });
-    
-        expect(redisSetStub).to.have.been.calledWith(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+
+        const cachePayload = JSON.stringify({ accountId: testAccountId, savingsHeat: expectedScore });
+        expect(redisSetStub).to.have.been.calledWith(testAccountId, cachePayload, 'EX', CACHE_TTL_IN_SECONDS);
         expect(redisSetStub).to.have.been.calledThrice;
     });
 
@@ -237,7 +241,8 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             ]
         });
 
-        expect(redisSetStub).to.have.been.calledOnceWithExactly(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        const cachePayload = JSON.stringify({ accountId: testAccountId, savingsHeat: expectedScore });
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testAccountId, cachePayload, 'EX', CACHE_TTL_IN_SECONDS);
         expect(findCurrencyStub).to.have.not.been.called;
         expect(sumTotalSavedStub).to.have.not.been.called;
         expect(sumSavedLastMonthStub).to.have.not.been.called;
@@ -266,13 +271,14 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
             ]
         });
 
-        expect(redisSetStub).to.have.been.calledOnceWithExactly(testAccountId, expectedScore, 'EX', CACHE_TTL_IN_SECONDS);
+        const cachePayload = JSON.stringify({ accountId: testAccountId, savingsHeat: expectedScore });
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testAccountId, cachePayload, 'EX', CACHE_TTL_IN_SECONDS);
         expect(findCurrencyStub).to.have.not.been.called;
         expect(sumTotalSavedStub).to.have.not.been.called;
         expect(sumSavedLastMonthStub).to.have.not.been.called;
     });
 
-    // todo: Test effect of active months
+    // todo: Tests for the obersavtion of the effect of active months
 
     it('Catches thrown errors', async () => {
         getOwnerInfoStub.withArgs(testAccountId).throws(new Error('Error!'));

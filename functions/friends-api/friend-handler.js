@@ -4,14 +4,14 @@ const logger = require('debug')('jupiter:friends:main');
 const config = require('config');
 
 const validator = require('validator');
-const format = require('string-format');
 const randomWord = require('random-words');
+const format = require('string-format');
 
 const publisher = require('publish-common');
+const opsUtil = require('ops-util-common');
 
 const persistenceRead = require('./persistence/read.friends');
 const persistenceWrite = require('./persistence/write.friends');
-const opsUtil = require('ops-util-common');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
@@ -40,38 +40,50 @@ const invokeSavingsHeatLambda = async (accountIds) => {
     return extractLambdaBody(savingsHeatResult);
 };
 
-const fetchSavingsHeatFromCache = async (accountId) => {
-    const savingsHeat = await redis.get(accountId);
-    return savingsHeat ? { accountId, savingsHeat } : null;
+const fetchSavingsHeatFromCache = async (accountIds) => {
+    const cachedSavingsHeatForAccounts = await redis.mget(...accountIds);
+    logger('Got cached savings heat for accounts:', cachedSavingsHeatForAccounts);
+    return cachedSavingsHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
 };
 
-const appendSavingsHeatToProfiles = async (profiles, userAndAccIds) => {
-    const accountIds = userAndAccIds.map((object) => Object.values(object)[0]);
+/**
+ * This function appends a savings heat score to each profile. The savings heat is either fetched from cache or
+ * calculated by the savings heat lambda.
+ * @param {Array} profiles An array of user profiles.
+ * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
+ */
+const appendSavingsHeatToProfiles = async (profiles, userAccountMap) => {
+    const accountIds = Object.values(userAccountMap);
     logger('Got account ids:', accountIds);
     
-    const cachedSavingsHeatForAccounts = await Promise.all(accountIds.map((accountId) => fetchSavingsHeatFromCache(accountId)));
-    const filteredSavingsHeatFromCache = cachedSavingsHeatForAccounts.filter((savingsHeat) => savingsHeat !== null);
+    const cachedSavingsHeatForAccounts = await fetchSavingsHeatFromCache(accountIds);
+    logger('Found cached savings heat:', cachedSavingsHeatForAccounts);
 
-    const cachedAccounts = filteredSavingsHeatFromCache.map((savingsHeat) => savingsHeat.accountId);
-    logger('Got cached accounts:', cachedAccounts);
+    const cachedAccounts = cachedSavingsHeatForAccounts.map((savingsHeat) => savingsHeat.accountId);
     const uncachedAccounts = accountIds.filter((accountId) => !cachedAccounts.includes(accountId));
 
-    logger('Found cached savings heat:', filteredSavingsHeatFromCache);
     logger('Found uncached accounts:', uncachedAccounts);
+    logger('Got cached accounts:', cachedAccounts);
 
     let savingsHeatFromLambda = [];
     if (uncachedAccounts.length > 0) {
         savingsHeatFromLambda = await invokeSavingsHeatLambda(uncachedAccounts);
     }
+
     logger('Got savings heat from lambda:', savingsHeatFromLambda);
 
-    const savingsHeatForAccounts = [...savingsHeatFromLambda, ...filteredSavingsHeatFromCache];
+    const savingsHeatForAccounts = [...savingsHeatFromLambda, ...cachedSavingsHeatForAccounts];
     logger('Aggregated savings heat from cache and lambda:', savingsHeatForAccounts);
 
+    /* eslint-disable dot-location */
+    const accountsAndSavingsHeatMap = savingsHeatForAccounts
+        .reduce((obj, savingsHeatObj) => ({ ...obj, [savingsHeatObj.accountId]: savingsHeatObj.savingsHeat }), {});
+    /* eslint-enable dot-location */
+    
     const profilesWithSavingsHeat = profiles.map((profile) => {
-        const profileAccountId = userAndAccIds.map((account) => account[profile.systemWideUserId])[0];
-        const savingsHeatObject = savingsHeatForAccounts.filter((savingsHeat) => savingsHeat.accountId === profileAccountId);
-        profile.savingsHeat = Number(savingsHeatObject[0].savingsHeat);
+        const profileAccountId = userAccountMap[profile.systemWideUserId];
+        const savingsHeat = accountsAndSavingsHeatMap[profileAccountId];
+        profile.savingsHeat = Number(savingsHeat);
         return profile;
     });
 
@@ -82,7 +94,7 @@ const appendSavingsHeatToProfiles = async (profiles, userAndAccIds) => {
 
 /**
  * This functions accepts a users system id and returns the user's friends.
- * @param {object} event
+ * @param {Object} event
  * @property {String} systemWideUserId Required. The system id of the user whose friends are to be extracted.
  */
 module.exports.obtainFriends = async (event) => {
@@ -107,10 +119,11 @@ module.exports.obtainFriends = async (event) => {
         const friendProfiles = await Promise.all(profileRequests);
         logger('Got friend profiles:', friendProfiles);
 
-        const userAndAccIds = await Promise.all(friendUserIds.map((userId) => persistenceRead.fetchAccountIdForUser(userId)));
-        logger('Got user-account id map:', userAndAccIds);
+        const userAccountArray = await Promise.all(friendUserIds.map((userId) => persistenceRead.fetchAccountIdForUser(userId)));
+        logger('Got user accounts from persistence:', userAccountArray);
+        const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }));
 
-        const profilesWithSavingsHeat = await appendSavingsHeatToProfiles(friendProfiles, userAndAccIds);
+        const profilesWithSavingsHeat = await appendSavingsHeatToProfiles(friendProfiles, userAccountMap);
         
         return opsUtil.wrapResponse(profilesWithSavingsHeat);
     } catch (err) {
@@ -173,7 +186,7 @@ const identifyContactType = (contact) => {
 
 /**
  * This function persists a new friendship request.
- * @param {object} event
+ * @param {Object} event
  * @property {String} initiatedUserId Required. The user id of the user initiating the friendship. Defaults to the sytem id in the request header.
  * @property {String} targetUserId Required in the absence of targetContactDetails. The user id of the user whose friendship is being requested.
  * @property {String} targetContactDetails Required in the absence of targetUserId. Either the phone or email of the user whose friendship is being requested.
@@ -230,7 +243,7 @@ module.exports.addFriendshipRequest = async (event) => {
  * associated with any system user id. This function is called once the target user has confirmed they are are indeed the target for the
  * friendship. It accepts a request code (to identify the request) and the target users system id. The friendship request is
  * sought and the user id is added to its targetUserId field.
- * @param {object} event
+ * @param {Object} event
  * @param {String} systemWideUserId The target/accepting users system wide id
  * @param {String} requestCode The request code geneated during friend request creation. Used to find the persisted friend request.
  */
@@ -300,7 +313,7 @@ module.exports.findFriendRequestsForUser = async (event) => {
 
 /**
  * This function persists a new friendship. Triggered by a method that also flips the friend request to approved, but may also be called directly.
- * @param {object} event
+ * @param {Object} event
  * @property {String} requestId Required. The The friendships request id.
  */
 module.exports.acceptFriendshipRequest = async (event) => {
@@ -340,7 +353,7 @@ module.exports.acceptFriendshipRequest = async (event) => {
 /**
  * Proto-function intended to ignore a friend request recieved by a user. The difference between this function and the 
  * deactivateFriendship function is that this function ignores friendships that were never accepted.
- * @param {object} event
+ * @param {Object} event
  * @property {String} initiatedUserId The system id of the user to be ignored as a friend.
  */
 module.exports.ignoreFriendshipRequest = async (event) => {
@@ -365,7 +378,7 @@ module.exports.ignoreFriendshipRequest = async (event) => {
 
 /**
  * This functions deactivates a friendship.
- * @param {object} event
+ * @param {Object} event
  * @property {String} relationshipId The id of the relationship to be deactivated.
  */
 module.exports.deactivateFriendship = async (event) => {

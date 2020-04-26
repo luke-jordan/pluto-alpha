@@ -16,15 +16,15 @@ const redis = new Redis({
 
 const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.savingsHeat');
 
-// These multipliers are used in calculating the savings heat score. AVG_GROWTH_PERCENT shifts the decimal point
-// in the average growth percent (e.g 10 percent becomes 0.1). AVERAGE_GROWTH multiplies the adjusted average
-// growth in the amount a user saves. SAVES_PER_MONTH multiplies the users average number of saves per month. SAVES_LAST_MONTH
-// multiplies the users average number of saves over lifetime.
-const MULTIPLIERS = {
-    'AVG_GROWTH_PERCENT': 0.01, 
+// Contribution factors used in calculating the savings heat score.
+// AVERAGE_GROWTH multiplies the average growth in the amount a user saves.
+// SAVES_PER_MONTH multiplies the users average number of saves per month.
+// SAVES_LAST_MONTH multiplies the number of times a user saved last month.
+const CONTRIBUTION_FACTORS = {
     'AVERAGE_GROWTH': 10,
     'SAVES_PER_MONTH': 0.5,
-    'SAVES_LAST_MONTH': 0.5
+    'SAVES_LAST_MONTH': 0.5,
+    'ACTIVE_FRIENDS': 4
 };
 
 const calculateGrowthInTotalAmountSaved = async (accountId, activeMonths) => {
@@ -38,10 +38,7 @@ const calculateGrowthInTotalAmountSaved = async (accountId, activeMonths) => {
     logger(`Active months: ${activeMonths}\nTotal saved: ${totalAmountSaved}\nLast month: ${amountSavedLastMonth}`);
     const avgSavedAmountPerMonth = totalAmountSaved / activeMonths;
     logger('Average saved per month:', avgSavedAmountPerMonth);
-    const avgGrowth = Math.round(((amountSavedLastMonth - avgSavedAmountPerMonth) / avgSavedAmountPerMonth) * 100);
-    logger('Average growth in savings:', avgGrowth);
-
-    return avgGrowth * MULTIPLIERS.AVG_GROWTH_PERCENT;
+    return (amountSavedLastMonth - avgSavedAmountPerMonth) / avgSavedAmountPerMonth;
 };
 
 const calculateAndCacheHeatScore = async (accountId) => {
@@ -62,7 +59,7 @@ const calculateAndCacheHeatScore = async (accountId) => {
 
     if (totalNumberOfSaves === 0 || activeMonths === 0) {
         const savingsHeat = Number(0).toFixed(2);
-        await redis.set(accountId, savingsHeat, 'EX', CACHE_TTL_IN_SECONDS);
+        await redis.set(accountId, JSON.stringify({ accountId, savingsHeat }), 'EX', CACHE_TTL_IN_SECONDS);
         return { accountId, savingsHeat };
     }
 
@@ -72,19 +69,19 @@ const calculateAndCacheHeatScore = async (accountId) => {
     logger('Average savings growth for account:', avgGrowthInSavedAmount);
 
     const heatValues = [
-        MULTIPLIERS.SAVES_PER_MONTH * avgNumberOfSavesPerMonth,
-        MULTIPLIERS.SAVES_LAST_MONTH * numberOfSavesLastMonth,
-        MULTIPLIERS.AVERAGE_GROWTH * avgGrowthInSavedAmount,
-        numberOfSavingFriendships / 4
+        CONTRIBUTION_FACTORS.SAVES_LAST_MONTH * numberOfSavesLastMonth,
+        CONTRIBUTION_FACTORS.SAVES_PER_MONTH * avgNumberOfSavesPerMonth,
+        CONTRIBUTION_FACTORS.AVERAGE_GROWTH * avgGrowthInSavedAmount,
+        numberOfSavingFriendships / CONTRIBUTION_FACTORS.ACTIVE_FRIENDS
     ];
 
     const heatScore = heatValues.reduce((sum, value) => sum + value, 0);
-    const roundedScore = Number(heatScore).toFixed(2); // ensures only two decimal places
-    logger('Calculated heat score:', roundedScore);
+    const savingsHeat = Number(heatScore).toFixed(2); // ensures only two decimal places
+    logger('Calculated heat score:', savingsHeat);
 
-    await redis.set(accountId, roundedScore, 'EX', CACHE_TTL_IN_SECONDS);
+    await redis.set(accountId, JSON.stringify({ accountId, savingsHeat }), 'EX', CACHE_TTL_IN_SECONDS);
 
-    return { accountId, savingsHeat: roundedScore };
+    return { accountId, savingsHeat };
 };
 
 /**
