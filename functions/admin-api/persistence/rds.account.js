@@ -55,13 +55,20 @@ module.exports.listAccounts = async (includeNoSave = true, sinceMoment = null, u
 
     const start = sinceMoment ? sinceMoment.format() : moment(0).format();
     const end = untilMoment ? untilMoment.format() : moment().format();
-    const values = ['USER_SAVING_EVENT', 'SETTLED', start, end];
+    const values = ['USER_SAVING_EVENT', start, end];
 
-    const joinType = includeNoSave ? 'left join' : 'inner join';
+    let joinType = 'left join';
+    let txTypeSuffix = '';
 
+    if (!includeNoSave) {
+        joinType = 'inner join';
+        txTypeSuffix = ' and settlement_status = $4';
+        values.push('SETTLED');
+    }
+    
     const selectQuery = `select ${accountTable}.account_id, human_ref, ${accountTable}.creation_time, count(transaction_id) from ` + 
             `${accountTable} ${joinType} ${transactionTable} on ${accountTable}.account_id = ${transactionTable}.account_id ` +
-            `where transaction_type = $1 and settlement_status = $2 and ${accountTable}.creation_time between $3 and $4 ` + 
+            `where transaction_type = $1 and ${accountTable}.creation_time between $2 and $3${txTypeSuffix} ` + 
             `group by ${accountTable}.account_id`;
 
     logger('Assembled select query: ', selectQuery);
