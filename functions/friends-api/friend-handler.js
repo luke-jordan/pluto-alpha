@@ -82,8 +82,7 @@ const appendSavingsHeatToProfiles = async (profiles, userAccountMap) => {
     
     const profilesWithSavingsHeat = profiles.map((profile) => {
         const profileAccountId = userAccountMap[profile.systemWideUserId];
-        const savingsHeat = accountsAndSavingsHeatMap[profileAccountId];
-        profile.savingsHeat = Number(savingsHeat);
+        profile.savingsHeat = Number(accountsAndSavingsHeatMap[profileAccountId]);
         return profile;
     });
 
