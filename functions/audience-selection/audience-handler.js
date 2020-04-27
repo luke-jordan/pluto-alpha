@@ -54,6 +54,11 @@ const stdProperties = {
         type: 'aggregate',
         description: 'Number of pending',
         expects: 'number'
+    },
+    anySaveCount: {
+        type: 'aggregate',
+        description: 'Number of (any) status save',
+        expects: 'number'
     }
 };
 
@@ -68,9 +73,12 @@ const convertEpochToFormat = (epochMilli) => moment(parseInt(epochMilli, 10)).fo
 
 const convertTxCountToColumns = (condition, txStatus) => {
     const columnConditions = [
-        { prop: 'settlement_status', op: 'is', value: txStatus },
         { prop: 'transaction_type', op: 'is', value: 'USER_SAVING_EVENT' }
     ];
+
+    if (txStatus) {
+        columnConditions.push({ prop: 'settlement_status', op: 'is', value: txStatus });
+    }
 
     if (Number.isInteger(condition.startTime)) {
         columnConditions.push({ prop: 'creation_time', op: 'greater_than', value: convertEpochToFormat(condition.startTime) });
@@ -93,6 +101,8 @@ const convertSaveCountToColumns = (condition) => convertTxCountToColumns(conditi
 
 const convertPendingCountToColumns = (condition) => convertTxCountToColumns(condition, 'PENDING');
 
+const convertAnySaveCountToColumns = (condition) => convertTxCountToColumns(condition);
+
 const convertSumBalanceToColumns = (condition) => {
     const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
     const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
@@ -106,6 +116,7 @@ const convertSumBalanceToColumns = (condition) => {
             amount
         END
     )`;
+
     const columnConditions = [
         { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
         { prop: 'transaction_type', op: 'in', value: transactionTypesToInclude }
@@ -135,6 +146,7 @@ const convertSumBalanceToColumns = (condition) => {
 const columnConverters = {
     saveCount: (condition) => convertSaveCountToColumns(condition),
     pendingCount: (condition) => convertPendingCountToColumns(condition),
+    anySaveCount: (condition) => convertAnySaveCountToColumns(condition),
     currentBalance: (condition) => convertSumBalanceToColumns(condition),
     lastSaveTime: (condition) => ({
        conditions: [
