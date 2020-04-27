@@ -91,7 +91,7 @@ describe('Converts standard properties into column conditions', () => {
 
     beforeEach(() => resetStubs());
 
-    it('Converts properties as we wish', async () => {
+    it('Converts save count properly, multiple properties', async () => {
         const oneWeekAgo = moment().subtract(7, 'days');
         
         const mockWholeAudienceId = uuid();
@@ -115,8 +115,8 @@ describe('Converts standard properties into column conditions', () => {
         const expectedSaveCountSelection = Object.assign({}, rootJSON, {
             conditions: [
                 { op: 'and', children: [
-                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                     { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                     { op: 'greater_than', prop: 'creation_time', value: mockStart.format() },
                     { op: 'is', prop: 'client_id', value: mockClientId }
                 ]}
@@ -184,6 +184,106 @@ describe('Converts standard properties into column conditions', () => {
         expect(secondCallArgs[1]).to.be.true;
         expect(secondCallArgs[2]).to.deep.equal(primaryParams);
     });
+
+    it('Should handle zero completed save selection properly', async () => {
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            creatingUserId: mockUserId,
+            isDynamic: false,
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'pendingCount', type: 'aggregate', value: 1 },
+                    { op: 'is', prop: 'anySaveCount', type: 'aggregate', value: 1 }
+                ]}
+            ]
+        };
+
+        // note : we could here go for all accounts, even without a pending save, but ...
+        // that would require fetching all account table, figuring out KYC / regulatory status, etc
+        // and seems unlikely that user who has not even initiated, would want to continue, so.
+        const singlePendingCount = Object.assign({}, rootJSON, {
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'is', prop: 'settlement_status', value: 'PENDING' },
+                    { op: 'is', prop: 'client_id', value: mockClientId }
+                ]}
+            ],
+            groupBy: [
+                'account_id'
+            ],
+            postConditions: [
+                { op: 'is', prop: 'count(transaction_id)', value: 1, valueType: 'int' }
+            ]
+        });
+
+        // this is to avoid users who saved previously and now have a pending
+        const singleAnySaveCount = Object.assign({}, rootJSON, {
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'is', prop: 'client_id', value: mockClientId }
+                ]}
+            ],
+            groupBy: ['account_id'],
+            postConditions: [
+                { op: 'is', prop: 'count(transaction_id)', value: 1, valueType: 'int' }
+            ]
+        });
+
+        const subAudienceFirst = uuid();
+        const subAudienceSecond = uuid();
+        const mockFinalAudienceId = uuid();
+        
+        const expectedSubAudienceQuery = (audienceId) => `select account_id from ${config.get('tables.audienceJoinTable')} ` + 
+            `where audience_id = '${audienceId}' and active = true`;
+    
+        const expectedWholeAudienceSelection = Object.assign({}, rootJSON, {
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'in', prop: 'account_id', value: expectedSubAudienceQuery(subAudienceFirst) },
+                    { op: 'in', prop: 'account_id', value: expectedSubAudienceQuery(subAudienceSecond) },
+                    { op: 'is', prop: 'client_id', value: mockClientId }
+                ]}
+            ]
+        });
+
+        const expectedPersistenceParams = (audienceType) => ({
+            clientId: mockClientId,
+            creatingUserId: mockUserId,
+            isDynamic: false,
+            propertyConditions: mockSelectionJSON.conditions,
+            audienceType
+        });
+
+        // most things tested above and below, here just making sure not broken and right sequence
+        executeConditionsStub.onFirstCall().resolves({ audienceId: subAudienceFirst, audienceCount: 10 });
+        executeConditionsStub.onSecondCall().resolves({ audienceId: subAudienceSecond, audienceCount: 9 });
+        executeConditionsStub.onThirdCall().resolves({ audienceId: mockFinalAudienceId, audienceCount: 7 });
+        
+        const wrappedResult = await audienceHandler.createAudience(mockSelectionJSON);
+        logger('RESULT: ', wrappedResult);
+        expect(wrappedResult).to.deep.equal({ audienceId: mockFinalAudienceId, audienceCount: 7 });
+
+        expect(executeConditionsStub).to.have.been.calledThrice;
+        
+        // sinon behaving very badly on called with so doing the following
+        const firstArgs = executeConditionsStub.firstCall.args;
+        expect(firstArgs).to.have.length(3);
+        expect(firstArgs[0]).to.deep.equal(singlePendingCount);
+        expect(firstArgs[1]).to.be.true;
+        expect(firstArgs[2]).to.deep.equal(expectedPersistenceParams('INTERMEDIATE'));
+
+        const secondArgs = executeConditionsStub.secondCall.args;
+        expect(secondArgs[0]).to.deep.equal(singleAnySaveCount);
+        
+        const thirdArgs = executeConditionsStub.thirdCall.args;
+        expect(thirdArgs).to.have.length(3);
+        expect(thirdArgs[0]).to.deep.equal(expectedWholeAudienceSelection);
+        expect(thirdArgs[1]).to.be.true;
+        expect(thirdArgs[2]).to.deep.equal(expectedPersistenceParams('PRIMARY'));        
+    });
+
 
     it('should handle human reference audience selection properly', async () => {
         const mockSelectionJSON = {
