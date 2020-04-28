@@ -59,6 +59,8 @@ const evaluateGameTournament = (event, parameterValue) => {
     return topList.includes(event.accountId);
 };
 
+// this one is always going to be complex -- in time maybe split out the switch block further
+// eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
     logger('Status condition: ', statusCondition);
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
@@ -71,7 +73,10 @@ module.exports.testCondition = (event, statusCondition) => {
 
     // these two lines ensure we do not get caught in infinite loops because of boost/messages publishing, and that we only check the right events for the right conditions
     const isEventTriggeredButForbidden = (conditionType === 'event_occurs' && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));
-    const isNonEventTriggeredButForbidden = (conditionType !== 'event_occurs' && (!util.EVENT_TYPE_CONDITION_MAP[eventType] || !util.EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType)));
+    
+    const isConditionAndEventTypeForbidden = !util.EVENT_TYPE_CONDITION_MAP[eventType] || !util.EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType);
+    const isNonEventTriggeredButForbidden = conditionType !== 'event_occurs' && isConditionAndEventTypeForbidden;
+    
     if (isEventTriggeredButForbidden || isNonEventTriggeredButForbidden) {
         return false;
     }
@@ -85,6 +90,8 @@ module.exports.testCondition = (event, statusCondition) => {
             return event.accountId === parameterValue;
         case 'first_save_by':
             return event.accountId === parameterValue && eventHasContext && eventContext.firstSave;
+        case 'first_save_above':
+            return eventContext.firstSave && eventContext.saveCount === 1 && safeEvaluateAbove(eventContext, 'savedAmount', parameterValue);
         case 'balance_below':
             logger('Checking balance below: ', equalizeAmounts(parameterValue), ' event context: ', equalizeAmounts(eventContext.newBalance));
             return equalizeAmounts(eventContext.newBalance) < equalizeAmounts(parameterValue);

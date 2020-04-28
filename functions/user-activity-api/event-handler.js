@@ -444,7 +444,7 @@ const handleSavingEvent = async (eventBody) => {
     }
 
     const { context } = eventBody;
-    const { accountId, transactionId, savedAmount, saveCount } = context;
+    const { accountId, transactionId, savedAmount } = context;
 
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
@@ -453,12 +453,13 @@ const handleSavingEvent = async (eventBody) => {
     const [amount, unit, currency] = savedAmount.split('::');
     promisesToInvoke.push(addInvestmentToBSheet({ operation: 'INVEST', accountId, transactionId, amount, unit, currency }));
 
+    // removing this for now -- not sure allowing this to publish is wise, and have other/better ways to trigger
     // we sometimes have boosts and other events attached to this (could use 'firstSave', but this feels less fragile, and
-    // in time we might in fact just count it directly, if we see attempted spoofing etc)
-    if (saveCount === 1) {
-        logger('Firt user save, so trigger game for them');
-        promisesToInvoke.push(publisher.publishUserEvent(eventBody.userId, 'USER_COMPLETED_FIRST_SAVE', { context }));
-    }
+    // in time we might in fact just count it directly, if we see attempted spoofing etc) // and for now, removing in fact
+    // if (saveCount === 1) {
+    //     logger('Firt user save, so trigger game for them');
+    //     promisesToInvoke.push(publisher.publishUserEvent(eventBody.userId, 'USER_COMPLETED_FIRST_SAVE', { context }));
+    // }
 
     await Promise.all(promisesToInvoke);
 };

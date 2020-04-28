@@ -43,6 +43,10 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             throw Error('Publish event called without a user ID');
         }
 
+        if (!eventType) {
+            logger('FATAL_ERROR: Publish event called with undefined event type');
+        }
+
         logger('Publishing user event to topic');
         const eventTime = options.timestamp || moment().valueOf();
         const eventToPublish = {

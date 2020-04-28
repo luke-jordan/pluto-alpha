@@ -389,34 +389,35 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(publishUserEventStub).to.not.have.been.called;
     });
 
-    it('Also publishes event for first save, if is first save', async () => {
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-        // lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
+    // actually removing this, for now
+    // it('Also publishes event for first save, if is first save', async () => {
+    //     lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+    //     // lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
 
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
-        sendEmailStub.resolves({ result: 'SUCCESS' });
+    //     getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
+    //     sendEmailStub.resolves({ result: 'SUCCESS' });
         
-        fetchBSheetAccStub.resolves('POL1');
-        updateTxFlagsStub.resolves({ updatedTime: moment().add(1, 'seconds') });
+    //     fetchBSheetAccStub.resolves('POL1');
+    //     updateTxFlagsStub.resolves({ updatedTime: moment().add(1, 'seconds') });
 
-        const savingEvent = {
-            userId: testId,
-            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
-            timeInMillis: moment().valueOf(),
-            context: {
-                accountId: uuid(),
-                saveCount: 1,
-                firstSave: true,
-                savedAmount: '1000000::HUNDREDTH_CENT::USD'
-            }
-        };
+    //     const savingEvent = {
+    //         userId: testId,
+    //         eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+    //         timeInMillis: moment().valueOf(),
+    //         context: {
+    //             accountId: uuid(),
+    //             saveCount: 1,
+    //             firstSave: true,
+    //             savedAmount: '1000000::HUNDREDTH_CENT::USD'
+    //         }
+    //     };
 
-        const resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
-        expect(resultOfHandle).to.exist;
+    //     const resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
+    //     expect(resultOfHandle).to.exist;
 
-        // everything else is handled above, here we just make sure the first save event is fired
-        expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testId, 'USER_COMPLETED_FIRST_SAVE', { context: savingEvent.context });
-    });
+    //     // everything else is handled above, here we just make sure the first save event is fired
+    //     expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testId, 'USER_COMPLETED_FIRST_SAVE', { context: savingEvent.context });
+    // });
 
     it('Handles withdrawal event happy path correctly', async () => {
         const timeNow = moment().valueOf();
