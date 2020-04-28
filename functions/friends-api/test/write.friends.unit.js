@@ -56,12 +56,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         helper.resetStubs(multiTableStub, multiOpStub, updateStub, queryStub, uuidStub);
     });
 
-    it('Inserts friend request, filters out extra params', async () => {
+    it('Inserts friend request properly', async () => {
         const testFriendRequest = {
             requestId: testRequestId,
             requestStatus: 'PENDING',
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
+            requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
             targetContactDetails: {
                 contactType: 'EMAIL',
                 contactMethod: 'example@domain.com'
@@ -69,8 +70,9 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         };
 
         const testFriendQueryDef = {
-            query: `insert into ${friendReqTable} (request_id, request_status, initiated_user_id, target_user_id, target_contact_details) values %L returning request_id, creation_time`,
-            columnTemplate: '${requestId}, ${requestStatus}, ${initiatedUserId}, ${targetUserId}, ${targetContactDetails}',
+            query: `insert into ${friendReqTable} (initiated_user_id, target_user_id, requested_share_items, target_contact_details, ` +
+                `request_id, request_status) values %L returning request_id, creation_time`,
+            columnTemplate: '${initiatedUserId}, ${targetUserId}, ${requestedShareItems}, ${targetContactDetails}, ${requestId}, ${requestStatus}',
             rows: [testFriendRequest]
         };
 
@@ -97,11 +99,11 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const testInsertParams = {
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
+            requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
             targetContactDetails: {
                 contactType: 'EMAIL',
                 contactMethod: 'example@domain.com'
-            },
-            extra: 'param'
+            }
         };
 
         const insertResult = await persistence.insertFriendRequest(testInsertParams);
@@ -134,13 +136,14 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             relationshipId: testRelationshipId,
             initiatedUserId: testIniatedUserId,
             acceptedUserId: testAcceptedUserId,
-            relationshipStatus: 'ACTIVE'
+            relationshipStatus: 'ACTIVE',
+            shareItems: ['ACTIVITY_LEVEL']
         };
 
         const testFriendQueryDef = {
             query: `insert into ${friendshipTable} (relationship_id, initiated_user_id, accepted_user_id, ` +
-               `relationship_status) values %L returning relationship_id, creation_time`,
-            columnTemplate: '${relationshipId}, ${initiatedUserId}, ${acceptedUserId}, ${relationshipStatus}',      
+               `relationship_status, share_items) values %L returning relationship_id, creation_time`,
+            columnTemplate: '${relationshipId}, ${initiatedUserId}, ${acceptedUserId}, ${relationshipStatus}, ${shareItems}',      
             rows: [friendshipObject]
         };
 
@@ -164,7 +167,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }, { 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
 
-        const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId);
+        const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId, ['ACTIVITY_LEVEL']);
         expect(insertResult).to.exist;
         expect(insertResult).to.deep.equal({
             updatedTime: testUpdatedTime,

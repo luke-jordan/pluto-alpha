@@ -26,6 +26,7 @@ create table if not exists friends_data.friend_request (
     initiated_user_id uuid not null references friends_data.core_friend_relationship (initiated_user_id),
     target_user_id uuid,
     target_contact_details jsonb,
+    requested_share_items text[] default '{}',
     request_type varchar (100) not null default 'CREATE',
     request_code varchar (100)
 );

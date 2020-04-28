@@ -19,22 +19,19 @@ const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', 
 
 /**
  * This function persists a new friend requests, initialising its request status to PENDING
- * @param {object} requestParams
+ * @param {object} friendRequest
  * @property {String} initiatedUserId Required. The system id of the user requesting the friendship.
  * @property {String} targetUserId The system id of the requested friend. Optional in the presence targetContactDetails. But ultimately required and can be updated later.
- * @property {String} targetContactDetails The target users contact detail. Optional if targetUserId is provided. 
+ * @property {String} targetContactDetails The target users contact detail. Optional if targetUserId is provided.
  * @property {String} requestCode Required in the absence of targetUserId. This will be used to identify the friend request when the targetUserId is updated later.
  * @property {String} requestType Used in managing shared items in a relationship. Valid values are CREATE and UPDATE.
+ * @property {Array} requestedShareItems Specifies what the initiating user wants to share.
  */
-module.exports.insertFriendRequest = async (requestParams) => {
+module.exports.insertFriendRequest = async (friendRequest) => {
     const requestId = uuid();
-    requestParams.requestId = requestId;
-    requestParams.requestStatus = 'PENDING';
+    friendRequest.requestId = requestId;
+    friendRequest.requestStatus = 'PENDING';
 
-    const paramsToInclude = ['requestId', 'requestStatus', 'initiatedUserId', 'targetUserId', 'targetContactDetails', 'requestCode', 'requestType'];
-    /* eslint-disable no-confusing-arrow */
-    const friendRequest = paramsToInclude.reduce((obj, param) => requestParams[param] ? { ...obj, [param]: requestParams[param] } : { ...obj }, {});
-    /* eslint-disable no-confusing-arrow */ 
     const friendReqKeys = Object.keys(friendRequest);
     const friendQueryDef = {
         query: `insert into ${friendReqTable} (${extractColumnNames(friendReqKeys)}) values %L returning request_id, creation_time`,
@@ -122,13 +119,13 @@ module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) =
  * @param {String} requestId The request id associated with the friend request being accepted.
  * @param {String} initiatedUserId The system id of the user who requested the friendship.
  * @param {String} acceptedUserId The system id of the user who accepted the friendship.
- * @param {Array} sharedItems An array describing what the users in a friendship have agreed to share. Valid elements include 'ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', and 'BALANCE'
+ * @param {Array} shareItems An array describing what the users in a friendship have agreed to share. Valid elements include 'ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', and 'BALANCE'
  */
-module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUserId) => {
+module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUserId, shareItems) => {
     const relationshipId = uuid();
     const relationshipStatus = 'ACTIVE';
 
-    const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus };
+    const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus, shareItems };
     const friendshipKeys = Object.keys(friendshipObject);
 
     const friendshipInsertDef = {

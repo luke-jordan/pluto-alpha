@@ -230,8 +230,9 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Persists new friend request', async () => {
-        const insertArgs = { initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId };
-        const testEvent = helper.wrapEvent({ targetUserId: testTargetUserId }, testInitiatedUserId, 'ORDINARY_USER');
+        const requestedShareItems = ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'];
+        const insertArgs = { initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId, requestedShareItems };
+        const testEvent = helper.wrapEvent({ targetUserId: testTargetUserId, requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
         insertFriendRequestStub.withArgs(insertArgs).resolves({ requestId: testRequestId, logId: testLogId });
 
@@ -250,10 +251,16 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Finds target user id by contact detail where absent', async () => {
+        const requestedShareItems = ['ACTIVITY_COUNT'];
         const testContactDetails = { contactType: 'EMAIL', contactMethod: 'user@email.com' };
-        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId, targetContactDetails: testContactDetails };
+        const insertionArgs = {
+            requestedShareItems,
+            initiatedUserId: testInitiatedUserId,
+            targetUserId: testTargetUserId,
+            targetContactDetails: testContactDetails
+        };
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: 'user@email.com' }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: 'user@email.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchUserStub.withArgs(testContactDetails).resolves({ systemWideUserId: testTargetUserId });
@@ -273,14 +280,20 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Handles target user id not found, SMS route', async () => {
+        const requestedShareItems = ['BALANCE', 'SAVE_VALUES'];
         const testContactDetails = { contactType: 'PHONE', contactMethod: '27632310922' };
-        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetContactDetails: testContactDetails, requestCode: 'CLIMATE LEG' };
+        const insertionArgs = {
+            initiatedUserId: testInitiatedUserId,
+            targetContactDetails: testContactDetails,
+            requestCode: 'CLIMATE LEG',
+            requestedShareItems
+        };
         const sendSmsArgs = {
             phoneNumber: testContactDetails.contactMethod,
             message: format(config.get('sms.friendRequest.template'), testProfile.calledName)
         };
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922' }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
@@ -303,8 +316,14 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Handles target user id not found, email route', async () => {
+        const requestedShareItems = ['BALANCE', 'ACTIVITY_COUNT'];
         const testContactDetails = { contactType: 'EMAIL', contactMethod: 'juitsung@yuan.com' };
-        const insertionArgs = { initiatedUserId: testInitiatedUserId, targetContactDetails: testContactDetails, requestCode: 'ORBIT PAGE' };
+        const insertionArgs = {
+            initiatedUserId: testInitiatedUserId,
+            targetContactDetails: testContactDetails,
+            requestCode: 'ORBIT PAGE',
+            requestedShareItems
+        };
         const sendEmailArgs = {
             subject: config.get('email.friendRequest.subject'),
             toList: [testContactDetails.contactMethod],
@@ -312,7 +331,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             templateVariables: { initiatedUserName: testProfile.calledName }
         };
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: 'juitsung@yuan.com' }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: 'juitsung@yuan.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
@@ -342,9 +361,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     it('Fails on invalid parameters', async () => {
         const expectedResult = { message: 'Error! targetUserId or targetContactDetails must be provided' };
         const testEvent = helper.wrapEvent({ }, testInitiatedUserId, 'ORDINARY_USER');
-
         const insertionResult = await handler.addFriendshipRequest(testEvent);
-
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(insertFriendRequestStub).to.have.not.been.called;
@@ -408,6 +425,7 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
         requestStatus: 'PENDING',
         initiatedUserId: testInitiatedUserId,
         targetUserId: testTargetUserId,
+        requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
         targetContactDetails: {
             contactType: 'PHONE',
             contactMethod: '27894534503'
@@ -433,12 +451,9 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
 
     it('Fetches pending friend requests for user', async () => {
         const testEvent = helper.wrapEvent({ }, testTargetUserId, 'ORDINARY_USER');
-
         fetchAllRequestsStub.withArgs(testTargetUserId).resolves([mockFriendRequest, mockFriendRequest]);
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(mockProfile);
-        
         const fetchResult = await handler.findFriendRequestsForUser(testEvent);
-
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([expectedFriendRequest, expectedFriendRequest]));
     });
@@ -452,11 +467,8 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
 
     it('Catches thrown errors', async () => {
         const testEvent = helper.wrapEvent({}, testTargetUserId, 'ORDINARY_USER');
-
         fetchAllRequestsStub.withArgs(testTargetUserId).throws(new Error('Error!'));
-
         const fetchResult = await handler.findFriendRequestsForUser(testEvent);
-
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse({ message: 'Error!' }, 500));
     });
@@ -499,9 +511,7 @@ describe('*** UNIT TEST IGNORE FRIEND REQUEST ***', () => {
     it('Catches thrown errors', async () => {
         ignoreRequestStub.withArgs(testTargetUserId, testInitiatedUserId).throws(new Error('Error!'));
         const testEvent = helper.wrapEvent({ initiatedUserId: testInitiatedUserId }, testTargetUserId, 'ORDINARY_USER');
-
         const resultOfIgnore = await handler.ignoreFriendshipRequest(testEvent);
-
         expect(resultOfIgnore).to.exist;
         expect(resultOfIgnore).to.deep.equal(helper.wrapResponse({ message: 'Error!' }, 500));
     });
@@ -534,11 +544,8 @@ describe('*** UNIT TEST FRIEND REQUEST ACCEPTANCE ***', () => {
 
     it('Fails where accepting user is not target user', async () => {
         const expectedResult = { message: 'Error! Accepting user is not friendship target' };
-
         fetchRequestStub.withArgs(testRequestId).resolves({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
-
         const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testAcceptedUserId, 'ORDINARY_USER'));
-
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(insertFriendshipStub).to.have.not.been.called;
@@ -546,11 +553,8 @@ describe('*** UNIT TEST FRIEND REQUEST ACCEPTANCE ***', () => {
 
     it('Fails on invalid request id', async () => {
         const expectedResult = { message: `Error! No friend request found for request id: ${testRequestId}` };
-
         fetchRequestStub.withArgs(testRequestId).resolves();
-
         const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testAcceptedUserId, 'ORDINARY_USER'));
-
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(insertFriendshipStub).to.have.not.been.called;
@@ -567,9 +571,7 @@ describe('*** UNIT TEST FRIEND REQUEST ACCEPTANCE ***', () => {
     it('Fails on invalid parameters', async () => {
         const expectedResult = { message: 'Error! Missing requestId' };
         const testEvent = { initiatedUserId: testInitiatedUserId };
-
         const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent(testEvent, testInitiatedUserId, 'ORDINARY_USER'));
-
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(insertFriendshipStub).to.have.not.been.called;
