@@ -44,10 +44,9 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         }
 
         if (!eventType) {
-            logger('FATAL_ERROR: Publish event called with undefined event type');
+            throw Error('Publish event called with undefined event type');
         }
 
-        logger('Publishing user event to topic');
         const eventTime = options.timestamp || moment().valueOf();
         const eventToPublish = {
             userId,
@@ -73,11 +72,8 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             TopicArn: config.get('publishing.userEvents.topicArn')
         };
 
-        // logger('Sending to queue: ', messageForQueue);
-
         logger(`Logging ${eventType} for user ID ${userId}`);
         const resultOfPublish = await sns.publish(messageForQueue).promise();
-        // logger('Result from queue: ', resultOfPublish);
 
         if (typeof resultOfPublish === 'object' && Reflect.has(resultOfPublish, 'MessageId')) {
             return { result: 'SUCCESS' };
