@@ -1,7 +1,10 @@
 'use strict';
 
+const uuid = require('uuid/v4');
+
 const chai = require('chai');
 const expect = chai.expect;
+
 chai.use(require('sinon-chai'));
 
 const tester = require('../condition-tester');
@@ -35,6 +38,33 @@ describe('*** TESTING CONDITIONS ****', () => {
 
         expect(result1).to.be.false;
         expect(result2).to.be.true;
+    });
+
+    it('Checks for first save correctly', () => {
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '5000000::HUNDREDTH_CENT::USD',
+                firstSave: true,
+                saveCount: 1
+            }
+        };
+
+        const result1 = tester.testConditionsForStatus(sampleEvent, ['first_save_above #{0::HUNDREDTH_CENT::USD}']);
+        expect(result1).to.be.true;
+    });
+
+    it('Fails spoof first save attempts', () => {
+        const condition = ['first_save_above #{1::HUNDREDTH_CENT::USD}'];
+
+        const eventType = 'SAVING_PAYMENT_SUCCESSFUL';
+        const sampleContext1 = { savedAmount: '10::HUNDREDTH_CENT::ZAR', saveCount: 2, firstSave: true };
+        expect(tester.testConditionsForStatus({ eventType, eventContext: sampleContext1 }, condition)).to.be.false;
+
+        const sampleContext2 = { savedAmount: '0::HUNDREDTH_CENT::ZAR', saveCount: 1, firstSave: true };
+        expect(tester.testConditionsForStatus({ eventType, eventContext: sampleContext2 }, condition)).to.be.false;        
     });
 
 });

@@ -309,4 +309,13 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         expect(result2).to.deep.equal({ result: 'FAILURE' });
     });
 
+    it('Fails if no user ID or event type', async () => {
+        const result1 = await eventPublisher.publishUserEvent(null, 'BAD_EVENT');
+        expect(result1).to.deep.equal({ result: 'FAILURE' });
+
+        // eslint-disable-next-line no-undefined
+        const result2 = await eventPublisher.publishUserEvent('some-id', undefined);
+        expect(result2).to.deep.equal({ result: 'FAILURE' });
+    });
+
 });
