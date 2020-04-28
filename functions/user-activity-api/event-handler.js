@@ -443,14 +443,22 @@ const handleSavingEvent = async (eventBody) => {
         promisesToInvoke.push(sendSaveSucceededEmail(eventBody));
     }
 
+    const { context } = eventBody;
+    const { accountId, transactionId, savedAmount, saveCount } = context;
+
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
     promisesToInvoke.push(lambda.invoke(statusInvocation).promise());
     
-    const accountId = eventBody.context.accountId;
-    const transactionId = eventBody.context.transactionId;
-    const [amount, unit, currency] = eventBody.context.savedAmount.split('::');
+    const [amount, unit, currency] = savedAmount.split('::');
     promisesToInvoke.push(addInvestmentToBSheet({ operation: 'INVEST', accountId, transactionId, amount, unit, currency }));
+
+    // we sometimes have boosts and other events attached to this (could use 'firstSave', but this feels less fragile, and
+    // in time we might in fact just count it directly, if we see attempted spoofing etc)
+    if (saveCount === 1) {
+        logger('Firt user save, so trigger game for them');
+        promisesToInvoke.push(publisher.publishUserEvent(eventBody.userId, 'USER_COMPLETED_FIRST_SAVE', { context }));
+    }
 
     await Promise.all(promisesToInvoke);
 };

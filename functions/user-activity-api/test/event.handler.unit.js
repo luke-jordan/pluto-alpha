@@ -27,6 +27,8 @@ const updateTagsStub = sinon.stub();
 const updateTxFlagsStub = sinon.stub();
 const fetchBSheetAccStub = sinon.stub();
 
+const publishUserEventStub = sinon.stub();
+
 const redisGetStub = sinon.stub();
 const redisSetStub = sinon.stub();
 
@@ -82,6 +84,7 @@ const eventHandler = proxyquire('../event-handler', {
     'publish-common': {
         'sendSms': sendSmsStub,
         'safeEmailSendPlain': sendEmailStub,
+        'publishUserEvent': publishUserEventStub,
         '@noCallThru': true
     }
 });
@@ -101,7 +104,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
     beforeEach(() => {
         helper.resetStubs(
             lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, 
-            fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub, sendEmailStub, sendSmsStub
+            fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub, sendEmailStub, sendSmsStub, publishUserEventStub
         );
 
         getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'some-queue'}) });
@@ -341,7 +344,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         commonAssertions({ resultOfHandle, investmentInvocation });
         helper.resetStubs(...activeStubs);
 
-        savingEvent.context.saveCount = 1;
+        savingEvent.context.saveCount = 2; // special case of 1 is tested below properly
         configureStubs(investmentInvocation);
         sendEmailStub.resolves({ result: 'FAILURE' });
         resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
@@ -383,6 +386,36 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(updateTxFlagsStub).to.have.been.calledOnce;
         expect(sendEmailStub).to.have.not.been.called;
         expect(sqsSendStub).to.have.been.calledOnce;
+        expect(publishUserEventStub).to.not.have.been.called;
+    });
+
+    it('Also publishes event for first save, if is first save', async () => {
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+        // lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
+        sendEmailStub.resolves({ result: 'SUCCESS' });
+        
+        fetchBSheetAccStub.resolves('POL1');
+        updateTxFlagsStub.resolves({ updatedTime: moment().add(1, 'seconds') });
+
+        const savingEvent = {
+            userId: testId,
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            timeInMillis: moment().valueOf(),
+            context: {
+                accountId: uuid(),
+                saveCount: 1,
+                firstSave: true,
+                savedAmount: '1000000::HUNDREDTH_CENT::USD'
+            }
+        };
+
+        const resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
+        expect(resultOfHandle).to.exist;
+
+        // everything else is handled above, here we just make sure the first save event is fired
+        expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testId, 'USER_COMPLETED_FIRST_SAVE', { context: savingEvent.context });
     });
 
     it('Handles withdrawal event happy path correctly', async () => {
