@@ -112,10 +112,10 @@ resource "aws_iam_role_policy_attachment" "message_event_process_transaction_sec
 
 ////////////////// SUBSCRIPTION TO TOPIC //////////////////////////////////////////////////////////////
 
-resource "aws_sns_topic_subscription" "message_event_process_lambda" {
+resource "aws_sns_topic_subscription" "message_event_process_queue" {
   topic_arn = var.user_event_topic_arn[terraform.workspace]
-  protocol = "lambda"
-  endpoint = aws_lambda_function.message_event_process.arn
+  protocol = "sqs"
+  endpoint = aws_sqs_queue.message_event_process_queue.arn
 
   filter_policy = "${jsonencode({
     "eventType": [
