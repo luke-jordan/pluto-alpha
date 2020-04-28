@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_event_process" {
 
   function_name                  = "${var.message_event_process_function_name}"
   role                           = "${aws_iam_role.message_event_process_role.arn}"
-  handler                        = "message-trigger-handler.createFromUserEvent"
+  handler                        = "message-trigger-handler.handleBatchUserEvents"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 900
