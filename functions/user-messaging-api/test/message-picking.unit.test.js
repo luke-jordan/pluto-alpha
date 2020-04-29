@@ -154,7 +154,7 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
         const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: 80000000, unit: 'HUNDREDTH_CENT', currency: 'USD' }] });
         lamdbaInvokeStub.returns({ promise: () => queryResult});
-        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testDestinationUserId }, ['personal_name', 'family_name']).resolves({
+        fetchDynamoRowStub.withArgs(profileTable, { systemWideUserId: testDestinationUserId }, ['personal_name', 'family_name', 'called_name']).resolves({
             systemWideUserId: testUserId, 
             personalName: 'Luke', 
             familyName: 'Jordan'

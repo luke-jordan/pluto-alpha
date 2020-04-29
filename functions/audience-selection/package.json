@@ -8,10 +8,8 @@
   },
   "scripts": {
     "test": "DEBUG=jupiter:audience-selection*test nyc mocha",
-    "test-all": "DEBUG=jupiter:audience-selection:* nyc mocha --exit",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "lint": "eslint ."
   },
   "author": "Bolu Ajibawo",
   "dependencies": {

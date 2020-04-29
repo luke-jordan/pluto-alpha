@@ -179,6 +179,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         floatId: testFloatId,
         clientId: testClientId,
         settlementStatus: 'SETTLED',
+        paymentProvider: 'OZOW',
         initiationTime: moment().subtract(5, 'minutes').format(),
         settlementTime: testSettlementTime
     };
@@ -280,7 +281,7 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(fetchClientFloatStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
     });
 
-    it('Handles pending payments properly', async () => {
+    it('Handles pending payments properly, if Ozow', async () => {
         const expectedBankDetails = {
             bankName: 'JPM',
             accountType: 'Cheque',
@@ -306,7 +307,33 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
             bankDetails: { ...expectedBankDetails, useReference: 'TUSER170001' } 
         });
 
+        expect(getPaymentStatusStub).to.have.been.calledOnce;
         expect(fetchClientFloatStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+    });
+
+    it('Does not check Ozow, but just returns, if manual EFT', async () => {
+        const expectedBankDetails = {
+            bankName: 'JPM',
+            accountType: 'Cheque',
+            accountNumber: '123456',
+            routingNumber: '343677',
+            beneficiaryName: 'Jupiter Savings'
+        };
+
+        const manualTx = { ...testTransaction, settlementStatus: 'PENDING', humanReference: 'TUSER1700001' };
+        manualTx.paymentProvider = 'MANUAL_EFT';
+
+        fetchTransactionStub.withArgs(testPendingTxId).resolves(manualTx);
+        fetchClientFloatStub.resolves({ bankDetails: expectedBankDetails });
+
+        const expectedEvent = { transactionId: testPendingTxId };
+        const paymentCheckPendingResult = await handler.checkPendingPayment(wrapTestParams(expectedEvent));
+
+        const paymentCheckBody = testHelper.standardOkayChecks(paymentCheckPendingResult);
+        expect(paymentCheckBody).to.deep.equal({
+            result: 'PAYMENT_PENDING', bankDetails: { ...expectedBankDetails, useReference: 'TUSER1700001' }
+        });
+        expect(getPaymentStatusStub).to.not.have.been.called;
     });
 
     it('Handles non-standard payment responses', async () => {
