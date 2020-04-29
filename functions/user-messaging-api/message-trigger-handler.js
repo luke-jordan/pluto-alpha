@@ -111,6 +111,7 @@ module.exports.createFromUserEvent = async (event) => {
  * SQS then sends an array of parsed event objects to createFromUserMessage.
  */
 module.exports.handleBatchUserEvents = async (sqsEvent) => {
+    logger('Precise format of event: ', JSON.stringify(sqsEvent, null, 2));
     const userEvents = opsUtil.extractSQSEvents(sqsEvent);
     return Promise.all(userEvents.map((event) => exports.createFromUserEvent(event)));
 };
