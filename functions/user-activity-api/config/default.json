@@ -61,7 +61,9 @@
         "addTxToBalanceSheet": "balance_sheet_acc_update",
         "userBankVerify": "bank_account_verify",
         "sendOutboundMessages": "outbound_comms_send",
-        "calcSavingsHeat": "savings_heat_fetch"
+        "calcSavingsHeat": "savings_heat_fetch",
+        "fetchFriendRequests": "friend_requests_fetch",
+        "createFriendship": "friendship_create"
     },
     "payment": {
         "test": false,

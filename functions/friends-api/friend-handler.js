@@ -283,13 +283,15 @@ const appendUserNameToRequest = async (friendRequest) => {
  * extracted for the system id in the request context.
  */
 module.exports.findFriendRequestsForUser = async (event) => {
-    try {
-        const userDetails = opsUtil.extractUserDetails(event);
-        if (!userDetails) {
+    try {    
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
             return { statusCode: 403 };
         }
 
-        const { systemWideUserId } = userDetails;
+        const params = opsUtil.extractParamsFromEvent(event);
+        const userDetails = opsUtil.extractUserDetails(event);
+        
+        const systemWideUserId = userDetails ? userDetails.systemWideUserId : params.systemWideUserId;
 
         // get friend requests
         const friendRequestsForUser = await persistenceRead.fetchFriendRequestsForUser(systemWideUserId);
@@ -322,8 +324,12 @@ module.exports.acceptFriendshipRequest = async (event) => {
             return { statusCode: 403 };
         }
 
-        const { systemWideUserId } = opsUtil.extractUserDetails(event);
-        const { requestId, acceptedShareItems } = opsUtil.extractParamsFromEvent(event);
+        const params = opsUtil.extractParamsFromEvent(event);
+        const userDetails = opsUtil.extractUserDetails(event);
+
+        const systemWideUserId = userDetails ? userDetails.systemWideUserId : params.systemWideUserId;
+        const shareItems = params.acceptedShareItems ? params.acceptedShareItems : [];
+        const requestId = params.requestId;
 
         if (!requestId) {
             throw new Error('Error! Missing requestId');
@@ -337,7 +343,7 @@ module.exports.acceptFriendshipRequest = async (event) => {
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
         if (targetUserId === systemWideUserId) {
-            const insertionResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, acceptedShareItems);
+            const insertionResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
             logger('Result of friendship insertion:', insertionResult);
             return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult }});
         }

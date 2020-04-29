@@ -459,7 +459,7 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
     });
 
     it('Rejects unauthorized requests', async () => {
-        const fetchResult = await handler.findFriendRequestsForUser({ });
+        const fetchResult = await handler.findFriendRequestsForUser({ httpMethod: 'POST', body: JSON.stringify({ }) });
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal({ statusCode: 403 });
         expect(fetchAllRequestsStub).to.have.not.been.called;
