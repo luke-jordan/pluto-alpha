@@ -39,6 +39,20 @@ resource "aws_sns_topic" "withdrawal_backup_topic" {
   display_name = "${terraform.workspace}_withdrawal_backup_topic"
 }
 
+resource "aws_sqs_queue" "message_event_process_queue" {
+   name = "${terraform.workspace}_message_event_queue"
+  tags = {
+    environment = "${terraform.workspace}"
+  }
+}
+
+resource "aws_lambda_event_source_mapping" "message_event_process_lambda" {
+  event_source_arn = aws_sqs_queue.message_event_process_queue.arn
+  enabled = true
+  function_name = aws_lambda_function.message_event_process.arn
+  batch_size = 10
+}
+
 //////////////// FOR EMAIL BOUNCES, ETC /////////////////////////////
 
 # resource "aws_sns_topic" "sns_bounces_topic" {
