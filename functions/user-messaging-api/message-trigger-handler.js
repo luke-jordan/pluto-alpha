@@ -7,11 +7,10 @@ const moment = require('moment');
 const stringify = require('json-stable-stringify');
 
 const rdsUtil = require('./persistence/rds.instructions');
+const opsUtil = require('ops-util-common');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
-
-const extractSnsMessage = async (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
 
 const statusToHalt = ['CREATED', 'SCHEDULED', 'READY_FOR_SENDING', 'SENDING'];
 
@@ -79,14 +78,9 @@ const findAndHaltMessages = async (userId, eventType) => {
     return { result: 'SUCCESS' };
 };
 
-/**
- * This function is triggered on user events. If the event is not in any black list and a message instruction
- * for the event exists, the instruction is processed and the resulting message is sent to the user.
- */
-module.exports.createFromUserEvent = async (snsEvent) => {
+module.exports.createFromUserEvent = async (event) => {
     try {
-        const eventBody = await extractSnsMessage(snsEvent);
-        const { eventType, userId } = eventBody;
+        const { eventType, userId } = event;
 
         if (!userId) {
             throw Error('Event does not include a specific user ID');
@@ -106,7 +100,17 @@ module.exports.createFromUserEvent = async (snsEvent) => {
         return { statusCode: 200 };
 
     } catch (err) {
+        // make sure to do this, otherwise, a single failure will fail the whole batch, which will be bad
         logger('FATAL_ERROR:', err);
         return { statusCode: 500 };
     }
+};
+
+/**
+ * Triggered on user events. This function handles batch SQS user events. It parses the event from 
+ * SQS then sends an array of parsed event objects to createFromUserMessage.
+ */
+module.exports.handleBatchUserEvents = async (sqsEvent) => {
+    const userEvents = opsUtil.extractSQSEvents(sqsEvent);
+    return Promise.all(userEvents.map((event) => exports.createFromUserEvent(event)));
 };

@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_event_process" {
 
   function_name                  = "${var.message_event_process_function_name}"
   role                           = "${aws_iam_role.message_event_process_role.arn}"
-  handler                        = "message-trigger-handler.createFromUserEvent"
+  handler                        = "message-trigger-handler.handleBatchUserEvents"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 900
@@ -105,25 +105,23 @@ resource "aws_iam_role_policy_attachment" "message_event_message_process_policy"
   policy_arn = aws_iam_policy.lambda_invoke_message_process_access.arn
 }
 
+resource "aws_iam_role_policy_attachment" "message_event_queue_polling_policy" {
+  role = aws_iam_role.message_event_process_role.name
+  policy_arn = aws_iam_policy.sqs_message_event_queue_process.arn
+}
+
 resource "aws_iam_role_policy_attachment" "message_event_process_transaction_secret_get" {
   role = aws_iam_role.message_event_process_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_message_worker_read"
 }
 
-////////////////// SUBSCRIPTION TO TOPIC //////////////////////////////////////////////////////////////
+////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) /////////////////////////////////////////////////////////////
 
-resource "aws_sns_topic_subscription" "message_event_process_lambda" {
-  topic_arn = var.user_event_topic_arn[terraform.workspace]
-  protocol = "lambda"
-  endpoint = aws_lambda_function.message_event_process.arn
-
-  filter_policy = "${jsonencode({
-    "eventType": [
-      {
-        "anything-but": ["MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT", "MESSAGE_SENT", "BOOST_CREATED_GAME", "BOOST_CREATED_SIMPLE", "BOOST_EXPIRED"]
-      }
-    ]
-  })}"
+resource "aws_lambda_event_source_mapping" "message_event_process_lambda" {
+  event_source_arn = aws_sqs_queue.message_event_process_queue.arn
+  enabled = true
+  function_name = aws_lambda_function.message_event_process.arn
+  batch_size = 5
 }
 
 resource "aws_lambda_permission" "message_process_from_sns" {
