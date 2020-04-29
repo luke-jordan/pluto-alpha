@@ -112,6 +112,8 @@ module.exports.createFromUserEvent = async (event) => {
  */
 module.exports.handleBatchUserEvents = async (sqsEvent) => {
     logger('Precise format of event: ', JSON.stringify(sqsEvent, null, 2));
-    const userEvents = opsUtil.extractSQSEvents(sqsEvent);
+    const snsEvents = opsUtil.extractSQSEvents(sqsEvent);
+    logger('Extracted SNS events: ', snsEvents);
+    const userEvents = snsEvents.map((snsEvent) => opsUtil.extractSNSEvent(snsEvent));
     return Promise.all(userEvents.map((event) => exports.createFromUserEvent(event)));
 };

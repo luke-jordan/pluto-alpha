@@ -42,10 +42,10 @@ const handler = proxyquire('../message-trigger-handler', {
 
 const mockSQSBatchEvent = (event) => ({
     Records: [
-        { body: JSON.stringify(event) },
-        { body: JSON.stringify(event) },
-        { body: JSON.stringify(event) },
-        { body: JSON.stringify(event) }
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) },
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) },
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) },
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) }
     ]
 });
 
