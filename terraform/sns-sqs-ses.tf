@@ -39,41 +39,50 @@ resource "aws_sns_topic" "withdrawal_backup_topic" {
   display_name = "${terraform.workspace}_withdrawal_backup_topic"
 }
 
+///////////////// SQS QUEUE TO PREVENT LAMBDA EXPLOSION FROM SNS //////////////
 resource "aws_sqs_queue" "message_event_process_queue" {
-   name = "${terraform.workspace}_message_event_queue"
+  name = "${terraform.workspace}_message_processing_event_queue"
+  visibility_timeout_seconds = 4500
   tags = {
     environment = "${terraform.workspace}"
   }
 }
 
-resource "aws_lambda_event_source_mapping" "message_event_process_lambda" {
-  event_source_arn = aws_sqs_queue.message_event_process_queue.arn
-  enabled = true
-  function_name = aws_lambda_function.message_event_process.arn
-  batch_size = 10
+resource "aws_sqs_queue_policy" "message_event_process_queue_policy" {
+  queue_url = aws_sqs_queue.message_event_process_queue.id
+
+  policy = <<POLICY
+{
+  "Version": "2012-10-17",
+  "Id": "sqspolicy",
+  "Statement": [
+    {
+      "Sid": "First",
+      "Effect": "Allow",
+      "Principal": "*",
+      "Action": "sqs:SendMessage",
+      "Resource": "${aws_sqs_queue.message_event_process_queue.arn}",
+      "Condition": {
+        "ArnEquals": {
+          "aws:SourceArn": "${var.user_event_topic_arn[terraform.workspace]}"
+        }
+      }
+    }
+  ]
+}
+POLICY
 }
 
-//////////////// FOR EMAIL BOUNCES, ETC /////////////////////////////
+resource "aws_sns_topic_subscription" "message_event_process_queue" {
+  topic_arn = var.user_event_topic_arn[terraform.workspace]
+  protocol = "sqs"
+  endpoint = aws_sqs_queue.message_event_process_queue.arn
 
-# resource "aws_sns_topic" "sns_bounces_topic" {
-#   name = "${terraform.workspace}_mail_bounce_topic"
-#   tags = {
-#     environment = "${terraform.workspace}"
-#   }
-# }
-
-# resource "aws_sns_topic" "sns_complaints_topic" {
-#   name = "${terraform.workspace}_mail_complaint_topic"
-#   tags = {
-#     environment = "${terraform.workspace}"
-#   }
-# }
-
-# resource "aws_ses_domain_identity" "primary_email_domain" {
-#   domain = "${terraform.workspace}.jupiterapp.net"
-# }
-
-# resource "aws_ses_email_identity" "outbound_email_identity" {
-#   email = "noreply@jupitersave.com"
-# }
-
+  filter_policy = "${jsonencode({
+    "eventType": [
+      {
+        "anything-but": ["MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT", "MESSAGE_SENT", "BOOST_CREATED_GAME", "BOOST_CREATED_SIMPLE", "BOOST_EXPIRED"]
+      }
+    ]
+  })}"
+}

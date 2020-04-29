@@ -100,6 +100,7 @@ module.exports.createFromUserEvent = async (event) => {
         return { statusCode: 200 };
 
     } catch (err) {
+        // make sure to do this, otherwise, a single failure will fail the whole batch, which will be bad
         logger('FATAL_ERROR:', err);
         return { statusCode: 500 };
     }

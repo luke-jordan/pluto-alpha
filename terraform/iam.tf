@@ -827,3 +827,30 @@ resource "aws_iam_policy" "lambda_invoke_outbound_comms_send" {
 }
 EOF
 }
+
+///// SOME QUEUE PERMISSIONS
+
+resource "aws_iam_policy" "sqs_message_event_queue_process" {
+    name = "${terraform.workspace}_message_event_queue_process"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.message_event_process_queue.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
