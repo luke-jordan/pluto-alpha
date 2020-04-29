@@ -52,10 +52,10 @@ describe('Audience selection - obtain & utilize list of standard properties', ()
 
     it('Should return acceptable properties, with types and labels', async () => {
         const activityCountProperty = { type: 'aggregate', name: 'saveCount', description: 'Number of saves', expects: 'number' };
-        const lastSaveTimeProperty = { type: 'match', name: 'lastSaveTime', description: 'Last save date', expects: 'epochMillis' };
+        const lastSaveTimeProperty = { type: 'aggregate', name: 'lastSaveTime', description: 'Last save date', expects: 'epochMillis' };
         
         const availableProperties = audienceHandler.fetchAvailableProperties();
-        logger('Properties: ', availableProperties);
+        // logger('Properties: ', availableProperties);
 
         expect(availableProperties).to.exist;
         expect(availableProperties).to.be.an('array');
@@ -73,7 +73,7 @@ describe('Audience selection - obtain & utilize list of standard properties', ()
         };
 
         const wrappedProperties = await audienceHandler.handleInboundRequest(authorizedRequest);
-        logger('Wrapped response to property fetch: ', wrappedProperties);
+        // logger('Wrapped response to property fetch: ', wrappedProperties);
 
         expect(wrappedProperties).to.have.property('statusCode', 200);
         expect(wrappedProperties).to.have.property('headers');
@@ -87,9 +87,17 @@ describe('Audience selection - obtain & utilize list of standard properties', ()
 describe('Converts standard properties into column conditions', () => {
 
     const mockClientId = 'test-client-id';
-    const mockSubAudienceId = uuid();
 
     beforeEach(() => resetStubs());
+
+    const testExecution = (callNumber, selectionJson, persistSelection, persistenceParams = null) => {
+        const args = executeConditionsStub.getCall(callNumber).args;
+        expect(args[0]).to.deep.equal(selectionJson);
+        expect(args[1]).to.equal(persistSelection);
+        if (persistSelection) {
+            expect(args[2]).to.deep.equal(persistenceParams);
+        }
+    };
 
     it('Converts save count properly, multiple properties', async () => {
         const oneWeekAgo = moment().subtract(7, 'days');
@@ -106,18 +114,38 @@ describe('Converts standard properties into column conditions', () => {
             isDynamic: true,
             conditions: [
                 { op: 'or', children: [
-                    { op: 'greater_than', prop: 'lastSaveTime', type: 'match', value: oneWeekAgo.valueOf() },
+                    { op: 'greater_than', prop: 'lastSaveTime', type: 'aggregate', value: oneWeekAgo.valueOf() },
                     { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3, startTime: mockStart.valueOf() }
                 ]}
             ]
         };
+
+        const expectedSaveTimeSelection = { ...rootJSON, 
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
+                    { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
+                    { op: 'is', prop: 'client_id', value: mockClientId }
+                ]}
+            ],
+            groupBy: [
+                'account_id'
+            ],
+            postConditions: [
+                { op: 'greater_than', prop: 'max(creation_time)', value: oneWeekAgo.format() }
+            ]
+        };
+
+        const mockTimeSubAudienceId = uuid();
+        const expectedTimeSubAudienceQuery = `select account_id from ${config.get('tables.audienceJoinTable')} ` +
+            `where audience_id = '${mockTimeSubAudienceId}' and active = true`;
 
         const expectedSaveCountSelection = Object.assign({}, rootJSON, {
             conditions: [
                 { op: 'and', children: [
                     { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' },
                     { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
-                    { op: 'greater_than', prop: 'creation_time', value: mockStart.format() },
+                    { op: 'greater_than', prop: 'creation_time', value: mockStart.format() },                    
                     { op: 'is', prop: 'client_id', value: mockClientId }
                 ]}
             ],
@@ -129,20 +157,17 @@ describe('Converts standard properties into column conditions', () => {
             ]
         });
 
-        const expectedSubAudienceQuery = `select account_id from ${config.get('tables.audienceJoinTable')} ` + 
-            `where audience_id = '${mockSubAudienceId}' and active = true`;
+        const mockCountSubAudienceId = uuid();
+        const expectedCountSubAudienceQuery = `select account_id from ${config.get('tables.audienceJoinTable')} ` + 
+            `where audience_id = '${mockCountSubAudienceId}' and active = true`;
         
         const expectedWholeAudienceSelection = Object.assign({}, rootJSON, {
             conditions: [
                 { op: 'and', children: [
                     { op: 'is', prop: 'client_id', value: mockClientId },
                     { op: 'or', children: [
-                        { op: 'and', children: [
-                            { op: 'greater_than', prop: 'creation_time', value: oneWeekAgo.format() },
-                            { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
-                            { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' }
-                        ]},
-                        { op: 'in', prop: 'account_id', value: expectedSubAudienceQuery }
+                        { op: 'in', prop: 'account_id', value: expectedTimeSubAudienceQuery },
+                        { op: 'in', prop: 'account_id', value: expectedCountSubAudienceQuery }
                     ]}
                 ]}
             ]
@@ -158,31 +183,20 @@ describe('Converts standard properties into column conditions', () => {
         const intermediateParams = { ...expectedPersistenceParams, audienceType: 'INTERMEDIATE' };
         const primaryParams = { ...expectedPersistenceParams, audienceType: 'PRIMARY' };
 
-        // not actually assembled here, instead in RDS, but placing here for reference for now (see final test in audience.rds.unit.test)
-        // const expectedFullQuery = `select distinct(account_id) from ${config.get('tables.transactionTable')} ` +
-        //     `where (client_id = '${mockClientId} and ` +
-        //     `((creation_time > '${oneWeekAgo.format()}' and settlement_status = 'SETTLED') or account_id in (${expectedSubAudienceQuery}))` +
-        //     `)`;
-
-        executeConditionsStub.onFirstCall().resolves({ audienceId: mockSubAudienceId, audienceCount: Math.floor(mockNumberAccounts / 2) });
-        executeConditionsStub.onSecondCall().resolves({ audienceId: mockWholeAudienceId, audienceCount: mockNumberAccounts });
+        executeConditionsStub.onFirstCall().resolves({ audienceId: mockTimeSubAudienceId, audienceCount: mockNumberAccounts });
+        executeConditionsStub.onSecondCall().resolves({ audienceId: mockCountSubAudienceId, audienceCount: Math.floor(mockNumberAccounts / 2) });
+        executeConditionsStub.onThirdCall().resolves({ audienceId: mockWholeAudienceId, audienceCount: mockNumberAccounts });
 
         const resultOfCall = await audienceHandler.createAudience(mockSelectionJSON);
         
         expect(resultOfCall).to.exist;
-        expect(resultOfCall).to.deep.equal({ audienceCount: mockNumberAccounts, audienceId: mockWholeAudienceId });
+        // expect(resultOfCall).to.deep.equal({ audienceCount: mockNumberAccounts, audienceId: mockWholeAudienceId });
 
-        expect(executeConditionsStub).to.have.been.calledTwice;
+        expect(executeConditionsStub).to.have.been.calledThrice;
         // these could be consolidated into a single calledWith but output then gets a bit harder to debug, so trading off some verbosity here        
-        const firstCallArgs = executeConditionsStub.getCall(0).args;
-        expect(firstCallArgs[0]).to.deep.equal(expectedSaveCountSelection);
-        expect(firstCallArgs[1]).to.be.true;
-        expect(firstCallArgs[2]).to.deep.equal(intermediateParams);
-
-        const secondCallArgs = executeConditionsStub.getCall(1).args;
-        expect(secondCallArgs[0]).to.deep.equal(expectedWholeAudienceSelection);        
-        expect(secondCallArgs[1]).to.be.true;
-        expect(secondCallArgs[2]).to.deep.equal(primaryParams);
+        testExecution(0, expectedSaveTimeSelection, true, intermediateParams);
+        testExecution(1, expectedSaveCountSelection, true, intermediateParams);
+        testExecution(2, expectedWholeAudienceSelection, true, primaryParams);
     });
 
     it('Should handle zero completed save selection properly', async () => {
