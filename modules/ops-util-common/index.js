@@ -40,6 +40,9 @@ module.exports.wrapResponse = (body, statusCode = 200) => {
     };
 };
 
+module.exports.extractSQSEvents = (sqsEvent) => sqsEvent.Records.map((record) => JSON.parse(record.body));
+module.exports.extractSNSEvent = (snsEvent) => JSON.parse(snsEvent.Message);
+
 module.exports.extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
 
 module.exports.convertToUnit = (amount, fromUnit, toUnit) => {

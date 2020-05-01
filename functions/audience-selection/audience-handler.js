@@ -29,7 +29,7 @@ const stdProperties = {
       unit: DEFAULT_BALANCE_UNIT
     },
     lastSaveTime: {
-        type: 'match',
+        type: 'aggregate', // since we select on max(creation_time)
         description: 'Last save date',
         expects: 'epochMillis'
     },
@@ -149,13 +149,16 @@ const columnConverters = {
     anySaveCount: (condition) => convertAnySaveCountToColumns(condition),
     currentBalance: (condition) => convertSumBalanceToColumns(condition),
     lastSaveTime: (condition) => ({
-       conditions: [
+        conditions: [
             { op: 'and', children: [
-                { op: condition.op, prop: 'creation_time', value: convertEpochToFormat(condition.value) },
                 { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                 { op: 'is', prop: 'transaction_type', value: 'USER_SAVING_EVENT' }
             ]}
-       ]
+        ],
+        groupBy: ['account_id'],
+        postConditions: [
+           { op: condition.op, prop: 'max(creation_time)', value: convertEpochToFormat(condition.value) }
+        ]
     }),
     lastCapitalization: (condition) => ({
         conditions: [
