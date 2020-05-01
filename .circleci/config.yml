@@ -110,7 +110,6 @@ jobs:
             /bin/sh execute_test_lint.sh functions/user-existence-api
             /bin/sh execute_test_lint.sh functions/boost-api
             /bin/sh execute_test_lint.sh functions/audience-selection
-            /bin/sh execute_test_lint.sh functions/friend-api
             /bin/sh execute_test_lint.sh functions/user-messaging-api
             /bin/sh execute_test_lint.sh functions/referral-api
             /bin/sh execute_test_lint.sh functions/admin-api
