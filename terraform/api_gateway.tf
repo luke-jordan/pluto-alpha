@@ -401,6 +401,8 @@ resource "aws_api_gateway_resource" "friend_path_root" {
   path_part     = "friend"
 }
 
+/////////////// LIST FRIENDS ////////////////////////////////////////////////////////
+
 resource "aws_api_gateway_method" "user_friend_list" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   resource_id   = aws_api_gateway_resource.user_friend_list.id
