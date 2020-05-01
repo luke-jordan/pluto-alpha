@@ -1,0 +1,50 @@
+{
+    "aws": {
+        "region": "us-east-1"
+    },
+    "db": {
+        "user": "friends_api_worker",
+        "host": "localhost",
+        "database": "jupiter",
+        "password": "pwd_for_friends_api",
+        "port" :"5430"
+    },
+    "tables": {
+        "accountTable": "account_data.core_account_ledger",
+        "friendshipTable": "friends_data.core_friend_relationship",
+        "friendRequestTable": "friends_data.friend_request",
+        "friendLogTable": "friend_data.friend_log",
+        "profileTable": "UserProfileTable",
+        "phoneTable": "UserPhoneTable",
+        "emailTable": "UserEmailTable"
+    },
+    "lambdas": {
+        "sendOutboundMessages": "outbound_comms_send",
+        "calcSavingsHeat": "savings_heat_fetch"
+    },
+    "cache": {
+        "port": 6739,
+        "detailsTTL": 900,
+        "host": "localhost",
+        "keyPrefixes": {
+            "profile": "FRIENDS_PROFILE",
+            "userId": "FRIENDS_USER_ID",
+            "savingsHeat": "SAVINGS_HEAT"
+        },
+        "ttls": {
+            "profile": 25200,
+            "userId": 25200
+        }
+    },
+    "email": {
+        "friendRequest": {
+            "subject": "Jupiter Saving Buddies",
+            "templateKey": "emails/friendRequestEmail.html"
+        }
+    },
+    "sms": {
+        "friendRequest": {
+            "template": "Greetings. {} has invited you to save some lettuce with them. All things are better done together."
+        }
+    }
+}

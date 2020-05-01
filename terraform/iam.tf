@@ -415,6 +415,30 @@ resource "aws_iam_policy" "lamdba_invoke_bank_verify_access" {
 EOF
 }
 
+resource "aws_iam_policy" "lambda_invoke_saving_heat_access" {
+    name = "lambda_saving_heat_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "WarmupLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.user_save_heat_fetch.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 
 /////////////// COMPOSITE POLICIES FOR PROCESSING/ADMIN LAMBDAS THAT DO A LOT ///////////////////
 

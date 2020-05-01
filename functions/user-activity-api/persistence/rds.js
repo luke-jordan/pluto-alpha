@@ -67,6 +67,35 @@ module.exports.countSettledSaves = async (accountId) => {
     return parseInt(resultOfQuery[0]['count'], 10);
 };
 
+module.exports.countSettledSavesForPrevMonth = async (accountId) => {
+    const startDate = moment().startOf('month').subtract(1, 'month');
+    const endDate = moment().startOf('month');
+    const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+        `transaction_type = $2 and settlement_status = $3 and creation_time > $4 and creation_time < $5`;
+    const queryValues = [accountId, 'USER_SAVING_EVENT', 'SETTLED', startDate.unix(), endDate.unix()];
+    const resultOfQuery = await rdsConnection.selectQuery(query, queryValues);
+    logger('Result of count : ', resultOfQuery);
+
+    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
+        return 0;
+    }
+
+    return parseInt(resultOfQuery[0]['count'], 10);
+};
+
+module.exports.countActiveSavingFriendsForUser = async (systemWideUserId) => {
+    const query = `select count(relationship_id) from ${config.get('tables.friendshipTable')} where initiated_user_id = $1 or accepted_user_id = $2 ` +
+        `and relationship_status = $3`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [systemWideUserId, systemWideUserId, 'ACTIVE']);
+    logger('Result of count : ', resultOfQuery);
+    
+    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
+        return 0;
+    }
+
+    return parseInt(resultOfQuery[0]['count'], 10);
+};
+
 module.exports.fetchInfoForBankRef = async (accountId) => {
     const accountTable = config.get('tables.accountLedger');
     const txTable = config.get('tables.accountTransactions');
@@ -96,6 +125,30 @@ module.exports.findMostCommonCurrency = async (accountId) => {
         `group by currency order by currency_count desc limit 1`;
     const resultOfQuery = await rdsConnection.selectQuery(query, [accountId]);
     return resultOfQuery.length > 0 ? resultOfQuery[0]['currency'] : null; 
+};
+
+module.exports.getAccountOpenedDateForHeatCalc = async (accountId) => {
+    const query = `select creation_time from ${config.get('tables.accountLedger')} where account_id = $1`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId]);
+    return resultOfQuery.length > 0 ? resultOfQuery[0]['creation_time'] : null; 
+};
+
+module.exports.fetchAccounts = async () => {
+    const query = `select account_id from ${config.get('tables.accountLedger')} where frozen = $1`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [false]);
+    return resultOfQuery.map((result) => result['account_id']);
+};
+
+module.exports.findAccountsForFloat = async (floatId) => {
+    const query = `select account_id from ${config.get('tables.accountLedger')} where default_float_id = $1 and frozen = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [floatId, false]);
+    return resultOfQuery.map((result) => result['account_id']);
+};
+
+module.exports.findAccountsForClient = async (clientId) => {
+    const query = `select account_id from ${config.get('tables.accountLedger')} where responsible_client_id = $1 and frozen = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [clientId, false]);
+    return resultOfQuery.map((result) => result['account_id']);
 };
 
 module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
@@ -161,6 +214,44 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, currency, lastTxTime };
 };
 
+module.exports.sumTotalAmountSaved = async (accountId, currency) => {
+    const accountTxTable = config.get('tables.accountTransactions');
+
+    const sumQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
+        `settlement_status = $3 and transaction_type = $4 group by unit`;
+
+    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT'];
+    logger('Summing with query: ', sumQuery, ' and params: ', params);
+
+    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
+    logger('Result of unit query: ', summedRows);
+    
+    const totalAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
+    logger('For account ID, RDS calculation yields result: ', totalAmountInDefaultUnit);
+
+    return { 'amount': totalAmountInDefaultUnit, 'unit': DEFAULT_UNIT, currency };
+};
+
+module.exports.sumAmountSavedLastMonth = async (accountId, currency) => {
+    const accountTxTable = config.get('tables.accountTransactions');
+
+    const startTime = moment().startOf('month').subtract(1, 'month');
+    const endTime = moment().startOf('month');
+    
+    const sumQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
+        `settlement_status = $3 and transaction_type = $4 and creation_time > $5 and creation_time < $6 group by unit`;
+
+    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT', startTime.unix(), endTime.unix()];
+    logger('Summing with query: ', sumQuery, ' and params: ', params);
+
+    const summedRows = await rdsConnection.selectQuery(sumQuery, params);
+    logger('Result of unit query: ', summedRows);
+    
+    const monthlyAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
+    logger('For account ID, RDS calculation yields result: ', monthlyAmountInDefaultUnit);
+
+    return { 'amount': monthlyAmountInDefaultUnit, 'unit': DEFAULT_UNIT, currency };
+};
 
 /**
  * This function updates a users account tags.
