@@ -393,6 +393,45 @@ module "balance_cors" {
   api_resource_id = "${aws_api_gateway_resource.balance_fetch_wrapper.id}"
 }
 
+/////////////// FRIEND API FUNCTIONS /////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "friend_path_root" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_rest_api.api_gateway.root_resource_id
+  path_part     = "friend"
+}
+
+resource "aws_api_gateway_method" "user_friend_list" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.user_friend_list.id
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_api_gateway_resource" "user_friend_list" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_path_root.id
+  path_part       = "list"
+}
+
+resource "aws_lambda_permission" "user_friend_list" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.friend_list.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "user_friend_list" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_method.user_friend_list.resource_id
+  http_method   = aws_api_gateway_method.user_friend_list.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.friend_list.invoke_arn
+}
+
 /////////////// USER HISTORY LAMBDA (OWN USER, NOT ADMIN) /////////////////////////////////////////////////
 
 // in future we will probably add some more endpoints like graphing etc., so just future-proofing
@@ -404,7 +443,7 @@ resource "aws_api_gateway_resource" "history_path_root" {
 
 resource "aws_api_gateway_method" "user_history_list" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  resource_id   = "${aws_api_gateway_resource.user_history_list.id}"
+  resource_id   = aws_api_gateway_resource.user_history_list.id
   http_method   = "GET"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
@@ -412,7 +451,7 @@ resource "aws_api_gateway_method" "user_history_list" {
 
 resource "aws_api_gateway_resource" "user_history_list" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  parent_id   = "${aws_api_gateway_resource.history_path_root.id}"
+  parent_id   = aws_api_gateway_resource.history_path_root.id
   path_part   = "list"
 }
 
@@ -425,12 +464,12 @@ resource "aws_lambda_permission" "user_history_list" {
 
 resource "aws_api_gateway_integration" "user_history_list" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  resource_id = "${aws_api_gateway_method.user_history_list.resource_id}"
-  http_method = "${aws_api_gateway_method.user_history_list.http_method}"
+  resource_id = aws_api_gateway_method.user_history_list.resource_id
+  http_method = aws_api_gateway_method.user_history_list.http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.user_history_list.invoke_arn}"
+  uri                     = aws_lambda_function.user_history_list.invoke_arn
 }
 
 /////////////// PENDING STATUS CHECK LAMBDA ////////////////////////////////////////////////////////////////
