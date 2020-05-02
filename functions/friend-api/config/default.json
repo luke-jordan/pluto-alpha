@@ -3,7 +3,7 @@
         "region": "us-east-1"
     },
     "db": {
-        "user": "friends_api_worker",
+        "user": "friend_api_worker",
         "host": "localhost",
         "database": "jupiter",
         "password": "pwd_for_friends_api",

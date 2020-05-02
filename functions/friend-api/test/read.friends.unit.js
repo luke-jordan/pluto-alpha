@@ -5,7 +5,7 @@ const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('chai-as-promised'));
@@ -36,7 +36,8 @@ const persistence = proxyquire('../persistence/read.friends', {
     'ioredis': MockRedis,
     'rds-common': MockRdsConnection,
     'dynamo-common': {
-        'fetchSingleRow': fetchStub
+        'fetchSingleRow': fetchStub,
+        '@noCallThru': true
     },
     '@noCallThru': true
 });
@@ -125,12 +126,19 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const testAcceptedUserId = uuid();
         const friendshipTable = config.get('tables.friendshipTable');
 
-        const selectQuery = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
-        queryStub.withArgs(selectQuery, [testSystemId, 'ACTIVE']).resolves([{ 'accepted_user_id': testAcceptedUserId }]);
+        const acceptedSelectQuery = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
+        queryStub.onFirstCall().resolves([{ 'accepted_user_id': testAcceptedUserId }]);
 
-        const resultOfFetch = await persistence.getFriendIdsForUser({ systemWideUserId: testSystemId });
+        const initiatedSelectQuery = `select initiated_user_id from ${friendshipTable} where accepted_user_id = $1 and relationship_status = $2`;
+        queryStub.onSecondCall().resolves([{ 'initiated_user_id': testInitiatedUserId }]);
+
+        const resultOfFetch = await persistence.getFriendIdsForUser(testSystemId);
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([testAcceptedUserId]);
+        expect(resultOfFetch).to.deep.equal([testAcceptedUserId, testInitiatedUserId]);
+
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(acceptedSelectQuery, [testSystemId, 'ACTIVE']);
+        expect(queryStub).to.have.been.calledWithExactly(initiatedSelectQuery, [testSystemId, 'ACTIVE']);
     });
 
     it('Fetches friendship request by request id', async () => {

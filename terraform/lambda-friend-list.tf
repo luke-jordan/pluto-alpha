@@ -37,7 +37,7 @@ resource "aws_lambda_function" "friend_list" {
               "secrets": {
                 "enabled": true,
                 "names": {
-                    "friend_api_worker": "${terraform.workspace}/ops/psql/transactions"
+                    "friend_api_worker": "${terraform.workspace}/ops/psql/friend"
                 }
               }
           }

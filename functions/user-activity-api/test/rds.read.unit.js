@@ -449,7 +449,7 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
     it('Counts number of settled saved in previous month', async () => {
         const selectQuery = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
             `transaction_type = $2 and settlement_status = $3 and creation_time > $4 and creation_time < $5`;
-        const selectValues = [testAccountId, 'USER_SAVING_EVENT', 'SETTLED', sinon.match.number, sinon.match.number];
+        const selectValues = [testAccountId, 'USER_SAVING_EVENT', 'SETTLED', sinon.match.string, sinon.match.string];
 
         queryStub.withArgs(selectQuery, selectValues).resolves([{ 'count': 22 }]);
         const resultOfCount = await rds.countSettledSavesForPrevMonth(testAccountId);

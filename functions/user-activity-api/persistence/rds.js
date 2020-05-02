@@ -72,7 +72,7 @@ module.exports.countSettledSavesForPrevMonth = async (accountId) => {
     const endDate = moment().startOf('month');
     const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
         `transaction_type = $2 and settlement_status = $3 and creation_time > $4 and creation_time < $5`;
-    const queryValues = [accountId, 'USER_SAVING_EVENT', 'SETTLED', startDate.unix(), endDate.unix()];
+    const queryValues = [accountId, 'USER_SAVING_EVENT', 'SETTLED', startDate.format(), endDate.format()];
     const resultOfQuery = await rdsConnection.selectQuery(query, queryValues);
     logger('Result of count : ', resultOfQuery);
 

@@ -47,15 +47,6 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
     return fetchResult.length > 0 ? fetchResult[0]['owner_user_id'] : null;
 };
 
-const fetchAcceptedUserIdsForUser = async (systemWideUserId) => {
-    const friendshipTable = config.get('tables.friendshipTable');
-    const query = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
-    const fetchedUserIds = await rdsConnection.selectQuery(query, [systemWideUserId, 'ACTIVE']);
-    logger('Got user ids:', fetchedUserIds);
-    
-    return fetchedUserIds.map((userId) => userId['accepted_user_id']);
-};
-
 const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     logger(`Fetching 'user profile' from database or cache`);
 
@@ -117,15 +108,30 @@ module.exports.fetchUserProfile = async (params) => {
 
 /**
  * This function accepts a user id and returns the user ids of the users friends.
- * @param {object} params An object of the form { systemWideUserId: 'e9a83c01-9d...' }
+ * @param {object} systemWideUserId The user's ID
  */
-module.exports.getFriendIdsForUser = async (params) => {
-    if (!params.systemWideUserId) {
-        throw new Error('Error! Missing user identifier');
-    }
+module.exports.getFriendIdsForUser = async (systemWideUserId) => {
+    const friendshipTable = config.get('tables.friendshipTable');
+    
+    // we are checking both sides at once here (we can optimize this in time, but it will be very quick, esp vs rest of this process)
 
-    const systemWideUserId = params.systemWideUserId;
-    return fetchAcceptedUserIdsForUser(systemWideUserId);
+    const acceptedQuery = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
+    const initiatedQuery = `select initiated_user_id from ${friendshipTable} where accepted_user_id = $1 and relationship_status = $2`;
+    
+    const [acceptedResult, initiatedResult] = await Promise.all([
+        rdsConnection.selectQuery(acceptedQuery, [systemWideUserId, 'ACTIVE']),
+        rdsConnection.selectQuery(initiatedQuery, [systemWideUserId, 'ACTIVE'])
+    ]);
+
+    const acceptedIds = acceptedResult.map((row) => row['accepted_user_id']);
+    const initiatedIds = initiatedResult.map((row) => row['initiated_user_id']);
+
+    // unique constraint on table means do not have to worry about duplicates
+    const fetchedUserIds = [...acceptedIds, ...initiatedIds];
+
+    logger('Retrieved user ids for friends:', fetchedUserIds);
+    
+    return fetchedUserIds;
 };
 
 /**
