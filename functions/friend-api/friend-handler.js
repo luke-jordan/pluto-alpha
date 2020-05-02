@@ -112,6 +112,9 @@ module.exports.obtainFriends = async (event) => {
     
         const friendUserIds = await persistenceRead.getFriendIdsForUser(systemWideUserId);
         logger('Got friend system ids:', friendUserIds);
+        if (!friendUserIds || friendUserIds.length === 0) {
+            return opsUtil.wrapResponse([]);
+        }
     
         const profileRequests = friendUserIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
         const friendProfiles = await Promise.all(profileRequests);
@@ -119,7 +122,7 @@ module.exports.obtainFriends = async (event) => {
 
         const userAccountArray = await Promise.all(friendUserIds.map((userId) => persistenceRead.fetchAccountIdForUser(userId)));
         logger('Got user accounts from persistence:', userAccountArray);
-        const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }));
+        const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }), {});
 
         const profilesWithSavingsHeat = await appendSavingsHeatToProfiles(friendProfiles, userAccountMap);
         

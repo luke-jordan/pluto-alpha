@@ -107,12 +107,18 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         resetStubs();
     });
 
+    it('Returns empty if user has no friends yet', async () => {
+        getFriendsStub.resolves([]);
+        const fetchResult = await handler.obtainFriends(helper.wrapEvent({}, testSystemId));
+        expect(fetchResult).to.exist;
+        expect(fetchResult).to.deep.equal(helper.wrapResponse([]));
+    });
+
     it('Fetches user friends', async () => {
         const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
         const [firstAccId, secondAccId, thirdAccId] = [uuid(), uuid(), uuid()];
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.calcSavingsHeat'), false, { accountIds: [secondAccId, thirdAccId] });
         const testEvent = helper.wrapEvent({}, testSystemId, 'ORDINARY_USER');
-
 
         getFriendsStub.withArgs(testSystemId).resolves([firstUserId, secondUserId, thirdUserId]);
         fetchProfileStub.withArgs({ systemWideUserId: firstUserId }).resolves(mockProfile(firstUserId));
