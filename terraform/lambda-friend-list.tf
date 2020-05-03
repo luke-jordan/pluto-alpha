@@ -7,7 +7,7 @@ resource "aws_lambda_function" "friend_list" {
 
   function_name                  = "${var.friend_list}"
   role                           = "${aws_iam_role.friend_list_role.arn}"
-  handler                        = "friend-handler.obtainFriends"
+  handler                        = "friend-read-handler.obtainFriends"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
