@@ -3,7 +3,7 @@
         "region": "us-east-1"
     },
     "db": {
-        "user": "friends_api_worker",
+        "user": "friend_api_worker",
         "host": "localhost",
         "database": "jupiter",
         "password": "pwd_for_friends_api",
@@ -11,8 +11,8 @@
     },
     "tables": {
         "accountTable": "account_data.core_account_ledger",
-        "friendshipTable": "friends_data.core_friend_relationship",
-        "friendRequestTable": "friends_data.friend_request",
+        "friendshipTable": "friend_data.core_friend_relationship",
+        "friendRequestTable": "friend_data.friend_request",
         "friendLogTable": "friend_data.friend_log",
         "profileTable": "UserProfileTable",
         "phoneTable": "UserPhoneTable",

@@ -62,14 +62,16 @@ const handler = proxyquire('../friend-write-handler', {
         'fetchFriendshipRequestById': fetchRequestStub,
         'fetchAccountIdForUser': fetchAccountStub,
         'getFriendIdsForUser': getFriendsStub,
-        'fetchUserProfile': fetchProfileStub
+        'fetchUserProfile': fetchProfileStub,
+        '@noCallThru': true
     },
     './persistence/write.friends': {
         'connectUserToFriendRequest': connectUserStub,
         'ignoreFriendshipRequest': ignoreRequestStub,
         'insertFriendRequest': insertFriendRequestStub,
         'insertFriendship': insertFriendshipStub,
-        'deactivateFriendship': deactivateFriendshipStub
+        'deactivateFriendship': deactivateFriendshipStub,
+        '@noCallThru': true
     },
     'publish-common': {
         'sendSystemEmail': sendEmailStub,

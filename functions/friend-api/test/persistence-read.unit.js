@@ -38,7 +38,8 @@ const persistence = proxyquire('../persistence/read.friends', {
     'ioredis': MockRedis,
     'rds-common': MockRdsConnection,
     'dynamo-common': {
-        'fetchSingleRow': fetchStub
+        'fetchSingleRow': fetchStub,
+        '@noCallThru': true
     },
     '@noCallThru': true
 });

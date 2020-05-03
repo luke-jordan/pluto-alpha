@@ -180,6 +180,10 @@ jobs:
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_user_existence_api_$CIRCLE_SHA1.zip .
 
+                cd $HOME/app/functions/friend-api
+                echo $CIRCLE_SHA1 > last_commit.txt
+                zip -rq $HOME/deploy_friend_api_$CIRCLE_SHA1.zip .
+
                 cd $HOME/app/functions/boost-api
                 echo $CIRCLE_SHA1 > last_commit.txt
                 zip -rq $HOME/deploy_boost_api_$CIRCLE_SHA1.zip .
@@ -223,6 +227,7 @@ jobs:
                 /home/circleci/bin/aws s3 cp deploy_float_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/float_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_act_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_activity_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_existence_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_existence_api/$CIRCLE_SHA1.zip
+                /home/circleci/bin/aws s3 cp deploy_friend_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/friend_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_boost_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/boost_api/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_audience_selection_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/audience_selection/$CIRCLE_SHA1.zip
                 /home/circleci/bin/aws s3 cp deploy_user_messaging_api_$CIRCLE_SHA1.zip s3://pluto.lambda.$CIRCLE_BRANCH/user_messaging_api/$CIRCLE_SHA1.zip

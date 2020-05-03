@@ -108,7 +108,7 @@ module.exports.fetchUserProfile = async (params) => {
 
 /**
  * This function accepts a user id and returns the user ids of the users friends.
- * @param {object} params An object of the form { systemWideUserId: 'e9a83c01-9d...' }
+ * @param {object} systemWideUserId The user's ID
  */
 module.exports.fetchActiveSavingFriendsForUser = async (systemWideUserId) => {
     if (!systemWideUserId) {

@@ -11,7 +11,7 @@
     "tables": {
         "accountTransactions": "transaction_data.core_transaction_ledger",
         "rewardTransactions": "transaction_data.core_transaction_ledger",
-        "friendshipTable": "friends_data.core_friend_relationship",
+        "friendshipTable": "friend_data.core_friend_relationship",
         "floatTransactions": "float_data.float_transaction_ledger",
         "accountLedger": "account_data.core_account_ledger",
         "accountLog": "account_data.account_log",
