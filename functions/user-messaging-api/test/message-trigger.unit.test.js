@@ -40,8 +40,13 @@ const handler = proxyquire('../message-trigger-handler', {
     'moment': momentStub
 });
 
-const wrapEventSns = (event) => ({
-    Records: [{ Sns: { Message: JSON.stringify(event) }}]
+const mockSQSBatchEvent = (event) => ({
+    Records: [
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) },
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) },
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) },
+        { body: JSON.stringify({ Message: JSON.stringify(event) }) }
+    ]
 });
 
 const resetStubs = () => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, lambdaInvokeStub);
@@ -86,26 +91,26 @@ describe('*** UNIT TEST SIMPLE EVENT TRIGGERED MESSAGES ***', () => {
         findMsgInstructionByFlagStub.resolves([mockInstruction]);
         lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
 
-        const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });
+        const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });
 
-        const result = await handler.createFromUserEvent(mockEvent);
+        const result = await handler.handleBatchUserEvents(mockEvent);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ statusCode: 200 });
+        expect(result).to.deep.equal([{ statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }]);
 
-        expect(findMsgInstructionByFlagStub).to.have.been.calledOnceWithExactly('SAVING_PAYMENT_SUCCESSFUL');
+        expect(findMsgInstructionByFlagStub).to.have.been.calledWith('SAVING_PAYMENT_SUCCESSFUL');
         
         const expectedPaylod = { instructions: [{ instructionId: mockInstructionId, destinationUserId: mockUserId }] };
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
+        expect(lambdaInvokeStub).to.have.been.calledWith(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
     });
 
     it('Returns 200 when called by blacklisted event', async () => {
-        const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'MESSAGE_PUSH_NOTIFICATION_SENT' });
+        const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'MESSAGE_PUSH_NOTIFICATION_SENT' });
 
-        const result = await handler.createFromUserEvent(mockEvent);
+        const result = await handler.handleBatchUserEvents(mockEvent);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ statusCode: 200 });
+        expect(result).to.deep.equal([{ statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }]);
 
         expect(findMsgInstructionByFlagStub).to.have.not.been.called;
         expect(findMsgToHaltStub).to.have.not.been.called;
@@ -115,15 +120,15 @@ describe('*** UNIT TEST SIMPLE EVENT TRIGGERED MESSAGES ***', () => {
     it('Catches thrown errors, but they do not interfere (halt still called)', async () => {
         findMsgInstructionByFlagStub.throws(new Error('Error'));
     
-        const mockEvent = wrapEventSns({ instructionId: mockInstructionId, userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });
+        const mockEvent = mockSQSBatchEvent({ instructionId: mockInstructionId, userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });
 
-        const result = await handler.createFromUserEvent(mockEvent);
+        const result = await handler.handleBatchUserEvents(mockEvent);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ statusCode: 500 });
+        expect(result).to.deep.equal([{ statusCode: 500 }, { statusCode: 500 }, { statusCode: 500 }, { statusCode: 500 }]);
 
-        expect(findMsgInstructionByFlagStub).to.have.been.calledOnceWithExactly('SAVING_PAYMENT_SUCCESSFUL');
-        expect(findMsgToHaltStub).to.have.been.calledOnceWithExactly('SAVING_PAYMENT_SUCCESSFUL');
+        expect(findMsgInstructionByFlagStub).to.have.been.calledWith('SAVING_PAYMENT_SUCCESSFUL');
+        expect(findMsgToHaltStub).to.have.been.calledWith('SAVING_PAYMENT_SUCCESSFUL');
         expect(lambdaInvokeStub).to.have.not.been.called;
     });
 });
@@ -135,7 +140,7 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
     beforeEach(() => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, lambdaInvokeStub, momentStub));
 
     it('Creates message based on triggering event, for time in future, hours and minutes', async () => {
-        const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'MANUAL_EFT_INITIATED' });
+        const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'MANUAL_EFT_INITIATED' });
 
         const mockMoment = moment();
         const expectedMoment = mockMoment.clone().add(24, 'hours');
@@ -157,12 +162,12 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
         momentStub.returns(mockMoment.clone());
         lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
 
-        const result = await handler.createFromUserEvent(mockEvent);
+        const result = await handler.handleBatchUserEvents(mockEvent);
 
-        expect(result).to.deep.equal({ statusCode: 200 });
+        expect(result).to.deep.equal([{ statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }]);
 
-        expect(findMsgInstructionByFlagStub).to.have.been.calledOnceWithExactly('MANUAL_EFT_INITIATED');
-        expect(findMsgToHaltStub).to.have.been.calledOnceWithExactly('MANUAL_EFT_INITIATED');
+        expect(findMsgInstructionByFlagStub).to.have.been.calledWith('MANUAL_EFT_INITIATED');
+        expect(findMsgToHaltStub).to.have.been.calledWith('MANUAL_EFT_INITIATED');
         
         const expectedPaylod = { 
             instructions: 
@@ -173,11 +178,11 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
                 }]
         };
 
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
+        expect(lambdaInvokeStub).to.have.been.calledWith(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
     });
 
     it('Creates message based on triggering event, for set time the next day', async () => {
-        const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'MANUAL_EFT_INITIATED' });
+        const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'MANUAL_EFT_INITIATED' });
 
         const mockMoment = moment();
         const expectedMoment = mockMoment.clone().add(1, 'day').set({ hour: 16, minute: 0 });
@@ -200,12 +205,12 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
         momentStub.returns(mockMoment.clone());
         lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
 
-        const result = await handler.createFromUserEvent(mockEvent);
+        const result = await handler.handleBatchUserEvents(mockEvent);
 
-        expect(result).to.deep.equal({ statusCode: 200 });
+        expect(result).to.deep.equal([{ statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }]);
 
-        expect(findMsgInstructionByFlagStub).to.have.been.calledOnceWithExactly('MANUAL_EFT_INITIATED');
-        expect(findMsgToHaltStub).to.have.been.calledOnceWithExactly('MANUAL_EFT_INITIATED');
+        expect(findMsgInstructionByFlagStub).to.have.been.calledWith('MANUAL_EFT_INITIATED');
+        expect(findMsgToHaltStub).to.have.been.calledWith('MANUAL_EFT_INITIATED');
         
         const expectedPaylod = { 
             instructions: 
@@ -216,12 +221,12 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
                 }]
         };
 
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
+        expect(lambdaInvokeStub).to.have.been.calledWith(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
     });
 
     // todo : disable the instruction automatically if this happens
     it('Throws an error if invalid trigger event', async () => {
-        const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'MANUAL_EFT_INITIATED' });
+        const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'MANUAL_EFT_INITIATED' });
 
         const mockInstruction = {
             instructionId: mockInstructionId,
@@ -239,8 +244,8 @@ describe('*** UNIT TEST SCHEDULE-TRIGGERED MESSAGES ***', () => {
         findMsgInstructionByFlagStub.resolves([mockInstruction]);
         findMsgToHaltStub.resolves([]);
 
-        const result = await handler.createFromUserEvent(mockEvent);
-        expect(result).to.deep.equal({ statusCode: 500 });
+        const result = await handler.handleBatchUserEvents(mockEvent);
+        expect(result).to.deep.equal([{ statusCode: 500 }, { statusCode: 500 }, { statusCode: 500 }, { statusCode: 500 }]);
 
         expect(lambdaInvokeStub).to.not.have.been.called;
     });
@@ -252,7 +257,7 @@ describe('*** UNIT TEST CANCEL TRIGGERED MESSAGES ON HALT EVENT ***', () => {
     beforeEach(() => testHelper.resetStubs(findMsgInstructionByFlagStub, findMsgToHaltStub, lambdaInvokeStub, momentStub));
 
     it('Cancels messages (multiple) when halting event arrives', async () => {
-        const mockEvent = wrapEventSns({ userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });
+        const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL' });
 
         findMsgInstructionByFlagStub.resolves([]);
         findMsgToHaltStub.resolves(['instruction1', 'instruction2']);
@@ -260,18 +265,18 @@ describe('*** UNIT TEST CANCEL TRIGGERED MESSAGES ON HALT EVENT ***', () => {
 
         lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
 
-        const result = await handler.createFromUserEvent(mockEvent);
+        const result = await handler.handleBatchUserEvents(mockEvent);
 
-        expect(result).to.deep.equal({ statusCode: 200 });
+        expect(result).to.deep.equal([{ statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }]);
 
-        expect(findMsgInstructionByFlagStub).to.have.been.calledOnceWithExactly('SAVING_PAYMENT_SUCCESSFUL');
-        expect(findMsgToHaltStub).to.have.been.calledOnceWithExactly('SAVING_PAYMENT_SUCCESSFUL');
+        expect(findMsgInstructionByFlagStub).to.have.been.calledWith('SAVING_PAYMENT_SUCCESSFUL');
+        expect(findMsgToHaltStub).to.have.been.calledWith('SAVING_PAYMENT_SUCCESSFUL');
 
         const soughtStatuses = ['CREATED', 'SCHEDULED', 'READY_FOR_SENDING', 'SENDING'];
-        expect(findMsgIdsStub).to.have.been.calledOnceWithExactly(['instruction1', 'instruction2'], mockUserId, soughtStatuses);
+        expect(findMsgIdsStub).to.have.been.calledWith(['instruction1', 'instruction2'], mockUserId, soughtStatuses);
 
         const expectedInvoke = (messageId) => testHelper.wrapLambdaInvoc('message_user_process', true, { messageId, newStatus: 'SUPERCEDED' });
-        expect(lambdaInvokeStub).to.have.been.calledTwice;
+        expect(lambdaInvokeStub).to.have.callCount(8);
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedInvoke('message1'));
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(expectedInvoke('message2'));
     });

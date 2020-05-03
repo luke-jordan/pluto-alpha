@@ -11,7 +11,7 @@ const functionFolders = [
     './functions/boost-api',
     './functions/audience-selection',
     './functions/float-api',
-    './functions/friends-api',
+    './functions/friend-api',
     './functions/user-activity-api',
     './functions/user-existence-api',
     './functions/user-messaging-api',

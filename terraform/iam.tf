@@ -415,6 +415,30 @@ resource "aws_iam_policy" "lamdba_invoke_bank_verify_access" {
 EOF
 }
 
+resource "aws_iam_policy" "lambda_invoke_saving_heat_access" {
+    name = "lambda_saving_heat_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "WarmupLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.user_save_heat_fetch.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 
 /////////////// COMPOSITE POLICIES FOR PROCESSING/ADMIN LAMBDAS THAT DO A LOT ///////////////////
 
@@ -821,6 +845,33 @@ resource "aws_iam_policy" "lambda_invoke_outbound_comms_send" {
             ],
             "Resource": [
                 "${aws_lambda_function.outbound_comms_send.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+///// SOME QUEUE PERMISSIONS
+
+resource "aws_iam_policy" "sqs_message_event_queue_process" {
+    name = "${terraform.workspace}_message_event_queue_process"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.message_event_process_queue.arn}"
             ]
         }
     ]

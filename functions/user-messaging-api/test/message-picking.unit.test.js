@@ -94,6 +94,41 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 800000 });
     });
 
+    it('Assembles message base properly', async () => {
+        const testInstructionId = uuid();
+        const testCreationTime = moment();
+
+        const testMsgDetails = {
+            messageId: testMessageId,
+            messageBody: 'Hello #{user_full_name}. Welcome to Jupiter',
+            messageTitle: 'Welcome',
+            destinationUserId: testUserId,
+            messagePriority: 1,
+            display: { type: 'CARD', titleType: 'EMPHASIS', iconType: 'BOOST_ROCKET' },
+            creationTime: testCreationTime,
+            followsPriorMessage: true,
+            hasFollowingMessage: true,
+            instructionId: testInstructionId
+        };
+
+        const messageBase = await handler.assembleMessage(testMsgDetails);
+
+        expect(messageBase).to.exist;
+        expect(messageBase).to.deep.equal({
+            messageId: testMessageId,
+            title: 'Welcome',
+            body: 'Hello Luke Jordan. Welcome to Jupiter',
+            priority: 1,
+            display: { type: 'CARD', titleType: 'EMPHASIS', iconType: 'BOOST_ROCKET' },
+            persistedTimeMillis: testCreationTime.valueOf(),
+            hasFollowingMessage: true,
+            instructionId: testInstructionId,
+            actionContext: {}
+        });
+
+        expect(fetchDynamoRowStub).to.have.been.calledOnceWithExactly(profileTable, { systemWideUserId: testUserId }, relevantProfileCols);
+    });
+
     it('Fills in message templates properly', async () => {
         const expectedMessage = 'Hello Luke Jordan. Did you know you have earned $100 in interest since you opened your account in July 2019?';
         

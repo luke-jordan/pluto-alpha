@@ -1,5 +1,5 @@
 {
-  "name": "friends-api",
+  "name": "friend-api",
   "version": "0.0.1",
   "description": "API for joint savings",
   "main": "handler.js",
