@@ -5,6 +5,8 @@ const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
+const camelCaseKeys = require('camelcase-keys');
+
 const proxyquire = require('proxyquire');
 const sinon = require('sinon');
 const chai = require('chai');
@@ -53,7 +55,9 @@ const expectedProfileColumns = [
 describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     const testSystemId = uuid();
     const testTargetUserId = uuid();
+    const testAcceptedUserId = uuid();
     const testInitiatedUserId = uuid();
+    const testRelationshipId = uuid();
     const testRequestId = uuid();
     const testAccountId = uuid();
 
@@ -70,6 +74,13 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         phoneNumber: '16061110000',
         calledName: 'Lao Tzu',
         emailAddress: 'laotzu@tao.com'
+    };
+
+    const friendshipFromRds = {
+        'relationship_id': testRelationshipId,
+        'initiated_user_id': testInitiatedUserId,
+        'accepted_user_id': testAcceptedUserId,
+        'share_items': ['LAST_ACTIVITY_AMOUNT', 'LAST_ACTIVITY_DATE']
     };
 
     beforeEach(() => {
@@ -122,15 +133,12 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     });
 
     it('Gets the user ids of a users friends', async () => {
-        const testAcceptedUserId = uuid();
         const friendshipTable = config.get('tables.friendshipTable');
-
-        const selectQuery = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
-        queryStub.withArgs(selectQuery, [testSystemId, 'ACTIVE']).resolves([{ 'accepted_user_id': testAcceptedUserId }]);
-
-        const resultOfFetch = await persistence.getFriendIdsForUser({ systemWideUserId: testSystemId });
+        const selectQuery = `select * from ${friendshipTable} where initiated_user_id = $1 or accepted_user_id = $2 and relationship_status = $3`;
+        queryStub.withArgs(selectQuery, [testSystemId, testSystemId, 'ACTIVE']).resolves([friendshipFromRds, friendshipFromRds, friendshipFromRds]);
+        const resultOfFetch = await persistence.fetchActiveSavingFriendsForUser(testSystemId);
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([testAcceptedUserId]);
+        expect(resultOfFetch).to.deep.equal([camelCaseKeys(friendshipFromRds), camelCaseKeys(friendshipFromRds), camelCaseKeys(friendshipFromRds)]);
     });
 
     it('Fetches friendship request by request id', async () => {
@@ -177,12 +185,14 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     it('Fetches friend requests for user', async () => {
         const testCreationTime = moment().format();
         const testUpdatedTime = moment().format();
+        const testCustomerMessage = 'Hi, this is John. Lets save some bones together.';
 
         const friendRequestFromRds = {
             'request_id': testRequestId,
             'creation_time': testCreationTime,
             'updated_time': testUpdatedTime,
             'request_status': 'PENDING',
+            'customer_message': testCustomerMessage,
             'initiated_user_id': testInitiatedUserId,
             'targetUser_id': testTargetUserId,
             'target_contact_details': {
@@ -198,6 +208,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
             creationTime: testCreationTime,
             updatedTime: testUpdatedTime,
             requestStatus: 'PENDING',
+            customerMessage: testCustomerMessage,
             initiatedUserId: testInitiatedUserId,
             targetUserId: testTargetUserId,
             targetContactDetails: {

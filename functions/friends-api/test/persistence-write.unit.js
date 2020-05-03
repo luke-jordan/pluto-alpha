@@ -60,6 +60,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const testFriendRequest = {
             requestId: testRequestId,
             requestStatus: 'PENDING',
+            customerMessage: '126',
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
             requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
@@ -70,9 +71,9 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         };
 
         const testFriendQueryDef = {
-            query: `insert into ${friendReqTable} (initiated_user_id, target_user_id, requested_share_items, target_contact_details, ` +
+            query: `insert into ${friendReqTable} (initiated_user_id, target_user_id, requested_share_items, customer_message, target_contact_details, ` +
                 `request_id, request_status) values %L returning request_id, creation_time`,
-            columnTemplate: '${initiatedUserId}, ${targetUserId}, ${requestedShareItems}, ${targetContactDetails}, ${requestId}, ${requestStatus}',
+            columnTemplate: '${initiatedUserId}, ${targetUserId}, ${requestedShareItems}, ${customerMessage}, ${targetContactDetails}, ${requestId}, ${requestStatus}',
             rows: [testFriendRequest]
         };
 
@@ -100,6 +101,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
             requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
+            customerMessage: '126',
             targetContactDetails: {
                 contactType: 'EMAIL',
                 contactMethod: 'example@domain.com'

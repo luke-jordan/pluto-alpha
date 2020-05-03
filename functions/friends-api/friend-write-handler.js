@@ -13,125 +13,10 @@ const opsUtil = require('ops-util-common');
 const persistenceRead = require('./persistence/read.friends');
 const persistenceWrite = require('./persistence/write.friends');
 
-const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region') });
-
-const Redis = require('ioredis');
-const redis = new Redis({
-    port: config.get('cache.port'),
-    host: config.get('cache.host'),
-    retryStrategy: () => `dont retry`,
-    keyPrefix: `${config.get('cache.keyPrefixes.savingsHeat')}::`
-});
-
-const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-
-const invokeLambda = (functionName, payload, sync = true) => ({
-    FunctionName: functionName,
-    InvocationType: sync ? 'RequestResponse' : 'Event',
-    Payload: JSON.stringify(payload)
-});
-
-const invokeSavingsHeatLambda = async (accountIds) => {
-    const savingsHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingsHeat'), { accountIds });
-    logger('Invoke savings heat lambda with arguments: ', savingsHeatLambdaInvoke);
-    const savingsHeatResult = await lambda.invoke(savingsHeatLambdaInvoke).promise();
-    logger('Result of savings heat calculation: ', savingsHeatResult);
-    return extractLambdaBody(savingsHeatResult);
-};
-
-const fetchSavingsHeatFromCache = async (accountIds) => {
-    const cachedSavingsHeatForAccounts = await redis.mget(...accountIds);
-    logger('Got cached savings heat for accounts:', cachedSavingsHeatForAccounts);
-    return cachedSavingsHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
-};
-
-/**
- * This function appends a savings heat score to each profile. The savings heat is either fetched from cache or
- * calculated by the savings heat lambda.
- * @param {Array} profiles An array of user profiles.
- * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
- */
-const appendSavingsHeatToProfiles = async (profiles, userAccountMap) => {
-    const accountIds = Object.values(userAccountMap);
-    
-    const cachedSavingsHeatForAccounts = await fetchSavingsHeatFromCache(accountIds);
-    logger('Found cached savings heat:', cachedSavingsHeatForAccounts);
-
-    const cachedAccounts = cachedSavingsHeatForAccounts.map((savingsHeat) => savingsHeat.accountId);
-    const uncachedAccounts = accountIds.filter((accountId) => !cachedAccounts.includes(accountId));
-
-    logger('Found uncached accounts:', uncachedAccounts);
-    logger('Got cached accounts:', cachedAccounts);
-
-    let savingsHeatFromLambda = [];
-    if (uncachedAccounts.length > 0) {
-        savingsHeatFromLambda = await invokeSavingsHeatLambda(uncachedAccounts);
-    }
-
-    logger('Got savings heat from lambda:', savingsHeatFromLambda);
-
-    const savingsHeatForAccounts = [...savingsHeatFromLambda, ...cachedSavingsHeatForAccounts];
-    logger('Aggregated savings heat from cache and lambda:', savingsHeatForAccounts);
-
-    /* eslint-disable dot-location */
-    const accountsAndSavingsHeatMap = savingsHeatForAccounts
-        .reduce((obj, savingsHeatObj) => ({ ...obj, [savingsHeatObj.accountId]: savingsHeatObj.savingsHeat }), {});
-    /* eslint-enable dot-location */
-    
-    const profilesWithSavingsHeat = profiles.map((profile) => {
-        const profileAccountId = userAccountMap[profile.systemWideUserId];
-        profile.savingsHeat = Number(accountsAndSavingsHeatMap[profileAccountId]);
-        return profile;
-    });
-
-    logger('Got profiles with savings heat:', profilesWithSavingsHeat);
-
-    return profilesWithSavingsHeat;
-};
-
-/**
- * This functions accepts a users system id and returns the user's friends.
- * @param {Object} event
- * @property {String} systemWideUserId Required. The system id of the user whose friends are to be extracted.
- */
-module.exports.obtainFriends = async (event) => {
-    try {
-        const userDetails = opsUtil.extractUserDetails(event);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-        
-        let systemWideUserId = '';
-        if (userDetails.role === 'SYSTEM_ADMIN') {
-            const params = opsUtil.extractParamsFromEvent(event);
-            systemWideUserId = params.systemWideUserId ? params.systemWideUserId : userDetails.systemWideUserId;
-        } else {
-            systemWideUserId = userDetails.systemWideUserId;
-        }
-    
-        const friendUserIds = await persistenceRead.getFriendIdsForUser(systemWideUserId);
-        logger('Got friend system ids:', friendUserIds);
-    
-        const profileRequests = friendUserIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
-        const friendProfiles = await Promise.all(profileRequests);
-        logger('Got friend profiles:', friendProfiles);
-
-        const userAccountArray = await Promise.all(friendUserIds.map((userId) => persistenceRead.fetchAccountIdForUser(userId)));
-        logger('Got user accounts from persistence:', userAccountArray);
-        const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }));
-
-        const profilesWithSavingsHeat = await appendSavingsHeatToProfiles(friendProfiles, userAccountMap);
-        
-        return opsUtil.wrapResponse(profilesWithSavingsHeat);
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse({ message: err.message }, 500);
-    }
-
-};
 
 const handleUserNotFound = async (friendRequest) => {
+    const customerMessage = friendRequest.customerMessage ? friendRequest.customerMessage : null;
+    friendRequest.customerMessage = customerMessage ? String(customerMessage.length) : 0;
     const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
     logger('Persisting friend request resulted in:', insertionResult);
 
@@ -143,17 +28,26 @@ const handleUserNotFound = async (friendRequest) => {
     let dispatchResult = null;
 
     if (contactType === 'PHONE') {
-        const dispatchMsg = format(config.get('sms.friendRequest.template'), initiatedUserName);
+        const dispatchMsg = customerMessage
+            ? customerMessage
+            : format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
+        
         dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
     }
 
     if (contactType === 'EMAIL') {
+        const bodyTemplateKey = customerMessage
+            ? config.get('templates.email.custom.templateKey')
+            : config.get('templates.email.default.templateKey');
+
+        const templateVariables = customerMessage ? { customerMessage } : { initiatedUserName };
+
         dispatchResult = await publisher.sendSystemEmail({
-            subject: config.get('email.friendRequest.subject'),
+            subject: config.get('templates.email.default.subject'),
             toList: [contactMethod],
-            bodyTemplateKey: config.get('email.friendRequest.templateKey'),
-            templateVariables: { initiatedUserName }
+            bodyTemplateKey,
+            templateVariables
         });
 
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
@@ -188,7 +82,8 @@ const identifyContactType = (contact) => {
  * @property {String} initiatedUserId Required. The user id of the user initiating the friendship. Defaults to the sytem id in the request header.
  * @property {String} targetUserId Required in the absence of targetContactDetails. The user id of the user whose friendship is being requested.
  * @property {String} targetContactDetails Required in the absence of targetUserId. Either the phone or email of the user whose friendship is being requested.
- * @property {Array} requestedShareItems Specifies what the initiating user wants to share. Valid values include ACTIVITY_LEVEL, ACTIVITY_COUNT, SAVE_VALUES, and BALANCE
+ * @property {Array } requestedShareItems Specifies what the initiating user wants to share. Valid values include ACTIVITY_LEVEL, ACTIVITY_COUNT, SAVE_VALUES, and BALANCE
+ * @property {String} customerMessage An optional message that would be displayed when the friend request is viewed by the recieving user.
  */
 module.exports.addFriendshipRequest = async (event) => {
     try {
@@ -214,6 +109,13 @@ module.exports.addFriendshipRequest = async (event) => {
             }
 
             friendRequest.targetContactDetails = { contactType, contactMethod };
+        }
+
+        if (friendRequest.customerMessage) {
+            const blacklist = new RegExp(config.get('templates.blacklist'), 'u');
+            if (blacklist.test(friendRequest.customerMessage)) {
+                throw new Error(`Error: Invalid customer message`);
+            }
         }
 
         if (!friendRequest.targetUserId) {
@@ -262,50 +164,6 @@ module.exports.connectFriendshipRequest = async (event) => {
         }
 
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse({ message: err.message }, 500);
-    }
-};
-
-const appendUserNameToRequest = async (friendRequest) => {
-    const systemWideUserId = friendRequest.initiatedUserId;
-    const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId });
-    friendRequest.initiatedUserName = userProfile.calledName
-        ? userProfile.calledName
-        : userProfile.firstName;
-
-    return friendRequest;
-};
-
-/**
- * This function returns an array of friend requests a user has not yet accepted (or ignored). Friend requests are
- * extracted for the system id in the request context.
- */
-module.exports.findFriendRequestsForUser = async (event) => {
-    try {    
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
-            return { statusCode: 403 };
-        }
-
-        const params = opsUtil.extractParamsFromEvent(event);
-        const userDetails = opsUtil.extractUserDetails(event);
-        
-        const systemWideUserId = userDetails ? userDetails.systemWideUserId : params.systemWideUserId;
-
-        // get friend requests
-        const friendRequestsForUser = await persistenceRead.fetchFriendRequestsForUser(systemWideUserId);
-        logger('Got requests:', friendRequestsForUser);
-        if (friendRequestsForUser.length === 0) {
-            return opsUtil.wrapResponse(friendRequestsForUser); 
-        }
-
-        // for each request append the user name of the initiating user
-        const appendUserNames = friendRequestsForUser.map((request) => appendUserNameToRequest(request));
-        const transformedRequests = await Promise.all(appendUserNames);
-        logger('Transformed requests:', transformedRequests);
-
-        return opsUtil.wrapResponse(transformedRequests);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);

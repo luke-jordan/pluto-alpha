@@ -20,11 +20,12 @@ const countFriendsStub = sinon.stub();
 const getOwnerInfoStub = sinon.stub();
 const findCurrencyStub = sinon.stub();
 const sumTotalSavedStub = sinon.stub();
+const fetchTxHistoryStub = sinon.stub();
 const getAccOpenDateStub = sinon.stub();
 const fetchAllAccountsStub = sinon.stub();
 const findFloatAccountsStub = sinon.stub();
-const findClientAccountsStub = sinon.stub();
 const sumSavedLastMonthStub = sinon.stub();
+const findClientAccountsStub = sinon.stub();
 const countSavesLastMonthStub = sinon.stub();
 
 const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.savingsHeat');
@@ -45,6 +46,7 @@ const handler = proxyquire('../savings-heat-handler', {
         'sumAmountSavedLastMonth': sumSavedLastMonthStub,
         'countSettledSaves': countSavesStub,
         'findMostCommonCurrency': findCurrencyStub,
+        'fetchTransactionsForHistory': fetchTxHistoryStub,
         'countSettledSavesForPrevMonth': countSavesLastMonthStub,
         'countActiveSavingFriendsForUser': countFriendsStub,
         'getAccountOpenedDateForHeatCalc': getAccOpenDateStub
@@ -54,6 +56,7 @@ const handler = proxyquire('../savings-heat-handler', {
 
 
 describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
+    const testTxId = uuid();
     const testSystemId = uuid();
     const testAccountId = uuid();
 
@@ -61,11 +64,24 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
     const testFloatId = 'primary_mmkt_float';
 
     const testAccountOpenedTime = moment().subtract(3, 'months').format();
+    const testActivityDate = moment().format();
+
+    const testTx = (txType) => ({
+        transactionId: testTxId,
+        accountId: testAccountId,
+        creationTime: testActivityDate,
+        transactionType: txType,
+        settlementStatus: 'SETTLED',
+        amount: '100',
+        currency: 'ZAR',
+        unit: 'HUNDREDTH_CENT',
+        humanReference: 'VADER1'
+    });
 
     beforeEach(() => {
         helper.resetStubs(
             redisSetStub, countSavesStub, countFriendsStub, sumTotalSavedStub, getAccOpenDateStub, fetchAllAccountsStub,
-            findFloatAccountsStub, findClientAccountsStub, sumSavedLastMonthStub, countSavesLastMonthStub, findCurrencyStub
+            findFloatAccountsStub, findClientAccountsStub, sumSavedLastMonthStub, countSavesLastMonthStub, findCurrencyStub, fetchTxHistoryStub
         );
     });
 
@@ -254,7 +270,7 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
 
         getOwnerInfoStub.withArgs(testAccountId).resolves({ ownerUserId: testSystemId });
         countSavesStub.resolves(0);
-        countSavesLastMonthStub.withArgs(testAccountId).resolves(1);
+        countSavesLastMonthStub.withArgs(testAccountId).resolves(0);
         countFriendsStub.withArgs(testSystemId).resolves(5);
         getAccOpenDateStub.withArgs(testAccountId).resolves(testAccountOpenedDate);
 
@@ -278,7 +294,51 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
         expect(sumSavedLastMonthStub).to.have.not.been.called;
     });
 
-    // todo: Tests for the obersavtion of the effect of active months
+    it('Includes last acitvity details if requested', async () => {
+        const expectedScore = '19.77';
+        const testAccountOpenedDate = moment().subtract(5, 'months').format(); // NB
+        // In this case the user has no previous capitalization events.
+        const testEvent = { accountIds: [testAccountId], includeLastActivityOfType: ['USER_SAVING_EVENT', 'BOOST_REDEMPTION', 'CAPITALIZATION'] }; // NB
+
+        getOwnerInfoStub.withArgs(testAccountId).resolves({ ownerUserId: testSystemId });
+        countSavesStub.resolves(27);
+        countSavesLastMonthStub.withArgs(testAccountId).resolves(5);
+        countFriendsStub.withArgs(testSystemId).resolves(14);
+        getAccOpenDateStub.withArgs(testAccountId).resolves(testAccountOpenedDate);
+        findCurrencyStub.withArgs(testAccountId).resolves('ZAR');
+        sumTotalSavedStub.withArgs(testAccountId, 'ZAR').resolves(100000);
+        sumSavedLastMonthStub.withArgs(testAccountId, 'ZAR').resolves(51000);
+        fetchTxHistoryStub.withArgs(testAccountId).resolves([testTx('USER_SAVING_EVENT'), testTx('BOOST_REDEMPTION'), testTx('WITHDRAWAL')]);
+
+        const resultOfCalc = await handler.calculateSavingsHeat(testEvent);
+
+        expect(resultOfCalc).to.exist;
+        expect(resultOfCalc).to.deep.equal({
+            result: 'SUCCESS',
+            details: [
+                {
+                    accountId: testAccountId,
+                    savingsHeat: expectedScore,
+                    USER_SAVING_EVENT: {
+                        lastActivityDate: testActivityDate,
+                        lastActivityAmount: {
+                            amount: '100',
+                            currency: 'ZAR',
+                            unit: 'HUNDREDTH_CENT'
+                        }
+                    },
+                    BOOST_REDEMPTION: {
+                        lastActivityDate: testActivityDate,
+                        lastActivityAmount: {
+                            amount: '100',
+                            currency: 'ZAR',
+                            unit: 'HUNDREDTH_CENT'
+                        }
+                    }
+                }
+            ]
+        });
+    });
 
     it('Catches thrown errors', async () => {
         getOwnerInfoStub.withArgs(testAccountId).throws(new Error('Error!'));

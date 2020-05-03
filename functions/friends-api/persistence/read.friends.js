@@ -47,15 +47,6 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
     return fetchResult.length > 0 ? fetchResult[0]['owner_user_id'] : null;
 };
 
-const fetchAcceptedUserIdsForUser = async (systemWideUserId) => {
-    const friendshipTable = config.get('tables.friendshipTable');
-    const query = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
-    const fetchedUserIds = await rdsConnection.selectQuery(query, [systemWideUserId, 'ACTIVE']);
-    logger('Got user ids:', fetchedUserIds);
-    
-    return fetchedUserIds.map((userId) => userId['accepted_user_id']);
-};
-
 const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     logger(`Fetching 'user profile' from database or cache`);
 
@@ -119,13 +110,17 @@ module.exports.fetchUserProfile = async (params) => {
  * This function accepts a user id and returns the user ids of the users friends.
  * @param {object} params An object of the form { systemWideUserId: 'e9a83c01-9d...' }
  */
-module.exports.getFriendIdsForUser = async (params) => {
-    if (!params.systemWideUserId) {
+module.exports.fetchActiveSavingFriendsForUser = async (systemWideUserId) => {
+    if (!systemWideUserId) {
         throw new Error('Error! Missing user identifier');
     }
 
-    const systemWideUserId = params.systemWideUserId;
-    return fetchAcceptedUserIdsForUser(systemWideUserId);
+    const friendshipTable = config.get('tables.friendshipTable');
+    const query = `select * from ${friendshipTable} where initiated_user_id = $1 or accepted_user_id = $2 and relationship_status = $3`;
+    const fetchResult = await rdsConnection.selectQuery(query, [systemWideUserId, systemWideUserId, 'ACTIVE']);
+    logger('Got user ids:', fetchResult);
+    
+    return fetchResult.length > 0 ? fetchResult.map((result) => camelCaseKeys(result)) : [];
 };
 
 /**

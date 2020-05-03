@@ -19,13 +19,14 @@ const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', 
 
 /**
  * This function persists a new friend requests, initialising its request status to PENDING
- * @param {object} friendRequest
+ * @param    {object} friendRequest
  * @property {String} initiatedUserId Required. The system id of the user requesting the friendship.
  * @property {String} targetUserId The system id of the requested friend. Optional in the presence targetContactDetails. But ultimately required and can be updated later.
  * @property {String} targetContactDetails The target users contact detail. Optional if targetUserId is provided.
  * @property {String} requestCode Required in the absence of targetUserId. This will be used to identify the friend request when the targetUserId is updated later.
  * @property {String} requestType Used in managing shared items in a relationship. Valid values are CREATE and UPDATE.
- * @property {Array} requestedShareItems Specifies what the initiating user wants to share.
+ * @property {Array } requestedShareItems Specifies what the initiating user wants to share.
+ * @property {String} customerMessage An optional message that would be displayed when the friend request is viewed by the recieving user.
  */
 module.exports.insertFriendRequest = async (friendRequest) => {
     const requestId = uuid();

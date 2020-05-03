@@ -52,7 +52,7 @@ const calculateAndCacheHeatScore = async (accountId) => {
         persistence.getAccountOpenedDateForHeatCalc(accountId)
     ]);
 
-    logger(`Total savings: ${totalNumberOfSaves}\nNumber of savings last month: ${numberOfSavesLastMonth}`);
+    logger(`Total number of savings: ${totalNumberOfSaves}\nNumber of savings last month: ${numberOfSavesLastMonth}`);
     logger(`Account opened date: ${accountOpenedDate}\nActive friendships: ${numberOfSavingFriendships}`);
 
     const activeMonths = Math.abs(moment(accountOpenedDate).diff(moment().startOf('month'), 'month'));
@@ -84,18 +84,55 @@ const calculateAndCacheHeatScore = async (accountId) => {
     return { accountId, savingsHeat };
 };
 
+const findLastActivitiesOfType = (txType, txHistory) => {
+    const transactions = txHistory.filter((tx) => tx.transactionType === txType);
+    if (transactions.length === 0) {
+        return null;
+    }
+
+    const txDates = transactions.map((tx) => moment(tx.creationTime).valueOf());
+    const latestActivity = transactions.filter((tx) => moment(tx.creationTime).valueOf() === Math.max(txDates))[0];
+
+    return {
+        lastActivityDate: latestActivity.creationTime,
+        lastActivityAmount: {
+            amount: latestActivity.amount,
+            currency: latestActivity.currency,
+            unit: latestActivity.unit
+        }
+    };
+};
+
+const appendLastActivityToSavingsHeat = async (savingsHeat, activitiesToInclude) => {
+    const accountId = savingsHeat.accountId;
+    const txHistory = await persistence.fetchTransactionsForHistory(accountId);
+
+    activitiesToInclude.forEach((activity) => {
+        const latestActivity = findLastActivitiesOfType(activity, txHistory);
+        if (latestActivity) {
+            savingsHeat[activity] = latestActivity;
+        }
+    });
+
+    return savingsHeat;
+};
+
 /**
  * This function calculates and caches a user's saving heat score. The score is based on their savings activity as well
  * as other factors such as number of saving buddies, etc. If an empty object is recieved, the function will calculate
  * and cache savings heat scores for all accounts.
+ * 
+ * A note on how user activity affects the heat score: making more frequent savings, adding more saving buddies, and increasing the 
+ * amount saved per month will all positively affect their savings heat. 
  * @param {object} event
  * @property {string} accountId Optional. The account id of the user whose savings heat score is to be calculated.
  * @property {string} floatId Optional. If provided the function will calculate and cache the savings heat score for all accounts associated with this float.
  * @property {string} clientId Optional. If provided the function will calculate and cache the savings heat score for all accounts associated with this client.
+ * @property {array } includeLastActivityOfType An array containing the types of user activity to include with the returned savings heat.
  */
 module.exports.calculateSavingsHeat = async (event) => {
     try {
-        const { accountIds, floatId, clientId } = opsUtil.extractParamsFromEvent(event);
+        const { accountIds, floatId, clientId, includeLastActivityOfType } = opsUtil.extractParamsFromEvent(event);
 
         let accountIdsForCalc = [];
         if (!accountIds && !floatId && !clientId) {
@@ -119,6 +156,14 @@ module.exports.calculateSavingsHeat = async (event) => {
         const heatCalculations = accountIdsForCalc.map((account) => calculateAndCacheHeatScore(account));
         const resultOfCalculations = await Promise.all(heatCalculations);
         logger('Result of heat calculations:', resultOfCalculations);
+
+        if (Array.isArray(includeLastActivityOfType) && includeLastActivityOfType.length > 0) {
+            const activityPromises = resultOfCalculations.map((result) => appendLastActivityToSavingsHeat(result, includeLastActivityOfType));
+            const savingsHeatWithLastActivity = await Promise.all(activityPromises);
+            logger('Got savings heat with last activities:', savingsHeatWithLastActivity);
+
+            return { result: 'SUCCESS', details: savingsHeatWithLastActivity };
+        }
 
         return { result: 'SUCCESS', details: resultOfCalculations };
 

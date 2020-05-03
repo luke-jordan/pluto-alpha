@@ -23,6 +23,7 @@ create table if not exists friends_data.friend_request (
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
     request_status varchar (100) check (request_status in ('PENDING', 'ACCEPTED', 'IGNORED')),
+    customer_message varchar,
     initiated_user_id uuid not null references friends_data.core_friend_relationship (initiated_user_id),
     target_user_id uuid,
     target_contact_details jsonb,
