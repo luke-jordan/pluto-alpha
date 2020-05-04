@@ -71,6 +71,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "admin_user_count" {
   name = "/aws/lambda/${var.admin_user_count_lambda_function_name}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"

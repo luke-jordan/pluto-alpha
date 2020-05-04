@@ -434,6 +434,78 @@ resource "aws_api_gateway_integration" "user_friend_list" {
   uri                     = aws_lambda_function.friend_list.invoke_arn
 }
 
+//////////////// DEACTIVATE A FRIENDSHIP ///////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "user_friend_deactivate" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_path_root.id
+  path_part     = "deactivate"
+}
+
+resource "aws_api_gateway_method" "user_friend_deactivate" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.user_friend_deactivate.id
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "user_friend_deactivate" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.friend_deactivate.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "user_friend_deactivate" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_method.user_friend_deactivate.resource_id
+  http_method   = aws_api_gateway_method.user_friend_deactivate.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.friend_deactivate.invoke_arn
+}
+
+//////////////// HANDLE FRIEND REQUESTS (USING 1-LAMBDA ROUTER METHOD) ////////////////
+
+resource "aws_api_gateway_resource" "friend_request_path_root" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_path_root.id
+  path_part     = "request"
+}
+
+resource "aws_api_gateway_resource" "user_friend_request_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_request_path_root.api_id
+  path_part     = "{proxy+}" 
+}
+
+resource "aws_api_gateway_method" "user_friend_request_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.user_friend_request_manage.id
+  http_method   = "ANY"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "user_friend_request_manage" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.friend_request_manage.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "user_friend_request_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.user_friend_request_manage.resource_id
+  http_method   = aws_api_gateway_method.user_friend_list.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.friend_request_manage.invoke_arn
+}
+
 /////////////// USER HISTORY LAMBDA (OWN USER, NOT ADMIN) /////////////////////////////////////////////////
 
 // in future we will probably add some more endpoints like graphing etc., so just future-proofing

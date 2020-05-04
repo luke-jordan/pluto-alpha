@@ -134,6 +134,33 @@ module.exports.obtainFriends = async (event) => {
 
 };
 
+/**
+ * This functions deactivates a friendship.
+ * @param {Object} event
+ * @property {String} relationshipId The id of the relationship to be deactivated.
+ */
+module.exports.deactivateFriendship = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { relationshipId } = opsUtil.extractParamsFromEvent(event);
+        if (!relationshipId) {
+            throw new Error('Error! Missing relationshipId');
+        }
+
+        const deactivationResult = await persistenceWrite.deactivateFriendship(relationshipId);
+        logger('Result of friendship deactivation:', deactivationResult);
+
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { deactivationResult } });
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
+
 const handleUserNotFound = async (friendRequest) => {
     const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
     logger('Persisting friend request resulted in:', insertionResult);
@@ -233,7 +260,7 @@ module.exports.addFriendshipRequest = async (event) => {
         const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
         logger('Result of friend request insertion:', insertionResult);
     
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult } });
+        return opsUtil.wrapResponse({ result: 'SUCCESS', requestId: insertionResult.requestId });
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -385,29 +412,27 @@ module.exports.ignoreFriendshipRequest = async (event) => {
     }
 };
 
+const dispatcher = {
+    'initiate': (event) => exports.addFriendshipRequest(event),
+    'accept': (event) => exports.acceptFriendshipRequest(event),
+    'ignore': (event) => exports.ignoreFriendshipRequest(event),
+    'list': (event) => exports.findFriendRequestsForUser(event)
+};
+
 /**
- * This functions deactivates a friendship.
- * @param {Object} event
- * @property {String} relationshipId The id of the relationship to be deactivated.
+ * This just directs friendship-request management, on the lines of the audience management API, to avoid excessive lambda
+ * and API GW resource proliferation. Note: try-catch robustness is inside the methods, so not duplicating
  */
-module.exports.deactivateFriendship = async (event) => {
-    try {
-        const userDetails = opsUtil.extractUserDetails(event);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-
-        const { relationshipId } = opsUtil.extractParamsFromEvent(event);
-        if (!relationshipId) {
-            throw new Error('Error! Missing relationshipId');
-        }
-
-        const deactivationResult = await persistenceWrite.deactivateFriendship(relationshipId);
-        logger('Result of friendship deactivation:', deactivationResult);
-
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { deactivationResult } });
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse({ message: err.message }, 500);
+module.exports.directRequestManagement = async (event) => {
+    if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
+        return { statusCode: 403 };
     }
+
+    const { operation } = opsUtil.extractPathAndParams(event);
+    logger('Extracted operation from path: ', operation);
+
+    const resultOfProcess = await dispatcher[operation.trim().toLowerCase()](event);
+    logger('Final result: ', resultOfProcess);
+
+    return resultOfProcess;
 };

@@ -247,15 +247,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const insertionResult = await handler.addFriendshipRequest(testEvent);
 
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.deep.equal(helper.wrapResponse({
-            result: 'SUCCESS',
-            updateLog: {
-                insertionResult: {
-                    requestId: testRequestId,
-                    logId: testLogId
-                }
-            }
-        }));
+        expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS', requestId: testRequestId }));
     });
 
     it('Finds target user id by contact detail where absent', async () => {
@@ -276,15 +268,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const insertionResult = await handler.addFriendshipRequest(testEvent);
         
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.deep.equal(helper.wrapResponse({
-            result: 'SUCCESS',
-            updateLog: {
-                insertionResult: {
-                    requestId: testRequestId,
-                    logId: testLogId
-                }
-            }
-        }));
+        expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS', requestId: testRequestId }));
     });
 
     it('Handles target user id not found, SMS route', async () => {

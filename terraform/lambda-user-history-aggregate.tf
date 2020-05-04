@@ -71,6 +71,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "user_history_aggregate" {
   name = "/aws/lambda/${var.user_history_aggregate}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"

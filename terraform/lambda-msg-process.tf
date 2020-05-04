@@ -73,6 +73,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "message_user_process" {
   name = "/aws/lambda/${var.message_user_process_function_name}"
+  retention_in_days = 7
 
   tags = {
     environment = "${terraform.workspace}"
