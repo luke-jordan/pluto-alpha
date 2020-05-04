@@ -4,6 +4,8 @@ const logger = require('debug')('jupiter:friends:dynamo');
 const config = require('config');
 const uuid = require('uuid/v4');
 
+const opsUtil = require('ops-util-common');
+
 const camelCaseKeys = require('camelcase-keys');
 const decamelize = require('decamelize');
 
@@ -13,9 +15,40 @@ const rdsConnection = new RdsConnection(config.get('db'));
 const friendshipTable = config.get('tables.friendshipTable');
 const friendReqTable = config.get('tables.friendRequestTable');
 const friendLogTable = config.get('tables.friendLogTable');
+const userIdTable = config.get('tables.friendUserIdTable');
 
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', ');
+
+// do this at the moment until start building in replication in, e.g., account open
+const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
+    const userIds = targetUserId ? [initiatedUserId, targetUserId] : [initiatedUserId];
+    const findQuery = `select user_id from ${userIdTable} where user_id in (${opsUtil.extractArrayIndices(userIds)})`;
+    const presentRows = await rdsConnection.selectQuery(findQuery, userIds);
+
+    const foundInitiatedUserId = presentRows.map((row) => row['user_id']).some((userId) => userId === initiatedUserId);
+    const foundTargetUserId = !targetUserId || presentRows.map((row) => row['user_id']).some((userId) => userId === targetUserId);
+
+    if (foundInitiatedUserId && foundTargetUserId) {
+        return;
+    }
+
+    // could include this in the multi-table insert below, but that would cause a lot of complexity in insertFriendRequest, so
+    // rather have the second query here (and in future integrate this with account opening, then deprecate)
+    const insertQuery = `insert into ${userIdTable} (user_id) values %L returning creation_time`;
+    const columnTemplate = '${userId}';
+    const rows = [];
+    if (!foundInitiatedUserId) {
+        rows.push({ userId: initiatedUserId });
+    }
+
+    if (!foundTargetUserId) {
+        rows.push({ userId: targetUserId});
+    }
+
+    const resultOfInsertion = await rdsConnection.insertRecords({ query: insertQuery, columnTemplate, rows });
+    logger('Inserted user Ids: ', resultOfInsertion);
+};
 
 /**
  * This function persists a new friend requests, initialising its request status to PENDING
@@ -28,7 +61,11 @@ const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', 
  * @property {Array} requestedShareItems Specifies what the initiating user wants to share.
  */
 module.exports.insertFriendRequest = async (friendRequest) => {
+    // do this for now
+    await checkForAndInsertUserIds(friendRequest);
+    
     const requestId = uuid();
+    
     friendRequest.requestId = requestId;
     friendRequest.requestStatus = 'PENDING';
 

@@ -14,6 +14,7 @@
         "friendshipTable": "friend_data.core_friend_relationship",
         "friendRequestTable": "friend_data.friend_request",
         "friendLogTable": "friend_data.friend_log",
+        "friendUserIdTable": "friend_data.user_reference_table",
         "profileTable": "UserProfileTable",
         "phoneTable": "UserPhoneTable",
         "emailTable": "UserEmailTable"

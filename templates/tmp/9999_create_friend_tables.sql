@@ -2,7 +2,7 @@ create schema friend_data;
 
 create table if not exists friend_data.user_reference_table (
     user_id uuid not null primary key,
-    account_id text[] not null,
+    account_id text[] default '{}',
     creation_time timestamp with time zone not null default current_timestamp
 );
 
@@ -29,6 +29,7 @@ create table if not exists friend_data.friend_request (
     target_user_id uuid not null references friend_data.user_reference_table (user_id),
     target_contact_details jsonb,
     requested_share_items text[] default '{}',
+    custom_share_message text,
     request_type varchar (100) not null default 'CREATE',
     request_code varchar (100)
 );

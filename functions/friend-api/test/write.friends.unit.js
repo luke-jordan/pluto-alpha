@@ -17,6 +17,7 @@ const expect = chai.expect;
 
 const proxyquire = require('proxyquire').noCallThru();
 
+const simpleInsertStub = sinon.stub();
 const multiTableStub = sinon.stub();
 const multiOpStub = sinon.stub();
 const updateStub = sinon.stub();
@@ -25,6 +26,7 @@ const uuidStub = sinon.stub();
 
 class MockRdsConnection {
     constructor () {
+        this.insertRecords = simpleInsertStub;
         this.selectQuery = queryStub;
         this.updateRecord = updateStub;
         this.largeMultiTableInsert = multiTableStub;
@@ -89,6 +91,9 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             rows: [testLogObject]
         };
 
+        queryStub.resolves([{ 'user_id': testIniatedUserId }]);
+        simpleInsertStub.resolves([{ 'creation_time': moment().format() }]);
+
         uuidStub.onFirstCall().returns(testRequestId);
         uuidStub.onSecondCall().returns(testLogId);
         multiTableStub.resolves([
@@ -109,6 +114,9 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const insertResult = await persistence.insertFriendRequest(testInsertParams);
         expect(insertResult).to.exist;
         expect(insertResult).to.deep.equal({ requestId: testRequestId, logId: testLogId });
+
+        expect(queryStub).to.have.been.calledOnceWithExactly('select user_id from friend_data.user_reference_table where user_id in ($1, $2)', [testIniatedUserId, testTargetUserId]);
+        expect(simpleInsertStub).to.have.been.calledOnce;
         expect(multiTableStub).to.have.been.calledOnceWithExactly([testFriendQueryDef, testLogDef]);
     });
 
