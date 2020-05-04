@@ -21,7 +21,7 @@ const redis = new Redis({
     port: config.get('cache.port'),
     host: config.get('cache.host'),
     retryStrategy: () => `dont retry`,
-    keyPrefix: `${config.get('cache.keyPrefixes.savingsHeat')}::`
+    keyPrefix: `${config.get('cache.keyPrefixes.savingHeat')}::`
 });
 
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
@@ -32,18 +32,18 @@ const invokeLambda = (functionName, payload, sync = true) => ({
     Payload: JSON.stringify(payload)
 });
 
-const invokeSavingsHeatLambda = async (accountIds) => {
-    const savingsHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingsHeat'), { accountIds });
-    logger('Invoke savings heat lambda with arguments: ', savingsHeatLambdaInvoke);
-    const savingsHeatResult = await lambda.invoke(savingsHeatLambdaInvoke).promise();
-    logger('Result of savings heat calculation: ', savingsHeatResult);
-    return extractLambdaBody(savingsHeatResult);
+const invokeSavingHeatLambda = async (accountIds) => {
+    const savingHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingHeat'), { accountIds });
+    logger('Invoke savings heat lambda with arguments: ', savingHeatLambdaInvoke);
+    const savingHeatResult = await lambda.invoke(savingHeatLambdaInvoke).promise();
+    logger('Result of savings heat calculation: ', savingHeatResult);
+    return extractLambdaBody(savingHeatResult);
 };
 
-const fetchSavingsHeatFromCache = async (accountIds) => {
-    const cachedSavingsHeatForAccounts = await redis.mget(...accountIds);
-    logger('Got cached savings heat for accounts:', cachedSavingsHeatForAccounts);
-    return cachedSavingsHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
+const fetchSavingHeatFromCache = async (accountIds) => {
+    const cachedSavingHeatForAccounts = await redis.mget(...accountIds);
+    logger('Got cached savings heat for accounts:', cachedSavingHeatForAccounts);
+    return cachedSavingHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
 };
 
 /**
@@ -52,42 +52,42 @@ const fetchSavingsHeatFromCache = async (accountIds) => {
  * @param {Array} profiles An array of user profiles.
  * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
  */
-const appendSavingsHeatToProfiles = async (profiles, userAccountMap) => {
+const appendSavingHeatToProfiles = async (profiles, userAccountMap) => {
     const accountIds = Object.values(userAccountMap);
     
-    const cachedSavingsHeatForAccounts = await fetchSavingsHeatFromCache(accountIds);
-    logger('Found cached savings heat:', cachedSavingsHeatForAccounts);
+    const cachedSavingHeatForAccounts = await fetchSavingHeatFromCache(accountIds);
+    logger('Found cached savings heat:', cachedSavingHeatForAccounts);
 
-    const cachedAccounts = cachedSavingsHeatForAccounts.map((savingsHeat) => savingsHeat.accountId);
+    const cachedAccounts = cachedSavingHeatForAccounts.map((savingHeat) => savingHeat.accountId);
     const uncachedAccounts = accountIds.filter((accountId) => !cachedAccounts.includes(accountId));
 
     logger('Found uncached accounts:', uncachedAccounts);
     logger('Got cached accounts:', cachedAccounts);
 
-    let savingsHeatFromLambda = [];
+    let savingHeatFromLambda = [];
     if (uncachedAccounts.length > 0) {
-        savingsHeatFromLambda = await invokeSavingsHeatLambda(uncachedAccounts);
+        savingHeatFromLambda = await invokeSavingHeatLambda(uncachedAccounts);
     }
 
-    logger('Got savings heat from lambda:', savingsHeatFromLambda);
+    logger('Got savings heat from lambda:', savingHeatFromLambda);
 
-    const savingsHeatForAccounts = [...savingsHeatFromLambda, ...cachedSavingsHeatForAccounts];
-    logger('Aggregated savings heat from cache and lambda:', savingsHeatForAccounts);
+    const savingHeatForAccounts = [...savingHeatFromLambda, ...cachedSavingHeatForAccounts];
+    logger('Aggregated savings heat from cache and lambda:', savingHeatForAccounts);
 
     /* eslint-disable dot-location */
-    const accountsAndSavingsHeatMap = savingsHeatForAccounts
-        .reduce((obj, savingsHeatObj) => ({ ...obj, [savingsHeatObj.accountId]: savingsHeatObj.savingsHeat }), {});
+    const accountsAndSavingHeatMap = savingHeatForAccounts
+        .reduce((obj, savingHeatObj) => ({ ...obj, [savingHeatObj.accountId]: savingHeatObj.savingHeat }), {});
     /* eslint-enable dot-location */
     
-    const profilesWithSavingsHeat = profiles.map((profile) => {
+    const profilesWithSavingHeat = profiles.map((profile) => {
         const profileAccountId = userAccountMap[profile.systemWideUserId];
-        profile.savingsHeat = Number(accountsAndSavingsHeatMap[profileAccountId]);
+        profile.savingHeat = Number(accountsAndSavingHeatMap[profileAccountId]);
         return profile;
     });
 
-    logger('Got profiles with savings heat:', profilesWithSavingsHeat);
+    logger('Got profiles with savings heat:', profilesWithSavingHeat);
 
-    return profilesWithSavingsHeat;
+    return profilesWithSavingHeat;
 };
 
 /**
@@ -124,9 +124,11 @@ module.exports.obtainFriends = async (event) => {
         logger('Got user accounts from persistence:', userAccountArray);
         const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }), {});
 
-        const profilesWithSavingsHeat = await appendSavingsHeatToProfiles(friendProfiles, userAccountMap);
+        // todo : do not include user ID in what is sent back, but tdo include friendship ID
+        // (probably requires modification to getFriendIdsForUser to return both as well)
+        const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, userAccountMap);
         
-        return opsUtil.wrapResponse(profilesWithSavingsHeat);
+        return opsUtil.wrapResponse(profilesWithSavingHeat);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -270,6 +272,7 @@ module.exports.addFriendshipRequest = async (event) => {
             friendRequest.targetUserId = targetUserForFriendship.systemWideUserId;
         }
     
+        logger('Assembled friend request: ', friendRequest);
         const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
         logger('Result of friend request insertion:', insertionResult);
     

@@ -59,4 +59,4 @@ grant select, insert, update on friend_data.friend_log to friend_api_worker;
 
 grant usage on schema friend_data to save_tx_api_worker;
 
-grant select on friend_data.core_friend_relationship to friend_api_worker;
+grant select on friend_data.core_friend_relationship to save_tx_api_worker;

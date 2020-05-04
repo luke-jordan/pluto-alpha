@@ -214,7 +214,7 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, currency, lastTxTime };
 };
 
-module.exports.sumTotalAmountSaved = async (accountId, currency) => {
+module.exports.sumTotalAmountSaved = async (accountId, currency, unit = DEFAULT_UNIT) => {
     const accountTxTable = config.get('tables.accountTransactions');
 
     const sumQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
@@ -226,13 +226,13 @@ module.exports.sumTotalAmountSaved = async (accountId, currency) => {
     const summedRows = await rdsConnection.selectQuery(sumQuery, params);
     logger('Result of unit query: ', summedRows);
     
-    const totalAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
+    const totalAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, unit);
     logger('For account ID, RDS calculation yields result: ', totalAmountInDefaultUnit);
 
-    return { 'amount': totalAmountInDefaultUnit, 'unit': DEFAULT_UNIT, currency };
+    return { amount: totalAmountInDefaultUnit, unit, currency };
 };
 
-module.exports.sumAmountSavedLastMonth = async (accountId, currency) => {
+module.exports.sumAmountSavedLastMonth = async (accountId, currency, unit = DEFAULT_UNIT) => {
     const accountTxTable = config.get('tables.accountTransactions');
 
     const startTime = moment().startOf('month').subtract(1, 'month');
@@ -241,16 +241,16 @@ module.exports.sumAmountSavedLastMonth = async (accountId, currency) => {
     const sumQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
         `settlement_status = $3 and transaction_type = $4 and creation_time > $5 and creation_time < $6 group by unit`;
 
-    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT', startTime.unix(), endTime.unix()];
+    const params = [accountId, currency, 'SETTLED', 'USER_SAVING_EVENT', startTime.format(), endTime.format()];
     logger('Summing with query: ', sumQuery, ' and params: ', params);
 
     const summedRows = await rdsConnection.selectQuery(sumQuery, params);
     logger('Result of unit query: ', summedRows);
     
-    const monthlyAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, DEFAULT_UNIT);
-    logger('For account ID, RDS calculation yields result: ', monthlyAmountInDefaultUnit);
+    const monthlyAmountInDefaultUnit = opsUtil.sumOverUnits(summedRows, unit);
+    logger('For account ID, ', accountId, ', last months aved calculation yields result: ', monthlyAmountInDefaultUnit);
 
-    return { 'amount': monthlyAmountInDefaultUnit, 'unit': DEFAULT_UNIT, currency };
+    return { amount: monthlyAmountInDefaultUnit, unit, currency };
 };
 
 /**

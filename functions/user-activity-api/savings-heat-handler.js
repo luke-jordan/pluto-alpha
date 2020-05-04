@@ -11,10 +11,10 @@ const Redis = require('ioredis');
 const redis = new Redis({
     port: config.get('cache.port'),
     host: config.get('cache.host'),
-    keyPrefix: `${config.get('cache.keyPrefixes.savingsHeat')}::`
+    keyPrefix: `${config.get('cache.keyPrefixes.savingHeat')}::`
 });
 
-const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.savingsHeat');
+const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.savingHeat');
 
 // Contribution factors used in calculating the savings heat score.
 // AVERAGE_GROWTH multiplies the average growth in the amount a user saves.
@@ -27,18 +27,24 @@ const CONTRIBUTION_FACTORS = {
     'ACTIVE_FRIENDS': 4
 };
 
+const DEFAULT_UNIT = 'HUNDREDTH_CENT';
+
 const calculateGrowthInTotalAmountSaved = async (accountId, activeMonths) => {
     const currency = await persistence.findMostCommonCurrency(accountId);
     logger('Most common currency:', currency);
-    const [totalAmountSaved, amountSavedLastMonth] = await Promise.all([
-        persistence.sumTotalAmountSaved(accountId, currency),
-        persistence.sumAmountSavedLastMonth(accountId, currency)
+    const [totalSavedDict, lastMonthSavedDict] = await Promise.all([
+        persistence.sumTotalAmountSaved(accountId, currency, DEFAULT_UNIT),
+        persistence.sumAmountSavedLastMonth(accountId, currency, DEFAULT_UNIT)
     ]);
 
-    logger(`Active months: ${activeMonths}\nTotal saved: ${totalAmountSaved}\nLast month: ${amountSavedLastMonth}`);
+    const { amount: totalAmountSaved } = totalSavedDict;
+    const { amount: amountSavedLastMonth } = lastMonthSavedDict;
+
+    logger(`Active months: ${activeMonths}, total saved: ${totalAmountSaved}, last month: ${amountSavedLastMonth}`);
     const avgSavedAmountPerMonth = totalAmountSaved / activeMonths;
     logger('Average saved per month:', avgSavedAmountPerMonth);
-    return (amountSavedLastMonth - avgSavedAmountPerMonth) / avgSavedAmountPerMonth;
+    // note : if we allow this to be negative the heat calc will be quite volatile; track if we want to do that
+    return Math.max(0, (amountSavedLastMonth - avgSavedAmountPerMonth) / avgSavedAmountPerMonth);
 };
 
 const calculateAndCacheHeatScore = async (accountId) => {
@@ -52,15 +58,15 @@ const calculateAndCacheHeatScore = async (accountId) => {
         persistence.getAccountOpenedDateForHeatCalc(accountId)
     ]);
 
-    logger(`Total savings: ${totalNumberOfSaves}\nNumber of savings last month: ${numberOfSavesLastMonth}`);
-    logger(`Account opened date: ${accountOpenedDate}\nActive friendships: ${numberOfSavingFriendships}`);
+    logger(`Total savings: ${totalNumberOfSaves}, and number of savings last month: ${numberOfSavesLastMonth}`);
+    logger(`Account opened date: ${accountOpenedDate}, and active friendships: ${numberOfSavingFriendships}`);
 
     const activeMonths = Math.abs(moment(accountOpenedDate).diff(moment().startOf('month'), 'month'));
 
     if (totalNumberOfSaves === 0 || activeMonths === 0) {
-        const savingsHeat = Number(0).toFixed(2);
-        await redis.set(accountId, JSON.stringify({ accountId, savingsHeat }), 'EX', CACHE_TTL_IN_SECONDS);
-        return { accountId, savingsHeat };
+        const savingHeat = Number(0).toFixed(2);
+        await redis.set(accountId, JSON.stringify({ accountId, savingHeat }), 'EX', CACHE_TTL_IN_SECONDS);
+        return { accountId, savingHeat };
     }
 
     const avgNumberOfSavesPerMonth = totalNumberOfSaves / activeMonths;
@@ -74,14 +80,15 @@ const calculateAndCacheHeatScore = async (accountId) => {
         CONTRIBUTION_FACTORS.AVERAGE_GROWTH * avgGrowthInSavedAmount,
         numberOfSavingFriendships / CONTRIBUTION_FACTORS.ACTIVE_FRIENDS
     ];
+    logger('Heat values: (last mth save, avg saves, avg growth, active friends', heatValues);
 
     const heatScore = heatValues.reduce((sum, value) => sum + value, 0);
-    const savingsHeat = Number(heatScore).toFixed(2); // ensures only two decimal places
-    logger('Calculated heat score:', savingsHeat);
+    const savingHeat = Number(heatScore).toFixed(2); // ensures only two decimal places
+    logger('Calculated heat score:', savingHeat);
 
-    await redis.set(accountId, JSON.stringify({ accountId, savingsHeat }), 'EX', CACHE_TTL_IN_SECONDS);
+    await redis.set(accountId, JSON.stringify({ accountId, savingHeat }), 'EX', CACHE_TTL_IN_SECONDS);
 
-    return { accountId, savingsHeat };
+    return { accountId, savingHeat };
 };
 
 /**
@@ -93,7 +100,7 @@ const calculateAndCacheHeatScore = async (accountId) => {
  * @property {string} floatId Optional. If provided the function will calculate and cache the savings heat score for all accounts associated with this float.
  * @property {string} clientId Optional. If provided the function will calculate and cache the savings heat score for all accounts associated with this client.
  */
-module.exports.calculateSavingsHeat = async (event) => {
+module.exports.calculateSavingHeat = async (event) => {
     try {
         const { accountIds, floatId, clientId } = opsUtil.extractParamsFromEvent(event);
 

@@ -99,8 +99,8 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         emailAddress: 'liezi@tao.com'
     });
 
-    const expectedSavingsHeat = 23.71;
-    const expectedProfile = (userId) => ({ ...mockProfile(userId), savingsHeat: expectedSavingsHeat });
+    const expectedSavingHeat = 23.71;
+    const expectedProfile = (userId) => ({ ...mockProfile(userId), savingHeat: expectedSavingHeat });
 
     beforeEach(() => {
         resetStubs();
@@ -116,7 +116,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
     it('Fetches user friends', async () => {
         const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
         const [firstAccId, secondAccId, thirdAccId] = [uuid(), uuid(), uuid()];
-        const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.calcSavingsHeat'), false, { accountIds: [secondAccId, thirdAccId] });
+        const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.calcSavingHeat'), false, { accountIds: [secondAccId, thirdAccId] });
         const testEvent = helper.wrapEvent({}, testSystemId, 'ORDINARY_USER');
 
         getFriendsStub.withArgs(testSystemId).resolves([firstUserId, secondUserId, thirdUserId]);
@@ -128,12 +128,12 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         lamdbaInvokeStub.withArgs(lambdaArgs).returns({
             promise: () => helper.mockLambdaResponse([
-                { accountId: secondAccId, savingsHeat: `${expectedSavingsHeat}` },
-                { accountId: thirdAccId, savingsHeat: `${expectedSavingsHeat}` }
+                { accountId: secondAccId, savingHeat: `${expectedSavingHeat}` },
+                { accountId: thirdAccId, savingHeat: `${expectedSavingHeat}` }
             ])
         });
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
-            JSON.stringify({ accountId: firstAccId, savingsHeat: `${expectedSavingsHeat}` }),
+            JSON.stringify({ accountId: firstAccId, savingHeat: `${expectedSavingHeat}` }),
             null,
             null
         ]);
@@ -161,9 +161,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchAccountStub.withArgs(secondUserId).resolves({ [secondUserId]: secondAccId });
         fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
-            JSON.stringify({ accountId: firstAccId, savingsHeat: `${expectedSavingsHeat}` }),
-            JSON.stringify({ accountId: secondAccId, savingsHeat: `${expectedSavingsHeat}` }),
-            JSON.stringify({ accountId: thirdAccId, savingsHeat: `${expectedSavingsHeat}` })
+            JSON.stringify({ accountId: firstAccId, savingHeat: `${expectedSavingHeat}` }),
+            JSON.stringify({ accountId: secondAccId, savingHeat: `${expectedSavingHeat}` }),
+            JSON.stringify({ accountId: thirdAccId, savingHeat: `${expectedSavingHeat}` })
         ]);
 
         const fetchResult = await handler.obtainFriends(testEvent);
@@ -189,9 +189,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchAccountStub.withArgs(secondUserId).resolves({ [secondUserId]: secondAccId });
         fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
-            JSON.stringify({ accountId: firstAccId, savingsHeat: `${expectedSavingsHeat}` }),
-            JSON.stringify({ accountId: secondAccId, savingsHeat: `${expectedSavingsHeat}` }),
-            JSON.stringify({ accountId: thirdAccId, savingsHeat: `${expectedSavingsHeat}` })
+            JSON.stringify({ accountId: firstAccId, savingHeat: `${expectedSavingHeat}` }),
+            JSON.stringify({ accountId: secondAccId, savingHeat: `${expectedSavingHeat}` }),
+            JSON.stringify({ accountId: thirdAccId, savingHeat: `${expectedSavingHeat}` })
         ]);
         const fetchResult = await handler.obtainFriends(testEvent);
         

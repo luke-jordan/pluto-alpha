@@ -434,7 +434,7 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
     it('Sums total amount saved by user over last month', async () => {
         const selectQuery = `select sum(amount), unit from ${accountTxTable} where account_id = $1 and currency = $2 and ` +
             `settlement_status = $3 and transaction_type = $4 and creation_time > $5 and creation_time < $6 group by unit`;
-        const selectValues = [testAccountId, 'ZAR', 'SETTLED', 'USER_SAVING_EVENT', sinon.match.number, sinon.match.number];
+        const selectValues = [testAccountId, 'ZAR', 'SETTLED', 'USER_SAVING_EVENT', sinon.match.string, sinon.match.string];
 
         queryStub.withArgs(selectQuery, selectValues).resolves([{ 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }]);
         const expectedBalance = testBalance + (100 * testBalanceCents);

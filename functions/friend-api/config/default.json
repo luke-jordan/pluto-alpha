@@ -21,7 +21,7 @@
     },
     "lambdas": {
         "sendOutboundMessages": "outbound_comms_send",
-        "calcSavingsHeat": "savings_heat_fetch",
+        "calcSavingHeat": "user_save_heat_fetch",
         "lookupByContactDetails": "profile_find_by_details"
     },
     "cache": {
@@ -31,7 +31,7 @@
         "keyPrefixes": {
             "profile": "FRIENDS_PROFILE",
             "userId": "FRIENDS_USER_ID",
-            "savingsHeat": "SAVINGS_HEAT"
+            "savingHeat": "SAVINGS_HEAT"
         },
         "ttls": {
             "profile": 25200,

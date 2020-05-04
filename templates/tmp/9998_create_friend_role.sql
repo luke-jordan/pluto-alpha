@@ -7,3 +7,9 @@ BEGIN
   RAISE NOTICE 'not creating role friend_api_worker -- it already exists';
 END
 $$;
+
+-- Necessary for the friend worker to pick up account IDs
+
+grant usage on schema account_data to friend_api_worker;
+
+grant select (account_id, owner_user_id) on account_data.core_account_ledger to friend_api_worker;

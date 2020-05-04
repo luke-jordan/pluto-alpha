@@ -35,14 +35,14 @@
             "profile": "USER_PROFILE",
             "account": "ACCOUNT_DETAILS",
             "clientFloat": "CLIENT_FLOAT",
-            "savingsHeat": "SAVINGS_HEAT"
+            "savingHeat": "SAVING_HEAT"
         },
         "ttls": {
             "withdrawal": 900,
             "profile": 25200,
             "account": 25200,
             "clientFloat": 3600,
-            "savingsHeat": 21600
+            "savingHeat": 21600
         }
     },
     "projection": {
@@ -61,7 +61,7 @@
         "addTxToBalanceSheet": "balance_sheet_acc_update",
         "userBankVerify": "bank_account_verify",
         "sendOutboundMessages": "outbound_comms_send",
-        "calcSavingsHeat": "savings_heat_fetch",
+        "calcSavingHeat": "user_save_heat_fetch",
         "fetchFriendRequests": "friend_requests_fetch",
         "createFriendship": "friendship_create"
     },

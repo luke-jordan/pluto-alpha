@@ -36,7 +36,6 @@ const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
     // could include this in the multi-table insert below, but that would cause a lot of complexity in insertFriendRequest, so
     // rather have the second query here (and in future integrate this with account opening, then deprecate)
     const insertQuery = `insert into ${userIdTable} (user_id) values %L returning creation_time`;
-    const columnTemplate = '${userId}';
     const rows = [];
     if (!foundInitiatedUserId) {
         rows.push({ userId: initiatedUserId });
@@ -46,7 +45,7 @@ const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
         rows.push({ userId: targetUserId});
     }
 
-    const resultOfInsertion = await rdsConnection.insertRecords({ query: insertQuery, columnTemplate, rows });
+    const resultOfInsertion = await rdsConnection.insertRecords(insertQuery, '${userId}', rows);
     logger('Inserted user Ids: ', resultOfInsertion);
 };
 
@@ -165,14 +164,18 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus, shareItems };
     const friendshipKeys = Object.keys(friendshipObject);
 
+    // will need a test of whether friendship existed prior, and if so, just use an update def to swap it to active
     const friendshipInsertDef = {
         query: `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`,
         columnTemplate: extractColumnTemplate(friendshipKeys),
         rows: [friendshipObject]
     };
 
+    // todo : friend request should have a column 'initiated_friendship_id' that refers to the above. It should be a foreign key but
+    // allow for nullable values (for requests that are not accepted). It is not unique (if a friendship goes on-off-on then multiple reqs)
+    // will point to the same friendship
     const updateFriendReqDef = {
-        table: friendshipTable,
+        table: friendReqTable,
         key: { requestId },
         value: { requestStatus: 'ACCEPTED' },
         returnClause: 'updated_time'
@@ -194,7 +197,7 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
 
     const updatedTime = resultOfOperations[0][0]['updated_time'];
     const queryRelationshipId = resultOfOperations[1][0]['relationship_id'];
-    const queryLogId = resultOfOperations[1][1]['log_id'];
+    const queryLogId = resultOfOperations[2][0]['log_id'];
 
     return { updatedTime, relationshipId: queryRelationshipId, logId: queryLogId };
 };

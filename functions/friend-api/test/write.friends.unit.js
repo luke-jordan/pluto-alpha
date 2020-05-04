@@ -134,7 +134,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
 
     it('Inserts friendship properly', async () => {
         const friendReqUpdateDef = {
-            table: friendshipTable,
+            table: friendReqTable,
             key: { requestId: testRequestId },
             value: { requestStatus: 'ACCEPTED' },
             returnClause: 'updated_time'
@@ -170,18 +170,22 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
 
         uuidStub.onFirstCall().returns(testRelationshipId);
         uuidStub.onSecondCall().returns(testLogId);
-        multiOpStub.withArgs([friendReqUpdateDef], [testFriendQueryDef, testLogDef]).resolves([
+        multiOpStub.resolves([
             [{ 'updated_time': testUpdatedTime }],
-            [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }, { 'log_id': testLogId, 'creation_time': testInsertionTime }]
+            [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }], 
+            [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
 
         const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId, ['ACTIVITY_LEVEL']);
         expect(insertResult).to.exist;
-        expect(insertResult).to.deep.equal({
-            updatedTime: testUpdatedTime,
-            relationshipId: testRelationshipId,
-            logId: testLogId
-        });
+        expect(insertResult).to.deep.equal({ updatedTime: testUpdatedTime, relationshipId: testRelationshipId, logId: testLogId });
+
+        // *not* to be a general pattern, but using here as complex set of args and failures should be easily traceable
+        expect(multiOpStub).to.have.been.calledOnce;
+        const multiOpArgs = multiOpStub.getCall(0).args;
+        expect(multiOpArgs[0]).to.deep.equal([friendReqUpdateDef]);
+        expect(multiOpArgs[1][0]).to.deep.equal(testFriendQueryDef);
+        expect(multiOpArgs[1][1]).to.deep.equal(testLogDef);
     });
 
     it('Deactivates friendship', async () => {
