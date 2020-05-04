@@ -61,8 +61,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     const friendRequestTable = config.get('tables.friendRequestTable');
     const accountTable = config.get('tables.accountTable');
     const profileTable = config.get('tables.profileTable');
-    const phoneTable = config.get('tables.phoneTable');
-    const emailTable = config.get('tables.emailTable');
 
     const expectedUserProfile = {
         systemWideUserId: testSystemId,
@@ -156,22 +154,6 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchFriendshipRequestByCode(testRequestCode);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
-    });
-
-    it('Fetches user by email', async () => {
-        const testContactDetails = { contactType: 'EMAIL', contactMethod: 'user@email.com' };
-        fetchStub.withArgs(emailTable, { emailAddress: testContactDetails.contactMethod }).resolves({ systemWideUserId: testTargetUserId });
-        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetails);
-        expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
-    });
-
-    it('Fetches user by phone', async () => {
-        const testContactDetails = { contactType: 'PHONE', contactMethod: '27632390812' };
-        fetchStub.withArgs(phoneTable, { phoneNumber: testContactDetails.contactMethod }).resolves({ systemWideUserId: testTargetUserId });
-        const resultOfFetch = await persistence.fetchUserByContactDetail(testContactDetails);
-        expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal({ systemWideUserId: testTargetUserId });
     });
 
     it('Fetches all active request codes', async () => {

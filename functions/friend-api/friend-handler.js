@@ -212,6 +212,19 @@ const identifyContactType = (contact) => {
     return null;
 };
 
+const checkForUserWithContact = async (contactDetails) => {
+    const lookUpPayload = { phoneOrEmail: contactDetails.contactMethod, countryCode: 'ZAF' };
+    const lookUpInvoke = invokeLambda(config.get('lambdas.lookupByContactDetails'), lookUpPayload);
+    const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
+    const systemIdPayload = JSON.parse(systemWideIdResult['Payload']);
+
+    if (systemIdPayload.statusCode !== 200) {
+        return null;
+    }
+
+    return JSON.parse(systemIdPayload.body);
+};
+
 /**
  * This function persists a new friendship request.
  * @param {Object} event
@@ -248,7 +261,7 @@ module.exports.addFriendshipRequest = async (event) => {
 
         if (!friendRequest.targetUserId) {
             const targetContactDetails = friendRequest.targetContactDetails;
-            const targetUserForFriendship = await persistenceRead.fetchUserByContactDetail(targetContactDetails);
+            const targetUserForFriendship = await checkForUserWithContact(targetContactDetails);
             if (!targetUserForFriendship) {
                 friendRequest.requestCode = await generateRequestCode();
                 return handleUserNotFound(friendRequest);

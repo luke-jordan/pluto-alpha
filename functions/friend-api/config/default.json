@@ -20,7 +20,8 @@
     },
     "lambdas": {
         "sendOutboundMessages": "outbound_comms_send",
-        "calcSavingsHeat": "savings_heat_fetch"
+        "calcSavingsHeat": "savings_heat_fetch",
+        "lookupByContactDetails": "profile_find_by_details"
     },
     "cache": {
         "port": 6739,

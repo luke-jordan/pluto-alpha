@@ -19,7 +19,7 @@ const helper = require('./test-helper');
 const sendSmsStub = sinon.stub();
 const redisGetStub = sinon.stub();
 const sendEmailStub = sinon.stub();
-const fetchUserStub = sinon.stub();
+
 const getFriendsStub = sinon.stub();
 const randomWordStub = sinon.stub();
 const connectUserStub = sinon.stub();
@@ -57,7 +57,6 @@ class MockLambdaClient {
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchFriendRequestsForUser': fetchAllRequestsStub,
-        'fetchUserByContactDetail': fetchUserStub,
         'fetchActiveRequestCodes': fetchActiveCodesStub,
         'fetchFriendshipRequestById': fetchRequestStub,
         'fetchAccountIdForUser': fetchAccountStub,
@@ -85,7 +84,7 @@ const handler = proxyquire('../friend-handler', {
     'random-words': randomWordStub
 });
 
-const resetStubs = () => helper.resetStubs(fetchUserStub, getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub,
+const resetStubs = () => helper.resetStubs(getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub,
     deactivateFriendshipStub, fetchActiveCodesStub, fetchRequestStub, randomWordStub, sendEmailStub, sendSmsStub, connectUserStub,
     fetchAllRequestsStub, ignoreRequestStub, fetchAccountStub, lamdbaInvokeStub, redisGetStub);
 
@@ -263,12 +262,18 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const testEvent = helper.wrapEvent({ targetContactDetails: 'user@email.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
-        fetchUserStub.withArgs(testContactDetails).resolves({ systemWideUserId: testTargetUserId });
+
+        const profileResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testTargetUserId })})};
+        lamdbaInvokeStub.returns({ promise: () => profileResult });
 
         const insertionResult = await handler.addFriendshipRequest(testEvent);
         
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS', requestId: testRequestId }));
+        
+        const expectedProfileCallBody = { phoneOrEmail: 'user@email.com', countryCode: 'ZAF' };
+        const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
     });
 
     it('Handles target user id not found, SMS route', async () => {
@@ -287,10 +292,12 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
         const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
+        
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
         sendSmsStub.withArgs(sendSmsArgs).resolves({ result: 'SUCCESS' });
-        fetchUserStub.withArgs(testContactDetails).resolves();
+        
         fetchActiveCodesStub.withArgs().resolves(['POETRY SHELLS', 'SENSE BANK', 'BEAR CELL']);
         randomWordStub.onFirstCall().returns('BEAR CELL');
         randomWordStub.onSecondCall().returns('CLIMATE LEG');
@@ -305,6 +312,10 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
                 dispatchResult: { result: 'SUCCESS' }
             }
         }));
+
+        const expectedProfileCallBody = { phoneOrEmail: '27632310922', countryCode: 'ZAF' };
+        const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
     });
 
     it('Handles target user id not found, email route', async () => {
@@ -325,10 +336,12 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
         const testEvent = helper.wrapEvent({ targetContactDetails: 'juitsung@yuan.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
+
         insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
         sendEmailStub.withArgs(sendEmailArgs).resolves({ result: 'SUCCESS' });
-        fetchUserStub.withArgs(testContactDetails).resolves();
+
         fetchActiveCodesStub.withArgs().resolves(['DRY SLABS', 'POETRY BEAN', 'COMPASS MAJOR']);
         randomWordStub.returns('ORBIT PAGE');
 
@@ -341,6 +354,9 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
                 dispatchResult: { result: 'SUCCESS' }
             }
         }));
+
+        // details of call handled above
+        expect(lamdbaInvokeStub).to.have.been.calledOnce;
     });
 
     it('Rejects unauthorized requests', async () => {
@@ -348,6 +364,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal({ statusCode: 403 });
         expect(insertFriendRequestStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.not.have.been.called;
     });
 
     it('Fails on invalid parameters', async () => {
@@ -357,6 +374,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(insertFriendRequestStub).to.have.not.been.called;
+        expect(lamdbaInvokeStub).to.not.have.been.called;
     });
 
 });
