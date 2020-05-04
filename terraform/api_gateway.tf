@@ -22,6 +22,9 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.boost_user_process,
   aws_api_gateway_integration.boost_user_list,
   aws_api_gateway_integration.boost_user_changed,
+  aws_api_gateway_integration.user_friend_list,
+  aws_api_gateway_integration.friend_deactivate,
+  aws_api_gateway_integration.friend_request_manage,
   ]
 
   variables = {
@@ -436,31 +439,31 @@ resource "aws_api_gateway_integration" "user_friend_list" {
 
 //////////////// DEACTIVATE A FRIENDSHIP ///////////////////////////////////////////////
 
-resource "aws_api_gateway_resource" "user_friend_deactivate" {
+resource "aws_api_gateway_resource" "friend_deactivate" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   parent_id     = aws_api_gateway_resource.friend_path_root.id
   path_part     = "deactivate"
 }
 
-resource "aws_api_gateway_method" "user_friend_deactivate" {
+resource "aws_api_gateway_method" "friend_deactivate" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  resource_id   = aws_api_gateway_resource.user_friend_deactivate.id
+  resource_id   = aws_api_gateway_resource.friend_deactivate.id
   http_method   = "GET"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
 }
 
-resource "aws_lambda_permission" "user_friend_deactivate" {
+resource "aws_lambda_permission" "friend_deactivate" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.friend_deactivate.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
-resource "aws_api_gateway_integration" "user_friend_deactivate" {
+resource "aws_api_gateway_integration" "friend_deactivate" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  resource_id   = aws_api_gateway_method.user_friend_deactivate.resource_id
-  http_method   = aws_api_gateway_method.user_friend_deactivate.http_method
+  resource_id   = aws_api_gateway_method.friend_deactivate.resource_id
+  http_method   = aws_api_gateway_method.friend_deactivate.http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
@@ -475,31 +478,31 @@ resource "aws_api_gateway_resource" "friend_request_path_root" {
   path_part     = "request"
 }
 
-resource "aws_api_gateway_resource" "user_friend_request_manage" {
+resource "aws_api_gateway_resource" "friend_request_manage" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  parent_id     = aws_api_gateway_resource.friend_request_path_root.api_id
+  parent_id     = aws_api_gateway_resource.friend_request_path_root.id
   path_part     = "{proxy+}" 
 }
 
-resource "aws_api_gateway_method" "user_friend_request_manage" {
+resource "aws_api_gateway_method" "friend_request_manage" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  resource_id   = aws_api_gateway_resource.user_friend_request_manage.id
+  resource_id   = aws_api_gateway_resource.friend_request_manage.id
   http_method   = "ANY"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
 }
 
-resource "aws_lambda_permission" "user_friend_request_manage" {
+resource "aws_lambda_permission" "friend_request_manage" {
   action        = "lambda:InvokeFunction"
   function_name = aws_lambda_function.friend_request_manage.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
-resource "aws_api_gateway_integration" "user_friend_request_manage" {
+resource "aws_api_gateway_integration" "friend_request_manage" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  resource_id   = aws_api_gateway_resource.user_friend_request_manage.resource_id
-  http_method   = aws_api_gateway_method.user_friend_list.http_method
+  resource_id   = aws_api_gateway_resource.friend_request_manage.id
+  http_method   = aws_api_gateway_method.friend_request_manage.http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
