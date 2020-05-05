@@ -6,6 +6,7 @@ const config = require('config');
 const validator = require('validator');
 const randomWord = require('random-words');
 const format = require('string-format');
+const camelcase = require('camelcase');
 
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
@@ -33,11 +34,12 @@ const invokeLambda = (functionName, payload, sync = true) => ({
 });
 
 const invokeSavingHeatLambda = async (accountIds) => {
-    const savingHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingHeat'), { accountIds });
+    const includeLastActivityOfType = config.get('share.userActivities');
+    const savingHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingHeat'), { accountIds, includeLastActivityOfType });
     logger('Invoke savings heat lambda with arguments: ', savingHeatLambdaInvoke);
     const savingHeatResult = await lambda.invoke(savingHeatLambdaInvoke).promise();
     logger('Result of savings heat calculation: ', savingHeatResult);
-    return extractLambdaBody(savingHeatResult);
+    return extractLambdaBody(savingHeatResult).details;
 };
 
 const fetchSavingHeatFromCache = async (accountIds) => {
@@ -46,13 +48,43 @@ const fetchSavingHeatFromCache = async (accountIds) => {
     return cachedSavingHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
 };
 
+const transformProfile = (profile, friendships, userAccountMap, accountAndSavingHeatMap) => {
+    const profileAccountId = userAccountMap[profile.systemWideUserId];
+    const profileSavingHeat = accountAndSavingHeatMap[profileAccountId];
+    Reflect.deleteProperty(profileSavingHeat, 'accountId');
+    logger('Got savings heat for profile:', profileSavingHeat);
+
+    const targetFriendship = friendships.filter((friendship) => friendship.initiatedUserId === profile.systemWideUserId ||
+        friendship.acceptedUserId === profile.systemWideUserId);
+    logger('Got target friendship:', targetFriendship);
+
+    profile.relationshipId = targetFriendship[0].relationshipId;
+    Reflect.deleteProperty(profile, 'systemWideUserId');
+
+    const allowedShareItems = config.get('share.allowedShareItems');
+    const userActivities = config.get('share.userActivities');
+
+    allowedShareItems.forEach((allowedShareItem) => {
+        if (!targetFriendship[0].shareItems.includes(allowedShareItem)) {
+            userActivities.forEach((activity) => {
+                if (profileSavingHeat[activity]) {
+                    Reflect.deleteProperty(profileSavingHeat[activity], camelcase(allowedShareItem));
+                }
+            });
+        }
+    });
+    
+    profile.shareItems = profileSavingHeat;
+    return profile;
+};
+
 /**
  * This function appends a savings heat score to each profile. The savings heat is either fetched from cache or
  * calculated by the savings heat lambda.
  * @param {Array} profiles An array of user profiles.
  * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
  */
-const appendSavingHeatToProfiles = async (profiles, userAccountMap) => {
+const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendships) => {
     const accountIds = Object.values(userAccountMap);
     
     const cachedSavingHeatForAccounts = await fetchSavingHeatFromCache(accountIds);
@@ -74,21 +106,15 @@ const appendSavingHeatToProfiles = async (profiles, userAccountMap) => {
     const savingHeatForAccounts = [...savingHeatFromLambda, ...cachedSavingHeatForAccounts];
     logger('Aggregated savings heat from cache and lambda:', savingHeatForAccounts);
 
-    /* eslint-disable dot-location */
-    const accountsAndSavingHeatMap = savingHeatForAccounts
-        .reduce((obj, savingHeatObj) => ({ ...obj, [savingHeatObj.accountId]: savingHeatObj.savingHeat }), {});
-    /* eslint-enable dot-location */
-    
-    const profilesWithSavingHeat = profiles.map((profile) => {
-        const profileAccountId = userAccountMap[profile.systemWideUserId];
-        profile.savingHeat = Number(accountsAndSavingHeatMap[profileAccountId]);
-        return profile;
-    });
+    const accountAndSavingHeatMap = savingHeatForAccounts.reduce((obj, savingHeat) => ({ ...obj, [savingHeat.accountId]: savingHeat }), {});
+
+    const profilesWithSavingHeat = profiles.map((profile) => transformProfile(profile, friendships, userAccountMap, accountAndSavingHeatMap));
 
     logger('Got profiles with savings heat:', profilesWithSavingHeat);
 
     return profilesWithSavingHeat;
 };
+
 
 /**
  * This functions accepts a users system id and returns the user's friends.
@@ -110,11 +136,14 @@ module.exports.obtainFriends = async (event) => {
             systemWideUserId = userDetails.systemWideUserId;
         }
     
-        const friendUserIds = await persistenceRead.getFriendIdsForUser(systemWideUserId);
-        logger('Got friend system ids:', friendUserIds);
-        if (!friendUserIds || friendUserIds.length === 0) {
+        const friendships = await persistenceRead.fetchActiveSavingFriendsForUser(systemWideUserId);
+        logger('Got user friendships:', friendships);
+        if (!friendships || friendships.length === 0) {
             return opsUtil.wrapResponse([]);
         }
+
+        const friendUserIds = friendships.map((friendship) => friendship.initiatedUserId || friendship.acceptedUserId);
+        logger('Got user ids:', friendUserIds);
     
         const profileRequests = friendUserIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
         const friendProfiles = await Promise.all(profileRequests);
@@ -126,7 +155,7 @@ module.exports.obtainFriends = async (event) => {
 
         // todo : do not include user ID in what is sent back, but tdo include friendship ID
         // (probably requires modification to getFriendIdsForUser to return both as well)
-        const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, userAccountMap);
+        const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, userAccountMap, friendships);
         
         return opsUtil.wrapResponse(profilesWithSavingHeat);
     } catch (err) {
@@ -164,6 +193,8 @@ module.exports.deactivateFriendship = async (event) => {
 };
 
 const handleUserNotFound = async (friendRequest) => {
+    const customerMessage = friendRequest.customerMessage ? friendRequest.customerMessage : null;
+    friendRequest.customerMessage = customerMessage ? String(customerMessage.length) : 0;
     const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
     logger('Persisting friend request resulted in:', insertionResult);
 
@@ -175,17 +206,26 @@ const handleUserNotFound = async (friendRequest) => {
     let dispatchResult = null;
 
     if (contactType === 'PHONE') {
-        const dispatchMsg = format(config.get('sms.friendRequest.template'), initiatedUserName);
+        const dispatchMsg = customerMessage
+            ? customerMessage
+            : format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
+        
         dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
     }
 
     if (contactType === 'EMAIL') {
+        const bodyTemplateKey = customerMessage
+            ? config.get('templates.email.custom.templateKey')
+            : config.get('templates.email.default.templateKey');
+
+        const templateVariables = customerMessage ? { customerMessage } : { initiatedUserName };
+
         dispatchResult = await publisher.sendSystemEmail({
-            subject: config.get('email.friendRequest.subject'),
+            subject: config.get('templates.email.default.subject'),
             toList: [contactMethod],
-            bodyTemplateKey: config.get('email.friendRequest.templateKey'),
-            templateVariables: { initiatedUserName }
+            bodyTemplateKey,
+            templateVariables
         });
 
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
@@ -259,6 +299,13 @@ module.exports.addFriendshipRequest = async (event) => {
             }
 
             friendRequest.targetContactDetails = { contactType, contactMethod };
+        }
+
+        if (friendRequest.customerMessage) {
+            const blacklist = new RegExp(config.get('templates.blacklist'), 'u');
+            if (blacklist.test(friendRequest.customerMessage)) {
+                throw new Error(`Error: Invalid customer message`);
+            }
         }
 
         if (!friendRequest.targetUserId) {

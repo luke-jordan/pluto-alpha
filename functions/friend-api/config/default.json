@@ -38,15 +38,26 @@
             "userId": 25200
         }
     },
-    "email": {
-        "friendRequest": {
-            "subject": "Jupiter Saving Buddies",
-            "templateKey": "emails/friendRequestEmail.html"
-        }
+    "templates": {
+        "email": {
+            "default": {
+                "subject": "Jupiter Saving Buddies",
+                "templateKey": "emails/friendRequestEmail.html"
+            },
+            "custom": {
+                "subject": "Jupiter Saving Buddies",
+                "templateKey": "emails/customFriendRequestEmail.html"
+            }
+        },
+        "sms": {
+            "friendRequest": {
+                "template": "Greetings. {} has invited you to save some lettuce with them. All things are better done together."
+            }
+        },
+        "blacklist": "\\b(password|pwd)"
     },
-    "sms": {
-        "friendRequest": {
-            "template": "Greetings. {} has invited you to save some lettuce with them. All things are better done together."
-        }
+    "share": {
+        "allowedShareItems": ["LAST_ACTIVITY_DATE", "LAST_ACTIVITY_AMOUNT"],
+        "userActivities": ["USER_SAVING_EVENT", "WITHDRAWAL", "BOOST_REDEMPTION", "CAPITALIZATION"]
     }
 }

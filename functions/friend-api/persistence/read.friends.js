@@ -110,24 +110,24 @@ module.exports.fetchUserProfile = async (params) => {
  * This function accepts a user id and returns the user ids of the users friends.
  * @param {object} systemWideUserId The user's ID
  */
-module.exports.getFriendIdsForUser = async (systemWideUserId) => {
+module.exports.fetchActiveSavingFriendsForUser = async (systemWideUserId) => {
     const friendshipTable = config.get('tables.friendshipTable');
     
     // we are checking both sides at once here (we can optimize this in time, but it will be very quick, esp vs rest of this process)
 
-    const acceptedQuery = `select accepted_user_id from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
-    const initiatedQuery = `select initiated_user_id from ${friendshipTable} where accepted_user_id = $1 and relationship_status = $2`;
+    const acceptedQuery = `select relationship_id, accepted_user_id, share_items from ${friendshipTable} where initiated_user_id = $1 and relationship_status = $2`;
+    const initiatedQuery = `select relationship_id, initiated_user_id, share_items from ${friendshipTable} where accepted_user_id = $1 and relationship_status = $2`;
     
     const [acceptedResult, initiatedResult] = await Promise.all([
         rdsConnection.selectQuery(acceptedQuery, [systemWideUserId, 'ACTIVE']),
         rdsConnection.selectQuery(initiatedQuery, [systemWideUserId, 'ACTIVE'])
     ]);
 
-    const acceptedIds = acceptedResult.map((row) => row['accepted_user_id']);
-    const initiatedIds = initiatedResult.map((row) => row['initiated_user_id']);
+    const acceptedFriends = acceptedResult.map((row) => camelCaseKeys(row));
+    const initiatedFriends = initiatedResult.map((row) => camelCaseKeys(row));
 
     // unique constraint on table means do not have to worry about duplicates
-    const fetchedUserIds = [...acceptedIds, ...initiatedIds];
+    const fetchedUserIds = [...acceptedFriends, ...initiatedFriends];
 
     logger('Retrieved user ids for friends:', fetchedUserIds);
     

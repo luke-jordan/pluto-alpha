@@ -91,6 +91,39 @@ const calculateAndCacheHeatScore = async (accountId) => {
     return { accountId, savingHeat };
 };
 
+const findLastActivitiesOfType = (txType, txHistory) => {
+    const transactions = txHistory.filter((tx) => tx.transactionType === txType);
+    if (transactions.length === 0) {
+        return null;
+    }
+
+    const txDates = transactions.map((tx) => moment(tx.creationTime).valueOf());
+    const latestActivity = transactions.filter((tx) => moment(tx.creationTime).valueOf() === Math.max(txDates))[0];
+
+    return {
+        lastActivityDate: latestActivity.creationTime,
+        lastActivityAmount: {
+            amount: latestActivity.amount,
+            currency: latestActivity.currency,
+            unit: latestActivity.unit
+        }
+    };
+};
+
+const appendLastActivityToSavingHeat = async (savingHeat, activitiesToInclude) => {
+    const accountId = savingHeat.accountId;
+    const txHistory = await persistence.fetchTransactionsForHistory(accountId);
+
+    activitiesToInclude.forEach((activity) => {
+        const latestActivity = findLastActivitiesOfType(activity, txHistory);
+        if (latestActivity) {
+            savingHeat[activity] = latestActivity;
+        }
+    });
+
+    return savingHeat;
+};
+
 /**
  * This function calculates and caches a user's saving heat score. The score is based on their savings activity as well
  * as other factors such as number of saving buddies, etc. If an empty object is recieved, the function will calculate
@@ -102,7 +135,7 @@ const calculateAndCacheHeatScore = async (accountId) => {
  */
 module.exports.calculateSavingHeat = async (event) => {
     try {
-        const { accountIds, floatId, clientId } = opsUtil.extractParamsFromEvent(event);
+        const { accountIds, floatId, clientId, includeLastActivityOfType } = opsUtil.extractParamsFromEvent(event);
 
         let accountIdsForCalc = [];
         if (!accountIds && !floatId && !clientId) {
@@ -126,6 +159,14 @@ module.exports.calculateSavingHeat = async (event) => {
         const heatCalculations = accountIdsForCalc.map((account) => calculateAndCacheHeatScore(account));
         const resultOfCalculations = await Promise.all(heatCalculations);
         logger('Result of heat calculations:', resultOfCalculations);
+
+        if (Array.isArray(includeLastActivityOfType) && includeLastActivityOfType.length > 0) {
+            const activityPromises = resultOfCalculations.map((result) => appendLastActivityToSavingHeat(result, includeLastActivityOfType));
+            const savingHeatWithLastActivity = await Promise.all(activityPromises);
+            logger('Got savings heat with last activities:', savingHeatWithLastActivity);
+
+            return { result: 'SUCCESS', details: savingHeatWithLastActivity };
+        }
 
         return { result: 'SUCCESS', details: resultOfCalculations };
 
