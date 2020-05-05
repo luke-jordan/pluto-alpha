@@ -1,6 +1,6 @@
 variable "account_create_lambda_function_name" {
   default = "account_create"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "account_create" {

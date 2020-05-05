@@ -601,7 +601,7 @@ describe('*** UNIT EMAIL MESSAGE DISPATCH ***', () => {
         expect(result).to.exist;
         expect(result).to.deep.equal(expectedResult);
 
-        expect(getPendingOutboundMessagesStub).have.been.calledOnceWithExactly('EMAIL');
+        expect(getPendingOutboundMessagesStub).have.been.calledOnceWithExactly('EMAIL', 20);
         expect(lamdbaInvokeStub).to.have.not.been.called;
         expect(assembleMessageStub).to.have.not.been.called;
         expect(publishUserEventStub).to.have.not.been.called;
@@ -693,7 +693,7 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
 
         expect(getPendingOutboundMessagesStub).have.been.calledTwice;
         expect(getPendingOutboundMessagesStub).have.been.calledWith('PUSH');
-        expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL');
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL', 20); // lower limit here
 
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENDING');
         expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENT');

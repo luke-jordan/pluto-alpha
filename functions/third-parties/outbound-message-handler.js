@@ -94,6 +94,9 @@ const dispatchSingleEmail = async (msg, sandbox, retryStatus) => {
         logger('API result: ', JSON.stringify(result));
         return { statusCode: 200 };
     } catch (error) {
+        // interim, so we can see how many failures we get
+        logger('FATAL_ERROR: ', error);
+
         if (!retryStatus) {
             // must be first retry, so set it and return
             const initialTime = config.get('retry.initialPeriod');

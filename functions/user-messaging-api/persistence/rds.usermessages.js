@@ -12,6 +12,8 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 const userMessageTable = config.get('tables.userMessagesTable');
 
+const DEFAULT_BATCH_SIZE = 50;
+
 // helper for a common pattern
 const executeQueryAndGetIds = async (query, values, idColumn = 'destination_user_id') => {
     const rows = await rdsConnection.selectQuery(query, values);
@@ -212,10 +214,10 @@ module.exports.fetchUserHistoricalMessages = async (destinationUserId, messageTy
     return result.map((msg) => transformMsg(msg, false));
 };
 
-module.exports.getPendingOutboundMessages = async (messageType) => {
+module.exports.getPendingOutboundMessages = async (messageType, batchSize = DEFAULT_BATCH_SIZE) => {
     const query = `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
-        `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2`;
-    const values = ['READY_FOR_SENDING', messageType];
+        `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2 order by updated_time limit $3`;
+    const values = ['READY_FOR_SENDING', messageType, batchSize];
     const resultOfQuery = await rdsConnection.selectQuery(query, values);
     return resultOfQuery.map((msg) => transformMsg(msg));
 };

@@ -70,6 +70,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "boost_admin_list" {
   name = "/aws/lambda/${var.boost_admin_list_lambda_function_name}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"

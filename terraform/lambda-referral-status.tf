@@ -61,6 +61,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "referral_status" {
   name = "/aws/lambda/${var.referral_status_lambda_function_name}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"

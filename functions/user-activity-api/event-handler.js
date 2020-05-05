@@ -276,7 +276,7 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails) => {
         subject: 'Jupiter withdrawal cancelled', 
         htmlBody, textBody
     });
-    const emailResult = await publisher.sendEmail(emailParams);
+    const emailResult = await publisher.sendSystemEmail(emailParams);
     logger('Result of sending email: ', emailResult);
 };
 
@@ -377,6 +377,28 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
     }
 };
 
+// eslint-disable-next-line no-unused-vars
+const acceptPendingFriendRequests = async (systemWideUserId) => {
+    const pendingFriendsInvocation = invokeLambda(config.get('lambdas.fetchFriendRequests'), { systemWideUserId });
+    logger('Lambda args:', pendingFriendsInvocation);
+    const pendingFriendsResult = await lambda.invoke(pendingFriendsInvocation).promise();
+    logger('Result from lambda:', pendingFriendsResult);
+
+    const pendingFriendsForUser = extractLambdaBody(pendingFriendsResult);
+    logger('Pending friends requests for user:', pendingFriendsForUser);
+
+    if (pendingFriendsForUser.length === 0) {
+        return 'NO_PENDING_FRIENDSHIP_REQUESTS_FOUND';
+    }
+
+    const createFriendshipInvocations = pendingFriendsForUser.map((request) => invokeLambda(config.get('lambdas.createFriendship'), { requestId: request.requestId }));
+
+    logger('Created invocations:', createFriendshipInvocations);
+    const creationResults = await Promise.all(createFriendshipInvocations.map((invocation) => lambda.invoke(invocation).promise()));
+    logger('Creatiion results:', creationResults);
+
+    return creationResults.map((result) => extractLambdaBody(result));
+};
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
@@ -400,6 +422,8 @@ const handleAccountOpenedEvent = async (eventBody) => {
     const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
     logger(`Result of user account update: ${accountUpdateResult}`);
 
+    // const friendshipCreationResult = await acceptPendingFriendRequests(userProfile.systemWideUserId);
+    // logger('Creating user friendships resulted in:', friendshipCreationResult);
     
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));

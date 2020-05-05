@@ -84,6 +84,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "balance_fetch" {
   name = "/aws/lambda/${var.balance_fetch_function_name}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"
