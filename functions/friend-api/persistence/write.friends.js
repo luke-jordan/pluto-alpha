@@ -177,7 +177,7 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const updateFriendReqDef = {
         table: friendReqTable,
         key: { requestId },
-        value: { requestStatus: 'ACCEPTED' },
+        value: { requestStatus: 'ACCEPTED', initiatedFriendshipId: relationshipId },
         returnClause: 'updated_time'
     };
 

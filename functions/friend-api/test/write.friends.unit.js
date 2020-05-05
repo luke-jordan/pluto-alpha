@@ -136,7 +136,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const friendReqUpdateDef = {
             table: friendReqTable,
             key: { requestId: testRequestId },
-            value: { requestStatus: 'ACCEPTED' },
+            value: { requestStatus: 'ACCEPTED', initiatedFriendshipId: testRelationshipId },
             returnClause: 'updated_time'
         };
 

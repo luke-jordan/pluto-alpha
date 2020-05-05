@@ -176,14 +176,24 @@ module.exports.fetchActiveRequestCodes = async () => {
 /**
  * This function fetches a users pending friend requests, i.e. requests the user has not yet accepted or ignored
  */
-module.exports.fetchFriendRequestsForUser = async (targetUserId) => {
+module.exports.fetchFriendRequestsForUser = async (systemWideUserId) => {
     const friendReqTable = config.get('tables.friendRequestTable');
-    const selectQuery = `select * from ${friendReqTable} where target_user_id = $1 and request_status = $2`;
-    const fetchResult = await rdsConnection.selectQuery(selectQuery, [targetUserId, 'PENDING']);
-    logger('Found requests for user:', fetchResult);
+    const receivedQuery = `select * from ${friendReqTable} where target_user_id = $1 and request_status = $2`;
+    const initiatedQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and request_status = $2`;
 
-    return Array.isArray(fetchResult) && fetchResult.length > 0 
-        ? fetchResult.map((result) => camelCaseKeys(result)) : [];
+    const [receivedResult, initiatedResult] = await Promise.all([
+        rdsConnection.selectQuery(receivedQuery, [systemWideUserId, 'PENDING']),
+        rdsConnection.selectQuery(initiatedQuery, [systemWideUserId, 'PENDING'])
+    ]);
+
+    const receivedRequests = receivedResult.map((row) => camelCaseKeys(row));
+    const initiatedRequests = initiatedResult.map((row) => camelCaseKeys(row));
+
+    const friendRequests = [...receivedRequests, ...initiatedRequests];
+
+    logger('Found pending requests for user:', friendRequests);
+
+    return friendRequests;
 };
 
 /**

@@ -361,14 +361,38 @@ module.exports.connectFriendshipRequest = async (event) => {
     }
 };
 
-const appendUserNameToRequest = async (friendRequest) => {
-    const systemWideUserId = friendRequest.initiatedUserId;
-    const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId });
-    friendRequest.initiatedUserName = userProfile.calledName
-        ? userProfile.calledName
-        : userProfile.firstName;
+const appendUserNameToRequest = async (userId, friendRequest) => {
+    const type = friendRequest.targetUserId === userId ? 'RECIEVED' : 'INITIATED';
+    const friendUserId = type === 'INITIATED' 
+        ? friendRequest.targetUserId
+        : friendRequest.initiatedUserId;
 
-    return friendRequest;
+    const profile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendUserId });
+    logger('Got friend profile:', profile);
+
+    const transformedResult = {
+        requestId: friendRequest.requestId,
+        requestCode: friendRequest.requestCode,
+        requestedShareItems: friendRequest.requestedShareItems,
+        creationTime: friendRequest.creationTime,
+        personalName: profile.personalName,
+        familyName: profile.familyName,
+        calledName: profile.calledName ? profile.calledName : profile.personalName
+    };
+
+    if (type === 'INITIATED') {
+        if (friendRequest.targetContactDetails) {
+            transformedResult.contactMethod = friendRequest.targetContactDetails.contactMethod;
+        }
+    }
+
+    if (friendRequest.customShareMessage) {
+        transformedResult.customShareMessage = friendRequest.customShareMessage;
+    }
+
+    logger('Transformed friend request:', transformedResult);
+
+    return transformedResult;
 };
 
 /**
@@ -390,11 +414,11 @@ module.exports.findFriendRequestsForUser = async (event) => {
         const friendRequestsForUser = await persistenceRead.fetchFriendRequestsForUser(systemWideUserId);
         logger('Got requests:', friendRequestsForUser);
         if (friendRequestsForUser.length === 0) {
-            return opsUtil.wrapResponse(friendRequestsForUser); 
+            return opsUtil.wrapResponse([]); 
         }
 
         // for each request append the user name of the initiating user
-        const appendUserNames = friendRequestsForUser.map((request) => appendUserNameToRequest(request));
+        const appendUserNames = friendRequestsForUser.map((request) => appendUserNameToRequest(systemWideUserId, request));
         const transformedRequests = await Promise.all(appendUserNames);
         logger('Transformed requests:', transformedRequests);
 

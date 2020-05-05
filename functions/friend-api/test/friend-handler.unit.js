@@ -446,6 +446,16 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
     });
 
+    it('Throws on error on potential phishing in customer message', async () => {
+        const customerMessage = 'Hey potential victim. Give me your password. Everything will be fine.';
+        const expectedResult = { message: 'Error: Invalid customer message' };
+        const testEvent = helper.wrapEvent({ targetContactDetails: '27994593458', customerMessage }, testInitiatedUserId, 'ORDINARY_USER');
+        const phishingResult = await handler.addFriendshipRequest(testEvent);
+        expect(phishingResult).to.exist;
+        expect(phishingResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
+        expect(insertFriendRequestStub).to.have.not.been.called;
+    });
+
     it('Handles target user id not found, email route', async () => {
         const requestedShareItems = ['BALANCE', 'ACTIVITY_COUNT'];
         const testContactDetails = { contactType: 'EMAIL', contactMethod: 'juitsung@yuan.com' };
@@ -582,7 +592,15 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
         emailAddress: 'yingzheng@qin.com'
     };
 
-    const expectedFriendRequest = { ...mockFriendRequest, initiatedUserName: 'Ying Zheng' };
+    const expectedFriendRequest = { 
+        requestId: testRequestId,
+        requestCode: 'DARK SCIENCE',
+        requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
+        creationTime: testCreationTime,
+        personalName: 'Qin Shi',
+        familyName: 'Huang',
+        calledName: 'Ying Zheng'
+    };
 
     beforeEach(() => {
         resetStubs();

@@ -25,6 +25,7 @@ create table if not exists friend_data.friend_request (
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
     request_status varchar (100) not null default 'PENDING',
+    initiated_friendship_id uuid references friend_data.core_friend_relationship (relationship_id),
     initiated_user_id uuid not null references friend_data.user_reference_table (user_id),
     target_user_id uuid not null references friend_data.user_reference_table (user_id),
     target_contact_details jsonb,

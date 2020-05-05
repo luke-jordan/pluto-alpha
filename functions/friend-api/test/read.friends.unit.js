@@ -218,13 +218,18 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
             requestCode: 'SPOOKY ACTION'
         };
 
-        const selectQuery = `select * from ${friendRequestTable} where target_user_id = $1 and request_status = $2`;
+        const receivedQuery = `select * from ${friendRequestTable} where target_user_id = $1 and request_status = $2`;
+        const initiatedQuery = `select * from ${friendRequestTable} where initiated_user_id = $1 and request_status = $2`;
 
-        queryStub.withArgs(selectQuery, [testTargetUserId, 'PENDING']).resolves([friendRequestFromRds]);
+        queryStub.withArgs(receivedQuery, [testTargetUserId, 'PENDING']).resolves([friendRequestFromRds]);
+        queryStub.withArgs(initiatedQuery, [testTargetUserId, 'PENDING']).resolves([friendRequestFromRds]);
 
         const resultOfFetch = await persistence.fetchFriendRequestsForUser(testTargetUserId);
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([expectedFriendRequest]);
+        expect(resultOfFetch).to.deep.equal([expectedFriendRequest, expectedFriendRequest]);
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(receivedQuery, [testTargetUserId, 'PENDING']);
+        expect(queryStub).to.have.been.calledWithExactly(initiatedQuery, [testTargetUserId, 'PENDING']);
     });
 
     it('Fetches account id for user', async () => {

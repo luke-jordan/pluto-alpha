@@ -301,6 +301,19 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
     it('Includes last acitvity details if requested', async () => {
         const expectedScore = '19.77';
         const testAccountOpenedDate = moment().subtract(5, 'months').format(); // NB
+        const expectedSavingHeatObject = {
+            accountId: testAccountId,
+            savingHeat: expectedScore,
+            USER_SAVING_EVENT: {
+                lastActivityDate: testActivityDate,
+                lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+            },
+            BOOST_REDEMPTION: {
+                lastActivityDate: testActivityDate,
+                lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+            }
+        };
+
         // In this case the user has no previous capitalization events.
         const testEvent = { accountIds: [testAccountId], includeLastActivityOfType: ['USER_SAVING_EVENT', 'BOOST_REDEMPTION', 'CAPITALIZATION'] }; // NB
 
@@ -319,31 +332,10 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
         const resultOfCalc = await handler.calculateSavingHeat(testEvent);
 
         expect(resultOfCalc).to.exist;
-        expect(resultOfCalc).to.deep.equal({
-            result: 'SUCCESS',
-            details: [
-                {
-                    accountId: testAccountId,
-                    savingHeat: expectedScore,
-                    USER_SAVING_EVENT: {
-                        lastActivityDate: testActivityDate,
-                        lastActivityAmount: {
-                            amount: '100',
-                            currency: 'ZAR',
-                            unit: 'HUNDREDTH_CENT'
-                        }
-                    },
-                    BOOST_REDEMPTION: {
-                        lastActivityDate: testActivityDate,
-                        lastActivityAmount: {
-                            amount: '100',
-                            currency: 'ZAR',
-                            unit: 'HUNDREDTH_CENT'
-                        }
-                    }
-                }
-            ]
-        });
+        expect(resultOfCalc).to.deep.equal({ result: 'SUCCESS', details: [expectedSavingHeatObject] });
+
+        const cachePayload = JSON.stringify(expectedSavingHeatObject);
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testAccountId, cachePayload, 'EX', CACHE_TTL_IN_SECONDS);
     });
 
     it('Catches thrown errors', async () => {
