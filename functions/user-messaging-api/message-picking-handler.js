@@ -39,7 +39,7 @@ const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'cr
 const getSubParamOrDefault = (paramSplit, defaultValue) => (paramSplit.length > 1 ? paramSplit[1] : defaultValue);
 
 const formatAmountResult = (amountResult, desiredDigits = 0) => {
-    logger('Formatting amount result: ', amountResult);
+    // logger('Formatting amount result: ', amountResult);
     const wholeCurrencyAmount = amountResult.amount / UNIT_DIVISORS[amountResult.unit];
 
     // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
@@ -95,7 +95,7 @@ const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId, desir
         Payload: JSON.stringify({ aggregates: [aggregateOperation], systemWideUserId })
     };
     const resultOfInvoke = await lambda.invoke(invocation).promise();
-    logger('Aggregate response: ', resultOfInvoke);
+    // logger('Aggregate response: ', resultOfInvoke);
     const resultBody = JSON.parse(resultOfInvoke['Payload']);
     return formatAmountResult(resultBody.results[0], desiredDigits);
 };
@@ -103,7 +103,7 @@ const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId, desir
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
     const paramSplit = param.split('::');
     const paramName = paramSplit[0];
-    logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
+    // logger('Params split: ', paramSplit, ' and dominant: ', paramName, ' for user ID: ', destinationUserId);
     if (STANDARD_PARAMS.indexOf(paramName) < 0) {
         return paramName; // redundant and unreachable but useful for robustness
     } else if (paramName === 'user_first_name') {
@@ -145,7 +145,7 @@ const fillInTemplate = async (template, destinationUserId) => {
     }
 
     const replacedString = template.replace(paramRegex, '%s');
-    logger('String template looks like: ', replacedString);
+    // logger('String template looks like: ', replacedString);
     
     logger('Fetching user profile for ID: ', destinationUserId);
     const userProfile = await dynamo.fetchSingleRow(userProfileTable, { systemWideUserId: destinationUserId }, PROFILE_COLS);

@@ -47,7 +47,7 @@ module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { ke
         params.ProjectionExpression = soughtAttributes.map((attr) => decamelize(attr, '_')).join(', ');
     }
 
-    logger('Passing parameters to docClient: ', params);
+    // logger('Passing parameters to docClient: ', params);
 
     try {
         const ddbResult = await docC.get(params).promise();

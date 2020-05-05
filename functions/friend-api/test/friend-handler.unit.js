@@ -166,8 +166,10 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
     it('Fetches user friends', async () => {
         const shareItems = ['LAST_ACTIVITY_AMOUNT'];
+
         const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
         const includeLastActivityOfType = config.get('share.userActivities');
+        
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.calcSavingHeat'), false, { accountIds: [secondAccId, thirdAccId], includeLastActivityOfType });
         const testEvent = helper.wrapEvent({}, testSystemId, 'ORDINARY_USER');
 
@@ -177,7 +179,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchAccountStub.withArgs(firstUserId).resolves({ [firstUserId]: firstAccId });
         fetchAccountStub.withArgs(secondUserId).resolves({ [secondUserId]: secondAccId });
         fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
-        lamdbaInvokeStub.withArgs(lambdaArgs).returns({ promise: () => helper.mockLambdaResponse(mockResponseFromLambda) });
+        
+        lamdbaInvokeStub.withArgs(lambdaArgs).returns({ promise: () => ({ Payload: JSON.stringify(mockResponseFromLambda) }) });
+        
         getFriendsStub.withArgs(testSystemId).resolves([
             mockFriendship(firstUserId, shareItems),
             mockFriendship(secondUserId, shareItems),
@@ -231,9 +235,11 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchProfileStub.withArgs({ systemWideUserId: firstUserId }).resolves(mockProfile(firstUserId));
         fetchProfileStub.withArgs({ systemWideUserId: secondUserId }).resolves(mockProfile(secondUserId));
         fetchProfileStub.withArgs({ systemWideUserId: thirdUserId }).resolves(mockProfile(thirdUserId));
+        
         fetchAccountStub.withArgs(firstUserId).resolves({ [firstUserId]: firstAccId });
         fetchAccountStub.withArgs(secondUserId).resolves({ [secondUserId]: secondAccId });
         fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
+
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
             JSON.stringify(mockResponseFromCache(firstAccId)),
             JSON.stringify(mockResponseFromCache(secondAccId)),
@@ -593,6 +599,7 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
     };
 
     const expectedFriendRequest = { 
+        type: 'RECEIVED',
         requestId: testRequestId,
         requestCode: 'DARK SCIENCE',
         requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
