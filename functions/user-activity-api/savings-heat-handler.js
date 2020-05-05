@@ -38,6 +38,10 @@ const findLastActivitiesOfType = (txType, txHistory) => {
     const txDates = transactions.map((tx) => moment(tx.creationTime).valueOf());
     const latestActivity = transactions.filter((tx) => moment(tx.creationTime).valueOf() === Math.max(txDates))[0];
 
+    if (!latestActivity) {
+        return null;
+    }
+
     return {
         lastActivityDate: latestActivity.creationTime,
         lastActivityAmount: {

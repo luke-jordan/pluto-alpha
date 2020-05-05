@@ -102,6 +102,12 @@ resource "aws_iam_role_policy_attachment" "friend_request_manage_profile_invoke_
   policy_arn = var.user_profile_lookup_by_detail_policy[terraform.workspace]
 }
 
+// caching goes through here, so
+resource "aws_iam_role_policy_attachment" "friend_request_profile_table_read_policy" {
+  role = aws_iam_role.friend_request_manage_role.name
+  policy_arn = var.user_profile_table_read_policy_arn[terraform.workspace]
+}
+
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_friend_request_manage" {
