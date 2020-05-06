@@ -127,11 +127,11 @@ module.exports.fetchActiveSavingFriendsForUser = async (systemWideUserId) => {
     const initiatedFriends = initiatedResult.map((row) => camelCaseKeys(row));
 
     // unique constraint on table means do not have to worry about duplicates
-    const fetchedUserIds = [...acceptedFriends, ...initiatedFriends];
+    const fetchedActiveFriends = [...acceptedFriends, ...initiatedFriends];
 
-    logger('Retrieved user ids for friends:', fetchedUserIds);
+    logger('Retrieved active friendships for user:', fetchedActiveFriends);
     
-    return fetchedUserIds;
+    return fetchedActiveFriends;
 };
 
 /**
@@ -206,4 +206,23 @@ module.exports.fetchAccountIdForUser = async (systemWideUserId) => {
     return fetchResult.length > 0
         ? { [systemWideUserId]: fetchResult[0]['account_id'] }
         : { };
+};
+
+/**
+ * Counts the number of mutual friends between two users.
+ */
+module.exports.countMutualFriends = async (targetUserId, initiatedUserId) => {
+    // todo: transform to single query, make all the queries bunched and more efficient
+    
+    const [friendsForTargetUser, friendsForInitiatedUser] = await Promise.all([
+        exports.fetchActiveSavingFriendsForUser(targetUserId),
+        exports.fetchActiveSavingFriendsForUser(initiatedUserId)
+    ]);
+
+    const friendIdsForTargetUser = friendsForTargetUser.map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+    const friendIdsForInitiatedUser = friendsForInitiatedUser.map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+
+    const mutualFriends = friendIdsForTargetUser.filter((friendId) => friendIdsForInitiatedUser.includes(friendId));
+
+    return mutualFriends.length > 0 ? mutualFriends.length : 0;
 };

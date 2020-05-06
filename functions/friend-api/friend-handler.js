@@ -194,7 +194,7 @@ module.exports.deactivateFriendship = async (event) => {
 
 const handleUserNotFound = async (friendRequest) => {
     const customShareMessage = friendRequest.customShareMessage ? friendRequest.customShareMessage : null;
-    friendRequest.customShareMessage = customShareMessage ? String(customShareMessage.length) : 0;
+    friendRequest.customShareMessage = customShareMessage ? String(customShareMessage.length) : '0';
     const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
     logger('Persisting friend request resulted in:', insertionResult);
 
@@ -304,7 +304,7 @@ module.exports.addFriendshipRequest = async (event) => {
         if (friendRequest.customShareMessage) {
             const blacklist = new RegExp(config.get('templates.blacklist'), 'u');
             if (blacklist.test(friendRequest.customShareMessage)) {
-                throw new Error(`Error: Invalid customer message`);
+                throw new Error(`Error: Invalid custom share message`);
             }
         }
 
@@ -385,6 +385,10 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
         if (friendRequest.targetContactDetails) {
             transformedResult.contactMethod = friendRequest.targetContactDetails.contactMethod;
         }
+    }
+
+    if (type === 'RECEIVED') {
+        transformedResult.numberOfMutualFriends = await persistenceRead.countMutualFriends(userId, friendUserId);
     }
 
     if (friendRequest.customShareMessage) {

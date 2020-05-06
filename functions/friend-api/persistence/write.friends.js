@@ -150,6 +150,19 @@ module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) =
     return { updatedTime, logId: queryLogId };
 };
 
+const checkForExistingFriendship = async (initiatedUserId, acceptedUserId) => {
+    const query = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_uer_id = $2`; 
+    const [firstResult, secondResult] = await Promise.all([
+        rdsConnection.selectQuery(query, [initiatedUserId, acceptedUserId]),
+        rdsConnection.selectQuery(query, [acceptedUserId, initiatedUserId])
+    ]);
+
+    const queryResult = [...firstResult, ...secondResult];
+    logger('Found existing friendship:', queryResult);
+
+    return query.length > 0 ? camelCaseKeys(queryResult[0]) : null;
+};
+
 /**
  * This function activates and persists a new friendship. It also updates the associated friend request to ACCEPTED.
  * @param {String} requestId The request id associated with the friend request being accepted.
@@ -164,22 +177,40 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus, shareItems };
     const friendshipKeys = Object.keys(friendshipObject);
 
-    // will need a test of whether friendship existed prior, and if so, just use an update def to swap it to active
-    const friendshipInsertDef = {
-        query: `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`,
-        columnTemplate: extractColumnTemplate(friendshipKeys),
-        rows: [friendshipObject]
-    };
+    const insertDefs = [];
+    const updateDefs = [];
 
-    // todo : friend request should have a column 'initiated_friendship_id' that refers to the above. It should be a foreign key but
-    // allow for nullable values (for requests that are not accepted). It is not unique (if a friendship goes on-off-on then multiple reqs)
-    // will point to the same friendship
+    const existingFriendship = await checkForExistingFriendship(initiatedUserId, acceptedUserId);
+    logger('Found existing friendship:', existingFriendship);
+    if (existingFriendship) {
+        const friendshipUpdateDef = {
+            table: friendshipTable,
+            key: { relationshipId: existingFriendship.relationshipId },
+            value: { relationshipStatus: 'ACTIVE' },
+            returnClause: 'updated_time'
+        };
+
+        updateDefs.push(friendshipUpdateDef);
+    } 
+    
+    if (!existingFriendship) {
+        const friendshipInsertDef = {
+            query: `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`,
+            columnTemplate: extractColumnTemplate(friendshipKeys),
+            rows: [friendshipObject]
+        };
+
+        insertDefs.push(friendshipInsertDef);
+    }
+
     const updateFriendReqDef = {
         table: friendReqTable,
         key: { requestId },
         value: { requestStatus: 'ACCEPTED', initiatedFriendshipId: relationshipId },
         returnClause: 'updated_time'
     };
+
+    updateDefs.push(updateFriendReqDef);
 
     const logId = uuid();
     const logRow = { logId, relationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject };
@@ -191,8 +222,10 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
         rows: [logRow]
     };
 
-    logger(`Persisting: ${friendshipInsertDef} and ${insertLogDef} Updating: ${updateFriendReqDef}`);
-    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [friendshipInsertDef, insertLogDef]);
+    insertDefs.push(insertLogDef);
+
+    logger(`Persisting: ${JSON.stringify(insertDefs)} Updating: ${JSON.stringify(updateDefs)}`);
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefs, insertDefs);
     logger('Result of update and insertion:', resultOfOperations);
 
     const updatedTime = resultOfOperations[0][0]['updated_time'];

@@ -14,6 +14,19 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     }
 });
 
+module.exports.wrapParamsWithPath = (params, path, systemWideUserId) => ({
+    requestContext: {
+        authorizer: {
+            systemWideUserId
+        }
+    },
+    httpMethod: 'POST',
+    pathParameters: {
+        proxy: path
+    },
+    body: JSON.stringify(params)
+});
+
 module.exports.wrapResponse = (body, statusCode = 200) => ({
     statusCode,
     headers: {
