@@ -226,8 +226,9 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     it('Finds pending push messages', async () => {
         const expectedQuery = [
             `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
-                `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2`,
-            ['READY_FOR_SENDING', 'PUSH']
+                `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2 ` + 
+                `order by updated_time limit $3`,
+            ['READY_FOR_SENDING', 'PUSH', 50]
         ];
         selectQueryStub.resolves([msgRawFromRds, msgRawFromRds]);
 

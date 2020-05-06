@@ -377,6 +377,7 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
     }
 };
 
+// eslint-disable-next-line no-unused-vars
 const acceptPendingFriendRequests = async (systemWideUserId) => {
     const pendingFriendsInvocation = invokeLambda(config.get('lambdas.fetchFriendRequests'), { systemWideUserId });
     logger('Lambda args:', pendingFriendsInvocation);
@@ -421,8 +422,8 @@ const handleAccountOpenedEvent = async (eventBody) => {
     const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
     logger(`Result of user account update: ${accountUpdateResult}`);
 
-    const friendshipCreationResult = await acceptPendingFriendRequests(userProfile.systemWideUserId);
-    logger('Creating user friendships resulted in:', friendshipCreationResult);
+    // const friendshipCreationResult = await acceptPendingFriendRequests(userProfile.systemWideUserId);
+    // logger('Creating user friendships resulted in:', friendshipCreationResult);
     
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));

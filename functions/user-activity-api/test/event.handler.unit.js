@@ -203,11 +203,11 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
         
-        expect(lamdbaInvokeStub.callCount).to.equal(4);
+        expect(lamdbaInvokeStub.callCount).to.equal(2);
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWith(boostInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(friendReqInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(createFriendInvocation);
+        // expect(lamdbaInvokeStub).to.have.been.calledWith(friendReqInvocation);
+        // expect(lamdbaInvokeStub).to.have.been.calledWith(createFriendInvocation);
 
         expect(updateTagsStub).to.have.been.calledOnceWithExactly(testUserId, 'FINWORKS::MKZ0010');
         notificationContacts.forEach((contact) => {

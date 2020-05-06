@@ -25,8 +25,6 @@ const redis = new Redis({
     keyPrefix: `${config.get('cache.keyPrefixes.savingHeat')}::`
 });
 
-const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,
     InvocationType: sync ? 'RequestResponse' : 'Event',
@@ -39,7 +37,9 @@ const invokeSavingHeatLambda = async (accountIds) => {
     logger('Invoke savings heat lambda with arguments: ', savingHeatLambdaInvoke);
     const savingHeatResult = await lambda.invoke(savingHeatLambdaInvoke).promise();
     logger('Result of savings heat calculation: ', savingHeatResult);
-    return extractLambdaBody(savingHeatResult).details;
+    const heatPayload = JSON.parse(savingHeatResult.Payload);
+    const { details } = heatPayload;
+    return details;
 };
 
 const fetchSavingHeatFromCache = async (accountIds) => {
@@ -371,6 +371,7 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
     logger('Got friend profile:', profile);
 
     const transformedResult = {
+        type,
         requestId: friendRequest.requestId,
         requestCode: friendRequest.requestCode,
         requestedShareItems: friendRequest.requestedShareItems,

@@ -56,7 +56,8 @@
             "enabled": true,
             "bucket": "jupiter.templates",
             "key": "emails/messageEmailWrapper.html"
-        }
+        },
+        "batchSize": 20
     },
     "security": {
         "roleRequired": false,

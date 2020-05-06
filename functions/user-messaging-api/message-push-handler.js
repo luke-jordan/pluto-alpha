@@ -188,9 +188,10 @@ const sendPendingPushMsgs = async () => {
 
         return resultOfSend;
     } catch (err) {
-        // just in case, we revert, else messages never sent out
-        const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
-        logger('Result of state lock release: ', releaseStateLock);
+        // just in case, we revert, else messages never sent out (but this is leading to bad outcomes, i.e., repeat pings, so removing)
+        // const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
+        // logger('Result of state lock release: ', releaseStateLock);
+        logger('FATAL_ERROR: ', err);
         return { channel: 'PUSH', result: 'ERROR', message: err.message };
     }
 };
@@ -206,7 +207,7 @@ const fetchUserContactDetail = async (destinationUserId) => {
     // logger('Raw profile fetch result: ', profileFetchResult);
     const profilePayload = JSON.parse(profileFetchResult['Payload']);
     const userProfile = JSON.parse(profilePayload.body);
-    logger('User profile fetch result: ', userProfile);
+    // logger('User profile fetch result: ', userProfile);
     
     const result = { destinationUserId };
     if (Reflect.has(userProfile, 'emailAddress')) {
@@ -278,16 +279,17 @@ const handleLogPublishing = async ({ sentMessages, rawMessages, emailResult }) =
 // In the event of a message being sent to a user without an email, an sms back up message is sent to the user.
 // This sms message is found in the message display property (backupSms in the template)
 const sendPendingEmailMsgs = async () => {
-        const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL');
-        if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
-            return { channel: 'EMAIL', result: 'NONE_PENDING', numberSent: 0 };
-        }
+    const batchSize = config.get('email.batchSize');
+    const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL', batchSize);
+    if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
+        return { channel: 'EMAIL', result: 'NONE_PENDING', numberSent: 0 };
+    }
 
-        const messageIds = messagesToSend.map((msg) => msg.messageId);
-        logger('Alright, processing emails and SMSs: ', messageIds);
-        const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-        logger('Email state lock done? : ', stateLock ? stateLock.rowCount : false);
-        
+    const messageIds = messagesToSend.map((msg) => msg.messageId);
+    logger('Alright, processing emails and SMSs: ', messageIds);
+    const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
+    logger('Email state lock done? : ', stateLock ? stateLock.rowCount : false);
+    
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
         const userContactDetails = await Promise.all(destinationUserIds.map((userId) => fetchUserContactDetail(userId)));
@@ -297,7 +299,7 @@ const sendPendingEmailMsgs = async () => {
         // logger('And assembled messages: ', assembledMessages);
         
         const messages = assembledMessages.map((msg) => {
-            logger('Creating lambda invocation from assembled message: ', msg);
+            // logger('Creating lambda invocation from assembled message: ', msg);
             logger('Mapped contact: ', mappedContacts[msg.destinationUserId]);
             if (mappedContacts[msg.destinationUserId].emailAddress) {
                 return {
@@ -340,8 +342,8 @@ const sendPendingEmailMsgs = async () => {
 
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
-        logger('Result of state lock release: ', releaseStateLock);
+        // const releaseStateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'READY_FOR_SENDING');
+        // logger('Result of state lock release: ', releaseStateLock);
         return { channel: 'EMAIL', result: 'ERROR', message: err.message };
     }
 };
