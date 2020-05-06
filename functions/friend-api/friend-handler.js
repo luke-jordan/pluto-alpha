@@ -254,6 +254,24 @@ const identifyContactType = (contact) => {
     return null;
 };
 
+const extractValidateFormatContact = (phoneOrEmail) => {
+    const contactType = identifyContactType(phoneOrEmail);
+    if (!contactType) {
+        throw new Error(`Error! Invalid target contact: ${phoneOrEmail}`);
+    }
+
+    let contactMethod = '';
+    if (contactType === 'EMAIL') {
+        contactMethod = phoneOrEmail.trim().toLowerCase();
+    }
+
+    if (contactType === 'PHONE') {
+        contactMethod = phoneOrEmail; // todo : apply simple formatting
+    }
+
+    return { contactType, contactMethod };
+};
+
 const checkForUserWithContact = async (contactDetails) => {
     const lookUpPayload = { phoneOrEmail: contactDetails.contactMethod, countryCode: 'ZAF' };
     const lookUpInvoke = invokeLambda(config.get('lambdas.lookupByContactDetails'), lookUpPayload);
@@ -267,12 +285,57 @@ const checkForUserWithContact = async (contactDetails) => {
     return JSON.parse(systemIdPayload.body);
 };
 
+// simple method to determine if a contact method has a user aligned
+// todo : cache the number of requests to this by a user and after 5 in one minute just return not found 
+module.exports.seekFriend = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+        const { phoneOrEmail } = opsUtil.extractParamsFromEvent(event);
+        const contactDetails = extractValidateFormatContact(phoneOrEmail);
+        const userResult = await checkForUserWithContact(contactDetails);
+        if (!userResult) {
+            return { statusCode: 404 };
+        }
+        
+        const { systemWideUserId } = userResult;
+        const { personalName, calledName, familyName} = await persistenceRead.fetchUserProfile({ systemWideUserId });
+        
+        const targetUserName = `${calledName || personalName} ${familyName}`;
+        return { statusCode: 200, body: JSON.stringify({ systemWideUserId, targetUserName })};
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 404 };
+    }
+};
+
+// and another one, to get current referral data
+module.exports.obtainReferralCode = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+        
+        const { systemWideUserId } = userDetails;
+        const { referralCode, countryCode } = await persistenceRead.fetchUserProfile({ systemWideUserId });
+        const referralPayload = { referralCode, countryCode, includeFloatDefaults: true };
+        const referralInvocation = invokeLambda(config.get('referralDetails'), referralPayload, true);
+        return lambda.invoke(referralInvocation).promise();
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500 };
+    }
+};
+
 /**
  * This function persists a new friendship request.
  * @param {Object} event
  * @property {String} initiatedUserId Required. The user id of the user initiating the friendship. Defaults to the sytem id in the request header.
  * @property {String} targetUserId Required in the absence of targetContactDetails. The user id of the user whose friendship is being requested.
- * @property {String} targetContactDetails Required in the absence of targetUserId. Either the phone or email of the user whose friendship is being requested.
+ * @property {String} targetPhoneOrEmail Required in the absence of targetUserId. Either the phone or email of the user whose friendship is being requested.
  * @property {Array} requestedShareItems Specifies what the initiating user wants to share. Valid values include ACTIVITY_LEVEL, ACTIVITY_COUNT, SAVE_VALUES, and BALANCE
  */
 module.exports.addFriendshipRequest = async (event) => {
@@ -285,20 +348,15 @@ module.exports.addFriendshipRequest = async (event) => {
         const { systemWideUserId } = userDetails;
     
         const friendRequest = opsUtil.extractParamsFromEvent(event);
-        if (!friendRequest.targetUserId && !friendRequest.targetContactDetails) {
-            throw new Error('Error! targetUserId or targetContactDetails must be provided');
+        if (!friendRequest.targetUserId && !friendRequest.targetPhoneOrEmail) {
+            throw new Error('Error! targetUserId or targetPhoneOrEmail must be provided');
         }
 
         friendRequest.initiatedUserId = systemWideUserId;
 
-        if (friendRequest.targetContactDetails) {
-            const contactMethod = friendRequest.targetContactDetails;
-            const contactType = identifyContactType(contactMethod);
-            if (!contactType) {
-                throw new Error(`Error! Invalid target contact: ${contactMethod}`);
-            }
-
-            friendRequest.targetContactDetails = { contactType, contactMethod };
+        if (friendRequest.targetPhoneOrEmail) {
+            friendRequest.targetContactDetails = extractValidateFormatContact(friendRequest.targetPhoneOrEmail);
+            Reflect.deleteProperty(friendRequest, 'targetPhoneOrEmail');
         }
 
         if (friendRequest.customerMessage) {
@@ -504,7 +562,9 @@ const dispatcher = {
     'initiate': (event) => exports.addFriendshipRequest(event),
     'accept': (event) => exports.acceptFriendshipRequest(event),
     'ignore': (event) => exports.ignoreFriendshipRequest(event),
-    'list': (event) => exports.findFriendRequestsForUser(event)
+    'list': (event) => exports.findFriendRequestsForUser(event),
+    'seek': (event) => exports.seekFriend(event),
+    'referral': (event) => exports.obtainReferralCode(event)
 };
 
 /**

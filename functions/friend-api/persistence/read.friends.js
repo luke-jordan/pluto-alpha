@@ -25,7 +25,9 @@ const relevantProfileColumns = [
     'family_name',
     'called_name',
     'emai_adress',
-    'phone_number'
+    'phone_number',
+    'referral_code',
+    'country_code'
 ];
 
 const fetchUserProfileFromDB = async (systemWideUserId) => {

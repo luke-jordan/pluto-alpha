@@ -391,9 +391,9 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             targetContactDetails: testContactDetails
         };
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: 'user@email.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetPhoneOrEmail: 'user@email.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
-        insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
+        insertFriendRequestStub.resolves({ requestId: testRequestId, logId: testLogId });
 
         const profileResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testTargetUserId })})};
         lamdbaInvokeStub.returns({ promise: () => profileResult });
@@ -406,6 +406,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const expectedProfileCallBody = { phoneOrEmail: 'user@email.com', countryCode: 'ZAF' };
         const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
+        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
     });
 
     it('Handles target user id not found, SMS route', async () => {
@@ -424,7 +425,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             message: customerMessage
         };
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922', requestedShareItems, customerMessage }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetPhoneOrEmail: '27632310922', requestedShareItems, customerMessage }, testInitiatedUserId, 'ORDINARY_USER');
 
         lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
         
@@ -455,7 +456,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     it('Throws on error on potential phishing in customer message', async () => {
         const customerMessage = 'Hey potential victim. Give me your password. Everything will be fine.';
         const expectedResult = { message: 'Error: Invalid customer message' };
-        const testEvent = helper.wrapEvent({ targetContactDetails: '27994593458', customerMessage }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetPhoneOrEmail: '27994593458', customerMessage }, testInitiatedUserId, 'ORDINARY_USER');
         const phishingResult = await handler.addFriendshipRequest(testEvent);
         expect(phishingResult).to.exist;
         expect(phishingResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
@@ -479,7 +480,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             templateVariables: { initiatedUserName: testProfile.calledName }
         };
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: 'juitsung@yuan.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetPhoneOrEmail: 'juitsung@yuan.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
         lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
 
@@ -513,7 +514,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Fails on invalid parameters', async () => {
-        const expectedResult = { message: 'Error! targetUserId or targetContactDetails must be provided' };
+        const expectedResult = { message: 'Error! targetUserId or targetPhoneOrEmail must be provided' };
         const testEvent = helper.wrapEvent({ }, testInitiatedUserId, 'ORDINARY_USER');
         const insertionResult = await handler.addFriendshipRequest(testEvent);
         expect(insertionResult).to.exist;

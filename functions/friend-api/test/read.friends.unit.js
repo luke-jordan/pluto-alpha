@@ -48,7 +48,9 @@ const expectedProfileColumns = [
     'family_name',
     'called_name',
     'emai_adress',
-    'phone_number'
+    'phone_number',
+    'referral_code',
+    'country_code'
 ];
 
 describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
