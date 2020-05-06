@@ -191,7 +191,7 @@ module.exports.statusCheck = async (event) => {
         
         logger('Created status options:', options, 'with headers: ', JSON.stringify(options.headers));
         const paymentStatus = await request(options);
-        logger('Recieved payment status:', paymentStatus);
+        logger('Received payment status:', paymentStatus);
 
         const formattedResponse = {
             result: paymentStatus[0].status.toUpperCase(),

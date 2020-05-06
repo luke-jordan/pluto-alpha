@@ -137,7 +137,7 @@ const calculateAndCacheHeatScore = async (accountId, activitiesToInclude) => {
 
 /**
  * This function calculates and caches a user's saving heat score. The score is based on their savings activity as well
- * as other factors such as number of saving buddies, etc. If an empty object is recieved, the function will calculate
+ * as other factors such as number of saving buddies, etc. If an empty object is received, the function will calculate
  * and cache savings heat scores for all accounts.
  * @param {object} event
  * @property {string} accountId Optional. The account id of the user whose savings heat score is to be calculated.

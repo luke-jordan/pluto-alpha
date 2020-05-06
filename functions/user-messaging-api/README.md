@@ -204,7 +204,7 @@ Enforces instruction rules and ensures the message instruction is valid before i
 First it asserts whether all required properties are present in the instruction object. If so, then
 condtional required properties are asserted. These are properties that are only required under certain condtions.
 For example, if the message instruction has a recurring presentation then a recurrance instruction is required to
-describe how frequently the notification should recur. The object properties recieved by this function are described below:
+describe how frequently the notification should recur. The object properties received by this function are described below:
 
 **Kind**: global function  
 

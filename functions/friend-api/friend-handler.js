@@ -193,8 +193,8 @@ module.exports.deactivateFriendship = async (event) => {
 };
 
 const handleUserNotFound = async (friendRequest) => {
-    const customerMessage = friendRequest.customerMessage ? friendRequest.customerMessage : null;
-    friendRequest.customerMessage = customerMessage ? String(customerMessage.length) : 0;
+    const customShareMessage = friendRequest.customShareMessage ? friendRequest.customShareMessage : null;
+    friendRequest.customShareMessage = customShareMessage ? String(customShareMessage.length) : 0;
     const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
     logger('Persisting friend request resulted in:', insertionResult);
 
@@ -206,8 +206,8 @@ const handleUserNotFound = async (friendRequest) => {
     let dispatchResult = null;
 
     if (contactType === 'PHONE') {
-        const dispatchMsg = customerMessage
-            ? customerMessage
+        const dispatchMsg = customShareMessage
+            ? customShareMessage
             : format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
         
         dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
@@ -215,11 +215,11 @@ const handleUserNotFound = async (friendRequest) => {
     }
 
     if (contactType === 'EMAIL') {
-        const bodyTemplateKey = customerMessage
+        const bodyTemplateKey = customShareMessage
             ? config.get('templates.email.custom.templateKey')
             : config.get('templates.email.default.templateKey');
 
-        const templateVariables = customerMessage ? { customerMessage } : { initiatedUserName };
+        const templateVariables = customShareMessage ? { customShareMessage } : { initiatedUserName };
 
         dispatchResult = await publisher.sendSystemEmail({
             subject: config.get('templates.email.default.subject'),
@@ -301,9 +301,9 @@ module.exports.addFriendshipRequest = async (event) => {
             friendRequest.targetContactDetails = { contactType, contactMethod };
         }
 
-        if (friendRequest.customerMessage) {
+        if (friendRequest.customShareMessage) {
             const blacklist = new RegExp(config.get('templates.blacklist'), 'u');
-            if (blacklist.test(friendRequest.customerMessage)) {
+            if (blacklist.test(friendRequest.customShareMessage)) {
                 throw new Error(`Error: Invalid customer message`);
             }
         }
@@ -362,7 +362,7 @@ module.exports.connectFriendshipRequest = async (event) => {
 };
 
 const appendUserNameToRequest = async (userId, friendRequest) => {
-    const type = friendRequest.targetUserId === userId ? 'RECIEVED' : 'INITIATED';
+    const type = friendRequest.targetUserId === userId ? 'RECEIVED' : 'INITIATED';
     const friendUserId = type === 'INITIATED' 
         ? friendRequest.targetUserId
         : friendRequest.initiatedUserId;
@@ -474,7 +474,7 @@ module.exports.acceptFriendshipRequest = async (event) => {
 };
 
 /**
- * Proto-function intended to ignore a friend request recieved by a user. The difference between this function and the 
+ * Proto-function intended to ignore a friend request received by a user. The difference between this function and the 
  * deactivateFriendship function is that this function ignores friendships that were never accepted.
  * @param {Object} event
  * @property {String} initiatedUserId The system id of the user to be ignored as a friend.

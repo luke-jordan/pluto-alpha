@@ -249,36 +249,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([
-            {
-                ...expectedProfile,
-                shareItems: {
-                    savingHeat: `${expectedsavingHeat}`,
-                    WITHDRAWAL: {
-                        lastActivityDate: testActivityDate,
-                        lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-                    }
-                }
-            },
-            {
-                ...expectedProfile,
-                shareItems: {
-                    savingHeat: `${expectedsavingHeat}`,
-                    WITHDRAWAL: {
-                        lastActivityDate: testActivityDate,
-                        lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-                    }
-                }  
-            },
-            {
-                ...expectedProfile,
-                shareItems: {
-                    savingHeat: `${expectedsavingHeat}`,
-                    WITHDRAWAL: {
-                        lastActivityDate: testActivityDate,
-                        lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-                    }
-                }
-            }
+            { ...expectedProfile, shareItems: { ...expectedResultFromCache } },
+            { ...expectedProfile, shareItems: { ...expectedResultFromCache } },
+            { ...expectedProfile, shareItems: { ...expectedResultFromCache } },
         ]));
     });
 
@@ -308,24 +281,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([
-            {
-                ...expectedProfile,
-                shareItems: {
-                    ...expectedResultFromCache
-                }
-            },
-            {
-                ...expectedProfile,
-                shareItems: {
-                    ...expectedResultFromCache
-                }  
-            },
-            {
-                ...expectedProfile,
-                shareItems: {
-                    ...expectedResultFromCache
-                }
-            }
+            { ...expectedProfile, shareItems: { ...expectedResultFromCache } },
+            { ...expectedProfile, shareItems: { ...expectedResultFromCache } },
+            { ...expectedProfile, shareItems: { ...expectedResultFromCache } },
         ]));
     });
 
@@ -405,20 +363,20 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     it('Handles target user id not found, SMS route', async () => {
         const requestedShareItems = ['BALANCE', 'SAVE_VALUES'];
         const testContactDetails = { contactType: 'PHONE', contactMethod: '27632310922' };
-        const customerMessage = 'Hey Jane. Lets save some lettuce, take over the world.';
+        const customShareMessage = 'Hey Jane. Lets save some lettuce, take over the world.';
         const insertionArgs = {
             initiatedUserId: testInitiatedUserId,
             targetContactDetails: testContactDetails,
             requestCode: 'CLIMATE LEG',
             requestedShareItems,
-            customerMessage: '54'
+            customShareMessage: '54'
         };
         const sendSmsArgs = {
             phoneNumber: testContactDetails.contactMethod,
-            message: customerMessage
+            message: customShareMessage
         };
 
-        const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922', requestedShareItems, customerMessage }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: '27632310922', requestedShareItems, customShareMessage }, testInitiatedUserId, 'ORDINARY_USER');
 
         lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
         
@@ -447,9 +405,9 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Throws on error on potential phishing in customer message', async () => {
-        const customerMessage = 'Hey potential victim. Give me your password. Everything will be fine.';
+        const customShareMessage = 'Hey potential victim. Give me your password. Everything will be fine.';
         const expectedResult = { message: 'Error: Invalid customer message' };
-        const testEvent = helper.wrapEvent({ targetContactDetails: '27994593458', customerMessage }, testInitiatedUserId, 'ORDINARY_USER');
+        const testEvent = helper.wrapEvent({ targetContactDetails: '27994593458', customShareMessage }, testInitiatedUserId, 'ORDINARY_USER');
         const phishingResult = await handler.addFriendshipRequest(testEvent);
         expect(phishingResult).to.exist;
         expect(phishingResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
@@ -464,7 +422,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             targetContactDetails: testContactDetails,
             requestCode: 'ORBIT PAGE',
             requestedShareItems,
-            customerMessage: 0
+            customShareMessage: '0'
         };
         const sendEmailArgs = {
             subject: config.get('templates.email.default.subject'),
