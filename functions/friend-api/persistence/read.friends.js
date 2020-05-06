@@ -223,7 +223,7 @@ module.exports.countMutualFriends = async (targetUserId, initiatedUserIds) => {
 
     const mutualFriendCounts = friendsForInitiatedUsers.map((friendships) => {
         const initiatedUserId = Object.keys(friendships)[0];
-        const friendIdsForInitiatedUser = friendships[initiatedUserId].map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+        const friendIdsForInitiatedUser = friendships[initiatedUserId].map((friendship) => friendship.initiatedUserId || friendship.acceptedUserId);
         logger('Found friends for initiator:', friendIdsForInitiatedUser);
         const mutualFriends = friendIdsForTargetUser.filter((friendId) => friendIdsForInitiatedUser.includes(friendId));
         logger('Found mutual friends:', mutualFriends);

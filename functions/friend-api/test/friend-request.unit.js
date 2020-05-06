@@ -16,34 +16,20 @@ const expect = chai.expect;
 const helper = require('./test-helper');
 
 const sendSmsStub = sinon.stub();
-const redisGetStub = sinon.stub();
 const sendEmailStub = sinon.stub();
-
-const getFriendsStub = sinon.stub();
 const randomWordStub = sinon.stub();
-const connectUserStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
-const fetchRequestStub = sinon.stub();
-const fetchAccountStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const ignoreRequestStub = sinon.stub();
 const fetchAllRequestsStub = sinon.stub();
 const fetchActiveCodesStub = sinon.stub();
-const insertFriendshipStub = sinon.stub();
 const countMutualFriendsStub = sinon.stub();
 const insertFriendRequestStub = sinon.stub();
-const deactivateFriendshipStub = sinon.stub();
 
 const testLogId = uuid();
 const testInitiatedUserId = uuid();
 const testTargetUserId = uuid();
 const testRequestId = uuid();
-
-class MockRedis {
-    constructor () { 
-        this.mget = redisGetStub;
-    }
-}
 
 class MockLambdaClient {
     constructor () {
@@ -55,19 +41,13 @@ const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchFriendRequestsForUser': fetchAllRequestsStub,
         'fetchActiveRequestCodes': fetchActiveCodesStub,
-        'fetchFriendshipRequestById': fetchRequestStub,
-        'fetchAccountIdForUser': fetchAccountStub,
-        'fetchActiveSavingFriendsForUser': getFriendsStub,
         'countMutualFriends': countMutualFriendsStub,
         'fetchUserProfile': fetchProfileStub,
         '@noCallThru': true
     },
     './persistence/write.friends': {
-        'connectUserToFriendRequest': connectUserStub,
         'ignoreFriendshipRequest': ignoreRequestStub,
         'insertFriendRequest': insertFriendRequestStub,
-        'insertFriendship': insertFriendshipStub,
-        'deactivateFriendship': deactivateFriendshipStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -78,13 +58,11 @@ const handler = proxyquire('../friend-handler', {
     'aws-sdk': {
         'Lambda': MockLambdaClient  
     },
-    'ioredis': MockRedis,
     'random-words': randomWordStub
 });
 
-const resetStubs = () => helper.resetStubs(getFriendsStub, fetchProfileStub, insertFriendRequestStub, insertFriendshipStub,
-    deactivateFriendshipStub, fetchActiveCodesStub, fetchRequestStub, randomWordStub, sendEmailStub, sendSmsStub, connectUserStub,
-    fetchAllRequestsStub, ignoreRequestStub, fetchAccountStub, lamdbaInvokeStub, redisGetStub);
+const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendRequestStub, countMutualFriendsStub,
+    fetchActiveCodesStub, randomWordStub, sendEmailStub, sendSmsStub, fetchAllRequestsStub, ignoreRequestStub, lamdbaInvokeStub);
 
 
 describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
