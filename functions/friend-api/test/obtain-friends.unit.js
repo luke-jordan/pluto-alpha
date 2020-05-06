@@ -50,7 +50,7 @@ const handler = proxyquire('../friend-handler', {
     'aws-sdk': {
         'Lambda': MockLambdaClient  
     },
-    'ioredis': MockRedis,
+    'ioredis': MockRedis
 });
 
 const resetStubs = () => helper.resetStubs(getFriendsStub, fetchProfileStub, fetchAccountStub, lamdbaInvokeStub, redisGetStub);
