@@ -1,6 +1,7 @@
 'use strict';
 
 // const logger = require('debug')('jupiter:friends:test');
+const config = require('config');
 const uuid = require('uuid/v4');
 
 const moment = require('moment');
@@ -234,6 +235,64 @@ describe('*** UNIT TEST FRIENDSHIP REMOVAL ***', () => {
         expect(removalResult).to.exist;
         expect(removalResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
         expect(deactivateFriendshipStub).to.have.not.been.called;
+    });
+
+});
+
+describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
+
+    const testProfile = {
+        systemWideUserId: testSystemId,
+        personalName: 'Nurhaci',
+        familyName: 'Gioro',
+        phoneNumber: '16349324310',
+        calledName: 'Tien-ming',
+        emailAddress: 'taizu@manchu.com',
+        referralCode: 'LETMEIN',
+        countryCode: 'ZAF'
+    };
+
+    const testReferralDetails = {
+        referralCode: 'LETMEIN',
+        context: { boostAmountOffered: 'BIGCHEESE' }
+    };
+
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('Determines if a contact method is aligned to a user', async () => {
+        const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.lookupByContactDetails'), false, { phoneOrEmail: 'user@email.com', countryCode: 'ZAF' });
+        const testEvent = helper.wrapParamsWithPath({ phoneOrEmail: 'user@email.com' }, 'seek', testSystemId);
+
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
+        fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
+
+        const result = await handler.directRequestManagement(testEvent);
+
+        expect(result).to.exist;
+        expect(result.statusCode).to.equal(200);
+        expect(result).to.have.property('body');
+        const parsedResult = JSON.parse(result.body);
+        expect(parsedResult).to.deep.equal({ systemWideUserId: testSystemId, targetUserName: 'Tien-ming Gioro' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+        expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testSystemId });
+    });
+
+    it('Obtains referral code', async () => {
+        const testReferralPayload = { referralCode: 'LETMEIN', countryCode: 'ZAF', includeFloatDefaults: true };
+        const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.referralDetails'), false, testReferralPayload);
+        const testEvent = helper.wrapParamsWithPath({ }, 'referral', testSystemId);
+
+        fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
+        lamdbaInvokeStub.withArgs(lambdaArgs).returns({ promise: () => (testReferralDetails) });
+
+        const referralCode = await handler.directRequestManagement(testEvent);
+
+        expect(referralCode).to.exist;
+        expect(referralCode).to.deep.equal(testReferralDetails);
+        expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testSystemId });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
     });
 
 });

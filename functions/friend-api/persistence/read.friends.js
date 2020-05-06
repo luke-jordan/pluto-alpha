@@ -25,7 +25,9 @@ const relevantProfileColumns = [
     'family_name',
     'called_name',
     'emai_adress',
-    'phone_number'
+    'phone_number',
+    'referral_code',
+    'country_code'
 ];
 
 const fetchUserProfileFromDB = async (systemWideUserId) => {
@@ -131,7 +133,7 @@ module.exports.fetchActiveSavingFriendsForUser = async (systemWideUserId) => {
 
     logger('Retrieved active friendships for user:', fetchedActiveFriends);
     
-    return fetchedActiveFriends;
+    return { [systemWideUserId]: fetchedActiveFriends };
 };
 
 /**
@@ -209,20 +211,25 @@ module.exports.fetchAccountIdForUser = async (systemWideUserId) => {
 };
 
 /**
- * Counts the number of mutual friends between two users.
+ * Counts the number of mutual friends between a user and an array of other users.
  */
-module.exports.countMutualFriends = async (targetUserId, initiatedUserId) => {
-    // todo: transform to single query, make all the queries bunched and more efficient
-    
-    const [friendsForTargetUser, friendsForInitiatedUser] = await Promise.all([
-        exports.fetchActiveSavingFriendsForUser(targetUserId),
-        exports.fetchActiveSavingFriendsForUser(initiatedUserId)
-    ]);
+module.exports.countMutualFriends = async (targetUserId, initiatedUserIds) => {
+    const friendshipsForTargetUser = await exports.fetchActiveSavingFriendsForUser(targetUserId);
+    const friendIdsForTargetUser = friendshipsForTargetUser[targetUserId].map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+    logger('Found friends for target user:', friendIdsForTargetUser);
 
-    const friendIdsForTargetUser = friendsForTargetUser.map((friend) => friend.initiatedUserId || friend.acceptedUserId);
-    const friendIdsForInitiatedUser = friendsForInitiatedUser.map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+    const friendsForInitiatedUsers = await Promise.all(initiatedUserIds.map((userId) => exports.fetchActiveSavingFriendsForUser(userId)));
+    logger('Found friends for initaited users:', friendsForInitiatedUsers);
 
-    const mutualFriends = friendIdsForTargetUser.filter((friendId) => friendIdsForInitiatedUser.includes(friendId));
+    const mutualFriendCounts = friendsForInitiatedUsers.map((friendships) => {
+        const initiatedUserId = Object.keys(friendships)[0];
+        const friendIdsForInitiatedUser = friendships[initiatedUserId].map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+        logger('Found friends for initiator:', friendIdsForInitiatedUser);
+        const mutualFriends = friendIdsForTargetUser.filter((friendId) => friendIdsForInitiatedUser.includes(friendId));
+        logger('Found mutual friends:', mutualFriends);
 
-    return mutualFriends.length > 0 ? mutualFriends.length : 0;
+        return { [initiatedUserId]: mutualFriends.length };
+    });
+
+    return mutualFriendCounts;
 };

@@ -115,7 +115,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS', requestId: testRequestId }));
     });
 
-    it('Finds target user id by contact detail where absent', async () => {
+     it('Finds target user id by contact detail where absent', async () => {
         const requestedShareItems = ['ACTIVITY_COUNT'];
         const testContactDetails = { contactType: 'EMAIL', contactMethod: 'user@email.com' };
         const insertionArgs = {
@@ -125,14 +125,14 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             targetContactDetails: testContactDetails
         };
 
-        const testEvent = helper.wrapParamsWithPath({ targetContactDetails: 'user@email.com', requestedShareItems }, 'initiate', testInitiatedUserId);
+        const testEvent = helper.wrapEvent({ targetPhoneOrEmail: 'user@email.com', requestedShareItems }, testInitiatedUserId, 'ORDINARY_USER');
 
-        insertFriendRequestStub.withArgs(insertionArgs).resolves({ requestId: testRequestId, logId: testLogId });
+        insertFriendRequestStub.resolves({ requestId: testRequestId, logId: testLogId });
 
         const profileResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testTargetUserId })})};
         lamdbaInvokeStub.returns({ promise: () => profileResult });
 
-        const insertionResult = await handler.directRequestManagement(testEvent);
+        const insertionResult = await handler.addFriendshipRequest(testEvent);
         
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse({ result: 'SUCCESS', requestId: testRequestId }));
@@ -140,6 +140,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const expectedProfileCallBody = { phoneOrEmail: 'user@email.com', countryCode: 'ZAF' };
         const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
+        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
     });
 
     it('Handles target user id not found, SMS route', async () => {
@@ -158,7 +159,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             message: customShareMessage
         };
 
-        const testEvent = helper.wrapParamsWithPath({ targetContactDetails: '27632310922', requestedShareItems, customShareMessage }, 'initiate', testInitiatedUserId);
+        const testEvent = helper.wrapParamsWithPath({ targetPhoneOrEmail: '27632310922', requestedShareItems, customShareMessage }, 'initiate', testInitiatedUserId);
 
         lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
         
@@ -194,7 +195,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             targetContactDetails: testContactDetails,
             requestCode: 'ORBIT PAGE',
             requestedShareItems,
-            customShareMessage: '0'
+            customShareMessage: null
         };
         const sendEmailArgs = {
             subject: config.get('templates.email.default.subject'),
@@ -203,7 +204,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             templateVariables: { initiatedUserName: testProfile.calledName }
         };
 
-        const testEvent = helper.wrapParamsWithPath({ targetContactDetails: 'juitsung@yuan.com', requestedShareItems }, 'initiate', testInitiatedUserId);
+        const testEvent = helper.wrapParamsWithPath({ targetPhoneOrEmail: 'juitsung@yuan.com', requestedShareItems }, 'initiate', testInitiatedUserId);
 
         lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
 
@@ -224,7 +225,6 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             }
         }));
 
-        // details of call handled above
         expect(lamdbaInvokeStub).to.have.been.calledOnce;
         expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testInitiatedUserId });
@@ -236,7 +236,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     it('Throws an error on potential phishing in custom share message', async () => {
         const customShareMessage = 'Hey potential victim. Give me your password. Everything will be fine.';
         const expectedResult = { message: 'Error: Invalid custom share message' };
-        const testEvent = helper.wrapParamsWithPath({ targetContactDetails: '27994593458', customShareMessage }, 'initiate', testInitiatedUserId);
+        const testEvent = helper.wrapParamsWithPath({ targetPhoneOrEmail: '27994593458', customShareMessage }, 'initiate', testInitiatedUserId);
         const phishingResult = await handler.directRequestManagement(testEvent);
         expect(phishingResult).to.exist;
         expect(phishingResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
@@ -253,7 +253,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
     });
 
     it('Fails on invalid parameters', async () => {
-        const expectedResult = { message: 'Error! targetUserId or targetContactDetails must be provided' };
+        const expectedResult = { message: 'Error! targetUserId or targetPhoneOrEmail must be provided' };
         const testEvent = helper.wrapParamsWithPath({ }, 'initiate', testInitiatedUserId);
         const insertionResult = await handler.directRequestManagement(testEvent);
         expect(insertionResult).to.exist;
@@ -313,7 +313,7 @@ describe('*** UNIT TEST FRIEND REQUEST EXTRACTION ***', () => {
         const testEvent = helper.wrapParamsWithPath({ }, 'list', testTargetUserId);
         fetchAllRequestsStub.withArgs(testTargetUserId).resolves([mockFriendRequest, mockFriendRequest]);
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(mockProfile);
-        countMutualFriendsStub.withArgs(testTargetUserId, testInitiatedUserId).resolves(12);
+        countMutualFriendsStub.withArgs(testTargetUserId, [testInitiatedUserId]).resolves([{ [testInitiatedUserId]: 12 }]);
         const fetchResult = await handler.directRequestManagement(testEvent);
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([expectedFriendRequest, expectedFriendRequest]));

@@ -179,11 +179,13 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         
         lamdbaInvokeStub.withArgs(lambdaArgs).returns({ promise: () => ({ Payload: JSON.stringify(mockResponseFromLambda) }) });
         
-        getFriendsStub.withArgs(testSystemId).resolves([
-            mockFriendship(firstUserId, shareItems),
-            mockFriendship(secondUserId, shareItems),
-            mockFriendship(thirdUserId, shareItems)
-        ]);
+        getFriendsStub.withArgs(testSystemId).resolves({
+            [testSystemId]: [
+                mockFriendship(firstUserId, shareItems),
+                mockFriendship(secondUserId, shareItems),
+                mockFriendship(thirdUserId, shareItems)
+            ]
+        });
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
             JSON.stringify(mockResponseFromCache(firstAccId)),
             null,
@@ -242,11 +244,13 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
             JSON.stringify(mockResponseFromCache(secondAccId)),
             JSON.stringify(mockResponseFromCache(thirdAccId))
         ]);
-        getFriendsStub.withArgs(testSystemId).resolves([
-            mockFriendship(firstUserId, shareItems),
-            mockFriendship(secondUserId, shareItems),
-            mockFriendship(thirdUserId, shareItems)
-        ]);
+        getFriendsStub.withArgs(testSystemId).resolves({
+            [testSystemId]: [
+                mockFriendship(firstUserId, shareItems),
+                mockFriendship(secondUserId, shareItems),
+                mockFriendship(thirdUserId, shareItems)
+            ]
+        });
 
         const fetchResult = await handler.obtainFriends(testEvent);
 
@@ -274,11 +278,13 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
             JSON.stringify(mockResponseFromCache(secondAccId)),
             JSON.stringify(mockResponseFromCache(thirdAccId))
         ]);
-        getFriendsStub.withArgs(testInitiatedUserId).resolves([
-            mockFriendship(firstUserId, shareItems),
-            mockFriendship(secondUserId, shareItems),
-            mockFriendship(thirdUserId, shareItems)
-        ]);
+        getFriendsStub.withArgs(testInitiatedUserId).resolves({
+            [testInitiatedUserId]: [
+                mockFriendship(firstUserId, shareItems),
+                mockFriendship(secondUserId, shareItems),
+                mockFriendship(thirdUserId, shareItems)
+            ]
+        });
 
         const fetchResult = await handler.obtainFriends(testEvent);
         

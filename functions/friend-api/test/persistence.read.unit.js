@@ -48,7 +48,9 @@ const expectedProfileColumns = [
     'family_name',
     'called_name',
     'emai_adress',
-    'phone_number'
+    'phone_number',
+    'referral_code',
+    'country_code'
 ];
 
 describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
@@ -141,8 +143,8 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
 
         const resultOfFetch = await persistence.fetchActiveSavingFriendsForUser(testSystemId);
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([
-            {
+        expect(resultOfFetch).to.deep.equal({
+            [testSystemId]: [{
                 relationshipId: testRelationshipId,
                 acceptedUserId: testAcceptedUserId,
                 shareItems: ['BALANCE', 'LAST_ACTIVITY_DATE']
@@ -151,8 +153,8 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
                 relationshipId: testRelationshipId,
                 initiatedUserId: testInitiatedUserId,
                 shareItems: ['LAST_ACTIVITY_AMOUNT']
-            }
-        ]);
+            }]
+        });
 
         expect(queryStub).to.have.been.calledTwice;
         expect(queryStub).to.have.been.calledWithExactly(acceptedSelectQuery, [testSystemId, 'ACTIVE']);
@@ -241,6 +243,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     });
 
     it('Counts mutual friends between two users', async () => {
+        const [firstUserId, secondUserId] = [uuid(), uuid()];
         const testAcceptedUserId = uuid();
         const friendshipTable = config.get('tables.friendshipTable');
 
@@ -258,12 +261,13 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
             'share_items': ['LAST_ACTIVITY_AMOUNT']
         }]);
 
-        const mutualFriendCount = await persistence.countMutualFriends(testTargetUserId, testInitiatedUserId);
+        const mutualFriendCount = await persistence.countMutualFriends(testTargetUserId, [firstUserId, secondUserId]);
 
         expect(mutualFriendCount).to.exist;
-        expect(mutualFriendCount).to.equal(1);
-        expect(queryStub.callCount).to.equal(4);
+        expect(mutualFriendCount).to.deep.equal([{ [firstUserId]: 1 }, { [secondUserId]: 1 }]);
+        expect(queryStub.callCount).to.equal(6);
         expect(queryStub).to.have.been.calledWithExactly(acceptedSelectQuery, [testTargetUserId, 'ACTIVE']);
-        expect(queryStub).to.have.been.calledWithExactly(initiatedSelectQuery, [testInitiatedUserId, 'ACTIVE']);
+        expect(queryStub).to.have.been.calledWithExactly(initiatedSelectQuery, [firstUserId, 'ACTIVE']);
+        expect(queryStub).to.have.been.calledWithExactly(initiatedSelectQuery, [secondUserId, 'ACTIVE']);
     });
 });
