@@ -604,7 +604,7 @@ module.exports.ignoreFriendshipRequest = async (event) => {
             return { statusCode: 403 };
         }
 
-        const resultOfIgnore = await persistenceWrite.ignoreFriendshipRequest(systemWideUserId, friendRequest.initiatedUserId);
+        const resultOfIgnore = await persistenceWrite.ignoreFriendshipRequest(requestId, systemWideUserId);
         logger('Friendship update result:', resultOfIgnore);
 
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { resultOfIgnore }});
@@ -640,7 +640,7 @@ module.exports.cancelFriendshipRequest = async (event) => {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
     }
-}
+};
 
 const dispatcher = {
     'initiate': (event) => exports.addFriendshipRequest(event),

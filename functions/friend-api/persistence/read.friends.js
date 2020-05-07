@@ -54,7 +54,7 @@ const obtainFromDbAndCache = async (systemWideUserId) => {
     await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
     logger(`Successfully fetched 'user profile' from database and stored in cache`);
     return userProfile;
-}
+};
 
 const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     logger(`Fetching 'user profile' from database or cache`);
