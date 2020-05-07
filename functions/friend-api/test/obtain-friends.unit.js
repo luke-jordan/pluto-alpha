@@ -6,7 +6,7 @@ const uuid = require('uuid/v4');
 
 const moment = require('moment');
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
@@ -43,6 +43,9 @@ const handler = proxyquire('../friend-handler', {
         'fetchAccountIdForUser': fetchAccountStub,
         'fetchActiveSavingFriendsForUser': getFriendsStub,
         'fetchUserProfile': fetchProfileStub,
+        '@noCallThru': true
+    },
+    './persistence/write.friends': {
         '@noCallThru': true
     },
     'publish-common': {

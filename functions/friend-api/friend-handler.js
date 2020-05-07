@@ -445,6 +445,7 @@ module.exports.addFriendshipRequest = async (event) => {
         const { systemWideUserId } = userDetails;
     
         const friendRequest = opsUtil.extractParamsFromEvent(event);
+        logger('Extracted friend request: ', friendRequest);
         if (!friendRequest.targetUserId && !friendRequest.targetPhoneOrEmail) {
             throw new Error('Error! targetUserId or targetPhoneOrEmail must be provided');
         }
@@ -600,10 +601,10 @@ module.exports.acceptFriendshipRequest = async (event) => {
 };
 
 /**
- * Proto-function intended to ignore a friend request received by a user. The difference between this function and the 
+ * todo : convert to taking request ID friend request received by a user. The difference between this function and the 
  * deactivateFriendship function is that this function ignores friendships that were never accepted.
  * @param {Object} event
- * @property {String} initiatedUserId The system id of the user to be ignored as a friend.
+ * @property {String} requestId The system id of the user to be ignored as a friend. Can only be called by target.
  */
 module.exports.ignoreFriendshipRequest = async (event) => {
     try {
@@ -612,13 +613,46 @@ module.exports.ignoreFriendshipRequest = async (event) => {
             return { statusCode: 403 };
         }
 
-        const targetUserId = userDetails.systemWideUserId;
-        const { initiatedUserId } = opsUtil.extractParamsFromEvent(event);
+        const { systemWideUserId } = userDetails;
+        const { requestId } = opsUtil.extractParamsFromEvent(event);
 
-        const resultOfIgnore = await persistenceWrite.ignoreFriendshipRequest(targetUserId, initiatedUserId);
+        const friendRequest = await persistenceRead.fetchFriendshipRequestById(requestId);
+        if (systemWideUserId !== friendRequest.targetUserId) {
+            return { statusCode: 403 };
+        }
+
+        const resultOfIgnore = await persistenceWrite.ignoreFriendshipRequest(requestId, systemWideUserId);
         logger('Friendship update result:', resultOfIgnore);
 
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { resultOfIgnore }});
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ message: err.message }, 500);
+    }
+};
+
+/**
+ * For when someone sent the request but now wants it gone. Unlike above, this cancels a specific request
+ */
+module.exports.cancelFriendshipRequest = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { systemWideUserId } = userDetails;
+        const { requestId } = opsUtil.extractParamsFromEvent(event);
+
+        const friendRequest = await persistenceRead.fetchFriendshipRequestById(requestId);
+        if (systemWideUserId !== friendRequest.initiatedUserId) {
+            return { statusCode: 403 };
+        }
+
+        const resultOfCancel = await persistenceWrite.cancelFriendshipRequest(requestId);
+        logger('Result of persisting cancellation: ', resultOfCancel);
+        
+        return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -629,6 +663,7 @@ const dispatcher = {
     'initiate': (event) => exports.addFriendshipRequest(event),
     'accept': (event) => exports.acceptFriendshipRequest(event),
     'ignore': (event) => exports.ignoreFriendshipRequest(event),
+    'cancel': (event) => exports.cancelFriendshipRequest(event),
     'list': (event) => exports.findFriendRequestsForUser(event),
     'seek': (event) => exports.seekFriend(event),
     'referral': (event) => exports.obtainReferralCode(event)

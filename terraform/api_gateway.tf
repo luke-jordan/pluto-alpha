@@ -448,7 +448,7 @@ resource "aws_api_gateway_resource" "friend_deactivate" {
 resource "aws_api_gateway_method" "friend_deactivate" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   resource_id   = aws_api_gateway_resource.friend_deactivate.id
-  http_method   = "GET"
+  http_method   = "POST"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
 }

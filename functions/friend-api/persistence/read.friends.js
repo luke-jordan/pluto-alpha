@@ -33,7 +33,7 @@ const relevantProfileColumns = [
 const fetchUserProfileFromDB = async (systemWideUserId) => {
     logger(`Fetching profile for user id: ${systemWideUserId} from table: ${config.get('tables.profileTable')}`);
     const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.profileTable'), { systemWideUserId }, relevantProfileColumns);
-    logger('Result from DynamoDB: ', rowFromDynamo);
+    // logger('Result from DynamoDB: ', rowFromDynamo);
 
     if (!rowFromDynamo) {
         throw new Error(`Error! No profile found for: ${systemWideUserId}`);
@@ -49,21 +49,29 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
     return fetchResult.length > 0 ? fetchResult[0]['owner_user_id'] : null;
 };
 
+const obtainFromDbAndCache = async (systemWideUserId) => {
+    const userProfile = await fetchUserProfileFromDB(systemWideUserId);
+    await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
+    logger(`Successfully fetched 'user profile' from database and stored in cache`);
+    return userProfile;
+};
+
 const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     logger(`Fetching 'user profile' from database or cache`);
 
     const key = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
-    const responseFromCache = await redis.get(key);
-    
-    if (!responseFromCache) {
-        const userProfile = await fetchUserProfileFromDB(systemWideUserId);
-        await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
-        logger(`Successfully fetched 'user profile' from database and stored in cache`);
-        return userProfile;
+    try {
+        const responseFromCache = await redis.get(key);
+        if (!responseFromCache) {
+            return obtainFromDbAndCache(systemWideUserId);
+        }
+        logger(`Successfully fetched 'user profile' from cache`);
+        return JSON.parse(responseFromCache);    
+    } catch (err) {
+        logger('Error in cache: ', err);
+        return obtainFromDbAndCache(systemWideUserId);
     }
-    
-    logger(`Successfully fetched 'user profile' from cache`);
-    return JSON.parse(responseFromCache);
+        
 };
 
 const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
@@ -193,7 +201,7 @@ module.exports.fetchFriendRequestsForUser = async (systemWideUserId) => {
 
     const friendRequests = [...receivedRequests, ...initiatedRequests];
 
-    logger('Found pending requests for user:', friendRequests);
+    // logger('Found pending requests for user:', friendRequests);
 
     return friendRequests;
 };

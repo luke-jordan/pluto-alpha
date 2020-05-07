@@ -6,7 +6,7 @@ const uuid = require('uuid/v4');
 
 const moment = require('moment');
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
@@ -36,6 +36,9 @@ class MockLambdaClient {
     }
 }
 
+// eslint-disable-next-line
+class MockRedis { constructor() { } }; // forcing no call through
+
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchFriendshipRequestById': fetchRequestStub,
@@ -50,7 +53,8 @@ const handler = proxyquire('../friend-handler', {
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
-    }
+    },
+    'ioredis': MockRedis
 });
 
 const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendshipStub, deactivateFriendshipStub,

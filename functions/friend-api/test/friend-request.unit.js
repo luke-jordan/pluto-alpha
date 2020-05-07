@@ -6,7 +6,8 @@ const uuid = require('uuid/v4');
 
 const moment = require('moment');
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
+
 const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
@@ -23,6 +24,7 @@ const fetchProfileStub = sinon.stub();
 const ignoreRequestStub = sinon.stub();
 const publishUserEventStub = sinon.stub();
 const fetchAllRequestsStub = sinon.stub();
+const fetchSingleRequestStub = sinon.stub();
 const fetchActiveCodesStub = sinon.stub();
 const countMutualFriendsStub = sinon.stub();
 const insertFriendRequestStub = sinon.stub();
@@ -40,9 +42,13 @@ class MockLambdaClient {
     }
 }
 
+// eslint-disable-next-line
+class MockRedis { constructor() { } }; // forcing no call through
+
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchFriendRequestsForUser': fetchAllRequestsStub,
+        'fetchFriendshipRequestById': fetchSingleRequestStub,
         'fetchActiveRequestCodes': fetchActiveCodesStub,
         'countMutualFriends': countMutualFriendsStub,
         'fetchUserProfile': fetchProfileStub,
@@ -59,6 +65,7 @@ const handler = proxyquire('../friend-handler', {
         'sendSms': sendSmsStub,
         '@noCallThru': true
     },
+    'ioredis': MockRedis,
     'aws-sdk': {
         'Lambda': MockLambdaClient  
     },
@@ -368,9 +375,10 @@ describe('*** UNIT TEST IGNORE FRIEND REQUEST ***', () => {
     });
 
     it('Ignores a friend request properly', async () => {
-        const testEvent = helper.wrapParamsWithPath({ initiatedUserId: testInitiatedUserId }, 'ignore', testTargetUserId);
+        const testEvent = helper.wrapParamsWithPath({ requestId: testRequestId }, 'ignore', testTargetUserId);
 
-        ignoreRequestStub.withArgs(testTargetUserId, testInitiatedUserId).resolves({ updatedTime: testUpdatedTime, logId: testLogId });
+        fetchSingleRequestStub.resolves({ targetUserId: testTargetUserId });
+        ignoreRequestStub.withArgs(testRequestId, testTargetUserId).resolves({ updatedTime: testUpdatedTime, logId: testLogId });
 
         const resultOfIgnore = await handler.directRequestManagement(testEvent);
 
@@ -393,9 +401,17 @@ describe('*** UNIT TEST IGNORE FRIEND REQUEST ***', () => {
         expect(ignoreRequestStub).to.have.not.been.called;
     });
 
+    it('Rejects attempts by other users to call', async () => {
+        const testEvent = helper.wrapParamsWithPath({ requestId: testRequestId }, 'ignore', uuid());
+        fetchSingleRequestStub.resolves({ targetUserId: testTargetUserId });
+        const resultOfIgnore = await handler.directRequestManagement(testEvent);
+        expect(resultOfIgnore).to.deep.equal({ statusCode: 403 });
+        expect(ignoreRequestStub).to.have.not.been.called;
+    });
+
     it('Catches thrown errors', async () => {
-        ignoreRequestStub.withArgs(testTargetUserId, testInitiatedUserId).throws(new Error('Error!'));
-        const testEvent = helper.wrapEvent({ initiatedUserId: testInitiatedUserId }, testTargetUserId, 'ORDINARY_USER');
+        fetchSingleRequestStub.withArgs(testRequestId).throws(new Error('Error!'));
+        const testEvent = helper.wrapEvent({ requestId: testRequestId }, testTargetUserId, 'ORDINARY_USER');
         const resultOfIgnore = await handler.ignoreFriendshipRequest(testEvent);
         expect(resultOfIgnore).to.exist;
         expect(resultOfIgnore).to.deep.equal(helper.wrapResponse({ message: 'Error!' }, 500));
