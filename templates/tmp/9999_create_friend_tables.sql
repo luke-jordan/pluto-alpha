@@ -36,7 +36,7 @@ create table if not exists friend_data.friend_request (
 );
 
 alter table friend_data.friend_request add constraint friend_request_status_type check (
-    request_status in ('PENDING', 'ACCEPTED', 'IGNORED'));
+    request_status in ('PENDING', 'ACCEPTED', 'CANCELLED', 'IGNORED'));
 
 create index if not exists idx_request_status on friend_data.friend_request (request_status);
 

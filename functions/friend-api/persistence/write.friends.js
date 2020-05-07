@@ -111,12 +111,30 @@ module.exports.connectUserToFriendRequest = async (targetUserId, requestCode) =>
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
 };
 
+const createLogDef = (requestId, logType, logContext) => {
+    const logRow = { logId: uuid(), requestId, logType, logContext };
+    const logKeys = Object.keys(logRow);
+    return {
+        query: `insert into ${friendLogTable} (${extractColumnNames(logKeys)}) values %L returning log_id, creation_time`,
+        columnTemplate: extractColumnTemplate(logKeys),
+        rows: [logRow]
+    }
+};
+
+const transformUpdateResult = (resultOfOperations) => {
+    const updatedTime = resultOfOperations[0][0]['updated_time'];
+    const queryLogId = resultOfOperations[1][0]['log_id'];
+
+    return { updatedTime, logId: queryLogId };
+}
+
 /**
  * This function updates a friend requests status to IGNOREED and logs the event.
  * @param {String} targetUserId The system id of the ignoring user.
  * @param {String} initiatedUserId The system id of the ignored user.
  */
 module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) => {
+    // todo : and status = PENDING (so we do not retrospectively wipe previously accepted / cancelled ones)
     const selectQuery = `select request_id from ${friendReqTable} where target_user_id = $1 and initiated_user_id = $2`;
     const fetchResult = await rdsConnection.selectQuery(selectQuery, [targetUserId, initiatedUserId]);
     logger('Found unique id for request to be ignored', fetchResult);
@@ -130,24 +148,28 @@ module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) =
         returnClause: 'updated_time'
     };
 
-    const logId = uuid();
-    const logRow = { logId, requestId, logType: 'FRIENDSHIP_IGNORED', logContext: { targetUserId, initiatedUserId }};
-    const logKeys = Object.keys(logRow);
-
-    const insertLogDef = {
-        query: `insert into ${friendLogTable} (${extractColumnNames(logKeys)}) values %L returning log_id, creation_time`,
-        columnTemplate: extractColumnTemplate(logKeys),
-        rows: [logRow]
-    };
+    const insertLogDef = createLogDef(requestId, 'FRIENDSHIP_IGNORED', { targetUserId, initiatedUserId });
 
     logger(`Updating: ${JSON.stringify(updateFriendReqDef)} Persisting: ${JSON.stringify(insertLogDef)}`);
     const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [insertLogDef]);
     logger('Result of update and insertion:', resultOfOperations);
+    return transformUpdateResult(resultOfOperations);
+};
 
-    const updatedTime = resultOfOperations[0][0]['updated_time'];
-    const queryLogId = resultOfOperations[1][0]['log_id'];
+/**
+ * This one just cancels, given a request ID
+ */
+module.exports.cancelFriendshipRequest = async (requestId, performedByUserId) => {
+    const updateFriendReqDef = {
+        table: friendReqTable,
+        key: { requestId },
+        value: { requestStatus: 'CANCELLED' },
+        returnClause: 'updated_time'
+    };
 
-    return { updatedTime, logId: queryLogId };
+    const logDef = createLogDef(requestId, 'REQUEST_CANCELLED', { performedByUserId });
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [logDef]);
+    return transformUpdateResult(resultOfOperations);
 };
 
 /**
@@ -171,16 +193,6 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
         rows: [friendshipObject]
     };
 
-    // todo : friend request should have a column 'initiated_friendship_id' that refers to the above. It should be a foreign key but
-    // allow for nullable values (for requests that are not accepted). It is not unique (if a friendship goes on-off-on then multiple reqs)
-    // will point to the same friendship
-    const updateFriendReqDef = {
-        table: friendReqTable,
-        key: { requestId },
-        value: { requestStatus: 'ACCEPTED', initiatedFriendshipId: relationshipId },
-        returnClause: 'updated_time'
-    };
-
     const logId = uuid();
     const logRow = { logId, relationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject };
     const logKeys = Object.keys(logRow);
@@ -191,13 +203,24 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
         rows: [logRow]
     };
 
-    logger(`Persisting: ${friendshipInsertDef} and ${insertLogDef} Updating: ${updateFriendReqDef}`);
-    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [friendshipInsertDef, insertLogDef]);
-    logger('Result of update and insertion:', resultOfOperations);
+    logger(`Persisting: ${friendshipInsertDef} and ${insertLogDef}`);
+    const resultOfOperations = await rdsConnection.largeMultiTableInsert([friendshipInsertDef, insertLogDef]);
+    logger('Result of insertion:', resultOfOperations);
 
-    const updatedTime = resultOfOperations[0][0]['updated_time'];
-    const queryRelationshipId = resultOfOperations[1][0]['relationship_id'];
-    const queryLogId = resultOfOperations[2][0]['log_id'];
+    // need to make sure friendship is in before doing this, so foreign key works (could jam into TX but more than worth at present)
+    const updateFriendReqDef = {
+        table: friendReqTable,
+        key: { requestId },
+        value: { requestStatus: 'ACCEPTED', referenceFriendshipId: relationshipId },
+        returnClause: 'updated_time'
+    };
+    logger('Updating via: ', updateFriendReqDef);
+    const resultOfUpdate = await rdsConnection.updateRecordObject(updateFriendReqDef);
+
+    const queryRelationshipId = resultOfOperations[0][0]['relationship_id'];
+    const queryLogId = resultOfOperations[1][0]['log_id'];
+
+    const updatedTime = resultOfUpdate[0]['updated_time'];
 
     return { updatedTime, relationshipId: queryRelationshipId, logId: queryLogId };
 };

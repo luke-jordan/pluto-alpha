@@ -51,7 +51,7 @@ module.exports.fetchSingleRow = async (tableName = 'ConfigVars', keyValue = { ke
 
     try {
         const ddbResult = await docC.get(params).promise();
-        logger('Retrieved result: ', ddbResult);
+        // logger('Retrieved result: ', ddbResult);
         return nonEmptyReturnItem(ddbResult) ? camelCaseKeys(ddbResult.Item) : { };
     } catch (e) {
         logger('Error from AWS: ', e.message);
