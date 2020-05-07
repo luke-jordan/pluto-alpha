@@ -6,7 +6,6 @@ const config = require('config');
 const validator = require('validator');
 const randomWord = require('random-words');
 const format = require('string-format');
-const camelcase = require('camelcase');
 
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
@@ -48,31 +47,44 @@ const fetchSavingHeatFromCache = async (accountIds) => {
     return cachedSavingHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
 };
 
-const transformProfile = (profile, friendships, userAccountMap, accountAndSavingHeatMap) => {
-    const profileAccountId = userAccountMap[profile.systemWideUserId];
-    const profileSavingHeat = accountAndSavingHeatMap[profileAccountId];
-    logger('Got savings heat for profile:', profileSavingHeat);
+const stripDownToPermitted = (shareItems, transaction) => {
+    logger('Stripping down, share items: ', shareItems, ' and transaction: ', transaction);
+    if (!shareItems || shareItems.length === 0 || !shareItems.includes('LAST_ACTIVITY')) {
+        logger('No share items, exit');
+        return null;
+    }
 
+    const strippedActivity = {
+        creationTime: transaction.creationTime,
+        settlementTime: transaction.settlementTime 
+    };
+
+    if (shareItems && shareItems.includes('LAST_AMOUNT')) {
+        strippedActivity.amount = transaction.amount;
+        strippedActivity.unit = transaction.unit;
+        strippedActivity.balance = transaction.balance;
+    }
+
+    return strippedActivity;
+};
+
+const transformProfile = (profile, friendships, userAccountMap, accountAndSavingHeatMap) => {
+    // logger('Map thing: ', userAccountMap);
+    const profileAccountId = userAccountMap[profile.systemWideUserId];
+    // logger('Profile account ID: ', profileAccountId);
+    logger('And from saving heat: ', accountAndSavingHeatMap[profileAccountId]);
+    const { savingHeat, recentActivity } = accountAndSavingHeatMap[profileAccountId];
+        
     const targetFriendship = friendships.filter((friendship) => friendship.initiatedUserId === profile.systemWideUserId ||
         friendship.acceptedUserId === profile.systemWideUserId)[0];
 
     logger('Got target friendship:', targetFriendship);
 
-    const friendshipShareItems = targetFriendship.shareItems;
-    const friendActivities = profileSavingHeat.shareItems[0];
-
-    const allowedShareItems = config.get('share.items');
-    const defaultActivities = config.get('share.activities');
-
-    allowedShareItems.forEach((allowedShareItem) => {
-        if (!friendshipShareItems.includes(allowedShareItem)) {
-            defaultActivities.forEach((activity) => {
-                if (friendActivities[activity]) {
-                    Reflect.deleteProperty(friendActivities[activity], camelcase(allowedShareItem));
-                }
-            });
-        }
-    });
+    const expectedActivities = config.get('share.activities');
+    logger('Recent activity: ', recentActivity);
+    const extractShareableDetails = (activity) => stripDownToPermitted(targetFriendship.shareItems, recentActivity[activity]);
+    
+    const lastActivity = expectedActivities.reduce((obj, activity) => ({ ...obj, [activity]: extractShareableDetails(activity) }), {});
 
     const transformedProfile = {
         relationshipId: targetFriendship.relationshipId,
@@ -80,8 +92,9 @@ const transformProfile = (profile, friendships, userAccountMap, accountAndSaving
         familyName: profile.familyName,
         calledName: profile.calledName ? profile.calledName : profile.personalName,
         contactMethod: profile.phoneNumber || profile.emailAddress,
-        savingHeat: profileSavingHeat.savingHeat,
-        shareItems: profileSavingHeat.shareItems
+        shareItems: targetFriendship.shareItems,
+        savingHeat,
+        lastActivity
     };
     
     return transformedProfile;
@@ -116,6 +129,7 @@ const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendships)
     logger('Aggregated savings heat from cache and lambda:', savingHeatForAccounts);
 
     const accountAndSavingHeatMap = savingHeatForAccounts.reduce((obj, savingHeat) => ({ ...obj, [savingHeat.accountId]: savingHeat }), {});
+    logger('Map: ', accountAndSavingHeatMap);
 
     const profilesWithSavingHeat = profiles.map((profile) => transformProfile(profile, friendships, userAccountMap, accountAndSavingHeatMap));
 

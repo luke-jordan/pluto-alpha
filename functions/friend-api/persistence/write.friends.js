@@ -227,7 +227,6 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus, shareItems };
     const friendshipKeys = Object.keys(friendshipObject);
 
-
     const updateDefs = [];
 
     let persistedRelationshipId = '';
@@ -257,13 +256,13 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const updateFriendReqDef = {
         table: friendReqTable,
         key: { requestId },
-        value: { requestStatus: 'ACCEPTED', referenceFriendshipId: relationshipId },
+        value: { requestStatus: 'ACCEPTED', referenceFriendshipId: persistedRelationshipId },
         returnClause: 'updated_time'
     };
     updateDefs.push(updateFriendReqDef);
     logger('Updating friend request via: ', updateFriendReqDef);
 
-    const insertLogDef = createLogDef({ requestId, relationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject });
+    const insertLogDef = createLogDef({ requestId, relationshipId: persistedRelationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject });
 
     const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefs, [insertLogDef]);
     logger('Result of operations: ', resultOfOperations);

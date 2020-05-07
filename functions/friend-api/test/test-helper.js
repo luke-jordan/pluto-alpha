@@ -1,5 +1,10 @@
 'use strict';
 
+const sinon = require('sinon');
+const chai = require('chai');
+chai.use(require('sinon-chai'));
+const expect = chai.expect;
+
 module.exports.resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
@@ -48,3 +53,14 @@ module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
         body: JSON.stringify(body)
     })
 });
+
+module.exports.standardOkayChecks = (result, checkHeaders = false) => {
+    expect(result).to.exist;
+    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('body');
+    if (checkHeaders) {
+        expect(result).to.have.property('headers');
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
+    return JSON.parse(result.body);
+};
