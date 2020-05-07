@@ -587,9 +587,12 @@ module.exports.acceptFriendshipRequest = async (event) => {
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
         if (targetUserId === systemWideUserId) {
-            const createdFriendship = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
-            logger('Result of friendship insertion:', createdFriendship);
-            return opsUtil.wrapResponse(createdFriendship);
+            const creationResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
+            logger('Result of friendship insertion:', creationResult);
+            await publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_ACCEPTED', { context: { ...creationResult } });
+            const transformedResult = await appendUserNameToRequest(systemWideUserId, friendshipRequest);
+
+            return opsUtil.wrapResponse(transformedResult);
         }
     
         throw new Error('Error! Accepting user is not friendship target');
