@@ -90,27 +90,33 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         details: [{
             accountId: secondAccId,
             savingHeat: `${expectedsavingHeat}`,
-            USER_SAVING_EVENT: {
-                lastActivityDate: testActivityDate,
-                lastActivityAmount: { amount: '2000', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-            }
+            shareItems: [{
+                USER_SAVING_EVENT: {
+                    lastActivityDate: testActivityDate,
+                    lastActivityAmount: { amount: '2000', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+                }
+            }]
         },
         {
             accountId: thirdAccId,
             savingHeat: `${expectedsavingHeat}`,
-            BOOST_REDEMPTION: {
-                lastActivityDate: testActivityDate,
-                lastActivityAmount: { amount: '500', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-            }
+            shareItems: [{
+                BOOST_REDEMPTION: {
+                    lastActivityDate: testActivityDate,
+                    lastActivityAmount: { amount: '500', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+                }
+            }]
         }]
     };
 
     const expectedResultFromCache = {
         savingHeat: `${expectedsavingHeat}`,
-        WITHDRAWAL: {
-            lastActivityDate: testActivityDate,
-            lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-        }
+        shareItems: [{
+            WITHDRAWAL: {
+                lastActivityDate: testActivityDate,
+                lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+            }
+        }]
     };
 
     const mockResponseFromCache = (accountId) => ({
@@ -133,7 +139,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         const shareItems = ['LAST_ACTIVITY_AMOUNT'];
 
         const [firstUserId, secondUserId, thirdUserId] = [uuid(), uuid(), uuid()];
-        const includeLastActivityOfType = config.get('share.userActivities');
+        const includeLastActivityOfType = config.get('share.activities');
         
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.calcSavingHeat'), false, { accountIds: [secondAccId, thirdAccId], includeLastActivityOfType });
         const testEvent = helper.wrapEvent({}, testSystemId, 'ORDINARY_USER');
@@ -170,32 +176,32 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         expect(fetchResult).to.deep.equal(helper.wrapResponse([
             {
                 ...expectedProfile(testRelationshipId),
-                shareItems: {
-                    savingHeat: `${expectedsavingHeat}`,
+                savingHeat: `${expectedsavingHeat}`,
+                shareItems: [{
                     WITHDRAWAL: {
                         lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
                     }
-                }
+                }]
             },
             {
                 ...expectedProfile(testRelationshipId),
-                shareItems: {
-                    savingHeat: `${expectedsavingHeat}`,
+                savingHeat: `${expectedsavingHeat}`,
+                shareItems: [{
                     USER_SAVING_EVENT: {
                         lastActivityAmount: { amount: '2000', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
                     }
-                }  
+                }]  
             },
             {
                 ...expectedProfile(testRelationshipId),
-                shareItems: {
-                    savingHeat: `${expectedsavingHeat}`,
+                savingHeat: `${expectedsavingHeat}`,
+                shareItems: [{
                     BOOST_REDEMPTION: {
                         lastActivityAmount: { amount: '500', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
                     }
-                }
+                }]
             },
-            { ...expectedProfile('SELF'), shareItems: { ...expectedResultFromCache } }
+            { relationshipId: 'SELF', savingHeat: `${expectedsavingHeat}` }
         ]));
     });
 
@@ -232,10 +238,10 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([
-            { ...expectedProfile(testRelationshipId), shareItems: { ...expectedResultFromCache } },
-            { ...expectedProfile(testRelationshipId), shareItems: { ...expectedResultFromCache } },
-            { ...expectedProfile(testRelationshipId), shareItems: { ...expectedResultFromCache } },
-            { ...expectedProfile('SELF'), shareItems: { ...expectedResultFromCache } }
+            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache },
+            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache },
+            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache },
+            { relationshipId: 'SELF', savingHeat: `${expectedsavingHeat}` }
         ]));
     });
 
@@ -272,10 +278,10 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([
-            { ...expectedProfile(testRelationshipId), shareItems: { ...expectedResultFromCache } },
-            { ...expectedProfile(testRelationshipId), shareItems: { ...expectedResultFromCache } },
-            { ...expectedProfile(testRelationshipId), shareItems: { ...expectedResultFromCache } },
-            { ...expectedProfile('SELF'), shareItems: { ...expectedResultFromCache } }
+            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache },
+            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache },
+            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache },
+            { relationshipId: 'SELF', savingHeat: `${expectedsavingHeat}` }
         ]));
     });
 

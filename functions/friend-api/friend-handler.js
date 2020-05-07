@@ -32,7 +32,7 @@ const invokeLambda = (functionName, payload, sync = true) => ({
 });
 
 const invokeSavingHeatLambda = async (accountIds) => {
-    const includeLastActivityOfType = config.get('share.userActivities');
+    const includeLastActivityOfType = config.get('share.activities');
     const savingHeatLambdaInvoke = invokeLambda(config.get('lambdas.calcSavingHeat'), { accountIds, includeLastActivityOfType });
     logger('Invoke savings heat lambda with arguments: ', savingHeatLambdaInvoke);
     const savingHeatResult = await lambda.invoke(savingHeatLambdaInvoke).promise();
@@ -51,36 +51,39 @@ const fetchSavingHeatFromCache = async (accountIds) => {
 const transformProfile = (profile, friendships, userAccountMap, accountAndSavingHeatMap) => {
     const profileAccountId = userAccountMap[profile.systemWideUserId];
     const profileSavingHeat = accountAndSavingHeatMap[profileAccountId];
-    Reflect.deleteProperty(profileSavingHeat, 'accountId');
     logger('Got savings heat for profile:', profileSavingHeat);
 
     const targetFriendship = friendships.filter((friendship) => friendship.initiatedUserId === profile.systemWideUserId ||
-        friendship.acceptedUserId === profile.systemWideUserId);
+        friendship.acceptedUserId === profile.systemWideUserId)[0];
 
     logger('Got target friendship:', targetFriendship);
 
-    const allowedShareItems = config.get('share.allowedShareItems');
-    const userActivities = config.get('share.userActivities');
+    const friendshipShareItems = targetFriendship.shareItems;
+    const friendActivities = profileSavingHeat.shareItems[0];
+
+    const allowedShareItems = config.get('share.items');
+    const defaultActivities = config.get('share.activities');
 
     allowedShareItems.forEach((allowedShareItem) => {
-        if (!targetFriendship[0].shareItems.includes(allowedShareItem)) {
-            userActivities.forEach((activity) => {
-                if (profileSavingHeat[activity]) {
-                    Reflect.deleteProperty(profileSavingHeat[activity], camelcase(allowedShareItem));
+        if (!friendshipShareItems.includes(allowedShareItem)) {
+            defaultActivities.forEach((activity) => {
+                if (friendActivities[activity]) {
+                    Reflect.deleteProperty(friendActivities[activity], camelcase(allowedShareItem));
                 }
             });
         }
     });
 
     const transformedProfile = {
-        relationshipId: targetFriendship[0].relationshipId,
+        relationshipId: targetFriendship.relationshipId,
         personalName: profile.personalName,
         familyName: profile.familyName,
         calledName: profile.calledName ? profile.calledName : profile.personalName,
-        contactMethod: profile.phoneNumber || profile.emailAddress
+        contactMethod: profile.phoneNumber || profile.emailAddress,
+        savingHeat: profileSavingHeat.savingHeat,
+        shareItems: profileSavingHeat.shareItems
     };
     
-    transformedProfile.shareItems = profileSavingHeat;
     return transformedProfile;
 };
 
@@ -121,41 +124,32 @@ const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendships)
     return profilesWithSavingHeat;
 };
 
-const fetchUserProfileAndSavingHeat = async (systemWideUserId) => {
-    const [userProfile, userAccountMap] = await Promise.all([
-        persistenceRead.fetchUserProfile({ systemWideUserId }),
-        persistenceRead.fetchAccountIdForUser(systemWideUserId)
-    ]);
-
+/**
+ * The function fetches the user profile and saving heat for the calling user. It differs from the
+ * appendSavingHeatToProfiles process in that it does not seek friendships
+ * @param {string} systemWideUserId 
+ */
+const fetchOwnSavingHeat = async (systemWideUserId) => {
+    const userAccountMap = await persistenceRead.fetchAccountIdForUser(systemWideUserId);
     const accountId = userAccountMap[systemWideUserId];
-    logger(`Got account id: ${accountId}  and user profile: ${JSON.stringify(userProfile)}`);
+    logger(`Got account id: ${accountId}`);
 
     let savingHeat = null;
 
     const savingHeatFromCache = await fetchSavingHeatFromCache([accountId]);
-    logger('Got saving heat from cache:', savingHeatFromCache);
+    logger('Got caller saving heat from cache:', savingHeatFromCache);
 
     if (savingHeatFromCache.length === 0) {
         const savingHeatFromLambda = await invokeSavingHeatLambda([accountId]);
-        logger('Got saving heat from lambda:', savingHeatFromLambda);
-        savingHeat = savingHeatFromLambda[0];
+        logger('Got caller saving heat from lambda:', savingHeatFromLambda);
+        savingHeat = savingHeatFromLambda[0].savingHeat;
     } else {
-        savingHeat = savingHeatFromCache[0];
+        savingHeat = savingHeatFromCache[0].savingHeat;
     }
 
-    const userProfileAndSavingHeat = {
-        relationshipId: 'SELF',
-        personalName: userProfile.personalName,
-        familyName: userProfile.familyName,
-        calledName: userProfile.calledName ? userProfile.calledName : userProfile.personalName,
-        contactMethod: userProfile.phoneNumber || userProfile.emailAddress
-    };
+    logger('Got saving heat:', savingHeat);
 
-    Reflect.deleteProperty(savingHeat, 'accountId');
-    userProfileAndSavingHeat.shareItems = savingHeat;
-    logger('Returning user profile and saving heat:', userProfileAndSavingHeat);
-
-    return userProfileAndSavingHeat;
+    return { relationshipId: 'SELF', savingHeat };
 };
 
 /**
@@ -201,8 +195,8 @@ module.exports.obtainFriends = async (event) => {
         const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, userAccountMap, friendships);
 
         // todo: reuse above infra for user
-        const userProfileAndSavingHeat = await fetchUserProfileAndSavingHeat(systemWideUserId);
-        profilesWithSavingHeat.push(userProfileAndSavingHeat);
+        const savingHeatForCallingUser = await fetchOwnSavingHeat(systemWideUserId);
+        profilesWithSavingHeat.push(savingHeatForCallingUser);
         
         return opsUtil.wrapResponse(profilesWithSavingHeat);
     } catch (err) {
@@ -236,46 +230,6 @@ module.exports.deactivateFriendship = async (event) => {
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
-    }
-};
-
-const handleUserNotFound = async (friendRequest) => {
-    const customShareMessage = friendRequest.customShareMessage ? friendRequest.customShareMessage : null;
-    friendRequest.customShareMessage = customShareMessage ? String(customShareMessage.length) : null;
-    const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
-    logger('Persisting friend request resulted in:', insertionResult);
-
-    const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendRequest.initiatedUserId });
-    const initiatedUserName = userProfile.calledName ? userProfile.calledName : userProfile.firstName;
-
-    const { contactType, contactMethod } = friendRequest.targetContactDetails;
-
-    let dispatchResult = null;
-
-    if (contactType === 'PHONE') {
-        const dispatchMsg = customShareMessage
-            ? customShareMessage
-            : format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
-        
-        dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
-    }
-
-    if (contactType === 'EMAIL') {
-        const bodyTemplateKey = customShareMessage
-            ? config.get('templates.email.custom.templateKey')
-            : config.get('templates.email.default.templateKey');
-
-        const templateVariables = customShareMessage ? { customShareMessage } : { initiatedUserName };
-
-        dispatchResult = await publisher.sendSystemEmail({
-            subject: config.get('templates.email.default.subject'),
-            toList: [contactMethod],
-            bodyTemplateKey,
-            templateVariables
-        });
-
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult, dispatchResult }});
     }
 };
 
@@ -377,6 +331,102 @@ module.exports.obtainReferralCode = async (event) => {
     }
 };
 
+const appendUserNameToRequest = async (userId, friendRequest) => {
+    const type = friendRequest.targetUserId === userId ? 'RECEIVED' : 'INITIATED';
+    const friendUserId = type === 'INITIATED' 
+        ? friendRequest.targetUserId
+        : friendRequest.initiatedUserId;
+
+    const profile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendUserId });
+    logger('Got friend profile:', profile);
+
+    const transformedResult = {
+        type,
+        requestId: friendRequest.requestId,
+        requestedShareItems: friendRequest.requestedShareItems,
+        creationTime: friendRequest.creationTime,
+        personalName: profile.personalName,
+        familyName: profile.familyName,
+        calledName: profile.calledName ? profile.calledName : profile.personalName
+    };
+
+    if (type === 'INITIATED') {
+        if (friendRequest.targetContactDetails) {
+            transformedResult.contactMethod = friendRequest.targetContactDetails.contactMethod;
+        }
+    }
+
+    if (type === 'RECEIVED') {
+        const mutualFriendCount = await persistenceRead.countMutualFriends(userId, [friendUserId]);
+        transformedResult.numberOfMutualFriends = mutualFriendCount[0][friendUserId];
+    }
+
+    if (friendRequest.customShareMessage) {
+        transformedResult.customShareMessage = friendRequest.customShareMessage;
+    }
+
+    if (friendRequest.requestCode) {
+        transformedResult.requestCode = friendRequest.requestCode;
+    }
+
+    logger('Transformed friend request:', transformedResult);
+
+    return transformedResult;
+};
+
+const handleUserNotFound = async (friendRequest) => {
+    const customShareMessage = friendRequest.customShareMessage ? friendRequest.customShareMessage : null;
+    friendRequest.customShareMessage = customShareMessage ? String(customShareMessage.length) : null;
+    const createdFriendRequest = await persistenceWrite.insertFriendRequest(friendRequest);
+    logger('Persisting friend request resulted in:', createdFriendRequest);
+
+    const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendRequest.initiatedUserId });
+    const initiatedUserName = userProfile.calledName ? userProfile.calledName : userProfile.firstName;
+
+    const { contactType, contactMethod } = friendRequest.targetContactDetails;
+    const initiatedUserId = friendRequest.initiatedUserId;
+
+    let dispatchResult = null;
+
+    if (contactType === 'PHONE') {
+        const dispatchMsg = customShareMessage
+            ? customShareMessage
+            : format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
+        
+        dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
+    }
+
+    if (contactType === 'EMAIL') {
+        const bodyTemplateKey = customShareMessage
+            ? config.get('templates.email.custom.templateKey')
+            : config.get('templates.email.default.templateKey');
+
+        const templateVariables = customShareMessage ? { customShareMessage } : { initiatedUserName };
+
+        dispatchResult = await publisher.sendSystemEmail({
+            subject: config.get('templates.email.default.subject'),
+            toList: [contactMethod],
+            bodyTemplateKey,
+            templateVariables
+        });
+    }
+
+    const context = { createdFriendRequest, dispatchResult };
+    await publisher.publishUserEvent(initiatedUserId, 'FRIEND_REQUEST_CREATED', { context });
+
+    const transformedRequest = {
+        type: 'INITIATED',
+        requestId: createdFriendRequest.requestId,
+        requestedShareItems: createdFriendRequest.requestedShareItems,
+        creationTime: createdFriendRequest.creationTime,
+        contactMethod
+    };
+
+    logger('Transformed request:', transformedRequest);
+
+    return opsUtil.wrapResponse(transformedRequest);
+};
+
 /**
  * This function persists a new friendship request.
  * @param {Object} event
@@ -425,10 +475,15 @@ module.exports.addFriendshipRequest = async (event) => {
         }
     
         logger('Assembled friend request: ', friendRequest);
-        const insertionResult = await persistenceWrite.insertFriendRequest(friendRequest);
-        logger('Result of friend request insertion:', insertionResult);
-    
-        return opsUtil.wrapResponse({ result: 'SUCCESS', requestId: insertionResult.requestId });
+
+        const createdFriendRequest = await persistenceWrite.insertFriendRequest(friendRequest);
+        logger('Result of friend request insertion:', createdFriendRequest);
+        await publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_CREATED', { context: { createdFriendRequest } });
+        
+        const transformedRequest = await appendUserNameToRequest(systemWideUserId, createdFriendRequest);
+        logger('Transformed request:', transformedRequest);
+
+        return opsUtil.wrapResponse(transformedRequest);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -464,46 +519,6 @@ module.exports.connectFriendshipRequest = async (event) => {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
     }
-};
-
-const appendUserNameToRequest = async (userId, friendRequest) => {
-    const type = friendRequest.targetUserId === userId ? 'RECEIVED' : 'INITIATED';
-    const friendUserId = type === 'INITIATED' 
-        ? friendRequest.targetUserId
-        : friendRequest.initiatedUserId;
-
-    const profile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendUserId });
-    logger('Got friend profile:', profile);
-
-    const transformedResult = {
-        type,
-        requestId: friendRequest.requestId,
-        requestCode: friendRequest.requestCode,
-        requestedShareItems: friendRequest.requestedShareItems,
-        creationTime: friendRequest.creationTime,
-        personalName: profile.personalName,
-        familyName: profile.familyName,
-        calledName: profile.calledName ? profile.calledName : profile.personalName
-    };
-
-    if (type === 'INITIATED') {
-        if (friendRequest.targetContactDetails) {
-            transformedResult.contactMethod = friendRequest.targetContactDetails.contactMethod;
-        }
-    }
-
-    if (type === 'RECEIVED') {
-        const mutualFriendCount = await persistenceRead.countMutualFriends(userId, [friendUserId]);
-        transformedResult.numberOfMutualFriends = mutualFriendCount[0][friendUserId];
-    }
-
-    if (friendRequest.customShareMessage) {
-        transformedResult.customShareMessage = friendRequest.customShareMessage;
-    }
-
-    logger('Transformed friend request:', transformedResult);
-
-    return transformedResult;
 };
 
 /**

@@ -58,7 +58,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         helper.resetStubs(multiTableStub, multiOpStub, updateStub, queryStub, uuidStub);
     });
 
-    it('Inserts friend request properly', async () => {
+    it.skip('Inserts friend request properly', async () => {
         const testFriendRequest = {
             requestId: testRequestId,
             requestStatus: 'PENDING',

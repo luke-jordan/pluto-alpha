@@ -58,7 +58,7 @@
         "blacklist": "\\b(password|pwd)"
     },
     "share": {
-        "allowedShareItems": ["LAST_ACTIVITY_DATE", "LAST_ACTIVITY_AMOUNT"],
-        "userActivities": ["USER_SAVING_EVENT", "WITHDRAWAL", "BOOST_REDEMPTION", "CAPITALIZATION"]
+        "items": ["LAST_ACTIVITY_DATE", "LAST_ACTIVITY_AMOUNT"],
+        "activities": ["USER_SAVING_EVENT", "WITHDRAWAL", "BOOST_REDEMPTION", "CAPITALIZATION"]
     }
 }

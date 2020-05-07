@@ -56,10 +56,11 @@ const appendLastActivityToSavingHeat = async (savingHeat, activitiesToInclude) =
     const accountId = savingHeat.accountId;
     const txHistory = await persistence.fetchTransactionsForHistory(accountId);
 
+    savingHeat.shareItems = [];
     activitiesToInclude.forEach((activity) => {
         const latestActivity = findLastActivitiesOfType(activity, txHistory);
         if (latestActivity) {
-            savingHeat[activity] = latestActivity;
+            savingHeat.shareItems.push({ [activity]: latestActivity });
         }
     });
 

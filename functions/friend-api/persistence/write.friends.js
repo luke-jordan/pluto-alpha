@@ -49,6 +49,25 @@ const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
     logger('Inserted user Ids: ', resultOfInsertion);
 };
 
+const checkForExistingFriendRequest = async (friendRequest) => {
+    const { initiatedUserId, targetUserId, targetContactDetails } = friendRequest;
+
+    let findQuery = null;
+    let queryValues = [];
+
+    if (targetUserId) {
+        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_user_id = $2`;
+        queryValues = [initiatedUserId, targetUserId];
+    } else {
+        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_contact_details = $2`;
+        queryValues = [initiatedUserId, targetContactDetails];
+    }
+
+    const existingFriendRequest = await rdsConnection.selectQuery(findQuery, queryValues);
+    
+    return existingFriendRequest.length > 0 ? camelCaseKeys(existingFriendRequest[0]) : null;
+};
+
 /**
  * This function persists a new friend requests, initialising its request status to PENDING
  * @param {object} friendRequest
@@ -60,6 +79,10 @@ const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
  * @property {Array} requestedShareItems Specifies what the initiating user wants to share.
  */
 module.exports.insertFriendRequest = async (friendRequest) => {
+    const existingFriendRequest = await checkForExistingFriendRequest(friendRequest);
+    if (existingFriendRequest) {
+        return existingFriendRequest;
+    }
     // do this for now
     await checkForAndInsertUserIds(friendRequest);
     
@@ -90,9 +113,13 @@ module.exports.insertFriendRequest = async (friendRequest) => {
     logger('Result of insertion:', insertionResult);
 
     const queryRequestId = insertionResult[0][0]['request_id'];
+    const creationTime = insertionResult[0][0]['creation_time'];
     const queryLogId = insertionResult[1][0]['log_id'];
 
-    return { requestId: queryRequestId, logId: queryLogId };
+    logger(`Request ids from persistence: ${queryRequestId} and ${queryLogId}`);
+
+    friendRequest.creationTime = creationTime;
+    return friendRequest;
 };
 
 /**
