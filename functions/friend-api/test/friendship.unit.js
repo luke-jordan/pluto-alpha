@@ -15,8 +15,10 @@ const expect = chai.expect;
 
 const helper = require('./test-helper');
 
+const redisGetStub = sinon.stub();
 const connectUserStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const fetchAccountStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const publishUserEventStub = sinon.stub();
@@ -26,11 +28,18 @@ const deactivateFriendshipStub = sinon.stub();
 
 const testLogId = uuid();
 const testSystemId = uuid();
+const testAccountId = uuid();
 const testInitiatedUserId = uuid();
 const testTargetUserId = uuid();
 const testAcceptedUserId = uuid();
 const testRelationshipId = uuid();
 const testRequestId = uuid();
+
+class MockRedis {
+    constructor () { 
+        this.mget = redisGetStub;
+    }
+}
 
 class MockLambdaClient {
     constructor () {
@@ -38,13 +47,11 @@ class MockLambdaClient {
     }
 }
 
-// eslint-disable-next-line
-class MockRedis { constructor() { } }; // forcing no call through
-
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchFriendshipRequestById': fetchRequestStub,
         'countMutualFriends': countMutualFriendsStub,
+        'fetchAccountIdForUser': fetchAccountStub,
         'fetchUserProfile': fetchProfileStub,
         '@noCallThru': true
     },
@@ -115,6 +122,22 @@ describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
 
 describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     const testCreationTime = moment().format();
+    const testActivityDate = moment().format();
+
+    const expectedResultFromCache = {
+        savingHeat: '24.13',
+        shareItems: [{
+            WITHDRAWAL: {
+                lastActivityDate: testActivityDate,
+                lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+            }
+        }]
+    };
+
+    const mockResponseFromCache = (accountId) => ({
+        accountId,
+        ...expectedResultFromCache
+    });
 
     const testProfile = {
         systemWideUserId: testInitiatedUserId,
@@ -126,14 +149,12 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     };
 
     const expectedFriendship = {
-        type: 'RECEIVED',
-        requestId: testRequestId,
-        requestedShareItems: ['LAST_ACTIVITY_DATE'],
-        creationTime: testCreationTime,
+        relationshipId: testRelationshipId,
         personalName: 'Yao',
         familyName: 'Shu',
         calledName: 'Yao Shu',
-        numberOfMutualFriends: 23
+        contactMethod: '02130940334',
+        ...expectedResultFromCache
     };
 
     const testFriendRequest = {
@@ -162,6 +183,8 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
         insertFriendshipStub.withArgs(testRequestId, testInitiatedUserId, testTargetUserId).resolves(mockFriendship);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
         countMutualFriendsStub.resolves([{ [testInitiatedUserId]: 23 }]);
+        fetchAccountStub.resolves({ [testInitiatedUserId]: testAccountId });
+        redisGetStub.resolves([JSON.stringify(mockResponseFromCache(testAccountId))]);
 
         const insertionResult = await handler.directRequestManagement(helper.wrapParamsWithPath({ requestId: testRequestId }, 'accept', testTargetUserId));
         
