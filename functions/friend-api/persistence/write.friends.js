@@ -268,9 +268,7 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefs, [insertLogDef]);
     logger('Result of operations: ', resultOfOperations);
 
-    const queryLogId = resultOfOperations[1][0]['log_id'];
-
-    return { relationshipId: persistedRelationshipId, logId: queryLogId };
+    return friendshipObject;
 };
 
 /**

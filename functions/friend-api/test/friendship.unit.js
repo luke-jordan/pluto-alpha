@@ -108,26 +108,26 @@ describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
 
 describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
 
+    const mockFriendship = {
+        relationshipId: testRelationshipId,
+        initiatedUserId: testInitiatedUserId,
+        acceptedUserId: testAcceptedUserId,
+        relationshipStatus: 'ACTIVE',
+        shareItems: []
+    };
+
     beforeEach(() => {
         resetStubs();
     });
 
     it('Persists new friendship', async () => {
         fetchRequestStub.withArgs(testRequestId).resolves({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
-        insertFriendshipStub.withArgs(testRequestId, testInitiatedUserId, testTargetUserId).resolves({ relationshipId: testRelationshipId, logId: testLogId });
+        insertFriendshipStub.withArgs(testRequestId, testInitiatedUserId, testTargetUserId).resolves(mockFriendship);
 
         const insertionResult = await handler.directRequestManagement(helper.wrapParamsWithPath({ requestId: testRequestId }, 'accept', testTargetUserId));
         
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.deep.equal(helper.wrapResponse({
-            result: 'SUCCESS',
-            updateLog: {
-                insertionResult: {
-                    relationshipId: testRelationshipId,
-                    logId: testLogId
-                }
-            }
-        }));
+        expect(insertionResult).to.deep.equal(helper.wrapResponse(mockFriendship));
     });
 
     it('Fails where accepting user is not target user', async () => {

@@ -184,7 +184,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
 
         const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId, ['ACTIVITY_LEVEL']);
         expect(insertResult).to.exist;
-        expect(insertResult).to.deep.equal({ relationshipId: testRelationshipId, logId: testLogId });
+        expect(insertResult).to.deep.equal(friendshipObject);
 
         // *not* to be a general pattern, but using here as complex set of args and failures should be easily traceable
         expect(simpleInsertStub).to.have.been.calledOnce;
@@ -254,7 +254,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
 
         const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId, ['ACTIVITY_LEVEL']);
         expect(insertResult).to.exist;
-        expect(insertResult).to.deep.equal({ relationshipId: testRelationshipId, logId: testLogId });
+        expect(insertResult).to.deep.equal(friendshipObject);
 
         expect(multiOpStub).to.have.been.calledOnce;
         const multiOpArgs = multiOpStub.getCall(0).args;
