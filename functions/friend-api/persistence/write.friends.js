@@ -200,7 +200,7 @@ module.exports.cancelFriendshipRequest = async (requestId, performedByUserId) =>
 };
 
 const checkForExistingFriendship = async (initiatedUserId, acceptedUserId) => {
-    const query = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_uer_id = $2`; 
+    const query = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_user_id = $2`; 
     const [firstResult, secondResult] = await Promise.all([
         rdsConnection.selectQuery(query, [initiatedUserId, acceptedUserId]),
         rdsConnection.selectQuery(query, [acceptedUserId, initiatedUserId])

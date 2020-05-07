@@ -169,7 +169,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             rows: [testLogObject]
         };
 
-        const selectQuery = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_uer_id = $2`;
+        const selectQuery = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_user_id = $2`;
 
         uuidStub.onFirstCall().returns(testRelationshipId);
         uuidStub.onSecondCall().returns(testLogId);
@@ -237,7 +237,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             rows: [testLogObject]
         };
 
-        const selectQuery = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_uer_id = $2`;
+        const selectQuery = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_user_id = $2`;
 
         uuidStub.onFirstCall().returns(testRelationshipId);
         uuidStub.onSecondCall().returns(testLogId);
