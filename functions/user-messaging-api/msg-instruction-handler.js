@@ -65,7 +65,7 @@ const validateMessageTemplate = (messageTemplate) => {
  * First it asserts whether all required properties are present in the instruction object. If so, then
  * condtional required properties are asserted. These are properties that are only required under certain condtions.
  * For example, if the message instruction has a recurring presentation then a recurrance instruction is required to
- * describe how frequently the notification should recur. The object properties recieved by this function are described below:
+ * describe how frequently the notification should recur. The object properties received by this function are described below:
  * @param {object} instruction An instruction object. This objects properties are described below.
  * @property {string} instructionId The instruction unique id, useful in persistence operations.
  * @property {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.

@@ -172,6 +172,19 @@ module.exports.cancelFriendshipRequest = async (requestId, performedByUserId) =>
     return transformUpdateResult(resultOfOperations);
 };
 
+const checkForExistingFriendship = async (initiatedUserId, acceptedUserId) => {
+    const query = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_uer_id = $2`; 
+    const [firstResult, secondResult] = await Promise.all([
+        rdsConnection.selectQuery(query, [initiatedUserId, acceptedUserId]),
+        rdsConnection.selectQuery(query, [acceptedUserId, initiatedUserId])
+    ]);
+
+    const queryResult = [...firstResult, ...secondResult];
+    logger('Found existing friendship:', queryResult);
+
+    return query.length > 0 ? camelCaseKeys(queryResult[0]) : null;
+};
+
 /**
  * This function activates and persists a new friendship. It also updates the associated friend request to ACCEPTED.
  * @param {String} requestId The request id associated with the friend request being accepted.
@@ -186,12 +199,31 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus, shareItems };
     const friendshipKeys = Object.keys(friendshipObject);
 
-    // will need a test of whether friendship existed prior, and if so, just use an update def to swap it to active
-    const friendshipInsertDef = {
-        query: `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`,
-        columnTemplate: extractColumnTemplate(friendshipKeys),
-        rows: [friendshipObject]
-    };
+    const insertDefs = [];
+    const updateDefs = [];
+
+    const existingFriendship = await checkForExistingFriendship(initiatedUserId, acceptedUserId);
+    logger('Found existing friendship:', existingFriendship);
+    if (existingFriendship) {
+        const friendshipUpdateDef = {
+            table: friendshipTable,
+            key: { relationshipId: existingFriendship.relationshipId },
+            value: { relationshipStatus: 'ACTIVE' },
+            returnClause: 'updated_time'
+        };
+
+        updateDefs.push(friendshipUpdateDef);
+    } 
+    
+    if (!existingFriendship) {
+        const friendshipInsertDef = {
+            query: `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`,
+            columnTemplate: extractColumnTemplate(friendshipKeys),
+            rows: [friendshipObject]
+        };
+
+        insertDefs.push(friendshipInsertDef);
+    }
 
     const logId = uuid();
     const logRow = { logId, relationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject };

@@ -137,11 +137,11 @@ module.exports.fetchActiveSavingFriendsForUser = async (systemWideUserId) => {
     const initiatedFriends = initiatedResult.map((row) => camelCaseKeys(row));
 
     // unique constraint on table means do not have to worry about duplicates
-    const fetchedUserIds = [...acceptedFriends, ...initiatedFriends];
+    const fetchedActiveFriends = [...acceptedFriends, ...initiatedFriends];
 
-    logger('Retrieved user ids for friends:', fetchedUserIds);
+    logger('Retrieved active friendships for user:', fetchedActiveFriends);
     
-    return fetchedUserIds;
+    return { [systemWideUserId]: fetchedActiveFriends };
 };
 
 /**
@@ -216,4 +216,28 @@ module.exports.fetchAccountIdForUser = async (systemWideUserId) => {
     return fetchResult.length > 0
         ? { [systemWideUserId]: fetchResult[0]['account_id'] }
         : { };
+};
+
+/**
+ * Counts the number of mutual friends between a user and an array of other users.
+ */
+module.exports.countMutualFriends = async (targetUserId, initiatedUserIds) => {
+    const friendshipsForTargetUser = await exports.fetchActiveSavingFriendsForUser(targetUserId);
+    const friendIdsForTargetUser = friendshipsForTargetUser[targetUserId].map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+    logger('Found friends for target user:', friendIdsForTargetUser);
+
+    const friendsForInitiatedUsers = await Promise.all(initiatedUserIds.map((userId) => exports.fetchActiveSavingFriendsForUser(userId)));
+    logger('Found friends for initaited users:', friendsForInitiatedUsers);
+
+    const mutualFriendCounts = friendsForInitiatedUsers.map((friendships) => {
+        const initiatedUserId = Object.keys(friendships)[0];
+        const friendIdsForInitiatedUser = friendships[initiatedUserId].map((friendship) => friendship.initiatedUserId || friendship.acceptedUserId);
+        logger('Found friends for initiator:', friendIdsForInitiatedUser);
+        const mutualFriends = friendIdsForTargetUser.filter((friendId) => friendIdsForInitiatedUser.includes(friendId));
+        logger('Found mutual friends:', mutualFriends);
+
+        return { [initiatedUserId]: mutualFriends.length };
+    });
+
+    return mutualFriendCounts;
 };

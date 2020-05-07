@@ -22,7 +22,8 @@
     "lambdas": {
         "sendOutboundMessages": "outbound_comms_send",
         "calcSavingHeat": "user_save_heat_fetch",
-        "lookupByContactDetails": "profile_find_by_details"
+        "lookupByContactDetails": "profile_find_by_details",
+        "referralDetails": "referral_details_fetch"
     },
     "cache": {
         "port": 6739,
