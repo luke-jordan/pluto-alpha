@@ -56,10 +56,8 @@ const transformProfile = (profile, friendships, userAccountMap, accountAndSaving
 
     const targetFriendship = friendships.filter((friendship) => friendship.initiatedUserId === profile.systemWideUserId ||
         friendship.acceptedUserId === profile.systemWideUserId);
-    logger('Got target friendship:', targetFriendship);
 
-    profile.relationshipId = targetFriendship[0].relationshipId;
-    Reflect.deleteProperty(profile, 'systemWideUserId');
+    logger('Got target friendship:', targetFriendship);
 
     const allowedShareItems = config.get('share.allowedShareItems');
     const userActivities = config.get('share.userActivities');
@@ -73,9 +71,17 @@ const transformProfile = (profile, friendships, userAccountMap, accountAndSaving
             });
         }
     });
+
+    const transformedProfile = {
+        relationshipId: targetFriendship[0].relationshipId,
+        personalName: profile.personalName,
+        familyName: profile.familyName,
+        calledName: profile.calledName ? profile.calledName : profile.personalName,
+        contactMethod: profile.phoneNumber || profile.emailAddress
+    };
     
-    profile.shareItems = profileSavingHeat;
-    return profile;
+    transformedProfile.shareItems = profileSavingHeat;
+    return transformedProfile;
 };
 
 /**
@@ -115,6 +121,42 @@ const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendships)
     return profilesWithSavingHeat;
 };
 
+const fetchUserProfileAndSavingHeat = async (systemWideUserId) => {
+    const [userProfile, userAccountMap] = await Promise.all([
+        persistenceRead.fetchUserProfile({ systemWideUserId }),
+        persistenceRead.fetchAccountIdForUser(systemWideUserId)
+    ]);
+
+    const accountId = userAccountMap[systemWideUserId];
+    logger(`Got account id: ${accountId}  and user profile: ${JSON.stringify(userProfile)}`);
+
+    let savingHeat = null;
+
+    const savingHeatFromCache = await fetchSavingHeatFromCache([accountId]);
+    logger('Got saving heat from cache:', savingHeatFromCache);
+
+    if (savingHeatFromCache.length === 0) {
+        const savingHeatFromLambda = await invokeSavingHeatLambda([accountId]);
+        logger('Got saving heat from lambda:', savingHeatFromLambda);
+        savingHeat = savingHeatFromLambda[0];
+    } else {
+        savingHeat = savingHeatFromCache[0];
+    }
+
+    const userProfileAndSavingHeat = {
+        relationshipId: 'SELF',
+        personalName: userProfile.personalName,
+        familyName: userProfile.familyName,
+        calledName: userProfile.calledName ? userProfile.calledName : userProfile.personalName,
+        contactMethod: userProfile.phoneNumber || userProfile.emailAddress
+    };
+
+    Reflect.deleteProperty(savingHeat, 'accountId');
+    userProfileAndSavingHeat.shareItems = savingHeat;
+    logger('Returning user profile and saving heat:', userProfileAndSavingHeat);
+
+    return userProfileAndSavingHeat;
+};
 
 /**
  * This functions accepts a users system id and returns the user's friends.
@@ -156,9 +198,11 @@ module.exports.obtainFriends = async (event) => {
         logger('Got user accounts from persistence:', userAccountArray);
         const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }), {});
 
-        // todo : do not include user ID in what is sent back, but tdo include friendship ID
-        // (probably requires modification to getFriendIdsForUser to return both as well)
         const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, userAccountMap, friendships);
+
+        // todo: reuse above infra for user
+        const userProfileAndSavingHeat = await fetchUserProfileAndSavingHeat(systemWideUserId);
+        profilesWithSavingHeat.push(userProfileAndSavingHeat);
         
         return opsUtil.wrapResponse(profilesWithSavingHeat);
     } catch (err) {
