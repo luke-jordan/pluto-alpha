@@ -34,6 +34,14 @@ resource "aws_lambda_function" "friend_request_manage" {
                 "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
                 "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
               },
+              "publishing": {
+                "userEvents": {
+                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                },
+                "hash": {
+                  "key": "${var.log_hashing_secret[terraform.workspace]}"
+                }
+              },
               "secrets": {
                 "enabled": true,
                 "names": {
