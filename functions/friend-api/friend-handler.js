@@ -338,7 +338,12 @@ module.exports.obtainReferralCode = async (event) => {
         const { referralCode, countryCode } = await persistenceRead.fetchUserProfile({ systemWideUserId });
         const referralPayload = { referralCode, countryCode, includeFloatDefaults: true };
         const referralInvocation = invokeLambda(config.get('lambdas.referralDetails'), referralPayload, true);
-        return lambda.invoke(referralInvocation).promise();
+        
+        const bundledResponse = await lambda.invoke(referralInvocation).promise();
+        const extractedPayload = JSON.parse(bundledResponse.Payload);
+        const { result, codeDetails } = JSON.parse(extractedPayload.body);
+        logger('Code fetch result: ', result);
+        return opsUtil.wrapResponse(codeDetails);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500 };
@@ -351,18 +356,24 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
         ? friendRequest.targetUserId
         : friendRequest.initiatedUserId;
 
-    const profile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendUserId });
-    logger('Got friend profile:', profile);
-
     const transformedResult = {
         type,
         requestId: friendRequest.requestId,
         requestedShareItems: friendRequest.requestedShareItems,
         creationTime: friendRequest.creationTime,
-        personalName: profile.personalName,
-        familyName: profile.familyName,
-        calledName: profile.calledName ? profile.calledName : profile.personalName
     };
+    
+    if (!friendUserId) {
+        // means it was an invite to a non-user
+        return transformedResult;
+    }
+
+    const profile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendUserId });
+    logger('Got friend profile:', profile);
+
+    transformedResult.personalName = profile.personalName;
+    transformedResult.familyName = profile.familyName,
+    transformedResult.calledName = profile.calledName ? profile.calledName : profile.personalName;
 
     if (type === 'INITIATED') {
         if (friendRequest.targetContactDetails) {
