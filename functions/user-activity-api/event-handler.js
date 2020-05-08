@@ -380,12 +380,13 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
 // note : we do not _accept_ the friendship requests because the user needs to decide on their sharing level
 const findPendingFriendRequest = async (userProfile) => {
     try {
-        const { systemWideUserId: targetUserId, emailAddress, phoneNumber, referralCodeUsed } = userProfile;
-        const referralSearchParams = { referralCodeUsed, emailAddress, phoneNumber };
+        const { systemWideUserId: targetUserId, emailAddress, phoneNumber, countryCode, referralCodeUsed } = userProfile;
+        const referralSearchParams = { referralCodeUsed, countryCode, emailAddress, phoneNumber };
+
+        const pendingInvocation = { targetUserId, ...referralSearchParams};
+        const pendingFriendsInvocation = invokeLambda(config.get('lambdas.connectFriendReferral'), pendingInvocation, false);
         
-        const pendingFriendsInvocation = invokeLambda(config.get('lambdas.connectFriendReferral'), { targetUserId, referralSearchParams });
-        
-        logger('Lambda args:', pendingFriendsInvocation);
+        logger('Referral friendship connect lambda args:', JSON.stringify(pendingFriendsInvocation));
         const pendingFriendsResult = await lambda.invoke(pendingFriendsInvocation).promise();
         logger('Result from lambda:', pendingFriendsResult);
     } catch (err) {
@@ -418,7 +419,7 @@ const handleAccountOpenedEvent = async (eventBody) => {
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
 
-    finalProcesses.push(findPendingFriendRequest(userProfile.systemWideUserId));
+    finalProcesses.push(findPendingFriendRequest(userProfile));
 
     const boostEvent = { ...eventBody, context: { accountId: accountInfo[0].accountId }};
     const boostProcessInvocation = assembleBoostProcessInvocation(boostEvent);

@@ -5,6 +5,7 @@ const config = require('config');
 const uuid = require('uuid/v4');
 
 const moment = require('moment');
+const format = require('string-format');
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -84,7 +85,8 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         familyName: 'Shu',
         phoneNumber: '02130940334',
         calledName: 'Yao Shu',
-        emailAddress: 'yaoshu@orkhon.com'
+        emailAddress: 'yaoshu@orkhon.com',
+        referralCode: 'TUNNELS'
     };
 
     const expectedFriendRequest = (requestedShareItems) => ({
@@ -178,11 +180,17 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             targetContactDetails: testContactDetails,
             requestCode: 'CLIMATE LEG',
             requestedShareItems,
-            customShareMessage: '54'
+            customShareMessage: 'Hey Jane. Lets save some lettuce, take over the world.'
         };
+
+
+        const downloadLink = config.get('templates.downloadLink');
+        const expectedLinkPart = format(config.get('templates.sms.friendRequest.linkPart'), { downloadLink, referralCode: 'TUNNELS' });
+        const expectedSms = `${customShareMessage} ${expectedLinkPart}`;
+        
         const sendSmsArgs = {
             phoneNumber: testContactDetails.contactMethod,
-            message: customShareMessage
+            message: expectedSms
         };
 
         const expectedFriendReq = {
@@ -199,7 +207,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         
         insertFriendRequestStub.withArgs(insertionArgs).resolves(mockFriendRequest({ targetContactDetails: testContactDetails, requestedShareItems }));
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
-        sendSmsStub.withArgs(sendSmsArgs).resolves({ result: 'SUCCESS' });
+        sendSmsStub.resolves({ result: 'SUCCESS' });
         
         fetchActiveCodesStub.withArgs().resolves(['POETRY SHELLS', 'SENSE BANK', 'BEAR CELL']);
         randomWordStub.onFirstCall().returns('BEAR CELL');
@@ -213,24 +221,36 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const expectedProfileCallBody = { phoneOrEmail: '27632310922', countryCode: 'ZAF' };
         const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
+        
+        expect(sendSmsStub).to.have.been.calledOnceWithExactly(sendSmsArgs);
         expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_CREATED', sinon.match.object);
     });
 
     it('Handles target user id not found, email route', async () => {
         const requestedShareItems = ['BALANCE', 'ACTIVITY_COUNT'];
         const testContactDetails = { contactType: 'EMAIL', contactMethod: 'juitsung@yuan.com' };
+        const customShareMessage = 'Hey Jane.\n\nLets save some lettuce, take over the world.';
+
         const insertionArgs = {
             initiatedUserId: testInitiatedUserId,
             targetContactDetails: testContactDetails,
             requestCode: 'ORBIT PAGE',
             requestedShareItems,
-            customShareMessage: null
+            customShareMessage: customShareMessage.replace(/\n\s*\n/g, '\n')
         };
+
+        const expectedTemplateVars = {
+            initiatedUserName: testProfile.calledName,
+            customShareMessage,
+            downloadLink: config.get('templates.downloadLink'),
+            referralCode: 'TUNNELS'
+        };
+
         const sendEmailArgs = {
-            subject: config.get('templates.email.default.subject'),
+            subject: 'Yao Shu wants you to save with them on Jupiter',
             toList: [testContactDetails.contactMethod],
             bodyTemplateKey: config.get('templates.email.default.templateKey'),
-            templateVariables: { initiatedUserName: testProfile.calledName }
+            templateVariables: expectedTemplateVars
         };
 
         const expectedFriendReq = {
@@ -241,11 +261,12 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             contactMethod: testContactDetails.contactMethod
         };
 
-        const testEvent = helper.wrapParamsWithPath({ targetPhoneOrEmail: 'juitsung@yuan.com', requestedShareItems }, 'initiate', testInitiatedUserId);
+        const testPayload = { targetPhoneOrEmail: 'juitsung@yuan.com', requestedShareItems, customShareMessage };
+        const testEvent = helper.wrapParamsWithPath(testPayload, 'initiate', testInitiatedUserId);
 
         lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
 
-        insertFriendRequestStub.withArgs(insertionArgs).resolves(mockFriendRequest({ targetContactDetails: testContactDetails, requestedShareItems }));
+        insertFriendRequestStub.resolves(mockFriendRequest({ targetContactDetails: testContactDetails, requestedShareItems }));
         fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(testProfile);
         sendEmailStub.withArgs(sendEmailArgs).resolves({ result: 'SUCCESS' });
 

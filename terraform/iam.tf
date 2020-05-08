@@ -461,7 +461,8 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
                 "${aws_lambda_function.boost_event_process.arn}",
                 "${aws_lambda_function.balance_sheet_acc_create.arn}",
                 "${aws_lambda_function.balance_sheet_acc_update.arn}",
-                "${aws_lambda_function.outbound_comms_send.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}",
+                "${aws_lambda_function.friend_referral_connect.arn}"
             ]
         },
         {

@@ -93,11 +93,11 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             rows: [testLogObject]
         };
 
-        const requestQuery = 'select * from friend_data.friend_request where initiated_user_id = $1 and target_user_id = $2';
 
         const referenceQuery = 'select user_id from friend_data.user_reference_table where user_id in ($1, $2)';
-
         queryStub.withArgs(referenceQuery, [testIniatedUserId, testTargetUserId]).resolves([{ 'user_id': testIniatedUserId }]);
+
+        const requestQuery = 'select * from friend_data.friend_request where initiated_user_id = $1 and target_user_id = $2';
         queryStub.withArgs(requestQuery, [testIniatedUserId, testTargetUserId]).resolves([]);
         simpleInsertStub.resolves([{ 'creation_time': testInsertionTime }]);
 

@@ -41,9 +41,10 @@
     },
     "templates": {
         "email": {
+            "subject": "{initiatedUserName} wants you to save with them on Jupiter",
             "default": {
                 "subject": "Jupiter Saving Buddies",
-                "templateKey": "emails/friendRequestEmail.html"
+                "templateKey": "emails/customFriendRequestEmail.html"
             },
             "custom": {
                 "subject": "Jupiter Saving Buddies",
@@ -52,9 +53,11 @@
         },
         "sms": {
             "friendRequest": {
-                "template": "Greetings. {} has invited you to save some lettuce with them. All things are better done together."
+                "template": "Hi! {} wants you to join them as a saving buddy on the Jupiter Savings App!",
+                "linkPart": "Download here: {downloadLink} and use the referral code {referralCode}"
             }
         },
+        "downloadLink": "https://jupitersave.com",
         "blacklist": "\\b(password|pwd)"
     },
     "share": {
