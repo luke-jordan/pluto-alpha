@@ -599,7 +599,7 @@ const assembleFriendshipResponse = async (initiatedUserId, friendship) => {
         calledName: profile.calledName ? profile.calledName : profile.personalName,
         contactMethod: profile.phoneNumber || profile.emailAddress,
         savingHeat: profileSavingHeat.savingHeat,
-        shareItems: profileSavingHeat.shareItems
+        shareItems: friendship.shareItems
     };
 
     logger('Assembled response:', transformedProfile);
