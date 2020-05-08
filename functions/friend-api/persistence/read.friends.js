@@ -25,13 +25,26 @@ const relevantProfileColumns = [
     'family_name',
     'called_name',
     'emai_adress',
-    'phone_number'
+    'phone_number',
+    'referral_code',
+    'country_code'
 ];
+
+const safeRedisGet = async (key) => {
+    // ioredis has a nasty habit of throwing an error instead of reconnecting (to find a fix)
+    let responseFromCache = null;
+    try {
+        responseFromCache = await redis.get(key);
+    } catch (err) {
+        logger('REDIS_ERROR: ', err);
+    }
+    return responseFromCache;
+};
 
 const fetchUserProfileFromDB = async (systemWideUserId) => {
     logger(`Fetching profile for user id: ${systemWideUserId} from table: ${config.get('tables.profileTable')}`);
     const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.profileTable'), { systemWideUserId }, relevantProfileColumns);
-    logger('Result from DynamoDB: ', rowFromDynamo);
+    // logger('Result from DynamoDB: ', rowFromDynamo);
 
     if (!rowFromDynamo) {
         throw new Error(`Error! No profile found for: ${systemWideUserId}`);
@@ -47,29 +60,31 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
     return fetchResult.length > 0 ? fetchResult[0]['owner_user_id'] : null;
 };
 
+const obtainFromDbAndCache = async (systemWideUserId) => {
+    const userProfile = await fetchUserProfileFromDB(systemWideUserId);
+    await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
+    logger(`Successfully fetched 'user profile' from database and stored in cache`);
+    return userProfile;
+};
+
 const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     logger(`Fetching 'user profile' from database or cache`);
 
     const key = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
-    const responseFromCache = await redis.get(key);
-    
+    const responseFromCache = await safeRedisGet(key);
     if (!responseFromCache) {
-        const userProfile = await fetchUserProfileFromDB(systemWideUserId);
-        await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
-        logger(`Successfully fetched 'user profile' from database and stored in cache`);
-        return userProfile;
+        return obtainFromDbAndCache(systemWideUserId);
     }
-    
     logger(`Successfully fetched 'user profile' from cache`);
-    return JSON.parse(responseFromCache);
+    return JSON.parse(responseFromCache);            
 };
 
 const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
     logger(`Fetching 'user id' from database or cache`);
 
     const key = `${config.get('cache.keyPrefixes.userId')}::${accountId}`;
-    const responseFromCache = await redis.get(key);
-
+    const responseFromCache = await safeRedisGet(key);
+   
     if (!responseFromCache) {
         const systemWideUserId = await fetchUserIdForAccountFromDB(accountId);
         logger('Got account owner id', systemWideUserId);
@@ -127,11 +142,11 @@ module.exports.fetchActiveSavingFriendsForUser = async (systemWideUserId) => {
     const initiatedFriends = initiatedResult.map((row) => camelCaseKeys(row));
 
     // unique constraint on table means do not have to worry about duplicates
-    const fetchedUserIds = [...acceptedFriends, ...initiatedFriends];
+    const fetchedActiveFriends = [...acceptedFriends, ...initiatedFriends];
 
-    logger('Retrieved user ids for friends:', fetchedUserIds);
+    logger('Retrieved active friendships for user:', fetchedActiveFriends);
     
-    return fetchedUserIds;
+    return { [systemWideUserId]: fetchedActiveFriends };
 };
 
 /**
@@ -158,6 +173,20 @@ module.exports.fetchFriendshipRequestByCode = async (requestCode) => {
     logger('Fetched friend request:', fetchResult);
 
     return fetchResult.length > 0 ? camelCaseKeys(fetchResult[0]) : null;
+};
+
+/**
+ * This looks for a friendship request initiated by a user, with one or other of a contact method
+ * @param {String} initiatedUserId Sought for user who might have initiated
+ * @param {String} contactMethod Sought for contact method
+ */
+module.exports.findPossibleFriendRequest = async (initiatedUserId, contactMethod) => {
+    const selectQuery = `select request_id from ${config.get('tables.friendRequestTable')} where initiated_user_id = $1 ` +
+        `and target_contact_details ->> 'contactMethod' = $2 order by creation_time desc limit 1`; // limit is just in case
+    logger('Seeking with query: ', selectQuery);
+    const findResult = await rdsConnection.selectQuery(selectQuery, [initiatedUserId, contactMethod]);
+    logger('Found: ', findResult);
+    return findResult.length > 0 ? camelCaseKeys(findResult[0]) : null;
 };
 
 /**
@@ -191,7 +220,7 @@ module.exports.fetchFriendRequestsForUser = async (systemWideUserId) => {
 
     const friendRequests = [...receivedRequests, ...initiatedRequests];
 
-    logger('Found pending requests for user:', friendRequests);
+    // logger('Found pending requests for user:', friendRequests);
 
     return friendRequests;
 };
@@ -206,4 +235,28 @@ module.exports.fetchAccountIdForUser = async (systemWideUserId) => {
     return fetchResult.length > 0
         ? { [systemWideUserId]: fetchResult[0]['account_id'] }
         : { };
+};
+
+/**
+ * Counts the number of mutual friends between a user and an array of other users.
+ */
+module.exports.countMutualFriends = async (targetUserId, initiatedUserIds) => {
+    const friendshipsForTargetUser = await exports.fetchActiveSavingFriendsForUser(targetUserId);
+    const friendIdsForTargetUser = friendshipsForTargetUser[targetUserId].map((friend) => friend.initiatedUserId || friend.acceptedUserId);
+    logger('Found friends for target user:', friendIdsForTargetUser);
+
+    const friendsForInitiatedUsers = await Promise.all(initiatedUserIds.map((userId) => exports.fetchActiveSavingFriendsForUser(userId)));
+    logger('Found friends for initaited users:', friendsForInitiatedUsers);
+
+    const mutualFriendCounts = friendsForInitiatedUsers.map((friendships) => {
+        const initiatedUserId = Object.keys(friendships)[0];
+        const friendIdsForInitiatedUser = friendships[initiatedUserId].map((friendship) => friendship.initiatedUserId || friendship.acceptedUserId);
+        logger('Found friends for initiator:', friendIdsForInitiatedUser);
+        const mutualFriends = friendIdsForTargetUser.filter((friendId) => friendIdsForInitiatedUser.includes(friendId));
+        logger('Found mutual friends:', mutualFriends);
+
+        return { [initiatedUserId]: mutualFriends.length };
+    });
+
+    return mutualFriendCounts;
 };

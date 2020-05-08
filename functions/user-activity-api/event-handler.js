@@ -377,27 +377,21 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
     }
 };
 
-// eslint-disable-next-line no-unused-vars
-const acceptPendingFriendRequests = async (systemWideUserId) => {
-    const pendingFriendsInvocation = invokeLambda(config.get('lambdas.fetchFriendRequests'), { systemWideUserId });
-    logger('Lambda args:', pendingFriendsInvocation);
-    const pendingFriendsResult = await lambda.invoke(pendingFriendsInvocation).promise();
-    logger('Result from lambda:', pendingFriendsResult);
+// note : we do not _accept_ the friendship requests because the user needs to decide on their sharing level
+const findPendingFriendRequest = async (userProfile) => {
+    try {
+        const { systemWideUserId: targetUserId, emailAddress, phoneNumber, countryCode, referralCodeUsed } = userProfile;
+        const referralSearchParams = { referralCodeUsed, countryCode, emailAddress, phoneNumber };
 
-    const pendingFriendsForUser = extractLambdaBody(pendingFriendsResult);
-    logger('Pending friends requests for user:', pendingFriendsForUser);
-
-    if (pendingFriendsForUser.length === 0) {
-        return 'NO_PENDING_FRIENDSHIP_REQUESTS_FOUND';
+        const pendingInvocation = { targetUserId, ...referralSearchParams};
+        const pendingFriendsInvocation = invokeLambda(config.get('lambdas.connectFriendReferral'), pendingInvocation, false);
+        
+        logger('Referral friendship connect lambda args:', JSON.stringify(pendingFriendsInvocation));
+        const pendingFriendsResult = await lambda.invoke(pendingFriendsInvocation).promise();
+        logger('Result from lambda:', pendingFriendsResult);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
     }
-
-    const createFriendshipInvocations = pendingFriendsForUser.map((request) => invokeLambda(config.get('lambdas.createFriendship'), { requestId: request.requestId }));
-
-    logger('Created invocations:', createFriendshipInvocations);
-    const creationResults = await Promise.all(createFriendshipInvocations.map((invocation) => lambda.invoke(invocation).promise()));
-    logger('Creatiion results:', creationResults);
-
-    return creationResults.map((result) => extractLambdaBody(result));
 };
 
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -407,7 +401,7 @@ const acceptPendingFriendRequests = async (systemWideUserId) => {
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
     const { userId } = eventBody;
-    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId), persistence.findHumanRefForUser(userId)]);
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId, true), persistence.findHumanRefForUser(userId)]);
     logger('Result of account info retrieval: ', accountInfo);
     const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
     if (Array.isArray(accountInfo) && accountInfo.length > 0) {
@@ -421,12 +415,11 @@ const handleAccountOpenedEvent = async (eventBody) => {
     logger('Finworks account creation resulted in:', bsheetAccountResult);
     const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
     logger(`Result of user account update: ${accountUpdateResult}`);
-
-    // const friendshipCreationResult = await acceptPendingFriendRequests(userProfile.systemWideUserId);
-    // logger('Creating user friendships resulted in:', friendshipCreationResult);
     
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
+
+    finalProcesses.push(findPendingFriendRequest(userProfile));
 
     const boostEvent = { ...eventBody, context: { accountId: accountInfo[0].accountId }};
     const boostProcessInvocation = assembleBoostProcessInvocation(boostEvent);

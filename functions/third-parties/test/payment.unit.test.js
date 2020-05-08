@@ -324,7 +324,7 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
             Hash: '78ba37f123005d09dc0c0dfea4ecc000e322ba579859545f95977576c6ff9f6d76d138e4128a9507a366bfdd28c41ecdb6e036d9a66dcf2ebab723642a320973'
         };
 
-        it('Authenticates recieved response', async () => {
+        it('Authenticates received response', async () => {
             requestStub.returns(mockThirdPartyResponse);
 
             const resultOfAuthentication = await handler.auth({});

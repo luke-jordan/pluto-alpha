@@ -27,43 +27,26 @@ const CONTRIBUTION_FACTORS = {
     'ACTIVE_FRIENDS': 4
 };
 
+const ALLOWED_ACTIVITY_COLUMNS = ['creationTime', 'settlementTime', 'currency', 'unit', 'amount'];
 const DEFAULT_UNIT = 'HUNDREDTH_CENT';
 
-const findLastActivitiesOfType = (txType, txHistory) => {
-    const transactions = txHistory.filter((tx) => tx.transactionType === txType);
-    if (transactions.length === 0) {
-        return null;
-    }
+const txTypeFilter = (transaction, txType) => transaction.transactionType === txType;
+const dateSorter = (transactionA, transactionB) => transactionB.creationTime - transactionA.creationTime;
+const valueStripper = (transaction) => Object.keys(transaction).filter((key) => ALLOWED_ACTIVITY_COLUMNS.includes(key)).
+    reduce((obj, key) => ({ ...obj, [key]: transaction[key] }), {});
 
-    const txDates = transactions.map((tx) => moment(tx.creationTime).valueOf());
-    const latestActivity = transactions.filter((tx) => moment(tx.creationTime).valueOf() === Math.max(txDates))[0];
-
-    if (!latestActivity) {
-        return null;
-    }
-
-    return {
-        lastActivityDate: latestActivity.creationTime,
-        lastActivityAmount: {
-            amount: latestActivity.amount,
-            currency: latestActivity.currency,
-            unit: latestActivity.unit
-        }
-    };
-};
-
-const appendLastActivityToSavingHeat = async (savingHeat, activitiesToInclude) => {
-    const accountId = savingHeat.accountId;
+const obtainLastActivity = async (accountId, activitiesToInclude) => {
     const txHistory = await persistence.fetchTransactionsForHistory(accountId);
 
-    activitiesToInclude.forEach((activity) => {
-        const latestActivity = findLastActivitiesOfType(activity, txHistory);
-        if (latestActivity) {
-            savingHeat[activity] = latestActivity;
+    const latestActivities = {};
+    activitiesToInclude.forEach((txType) => {
+        const filteredTx = txHistory.filter((transaction) => txTypeFilter(transaction, txType)).sort(dateSorter);
+        if (filteredTx && filteredTx.length > 0) {
+            latestActivities[txType] = valueStripper(filteredTx[0]);
         }
     });
 
-    return savingHeat;
+    return latestActivities;
 };
 
 const calculateGrowthInTotalAmountSaved = async (accountId, activeMonths) => {
@@ -84,7 +67,7 @@ const calculateGrowthInTotalAmountSaved = async (accountId, activeMonths) => {
     return Math.max(0, (amountSavedLastMonth - avgSavedAmountPerMonth) / avgSavedAmountPerMonth);
 };
 
-const calculateAndCacheHeatScore = async (accountId, activitiesToInclude) => {
+const calculateHeatScore = async (accountId) => {
     const ownerInfo = await persistence.getOwnerInfoForAccount(accountId);
     const systemWideUserId = ownerInfo.ownerUserId;
 
@@ -101,9 +84,7 @@ const calculateAndCacheHeatScore = async (accountId, activitiesToInclude) => {
     const activeMonths = Math.abs(moment(accountOpenedDate).diff(moment().startOf('month'), 'month'));
 
     if (totalNumberOfSaves === 0 || activeMonths === 0) {
-        const savingHeat = Number(0).toFixed(2);
-        await redis.set(accountId, JSON.stringify({ accountId, savingHeat }), 'EX', CACHE_TTL_IN_SECONDS);
-        return { accountId, savingHeat };
+        return Number(0).toFixed(2);
     }
 
     const avgNumberOfSavesPerMonth = totalNumberOfSaves / activeMonths;
@@ -121,23 +102,28 @@ const calculateAndCacheHeatScore = async (accountId, activitiesToInclude) => {
 
     const heatScore = heatValues.reduce((sum, value) => sum + value, 0);
     const savingHeat = Number(heatScore).toFixed(2); // ensures only two decimal places
+    return savingHeat;
+};
+
+const calculateAndCacheHeatScore = async (accountId, activitiesToInclude) => {
+    const savingHeat = await calculateHeatScore(accountId);
     logger('Calculated heat score:', savingHeat);
 
     if (Array.isArray(activitiesToInclude) && activitiesToInclude.length > 0) {
-        const savingHeatWithLastActivity = await appendLastActivityToSavingHeat({ accountId, savingHeat }, activitiesToInclude);
-        logger('Got savings heat with last activity:', savingHeatWithLastActivity);
+        const recentActivity = await obtainLastActivity(accountId, activitiesToInclude);
+        const savingHeatWithLastActivity = { accountId, savingHeat, recentActivity };
+        logger('Got savings heat with last activity: ', savingHeatWithLastActivity);
         await redis.set(accountId, JSON.stringify(savingHeatWithLastActivity), 'EX', CACHE_TTL_IN_SECONDS);
         return savingHeatWithLastActivity;
     }
     
     await redis.set(accountId, JSON.stringify({ accountId, savingHeat }), 'EX', CACHE_TTL_IN_SECONDS);
-
     return { accountId, savingHeat };
 };
 
 /**
  * This function calculates and caches a user's saving heat score. The score is based on their savings activity as well
- * as other factors such as number of saving buddies, etc. If an empty object is recieved, the function will calculate
+ * as other factors such as number of saving buddies, etc. If an empty object is received, the function will calculate
  * and cache savings heat scores for all accounts.
  * @param {object} event
  * @property {string} accountId Optional. The account id of the user whose savings heat score is to be calculated.
@@ -169,10 +155,8 @@ module.exports.calculateSavingHeat = async (event) => {
 
         const heatCalculations = accountIdsForCalc.map((account) => calculateAndCacheHeatScore(account, includeLastActivityOfType));
         const resultOfCalculations = await Promise.all(heatCalculations);
-        logger('Result of heat calculations:', resultOfCalculations);
 
         return { result: 'SUCCESS', details: resultOfCalculations };
-
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERROR', message: err.message };

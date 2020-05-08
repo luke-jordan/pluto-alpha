@@ -103,8 +103,8 @@ resource "aws_iam_role_policy_attachment" "save_initiate_vpc_execution_policy" {
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_user_event_publish_policy" {
-  role = "${aws_iam_role.save_initiate_role.name}"
-  policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
+  role = aws_iam_role.save_initiate_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
 resource "aws_iam_role_policy_attachment" "save_initiate_payment_url_get" {

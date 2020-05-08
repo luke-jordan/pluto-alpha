@@ -25,9 +25,9 @@ create table if not exists friend_data.friend_request (
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
     request_status varchar (100) not null default 'PENDING',
-    initiated_friendship_id uuid references friend_data.core_friend_relationship (relationship_id),
+    reference_friendship_id uuid references friend_data.core_friend_relationship (relationship_id),
     initiated_user_id uuid not null references friend_data.user_reference_table (user_id),
-    target_user_id uuid not null references friend_data.user_reference_table (user_id),
+    target_user_id uuid references friend_data.user_reference_table (user_id),
     target_contact_details jsonb,
     requested_share_items text[] default '{}',
     custom_share_message text,
@@ -36,7 +36,7 @@ create table if not exists friend_data.friend_request (
 );
 
 alter table friend_data.friend_request add constraint friend_request_status_type check (
-    request_status in ('PENDING', 'ACCEPTED', 'IGNORED'));
+    request_status in ('PENDING', 'ACCEPTED', 'CANCELLED', 'IGNORED'));
 
 create index if not exists idx_request_status on friend_data.friend_request (request_status);
 

@@ -22,11 +22,20 @@ const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', 
 
 // do this at the moment until start building in replication in, e.g., account open
 const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
-    const userIds = targetUserId ? [initiatedUserId, targetUserId] : [initiatedUserId];
+    const userIds = [];
+
+    if (initiatedUserId) {
+        userIds.push(initiatedUserId);
+    }
+    if (targetUserId) {
+        userIds.push(targetUserId);
+    }
+
     const findQuery = `select user_id from ${userIdTable} where user_id in (${opsUtil.extractArrayIndices(userIds)})`;
+    logger(`Seeking user IDs in ref table with query: ${findQuery} and values: ${userIds}`);
     const presentRows = await rdsConnection.selectQuery(findQuery, userIds);
 
-    const foundInitiatedUserId = presentRows.map((row) => row['user_id']).some((userId) => userId === initiatedUserId);
+    const foundInitiatedUserId = !initiatedUserId || presentRows.map((row) => row['user_id']).some((userId) => userId === initiatedUserId);
     const foundTargetUserId = !targetUserId || presentRows.map((row) => row['user_id']).some((userId) => userId === targetUserId);
 
     if (foundInitiatedUserId && foundTargetUserId) {
@@ -49,6 +58,26 @@ const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
     logger('Inserted user Ids: ', resultOfInsertion);
 };
 
+const checkForExistingFriendRequest = async (friendRequest) => {
+    const { initiatedUserId, targetUserId, targetContactDetails } = friendRequest;
+
+    let findQuery = null;
+    let queryValues = [];
+
+    if (targetUserId) {
+        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_user_id = $2`;
+        queryValues = [initiatedUserId, targetUserId];
+    } else {
+        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_contact_details = $2`;
+        queryValues = [initiatedUserId, targetContactDetails];
+    }
+
+    const existingFriendRequest = await rdsConnection.selectQuery(findQuery, queryValues);
+    logger('Found existing friend request:', existingFriendRequest);
+    
+    return existingFriendRequest.length > 0 ? camelCaseKeys(existingFriendRequest[0]) : null;
+};
+
 /**
  * This function persists a new friend requests, initialising its request status to PENDING
  * @param {object} friendRequest
@@ -60,6 +89,10 @@ const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
  * @property {Array} requestedShareItems Specifies what the initiating user wants to share.
  */
 module.exports.insertFriendRequest = async (friendRequest) => {
+    const existingFriendRequest = await checkForExistingFriendRequest(friendRequest);
+    if (existingFriendRequest) {
+        return existingFriendRequest;
+    }
     // do this for now
     await checkForAndInsertUserIds(friendRequest);
     
@@ -90,9 +123,13 @@ module.exports.insertFriendRequest = async (friendRequest) => {
     logger('Result of insertion:', insertionResult);
 
     const queryRequestId = insertionResult[0][0]['request_id'];
+    const creationTime = insertionResult[0][0]['creation_time'];
     const queryLogId = insertionResult[1][0]['log_id'];
 
-    return { requestId: queryRequestId, logId: queryLogId };
+    logger(`Request ids from persistence: ${queryRequestId} and ${queryLogId}`);
+
+    const responseObject = { ...friendRequest, creationTime };
+    return responseObject;
 };
 
 /**
@@ -111,43 +148,96 @@ module.exports.connectUserToFriendRequest = async (targetUserId, requestCode) =>
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
 };
 
-/**
- * This function updates a friend requests status to IGNOREED and logs the event.
- * @param {String} targetUserId The system id of the ignoring user.
- * @param {String} initiatedUserId The system id of the ignored user.
- */
-module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) => {
-    const selectQuery = `select request_id from ${friendReqTable} where target_user_id = $1 and initiated_user_id = $2`;
-    const fetchResult = await rdsConnection.selectQuery(selectQuery, [targetUserId, initiatedUserId]);
-    logger('Found unique id for request to be ignored', fetchResult);
+module.exports.connectTargetViaId = async (targetUserId, requestId) => {
+    // throw an error if the request already has a target ... or does not exist
+    const selectQuery = `select target_user_id from ${friendReqTable} where request_id = $1`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [requestId]);
+    logger('Result of seeking request: ', resultOfQuery);
 
-    const requestId = fetchResult[0]['request_id'];
+    if (!resultOfQuery || resultOfQuery.length === 0 || resultOfQuery[0]['target_user_id'] !== null) {
+        throw Error('Attempted rewiring of non-existent or already wired request');
+    }
 
-    const updateFriendReqDef = {
-        table: friendReqTable,
-        key: { targetUserId, initiatedUserId },
-        value: { requestStatus: 'IGNORED' },
-        returnClause: 'updated_time'
-    };
+    // ensure the user ID is present (again, to be deprecated in future); initiated must already exist for row to be there
+    await checkForAndInsertUserIds({ targetUserId });
 
-    const logId = uuid();
-    const logRow = { logId, requestId, logType: 'FRIENDSHIP_IGNORED', logContext: { targetUserId, initiatedUserId }};
+    const updateQuery = `update ${friendReqTable} set target_user_id = $1 where request_id = $2 returning updated_time`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [targetUserId, requestId]);
+    return resultOfUpdate && resultOfUpdate.rows ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
+};
+
+const createLogDef = ({ requestId, relationshipId, logType, logContext }) => {
+    const logRow = { logId: uuid(), logType, logContext };
+    if (requestId) {
+        logRow.requestId = requestId;
+    }
+    if (relationshipId) {
+        logRow.relationshipId = relationshipId;
+    }
     const logKeys = Object.keys(logRow);
-
-    const insertLogDef = {
+    return {
         query: `insert into ${friendLogTable} (${extractColumnNames(logKeys)}) values %L returning log_id, creation_time`,
         columnTemplate: extractColumnTemplate(logKeys),
         rows: [logRow]
     };
+};
 
-    logger(`Updating: ${JSON.stringify(updateFriendReqDef)} Persisting: ${JSON.stringify(insertLogDef)}`);
-    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [insertLogDef]);
-    logger('Result of update and insertion:', resultOfOperations);
-
+const transformUpdateResult = (resultOfOperations) => {
     const updatedTime = resultOfOperations[0][0]['updated_time'];
     const queryLogId = resultOfOperations[1][0]['log_id'];
 
     return { updatedTime, logId: queryLogId };
+};
+
+/** todo update docs here
+ * This function updates a friend requests status to IGNOREED and logs the event.
+ * @param {String} targetUserId The system id of the ignoring user.
+ * @param {String} initiatedUserId The system id of the ignored user.
+ */
+module.exports.ignoreFriendshipRequest = async (requestId, instructedByUserId) => {
+    // todo : and status = PENDING (so we do not retrospectively wipe previously accepted / cancelled ones)
+    const updateFriendReqDef = {
+        table: friendReqTable,
+        key: { requestId },
+        value: { requestStatus: 'IGNORED' },
+        returnClause: 'updated_time'
+    };
+
+    const insertLogDef = createLogDef({ requestId, logType: 'FRIENDSHIP_IGNORED', logContext: { instructedByUserId }});
+
+    logger(`Updating: ${JSON.stringify(updateFriendReqDef)} Persisting: ${JSON.stringify(insertLogDef)}`);
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [insertLogDef]);
+    logger('Result of update and insertion:', resultOfOperations);
+    return transformUpdateResult(resultOfOperations);
+};
+
+/**
+ * This one just cancels, given a request ID
+ */
+module.exports.cancelFriendshipRequest = async (requestId, performedByUserId) => {
+    const updateFriendReqDef = {
+        table: friendReqTable,
+        key: { requestId },
+        value: { requestStatus: 'CANCELLED' },
+        returnClause: 'updated_time'
+    };
+
+    const logDef = createLogDef({ requestId, logType: 'REQUEST_CANCELLED', logContext: { performedByUserId }});
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [logDef]);
+    return transformUpdateResult(resultOfOperations);
+};
+
+const checkForExistingFriendship = async (initiatedUserId, acceptedUserId) => {
+    const query = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_user_id = $2`; 
+    const [firstResult, secondResult] = await Promise.all([
+        rdsConnection.selectQuery(query, [initiatedUserId, acceptedUserId]),
+        rdsConnection.selectQuery(query, [acceptedUserId, initiatedUserId])
+    ]);
+
+    const queryResult = [...firstResult, ...secondResult];
+    logger('Found existing friendship:', queryResult);
+
+    return query.length > 0 ? camelCaseKeys(queryResult[0]) : null;
 };
 
 /**
@@ -159,47 +249,54 @@ module.exports.ignoreFriendshipRequest = async (targetUserId, initiatedUserId) =
  */
 module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUserId, shareItems) => {
     const relationshipId = uuid();
+
     const relationshipStatus = 'ACTIVE';
 
     const friendshipObject = { relationshipId, initiatedUserId, acceptedUserId, relationshipStatus, shareItems };
     const friendshipKeys = Object.keys(friendshipObject);
 
-    // will need a test of whether friendship existed prior, and if so, just use an update def to swap it to active
-    const friendshipInsertDef = {
-        query: `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`,
-        columnTemplate: extractColumnTemplate(friendshipKeys),
-        rows: [friendshipObject]
-    };
+    const updateDefs = [];
 
-    // todo : friend request should have a column 'initiated_friendship_id' that refers to the above. It should be a foreign key but
-    // allow for nullable values (for requests that are not accepted). It is not unique (if a friendship goes on-off-on then multiple reqs)
-    // will point to the same friendship
+    let persistedRelationshipId = '';
+    const existingFriendship = await checkForExistingFriendship(initiatedUserId, acceptedUserId);
+    logger('Found existing friendship:', existingFriendship);
+    
+    // if the friendship does not exist, insert it first, before moving on to the other wiring
+    if (!existingFriendship) {
+        const insertQuery = `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`;
+        const insertResult = await rdsConnection.insertRecords(insertQuery, extractColumnTemplate(friendshipKeys), [friendshipObject]);
+        logger('Huh ? : ', insertResult);
+        persistedRelationshipId = insertResult['rows'][0]['relationship_id'];
+    }
+
+    // otherwise, put it into the update
+    if (existingFriendship) {
+        const friendshipUpdateDef = {
+            table: friendshipTable,
+            key: { relationshipId: existingFriendship.relationshipId },
+            value: { relationshipStatus: 'ACTIVE' },
+            returnClause: 'updated_time'
+        };
+        updateDefs.push(friendshipUpdateDef);
+        persistedRelationshipId = existingFriendship.relationshipId;
+    } 
+
+    // need to make sure friendship is in before doing this, so foreign key works (could jam into TX but more than worth at present)
     const updateFriendReqDef = {
         table: friendReqTable,
         key: { requestId },
-        value: { requestStatus: 'ACCEPTED', initiatedFriendshipId: relationshipId },
+        value: { requestStatus: 'ACCEPTED', referenceFriendshipId: persistedRelationshipId },
         returnClause: 'updated_time'
     };
+    updateDefs.push(updateFriendReqDef);
+    logger('Updating friend request via: ', updateFriendReqDef);
 
-    const logId = uuid();
-    const logRow = { logId, relationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject };
-    const logKeys = Object.keys(logRow);
+    const insertLogDef = createLogDef({ requestId, relationshipId: persistedRelationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject });
 
-    const insertLogDef = {
-        query: `insert into ${friendLogTable} (${extractColumnNames(logKeys)}) values %L returning log_id, creation_time`,
-        columnTemplate: extractColumnTemplate(logKeys),
-        rows: [logRow]
-    };
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefs, [insertLogDef]);
+    logger('Result of operations: ', resultOfOperations);
 
-    logger(`Persisting: ${friendshipInsertDef} and ${insertLogDef} Updating: ${updateFriendReqDef}`);
-    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [friendshipInsertDef, insertLogDef]);
-    logger('Result of update and insertion:', resultOfOperations);
-
-    const updatedTime = resultOfOperations[0][0]['updated_time'];
-    const queryRelationshipId = resultOfOperations[1][0]['relationship_id'];
-    const queryLogId = resultOfOperations[2][0]['log_id'];
-
-    return { updatedTime, relationshipId: queryRelationshipId, logId: queryLogId };
+    return friendshipObject;
 };
 
 /**

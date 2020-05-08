@@ -55,16 +55,18 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
     const testRelationshipId = uuid();
 
     beforeEach(() => {
-        helper.resetStubs(multiTableStub, multiOpStub, updateStub, queryStub, uuidStub);
+        helper.resetStubs(simpleInsertStub, multiTableStub, multiOpStub, updateStub, queryStub, uuidStub);
     });
 
     it('Inserts friend request properly', async () => {
+        const requestedShareItems = ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'];
+
         const testFriendRequest = {
             requestId: testRequestId,
             requestStatus: 'PENDING',
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
-            requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
+            requestedShareItems,
             targetContactDetails: {
                 contactType: 'EMAIL',
                 contactMethod: 'example@domain.com'
@@ -91,8 +93,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             rows: [testLogObject]
         };
 
-        queryStub.resolves([{ 'user_id': testIniatedUserId }]);
-        simpleInsertStub.resolves([{ 'creation_time': moment().format() }]);
+
+        const referenceQuery = 'select user_id from friend_data.user_reference_table where user_id in ($1, $2)';
+        queryStub.withArgs(referenceQuery, [testIniatedUserId, testTargetUserId]).resolves([{ 'user_id': testIniatedUserId }]);
+
+        const requestQuery = 'select * from friend_data.friend_request where initiated_user_id = $1 and target_user_id = $2';
+        queryStub.withArgs(requestQuery, [testIniatedUserId, testTargetUserId]).resolves([]);
+        simpleInsertStub.resolves([{ 'creation_time': testInsertionTime }]);
 
         uuidStub.onFirstCall().returns(testRequestId);
         uuidStub.onSecondCall().returns(testLogId);
@@ -104,18 +111,30 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const testInsertParams = {
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
-            requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
+            requestedShareItems,
             targetContactDetails: {
                 contactType: 'EMAIL',
                 contactMethod: 'example@domain.com'
             }
         };
 
-        const insertResult = await persistence.insertFriendRequest(testInsertParams);
-        expect(insertResult).to.exist;
-        expect(insertResult).to.deep.equal({ requestId: testRequestId, logId: testLogId });
+        const expectedResult = {
+            initiatedUserId: testIniatedUserId,
+            targetUserId: testTargetUserId,
+            requestedShareItems,
+            targetContactDetails: { contactType: 'EMAIL', contactMethod: 'example@domain.com' },
+            requestId: testRequestId,
+            requestStatus: 'PENDING',
+            creationTime: testInsertionTime
+        };
 
-        expect(queryStub).to.have.been.calledOnceWithExactly('select user_id from friend_data.user_reference_table where user_id in ($1, $2)', [testIniatedUserId, testTargetUserId]);
+        const insertResult = await persistence.insertFriendRequest(testInsertParams);
+
+        expect(insertResult).to.exist;
+        expect(insertResult).to.deep.equal(expectedResult);
+
+        expect(queryStub).to.have.been.calledWithExactly(referenceQuery, [testIniatedUserId, testTargetUserId]);
+        expect(queryStub).to.have.been.calledWithExactly(requestQuery, [testIniatedUserId, testTargetUserId]);
         expect(simpleInsertStub).to.have.been.calledOnce;
         expect(multiTableStub).to.have.been.calledOnceWithExactly([testFriendQueryDef, testLogDef]);
     });
@@ -136,7 +155,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const friendReqUpdateDef = {
             table: friendReqTable,
             key: { requestId: testRequestId },
-            value: { requestStatus: 'ACCEPTED', initiatedFriendshipId: testRelationshipId },
+            value: { requestStatus: 'ACCEPTED', referenceFriendshipId: testRelationshipId },
             returnClause: 'updated_time'
         };
 
@@ -157,35 +176,113 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
 
         const testLogObject = {
             logId: testLogId,
-            relationshipId: testRelationshipId,
             logType: 'FRIENDSHIP_ACCEPTED',
-            logContext: friendshipObject
+            logContext: friendshipObject,
+            relationshipId: testRelationshipId,
+            requestId: testRequestId
         };
 
         const testLogDef = {
-            query: `insert into ${friendLogTable} (log_id, relationship_id, log_type, log_context) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${relationshipId}, ${logType}, ${logContext}',
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}',
             rows: [testLogObject]
         };
 
+        const selectQuery = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_user_id = $2`;
+
         uuidStub.onFirstCall().returns(testRelationshipId);
         uuidStub.onSecondCall().returns(testLogId);
+
+        queryStub.resolves([]);
+
+        simpleInsertStub.resolves({ rows: [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }] });
         multiOpStub.resolves([
             [{ 'updated_time': testUpdatedTime }],
-            [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }], 
             [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
 
         const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId, ['ACTIVITY_LEVEL']);
         expect(insertResult).to.exist;
-        expect(insertResult).to.deep.equal({ updatedTime: testUpdatedTime, relationshipId: testRelationshipId, logId: testLogId });
+        expect(insertResult).to.deep.equal(friendshipObject);
 
         // *not* to be a general pattern, but using here as complex set of args and failures should be easily traceable
+        expect(simpleInsertStub).to.have.been.calledOnce;
+        expect(simpleInsertStub).to.have.been.calledWith(testFriendQueryDef.query, testFriendQueryDef.columnTemplate, testFriendQueryDef.rows);
+        
         expect(multiOpStub).to.have.been.calledOnce;
         const multiOpArgs = multiOpStub.getCall(0).args;
-        expect(multiOpArgs[0]).to.deep.equal([friendReqUpdateDef]);
-        expect(multiOpArgs[1][0]).to.deep.equal(testFriendQueryDef);
-        expect(multiOpArgs[1][1]).to.deep.equal(testLogDef);
+        expect(multiOpArgs[0][0]).to.deep.equal(friendReqUpdateDef);
+        expect(multiOpArgs[1][0]).to.deep.equal(testLogDef);
+        
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testIniatedUserId, testAcceptedUserId]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testAcceptedUserId, testIniatedUserId]);
+    });
+
+    it('Reactivates a friendship properly', async () => {
+        const friendshipUpdateDef = {
+            table: friendshipTable,
+            key: { relationshipId: testRelationshipId },
+            value: { relationshipStatus: 'ACTIVE' },
+            returnClause: 'updated_time'
+        };
+
+        const friendReqUpdateDef = {
+            table: friendReqTable,
+            key: { requestId: testRequestId },
+            value: { requestStatus: 'ACCEPTED', referenceFriendshipId: testRelationshipId },
+            returnClause: 'updated_time'
+        };
+
+        const friendshipObject = {
+            relationshipId: testRelationshipId,
+            initiatedUserId: testIniatedUserId,
+            acceptedUserId: testAcceptedUserId,
+            relationshipStatus: 'ACTIVE',
+            shareItems: ['ACTIVITY_LEVEL']
+        };
+
+        const testLogObject = {
+            logId: testLogId,
+            relationshipId: testRelationshipId,
+            requestId: testRequestId,
+            logType: 'FRIENDSHIP_ACCEPTED',
+            logContext: friendshipObject
+        };
+
+        const testLogDef = {
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}',
+            rows: [testLogObject]
+        };
+
+        const selectQuery = `select relationship_id from ${friendshipTable} where initiated_user_id = $1 and accepted_user_id = $2`;
+
+        uuidStub.onFirstCall().returns(testRelationshipId);
+        uuidStub.onSecondCall().returns(testLogId);
+
+        queryStub.onFirstCall().resolves([{ 'relationship_id': testRelationshipId }]);
+        queryStub.onSecondCall().resolves([]);
+        
+        const updateResults = [
+            [{ 'updated_time': testUpdatedTime }],
+            [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }]
+        ];
+        const insertResults = [{ 'log_id': testLogId, 'creation_time': testInsertionTime }];
+        multiOpStub.resolves([updateResults, insertResults]);
+
+        const insertResult = await persistence.insertFriendship(testRequestId, testIniatedUserId, testAcceptedUserId, ['ACTIVITY_LEVEL']);
+        expect(insertResult).to.exist;
+        expect(insertResult).to.deep.equal(friendshipObject);
+
+        expect(multiOpStub).to.have.been.calledOnce;
+        const multiOpArgs = multiOpStub.getCall(0).args;
+        expect(multiOpArgs[0][0]).to.deep.equal(friendshipUpdateDef);
+        expect(multiOpArgs[0][1]).to.deep.equal(friendReqUpdateDef);
+        expect(multiOpArgs[1][0]).to.deep.equal(testLogDef);
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testIniatedUserId, testAcceptedUserId]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testAcceptedUserId, testIniatedUserId]);
     });
 
     it('Deactivates friendship', async () => {
@@ -224,10 +321,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
     it('Ignores friendship request properly', async () => {
         const updateFriendReqDef = {
             table: friendReqTable,
-            key: {
-                targetUserId: testTargetUserId,
-                initiatedUserId: testIniatedUserId
-            },
+            key: { requestId: testRequestId },
             value: { requestStatus: 'IGNORED' },
             returnClause: 'updated_time'
         };
@@ -237,31 +331,27 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             requestId: testRequestId,
             logType: 'FRIENDSHIP_IGNORED',
             logContext: {
-                targetUserId: testTargetUserId,
-                initiatedUserId: testIniatedUserId
+                instructedByUserId: testTargetUserId
             }
         };
 
         const testInsertLogDef = {
-            query: `insert into ${friendLogTable} (log_id, request_id, log_type, log_context) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${requestId}, ${logType}, ${logContext}',
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}',
             rows: [testLogObject]
         };
 
-        const selectQuery = `select request_id from ${friendReqTable} where target_user_id = $1 and initiated_user_id = $2`;
-        const queryValues = [testTargetUserId, testIniatedUserId];
-
         uuidStub.returns(testLogId);
-        queryStub.withArgs(selectQuery, queryValues).resolves([{ 'request_id': testRequestId }]);
-        multiOpStub.withArgs([updateFriendReqDef], [testInsertLogDef]).resolves([
+        multiOpStub.resolves([
             [{ 'updated_time': testUpdatedTime }],
             [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
         
-        const resultOfIgnore = await persistence.ignoreFriendshipRequest(testTargetUserId, testIniatedUserId);
+        const resultOfIgnore = await persistence.ignoreFriendshipRequest(testRequestId, testTargetUserId);
+
         expect(resultOfIgnore).to.exist;
         expect(resultOfIgnore).to.deep.equal({ updatedTime: testUpdatedTime, logId: testLogId });
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, queryValues);
+        
         expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef], [testInsertLogDef]);
     });
 

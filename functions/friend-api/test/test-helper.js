@@ -1,5 +1,9 @@
 'use strict';
 
+const chai = require('chai');
+chai.use(require('sinon-chai'));
+const expect = chai.expect;
+
 module.exports.resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
@@ -12,6 +16,19 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
             role: userRole
         }
     }
+});
+
+module.exports.wrapParamsWithPath = (params, path, systemWideUserId) => ({
+    requestContext: {
+        authorizer: {
+            systemWideUserId
+        }
+    },
+    httpMethod: 'POST',
+    pathParameters: {
+        proxy: path
+    },
+    body: JSON.stringify(params)
 });
 
 module.exports.wrapResponse = (body, statusCode = 200) => ({
@@ -35,3 +52,14 @@ module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
         body: JSON.stringify(body)
     })
 });
+
+module.exports.standardOkayChecks = (result, checkHeaders = false) => {
+    expect(result).to.exist;
+    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('body');
+    if (checkHeaders) {
+        expect(result).to.have.property('headers');
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
+    return JSON.parse(result.body);
+};

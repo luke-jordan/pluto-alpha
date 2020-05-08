@@ -169,7 +169,7 @@ module.exports.isDirectInvokeAdminOrSelf = (event, userIdKey = 'systemWideUserId
     }
 
     const userDetails = exports.extractUserDetails(event);
-    logger('User details for call: ', userDetails);
+    // logger('User details for call: ', userDetails);
     if (!userDetails) {
         return false;
     }

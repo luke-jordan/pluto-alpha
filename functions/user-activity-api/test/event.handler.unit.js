@@ -140,7 +140,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expectNoCalls(lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, redisGetStub);
     });
 
-    it('Registers account with third party, persists account id from third party, accepts pending friend requests', async () => {
+    it('Registers account with third party, persists account id from third party, connects or creates friend requests', async () => {
         const testUserId = uuid();
         const testClientId = uuid();
         const testFloatId = uuid();
@@ -182,8 +182,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const boostInvocation = helper.wrapLambdaInvoc('boost_event_process', true, boostPayload);
 
         const testFriendRequests = [{ requestId: testRequestId }];
-        const friendReqInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchFriendRequests'), false, { systemWideUserId: testUserId });
-        const createFriendInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createFriendship'), false, { requestId: testRequestId });
+        const friendReqInvocation = helper.wrapLambdaInvoc(config.get('lambdas.connectFriendReferral'), false, { systemWideUserId: testUserId });
 
         sendSmsStub.resolves({ result: 'SUCCESS' });
         getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id' }]);
@@ -191,7 +190,6 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
         lamdbaInvokeStub.withArgs(boostInvocation).returns({ promise: () => ({ StatusCode: 202 })});
         lamdbaInvokeStub.withArgs(friendReqInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testFriendRequests)})})});
-        lamdbaInvokeStub.withArgs(createFriendInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'SUCCESS' })})})});
         updateTagsStub.resolves({ updatedTime: testUpdateTime });
 
         const snsEvent = wrapEventSns({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT' });
@@ -203,7 +201,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
         
-        expect(lamdbaInvokeStub.callCount).to.equal(2);
+        expect(lamdbaInvokeStub.callCount).to.equal(3);
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWith(boostInvocation);
         // expect(lamdbaInvokeStub).to.have.been.calledWith(friendReqInvocation);
@@ -249,7 +247,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             updatedTimeEpochMillis: moment().valueOf()
         };
 
-        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: false });
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true });
         const FWAccCreationInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
             idNumber: testUserProfile.nationalId,
             surname: testUserProfile.familyName,

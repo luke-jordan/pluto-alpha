@@ -1,13 +1,13 @@
-variable "friend_request_manage" {
-  default = "friend_request_manage"
+variable "friend_referral_connect" {
+  default = "friend_referral_connect"
   type = "string"
 }
 
-resource "aws_lambda_function" "friend_request_manage" {
+resource "aws_lambda_function" "friend_referral_connect" {
 
-  function_name                  = "${var.friend_request_manage}"
-  role                           = "${aws_iam_role.friend_request_manage_role.arn}"
-  handler                        = "friend-handler.directRequestManagement"
+  function_name                  = "${var.friend_referral_connect}"
+  role                           = "${aws_iam_role.friend_referral_connect_role.arn}"
+  handler                        = "friend-handler.initiateRequestFromReferralCode"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
@@ -58,11 +58,11 @@ resource "aws_lambda_function" "friend_request_manage" {
       aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.friend_request_manage]
+  depends_on = [aws_cloudwatch_log_group.friend_referral_connect]
 }
 
-resource "aws_iam_role" "friend_request_manage_role" {
-  name = "${var.friend_request_manage}_role_${terraform.workspace}"
+resource "aws_iam_role" "friend_referral_connect_role" {
+  name = "${var.friend_referral_connect}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -81,8 +81,8 @@ resource "aws_iam_role" "friend_request_manage_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "friend_request_manage" {
-  name = "/aws/lambda/${var.friend_request_manage}"
+resource "aws_cloudwatch_log_group" "friend_referral_connect" {
+  name = "/aws/lambda/${var.friend_referral_connect}"
   retention_in_days = 3
 
   tags = {
@@ -90,60 +90,49 @@ resource "aws_cloudwatch_log_group" "friend_request_manage" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "friend_request_manage_basic_execution_policy" {
-  role = aws_iam_role.friend_request_manage_role.name
+resource "aws_iam_role_policy_attachment" "friend_referral_connect_basic_execution_policy" {
+  role = aws_iam_role.friend_referral_connect_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "friend_request_manage_vpc_execution_policy" {
-  role = aws_iam_role.friend_request_manage_role.name
+resource "aws_iam_role_policy_attachment" "friend_referral_connect_vpc_execution_policy" {
+  role = aws_iam_role.friend_referral_connect_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "friend_request_manage_omnibus_policy" {
-  role = aws_iam_role.friend_request_manage_role.name
+resource "aws_iam_role_policy_attachment" "friend_referral_connect_omnibus_policy" {
+  role = aws_iam_role.friend_referral_connect_role.name
   policy_arn = aws_iam_policy.friend_request_manage_lambda_policy.arn
 }
 
-resource "aws_iam_role_policy_attachment" "friend_request_manage_profile_invoke_policy" {
-  role = aws_iam_role.friend_request_manage_role.name
-  policy_arn = var.user_profile_lookup_by_detail_policy[terraform.workspace]
-}
-
-resource "aws_iam_role_policy_attachment" "friend_request_user_event_publish_policy" {
-  role = aws_iam_role.friend_request_manage_role.name
+resource "aws_iam_role_policy_attachment" "friend_referral_user_event_publish_policy" {
+  role = aws_iam_role.friend_referral_connect_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
-// caching goes through here, so
-resource "aws_iam_role_policy_attachment" "friend_request_profile_table_read_policy" {
-  role = aws_iam_role.friend_request_manage_role.name
-  policy_arn = var.user_profile_table_read_policy_arn[terraform.workspace]
-}
-
-resource "aws_iam_role_policy_attachment" "friend_request_manage_secret_get" {
-  role = aws_iam_role.friend_request_manage_role.name
+resource "aws_iam_role_policy_attachment" "friend_referral_connect_secret_get" {
+  role = aws_iam_role.friend_referral_connect_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_friend_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_friend_request_manage" {
-  log_group_name = "${aws_cloudwatch_log_group.friend_request_manage.name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_friend_referral_connect" {
+  log_group_name = "${aws_cloudwatch_log_group.friend_referral_connect.name}"
   metric_transformation {
-    name = "${var.friend_request_manage}_fatal_api_alarm"
+    name = "${var.friend_referral_connect}_fatal_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.friend_request_manage}_fatal_api_alarm"
+  name = "${var.friend_referral_connect}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_friend_request_manage" {
-  alarm_name = "${var.friend_request_manage}_fatal_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_friend_referral_connect" {
+  alarm_name = "${var.friend_referral_connect}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_friend_request_manage.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_friend_referral_connect.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
@@ -151,22 +140,22 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_friend_request_manage
   alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
 }
 
-resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_friend_request_manage" {
-  log_group_name = "${aws_cloudwatch_log_group.friend_request_manage.name}"
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_friend_referral_connect" {
+  log_group_name = "${aws_cloudwatch_log_group.friend_referral_connect.name}"
   metric_transformation {
-    name = "${var.friend_request_manage}_security_api_alarm"
+    name = "${var.friend_referral_connect}_security_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.friend_request_manage}_security_api_alarm"
+  name = "${var.friend_referral_connect}_security_api_alarm"
   pattern = "SECURITY_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_friend_request_manage" {
-  alarm_name = "${var.friend_request_manage}_security_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_friend_referral_connect" {
+  alarm_name = "${var.friend_referral_connect}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_friend_request_manage.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_friend_referral_connect.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
