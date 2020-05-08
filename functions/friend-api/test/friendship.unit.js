@@ -285,14 +285,7 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
         countryCode: 'ZAF'
     };
 
-    const testReferralDetails = {
-        referralCode: 'LETMEIN',
-        context: { boostAmountOffered: 'BIGCHEESE' }
-    };
-
-    beforeEach(() => {
-        resetStubs();
-    });
+    beforeEach(() => resetStubs());
 
     it('Determines if a contact method is aligned to a user', async () => {
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.lookupByContactDetails'), false, { phoneOrEmail: 'user@email.com', countryCode: 'ZAF' });
@@ -314,15 +307,17 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
 
     it('Obtains referral code', async () => {
         const testReferralPayload = { referralCode: 'LETMEIN', countryCode: 'ZAF', includeFloatDefaults: true };
+        const testReferralDetails = { referralCode: 'LETMEIN', context: { boostAmountOffered: 'BIGCHEESE' } };    
+        
         const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.referralDetails'), false, testReferralPayload);
         const testEvent = helper.wrapParamsWithPath({ }, 'referral', testSystemId);
 
         fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
-        lamdbaInvokeStub.withArgs(lambdaArgs).returns({ promise: () => (testReferralDetails) });
+        const wrappedReferralResponse = { Payload: JSON.stringify({ body: JSON.stringify({ codeDetails: testReferralDetails }) }) };
+        lamdbaInvokeStub.returns({ promise: () => wrappedReferralResponse });
 
-        const referralCode = await handler.directRequestManagement(testEvent);
-
-        expect(referralCode).to.exist;
+        const rawResult = await handler.directRequestManagement(testEvent);
+        const referralCode = helper.standardOkayChecks(rawResult);
         expect(referralCode).to.deep.equal(testReferralDetails);
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testSystemId });
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
