@@ -201,7 +201,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
         expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
         
-        expect(lamdbaInvokeStub.callCount).to.equal(2);
+        expect(lamdbaInvokeStub.callCount).to.equal(3);
         expect(lamdbaInvokeStub).to.have.been.calledWith(bsheetInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWith(boostInvocation);
         // expect(lamdbaInvokeStub).to.have.been.calledWith(friendReqInvocation);
