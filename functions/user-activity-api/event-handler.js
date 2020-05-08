@@ -419,7 +419,7 @@ const handleAccountOpenedEvent = async (eventBody) => {
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
 
-    finalProcesses.push(findPendingFriendRequest(userProfile.systemWideUserId));
+    finalProcesses.push(findPendingFriendRequest(userProfile));
 
     const boostEvent = { ...eventBody, context: { accountId: accountInfo[0].accountId }};
     const boostProcessInvocation = assembleBoostProcessInvocation(boostEvent);
