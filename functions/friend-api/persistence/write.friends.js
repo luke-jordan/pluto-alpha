@@ -22,11 +22,20 @@ const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', 
 
 // do this at the moment until start building in replication in, e.g., account open
 const checkForAndInsertUserIds = async ({ initiatedUserId, targetUserId }) => {
-    const userIds = targetUserId ? [initiatedUserId, targetUserId] : [initiatedUserId];
+    const userIds = [];
+
+    if (initiatedUserId) {
+        userIds.push(initiatedUserId);
+    }
+    if (targetUserId) {
+        userIds.push(targetUserId);
+    }
+
     const findQuery = `select user_id from ${userIdTable} where user_id in (${opsUtil.extractArrayIndices(userIds)})`;
+    logger(`Seeking user IDs in ref table with query: ${findQuery} and values: ${userIds}`);
     const presentRows = await rdsConnection.selectQuery(findQuery, userIds);
 
-    const foundInitiatedUserId = presentRows.map((row) => row['user_id']).some((userId) => userId === initiatedUserId);
+    const foundInitiatedUserId = !initiatedUserId || presentRows.map((row) => row['user_id']).some((userId) => userId === initiatedUserId);
     const foundTargetUserId = !targetUserId || presentRows.map((row) => row['user_id']).some((userId) => userId === targetUserId);
 
     if (foundInitiatedUserId && foundTargetUserId) {
@@ -148,6 +157,9 @@ module.exports.connectTargetViaId = async (targetUserId, requestId) => {
     if (!resultOfQuery || resultOfQuery.length === 0 || resultOfQuery[0]['target_user_id'] !== null) {
         throw Error('Attempted rewiring of non-existent or already wired request');
     }
+
+    // ensure the user ID is present (again, to be deprecated in future); initiated must already exist for row to be there
+    await checkForAndInsertUserIds({ targetUserId });
 
     const updateQuery = `update ${friendReqTable} set target_user_id = $1 where request_id = $2 returning updated_time`;
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [targetUserId, requestId]);

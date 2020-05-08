@@ -382,10 +382,11 @@ const findPendingFriendRequest = async (userProfile) => {
     try {
         const { systemWideUserId: targetUserId, emailAddress, phoneNumber, referralCodeUsed } = userProfile;
         const referralSearchParams = { referralCodeUsed, emailAddress, phoneNumber };
+
+        const pendingInvocation = { targetUserId, ...referralSearchParams};
+        const pendingFriendsInvocation = invokeLambda(config.get('lambdas.connectFriendReferral'), pendingInvocation, false);
         
-        const pendingFriendsInvocation = invokeLambda(config.get('lambdas.connectFriendReferral'), { targetUserId, referralSearchParams });
-        
-        logger('Lambda args:', pendingFriendsInvocation);
+        logger('Referral friendship connect lambda args:', JSON.stringify(pendingFriendsInvocation));
         const pendingFriendsResult = await lambda.invoke(pendingFriendsInvocation).promise();
         logger('Result from lambda:', pendingFriendsResult);
     } catch (err) {

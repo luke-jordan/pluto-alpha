@@ -7,7 +7,7 @@ resource "aws_lambda_function" "friend_referral_connect" {
 
   function_name                  = "${var.friend_referral_connect}"
   role                           = "${aws_iam_role.friend_referral_connect_role.arn}"
-  handler                        = "friend-handler.directRequestManagement"
+  handler                        = "friend-handler.initiateRequestFromReferralCode"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
