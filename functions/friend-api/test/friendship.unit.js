@@ -15,20 +15,31 @@ const expect = chai.expect;
 
 const helper = require('./test-helper');
 
+const redisGetStub = sinon.stub();
 const connectUserStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const fetchAccountStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
+const publishUserEventStub = sinon.stub();
 const insertFriendshipStub = sinon.stub();
+const countMutualFriendsStub = sinon.stub();
 const deactivateFriendshipStub = sinon.stub();
 
 const testLogId = uuid();
 const testSystemId = uuid();
+const testAccountId = uuid();
 const testInitiatedUserId = uuid();
 const testTargetUserId = uuid();
 const testAcceptedUserId = uuid();
 const testRelationshipId = uuid();
 const testRequestId = uuid();
+
+class MockRedis {
+    constructor () { 
+        this.mget = redisGetStub;
+    }
+}
 
 class MockLambdaClient {
     constructor () {
@@ -36,12 +47,11 @@ class MockLambdaClient {
     }
 }
 
-// eslint-disable-next-line
-class MockRedis { constructor() { } }; // forcing no call through
-
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchFriendshipRequestById': fetchRequestStub,
+        'countMutualFriends': countMutualFriendsStub,
+        'fetchAccountIdForUser': fetchAccountStub,
         'fetchUserProfile': fetchProfileStub,
         '@noCallThru': true
     },
@@ -51,6 +61,10 @@ const handler = proxyquire('../friend-handler', {
         'insertFriendship': insertFriendshipStub,
         '@noCallThru': true
     },
+    'publish-common': {
+        'publishUserEvent': publishUserEventStub,
+        '@noCallThru': true
+    },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
     },
@@ -58,7 +72,7 @@ const handler = proxyquire('../friend-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendshipStub, deactivateFriendshipStub,
-    fetchRequestStub, connectUserStub, lamdbaInvokeStub);
+    fetchRequestStub, connectUserStub, lamdbaInvokeStub, publishUserEventStub);
 
 
 describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
@@ -107,27 +121,75 @@ describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
 });
 
 describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
+    const testCreationTime = moment().format();
+    const testActivityDate = moment().format();
+
+    const expectedResultFromCache = {
+        savingHeat: '24.13',
+        shareItems: [{
+            WITHDRAWAL: {
+                lastActivityDate: testActivityDate,
+                lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+            }
+        }]
+    };
+
+    const mockResponseFromCache = (accountId) => ({
+        accountId,
+        ...expectedResultFromCache
+    });
+
+    const testProfile = {
+        systemWideUserId: testInitiatedUserId,
+        personalName: 'Yao',
+        familyName: 'Shu',
+        phoneNumber: '02130940334',
+        calledName: 'Yao Shu',
+        emailAddress: 'yaoshu@orkhon.com'
+    };
+
+    const expectedFriendship = {
+        relationshipId: testRelationshipId,
+        personalName: 'Yao',
+        familyName: 'Shu',
+        calledName: 'Yao Shu',
+        contactMethod: '02130940334',
+        ...expectedResultFromCache
+    };
+
+    const testFriendRequest = {
+        requestId: testRequestId,
+        initiatedUserId: testInitiatedUserId,
+        targetUserId: testTargetUserId,
+        requestedShareItems: ['LAST_ACTIVITY_DATE'],
+        creationTime: testCreationTime
+    };
+
+    const mockFriendship = {
+        relationshipId: testRelationshipId,
+        initiatedUserId: testInitiatedUserId,
+        acceptedUserId: testAcceptedUserId,
+        relationshipStatus: 'ACTIVE',
+        shareItems: []
+    };
 
     beforeEach(() => {
         resetStubs();
     });
 
     it('Persists new friendship', async () => {
-        fetchRequestStub.withArgs(testRequestId).resolves({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
-        insertFriendshipStub.withArgs(testRequestId, testInitiatedUserId, testTargetUserId).resolves({ relationshipId: testRelationshipId, logId: testLogId });
+        fetchRequestStub.withArgs(testRequestId).resolves(testFriendRequest);
+        fetchProfileStub.resolves(testProfile);
+        insertFriendshipStub.withArgs(testRequestId, testInitiatedUserId, testTargetUserId).resolves(mockFriendship);
+        publishUserEventStub.resolves({ result: 'SUCCESS' });
+        countMutualFriendsStub.resolves([{ [testInitiatedUserId]: 23 }]);
+        fetchAccountStub.resolves({ [testInitiatedUserId]: testAccountId });
+        redisGetStub.resolves([JSON.stringify(mockResponseFromCache(testAccountId))]);
 
         const insertionResult = await handler.directRequestManagement(helper.wrapParamsWithPath({ requestId: testRequestId }, 'accept', testTargetUserId));
         
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.deep.equal(helper.wrapResponse({
-            result: 'SUCCESS',
-            updateLog: {
-                insertionResult: {
-                    relationshipId: testRelationshipId,
-                    logId: testLogId
-                }
-            }
-        }));
+        expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedFriendship));
     });
 
     it('Fails where accepting user is not target user', async () => {

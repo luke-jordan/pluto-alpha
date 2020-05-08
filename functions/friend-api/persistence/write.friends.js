@@ -64,6 +64,7 @@ const checkForExistingFriendRequest = async (friendRequest) => {
     }
 
     const existingFriendRequest = await rdsConnection.selectQuery(findQuery, queryValues);
+    logger('Found existing friend request:', existingFriendRequest);
     
     return existingFriendRequest.length > 0 ? camelCaseKeys(existingFriendRequest[0]) : null;
 };
@@ -118,8 +119,8 @@ module.exports.insertFriendRequest = async (friendRequest) => {
 
     logger(`Request ids from persistence: ${queryRequestId} and ${queryLogId}`);
 
-    friendRequest.creationTime = creationTime;
-    return friendRequest;
+    const responseObject = { ...friendRequest, creationTime };
+    return responseObject;
 };
 
 /**
@@ -267,9 +268,7 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefs, [insertLogDef]);
     logger('Result of operations: ', resultOfOperations);
 
-    const queryLogId = resultOfOperations[1][0]['log_id'];
-
-    return { relationshipId: persistedRelationshipId, logId: queryLogId };
+    return friendshipObject;
 };
 
 /**

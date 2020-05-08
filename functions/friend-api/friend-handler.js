@@ -581,6 +581,43 @@ module.exports.findFriendRequestsForUser = async (event) => {
     }
 };
 
+// todo: consolidate like functions
+const assembleFriendshipResponse = async (initiatedUserId, friendship) => {
+    const [profile, accountId] = await Promise.all([
+        persistenceRead.fetchUserProfile({ systemWideUserId: initiatedUserId }),
+        persistenceRead.fetchAccountIdForUser(initiatedUserId)
+    ]);
+
+    let profileSavingHeat = null;
+
+    const savingHeatFromCache = await fetchSavingHeatFromCache([accountId]);
+    logger('Saving heat from cache:', savingHeatFromCache);
+
+    if (savingHeatFromCache.length === 0) {
+        const savingHeatFromLambda = await invokeSavingHeatLambda([accountId]);
+        logger('Got caller saving heat from lambda:', savingHeatFromLambda);
+        profileSavingHeat = savingHeatFromLambda[0];
+    } else {
+        profileSavingHeat = savingHeatFromCache[0];
+    }
+
+    logger('Got saving heat:', profileSavingHeat);
+
+    const transformedProfile = {
+        relationshipId: friendship.relationshipId,
+        personalName: profile.personalName,
+        familyName: profile.familyName,
+        calledName: profile.calledName ? profile.calledName : profile.personalName,
+        contactMethod: profile.phoneNumber || profile.emailAddress,
+        savingHeat: profileSavingHeat.savingHeat,
+        shareItems: profileSavingHeat.shareItems
+    };
+
+    logger('Assembled response:', transformedProfile);
+    
+    return transformedProfile;
+};
+
 /**
  * This function persists a new friendship. Triggered by a method that also flips the friend request to approved, but may also be called directly.
  * @param {Object} event
@@ -612,9 +649,12 @@ module.exports.acceptFriendshipRequest = async (event) => {
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
         if (targetUserId === systemWideUserId) {
-            const insertionResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
-            logger('Result of friendship insertion:', insertionResult);
-            return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { insertionResult }});
+            const creationResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
+            logger('Result of friendship insertion:', creationResult);
+            await publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_ACCEPTED', { context: { ...creationResult } });
+            const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult);
+
+            return opsUtil.wrapResponse(transformedResult);
         }
     
         throw new Error('Error! Accepting user is not friendship target');
