@@ -102,7 +102,7 @@ resource "aws_iam_role_policy_attachment" "friend_request_manage_profile_invoke_
   policy_arn = var.user_profile_lookup_by_detail_policy[terraform.workspace]
 }
 
-resource "aws_iam_role_policy_attachment" "save_initiate_user_event_publish_policy" {
+resource "aws_iam_role_policy_attachment" "friend_request_user_event_publish_policy" {
   role = aws_iam_role.friend_request_manage_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
