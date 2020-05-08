@@ -188,7 +188,8 @@ module.exports.create = async (event) => {
  * @param {object} event An event object containing the referral code to be evaluated.
  * @property {string} countryCode The country where the referral code is being used
  * @property {string} referralCode The referralCode to be verified.
- * @property {string} includeFloatDefaults Whether to include float defaults, e.g.,  
+ * @property {boolean} includeFloatDefaults Whether to include float defaults, e.g., bonus amounts
+ * @property {boolean} includeCreatingUserId Whether to include the creating user ID. Not available on query calls 
  */
 module.exports.verify = async (event) => {
     try {
@@ -205,7 +206,12 @@ module.exports.verify = async (event) => {
         
         const referralCode = params.referralCode.toUpperCase().trim();
         const codeKey = { referralCode, countryCode: params.countryCode };
+        
         const colsToReturn = ['referralCode', 'codeType', 'expiryTimeMillis', 'context', 'clientId', 'floatId'];
+        if (params.includeCreatingUserId && !Reflect.has(event, 'httpMethod')) {
+            colsToReturn.push('creatingUserId');
+        }
+
         const tableLookUpResult = await dynamo.fetchSingleRow(config.get('tables.activeCodes'), codeKey, colsToReturn);
         
         logger('Table lookup result: ', tableLookUpResult);

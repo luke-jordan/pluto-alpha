@@ -618,7 +618,8 @@ resource "aws_iam_policy" "friend_request_manage_lambda_policy" {
             ],
             "Resource": [
                 "${aws_lambda_function.referral_verify.arn}",
-                "${aws_lambda_function.outbound_comms_send.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}",
+                "${aws_lambda_function.user_save_heat_fetch.arn}"
             ]
         },
         {
