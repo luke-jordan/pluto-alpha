@@ -20,6 +20,7 @@ const getFriendsStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 const fetchAccountStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
+const countMutualFriendsStub = sinon.stub();
 
 const testSystemId = uuid();
 const testAccountId = uuid();
@@ -41,6 +42,7 @@ class MockLambdaClient {
 const handler = proxyquire('../friend-handler', {
     './persistence/read.friends': {
         'fetchAccountIdForUser': fetchAccountStub,
+        'countMutualFriends': countMutualFriendsStub,
         'fetchActiveSavingFriendsForUser': getFriendsStub,
         'fetchUserProfile': fetchProfileStub,
         '@noCallThru': true
@@ -71,7 +73,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         emailAddress: 'liezi@tao.com'
     });
 
-    const expectedProfile = (relationshipId) => ({
+    const expectedFriendship = (relationshipId) => ({
         relationshipId,
         personalName: 'Lie',
         familyName: 'Yukou',
@@ -179,44 +181,37 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         redisGetStub.withArgs(testAccountId).resolves([mockResponseFromCache(testAccountId)]);
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([mockResponseFromCache(firstAccId), null, null]);
 
+        [firstUserId, secondUserId, thirdUserId].map((userId) => countMutualFriendsStub.withArgs(testSystemId, [userId]).resolves([{ [userId]: 12 }]));
+
         const fetchResult = await handler.obtainFriends(testEvent);
         const resultBody = helper.standardOkayChecks(fetchResult);
         const expectedBody = [
             {
-                ...expectedProfile(testRelationshipId),
+                ...expectedFriendship(testRelationshipId),
                 savingHeat: `${expectedsavingHeat}`,
                 shareItems,
                 lastActivity: {
-                    USER_SAVING_EVENT: {
-                        creationTime: testActivityDate,
-                        amount: '100', 
-                        unit: 'HUNDREDTH_CENT'
-                    }
-                }
+                    USER_SAVING_EVENT: { creationTime: testActivityDate, amount: '100', unit: 'HUNDREDTH_CENT' }
+                },
+                numberOfMutualFriends: 12
             },
             {
-                ...expectedProfile(testRelationshipId),
+                ...expectedFriendship(testRelationshipId),
                 savingHeat: expectedsavingHeat,
                 shareItems,
                 lastActivity: {
-                    USER_SAVING_EVENT: {
-                        creationTime: testActivityDate,
-                        amount: '2000',
-                        unit: 'HUNDREDTH_CENT'
-                    }
-                }
+                    USER_SAVING_EVENT: { creationTime: testActivityDate, amount: '2000', unit: 'HUNDREDTH_CENT' }
+                },
+                numberOfMutualFriends: 12
             },
             {
-                ...expectedProfile(testRelationshipId),
+                ...expectedFriendship(testRelationshipId),
                 savingHeat: expectedsavingHeat,
                 shareItems,
                 lastActivity: {
-                    USER_SAVING_EVENT: {
-                        creationTime: testActivityDate,
-                        amount: '500',
-                        unit: 'HUNDREDTH_CENT'
-                    }
-                }
+                    USER_SAVING_EVENT: { creationTime: testActivityDate, amount: '500', unit: 'HUNDREDTH_CENT' }
+                },
+                numberOfMutualFriends: 12
             },
             { relationshipId: 'SELF', savingHeat: `${expectedsavingHeat}` }
         ];
@@ -240,6 +235,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         fetchAccountStub.withArgs(testSystemId).resolves({ [testSystemId]: testAccountId });
 
+        [firstUserId, secondUserId, thirdUserId].map((userId) => countMutualFriendsStub.withArgs(testSystemId, [userId]).resolves([{ [userId]: 12 }]));
         redisGetStub.withArgs(testAccountId).resolves([mockResponseFromCache(testAccountId)]);
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
             mockResponseFromCache(firstAccId),
@@ -258,9 +254,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
 
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([
-            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache(shareItems) },
-            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache(shareItems) },
-            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache(shareItems) },
+            { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 12 },
+            { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 12 },
+            { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 12 },
             { relationshipId: 'SELF', savingHeat: `${expectedsavingHeat}` }
         ]));
     });
@@ -280,6 +276,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         fetchAccountStub.withArgs(thirdUserId).resolves({ [thirdUserId]: thirdAccId });
         fetchAccountStub.withArgs(testInitiatedUserId).resolves({ [testInitiatedUserId]: testAccountId });
 
+        [firstUserId, secondUserId, thirdUserId].map((userId) => countMutualFriendsStub.withArgs(testInitiatedUserId, [userId]).resolves([{ [userId]: 12 }]));
         redisGetStub.withArgs(testAccountId).resolves([mockResponseFromCache(testAccountId)]);
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([
             mockResponseFromCache(firstAccId),
@@ -298,9 +295,9 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         
         expect(fetchResult).to.exist;
         expect(fetchResult).to.deep.equal(helper.wrapResponse([
-            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache(shareItems) },
-            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache(shareItems) },
-            { ...expectedProfile(testRelationshipId), ...expectedResultFromCache(shareItems) },
+            { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 12 },
+            { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 12 },
+            { ...expectedFriendship(testRelationshipId), ...expectedResultFromCache(shareItems), numberOfMutualFriends: 12 },
             { relationshipId: 'SELF', savingHeat: `${expectedsavingHeat}` }
         ]));
     });
