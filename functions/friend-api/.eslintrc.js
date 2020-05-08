@@ -261,7 +261,7 @@ module.exports = {
         'radix': 'error',
         'require-await': 'off',
         'require-jsdoc': 'error',
-        'require-unicode-regexp': 'error',
+        'require-unicode-regexp': 'off',
         'rest-spread-spacing': 'error',
         'semi': [ 
             'error',

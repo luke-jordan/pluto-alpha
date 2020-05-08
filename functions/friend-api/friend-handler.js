@@ -405,36 +405,40 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
 };
 
 const handleUserNotFound = async (friendRequest) => {
-    const customShareMessage = friendRequest.customShareMessage ? friendRequest.customShareMessage : null;
-    friendRequest.customShareMessage = customShareMessage ? String(customShareMessage.length) : null;
+    
+    const { customShareMessage } = friendRequest;
+    const minifiedMessage = customShareMessage ? customShareMessage.replace(/\n\s*\n/g, '\n') : null;
+    friendRequest.customShareMessage = minifiedMessage;
+    
     const createdFriendRequest = await persistenceWrite.insertFriendRequest(friendRequest);
     logger('Persisting friend request resulted in:', createdFriendRequest);
 
     const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendRequest.initiatedUserId });
-    const initiatedUserName = userProfile.calledName ? userProfile.calledName : userProfile.firstName;
+    const initiatedUserName = userProfile.calledName || userProfile.firstName;
 
     const { contactType, contactMethod } = friendRequest.targetContactDetails;
     const initiatedUserId = friendRequest.initiatedUserId;
 
-    let dispatchResult = null;
+    const { referralCode } = userProfile;
+    const downloadLink = config.get('templates.downloadLink');
 
+    let dispatchResult = null;
+    
     if (contactType === 'PHONE') {
-        const dispatchMsg = customShareMessage
-            ? customShareMessage
-            : format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
-        
-        dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: dispatchMsg });
+        const initialPart = customShareMessage || format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
+        const linkPart = format(config.get('templates.sms.friendRequest.linkPart'), { downloadLink, referralCode });
+        logger(`Sending SMS: ${initialPart} ${linkPart}`);
+        dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: `${initialPart} ${linkPart}` });
     }
 
     if (contactType === 'EMAIL') {
-        const bodyTemplateKey = customShareMessage
-            ? config.get('templates.email.custom.templateKey')
-            : config.get('templates.email.default.templateKey');
+        const bodyTemplateKey = customShareMessage ? config.get('templates.email.custom.templateKey') : config.get('templates.email.default.templateKey');
 
-        const templateVariables = customShareMessage ? { customShareMessage } : { initiatedUserName };
+        const templateVariables = { initiatedUserName, customShareMessage, downloadLink, referralCode };
+        const subject = format(config.get('templates.email.subject'), { initiatedUserName });
 
         dispatchResult = await publisher.sendSystemEmail({
-            subject: config.get('templates.email.default.subject'),
+            subject,
             toList: [contactMethod],
             bodyTemplateKey,
             templateVariables

@@ -380,8 +380,8 @@ const addInvestmentToBSheet = async ({ operation, accountId, amount, unit, curre
 // note : we do not _accept_ the friendship requests because the user needs to decide on their sharing level
 const findPendingFriendRequest = async (userProfile) => {
     try {
-        const { systemWideUserId: targetUserId, emailAddress, phoneNumber, referralCodeUsed } = userProfile;
-        const referralSearchParams = { referralCodeUsed, emailAddress, phoneNumber };
+        const { systemWideUserId: targetUserId, emailAddress, phoneNumber, countryCode, referralCodeUsed } = userProfile;
+        const referralSearchParams = { referralCodeUsed, countryCode, emailAddress, phoneNumber };
 
         const pendingInvocation = { targetUserId, ...referralSearchParams};
         const pendingFriendsInvocation = invokeLambda(config.get('lambdas.connectFriendReferral'), pendingInvocation, false);
