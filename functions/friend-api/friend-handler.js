@@ -360,7 +360,7 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
         type,
         requestId: friendRequest.requestId,
         requestedShareItems: friendRequest.requestedShareItems,
-        creationTime: friendRequest.creationTime,
+        creationTime: friendRequest.creationTime
     };
     
     if (!friendUserId) {
@@ -372,7 +372,7 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
     logger('Got friend profile:', profile);
 
     transformedResult.personalName = profile.personalName;
-    transformedResult.familyName = profile.familyName,
+    transformedResult.familyName = profile.familyName;
     transformedResult.calledName = profile.calledName ? profile.calledName : profile.personalName;
 
     if (type === 'INITIATED') {
