@@ -195,7 +195,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
 
         queryStub.resolves([]);
 
-        simpleInsertStub.resolves([{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }]);
+        simpleInsertStub.resolves({ rows: [{ 'relationship_id': testRelationshipId, 'creation_time': testInsertionTime }] });
         multiOpStub.resolves([
             [{ 'updated_time': testUpdatedTime }],
             [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]

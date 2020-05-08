@@ -139,6 +139,21 @@ module.exports.connectUserToFriendRequest = async (targetUserId, requestCode) =>
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
 };
 
+module.exports.connectTargetViaId = async (targetUserId, requestId) => {
+    // throw an error if the request already has a target ... or does not exist
+    const selectQuery = `select target_user_id from ${friendReqTable} where request_id = $1`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [requestId]);
+    logger('Result of seeking request: ', resultOfQuery);
+
+    if (!resultOfQuery || resultOfQuery.length === 0 || resultOfQuery[0]['target_user_id'] !== null) {
+        throw Error('Attempted rewiring of non-existent or already wired request');
+    }
+
+    const updateQuery = `update ${friendReqTable} set target_user_id = $1 where request_id = $2 returning updated_time`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [targetUserId, requestId]);
+    return resultOfUpdate && resultOfUpdate.rows ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
+};
+
 const createLogDef = ({ requestId, relationshipId, logType, logContext }) => {
     const logRow = { logId: uuid(), logType, logContext };
     if (requestId) {
@@ -238,7 +253,8 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     if (!existingFriendship) {
         const insertQuery = `insert into ${friendshipTable} (${extractColumnNames(friendshipKeys)}) values %L returning relationship_id, creation_time`;
         const insertResult = await rdsConnection.insertRecords(insertQuery, extractColumnTemplate(friendshipKeys), [friendshipObject]);
-        persistedRelationshipId = insertResult[0]['relationship_id'];
+        logger('Huh ? : ', insertResult);
+        persistedRelationshipId = insertResult['rows'][0]['relationship_id'];
     }
 
     // otherwise, put it into the update

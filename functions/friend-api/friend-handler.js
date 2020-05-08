@@ -336,6 +336,16 @@ module.exports.seekFriend = async (event) => {
     }
 };
 
+const fetchAndExtractReferralDetails = async (referralPayload) => {
+    const referralInvocation = invokeLambda(config.get('lambdas.referralDetails'), referralPayload, true);
+        
+    const bundledResponse = await lambda.invoke(referralInvocation).promise();
+    const extractedPayload = JSON.parse(bundledResponse.Payload);
+    const { result, codeDetails } = JSON.parse(extractedPayload.body);
+    logger('Code fetch result: ', result);
+    return { result, codeDetails };
+};
+
 // and another one, to get current referral data
 module.exports.obtainReferralCode = async (event) => {
     try {
@@ -347,12 +357,7 @@ module.exports.obtainReferralCode = async (event) => {
         const { systemWideUserId } = userDetails;
         const { referralCode, countryCode } = await persistenceRead.fetchUserProfile({ systemWideUserId });
         const referralPayload = { referralCode, countryCode, includeFloatDefaults: true };
-        const referralInvocation = invokeLambda(config.get('lambdas.referralDetails'), referralPayload, true);
-        
-        const bundledResponse = await lambda.invoke(referralInvocation).promise();
-        const extractedPayload = JSON.parse(bundledResponse.Payload);
-        const { result, codeDetails } = JSON.parse(extractedPayload.body);
-        logger('Code fetch result: ', result);
+        const { codeDetails } = await fetchAndExtractReferralDetails(referralPayload);
         return opsUtil.wrapResponse(codeDetails);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
@@ -527,6 +532,59 @@ module.exports.addFriendshipRequest = async (event) => {
 };
 
 /**
+ * This will be used as a direct invocation. It just takes a referral code, finds the user that the code belongs to,
+ * and then either create or stitch up a friend request to the new user
+ * @param {Object} event Usual
+ * @property {String} targetUserId The ID of the user that might become the target of the request, if found
+ * @property {String} referralCodeUsed The referral code that was used to sign up
+ * @property {String} countryCode The country code where this was used
+ * @property {String} emailAddress The email address of the user (for searching in tables)
+ * @property {String} phoneNumber The phone number of the user (same)
+ */
+module.exports.initiateRequestFromReferralCode = async (event) => {
+    try {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'targetUserId')) {
+            return { statusCode: 403 };
+        }
+
+        const { targetUserId, referralCodeUsed, countryCode } = event;
+        const referralValidation = { referralCode: referralCodeUsed, countryCode, includeCreatingUserId: true };
+        const { result, codeDetails } = await fetchAndExtractReferralDetails(referralValidation);
+        
+        if (result === 'CODE_NOT_FOUND' || !codeDetails || codeDetails.codeType !== 'USER') {
+            return { result: 'NO_USER_CODE_FOUND' };
+        }
+
+        const { creatingUserId: initiatedUserId } = codeDetails;
+        
+        // lots to fix in here
+        const { emailAddress, phoneNumber } = event;
+        const contactMethod = emailAddress ? emailAddress : phoneNumber;
+        const seekExistingRequest = await persistenceRead.findPossibleFriendRequest(initiatedUserId, contactMethod);
+        logger('Sought existing request and found: ', seekExistingRequest);
+
+        if (seekExistingRequest) {
+            const resultOfUpdate = await persistenceWrite.connectTargetViaId(targetUserId, seekExistingRequest.requestId);
+            logger('Finished up with the update: ', resultOfUpdate);
+            return { result: 'CONNECTED' };
+        }
+
+        const friendshipRequest = { initiatedUserId, targetUserId, requestType: 'CREATE', requestedShareItems: ['SHARE_ACTIVITY'] };
+        friendshipRequest.targetContactDetails = {
+            contactType: emailAddress ? 'EMAIL' : 'PHONE',
+            contactMethod: emailAddress || phoneNumber
+        };
+
+        const newRequest = await persistenceWrite.insertFriendRequest(friendshipRequest);
+        logger('Result of creating request: ', newRequest);
+        return { result: 'CREATED' };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { result: 'FAILURE' };
+    }
+};
+
+/**
  * This function completes a previously ambigious friend request, where a friend was requested using a contact detail not
  * associated with any system user id. This function is called once the target user has confirmed they are are indeed the target for the
  * friendship. It accepts a request code (to identify the request) and the target users system id. The friendship request is
@@ -593,13 +651,14 @@ module.exports.findFriendRequestsForUser = async (event) => {
 
 // todo: consolidate like functions
 const assembleFriendshipResponse = async (initiatedUserId, friendship) => {
-    const [profile, accountId] = await Promise.all([
+    const [profile, accountIdMap] = await Promise.all([
         persistenceRead.fetchUserProfile({ systemWideUserId: initiatedUserId }),
         persistenceRead.fetchAccountIdForUser(initiatedUserId)
     ]);
 
     let profileSavingHeat = null;
 
+    const accountId = accountIdMap[initiatedUserId];
     const savingHeatFromCache = await fetchSavingHeatFromCache([accountId]);
     logger('Saving heat from cache:', savingHeatFromCache);
 

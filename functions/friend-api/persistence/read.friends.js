@@ -176,6 +176,20 @@ module.exports.fetchFriendshipRequestByCode = async (requestCode) => {
 };
 
 /**
+ * This looks for a friendship request initiated by a user, with one or other of a contact method
+ * @param {String} initiatedUserId Sought for user who might have initiated
+ * @param {String} contactMethod Sought for contact method
+ */
+module.exports.findPossibleFriendRequest = async (initiatedUserId, contactMethod) => {
+    const selectQuery = `select request_id from ${config.get('tables.friendRequestTable')} where initiated_user_id = $1 ` +
+        `and target_contact_details ->> 'contactMethod' = $2 order by creation_time desc limit 1`; // limit is just in case
+    logger('Seeking with query: ', selectQuery);
+    const findResult = await rdsConnection.selectQuery(selectQuery, [initiatedUserId, contactMethod]);
+    logger('Found: ', findResult);
+    return findResult.length > 0 ? camelCaseKeys(findResult[0]) : null;
+};
+
+/**
  * This functions returns an array of active requests codes.
  */
 module.exports.fetchActiveRequestCodes = async () => {

@@ -62,8 +62,7 @@
         "userBankVerify": "bank_account_verify",
         "sendOutboundMessages": "outbound_comms_send",
         "calcSavingHeat": "user_save_heat_fetch",
-        "fetchFriendRequests": "friend_requests_fetch",
-        "createFriendship": "friendship_create"
+        "connectFriendReferral": "friend_referral_connect"
     },
     "payment": {
         "test": false,
