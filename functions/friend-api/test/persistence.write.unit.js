@@ -58,13 +58,15 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         helper.resetStubs(simpleInsertStub, multiTableStub, multiOpStub, updateStub, queryStub, uuidStub);
     });
 
-    it.skip('Inserts friend request properly', async () => {
+    it('Inserts friend request properly', async () => {
+        const requestedShareItems = ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'];
+
         const testFriendRequest = {
             requestId: testRequestId,
             requestStatus: 'PENDING',
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
-            requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
+            requestedShareItems,
             targetContactDetails: {
                 contactType: 'EMAIL',
                 contactMethod: 'example@domain.com'
@@ -91,8 +93,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             rows: [testLogObject]
         };
 
-        queryStub.resolves([{ 'user_id': testIniatedUserId }]);
-        simpleInsertStub.resolves([{ 'creation_time': moment().format() }]);
+        const requestQuery = 'select * from friend_data.friend_request where initiated_user_id = $1 and target_user_id = $2';
+
+        const referenceQuery = 'select user_id from friend_data.user_reference_table where user_id in ($1, $2)';
+
+        queryStub.withArgs(referenceQuery, [testIniatedUserId, testTargetUserId]).resolves([{ 'user_id': testIniatedUserId }]);
+        queryStub.withArgs(requestQuery, [testIniatedUserId, testTargetUserId]).resolves([]);
+        simpleInsertStub.resolves([{ 'creation_time': testInsertionTime }]);
 
         uuidStub.onFirstCall().returns(testRequestId);
         uuidStub.onSecondCall().returns(testLogId);
@@ -104,18 +111,30 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const testInsertParams = {
             initiatedUserId: testIniatedUserId,
             targetUserId: testTargetUserId,
-            requestedShareItems: ['ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', 'BALANCE'],
+            requestedShareItems,
             targetContactDetails: {
                 contactType: 'EMAIL',
                 contactMethod: 'example@domain.com'
             }
         };
 
-        const insertResult = await persistence.insertFriendRequest(testInsertParams);
-        expect(insertResult).to.exist;
-        expect(insertResult).to.deep.equal({ requestId: testRequestId, logId: testLogId });
+        const expectedResult = {
+            initiatedUserId: testIniatedUserId,
+            targetUserId: testTargetUserId,
+            requestedShareItems,
+            targetContactDetails: { contactType: 'EMAIL', contactMethod: 'example@domain.com' },
+            requestId: testRequestId,
+            requestStatus: 'PENDING',
+            creationTime: testInsertionTime
+        };
 
-        expect(queryStub).to.have.been.calledOnceWithExactly('select user_id from friend_data.user_reference_table where user_id in ($1, $2)', [testIniatedUserId, testTargetUserId]);
+        const insertResult = await persistence.insertFriendRequest(testInsertParams);
+
+        expect(insertResult).to.exist;
+        expect(insertResult).to.deep.equal(expectedResult);
+
+        expect(queryStub).to.have.been.calledWithExactly(referenceQuery, [testIniatedUserId, testTargetUserId]);
+        expect(queryStub).to.have.been.calledWithExactly(requestQuery, [testIniatedUserId, testTargetUserId]);
         expect(simpleInsertStub).to.have.been.calledOnce;
         expect(multiTableStub).to.have.been.calledOnceWithExactly([testFriendQueryDef, testLogDef]);
     });
