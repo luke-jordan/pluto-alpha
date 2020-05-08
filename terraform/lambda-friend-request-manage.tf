@@ -92,9 +92,9 @@ resource "aws_iam_role_policy_attachment" "friend_request_manage_vpc_execution_p
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "friend_request_manage_secret_get" {
+resource "aws_iam_role_policy_attachment" "friend_request_manage_omnibus_policy" {
   role = aws_iam_role.friend_request_manage_role.name
-  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_friend_worker_read"
+  policy_arn = aws_iam_policy.friend_request_manage_lambda_policy.arn
 }
 
 resource "aws_iam_role_policy_attachment" "friend_request_manage_profile_invoke_policy" {
@@ -102,10 +102,20 @@ resource "aws_iam_role_policy_attachment" "friend_request_manage_profile_invoke_
   policy_arn = var.user_profile_lookup_by_detail_policy[terraform.workspace]
 }
 
+resource "aws_iam_role_policy_attachment" "save_initiate_user_event_publish_policy" {
+  role = aws_iam_role.friend_request_manage_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
+}
+
 // caching goes through here, so
 resource "aws_iam_role_policy_attachment" "friend_request_profile_table_read_policy" {
   role = aws_iam_role.friend_request_manage_role.name
   policy_arn = var.user_profile_table_read_policy_arn[terraform.workspace]
+}
+
+resource "aws_iam_role_policy_attachment" "friend_request_manage_secret_get" {
+  role = aws_iam_role.friend_request_manage_role.name
+  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_friend_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

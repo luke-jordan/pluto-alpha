@@ -4,14 +4,13 @@
   "description": "API for joint savings",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:*:test nyc mocha",
+    "test": "DEBUG=jupiter:* mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "camelcase": "^6.0.0",
     "camelcase-keys": "^6.2.2",
     "config": "^3.1.0",
     "debug": "^4.1.1",

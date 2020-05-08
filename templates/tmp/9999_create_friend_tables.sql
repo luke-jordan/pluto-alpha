@@ -27,7 +27,7 @@ create table if not exists friend_data.friend_request (
     request_status varchar (100) not null default 'PENDING',
     reference_friendship_id uuid references friend_data.core_friend_relationship (relationship_id),
     initiated_user_id uuid not null references friend_data.user_reference_table (user_id),
-    target_user_id uuid not null references friend_data.user_reference_table (user_id),
+    target_user_id uuid references friend_data.user_reference_table (user_id),
     target_contact_details jsonb,
     requested_share_items text[] default '{}',
     custom_share_message text,

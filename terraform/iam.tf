@@ -600,6 +600,40 @@ resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
 EOF
 }
 
+// another omnibus, for the friend request manager
+resource "aws_iam_policy" "friend_request_manage_lambda_policy" {
+    name = "${terraform.workspace}_friend_request_manage"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "InvokeLambdas",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.referral_verify.arn}",
+                "${aws_lambda_function.outbound_comms_send.arn}"
+            ]
+        },
+        {
+            "Sid": "EmailTemplateAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "referral_code_read_policy" {
     name = "dynamo_table_referral_read_${terraform.workspace}"
     path = "/"

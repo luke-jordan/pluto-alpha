@@ -23,7 +23,7 @@
         "sendOutboundMessages": "outbound_comms_send",
         "calcSavingHeat": "user_save_heat_fetch",
         "lookupByContactDetails": "profile_find_by_details",
-        "referralDetails": "referral_details_fetch"
+        "referralDetails": "referral_verify"
     },
     "cache": {
         "port": 6739,
@@ -58,7 +58,7 @@
         "blacklist": "\\b(password|pwd)"
     },
     "share": {
-        "items": ["LAST_ACTIVITY_DATE", "LAST_ACTIVITY_AMOUNT"],
-        "activities": ["USER_SAVING_EVENT", "WITHDRAWAL", "BOOST_REDEMPTION", "CAPITALIZATION"]
+        "items": ["ACTIVITY_LEVEL", "ACTIVITY_COUNT", "LAST_ACTIVITY"],
+        "activities": ["USER_SAVING_EVENT"]
     }
 }

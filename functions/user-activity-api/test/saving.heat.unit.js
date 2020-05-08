@@ -301,21 +301,24 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
     it('Includes last acitvity details if requested', async () => {
         const expectedScore = '19.77';
         const testAccountOpenedDate = moment().subtract(5, 'months').format(); // NB
+        
         const expectedSavingHeatObject = {
             accountId: testAccountId,
             savingHeat: expectedScore,
-            shareItems: [{
+            recentActivity: {
                 USER_SAVING_EVENT: {
-                    lastActivityDate: testActivityDate,
-                    lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-                }
-            },
-            {
+                    creationTime: testActivityDate,
+                    amount: '100', 
+                    currency: 'ZAR', 
+                    unit: 'HUNDREDTH_CENT'
+                },
                 BOOST_REDEMPTION: {
-                    lastActivityDate: testActivityDate,
-                    lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
+                    creationTime: testActivityDate,
+                    amount: '100', 
+                    currency: 'ZAR', 
+                    unit: 'HUNDREDTH_CENT'
                 }
-            }]
+            }
         };
 
         // In this case the user has no previous capitalization events.
