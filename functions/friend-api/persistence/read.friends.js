@@ -30,6 +30,17 @@ const relevantProfileColumns = [
     'country_code'
 ];
 
+const safeRedisGet = async (key) => {
+    // ioredis has a nasty habit of throwing an error instead of reconnecting (to find a fix)
+    let responseFromCache = null;
+    try {
+        responseFromCache = await redis.get(key);
+    } catch (err) {
+        logger('REDIS_ERROR: ', err);
+    }
+    return responseFromCache;
+};
+
 const fetchUserProfileFromDB = async (systemWideUserId) => {
     logger(`Fetching profile for user id: ${systemWideUserId} from table: ${config.get('tables.profileTable')}`);
     const rowFromDynamo = await dynamoCommon.fetchSingleRow(config.get('tables.profileTable'), { systemWideUserId }, relevantProfileColumns);
@@ -60,26 +71,20 @@ const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
     logger(`Fetching 'user profile' from database or cache`);
 
     const key = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
-    try {
-        const responseFromCache = await redis.get(key);
-        if (!responseFromCache) {
-            return obtainFromDbAndCache(systemWideUserId);
-        }
-        logger(`Successfully fetched 'user profile' from cache`);
-        return JSON.parse(responseFromCache);    
-    } catch (err) {
-        logger('Error in cache: ', err);
+    const responseFromCache = await safeRedisGet(key);
+    if (!responseFromCache) {
         return obtainFromDbAndCache(systemWideUserId);
     }
-        
+    logger(`Successfully fetched 'user profile' from cache`);
+    return JSON.parse(responseFromCache);            
 };
 
 const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
     logger(`Fetching 'user id' from database or cache`);
 
     const key = `${config.get('cache.keyPrefixes.userId')}::${accountId}`;
-    const responseFromCache = await redis.get(key);
-
+    const responseFromCache = await safeRedisGet(key);
+   
     if (!responseFromCache) {
         const systemWideUserId = await fetchUserIdForAccountFromDB(accountId);
         logger('Got account owner id', systemWideUserId);
