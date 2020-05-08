@@ -362,6 +362,12 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
         requestedShareItems: friendRequest.requestedShareItems,
         creationTime: friendRequest.creationTime
     };
+
+    if (type === 'INITIATED') {
+        if (friendRequest.targetContactDetails) {
+            transformedResult.contactMethod = friendRequest.targetContactDetails.contactMethod;
+        }
+    }
     
     if (!friendUserId) {
         // means it was an invite to a non-user
@@ -374,12 +380,6 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
     transformedResult.personalName = profile.personalName;
     transformedResult.familyName = profile.familyName;
     transformedResult.calledName = profile.calledName ? profile.calledName : profile.personalName;
-
-    if (type === 'INITIATED') {
-        if (friendRequest.targetContactDetails) {
-            transformedResult.contactMethod = friendRequest.targetContactDetails.contactMethod;
-        }
-    }
 
     if (type === 'RECEIVED') {
         const mutualFriendCount = await persistenceRead.countMutualFriends(userId, [friendUserId]);
