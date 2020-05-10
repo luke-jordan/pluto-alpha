@@ -178,6 +178,21 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         expect(resultOfFetch).to.deep.equal({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
     });
 
+    it('Finds possible friend request by contact method', async () => {
+        const testContactMethod = 'user@domain.com';
+        const selectQuery = `select request_id from ${friendRequestTable} where initiated_user_id = $1 ` +
+            `and target_contact_details ->> 'contactMethod' = $2 order by creation_time desc limit 1`;
+
+        queryStub.resolves([{ 'request_id': testRequestId }]);
+
+        const resultOfFetch = await persistence.findPossibleFriendRequest(testInitiatedUserId, testContactMethod);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal({ requestId: testRequestId });
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testInitiatedUserId, testContactMethod]);
+
+    });
+
     it('Fetches all active request codes', async () => {
         const selectQuery = `select request_code from ${friendRequestTable} where request_status = $1`;
         queryStub.withArgs(selectQuery, ['PENDING']).resolves([{ 'request_code': 'FLYING LOTUS' }, { 'request_code': 'ACTIVE MANTIS' }]);

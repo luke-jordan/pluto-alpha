@@ -68,9 +68,9 @@ const stripDownToPermitted = (shareItems, transaction) => {
     return strippedActivity;
 };
 
-const transformProfile = async (systemWideUserId, profile, friendshipsInfo, accountMaps) => {
+const transformProfile = async (profile, friendshipDetails, accountMaps) => {
     const { userAccountMap, accountAndSavingHeatMap } = accountMaps;
-    const { friendships, mutualFriendCounts } = friendshipsInfo;
+    const { friendships, mutualFriendCounts } = friendshipDetails;
     // logger('Map thing: ', userAccountMap);
     const profileAccountId = userAccountMap[profile.systemWideUserId];
     // logger('Profile account ID: ', profileAccountId);
@@ -113,7 +113,7 @@ const transformProfile = async (systemWideUserId, profile, friendshipsInfo, acco
  * @param {Array} profiles An array of user profiles.
  * @param {Object} userAccountMap An object mapping user system ids to thier account ids. Keys are user ids, values are account ids.
  */
-const appendSavingHeatToProfiles = async (systemWideUserId, profiles, userAccountMap, friendshipsInfo) => {
+const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendshipDetails) => {
     const accountIds = Object.values(userAccountMap);
     
     const cachedSavingHeatForAccounts = await fetchSavingHeatFromCache(accountIds);
@@ -141,7 +141,7 @@ const appendSavingHeatToProfiles = async (systemWideUserId, profiles, userAccoun
     const accountMaps = { userAccountMap, accountAndSavingHeatMap };
 
     const profilesWithSavingHeat = await Promise.all(
-        profiles.map((profile) => transformProfile(systemWideUserId, profile, friendshipsInfo, accountMaps))
+        profiles.map((profile) => transformProfile(profile, friendshipDetails, accountMaps))
     );
 
     logger('Got profiles with savings heat:', profilesWithSavingHeat);
@@ -212,7 +212,7 @@ module.exports.obtainFriends = async (event) => {
         const mutualFriendCounts = await persistenceRead.countMutualFriends(systemWideUserId, friendUserIds);
         logger('Got mutual friend counts:', mutualFriendCounts);
 
-        const friendshipsInfo = { friendships, mutualFriendCounts };
+        const friendshipDetails = { friendships, mutualFriendCounts };
     
         const profileRequests = friendUserIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
         const friendProfiles = await Promise.all(profileRequests);
@@ -222,7 +222,7 @@ module.exports.obtainFriends = async (event) => {
         logger('Got user accounts from persistence:', userAccountArray);
         const userAccountMap = userAccountArray.reduce((obj, userAccountObj) => ({ ...obj, ...userAccountObj }), {});
 
-        const profilesWithSavingHeat = await appendSavingHeatToProfiles(systemWideUserId, friendProfiles, userAccountMap, friendshipsInfo);
+        const profilesWithSavingHeat = await appendSavingHeatToProfiles(friendProfiles, userAccountMap, friendshipDetails);
 
         // todo: reuse above infra for user
         const savingHeatForCallingUser = await fetchOwnSavingHeat(systemWideUserId);
