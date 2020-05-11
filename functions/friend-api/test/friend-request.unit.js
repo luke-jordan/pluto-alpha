@@ -136,7 +136,10 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedFriendRequest(requestedShareItems)));
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testTargetUserId });
-        expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_CREATED', sinon.match.object);
+
+        expect(publishUserEventStub).to.have.been.calledTwice;
+        expect(publishUserEventStub).to.have.been.calledWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_INITIATED', sinon.match.object);
+        expect(publishUserEventStub).to.have.been.calledWithExactly(testTargetUserId, 'FRIEND_REQUEST_RECEIVED', sinon.match.object);
     });
 
      it('Finds target user id by contact detail where absent', async () => {
@@ -168,7 +171,10 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         const expectedLambdaInvoke = helper.wrapLambdaInvoc('profile_find_by_details', false, expectedProfileCallBody);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
         expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
-        expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_CREATED', sinon.match.object);
+
+        expect(publishUserEventStub).to.have.been.calledTwice;
+        expect(publishUserEventStub).to.have.been.calledWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_INITIATED', sinon.match.object);
+        expect(publishUserEventStub).to.have.been.calledWithExactly(testTargetUserId, 'FRIEND_REQUEST_RECEIVED', sinon.match.object);
     });
 
     it('Handles target user id not found, SMS route', async () => {
@@ -223,7 +229,9 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedLambdaInvoke);
         
         expect(sendSmsStub).to.have.been.calledOnceWithExactly(sendSmsArgs);
-        expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_CREATED', sinon.match.object);
+        
+        expect(publishUserEventStub).to.have.been.calledOnce;
+        expect(publishUserEventStub).to.have.been.calledWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_INITIATED', sinon.match.object);
     });
 
     it('Handles target user id not found, email route', async () => {
@@ -281,7 +289,10 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(insertionArgs);
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testInitiatedUserId });
         expect(sendEmailStub).to.have.been.calledOnceWithExactly(sendEmailArgs);
-        expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_CREATED', sinon.match.object);
+        
+        expect(publishUserEventStub).to.have.been.calledOnce;
+        expect(publishUserEventStub).to.have.been.calledWithExactly(testInitiatedUserId, 'FRIEND_REQUEST_INITIATED', sinon.match.object);
+
         expect(fetchActiveCodesStub).to.have.been.calledOnceWithExactly();
         expect(randomWordStub).to.have.been.calledOnce;
     });

@@ -446,7 +446,7 @@ const handleUserNotFound = async (friendRequest) => {
     }
 
     const context = { createdFriendRequest, dispatchResult };
-    await publisher.publishUserEvent(initiatedUserId, 'FRIEND_REQUEST_CREATED', { context });
+    await publisher.publishUserEvent(initiatedUserId, 'FRIEND_REQUEST_INITIATED', { context });
 
     const transformedRequest = {
         type: 'INITIATED',
@@ -513,7 +513,13 @@ module.exports.addFriendshipRequest = async (event) => {
 
         const createdFriendRequest = await persistenceWrite.insertFriendRequest(friendRequest);
         logger('Result of friend request insertion:', createdFriendRequest);
-        await publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_CREATED', { context: { createdFriendRequest } });
+
+        const logEvents = [publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_INITIATED', { context: { createdFriendRequest }})];
+        if (friendRequest.targetUserId) {
+            logEvents.push(publisher.publishUserEvent(friendRequest.targetUserId, 'FRIEND_REQUEST_RECEIVED', { context: { createdFriendRequest } }));
+        }
+
+        await Promise.all(logEvents);
         
         const transformedRequest = await appendUserNameToRequest(systemWideUserId, createdFriendRequest);
         logger('Transformed request:', transformedRequest);
@@ -571,6 +577,13 @@ module.exports.initiateRequestFromReferralCode = async (event) => {
 
         const newRequest = await persistenceWrite.insertFriendRequest(friendshipRequest);
         logger('Result of creating request: ', newRequest);
+        
+        // we use a different event to that above, because this is different
+        const eventContext = { targetUserId, initiatedUserId, referralCodeUsed, countryCode, codeDetails };
+        const referringUserEvent = publisher.publishUserEvent('FRIEND_INITIATED_VIA_REFERRAL', initiatedUserId, { context: eventContext });
+        const referredUserEvent = publisher.publishUserEvent('FRIEND_ACCEPTED_VIA_REFERRAL', targetUserId, { context: eventContext });
+        await Promise.all(referringUserEvent, referredUserEvent);
+
         return { result: 'CREATED' };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
@@ -602,6 +615,7 @@ module.exports.connectFriendshipRequest = async (event) => {
             throw new Error(`Error! No friend request found for request code: ${requestCode}`);
         }
 
+        await publisher.publishUserEvent('FRIEND_REQUEST_CONNECTED', systemWideUserId, { requestCode, updateResult });
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -711,17 +725,22 @@ module.exports.acceptFriendshipRequest = async (event) => {
         }
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
-        if (targetUserId === systemWideUserId) {
-            const creationResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
-            logger('Result of friendship insertion:', creationResult);
-            await publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_ACCEPTED', { context: { ...creationResult } });
-            const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult);
-
-            return opsUtil.wrapResponse(transformedResult);
+        if (targetUserId !== systemWideUserId) {
+            throw new Error('Error! Accepting user is not friendship target');
         }
-    
-        throw new Error('Error! Accepting user is not friendship target');
         
+        const creationResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
+        logger('Result of friendship insertion:', creationResult);
+        
+        // NB: the target user of the established event is the user who initiated the request
+        const eventContext = { initiatedUserId, targetUserId, creationResult };
+        const acceptedEvent = publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_ACCEPTED', { context: eventContext }); 
+        const establishedEvent = publisher.publishUserEvent(initiatedUserId, 'FRIEND_COMPLETED', { context: eventContext });
+        await Promise.all([acceptedEvent, establishedEvent]);
+
+        const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult);
+
+        return opsUtil.wrapResponse(transformedResult);        
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ message: err.message }, 500);
@@ -752,6 +771,7 @@ module.exports.ignoreFriendshipRequest = async (event) => {
         const resultOfIgnore = await persistenceWrite.ignoreFriendshipRequest(requestId, systemWideUserId);
         logger('Friendship update result:', resultOfIgnore);
 
+        await publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_IGNORED', { context: { requestId, resultOfIgnore }});
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { resultOfIgnore }});
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -779,7 +799,8 @@ module.exports.cancelFriendshipRequest = async (event) => {
 
         const resultOfCancel = await persistenceWrite.cancelFriendshipRequest(requestId);
         logger('Result of persisting cancellation: ', resultOfCancel);
-        
+
+        await publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_CANCELLED', { context: { requestId, resultOfCancel }});
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
         logger('FATAL_ERROR:', err);

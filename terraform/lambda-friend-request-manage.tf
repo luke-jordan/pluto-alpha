@@ -42,6 +42,9 @@ resource "aws_lambda_function" "friend_request_manage" {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
               },
+              "templates": {
+                "bucket": "${terraform.workspace}.jupiter.templates"
+              },
               "secrets": {
                 "enabled": true,
                 "names": {
