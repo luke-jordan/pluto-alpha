@@ -7,7 +7,7 @@ resource "aws_lambda_function" "friend_request_manage" {
 
   function_name                  = "${var.friend_request_manage}"
   role                           = "${aws_iam_role.friend_request_manage_role.arn}"
-  handler                        = "friend-handler.directRequestManagement"
+  handler                        = "friend-request-handler.directRequestManagement"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15
