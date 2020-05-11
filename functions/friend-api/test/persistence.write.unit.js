@@ -48,6 +48,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
     const testUpdatedTime = moment().format();
 
     const testLogId = uuid();
+    const testSystemId = uuid();
     const testIniatedUserId = uuid();
     const testTargetUserId = uuid();
     const testAcceptedUserId = uuid();
@@ -139,7 +140,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         expect(multiTableStub).to.have.been.calledOnceWithExactly([testFriendQueryDef, testLogDef]);
     });
 
-    it('Connects a user to a friends request', async () => {
+    it('Connects a user to a friend request via request code', async () => {
         const testRequestCode = 'ANCIENT COFFEE';
         const updateQuery = `update ${friendReqTable} set target_user_id = $1, request_code = null where request_code = $2 ` +
             `returning request_id, updated_time`;
@@ -149,6 +150,24 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const connectionResult = await persistence.connectUserToFriendRequest(testTargetUserId, testRequestCode);
         expect(connectionResult).to.exist;
         expect(connectionResult).to.deep.equal([{ requestId: testRequestId, updatedTime: testUpdatedTime }]);
+    });
+
+    it('Connects user to friend request via request id', async () => {
+        const selectQuery = `select target_user_id from ${friendReqTable} where request_id = $1`;
+        const findQuery = `select user_id from ${config.get('tables.friendUserIdTable')} where user_id in ($1)`;
+        const updateQuery = `update ${friendReqTable} set target_user_id = $1 where request_id = $2 returning updated_time`;
+
+        queryStub.onFirstCall().resolves([{ 'target_user_id': null }]);
+        queryStub.onSecondCall().resolves([{ 'user_id': testTargetUserId }]);
+        updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
+
+        const connectionResult = await persistence.connectTargetViaId(testTargetUserId, testRequestId);
+
+        expect(connectionResult).to.exist;
+        expect(connectionResult).to.deep.equal({ updatedTime: testUpdatedTime });
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testRequestId]);
+        expect(queryStub).to.have.been.calledWithExactly(findQuery, [testTargetUserId]);
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [testTargetUserId, testRequestId]);
     });
 
     it('Inserts friendship properly', async () => {
@@ -351,6 +370,43 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
 
         expect(resultOfIgnore).to.exist;
         expect(resultOfIgnore).to.deep.equal({ updatedTime: testUpdatedTime, logId: testLogId });
+        
+        expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef], [testInsertLogDef]);
+    });
+
+    it('Cancels friend requests properly', async () => {
+        const updateFriendReqDef = {
+            table: friendReqTable,
+            key: { requestId: testRequestId },
+            value: { requestStatus: 'CANCELLED' },
+            returnClause: 'updated_time'
+        };
+
+        const testLogObject = {
+            logId: testLogId,
+            requestId: testRequestId,
+            logType: 'REQUEST_CANCELLED',
+            logContext: {
+                performedByUserId: testSystemId
+            }
+        };
+
+        const testInsertLogDef = {
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}',
+            rows: [testLogObject]
+        };
+
+        uuidStub.returns(testLogId);
+        multiOpStub.resolves([
+            [{ 'updated_time': testUpdatedTime }],
+            [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
+        ]);
+    
+        const resultOfCancel = await persistence.cancelFriendshipRequest(testRequestId, testSystemId);
+
+        expect(resultOfCancel).to.exist;
+        expect(resultOfCancel).to.deep.equal({ updatedTime: testUpdatedTime, logId: testLogId });
         
         expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef], [testInsertLogDef]);
     });

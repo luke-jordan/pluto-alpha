@@ -124,20 +124,19 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     const testCreationTime = moment().format();
     const testActivityDate = moment().format();
 
-    const expectedResultFromCache = {
-        savingHeat: '24.13',
-        shareItems: [{
-            WITHDRAWAL: {
-                lastActivityDate: testActivityDate,
-                lastActivityAmount: { amount: '100', currency: 'ZAR', unit: 'HUNDREDTH_CENT' }
-            }
-        }]
-    };
+    const expectedsavingHeat = 41.12;
 
-    const mockResponseFromCache = (accountId) => ({
-        accountId,
-        ...expectedResultFromCache
-    });
+    const mockResponseFromCache = {
+        savingHeat: `${expectedsavingHeat}`,
+        recentActivity: {
+            WITHDRAWAL: {
+                creationTime: testActivityDate,
+                amount: '100', 
+                currency: 'ZAR', 
+                unit: 'HUNDREDTH_CENT'
+            }
+        }
+    };
 
     const testProfile = {
         systemWideUserId: testInitiatedUserId,
@@ -154,14 +153,15 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
         familyName: 'Shu',
         calledName: 'Yao Shu',
         contactMethod: '02130940334',
-        ...expectedResultFromCache
+        savingHeat: `${expectedsavingHeat}`,
+        shareItems: ['LAST_ACTIVITY']
     };
 
     const testFriendRequest = {
         requestId: testRequestId,
         initiatedUserId: testInitiatedUserId,
         targetUserId: testTargetUserId,
-        requestedShareItems: ['LAST_ACTIVITY_DATE'],
+        requestedShareItems: ['LAST_ACTIVITY'],
         creationTime: testCreationTime
     };
 
@@ -170,7 +170,7 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
         initiatedUserId: testInitiatedUserId,
         acceptedUserId: testAcceptedUserId,
         relationshipStatus: 'ACTIVE',
-        shareItems: []
+        shareItems: ['LAST_ACTIVITY']
     };
 
     beforeEach(() => {
@@ -184,7 +184,7 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
         publishUserEventStub.resolves({ result: 'SUCCESS' });
         countMutualFriendsStub.resolves([{ [testInitiatedUserId]: 23 }]);
         fetchAccountStub.resolves({ [testInitiatedUserId]: testAccountId });
-        redisGetStub.resolves([JSON.stringify(mockResponseFromCache(testAccountId))]);
+        redisGetStub.resolves([JSON.stringify(mockResponseFromCache)]);
 
         const insertionResult = await handler.directRequestManagement(helper.wrapParamsWithPath({ requestId: testRequestId }, 'accept', testTargetUserId));
         
