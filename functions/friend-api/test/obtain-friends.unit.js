@@ -181,9 +181,10 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
         redisGetStub.withArgs(testAccountId).resolves([mockResponseFromCache(testAccountId)]);
         redisGetStub.withArgs(firstAccId, secondAccId, thirdAccId).resolves([mockResponseFromCache(firstAccId), null, null]);
 
+        // make sure one of these at least is zero, to cover possible bugs from filters
         countMutualFriendsStub.withArgs(testSystemId, [firstUserId, secondUserId, thirdUserId]).resolves([
             { [firstUserId]: 5 },
-            { [secondUserId]: 8 },
+            { [secondUserId]: 0 },
             { [thirdUserId]: 13 }
         ]);
 
@@ -206,7 +207,7 @@ describe('*** UNIT TEST FRIEND PROFILE EXTRACTION ***', () => {
                 lastActivity: {
                     USER_SAVING_EVENT: { creationTime: testActivityDate, amount: '2000', unit: 'HUNDREDTH_CENT' }
                 },
-                numberOfMutualFriends: 8
+                numberOfMutualFriends: 0
             },
             {
                 ...expectedFriendship(testRelationshipId),

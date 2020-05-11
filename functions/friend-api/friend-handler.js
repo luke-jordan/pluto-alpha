@@ -83,7 +83,7 @@ const transformProfile = async (profile, friendshipDetails, accountMaps) => {
     
     const lastActivity = expectedActivities.reduce((obj, activity) => ({ ...obj, [activity]: extractShareableDetails(activity) }), {});
 
-    const mutualFriendCount = mutualFriendCounts.filter((count) => count[profile.systemWideUserId]);
+    const mutualFriendCount = mutualFriendCounts.filter((count) => typeof count[profile.systemWideUserId] === 'number');
     const numberOfMutualFriends = mutualFriendCount[0][profile.systemWideUserId];
     logger('Mutual friends:', numberOfMutualFriends);
 
@@ -112,12 +112,12 @@ const appendSavingHeatToProfiles = async (profiles, userAccountMap, friendshipDe
     const accountIds = Object.values(userAccountMap);
     
     const cachedSavingHeatForAccounts = await fetchSavingHeatFromCache(accountIds);
-    logger('Found cached savings heat:', cachedSavingHeatForAccounts);
+    // logger('Found cached savings heat:', cachedSavingHeatForAccounts);
 
     const cachedAccounts = cachedSavingHeatForAccounts.map((savingHeat) => savingHeat.accountId);
     const uncachedAccounts = accountIds.filter((accountId) => !cachedAccounts.includes(accountId));
 
-    logger('Found uncached accounts:', uncachedAccounts);
+    // logger('Found uncached accounts:', uncachedAccounts);
     logger('Got cached accounts:', cachedAccounts);
 
     let savingHeatFromLambda = [];
