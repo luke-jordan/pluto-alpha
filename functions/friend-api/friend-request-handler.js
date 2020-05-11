@@ -613,6 +613,7 @@ const dispatcher = {
     'accept': (event) => exports.acceptFriendshipRequest(event),
     'ignore': (event) => exports.ignoreFriendshipRequest(event),
     'cancel': (event) => exports.cancelFriendshipRequest(event),
+    'connect': (event) => exports.connectFriendshipRequest(event),
     'list': (event) => exports.findFriendRequestsForUser(event),
     'seek': (event) => exports.seekFriend(event),
     'referral': (event) => exports.obtainReferralCode(event)
