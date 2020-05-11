@@ -412,7 +412,7 @@ module.exports.connectFriendshipRequest = async (event) => {
 
         const updateResult = await persistenceWrite.connectUserToFriendRequest(systemWideUserId, requestCode);
         if (updateResult.length === 0) {
-            throw new Error(`Error! No friend request found for request code: ${requestCode}`);
+            return opsUtil.wrapResponse({ result: 'NOT_FOUND' }, 404);
         }
 
         await publisher.publishUserEvent('FRIEND_REQUEST_CONNECTED', systemWideUserId, { requestCode, updateResult });

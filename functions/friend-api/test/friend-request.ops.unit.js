@@ -102,13 +102,12 @@ describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
         expect(connectUserStub).to.have.not.been.called;
     });
 
-    it('Catches thrown errors', async () => {
-        const expectedResult = { message: `Error! No friend request found for request code: ${testRequestCode}` };
+    it('Returns not found if no code', async () => {
         connectUserStub.withArgs(testTargetUserId, testRequestCode).resolves([]);
         const testEvent = helper.wrapEvent({ requestCode: testRequestCode }, testTargetUserId, 'ORDINARY_USER');
         const connectionResult = await handler.connectFriendshipRequest(testEvent);
         expect(connectionResult).to.exist;
-        expect(connectionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
+        expect(connectionResult).to.deep.equal(helper.wrapResponse({ result: 'NOT_FOUND' }, 404));
     });
 
 });
