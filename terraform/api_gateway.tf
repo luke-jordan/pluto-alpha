@@ -509,6 +509,45 @@ resource "aws_api_gateway_integration" "friend_request_manage" {
   uri                     = aws_lambda_function.friend_request_manage.invoke_arn
 }
 
+///// CHECK FOR FRIEND ALERTS (SIMILAR TO ABOVE) ///////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "friend_alert_path_root" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_path_root.id
+  path_part     = "alert"
+}
+
+resource "aws_api_gateway_resource" "friend_alert_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_alert_path_root.id
+  path_part     = "{proxy+}" 
+}
+
+resource "aws_api_gateway_method" "friend_alert_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.friend_alert_manage.id
+  http_method   = "ANY"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "friend_alert_manage" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.friend_alert_manage.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "friend_alert_manage" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.friend_alert_manage.id
+  http_method   = aws_api_gateway_method.friend_alert_manage.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.friend_alert_manage.invoke_arn
+}
+
 /////////////// USER HISTORY LAMBDA (OWN USER, NOT ADMIN) /////////////////////////////////////////////////
 
 // in future we will probably add some more endpoints like graphing etc., so just future-proofing
