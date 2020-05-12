@@ -85,12 +85,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             logId: testLogId,
             requestId: testRequestId,
             logType: 'FRIENDSHIP_REQUESTED',
-            logContext: testFriendRequest
+            logContext: testFriendRequest,
+            toAlertUserId: [testTargetUserId]
         };
 
         const testLogDef = {
-            query: `insert into ${friendLogTable} (log_id, request_id, log_type, log_context) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${requestId}, ${logType}, ${logContext}',
+            query: `insert into ${friendLogTable} (log_id, request_id, log_type, log_context, to_alert_user_id) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${requestId}, ${logType}, ${logContext}, ${toAlertUserId}',
             rows: [testLogObject]
         };
 
@@ -98,8 +99,8 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         const referenceQuery = 'select user_id from friend_data.user_reference_table where user_id in ($1, $2)';
         queryStub.withArgs(referenceQuery, [testIniatedUserId, testTargetUserId]).resolves([{ 'user_id': testIniatedUserId }]);
 
-        const requestQuery = 'select * from friend_data.friend_request where initiated_user_id = $1 and target_user_id = $2';
-        queryStub.withArgs(requestQuery, [testIniatedUserId, testTargetUserId]).resolves([]);
+        const requestQuery = 'select * from friend_data.friend_request where initiated_user_id = $1 and target_user_id = $2 and request_status = $3';
+        queryStub.withArgs(requestQuery, [testIniatedUserId, testTargetUserId, 'PENDING']).resolves([]);
         simpleInsertStub.resolves([{ 'creation_time': testInsertionTime }]);
 
         uuidStub.onFirstCall().returns(testRequestId);
@@ -135,7 +136,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         expect(insertResult).to.deep.equal(expectedResult);
 
         expect(queryStub).to.have.been.calledWithExactly(referenceQuery, [testIniatedUserId, testTargetUserId]);
-        expect(queryStub).to.have.been.calledWithExactly(requestQuery, [testIniatedUserId, testTargetUserId]);
+        expect(queryStub).to.have.been.calledWithExactly(requestQuery, [testIniatedUserId, testTargetUserId, 'PENDING']);
         expect(simpleInsertStub).to.have.been.calledOnce;
         expect(multiTableStub).to.have.been.calledOnceWithExactly([testFriendQueryDef, testLogDef]);
     });
@@ -198,12 +199,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             logType: 'FRIENDSHIP_ACCEPTED',
             logContext: friendshipObject,
             relationshipId: testRelationshipId,
-            requestId: testRequestId
+            requestId: testRequestId,
+            toAlertUserId: [testIniatedUserId]
         };
 
         const testLogDef = {
-            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}',
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id, to_alert_user_id) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}, ${toAlertUserId}',
             rows: [testLogObject]
         };
 
@@ -266,12 +268,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             relationshipId: testRelationshipId,
             requestId: testRequestId,
             logType: 'FRIENDSHIP_ACCEPTED',
-            logContext: friendshipObject
+            logContext: friendshipObject,
+            toAlertUserId: [testIniatedUserId]
         };
 
         const testLogDef = {
-            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}',
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id, to_alert_user_id) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}, ${toAlertUserId}',
             rows: [testLogObject]
         };
 

@@ -3,9 +3,11 @@
 const logger = require('debug')('jupiter:friends:dynamo');
 const config = require('config');
 
+const opsUtil = require('ops-util-common');
 const camelCaseKeys = require('camelcase-keys');
 
 const dynamoCommon = require('dynamo-common');
+
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
@@ -259,4 +261,17 @@ module.exports.countMutualFriends = async (targetUserId, initiatedUserIds) => {
     });
 
     return mutualFriendCounts;
+};
+
+/**
+ * Looks for logs that a user should view
+ */
+module.exports.fetchAlertLogsForUser = async (systemWideUserId, logTypes) => {
+    const selectQuery = `select * from ${config.get('tables.friendLogTable')} where $1 = any(to_alert_user_id) and ` +
+        `$1 != any(alerted_user_id) and log_type in (${opsUtil.extractArrayIndices(logTypes, 2)})`;
+    const queryValues = [systemWideUserId, ...logTypes];
+    logger('Finding alerts with query: ', selectQuery, ' and values: ', queryValues);
+
+    const alertLogs = await rdsConnection.selectQuery(selectQuery, queryValues);
+    return alertLogs.map(camelCaseKeys);
 };

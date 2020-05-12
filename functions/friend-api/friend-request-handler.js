@@ -415,7 +415,7 @@ module.exports.connectFriendshipRequest = async (event) => {
             return opsUtil.wrapResponse({ result: 'NOT_FOUND' }, 404);
         }
 
-        await publisher.publishUserEvent('FRIEND_REQUEST_CONNECTED', systemWideUserId, { requestCode, updateResult });
+        await publisher.publishUserEvent('FRIEND_REQUEST_CONNECTED_VIA_CODE', systemWideUserId, { requestCode, updateResult });
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});
     } catch (err) {
         logger('FATAL_ERROR:', err);
@@ -534,8 +534,8 @@ module.exports.acceptFriendshipRequest = async (event) => {
         
         // NB: the target user of the established event is the user who initiated the request
         const eventContext = { initiatedUserId, targetUserId, creationResult };
-        const acceptedEvent = publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_ACCEPTED', { context: eventContext }); 
-        const establishedEvent = publisher.publishUserEvent(initiatedUserId, 'FRIEND_ESTABLISHED', { context: eventContext });
+        const acceptedEvent = publisher.publishUserEvent(systemWideUserId, 'FRIEND_REQUEST_TARGET_ACCEPTED', { context: eventContext }); 
+        const establishedEvent = publisher.publishUserEvent(initiatedUserId, 'FRIEND_REQUEST_INITIATED_ACCEPTED', { context: eventContext });
         await Promise.all([acceptedEvent, establishedEvent]);
 
         const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult);
