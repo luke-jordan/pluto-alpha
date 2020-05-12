@@ -519,7 +519,7 @@ resource "aws_api_gateway_resource" "friend_alert_path_root" {
 
 resource "aws_api_gateway_resource" "friend_alert_manage" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  parent_id     = aws_api_gateway_resource.friend_request_path_root.id
+  parent_id     = aws_api_gateway_resource.friend_alert_path_root.id
   path_part     = "{proxy+}" 
 }
 

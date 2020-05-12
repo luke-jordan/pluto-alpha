@@ -68,7 +68,7 @@ module.exports.directAlertRequest = async (event) => {
 
         logger('Executing operation: ', operation, ' with params: ', params);
 
-        const operationResult = dispatcher(operation)(params, userDetails);
+        const operationResult = dispatcher[operation.trim().toLowerCase()](params, userDetails);
 
         return { statusCode: 200, body: JSON.stringify(operationResult) };
     } catch (err) {
