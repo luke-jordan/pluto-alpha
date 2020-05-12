@@ -341,6 +341,15 @@ const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boos
  * 
  * Note (2): If multiple of the types above are passed, (3) will override the others (as it is called last)
  * Also note that if none are provided the boost will have no message and just hang in the ether
+ * 
+ * Note (3) on rewardParameters: where provided the following properties are expected:
+ * rewardType, required. Valid values are 'SIMPLE', 'RANDOM', and 'POOLED'. If reward rewardType is 'SIMPLE' no other properties are required.
+ * If the rewardType is 'RANDOM' the following properties may be provided: distribution (default is UNIFORM), targetMean (default is use boostAmount),
+ * significantFigures (optional - rounding amount, if not specified, amounts will be rounded to whole numbers), and realizedRewardModuloZeroTarget (optional - when provided only
+ * amounts that leave no remainder when divided by this number will be used as rewards).
+ * If rewardType is 'POOLED' the following properties must be provided: poolContributionPerUser (a sub-dict, with amount, unit, currency).
+ * percentPoolAsReward (specifies how much of the pool gets awarded as the reward amount), additionalBonusToPool (defines how much the overall Jupiter bonus pool will
+ * contribute to the reward, also a sub-dict with usual amount-unit-etc format).
  * @param {object} event An event object containing the request context and request body.
  * @property {string} creatingUserId The system wide user id of the user who is creating the boost.
  * @property {string} boostTypeCategory A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'.
@@ -353,6 +362,7 @@ const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boos
  * @property {string} audienceId The ID of the audience that the boost will be offered to. If left out, must have boostAudienceSelection.
  * @property {object} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
  * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {object} rewardParameters An optional object with reward details. expected properties are rewardType (valid values: 'SIMPLE', 'RANDOM', 'POOLED'). See Note (3) above.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
 module.exports.createBoost = async (event) => {
@@ -427,6 +437,10 @@ module.exports.createBoost = async (event) => {
         instructionToRds.statusConditions = mergeStatusConditions(params.gameParams, params.statusConditions, params.initialStatus);
     } else {
         instructionToRds.statusConditions = params.statusConditions;
+    }
+
+    if (params.rewardParameters) {
+        instructionToRds.rewardParameters = params.rewardParameters;
     }
 
     // logger('Sending to persistence: ', instructionToRds);

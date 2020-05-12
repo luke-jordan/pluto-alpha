@@ -20,6 +20,7 @@ const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.savingHeat');
 // AVERAGE_GROWTH multiplies the average growth in the amount a user saves.
 // SAVES_PER_MONTH multiplies the users average number of saves per month.
 // SAVES_LAST_MONTH multiplies the number of times a user saved last month.
+// SAVING_FRIENDS divides the number of active saving friends a user has.
 const CONTRIBUTION_FACTORS = {
     'AVERAGE_GROWTH': 10,
     'SAVES_PER_MONTH': 0.5,

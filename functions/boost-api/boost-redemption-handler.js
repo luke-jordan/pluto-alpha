@@ -10,12 +10,42 @@ const publisher = require('publish-common');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+const MAX_AMOUNT = 100;
+
+module.exports.generateMultiplier = () => (Math.random() * (1 - 0)).toFixed(2);
+
+const calculateBoostAmount = (boost) => {
+    const { rewardType } = boost.rewardParameters;
+
+    if (rewardType === 'RANDOM') {
+        const { distribution, realizedRewardModuloZeroTarget } = boost.rewardParameters;
+
+        if (distribution === 'UNIFORM') {
+            const multiplier = exports.generateMultiplier();
+            let boostAmount = multiplier * MAX_AMOUNT;
+            while (boostAmount % realizedRewardModuloZeroTarget > 0) {
+                boostAmount += 1;
+            }
+
+            if (boostAmount > MAX_AMOUNT) {
+                return calculateBoostAmount(boost);
+            }
+
+            logger('Returning boost amt:', boostAmount);
+            return boostAmount;
+        }
+    }
+
+    return boost.boostAmount;
+};
+
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
 // further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
 const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = false) => {
     const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
-    const amount = revoke ? -boost.boostAmount : boost.boostAmount;
+    const boostAmount = boost.rewardParameters ? calculateBoostAmount(boost) : boost.boostAmount;
+    const amount = revoke ? -boostAmount : boostAmount;
     const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
     const recipients = recipientAccounts.map((recipientId) => ({ 
         recipientId, amount, recipientType: 'END_USER_ACCOUNT'
