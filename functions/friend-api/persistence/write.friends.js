@@ -64,12 +64,13 @@ const checkForExistingFriendRequest = async (friendRequest) => {
     let findQuery = null;
     let queryValues = [];
 
+    // we only check for pending ones, since accepted or ignored or cancelled are historical
     if (targetUserId) {
-        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_user_id = $2`;
-        queryValues = [initiatedUserId, targetUserId];
+        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_user_id = $2 and request_status = $3`;
+        queryValues = [initiatedUserId, targetUserId, 'PENDING'];
     } else {
-        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_contact_details = $2`;
-        queryValues = [initiatedUserId, targetContactDetails];
+        findQuery = `select * from ${friendReqTable} where initiated_user_id = $1 and target_contact_details = $2 and request_status = $3`;
+        queryValues = [initiatedUserId, targetContactDetails, 'PENDING'];
     }
 
     const existingFriendRequest = await rdsConnection.selectQuery(findQuery, queryValues);
@@ -93,6 +94,7 @@ module.exports.insertFriendRequest = async (friendRequest) => {
     if (existingFriendRequest) {
         return existingFriendRequest;
     }
+
     // do this for now
     await checkForAndInsertUserIds(friendRequest);
     
@@ -110,6 +112,11 @@ module.exports.insertFriendRequest = async (friendRequest) => {
 
     const logId = uuid();
     const logRow = { logId, requestId, logType: 'FRIENDSHIP_REQUESTED', logContext: friendRequest };
+    if (friendRequest.targetUserId) {
+        logRow.toAlertUserId = [friendRequest.targetUserId];
+        logRow.isAlertActive = true;
+    }
+
     const logKeys = Object.keys(logRow);
 
     const insertLogDef = {
@@ -166,13 +173,17 @@ module.exports.connectTargetViaId = async (targetUserId, requestId) => {
     return resultOfUpdate && resultOfUpdate.rows ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
 };
 
-const createLogDef = ({ requestId, relationshipId, logType, logContext }) => {
+const createLogDef = ({ requestId, relationshipId, logType, logContext, toAlertUserId }) => {
     const logRow = { logId: uuid(), logType, logContext };
     if (requestId) {
         logRow.requestId = requestId;
     }
     if (relationshipId) {
         logRow.relationshipId = relationshipId;
+    }
+    if (toAlertUserId) {
+        logRow.toAlertUserId = toAlertUserId;
+        logRow.isAlertActive = true;
     }
     const logKeys = Object.keys(logRow);
     return {
@@ -182,9 +193,9 @@ const createLogDef = ({ requestId, relationshipId, logType, logContext }) => {
     };
 };
 
-const transformUpdateResult = (resultOfOperations) => {
+const transformUpdateResult = (resultOfOperations, logIdIndex = 2) => {
     const updatedTime = resultOfOperations[0][0]['updated_time'];
-    const queryLogId = resultOfOperations[1][0]['log_id'];
+    const queryLogId = resultOfOperations[logIdIndex][0]['log_id'];
 
     return { updatedTime, logId: queryLogId };
 };
@@ -203,10 +214,17 @@ module.exports.ignoreFriendshipRequest = async (requestId, instructedByUserId) =
         returnClause: 'updated_time'
     };
 
+    const updateFriendLogDef = {
+        table: friendLogTable,
+        key: { requestId, logType: 'FRIENDSHIP_REQUEST' },
+        value: { isAlertActive: false },
+        returnClause: 'updated_time'
+    };
+
     const insertLogDef = createLogDef({ requestId, logType: 'FRIENDSHIP_IGNORED', logContext: { instructedByUserId }});
 
     logger(`Updating: ${JSON.stringify(updateFriendReqDef)} Persisting: ${JSON.stringify(insertLogDef)}`);
-    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [insertLogDef]);
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef, updateFriendLogDef], [insertLogDef]);
     logger('Result of update and insertion:', resultOfOperations);
     return transformUpdateResult(resultOfOperations);
 };
@@ -222,8 +240,16 @@ module.exports.cancelFriendshipRequest = async (requestId, performedByUserId) =>
         returnClause: 'updated_time'
     };
 
+    const updateFriendLogDef = {
+        table: friendLogTable,
+        key: { requestId, logType: 'FRIENDSHIP_REQUEST' },
+        value: { isAlertActive: false },
+        returnClause: 'updated_time'
+    };
+
     const logDef = createLogDef({ requestId, logType: 'REQUEST_CANCELLED', logContext: { performedByUserId }});
-    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef], [logDef]);
+    const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert([updateFriendReqDef, updateFriendLogDef], [logDef]);
+    logger('Raw result of cancellation update: ', resultOfOperations);
     return transformUpdateResult(resultOfOperations);
 };
 
@@ -291,7 +317,21 @@ module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUse
     updateDefs.push(updateFriendReqDef);
     logger('Updating friend request via: ', updateFriendReqDef);
 
-    const insertLogDef = createLogDef({ requestId, relationshipId: persistedRelationshipId, logType: 'FRIENDSHIP_ACCEPTED', logContext: friendshipObject });
+    const alertLogDef = {
+        table: friendLogTable,
+        key: { requestId, logType: 'FRIENDSHIP_REQUEST' },
+        value: { isAlertActive: false },
+        returnClause: 'updated_time'
+    };
+    updateDefs.push(alertLogDef);
+
+    const insertLogDef = createLogDef({ 
+        requestId, 
+        relationshipId: persistedRelationshipId, 
+        logType: 'FRIENDSHIP_ACCEPTED', 
+        logContext: friendshipObject,
+        toAlertUserId: [initiatedUserId] 
+    });
 
     const resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefs, [insertLogDef]);
     logger('Result of operations: ', resultOfOperations);
@@ -329,4 +369,19 @@ module.exports.deactivateFriendship = async (relationshipId) => {
     const queryLogId = resultOfOperations[1][0]['log_id'];
 
     return { updatedTime, logId: queryLogId };
+};
+
+/**
+ * Updates a set of logs so that they record the user has been alerted
+ */
+module.exports.updateAlertLogsToViewedForUser = async (systemWideUserId, logIds) => {
+    const updateQuery = `update ${friendLogTable} set alerted_user_id = array_append(alerted_user_id, $1) where ` +
+        `log_id in (${opsUtil.extractArrayIndices(logIds, 2)}) and $1 = any(to_alert_user_id) returning updated_time`;
+
+    logger('Updating alerts using query: ', updateQuery);
+
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [systemWideUserId, ...logIds]);
+
+    logger('Result of update: ', resultOfUpdate);
+    return resultOfUpdate.rows ? resultOfUpdate.rows.map(camelCaseKeys) : null;
 };
