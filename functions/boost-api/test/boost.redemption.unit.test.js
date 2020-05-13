@@ -402,5 +402,22 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
     });
 
+    it('Calculates pooled reward', async () => {
+        const mockUserCount = 50;
+        const mockBoost = {
+            boostId: testBoostId,
+            rewardParameters: {
+                rewardType: 'POOLED',
+                poolContributionPerUser: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                additionalBonusToPool: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                percentPoolAsReward: 0.25
+            } 
+        };
+
+        const poolResult = handler.processPooledRewards(mockBoost, mockUserCount);
+
+        expect(poolResult).to.deep.equal({ amount: 1260, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+    });
+
 });
 

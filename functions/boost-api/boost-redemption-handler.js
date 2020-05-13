@@ -12,6 +12,12 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const MAX_AMOUNT = 100;
 
+module.exports.processPooledRewards = (boost, userCount) => {
+    const { poolContributionPerUser, percentPoolAsReward, additionalBonusToPool } = boost.rewardParameters;
+    const amount = (userCount * poolContributionPerUser.amount * percentPoolAsReward) + additionalBonusToPool.amount;
+    return { amount, unit: poolContributionPerUser.unit, currency: poolContributionPerUser.currency };
+};
+
 module.exports.generateMultiplier = () => (Math.random() * (1 - 0)).toFixed(2);
 
 const calculateBoostAmount = (boost) => {
