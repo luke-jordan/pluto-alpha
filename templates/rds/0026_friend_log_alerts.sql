@@ -1,6 +1,6 @@
 -- Adjusts friend logs to distinguish ones that need alerts
 
-alter table friend_data.friend_log add column is_alert_active default false not null;
+alter table friend_data.friend_log add column is_alert_active boolean not null default false;
 alter table friend_data.friend_log add column to_alert_user_id uuid[] default '{}';
 alter table friend_data.friend_log add column alerted_user_id uuid[] default '{}';
 
