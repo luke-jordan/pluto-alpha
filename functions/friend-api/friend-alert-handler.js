@@ -26,12 +26,15 @@ module.exports.fetchFriendAlert = async (params, userDetails) => {
     }
 
     if (pendingAlertLogs.length === 1) {
-        const alertLog = pendingAlertLogs[0];
-        return { result: 'SINGLE_ALERT', logIds: [alertLog.logId], alertLog };
+        const persistedLog = pendingAlertLogs[0];
+        const logToReturn = { logId: persistedLog.logId, logType: persistedLog.logType };
+        return { result: 'SINGLE_ALERT', logIds: [persistedLog.logId], alertLog: logToReturn };
     }
 
     const logIds = pendingAlertLogs.map((log) => log.logId);
-    return { result: 'MULTIPLE_ALERTS', logIds };
+    const logTypes = new Set(pendingAlertLogs.map((log) => log.logType));
+    const logsOfType = logTypes.size === 1 ? logTypes.values().next().value : 'MULTIPLE_TYPES';
+    return { result: 'MULTIPLE_ALERTS', logIds, logsOfType };
 };
 
 /**
@@ -51,7 +54,7 @@ module.exports.markAlertsViewed = async (params, userDetails) => {
 
 const dispatcher = {
     'fetch': (params, userDetails) => exports.fetchFriendAlert(params, userDetails),
-    'viewed': (params) => exports.markAlertViewed(params)
+    'viewed': (params, userDetails) => exports.markAlertsViewed(params, userDetails)
 };
 
 /**
@@ -66,9 +69,9 @@ module.exports.directAlertRequest = async (event) => {
         const { operation, params } = opsUtil.extractPathAndParams(event);
         const userDetails = opsUtil.extractUserDetails(event);
 
-        logger('Executing operation: ', operation, ' with params: ', params);
+        logger('Executing operation: ', operation, ' with params: ', params, ' and user details: ', userDetails);
 
-        const operationResult = dispatcher[operation.trim().toLowerCase()](params, userDetails);
+        const operationResult = await dispatcher[operation.trim().toLowerCase()](params, userDetails);
 
         return { statusCode: 200, body: JSON.stringify(operationResult) };
     } catch (err) {
