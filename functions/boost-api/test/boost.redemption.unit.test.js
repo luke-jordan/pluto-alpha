@@ -30,8 +30,6 @@ const handler = proxyquire('../boost-redemption-handler', {
     }
 });
 
-const multiplierStub = sinon.stub(handler, 'generateMultiplier');
-
 const testBoostId = uuid();
 const testFloatId = 'some-float';
 const testBonusPoolId = 'some-pool';
@@ -315,109 +313,4 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
     });
 
-    it('Handles random rewards', async () => {
-        const testUserId = uuid();
-        const testAccountId = uuid();
-        const testAmount = 35;
-
-        const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
-            instructions: [{
-                identifier: testBoostId,
-                floatId: testFloatId,
-                fromId: testBonusPoolId,
-                fromType: 'BONUS_POOL',
-                transactionType: 'BOOST_REDEMPTION',
-                relatedEntityType: 'BOOST_REDEMPTION',
-                currency: 'USD',
-                unit: 'HUNDREDTH_CENT',
-                settlementStatus: 'SETTLED',
-                allocType: 'BOOST_REDEMPTION',
-                allocState: 'SETTLED',
-                recipients: [
-                    { recipientId: testAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' }
-                ]
-            }]
-        });
-
-        const expectedAllocationResult = {
-            [testBoostId]: {
-                result: 'SUCCESS',
-                floatTxIds: [uuid(), uuid()],
-                accountTxIds: [uuid()]
-            }
-        };
-
-        multiplierStub.returns(0.31);
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
-
-        // then we do a user log, on each side (tested via the expect call underneath)
-        const publishOptions = {
-            initiator: testUserId,
-            context: {
-                accountId: testAccountId,
-                boostAmount: '100000::HUNDREDTH_CENT::USD',
-                boostId: testBoostId,
-                boostType: 'SIMPLE',
-                boostCategory: 'TIME_LIMITED',
-                boostUpdateTimeMillis: moment().valueOf(),
-                transferResults: expectedAllocationResult[testBoostId],
-                triggeringEventContext: 'SAVING_EVENT_COMPLETED'
-            }
-        };
-        publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
-
-        const mockBoost = {
-            boostId: testBoostId,
-            boostAmount: testAmount,
-            boostUnit: 'HUNDREDTH_CENT',
-            boostCurrency: 'USD',
-            fromFloatId: testFloatId,
-            fromBonusPoolId: testBonusPoolId,
-            rewardParameters: {
-                rewardType: 'RANDOM',
-                distribution: 'UNIFORM',
-                realizedRewardModuloZeroTarget: 5
-            },
-            messageInstructions: [],
-            flags: []    
-        };
-
-        const mockAccountMap = {
-            [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
-            }
-        };
-
-        const mockEvent = { 
-            redemptionBoosts: [mockBoost], 
-            affectedAccountsDict: mockAccountMap, 
-            event: { accountId: testAccountId, eventType: 'SAVING_EVENT_COMPLETED' }
-        };
-
-        const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
-
-        expect(resultOfRedemption).to.exist;
-        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
-
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
-    });
-
-    it('Calculates pooled reward', async () => {
-        const mockUserCount = 50;
-        const mockBoost = {
-            boostId: testBoostId,
-            rewardParameters: {
-                rewardType: 'POOLED',
-                poolContributionPerUser: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                additionalBonusToPool: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                percentPoolAsReward: 0.25
-            } 
-        };
-
-        const poolResult = handler.processPooledRewards(mockBoost, mockUserCount);
-
-        expect(poolResult).to.deep.equal({ amount: 1260, unit: 'HUNDREDTH_CENT', currency: 'USD' });
-    });
-
 });
-

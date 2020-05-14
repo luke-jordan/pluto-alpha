@@ -3,43 +3,57 @@
 const logger = require('debug')('jupiter:boost:redemption');
 const config = require('config');
 const moment = require('moment');
+const seedrandom = require('seedrandom');
 const stringify = require('json-stable-stringify');
 
 const publisher = require('publish-common');
+const opsUtil = require('ops-util-common');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const MAX_AMOUNT = 100;
-
-module.exports.processPooledRewards = (boost, userCount) => {
+const calculatePooledBoostAmount = (boost, userCount) => {
     const { poolContributionPerUser, percentPoolAsReward, additionalBonusToPool } = boost.rewardParameters;
-    const amount = (userCount * poolContributionPerUser.amount * percentPoolAsReward) + additionalBonusToPool.amount;
-    return { amount, unit: poolContributionPerUser.unit, currency: poolContributionPerUser.currency };
+    const contribAmount = opsUtil.convertToUnit(poolContributionPerUser.amount, poolContributionPerUser.unit, 'HUNDREDTH_CENT');
+    const bonusAmount = opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, 'HUNDREDTH_CENT');    
+    return (userCount * contribAmount * percentPoolAsReward) + bonusAmount;
 };
 
-module.exports.generateMultiplier = () => (Math.random() * (1 - 0)).toFixed(2);
+const generateMultiplier = (distribution) => {
+    if (distribution === 'UNIFORM') {
+        if (config.get('seedrandom.active')) {
+            seedrandom(config.get('seedrandom.value'), { global: true });
+        }
+    
+        return (Math.random()).toFixed(2);
+    }
+};
 
-const calculateBoostAmount = (boost) => {
+const calculateRandomBoostAmount = (boost) => {
+    const { distribution, realizedRewardModuloZeroTarget } = boost.rewardParameters;
+    const multiplier = generateMultiplier(distribution);
+    let calculatedBoostAmount = multiplier * boost.boostAmount;
+    while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
+        calculatedBoostAmount += 1000; // HUNDREDTH_CENT
+    }
+
+    // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount
+    if (calculatedBoostAmount > boost.boostAmount) {
+        return calculateRandomBoostAmount(boost);
+    }
+
+    logger('Returning boost amt:', calculatedBoostAmount);
+    return calculatedBoostAmount;
+};
+
+const calculateBoostAmount = (boost, params) => {
     const { rewardType } = boost.rewardParameters;
+    if (rewardType === 'POOLED') {
+        return calculatePooledBoostAmount(boost, params.userCount);
+    }
 
     if (rewardType === 'RANDOM') {
-        const { distribution, realizedRewardModuloZeroTarget } = boost.rewardParameters;
-
-        if (distribution === 'UNIFORM') {
-            const multiplier = exports.generateMultiplier();
-            let boostAmount = multiplier * MAX_AMOUNT;
-            while (boostAmount % realizedRewardModuloZeroTarget > 0) {
-                boostAmount += 1;
-            }
-
-            if (boostAmount > MAX_AMOUNT) {
-                return calculateBoostAmount(boost);
-            }
-
-            logger('Returning boost amt:', boostAmount);
-            return boostAmount;
-        }
+        return calculateRandomBoostAmount(boost);
     }
 
     return boost.boostAmount;
@@ -47,10 +61,10 @@ const calculateBoostAmount = (boost) => {
 
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
 // further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
-const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = false) => {
+const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = false, boostParams = {}) => {
     const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
-    const boostAmount = boost.rewardParameters ? calculateBoostAmount(boost) : boost.boostAmount;
+    const boostAmount = boost.rewardParameters ? calculateBoostAmount(boost, boostParams) : boost.boostAmount;
     const amount = revoke ? -boostAmount : boostAmount;
     const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
     const recipients = recipientAccounts.map((recipientId) => ({ 
@@ -204,12 +218,12 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
  * (to clarify the last -- if the user is in status PENDING, and has just fulfilled the conditions for REDEEMED, the status in the dict
  * will be PENDING) 
  */
-module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoosts, affectedAccountsDict, event }) => {
+module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoosts, affectedAccountsDict, boostParams, event }) => {
     const boostsToRedeem = redemptionBoosts || [];
     const boostsToRevoke = revocationBoosts || [];
     
     logger('Boosts to redeem: ', boostsToRedeem);
-    const redeemInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost));
+    const redeemInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, false, boostParams));
     logger('***** Transfer instructions: ', redeemInstructions);
 
     const revokeInstructions = boostsToRevoke.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, true));
