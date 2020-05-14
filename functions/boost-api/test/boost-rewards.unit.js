@@ -128,7 +128,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const testUserCount = 50;
         const testUserId = uuid();
         const testAccountId = uuid();
-        const testCalculatedAmount = 225000;
+        const testCalculatedAmount = 67500;
 
         const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
             instructions: [{
@@ -185,8 +185,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             rewardParameters: {
                 rewardType: 'POOLED',
                 poolContributionPerUser: { amount: 25000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                additionalBonusToPool: { amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                percentPoolAsReward: 0.10
+                additionalBonusToPool: { amount: 5000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                percentPoolAsReward: 0.05
             },
             messageInstructions: [],
             flags: []    

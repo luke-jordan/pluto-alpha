@@ -12,10 +12,12 @@ const opsUtil = require('ops-util-common');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+const DEFAULT_UNIT = 'HUNDREDTH_CENT';
+
 const calculatePooledBoostAmount = (boost, userCount) => {
     const { poolContributionPerUser, percentPoolAsReward, additionalBonusToPool } = boost.rewardParameters;
-    const contribAmount = opsUtil.convertToUnit(poolContributionPerUser.amount, poolContributionPerUser.unit, 'HUNDREDTH_CENT');
-    const bonusAmount = opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, 'HUNDREDTH_CENT');    
+    const contribAmount = opsUtil.convertToUnit(poolContributionPerUser.amount, poolContributionPerUser.unit, DEFAULT_UNIT);
+    const bonusAmount = opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, DEFAULT_UNIT);    
     return (userCount * contribAmount * percentPoolAsReward) + bonusAmount;
 };
 
@@ -32,9 +34,9 @@ const generateMultiplier = (distribution) => {
 const calculateRandomBoostAmount = (boost) => {
     const { distribution, realizedRewardModuloZeroTarget } = boost.rewardParameters;
     const multiplier = generateMultiplier(distribution);
-    let calculatedBoostAmount = multiplier * boost.boostAmount;
+    let calculatedBoostAmount = multiplier * opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
     while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
-        calculatedBoostAmount += 1000; // HUNDREDTH_CENT
+        calculatedBoostAmount += 1000;
     }
 
     // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount
