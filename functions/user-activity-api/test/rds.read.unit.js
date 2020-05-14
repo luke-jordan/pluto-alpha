@@ -472,18 +472,20 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
 
     it('Compiles list of saving friends with dates', async () => {
         // creation time not updated time to prevent gaming (via off/on)
-        const selectQuery = `select relationship_id, creation_time from ${config.get('tables.friendshipTable')} where ` +
+        const selectQuery = `select relationship_id, initiated_user_id, creation_time from ${config.get('tables.friendshipTable')} where ` +
             `(initiated_user_id = $1 or accepted_user_id = $1) and relationship_status = $2`;
         const selectValues = [testUserId, 'ACTIVE'];
 
         const mockRelationshipId = uuid();
         const mockCreationTime = moment().subtract(7, 'days');
-        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'relationship_id': mockRelationshipId, 'creation_time': mockCreationTime.format() }]);
+
+        const mockFriendship = { 'relationship_id': mockRelationshipId, 'creation_time': mockCreationTime.format(), 'initiated_user_id': testUserId };
+        queryStub.withArgs(selectQuery, selectValues).resolves([mockFriendship]);
 
         const resultOfFetch = await rds.getMinimalFriendListForUser(testUserId);
 
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([{ relationshipId: mockRelationshipId, creationTime: moment(mockCreationTime.format())}]);
+        expect(resultOfFetch).to.deep.equal([{ relationshipId: mockRelationshipId, creationTime: moment(mockCreationTime.format()), initiatedUserId: testUserId }]);
     });
 
     it('Fetches account opened date', async () => {

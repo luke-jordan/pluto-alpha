@@ -330,6 +330,7 @@ const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusC
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
  * @property {number} numberTaps The number of taps (if a boost game)
+ * @property {number} percentDestroyed The amount of the image/screen 'destroyed' (for that game)
  * @property {number} timeTaken The amount of time taken to complete the game (in seconds)  
  */
 module.exports.processUserBoostResponse = async (event) => {

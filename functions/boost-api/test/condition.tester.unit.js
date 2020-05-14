@@ -71,7 +71,11 @@ describe('*** TESTING CONDITIONS ****', () => {
 
 describe('** FRIEND CONDITION ***', () => {
 
-    const mockFriend = (createdDaysAgo) => ({ relationshipId: uuid(), creationTimeMillis: moment().subtract(createdDaysAgo, 'days').valueOf() });
+    const mockFriend = (createdDaysAgo, userInitiated = false) => ({ 
+        relationshipId: uuid(), 
+        creationTimeMillis: moment().subtract(createdDaysAgo, 'days').valueOf(),
+        userInitiated
+    });
 
     it('Checks friend numbers correctly, pass condition', () => {
         const startMoment = moment().subtract(3, 'days');
@@ -81,7 +85,7 @@ describe('** FRIEND CONDITION ***', () => {
             userId: uuid(),
             eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
             eventContext: {
-                friendshipList: [mockFriend(1), mockFriend(2), mockFriend(0)]
+                friendshipList: [mockFriend(1, true), mockFriend(2, false), mockFriend(0, true)]
             }
         };
 
@@ -96,7 +100,7 @@ describe('** FRIEND CONDITION ***', () => {
         const sampleEvent = {
             userId: uuid(),
             eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
-            eventContext: { friendshipList: [mockFriend(1), mockFriend(2)] }
+            eventContext: { friendshipList: [mockFriend(1, false), mockFriend(2, true)] }
         };
 
         const result = tester.testConditionsForStatus(sampleEvent, condition);
@@ -111,6 +115,75 @@ describe('** FRIEND CONDITION ***', () => {
             userId: uuid(),
             eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
             eventContext: { friendshipList: [mockFriend(1), mockFriend(2), mockFriend(5)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+    it('Handle total initiated friends correctly', () => {
+        const condition = [`total_number_friends #{5::INITIATED}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1, true), mockFriend(2, true), mockFriend(5, true), mockFriend(20, true), mockFriend(35, true)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+    it('Fails total initiated friends correctly', () => {
+        const condition = ['total_number_friends #{5::INITIATED}'];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1, false), mockFriend(2, false), mockFriend(5, true), mockFriend(20, true), mockFriend(35, true)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+    it('Works on total friends (either) correctly', () => {
+        const condition = ['total_number_friends #{5::EITHER}'];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_TARGET_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1, false), mockFriend(2, false), mockFriend(5, true), mockFriend(20, true), mockFriend(35, true)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+});
+
+describe('*** GAME CONDITIONS ***', () => {
+
+    it('Handles percent destroyed (for image game) properly', () => {
+        const condition = ['percent_destroyed_above #{50::10000}'];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'USER_GAME_COMPLETION',
+            eventContext: { percentDestroyed: 62, timeTakenMillis: 9000 }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+    it('Handles percent destroyed (for image game) properly', () => {
+        const condition = ['percent_destroyed_above #{50::10000}'];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'USER_GAME_COMPLETION',
+            eventContext: { percentDestroyed: 32, timeTakenMillis: 9000 }
         };
 
         const result = tester.testConditionsForStatus(sampleEvent, condition);

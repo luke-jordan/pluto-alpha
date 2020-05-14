@@ -33,15 +33,17 @@ const evaluateWithdrawal = (parameterValue, eventContext) => {
     return timeSettled.isBefore(timeThreshold);
 };
 
-const evaluateGameResponse = (eventContext, parameterValue) => {
-    const { numberTaps, timeTakenMillis } = eventContext;
-    const [requiredTaps, maxTimeMillis] = parameterValue.split('::');
-    return numberTaps >= requiredTaps && timeTakenMillis <= maxTimeMillis;
+const evaluateGameResponse = (eventContext, parameterValue, responseValueKey) => {
+    const { timeTakenMillis } = eventContext;
+    const valueToCheck = eventContext[responseValueKey];
+    const [requiredThreshold, maxTimeMillis] = parameterValue.split('::');
+    logger('Checking if ', valueToCheck, ' is above ', requiredThreshold);
+    return valueToCheck >= requiredThreshold && timeTakenMillis <= maxTimeMillis;
 };
 
 const gameResponseFilter = (logContext, maxTimeMillis) => logContext && logContext.numberTaps && logContext.timeTakenMillis <= maxTimeMillis;
 
-const evaluateGameTournament = (event, parameterValue) => {
+const evaluateGameTournament = (event, parameterValue, responseValueKey) => {
     const [selectTop, maxTimeMillis] = parameterValue.split('::');
     
     const { accountId, eventContext } = event;
@@ -51,7 +53,9 @@ const evaluateGameTournament = (event, parameterValue) => {
 
     const { accountTapList } = event.eventContext;
     const withinTimeList = accountTapList.filter((response) => gameResponseFilter(response.logContext, maxTimeMillis));
-    const sortedList = withinTimeList.sort((response1, response2) => response2.logContext.numberTaps - response1.logContext.numberTaps);
+    
+    const scoreSorter = (response1, response2) => response2.logContext[responseValueKey] - response1.logContext[responseValueKey];
+    const sortedList = withinTimeList.sort(scoreSorter);
     // logger('Evaluating game tournament results, sorted list: ', sortedList);
 
     const topList = sortedList.slice(0, selectTop).map((response) => response.accountId);
@@ -64,6 +68,14 @@ const evaluateFriendsSince = (parameterValue, friendshipList) => {
     logger('Checking for ', targetNumber, ' friends since ', sinceTimeMillis, ' in list: ', friendshipList);
     const friendsSinceTime = friendshipList.filter((friendship) => friendship.creationTimeMillis > sinceTimeMillis);
     return friendsSinceTime.length >= targetNumber;
+};
+
+const evaluateTotalFriends = (parameterValue, friendshipList) => {
+    const [targetNumber, relationshipConstraint] = parameterValue.split('::');
+    logger('Checking for ', targetNumber, ' friends in total, with constraint ', relationshipConstraint);
+    const filterToApply = (friendship) => relationshipConstraint === 'EITHER' || friendship.userInitiated;
+    const numberFriends = friendshipList.filter(filterToApply);
+    return numberFriends.length >= targetNumber;
 };
 
 // this one is always going to be complex -- in time maybe split out the switch block further
@@ -104,12 +116,21 @@ module.exports.testCondition = (event, statusCondition) => {
             return equalizeAmounts(eventContext.newBalance) < equalizeAmounts(parameterValue);
         case 'withdrawal_before':
             return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
+        // game conditions
         case 'number_taps_greater_than':
-            return evaluateGameResponse(eventContext, parameterValue);
+            return evaluateGameResponse(eventContext, parameterValue, 'numberTaps');
         case 'number_taps_in_first_N':
-            return evaluateGameTournament(event, parameterValue);
+            return evaluateGameTournament(event, parameterValue, 'numberTaps');
+        case 'percent_destroyed_above':
+            return evaluateGameResponse(eventContext, parameterValue, 'percentDestroyed');
+        case 'percent_destroyed_in_first_N':
+            return evaluateGameTournament(event, parameterValue, 'percentDestroyed');
+        // social conditions
         case 'friends_added_since':
             return evaluateFriendsSince(parameterValue, eventContext.friendshipList);
+        case 'total_number_friends':
+            return evaluateTotalFriends(parameterValue, eventContext.friendshipList);
+        // event trigger conditions
         case 'event_occurs':
             logger('Checking if event type matches paramater: ', eventType === parameterValue);
             return eventType === parameterValue;

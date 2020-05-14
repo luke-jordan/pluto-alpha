@@ -186,7 +186,7 @@ module.exports.countActiveSavingFriendsForUser = async (systemWideUserId) => {
 
 // used for event processing; todo : combine with above (replace above with a length call on this)
 module.exports.getMinimalFriendListForUser = async (systemWideUserId) => {
-    const selectQuery = `select relationship_id, creation_time from ${config.get('tables.friendshipTable')} where ` +
+    const selectQuery = `select relationship_id, initiated_user_id, creation_time from ${config.get('tables.friendshipTable')} where ` +
         `(initiated_user_id = $1 or accepted_user_id = $1) and relationship_status = $2`;
     
     logger('Fetching minimal info on friends with: ', selectQuery);

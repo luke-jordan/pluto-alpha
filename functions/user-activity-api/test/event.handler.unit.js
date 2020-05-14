@@ -519,10 +519,10 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         const friendshipEventAccepting = { userId: testAcceptingUserId, eventType: 'FRIEND_REQUEST_TARGET_ACCEPTED' };
 
         const mockConnectionTime = moment().subtract(3, 'seconds');
-        const mockFriendship = { relationshipId: 'friends-id', creationTime: mockConnectionTime };
+        const mockFriendship = { relationshipId: 'friends-id', creationTime: mockConnectionTime, initiatedUserId: testInitiatingUserId };
 
-        const mockFriendshipList = [{ relationshipId: 'friends-id', creationTimeMillis: mockConnectionTime.valueOf() }];
-        const mockBoostEvent = ({ eventType, userId }) => ({ userId, eventType, eventContext: { friendshipList: mockFriendshipList } });
+        const mockFriendshipList = (userId) => [{ relationshipId: 'friends-id', creationTimeMillis: mockConnectionTime.valueOf(), userInitiated: userId === testInitiatingUserId }];
+        const mockBoostEvent = ({ eventType, userId }) => ({ userId, eventType, eventContext: { friendshipList: mockFriendshipList(userId) } });
 
         getFriendListStub.resolves([mockFriendship]);
         lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
