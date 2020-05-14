@@ -470,6 +470,22 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
         expect(resultOfCount).to.deep.equal(7);
     });
 
+    it('Compiles list of saving friends with dates', async () => {
+        // creation time not updated time to prevent gaming (via off/on)
+        const selectQuery = `select relationship_id, creation_time from ${config.get('tables.friendshipTable')} where ` +
+            `(initiated_user_id = $1 or accepted_user_id = $1) and relationship_status = $2`;
+        const selectValues = [testUserId, 'ACTIVE'];
+
+        const mockRelationshipId = uuid();
+        const mockCreationTime = moment().subtract(7, 'days');
+        queryStub.withArgs(selectQuery, selectValues).resolves([{ 'relationship_id': mockRelationshipId, 'creation_time': mockCreationTime.format() }]);
+
+        const resultOfFetch = await rds.getMinimalFriendListForUser(testUserId);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([{ relationshipId: mockRelationshipId, creationTime: moment(mockCreationTime.format())}]);
+    });
+
     it('Fetches account opened date', async () => {
         const testCreationTime = moment().format();
         const selectQuery = `select creation_time from ${config.get('tables.accountLedger')} where account_id = $1`;

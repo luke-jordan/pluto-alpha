@@ -1,6 +1,7 @@
 'use strict';
 
 const uuid = require('uuid/v4');
+const moment = require('moment');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -65,6 +66,55 @@ describe('*** TESTING CONDITIONS ****', () => {
 
         const sampleContext2 = { savedAmount: '0::HUNDREDTH_CENT::ZAR', saveCount: 1, firstSave: true };
         expect(tester.testConditionsForStatus({ eventType, eventContext: sampleContext2 }, condition)).to.be.false;        
+    });
+});
+
+describe('** FRIEND CONDITION ***', () => {
+
+    const mockFriend = (createdDaysAgo) => ({ relationshipId: uuid(), creationTimeMillis: moment().subtract(createdDaysAgo, 'days').valueOf() });
+
+    it('Checks friend numbers correctly, pass condition', () => {
+        const startMoment = moment().subtract(3, 'days');
+        const condition = [`friends_added_since #{3::${startMoment.valueOf()}}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: {
+                friendshipList: [mockFriend(1), mockFriend(2), mockFriend(0)]
+            }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+    it('Checks friend numbers correctly, fail condition', () => {
+        const startMoment = moment().subtract(3, 'days');
+        const condition = [`friends_added_since #{3::${startMoment.valueOf()}}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1), mockFriend(2)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+    it('Check friend numbers correctly, fail on dates', () => {
+        const startMoment = moment().subtract(1, 'days');
+        const condition = [`friends_added_since #{3::${startMoment.valueOf()}}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1), mockFriend(2), mockFriend(5)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
     });
 
 });

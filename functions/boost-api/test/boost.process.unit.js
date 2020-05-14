@@ -264,7 +264,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const expectedRedemptionCall = { 
             redemptionBoosts: [boostFromPersistence], 
             revocationBoosts: [], 
-            affectedAccountsDict: expectedAccountDict, 
+            affectedAccountsDict: expectedAccountDict,
             event: testEvent
         };
 

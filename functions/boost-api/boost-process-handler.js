@@ -44,6 +44,7 @@ const shouldCreateBoostForAccount = (event, boost) => {
 };
 
 const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
+    logger('Initiating account ID: ', initiatingAccountId);
     const selectPromises = boosts.map((boost) => {
         const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
         const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
@@ -149,7 +150,7 @@ const processEventForCreatedBoosts = async (event) => {
     // then we also check for withdrawal boosts
     const boostsToRevoke = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REVOKED') >= 0);
 
-    let resultOfTransfers = [];
+    let resultOfTransfers = {};
     if (boostsToRedeem.length > 0 || boostsToRevoke.length > 0) {
         const redemptionCall = { redemptionBoosts: boostsToRedeem, revocationBoosts: boostsToRevoke, affectedAccountsDict: affectedAccountsDict, event };
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
@@ -159,7 +160,7 @@ const processEventForCreatedBoosts = async (event) => {
     const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('Result of update operation: ', resultOfUpdates);
 
-    if (resultOfTransfers.length > 0) {
+    if (resultOfTransfers && Object.keys(resultOfTransfers).length > 0) {
         // could do this inside boost redemption handler, but then have to give it persistence connection, and not worth solving that now
         const boostsToUpdateRedemption = [...util.extractBoostIds(boostsToRedeem), ...util.extractBoostIds(boostsToRevoke)];
         persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);        
@@ -308,6 +309,7 @@ module.exports.processEvent = async (event) => {
     if (!event.accountId) {
         // eslint-disable-next-line require-atomic-updates
         event.accountId = await persistence.getAccountIdForUser(event.userId);
+        logger('Event account ID: ', event.accountId);
     }
 
     // third, find boosts that do not already have an entry for this user, and are created by this event

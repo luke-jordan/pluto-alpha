@@ -3,7 +3,7 @@
 const logger = require('debug')('jupiter:boost:condition-tester');
 const moment = require('moment');
 
-const util = require('./boost.util');
+const { EVENT_TYPE_CONDITION_MAP } = require('./boost.util');
 
 // expects in form AMOUNT::UNIT::CURRENCY
 const equalizeAmounts = (amountString) => {
@@ -59,6 +59,13 @@ const evaluateGameTournament = (event, parameterValue) => {
     return topList.includes(event.accountId);
 };
 
+const evaluateFriendsSince = (parameterValue, friendshipList) => {
+    const [targetNumber, sinceTimeMillis] = parameterValue.split('::');
+    logger('Checking for ', targetNumber, ' friends since ', sinceTimeMillis, ' in list: ', friendshipList);
+    const friendsSinceTime = friendshipList.filter((friendship) => friendship.creationTimeMillis > sinceTimeMillis);
+    return friendsSinceTime.length >= targetNumber;
+};
+
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
@@ -74,7 +81,7 @@ module.exports.testCondition = (event, statusCondition) => {
     // these two lines ensure we do not get caught in infinite loops because of boost/messages publishing, and that we only check the right events for the right conditions
     const isEventTriggeredButForbidden = (conditionType === 'event_occurs' && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));
     
-    const isConditionAndEventTypeForbidden = !util.EVENT_TYPE_CONDITION_MAP[eventType] || !util.EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType);
+    const isConditionAndEventTypeForbidden = !EVENT_TYPE_CONDITION_MAP[eventType] || !EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType);
     const isNonEventTriggeredButForbidden = conditionType !== 'event_occurs' && isConditionAndEventTypeForbidden;
     
     if (isEventTriggeredButForbidden || isNonEventTriggeredButForbidden) {
@@ -101,10 +108,13 @@ module.exports.testCondition = (event, statusCondition) => {
             return evaluateGameResponse(eventContext, parameterValue);
         case 'number_taps_in_first_N':
             return evaluateGameTournament(event, parameterValue);
+        case 'friends_added_since':
+            return evaluateFriendsSince(parameterValue, eventContext.friendshipList);
         case 'event_occurs':
             logger('Checking if event type matches paramater: ', eventType === parameterValue);
             return eventType === parameterValue;
         default:
+            logger('Condition type not supported yet');
             return false;
     }
 };
