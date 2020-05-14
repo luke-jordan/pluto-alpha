@@ -3,7 +3,7 @@
 const logger = require('debug')('jupiter:boosts:handler');
 // const config = require('config');
 
-const status = require('statuses');
+const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
 const persistence = require('./persistence/rds.boost');
@@ -17,7 +17,7 @@ const GAME_RESPONSE = 'GAME_RESPONSE';
 
 const handleError = (err) => {
     logger('FATAL_ERROR: ', err);
-    return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
+    return { statusCode: statusCodes('Internal Server Error'), body: JSON.stringify(err.message) };
 };
 
 // //////////////////////////// HELPER METHODS ///////////////////////////////////////////
@@ -37,11 +37,14 @@ const shouldCreateBoostForAccount = (event, boost) => {
     logger('Got status conditions:', statusConditions);
     
     // To guard against accidentally redeeming a boost to all and sundry, check statuses except for REDEEMED
-    const statusesToCheck = Object.keys(statusConditions).filter((statusCondition) => statusCondition !== 'REDEEMED');
+    // then to avoid false positives, strip these down to only the ones triggered by events
+    const statusesToCheck = Object.keys(statusConditions).filter((status) => status !== 'REDEEMED').
+        filter((status) => statusConditions[status][0] && statusConditions[status][0].startsWith('event_occurs'));
     return statusesToCheck.some((statusCondition) => conditionTester.testCondition(event, statusConditions[statusCondition][0]));
 };
 
 const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => {
+    logger('Initiating account ID: ', initiatingAccountId);
     const selectPromises = boosts.map((boost) => {
         const redeemsAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
         const restrictToInitiator = boost.boostAudienceType === 'GENERAL' || !redeemsAll;
@@ -71,7 +74,7 @@ const createBoostsTriggeredByEvent = async (event) => {
 
     // select all boosts that are active, but not present in the user-boost table for this user/account
     const boostFetchResult = await persistence.fetchUncreatedActiveBoostsForAccount(accountId);
-    logger('Found active boosts:', boostFetchResult);
+    // logger('Found active boosts:', boostFetchResult);
 
     // Then check the status conditions until finding one that is triggered by this event
     const boostsToCreate = boostFetchResult.filter((boost) => shouldCreateBoostForAccount(event, boost)).map((boost) => boost.boostId);
@@ -113,7 +116,7 @@ const processEventForCreatedBoosts = async (event) => {
 
     if (!offeredOrPendingBoosts || offeredOrPendingBoosts.length === 0) {
         logger('Well, nothing found');
-        return { statusCode: status('Ok'), body: JSON.stringify({ boostsTriggered: 0 })};
+        return { statusCode: statusCodes('Ok'), body: JSON.stringify({ boostsTriggered: 0 })};
     }
 
     // for each offered or pending boost, we check if the event triggers a status change, and hence compose an object
@@ -147,7 +150,7 @@ const processEventForCreatedBoosts = async (event) => {
     // then we also check for withdrawal boosts
     const boostsToRevoke = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REVOKED') >= 0);
 
-    let resultOfTransfers = [];
+    let resultOfTransfers = {};
     if (boostsToRedeem.length > 0 || boostsToRevoke.length > 0) {
         const redemptionCall = { redemptionBoosts: boostsToRedeem, revocationBoosts: boostsToRevoke, affectedAccountsDict: affectedAccountsDict, event };
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
@@ -157,7 +160,7 @@ const processEventForCreatedBoosts = async (event) => {
     const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('Result of update operation: ', resultOfUpdates);
 
-    if (resultOfTransfers.length > 0) {
+    if (resultOfTransfers && Object.keys(resultOfTransfers).length > 0) {
         // could do this inside boost redemption handler, but then have to give it persistence connection, and not worth solving that now
         const boostsToUpdateRedemption = [...util.extractBoostIds(boostsToRedeem), ...util.extractBoostIds(boostsToRevoke)];
         persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);        
@@ -300,12 +303,13 @@ module.exports.processEvent = async (event) => {
 
     // second, we check if there is a pending boost for this account, or user, if we only have that
     if (!event.accountId && !event.userId) {
-        return { statusCode: status('Bad request'), body: 'Function requires at least a user ID or accountID' };
+        return { statusCode: statusCodes('Bad request'), body: 'Function requires at least a user ID or accountID' };
     }
 
     if (!event.accountId) {
         // eslint-disable-next-line require-atomic-updates
         event.accountId = await persistence.getAccountIdForUser(event.userId);
+        logger('Event account ID: ', event.accountId);
     }
 
     // third, find boosts that do not already have an entry for this user, and are created by this event
@@ -326,13 +330,14 @@ const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusC
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
  * @property {number} numberTaps The number of taps (if a boost game)
+ * @property {number} percentDestroyed The amount of the image/screen 'destroyed' (for that game)
  * @property {number} timeTaken The amount of time taken to complete the game (in seconds)  
  */
 module.exports.processUserBoostResponse = async (event) => {
     try {        
         const userDetails = util.extractUserDetails(event);
         if (!userDetails) {
-            return { statusCode: status('Forbidden') };
+            return { statusCode: statusCodes('Forbidden') };
         }
 
         const params = util.extractEventBody(event);

@@ -143,7 +143,7 @@ const isStillPendingResult = (err) => {
         return true;
     }
 
-    if (err.message === '404 -undefined') {
+    if (err.message === '404 - undefined') {
         return true;
     }
 };
