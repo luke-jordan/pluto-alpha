@@ -206,7 +206,7 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
 
 const handleUserNotFound = async (friendRequest) => {
     
-    const { customShareMessage } = friendRequest;
+    const { customShareMessage, requestCode } = friendRequest;
     const minifiedMessage = customShareMessage ? customShareMessage.replace(/\n\s*\n/g, '\n') : null;
     friendRequest.customShareMessage = minifiedMessage;
     
@@ -226,7 +226,7 @@ const handleUserNotFound = async (friendRequest) => {
     
     if (contactType === 'PHONE') {
         const initialPart = customShareMessage || format(config.get('templates.sms.friendRequest.template'), initiatedUserName);
-        const linkPart = format(config.get('templates.sms.friendRequest.linkPart'), { downloadLink, referralCode });
+        const linkPart = format(config.get('templates.sms.friendRequest.linkPart'), { downloadLink, referralCode, requestCode });
         logger(`Sending SMS: ${initialPart} ${linkPart}`);
         dispatchResult = await publisher.sendSms({ phoneNumber: contactMethod, message: `${initialPart} ${linkPart}` });
     }
@@ -234,7 +234,7 @@ const handleUserNotFound = async (friendRequest) => {
     if (contactType === 'EMAIL') {
         const bodyTemplateKey = customShareMessage ? config.get('templates.email.custom.templateKey') : config.get('templates.email.default.templateKey');
 
-        const templateVariables = { initiatedUserName, customShareMessage, downloadLink, referralCode };
+        const templateVariables = { initiatedUserName, customShareMessage, downloadLink, referralCode, requestCode };
         const subject = format(config.get('templates.email.subject'), { initiatedUserName });
 
         dispatchResult = await publisher.sendSystemEmail({
@@ -380,9 +380,9 @@ module.exports.initiateRequestFromReferralCode = async (event) => {
         
         // we use a different event to that above, because this is different
         const eventContext = { targetUserId, initiatedUserId, referralCodeUsed, countryCode, codeDetails };
-        const referringUserEvent = publisher.publishUserEvent('FRIEND_INITIATED_VIA_REFERRAL', initiatedUserId, { context: eventContext });
-        const referredUserEvent = publisher.publishUserEvent('FRIEND_ACCEPTED_VIA_REFERRAL', targetUserId, { context: eventContext });
-        await Promise.all(referringUserEvent, referredUserEvent);
+        const referringUserEvent = publisher.publishUserEvent(initiatedUserId, 'FRIEND_INITIATED_VIA_REFERRAL', { context: eventContext });
+        const referredUserEvent = publisher.publishUserEvent(targetUserId, 'FRIEND_ACCEPTED_VIA_REFERRAL', { context: eventContext });
+        await Promise.all([referringUserEvent, referredUserEvent]);
 
         return { result: 'CREATED' };
     } catch (err) {

@@ -264,7 +264,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const expectedRedemptionCall = { 
             redemptionBoosts: [boostFromPersistence], 
             revocationBoosts: [], 
-            affectedAccountsDict: expectedAccountDict, 
+            affectedAccountsDict: expectedAccountDict,
             event: testEvent
         };
 
@@ -329,6 +329,39 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             logContext: { boostAmount: boostCreatedByEvent.boostAmount, newStatus: 'UNLOCKED' }
         }]);
 
+    });
+
+    it('Does not create boost where it is the wrong event (even if other conditions pass)', async () => {
+        const testAccountId = uuid();
+
+        const testEvent = { 
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            accountId: testAccountId,
+            eventContext: { 
+                accountId: testAccountId,
+                bankReference: 'ABRIJMOHUN19-00197',
+                firstSave: false,
+                saveCount: 92,
+                savedAmount: '250000::HUNDREDTH_CENT::ZAR',
+                timeInMillis: '2020-05-08T07:21:13.000Z',
+                transactionId: '013cc85e-1aa2-4654-9e67-2d43a337e8d3' 
+            } 
+        };
+        
+        const mockBoost = { ...boostCreatedByEvent };
+        mockBoost.statusConditions = {
+            PENDING: ['number_taps_greater_than #{0::15000}'], 
+            REDEEMED: ['number_taps_in_first_N #{1::15000}'], 
+            UNLOCKED: ['save_event_greater_than #{25::WHOLE_CURRENCY::ZAR}']
+        };
+
+        fetchUncreatedBoostsStub.resolves([mockBoost]);
+        findBoostStub.resolves([]);
+
+        const resultOfEventRecord = await handler.processEvent(testEvent);
+        logger('Result of record: ', resultOfEventRecord);
+
+        expect(insertBoostAccountsStub).to.not.have.been.called;
     });
 
     it('Fails where event currency and status condition currency do not match', async () => {

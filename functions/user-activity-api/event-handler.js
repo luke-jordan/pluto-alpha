@@ -556,6 +556,25 @@ const handleBoostRedeemedEvent = async (eventBody) => {
     logger('Balance sheet result: ', bSheetResult);
 };
 
+const handleFriendshipConnectedEvent = async (eventBody) => {
+    // for the moment all we do is assemble friend list and pass to boost processing
+    const { userId, eventType } = eventBody;
+    const currentFriendsList = await persistence.getMinimalFriendListForUser(userId);
+    const friendshipList = currentFriendsList.map(({ relationshipId, initiatedUserId, creationTime }) => ({ 
+        relationshipId, 
+        creationTimeMillis: creationTime.valueOf(),
+        userInitiated: userId === initiatedUserId
+    }));
+    const boostPayload = { userId, eventType, eventContext: { friendshipList }};
+    const boostInvocation = {
+        FunctionName: config.get('publishing.processingLambdas.boosts'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify(boostPayload)
+    };
+    logger('Invoking boost process with: ', JSON.stringify(boostInvocation, null, 2));
+    await lambda.invoke(boostInvocation).promise();
+};
+
 /**
  * This function handles successful account opening, saving, and withdrawal events. It is typically called by SNS. The following properties are expected in the SNS message:
  * @param {object} snsEvent An SNS event object containing our parameter(s) of interest in its Message property.
@@ -583,6 +602,10 @@ module.exports.handleUserEvent = async (snsEvent) => {
                 break;
             case 'BOOST_REDEEMED':
                 await handleBoostRedeemedEvent(eventBody);
+                break;
+            case 'FRIEND_REQUEST_TARGET_ACCEPTED':
+            case 'FRIEND_REQUEST_INITIATED_ACCEPTED':
+                await handleFriendshipConnectedEvent(eventBody);
                 break;
             default:
                 logger(`We don't handle ${eventType}, let it pass`);

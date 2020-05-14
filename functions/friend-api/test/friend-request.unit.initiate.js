@@ -190,7 +190,7 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
 
         const downloadLink = config.get('templates.downloadLink');
-        const expectedLinkPart = format(config.get('templates.sms.friendRequest.linkPart'), { downloadLink, referralCode: 'TUNNELS' });
+        const expectedLinkPart = format(config.get('templates.sms.friendRequest.linkPart'), { downloadLink, referralCode: 'TUNNELS', requestCode: 'CLIMATE LEG' });
         const expectedSms = `${customShareMessage} ${expectedLinkPart}`;
         
         const sendSmsArgs = {
@@ -250,7 +250,8 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
             initiatedUserName: testProfile.calledName,
             customShareMessage,
             downloadLink: config.get('templates.downloadLink'),
-            referralCode: 'TUNNELS'
+            referralCode: 'TUNNELS',
+            requestCode: 'ORBIT PAGE'
         };
 
         const sendEmailArgs = {

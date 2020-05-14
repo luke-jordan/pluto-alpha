@@ -285,7 +285,7 @@ describe('*** UNIT TEST TRANSACTION STATUS HANDLER ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestOptions);
         resetStubs(requestStub);
 
-        requestStub.throws(new Error('404 -undefined'));
+        requestStub.throws(new Error('404 - undefined'));
 
         const secondTransactionStatus = await handler.statusCheck(mockEvent);
 

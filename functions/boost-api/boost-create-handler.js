@@ -23,9 +23,10 @@ const STANDARD_GAME_ACTIONS = {
 };
 
 const STANDARD_BOOST_TYPES = {
-    'GAME': ['CHASE_ARROW', 'TAP_SCREEN'],
+    'GAME': ['CHASE_ARROW', 'TAP_SCREEN', 'DESTROY_IMAGE'],
     'SIMPLE': ['TIME_LIMITED'],
-    'REFERRAL': ['USER_CODE_USED']
+    'REFERRAL': ['USER_CODE_USED'],
+    'SOCIAL': ['FRIENDS_ADDED', 'NUMBER_FRIENDS']
 };
 
 const DEFAULT_BOOST_PRIORITY = 100;
@@ -39,15 +40,24 @@ const obtainStdAction = (msgKey) => (Reflect.has(STANDARD_GAME_ACTIONS, msgKey) 
 
 const convertParamsToRedemptionCondition = (gameParams) => {
     const conditions = [];
+    const timeLimitMillis = gameParams.timeLimitSeconds * 1000;
     switch (gameParams.gameType) {
         case 'CHASE_ARROW':
         case 'TAP_SCREEN': {
-            const timeLimitMillis = gameParams.timeLimitSeconds * 1000;
             if (gameParams.winningThreshold) {
                 conditions.push(`number_taps_greater_than #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
             }
             if (gameParams.numberWinners) {
                 conditions.push(`number_taps_in_first_N #{${gameParams.numberWinners}::${timeLimitMillis}}`);
+            }
+            break;
+        }
+        case 'DESTROY_IMAGE': {
+            if (gameParams.winningThreshold) {
+                conditions.push(`percent_destroyed_above #{${gameParams.winningThreshold}::${timeLimitMillis}}`);
+            }
+            if (gameParams.numberWinners) {
+                conditions.push(`percent_destroyed_in_first_N #{${gameParams.numberWinners}::${timeLimitMillis}}`);
             }
             break;
         }

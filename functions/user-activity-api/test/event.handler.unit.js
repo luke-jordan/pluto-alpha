@@ -26,6 +26,7 @@ const getHumanRefStub = sinon.stub();
 const updateTagsStub = sinon.stub();
 const updateTxFlagsStub = sinon.stub();
 const fetchBSheetAccStub = sinon.stub();
+const getFriendListStub = sinon.stub();
 
 const publishUserEventStub = sinon.stub();
 
@@ -79,6 +80,7 @@ const eventHandler = proxyquire('../event-handler', {
         'updateAccountTags': updateTagsStub,
         'updateTxTags': updateTxFlagsStub,
         'fetchAccountTagByPrefix': fetchBSheetAccStub,
+        'getMinimalFriendListForUser': getFriendListStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -396,36 +398,6 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(publishUserEventStub).to.not.have.been.called;
     });
 
-    // actually removing this, for now
-    // it('Also publishes event for first save, if is first save', async () => {
-    //     lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-    //     // lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
-
-    //     getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
-    //     sendEmailStub.resolves({ result: 'SUCCESS' });
-        
-    //     fetchBSheetAccStub.resolves('POL1');
-    //     updateTxFlagsStub.resolves({ updatedTime: moment().add(1, 'seconds') });
-
-    //     const savingEvent = {
-    //         userId: testId,
-    //         eventType: 'SAVING_PAYMENT_SUCCESSFUL',
-    //         timeInMillis: moment().valueOf(),
-    //         context: {
-    //             accountId: uuid(),
-    //             saveCount: 1,
-    //             firstSave: true,
-    //             savedAmount: '1000000::HUNDREDTH_CENT::USD'
-    //         }
-    //     };
-
-    //     const resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
-    //     expect(resultOfHandle).to.exist;
-
-    //     // everything else is handled above, here we just make sure the first save event is fired
-    //     expect(publishUserEventStub).to.have.been.calledOnceWithExactly(testId, 'USER_COMPLETED_FIRST_SAVE', { context: savingEvent.context });
-    // });
-
     it('Handles withdrawal event happy path correctly', async () => {
         const timeNow = moment().valueOf();
         const testAccountId = uuid();
@@ -537,6 +509,39 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(updateTxFlagsStub).to.have.not.been.called;
         expect(getQueueUrlStub).to.have.been.calledOnce;
         expect(sqsSendStub).to.have.been.calledOnce;
+    });
+
+    it('Handles friendship event properly', async () => {
+        const testInitiatingUserId = 'some-user';
+        const testAcceptingUserId = 'another-user';
+
+        const friendshipEventInitiated = { userId: testInitiatingUserId, eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED' };
+        const friendshipEventAccepting = { userId: testAcceptingUserId, eventType: 'FRIEND_REQUEST_TARGET_ACCEPTED' };
+
+        const mockConnectionTime = moment().subtract(3, 'seconds');
+        const mockFriendship = { relationshipId: 'friends-id', creationTime: mockConnectionTime, initiatedUserId: testInitiatingUserId };
+
+        const mockFriendshipList = (userId) => [{ relationshipId: 'friends-id', creationTimeMillis: mockConnectionTime.valueOf(), userInitiated: userId === testInitiatingUserId }];
+        const mockBoostEvent = ({ eventType, userId }) => ({ userId, eventType, eventContext: { friendshipList: mockFriendshipList(userId) } });
+
+        getFriendListStub.resolves([mockFriendship]);
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+
+        const resultOfInitiatedHandle = await eventHandler.handleUserEvent(wrapEventSns(friendshipEventInitiated));
+        const resultOfAcceptedHandle = await eventHandler.handleUserEvent(wrapEventSns(friendshipEventAccepting));
+
+        expect(resultOfInitiatedHandle).to.deep.equal({ statusCode: 200 });
+        expect(resultOfAcceptedHandle).to.deep.equal({ statusCode: 200 });
+
+        expect(getFriendListStub).to.have.been.calledTwice;
+        expect(getFriendListStub).to.have.been.calledWithExactly(testInitiatingUserId);
+        expect(getFriendListStub).to.have.been.calledWithExactly(testAcceptingUserId);
+
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        const expectedInvokeAccepted = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventInitiated));
+        const expectedInvokeInitiated = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventAccepting));
+        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeAccepted);
+        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeInitiated);
     });
 
 });
