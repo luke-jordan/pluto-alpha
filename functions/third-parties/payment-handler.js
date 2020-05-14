@@ -139,6 +139,7 @@ module.exports.paymentUrlRequest = async (event) => {
 
 // the Ozow backend is super lousy, so we have to check a few different possibilities
 const isStillPendingResult = (err) => {
+    
     if (err.message === 'StatusCodeError: 404 - undefined') {
         return true;
     }
@@ -202,6 +203,10 @@ module.exports.statusCheck = async (event) => {
         return formattedResponse;
 
     } catch (err) {
+        if (err.statusCode === 404) {
+            return { result: 'CANCELLED' };
+        }
+
         if (isStillPendingResult(err)) {
             return { result: 'PENDING' };
         }
