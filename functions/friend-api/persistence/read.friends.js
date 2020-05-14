@@ -267,9 +267,11 @@ module.exports.countMutualFriends = async (targetUserId, initiatedUserIds) => {
  * Looks for logs that a user should view
  */
 module.exports.fetchAlertLogsForUser = async (systemWideUserId, logTypes) => {
-    const selectQuery = `select * from ${config.get('tables.friendLogTable')} where $1 = any(to_alert_user_id) and ` +
-        `$1 != any(alerted_user_id) and log_type in (${opsUtil.extractArrayIndices(logTypes, 2)})`;
-    const queryValues = [systemWideUserId, ...logTypes];
+    const selectQuery = `select * from ${config.get('tables.friendLogTable')} where is_alert_active = true and ` +
+        `$1 = any(to_alert_user_id) and not($1 = any(alerted_user_id)) ` +
+        `and log_type in (${opsUtil.extractArrayIndices(logTypes, 2)})`;
+    
+        const queryValues = [systemWideUserId, ...logTypes];
     logger('Finding alerts with query: ', selectQuery, ' and values: ', queryValues);
 
     const alertLogs = await rdsConnection.selectQuery(selectQuery, queryValues);

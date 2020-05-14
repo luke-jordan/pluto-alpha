@@ -86,12 +86,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             requestId: testRequestId,
             logType: 'FRIENDSHIP_REQUESTED',
             logContext: testFriendRequest,
-            toAlertUserId: [testTargetUserId]
+            toAlertUserId: [testTargetUserId],
+            isAlertActive: true
         };
 
         const testLogDef = {
-            query: `insert into ${friendLogTable} (log_id, request_id, log_type, log_context, to_alert_user_id) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${requestId}, ${logType}, ${logContext}, ${toAlertUserId}',
+            query: `insert into ${friendLogTable} (log_id, request_id, log_type, log_context, to_alert_user_id, is_alert_active) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${requestId}, ${logType}, ${logContext}, ${toAlertUserId}, ${isAlertActive}',
             rows: [testLogObject]
         };
 
@@ -200,12 +201,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             logContext: friendshipObject,
             relationshipId: testRelationshipId,
             requestId: testRequestId,
-            toAlertUserId: [testIniatedUserId]
+            toAlertUserId: [testIniatedUserId],
+            isAlertActive: true
         };
 
         const testLogDef = {
-            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id, to_alert_user_id) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}, ${toAlertUserId}',
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id, to_alert_user_id, is_alert_active) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}, ${toAlertUserId}, ${isAlertActive}',
             rows: [testLogObject]
         };
 
@@ -269,12 +271,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             requestId: testRequestId,
             logType: 'FRIENDSHIP_ACCEPTED',
             logContext: friendshipObject,
-            toAlertUserId: [testIniatedUserId]
+            toAlertUserId: [testIniatedUserId],
+            isAlertActive: true
         };
 
         const testLogDef = {
-            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id, to_alert_user_id) values %L returning log_id, creation_time`,
-            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}, ${toAlertUserId}',
+            query: `insert into ${friendLogTable} (log_id, log_type, log_context, request_id, relationship_id, to_alert_user_id, is_alert_active) values %L returning log_id, creation_time`,
+            columnTemplate: '${logId}, ${logType}, ${logContext}, ${requestId}, ${relationshipId}, ${toAlertUserId}, ${isAlertActive}',
             rows: [testLogObject]
         };
 
@@ -348,6 +351,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             returnClause: 'updated_time'
         };
 
+        const testUpdateLogDef = {
+            table: friendLogTable,
+            key: { requestId: testRequestId, logType: 'FRIENDSHIP_REQUEST' },
+            value: { isAlertActive: false },
+            returnClause: 'updated_time'
+        };
+
         const testLogObject = {
             logId: testLogId,
             requestId: testRequestId,
@@ -366,6 +376,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         uuidStub.returns(testLogId);
         multiOpStub.resolves([
             [{ 'updated_time': testUpdatedTime }],
+            [{ 'updated_time': testUpdatedTime }],
             [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
         
@@ -374,7 +385,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         expect(resultOfIgnore).to.exist;
         expect(resultOfIgnore).to.deep.equal({ updatedTime: testUpdatedTime, logId: testLogId });
         
-        expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef], [testInsertLogDef]);
+        expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef, testUpdateLogDef], [testInsertLogDef]);
     });
 
     it('Cancels friend requests properly', async () => {
@@ -382,6 +393,13 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
             table: friendReqTable,
             key: { requestId: testRequestId },
             value: { requestStatus: 'CANCELLED' },
+            returnClause: 'updated_time'
+        };
+
+        const testUpdateLogDef = {
+            table: friendLogTable,
+            key: { requestId: testRequestId, logType: 'FRIENDSHIP_REQUEST' },
+            value: { isAlertActive: false },
             returnClause: 'updated_time'
         };
 
@@ -403,6 +421,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         uuidStub.returns(testLogId);
         multiOpStub.resolves([
             [{ 'updated_time': testUpdatedTime }],
+            [{ 'updated_time': testUpdatedTime }],
             [{ 'log_id': testLogId, 'creation_time': testInsertionTime }]
         ]);
     
@@ -411,7 +430,7 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         expect(resultOfCancel).to.exist;
         expect(resultOfCancel).to.deep.equal({ updatedTime: testUpdatedTime, logId: testLogId });
         
-        expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef], [testInsertLogDef]);
+        expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef, testUpdateLogDef], [testInsertLogDef]);
     });
 
 });
