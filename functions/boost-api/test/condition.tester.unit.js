@@ -1,6 +1,7 @@
 'use strict';
 
 const uuid = require('uuid/v4');
+const moment = require('moment');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -65,6 +66,128 @@ describe('*** TESTING CONDITIONS ****', () => {
 
         const sampleContext2 = { savedAmount: '0::HUNDREDTH_CENT::ZAR', saveCount: 1, firstSave: true };
         expect(tester.testConditionsForStatus({ eventType, eventContext: sampleContext2 }, condition)).to.be.false;        
+    });
+});
+
+describe('** FRIEND CONDITION ***', () => {
+
+    const mockFriend = (createdDaysAgo, userInitiated = false) => ({ 
+        relationshipId: uuid(), 
+        creationTimeMillis: moment().subtract(createdDaysAgo, 'days').valueOf(),
+        userInitiated
+    });
+
+    it('Checks friend numbers correctly, pass condition', () => {
+        const startMoment = moment().subtract(3, 'days');
+        const condition = [`friends_added_since #{3::${startMoment.valueOf()}}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: {
+                friendshipList: [mockFriend(1, true), mockFriend(2, false), mockFriend(0, true)]
+            }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+    it('Checks friend numbers correctly, fail condition', () => {
+        const startMoment = moment().subtract(3, 'days');
+        const condition = [`friends_added_since #{3::${startMoment.valueOf()}}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1, false), mockFriend(2, true)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+    it('Check friend numbers correctly, fail on dates', () => {
+        const startMoment = moment().subtract(1, 'days');
+        const condition = [`friends_added_since #{3::${startMoment.valueOf()}}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1), mockFriend(2), mockFriend(5)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+    it('Handle total initiated friends correctly', () => {
+        const condition = [`total_number_friends #{5::INITIATED}`];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1, true), mockFriend(2, true), mockFriend(5, true), mockFriend(20, true), mockFriend(35, true)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+    it('Fails total initiated friends correctly', () => {
+        const condition = ['total_number_friends #{5::INITIATED}'];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1, false), mockFriend(2, false), mockFriend(5, true), mockFriend(20, true), mockFriend(35, true)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
+    });
+
+    it('Works on total friends (either) correctly', () => {
+        const condition = ['total_number_friends #{5::EITHER}'];
+
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'FRIEND_REQUEST_TARGET_ACCEPTED',
+            eventContext: { friendshipList: [mockFriend(1, false), mockFriend(2, false), mockFriend(5, true), mockFriend(20, true), mockFriend(35, true)] }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+});
+
+describe('*** GAME CONDITIONS ***', () => {
+
+    it('Handles percent destroyed (for image game) properly', () => {
+        const condition = ['percent_destroyed_above #{50::10000}'];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'USER_GAME_COMPLETION',
+            eventContext: { percentDestroyed: 62, timeTakenMillis: 9000 }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.true;
+    });
+
+    it('Handles percent destroyed (for image game) properly', () => {
+        const condition = ['percent_destroyed_above #{50::10000}'];
+        
+        const sampleEvent = {
+            userId: uuid(),
+            eventType: 'USER_GAME_COMPLETION',
+            eventContext: { percentDestroyed: 32, timeTakenMillis: 9000 }
+        };
+
+        const result = tester.testConditionsForStatus(sampleEvent, condition);
+        expect(result).to.be.false;
     });
 
 });

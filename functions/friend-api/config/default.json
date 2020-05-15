@@ -54,7 +54,7 @@
         "sms": {
             "friendRequest": {
                 "template": "Hi! {} wants you to join them as a saving buddy on the Jupiter Savings App!",
-                "linkPart": "Download here: {downloadLink} and use the referral code {referralCode}"
+                "linkPart": "Download here: {downloadLink} and use the referral code {referralCode}. If you are already a Jupiter Saver, enter {requestCode} in the buddy requests screen"
             }
         },
         "downloadLink": "https://jupitersave.com",

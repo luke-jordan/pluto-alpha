@@ -54,48 +54,6 @@ module.exports.fetchPendingTransactions = async (accountId) => {
   return rows.map((row) => camelizeKeys(row));
 };
 
-module.exports.countSettledSaves = async (accountId) => {
-    const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
-        `transaction_type = $2 and settlement_status = $3`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT', 'SETTLED']);
-    logger('Result of count : ', resultOfQuery);
-
-    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
-        return 0;
-    }
-
-    return parseInt(resultOfQuery[0]['count'], 10);
-};
-
-module.exports.countSettledSavesForPrevMonth = async (accountId) => {
-    const startDate = moment().startOf('month').subtract(1, 'month');
-    const endDate = moment().startOf('month');
-    const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
-        `transaction_type = $2 and settlement_status = $3 and creation_time > $4 and creation_time < $5`;
-    const queryValues = [accountId, 'USER_SAVING_EVENT', 'SETTLED', startDate.format(), endDate.format()];
-    const resultOfQuery = await rdsConnection.selectQuery(query, queryValues);
-    logger('Result of count : ', resultOfQuery);
-
-    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
-        return 0;
-    }
-
-    return parseInt(resultOfQuery[0]['count'], 10);
-};
-
-module.exports.countActiveSavingFriendsForUser = async (systemWideUserId) => {
-    const query = `select count(relationship_id) from ${config.get('tables.friendshipTable')} where initiated_user_id = $1 or accepted_user_id = $2 ` +
-        `and relationship_status = $3`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, [systemWideUserId, systemWideUserId, 'ACTIVE']);
-    logger('Result of count : ', resultOfQuery);
-    
-    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
-        return 0;
-    }
-
-    return parseInt(resultOfQuery[0]['count'], 10);
-};
-
 module.exports.fetchInfoForBankRef = async (accountId) => {
     const accountTable = config.get('tables.accountLedger');
     const txTable = config.get('tables.accountTransactions');
@@ -181,6 +139,64 @@ module.exports.countAvailableBoosts = async (accountId) => {
 
     return resultOfQuery && resultOfQuery.length > 0 ? resultOfQuery[0]['count'] : 0;
 };
+
+// todo : combine this with the next one just with date parameters
+module.exports.countSettledSaves = async (accountId) => {
+    const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+        `transaction_type = $2 and settlement_status = $3`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [accountId, 'USER_SAVING_EVENT', 'SETTLED']);
+    logger('Result of count : ', resultOfQuery);
+
+    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
+        return 0;
+    }
+
+    return parseInt(resultOfQuery[0]['count'], 10);
+};
+
+module.exports.countSettledSavesForPrevMonth = async (accountId) => {
+    const startDate = moment().startOf('month').subtract(1, 'month');
+    const endDate = moment().startOf('month');
+    const query = `select count(transaction_id) from ${config.get('tables.accountTransactions')} where account_id = $1 and ` +
+        `transaction_type = $2 and settlement_status = $3 and creation_time > $4 and creation_time < $5`;
+    const queryValues = [accountId, 'USER_SAVING_EVENT', 'SETTLED', startDate.format(), endDate.format()];
+    const resultOfQuery = await rdsConnection.selectQuery(query, queryValues);
+    logger('Result of count : ', resultOfQuery);
+
+    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
+        return 0;
+    }
+
+    return parseInt(resultOfQuery[0]['count'], 10);
+};
+
+// used for saving heat
+module.exports.countActiveSavingFriendsForUser = async (systemWideUserId) => {
+    const query = `select count(relationship_id) from ${config.get('tables.friendshipTable')} where initiated_user_id = $1 or accepted_user_id = $2 ` +
+        `and relationship_status = $3`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [systemWideUserId, systemWideUserId, 'ACTIVE']);
+    logger('Result of count : ', resultOfQuery);
+    
+    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
+        return 0;
+    }
+
+    return parseInt(resultOfQuery[0]['count'], 10);
+};
+
+// used for event processing; todo : combine with above (replace above with a length call on this)
+module.exports.getMinimalFriendListForUser = async (systemWideUserId) => {
+    const selectQuery = `select relationship_id, initiated_user_id, creation_time from ${config.get('tables.friendshipTable')} where ` +
+        `(initiated_user_id = $1 or accepted_user_id = $1) and relationship_status = $2`;
+    
+    logger('Fetching minimal info on friends with: ', selectQuery);
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [systemWideUserId, 'ACTIVE']);
+    logger('Retrieved: ', resultOfQuery);
+    return resultOfQuery.map((row) => camelizeKeys(row)).map((row) => ({ ...row, creationTime: moment(row.creationTime) }));
+};
+
+
+// HEAVY LIFTER : GET BALANCE UP TILL NOW
 
 module.exports.sumAccountBalance = async (accountId, currency, time = moment()) => {
     const tableToQuery = config.get('tables.accountTransactions');
