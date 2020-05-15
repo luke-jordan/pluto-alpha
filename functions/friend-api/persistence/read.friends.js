@@ -15,7 +15,15 @@ const Redis = require('ioredis');
 const redis = new Redis({
     port: config.get('cache.port'),
     host: config.get('cache.host'),
-    retryStrategy: () => `dont retry`
+    
+    maxRetriesPerRequest: 2,
+    reconnectOnError: (err) => {
+        const targetError = 'READONLY';
+        // Only reconnect when the error contains "READONLY"
+        if (err.message.includes(targetError)) {
+        return true; // or `return 1;`
+        }
+    }
 });
 
 const PROFILE_CACHE_TTL_IN_SECONDS = config.get('cache.ttls.profile');
