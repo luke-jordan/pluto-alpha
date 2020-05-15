@@ -24,6 +24,8 @@ const redemptionHandlerStub = sinon.stub();
 const getAccountIdForUserStub = sinon.stub();
 const fetchUncreatedBoostsStub = sinon.stub();
 const insertBoostAccountsStub = sinon.stub();
+const insertBoostLogStub = sinon.stub();
+const findPooledAccountsStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
@@ -42,7 +44,9 @@ const handler = proxyquire('../boost-process-handler', {
         'alterBoost': alterBoostStub,
         'getAccountIdForUser': getAccountIdForUserStub,
         'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
-        'insertBoostAccount': insertBoostAccountsStub
+        'insertBoostAccount': insertBoostAccountsStub,
+        'insertBoostAccountLogs': insertBoostLogStub,
+        'findAccountsForPooledRewards': findPooledAccountsStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
@@ -215,6 +219,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     };
 
     it('Happy path awarding a boost after a user has saved enough', async () => {
+        const testLogId = uuid();
         const testUserId = uuid();
         const timeSaveCompleted = moment();
         const mockPersistedTime = moment();
@@ -253,6 +258,8 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             accountUserMap: mockAccountUserMap
         }]);
 
+        insertBoostLogStub.resolves([{ logId: testLogId, creationTime: mockPersistedTime }]);
+
         // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the float allocation lambda
 
         const resultOfEventRecord = await handler.processEvent(testEvent);
@@ -268,10 +275,18 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             event: testEvent
         };
 
+        const expectedBoostLog = {
+            boostId: testBoostId,
+            accountId: testAccountId,
+            logType: 'BOOST_POOL_CONTRIBUTION',
+            logContext: testEvent
+        };
+
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
 
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedBoostLog]);
         expect(insertBoostAccountsStub).to.have.not.been.called;
         expect(getAccountIdForUserStub).to.have.not.been.called;
     });

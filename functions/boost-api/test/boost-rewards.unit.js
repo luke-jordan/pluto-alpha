@@ -125,10 +125,16 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
     });
 
     it('Handles pooled rewards', async () => {
-        const testUserCount = 50;
         const testUserId = uuid();
         const testAccountId = uuid();
         const testCalculatedAmount = 67500;
+
+        const testUserCount = 50;
+
+        const testAccountIds = [];
+        while (testAccountIds.length < testUserCount) {
+            testAccountIds.push(uuid());
+        }
 
         const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
             instructions: [{
@@ -201,7 +207,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const mockEvent = { 
             redemptionBoosts: [mockBoost], 
             affectedAccountsDict: mockAccountMap, 
-            boostParams: { userCount: testUserCount },
+            boostParams: { accountIds: testAccountIds },
             event: { accountId: testAccountId, eventType: 'SAVING_EVENT_COMPLETED' }
         };
 

@@ -51,7 +51,8 @@ const calculateRandomBoostAmount = (boost) => {
 const calculateBoostAmount = (boost, params) => {
     const { rewardType } = boost.rewardParameters;
     if (rewardType === 'POOLED') {
-        return calculatePooledBoostAmount(boost, params.userCount);
+        const userCount = params.accountIds.length;
+        return calculatePooledBoostAmount(boost, userCount);
     }
 
     if (rewardType === 'RANDOM') {

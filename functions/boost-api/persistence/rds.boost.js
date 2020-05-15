@@ -179,6 +179,12 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
     return resultOfQuery.map((row) => camelizeKeys(row));
 };
 
+module.exports.findAccountsForPooledRewards = async (logType) => {
+    const selectQuery = `select distinct account_id from ${boostLogTable} where log_type = $1`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [logType]);
+    return resultOfQuery.length > 0 ? resultOfQuery.map((result) => result['account_id']) : [];
+};
+
 // todo : validation / catching of status downgrade in here
 const updateAccountDefinition = (boostId, accountId, newStatus) => ({
     table: boostAccountJoinTable,
