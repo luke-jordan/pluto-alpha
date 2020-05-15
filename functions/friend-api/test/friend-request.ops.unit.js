@@ -271,6 +271,39 @@ describe('*** FRIENDSHIP UTIL FUNCTIONS ***', () => {
         expect(fetchProfileStub).to.have.been.calledOnceWithExactly({ systemWideUserId: testSystemId });
     });
 
+    it('Handles badly formatted email addresses', async () => {
+        const expectedEmail = 'user@email.com';
+        const inputEmail = 'user@EMAIL.com ';
+        const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.lookupByContactDetails'), false, { phoneOrEmail: expectedEmail, countryCode: 'ZAF' });
+        const testEvent = helper.wrapParamsWithPath({ phoneOrEmail: inputEmail }, 'seek', testSystemId);
+
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
+        fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
+
+        const result = await handler.directRequestManagement(testEvent);
+
+        expect(result).to.exist;
+        expect(result.statusCode).to.equal(200);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+    });
+
+    it('Also transforms phone numbers appropriately', async () => {
+        const inputPhone = '081 307 4085';
+        const expectedPhone = '27813074085';
+        
+        const lambdaArgs = helper.wrapLambdaInvoc(config.get('lambdas.lookupByContactDetails'), false, { phoneOrEmail: expectedPhone, countryCode: 'ZAF' });
+        const testEvent = helper.wrapParamsWithPath({ phoneOrEmail: inputPhone }, 'seek', testSystemId);
+
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ systemWideUserId: testSystemId })})})});
+        fetchProfileStub.withArgs({ systemWideUserId: testSystemId }).resolves(testProfile);
+
+        const result = await handler.directRequestManagement(testEvent);
+
+        expect(result).to.exist;
+        expect(result.statusCode).to.equal(200);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(lambdaArgs);
+    });
+
     it('Obtains referral code', async () => {
         const testReferralPayload = { referralCode: 'LETMEIN', countryCode: 'ZAF', includeFloatDefaults: true };
         const testReferralDetails = { referralCode: 'LETMEIN', context: { boostAmountOffered: 'BIGCHEESE' } };    

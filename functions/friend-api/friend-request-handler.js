@@ -46,11 +46,11 @@ const generateRequestCode = async () => {
 };
 
 const identifyContactType = (contact) => {
-    if (validator.isEmail(contact)) {
+    if (validator.isEmail(contact.trim())) {
         return 'EMAIL';
     }
     
-    if (validator.isMobilePhone(contact, ['en-ZA'])) {
+    if (validator.isMobilePhone(contact.trim(), ['en-ZA'])) {
         return 'PHONE';
     }
 
@@ -58,24 +58,31 @@ const identifyContactType = (contact) => {
 };
 
 const extractValidateFormatContact = (phoneOrEmail) => {
-    const contactType = identifyContactType(phoneOrEmail);
+    if (!phoneOrEmail) {
+        return { contactType: 'INVALID' };
+    }
+    
+    let contactMethod = phoneOrEmail.replace(/\s/g,'').toLowerCase();
+    const contactType = identifyContactType(contactMethod);
+    
     if (!contactType) {
-        throw new Error(`Error! Invalid target contact: ${phoneOrEmail}`);
+        // so we pick up frequency in here
+        logger(`FATAL_ERROR: Invalid target contact: ${phoneOrEmail}`);
+        return { contactType: 'INVALID' };
     }
-
-    let contactMethod = '';
-    if (contactType === 'EMAIL') {
-        contactMethod = phoneOrEmail.trim().toLowerCase();
-    }
-
+    
     if (contactType === 'PHONE') {
-        contactMethod = phoneOrEmail; // todo : apply simple formatting
+        contactMethod = contactMethod.replace(/^0/,'27'); // todo : apply simple formatting
     }
 
     return { contactType, contactMethod };
 };
 
 const checkForUserWithContact = async (contactDetails) => {
+    if (!contactDetails.contactMethod) {
+        return null;
+    }
+    
     const lookUpPayload = { phoneOrEmail: contactDetails.contactMethod, countryCode: 'ZAF' };
     const lookUpInvoke = invokeLambda(config.get('lambdas.lookupByContactDetails'), lookUpPayload);
     const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
@@ -96,8 +103,13 @@ module.exports.seekFriend = async (event) => {
         if (!userDetails) {
             return { statusCode: 403 };
         }
+        
         const { phoneOrEmail } = opsUtil.extractParamsFromEvent(event);
         const contactDetails = extractValidateFormatContact(phoneOrEmail);
+        if (contactDetails.contactType === 'INVALID') {
+            return { statusCode: 400, body: 'Invalid contact detail' };
+        }
+
         const userResult = await checkForUserWithContact(contactDetails);
         if (!userResult) {
             return { statusCode: 404 };
@@ -193,7 +205,6 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
 };
 
 const handleUserNotFound = async (friendRequest) => {
-    
     const { customShareMessage, requestCode } = friendRequest;
     const minifiedMessage = customShareMessage ? customShareMessage.replace(/\n\s*\n/g, '\n') : null;
     friendRequest.customShareMessage = minifiedMessage;
