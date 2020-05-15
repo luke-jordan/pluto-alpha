@@ -21,6 +21,8 @@ const lamdbaInvokeStub = sinon.stub();
 const fetchAccountStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
+const fecthSavingHeatStub = sinon.stub();
+
 const publishUserEventStub = sinon.stub();
 const insertFriendshipStub = sinon.stub();
 const countMutualFriendsStub = sinon.stub();
@@ -28,7 +30,6 @@ const countMutualFriendsStub = sinon.stub();
 const testAccountId = uuid();
 const testInitiatedUserId = uuid();
 const testTargetUserId = uuid();
-const testAcceptedUserId = uuid();
 const testRelationshipId = uuid();
 const testRequestId = uuid();
 
@@ -50,6 +51,7 @@ const handler = proxyquire('../friend-request-handler', {
         'countMutualFriends': countMutualFriendsStub,
         'fetchAccountIdForUser': fetchAccountStub,
         'fetchUserProfile': fetchProfileStub,
+        'fetchSavingHeatFromCache': fecthSavingHeatStub,
         '@noCallThru': true
     },
     './persistence/write.friends': {
@@ -87,13 +89,19 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
         }
     };
 
-    const testProfile = {
+    const testInitiatedProfile = {
         systemWideUserId: testInitiatedUserId,
         personalName: 'Yao',
         familyName: 'Shu',
         phoneNumber: '02130940334',
         calledName: 'Yao Shu',
-        emailAddress: 'yaoshu@orkhon.com'
+        emailAddress: 'yaoshu@orkhon.com',
+        userStatus: 'USER_HAS_SAVED'
+    };
+
+    const testTargetProfile = {
+        systemWideUserId: testTargetUserId,
+        userStatus: 'USER_HAS_SAVED'
     };
 
     const expectedFriendship = {
@@ -117,7 +125,7 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     const mockFriendship = {
         relationshipId: testRelationshipId,
         initiatedUserId: testInitiatedUserId,
-        acceptedUserId: testAcceptedUserId,
+        acceptedUserId: testTargetUserId,
         relationshipStatus: 'ACTIVE',
         shareItems: ['LAST_ACTIVITY']
     };
@@ -128,12 +136,17 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
 
     it('Persists new friendship', async () => {
         fetchRequestStub.withArgs(testRequestId).resolves(testFriendRequest);
-        fetchProfileStub.resolves(testProfile);
+        
+        fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId, forceCacheReset: true}).resolves(testInitiatedProfile);
+        fetchProfileStub.withArgs({ systemWideUserId: testTargetUserId, forceCacheReset: true}).resolves(testTargetProfile);
+        
         insertFriendshipStub.withArgs(testRequestId, testInitiatedUserId, testTargetUserId).resolves(mockFriendship);
         publishUserEventStub.resolves({ result: 'SUCCESS' });
+        
         countMutualFriendsStub.resolves([{ [testInitiatedUserId]: 23 }]);
         fetchAccountStub.resolves({ [testInitiatedUserId]: testAccountId });
-        redisGetStub.resolves([JSON.stringify(mockResponseFromCache)]);
+        // fecthSavingHeatStub.resolves([JSON.stringify(mockResponseFromCache)]);
+        fecthSavingHeatStub.resolves([mockResponseFromCache]);
 
         const insertionResult = await handler.directRequestManagement(helper.wrapParamsWithPath({ requestId: testRequestId }, 'accept', testTargetUserId));
         
@@ -142,25 +155,36 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     });
 
     it('Fails where accepting user is not target user', async () => {
-        const expectedResult = { message: 'Error! Accepting user is not friendship target' };
+        const wrongUserId = uuid();
         fetchRequestStub.withArgs(testRequestId).resolves({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
-        const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testAcceptedUserId, 'ORDINARY_USER'));
+        const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, wrongUserId, 'ORDINARY_USER'));
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
+        expect(insertionResult).to.deep.equal({ statusCode: 400, body: 'Error! Accepting user is not friendship target' });
         expect(insertFriendshipStub).to.have.not.been.called;
     });
 
     it('Fails on invalid request id', async () => {
-        const expectedResult = { message: `Error! No friend request found for request id: ${testRequestId}` };
         fetchRequestStub.withArgs(testRequestId).resolves();
-        const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testAcceptedUserId, 'ORDINARY_USER'));
+        const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testTargetUserId, 'ORDINARY_USER'));
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
+        expect(insertionResult).to.deep.equal({ statusCode: 404, body: 'Error! No request found for that ID' });
         expect(insertFriendshipStub).to.have.not.been.called;
     });
 
+    it('Fails where either user has not finished a save yet', async () => {
+        fetchRequestStub.withArgs(testRequestId).resolves(testFriendRequest);
+        fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId, forceCacheReset: true }).resolves(testInitiatedProfile);
+        fetchProfileStub.withArgs({ systemWideUserId: testTargetUserId, forceCacheReset: true }).
+            resolves({ systemWideUserId: testTargetUserId, userStatus: 'ACCOUNT_OPENED' });
+        const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent({ requestId: testRequestId }, testTargetUserId));
+        expect(insertionResult).to.exist;
+        expect(insertionResult).to.deep.equal({ statusCode: 400, body: 'Error! One or both users has not finished their first save yet' });
+        expect(insertFriendshipStub).to.not.have.been.called;
+        expect(publishUserEventStub).to.not.have.been.called;
+    });
+
     it('Rejects unauthorized requests', async () => {
-        const testEvent = { initiatedUserId: testInitiatedUserId, acceptedUserId: testAcceptedUserId };
+        const testEvent = { initiatedUserId: testInitiatedUserId, acceptedUserId: testTargetUserId };
         const insertionResult = await handler.acceptFriendshipRequest({ httpMethod: 'POST', body: JSON.stringify(testEvent) });
         expect(insertionResult).to.exist;
         expect(insertionResult).to.deep.equal({ statusCode: 403 });
@@ -168,11 +192,10 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     });
 
     it('Fails on invalid parameters', async () => {
-        const expectedResult = { message: 'Error! Missing requestId' };
         const testEvent = { initiatedUserId: testInitiatedUserId };
         const insertionResult = await handler.acceptFriendshipRequest(helper.wrapEvent(testEvent, testInitiatedUserId, 'ORDINARY_USER'));
         expect(insertionResult).to.exist;
-        expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedResult, 500));
+        expect(insertionResult).to.deep.equal({ statusCode: 400, body: 'Error! Missing requestId' });
         expect(insertFriendshipStub).to.have.not.been.called;
     });
 

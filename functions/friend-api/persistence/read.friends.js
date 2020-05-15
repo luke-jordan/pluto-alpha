@@ -29,7 +29,8 @@ const relevantProfileColumns = [
     'emai_adress',
     'phone_number',
     'referral_code',
-    'country_code'
+    'country_code',
+    'user_status'
 ];
 
 const safeRedisGet = async (key) => {
@@ -64,16 +65,17 @@ const fetchUserIdForAccountFromDB = async (accountId) => {
 
 const obtainFromDbAndCache = async (systemWideUserId) => {
     const userProfile = await fetchUserProfileFromDB(systemWideUserId);
-    await redis.set(systemWideUserId, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
+    const profileKey = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
+    await redis.set(profileKey, JSON.stringify(userProfile), 'EX', PROFILE_CACHE_TTL_IN_SECONDS);
     logger(`Successfully fetched 'user profile' from database and stored in cache`);
     return userProfile;
 };
 
-const fetchUserProfileFromCacheOrDB = async (systemWideUserId) => {
+const fetchUserProfileFromCacheOrDB = async (systemWideUserId, forceCacheReset = false) => {
     logger(`Fetching 'user profile' from database or cache`);
 
     const key = `${config.get('cache.keyPrefixes.profile')}::${systemWideUserId}`;
-    const responseFromCache = await safeRedisGet(key);
+    const responseFromCache = await (!forceCacheReset && safeRedisGet(key));
     if (!responseFromCache) {
         return obtainFromDbAndCache(systemWideUserId);
     }
@@ -100,8 +102,26 @@ const fetchUserIdForAccountFromCacheOrDB = async (accountId) => {
 };
 
 /**
+ * Utility method to get account IDs from cache
+ */
+module.exports.fetchSavingHeatFromCache = async (accountIds) => {
+    try {
+        const accountIdsWithKey = accountIds.map((accountId) => `$${config.get('cache.keyPrefixes.savingHeat')}::${accountId}`);
+        const cachedSavingHeatForAccounts = await redis.mget(...accountIdsWithKey);
+        logger('Got cached savings heat for accounts:', cachedSavingHeatForAccounts);
+        return cachedSavingHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
+    } catch (err) {
+        logger('FATAL_ERROR: Redis connection closed', err);
+        return [];
+    }
+};
+
+/**
  * This function fetches a user's profile. It accepts either the users system id or an array of the users accound ids
- * @param {object} params An object either of the form { systemWideUserId: '6802ad23-e9...' } or { accountIds: ['d7387b3a-40...', '30cae50a-2e...', ...]}
+ * @param {object} params An object with either a user ID or a set of account IDs
+ * @property {string} systemWideUserId userId
+ * @property {array} accountIds List of account Ids
+ * @property {boolean} forceCacheReset Force cache reset on profile (e.g., if real-time sensitive operation). Optional.
  */
 module.exports.fetchUserProfile = async (params) => {
     if (!params.systemWideUserId && !params.accountIds) {
@@ -120,7 +140,8 @@ module.exports.fetchUserProfile = async (params) => {
     }
     logger('Got user id:', systemWideUserId);
 
-    return fetchUserProfileFromCacheOrDB(systemWideUserId);
+    const forceCacheReset = params.forceCacheReset || false;
+    return fetchUserProfileFromCacheOrDB(systemWideUserId, forceCacheReset);
 };
 
 /**
@@ -253,9 +274,9 @@ module.exports.countMutualFriends = async (targetUserId, initiatedUserIds) => {
     const mutualFriendCounts = friendsForInitiatedUsers.map((friendships) => {
         const initiatedUserId = Object.keys(friendships)[0];
         const friendIdsForInitiatedUser = friendships[initiatedUserId].map((friendship) => friendship.initiatedUserId || friendship.acceptedUserId);
-        logger('Found friends for initiator:', friendIdsForInitiatedUser);
+        // logger('Found friends for initiator:', friendIdsForInitiatedUser);
         const mutualFriends = friendIdsForTargetUser.filter((friendId) => friendIdsForInitiatedUser.includes(friendId));
-        logger('Found mutual friends:', mutualFriends);
+        // logger('Found mutual friends:', mutualFriends);
 
         return { [initiatedUserId]: mutualFriends.length };
     });

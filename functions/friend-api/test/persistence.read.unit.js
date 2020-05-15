@@ -50,7 +50,8 @@ const expectedProfileColumns = [
     'emai_adress',
     'phone_number',
     'referral_code',
-    'country_code'
+    'country_code',
+    'user_status'
 ];
 
 describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
@@ -71,7 +72,8 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         familyName: 'Er',
         phoneNumber: '16061110000',
         calledName: 'Lao Tzu',
-        emailAddress: 'laotzu@tao.com'
+        emailAddress: 'laotzu@tao.com',
+        userStatus: 'USER_HAS_SAVED'
     };
 
     beforeEach(() => {
@@ -84,6 +86,8 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchUserProfile(profileFetchEvent);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
+        expect(redisGetStub).to.have.been.called;
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(`FRIENDS_PROFILE::${testSystemId}`, JSON.stringify(expectedUserProfile), 'EX', 25200);
     });
 
     it('Fetches user profile from db, given account ids', async () => {
@@ -101,6 +105,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchUserProfile({ systemWideUserId: testSystemId });
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
+        expect(redisSetStub).to.not.have.been.called;
     });
 
     it('Fetches user profile from cache, given account id', async () => {
@@ -109,6 +114,16 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         const resultOfFetch = await persistence.fetchUserProfile({ accountIds: [testAccountId, testAccountId] });
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
+    });
+
+    it('Forces cache refresh, if told to do so', async () => {
+        const profileFetchEvent = { systemWideUserId: testSystemId, forceCacheReset: true };
+        fetchStub.withArgs(profileTable, { systemWideUserId: testSystemId }, expectedProfileColumns).resolves(expectedUserProfile);
+        const resultOfFetch = await persistence.fetchUserProfile(profileFetchEvent);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(expectedUserProfile);
+        expect(redisGetStub).to.not.have.been.called;
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(`FRIENDS_PROFILE::${testSystemId}`, JSON.stringify(expectedUserProfile), 'EX', 25200);
     });
 
     it('Fetches user user from DB, given account id', async () => {
