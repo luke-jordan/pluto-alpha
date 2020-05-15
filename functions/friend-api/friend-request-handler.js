@@ -16,13 +16,7 @@ const persistenceWrite = require('./persistence/write.friends');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const Redis = require('ioredis');
-const redis = new Redis({
-    port: config.get('cache.port'),
-    host: config.get('cache.host'),
-    retryStrategy: () => `dont retry`,
-    keyPrefix: `${config.get('cache.keyPrefixes.savingHeat')}::`
-});
+const ALLOWED_USER_STATUS = ['USER_HAS_SAVED', 'USER_HAS_WITHDRAWN'];
 
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,
@@ -39,12 +33,6 @@ const invokeSavingHeatLambda = async (accountIds) => {
     const heatPayload = JSON.parse(savingHeatResult.Payload);
     const { details } = heatPayload;
     return details;
-};
-
-const fetchSavingHeatFromCache = async (accountIds) => {
-    const cachedSavingHeatForAccounts = await redis.mget(...accountIds);
-    logger('Got cached savings heat for accounts:', cachedSavingHeatForAccounts);
-    return cachedSavingHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
 };
 
 const generateRequestCode = async () => {
@@ -458,16 +446,13 @@ module.exports.findFriendRequestsForUser = async (event) => {
 };
 
 // todo: consolidate like functions
-const assembleFriendshipResponse = async (initiatedUserId, friendship) => {
-    const [profile, accountIdMap] = await Promise.all([
-        persistenceRead.fetchUserProfile({ systemWideUserId: initiatedUserId }),
-        persistenceRead.fetchAccountIdForUser(initiatedUserId)
-    ]);
+const assembleFriendshipResponse = async (initiatedUserId, friendship, initiatorProfile) => {
+    const accountIdMap = await persistenceRead.fetchAccountIdForUser(initiatedUserId);
 
     let profileSavingHeat = null;
 
     const accountId = accountIdMap[initiatedUserId];
-    const savingHeatFromCache = await fetchSavingHeatFromCache([accountId]);
+    const savingHeatFromCache = await persistenceRead.fetchSavingHeatFromCache([accountId]);
     logger('Saving heat from cache:', savingHeatFromCache);
 
     if (savingHeatFromCache.length === 0) {
@@ -482,10 +467,10 @@ const assembleFriendshipResponse = async (initiatedUserId, friendship) => {
 
     const transformedProfile = {
         relationshipId: friendship.relationshipId,
-        personalName: profile.personalName,
-        familyName: profile.familyName,
-        calledName: profile.calledName ? profile.calledName : profile.personalName,
-        contactMethod: profile.phoneNumber || profile.emailAddress,
+        personalName: initiatorProfile.personalName,
+        familyName: initiatorProfile.familyName,
+        calledName: initiatorProfile.calledName ? initiatorProfile.calledName : initiatorProfile.personalName,
+        contactMethod: initiatorProfile.phoneNumber || initiatorProfile.emailAddress,
         savingHeat: profileSavingHeat.savingHeat,
         shareItems: friendship.shareItems
     };
@@ -515,18 +500,27 @@ module.exports.acceptFriendshipRequest = async (event) => {
         const requestId = params.requestId;
 
         if (!requestId) {
-            throw new Error('Error! Missing requestId');
+            return { statusCode: 400, body: 'Error! Missing requestId' };
         }
 
         const friendshipRequest = await persistenceRead.fetchFriendshipRequestById(requestId);
         logger('Fetched friendship request:', friendshipRequest);
         if (!friendshipRequest) {
-            throw new Error(`Error! No friend request found for request id: ${requestId}`);
+            return { statusCode: 404, body: 'Error! No request found for that ID' };
         }
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
         if (targetUserId !== systemWideUserId) {
-            throw new Error('Error! Accepting user is not friendship target');
+            return { statusCode: 400, body: 'Error! Accepting user is not friendship target' };
+        }
+
+        const [initiatedUser, targetUser] = await Promise.all([
+            persistenceRead.fetchUserProfile({ systemWideUserId: initiatedUserId, forceCacheReset: true }),
+            persistenceRead.fetchUserProfile({ systemWideUserId: targetUserId, forceCacheReset: true })
+        ]);
+
+        if (!ALLOWED_USER_STATUS.includes(initiatedUser.userStatus) || !ALLOWED_USER_STATUS.includes(targetUser.userStatus)) {
+            return { statusCode: 400, body: 'Error! One or both users has not finished their first save yet'};
         }
         
         const creationResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
@@ -538,7 +532,7 @@ module.exports.acceptFriendshipRequest = async (event) => {
         const establishedEvent = publisher.publishUserEvent(initiatedUserId, 'FRIEND_REQUEST_INITIATED_ACCEPTED', { context: eventContext });
         await Promise.all([acceptedEvent, establishedEvent]);
 
-        const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult);
+        const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult, initiatedUser);
 
         return opsUtil.wrapResponse(transformedResult);        
     } catch (err) {
