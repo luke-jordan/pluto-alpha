@@ -62,7 +62,7 @@ const extractValidateFormatContact = (phoneOrEmail) => {
         return { contactType: 'INVALID' };
     }
     
-    let contactMethod = phoneOrEmail.replace(/\s/g,'').toLowerCase();
+    let contactMethod = phoneOrEmail.replace(/\s/g, '').toLowerCase();
     const contactType = identifyContactType(contactMethod);
     
     if (!contactType) {
@@ -72,7 +72,7 @@ const extractValidateFormatContact = (phoneOrEmail) => {
     }
     
     if (contactType === 'PHONE') {
-        contactMethod = contactMethod.replace(/^0/,'27'); // todo : apply simple formatting
+        contactMethod = contactMethod.replace(/^0/, '27');
     }
 
     return { contactType, contactMethod };
