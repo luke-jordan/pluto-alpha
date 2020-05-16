@@ -283,6 +283,10 @@ module.exports.addFriendshipRequest = async (event) => {
             throw new Error('Error! targetUserId or targetPhoneOrEmail must be provided');
         }
 
+        if (friendRequest.targetUserId === systemWideUserId) {
+            return { statusCode: 400, body: 'Error! Cannot form friendship with self' };
+        }
+
         friendRequest.initiatedUserId = systemWideUserId;
 
         if (friendRequest.targetPhoneOrEmail) {
@@ -355,6 +359,10 @@ module.exports.initiateRequestFromReferralCode = async (event) => {
         }
 
         const { creatingUserId: initiatedUserId } = codeDetails;
+        if (targetUserId === initiatedUserId) {
+            logger('SECURITY_ERROR: User trying to friend themselves');
+            return { result: 'FAILURE' };
+        }
         
         // lots to fix in here
         const { emailAddress, phoneNumber } = event;
@@ -407,12 +415,22 @@ module.exports.connectFriendshipRequest = async (event) => {
         }
 
         const { systemWideUserId } = userDetails;
-        const { requestCode } = opsUtil.extractParamsFromEvent(event);
-
-        const updateResult = await persistenceWrite.connectUserToFriendRequest(systemWideUserId, requestCode);
-        if (updateResult.length === 0) {
+        const { requestCode: rawRequestCode } = opsUtil.extractParamsFromEvent(event);
+        if (!rawRequestCode) {
+            return { statusCode: 400 };
+        }
+        
+        const requestCode = rawRequestCode.trim().toUpperCase();
+        const friendRequest = await persistenceRead.fetchFriendshipRequestByCode(requestCode);
+        if (!friendRequest) {
             return opsUtil.wrapResponse({ result: 'NOT_FOUND' }, 404);
         }
+
+        if (friendRequest.initiatedUserId === systemWideUserId) {
+            return opsUtil.wrapResponse({ result: 'CANNOT_CONNECT_SELF' }, 400);
+        }
+
+        const updateResult = await persistenceWrite.connectUserToFriendRequest(systemWideUserId, requestCode);
 
         await publisher.publishUserEvent('FRIEND_REQUEST_CONNECTED_VIA_CODE', systemWideUserId, { requestCode, updateResult });
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});

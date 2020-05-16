@@ -20,9 +20,11 @@ const lamdbaInvokeStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const ignoreRequestStub = sinon.stub();
 const connectUserStub = sinon.stub();
+
 const fetchAllRequestsStub = sinon.stub();
 const fetchSingleRequestStub = sinon.stub();
 const countMutualFriendsStub = sinon.stub();
+const fetchRequestByCodeStub = sinon.stub();
 
 const publishUserEventStub = sinon.stub();
 
@@ -48,6 +50,7 @@ const handler = proxyquire('../friend-request-handler', {
         'fetchFriendshipRequestById': fetchSingleRequestStub,
         'countMutualFriends': countMutualFriendsStub,
         'fetchUserProfile': fetchProfileStub,
+        'fetchFriendshipRequestByCode': fetchRequestByCodeStub,
         '@noCallThru': true
     },
     './persistence/write.friends': {
@@ -65,8 +68,8 @@ const handler = proxyquire('../friend-request-handler', {
     }
 });
 
-const resetStubs = () => helper.resetStubs(fetchProfileStub, connectUserStub, countMutualFriendsStub, publishUserEventStub,
-    fetchAllRequestsStub, ignoreRequestStub, lamdbaInvokeStub);
+const resetStubs = () => helper.resetStubs(fetchProfileStub, fetchRequestByCodeStub, connectUserStub, countMutualFriendsStub, 
+    publishUserEventStub, fetchAllRequestsStub, ignoreRequestStub, lamdbaInvokeStub);
 
 describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
     const testRequestCode = 'BEAR CELL';
@@ -79,6 +82,7 @@ describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
     it('Connects target user to friend request', async () => {
         const testEvent = helper.wrapEvent({ requestCode: testRequestCode }, testTargetUserId, 'ORDINARY_USER');
 
+        fetchRequestByCodeStub.resolves({ initiatedUserId: testInitiatedUserId, targetUserId: testTargetUserId });
         connectUserStub.withArgs(testTargetUserId, testRequestCode).resolves([{ requestId: testRequestId, updatedTime: testUpdatedTime }]);
 
         const connectionResult = await handler.connectFriendshipRequest(testEvent);
@@ -103,6 +107,7 @@ describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
     });
 
     it('Returns not found if no code', async () => {
+        fetchRequestByCodeStub.resolves(null);
         connectUserStub.withArgs(testTargetUserId, testRequestCode).resolves([]);
         const testEvent = helper.wrapEvent({ requestCode: testRequestCode }, testTargetUserId, 'ORDINARY_USER');
         const connectionResult = await handler.connectFriendshipRequest(testEvent);

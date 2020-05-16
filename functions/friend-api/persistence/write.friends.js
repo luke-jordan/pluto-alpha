@@ -274,6 +274,10 @@ const checkForExistingFriendship = async (initiatedUserId, acceptedUserId) => {
  * @param {Array} shareItems An array describing what the users in a friendship have agreed to share. Valid elements include 'ACTIVITY_LEVEL', 'ACTIVITY_COUNT', 'SAVE_VALUES', and 'BALANCE'
  */
 module.exports.insertFriendship = async (requestId, initiatedUserId, acceptedUserId, shareItems) => {
+    if (initiatedUserId === acceptedUserId) {
+        throw Error('Cannot be friends with self');
+    }
+
     const relationshipId = uuid();
 
     const relationshipStatus = 'ACTIVE';
