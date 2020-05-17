@@ -49,6 +49,11 @@ const stripDownToPermitted = (shareItems, transaction) => {
         return null;
     }
 
+    if (!transaction) { 
+        logger('No transaction in activity list, exit');
+        return null;
+    }
+
     const strippedActivity = {
         creationTime: transaction.creationTime,
         settlementTime: transaction.settlementTime 
@@ -69,7 +74,7 @@ const transformProfile = async (profile, friendshipDetails, accountMaps) => {
     // logger('Map thing: ', userAccountMap);
     const profileAccountId = userAccountMap[profile.systemWideUserId];
     // logger('Profile account ID: ', profileAccountId);
-    logger('And from saving heat: ', accountAndSavingHeatMap[profileAccountId]);
+    // logger('And from saving heat: ', accountAndSavingHeatMap[profileAccountId]);
     const { savingHeat, recentActivity } = accountAndSavingHeatMap[profileAccountId];
         
     const targetFriendship = friendships.filter((friendship) => friendship.initiatedUserId === profile.systemWideUserId ||
@@ -211,7 +216,7 @@ module.exports.obtainFriends = async (event) => {
     
         const profileRequests = friendUserIds.map((userId) => persistenceRead.fetchUserProfile({ systemWideUserId: userId }));
         const friendProfiles = await Promise.all(profileRequests);
-        logger('Got friend profiles:', friendProfiles);
+        logger('Got friend profiles:', friendProfiles.length);
 
         const userAccountArray = await Promise.all(friendUserIds.map((userId) => persistenceRead.fetchAccountIdForUser(userId)));
         logger('Got user accounts from persistence:', userAccountArray);

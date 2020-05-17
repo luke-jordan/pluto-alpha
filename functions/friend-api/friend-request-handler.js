@@ -16,13 +16,7 @@ const persistenceWrite = require('./persistence/write.friends');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const Redis = require('ioredis');
-const redis = new Redis({
-    port: config.get('cache.port'),
-    host: config.get('cache.host'),
-    retryStrategy: () => `dont retry`,
-    keyPrefix: `${config.get('cache.keyPrefixes.savingHeat')}::`
-});
+const ALLOWED_USER_STATUS = ['USER_HAS_SAVED', 'USER_HAS_WITHDRAWN'];
 
 const invokeLambda = (functionName, payload, sync = true) => ({
     FunctionName: functionName,
@@ -41,12 +35,6 @@ const invokeSavingHeatLambda = async (accountIds) => {
     return details;
 };
 
-const fetchSavingHeatFromCache = async (accountIds) => {
-    const cachedSavingHeatForAccounts = await redis.mget(...accountIds);
-    logger('Got cached savings heat for accounts:', cachedSavingHeatForAccounts);
-    return cachedSavingHeatForAccounts.filter((result) => result !== null).map((result) => JSON.parse(result));
-};
-
 const generateRequestCode = async () => {
     const activeRequestCodes = await persistenceRead.fetchActiveRequestCodes();
     let assembledRequestCode = randomWord({ exactly: 2, join: ' ' }).toUpperCase();
@@ -58,11 +46,11 @@ const generateRequestCode = async () => {
 };
 
 const identifyContactType = (contact) => {
-    if (validator.isEmail(contact)) {
+    if (validator.isEmail(contact.trim())) {
         return 'EMAIL';
     }
     
-    if (validator.isMobilePhone(contact, ['en-ZA'])) {
+    if (validator.isMobilePhone(contact.trim(), ['en-ZA'])) {
         return 'PHONE';
     }
 
@@ -70,24 +58,31 @@ const identifyContactType = (contact) => {
 };
 
 const extractValidateFormatContact = (phoneOrEmail) => {
-    const contactType = identifyContactType(phoneOrEmail);
+    if (!phoneOrEmail) {
+        return { contactType: 'INVALID' };
+    }
+    
+    let contactMethod = phoneOrEmail.replace(/\s/g, '').toLowerCase();
+    const contactType = identifyContactType(contactMethod);
+    
     if (!contactType) {
-        throw new Error(`Error! Invalid target contact: ${phoneOrEmail}`);
+        // so we pick up frequency in here
+        logger(`FATAL_ERROR: Invalid target contact: ${phoneOrEmail}`);
+        return { contactType: 'INVALID' };
     }
-
-    let contactMethod = '';
-    if (contactType === 'EMAIL') {
-        contactMethod = phoneOrEmail.trim().toLowerCase();
-    }
-
+    
     if (contactType === 'PHONE') {
-        contactMethod = phoneOrEmail; // todo : apply simple formatting
+        contactMethod = contactMethod.replace(/^0/, '27');
     }
 
     return { contactType, contactMethod };
 };
 
 const checkForUserWithContact = async (contactDetails) => {
+    if (!contactDetails.contactMethod) {
+        return null;
+    }
+    
     const lookUpPayload = { phoneOrEmail: contactDetails.contactMethod, countryCode: 'ZAF' };
     const lookUpInvoke = invokeLambda(config.get('lambdas.lookupByContactDetails'), lookUpPayload);
     const systemWideIdResult = await lambda.invoke(lookUpInvoke).promise();
@@ -108,8 +103,13 @@ module.exports.seekFriend = async (event) => {
         if (!userDetails) {
             return { statusCode: 403 };
         }
+        
         const { phoneOrEmail } = opsUtil.extractParamsFromEvent(event);
         const contactDetails = extractValidateFormatContact(phoneOrEmail);
+        if (contactDetails.contactType === 'INVALID') {
+            return { statusCode: 400, body: 'Invalid contact detail' };
+        }
+
         const userResult = await checkForUserWithContact(contactDetails);
         if (!userResult) {
             return { statusCode: 404 };
@@ -205,7 +205,6 @@ const appendUserNameToRequest = async (userId, friendRequest) => {
 };
 
 const handleUserNotFound = async (friendRequest) => {
-    
     const { customShareMessage, requestCode } = friendRequest;
     const minifiedMessage = customShareMessage ? customShareMessage.replace(/\n\s*\n/g, '\n') : null;
     friendRequest.customShareMessage = minifiedMessage;
@@ -284,6 +283,10 @@ module.exports.addFriendshipRequest = async (event) => {
             throw new Error('Error! targetUserId or targetPhoneOrEmail must be provided');
         }
 
+        if (friendRequest.targetUserId === systemWideUserId) {
+            return { statusCode: 400, body: 'Error! Cannot form friendship with self' };
+        }
+
         friendRequest.initiatedUserId = systemWideUserId;
 
         if (friendRequest.targetPhoneOrEmail) {
@@ -356,6 +359,10 @@ module.exports.initiateRequestFromReferralCode = async (event) => {
         }
 
         const { creatingUserId: initiatedUserId } = codeDetails;
+        if (targetUserId === initiatedUserId) {
+            logger('SECURITY_ERROR: User trying to friend themselves');
+            return { result: 'FAILURE' };
+        }
         
         // lots to fix in here
         const { emailAddress, phoneNumber } = event;
@@ -408,12 +415,22 @@ module.exports.connectFriendshipRequest = async (event) => {
         }
 
         const { systemWideUserId } = userDetails;
-        const { requestCode } = opsUtil.extractParamsFromEvent(event);
-
-        const updateResult = await persistenceWrite.connectUserToFriendRequest(systemWideUserId, requestCode);
-        if (updateResult.length === 0) {
+        const { requestCode: rawRequestCode } = opsUtil.extractParamsFromEvent(event);
+        if (!rawRequestCode) {
+            return { statusCode: 400 };
+        }
+        
+        const requestCode = rawRequestCode.trim().toUpperCase();
+        const friendRequest = await persistenceRead.fetchFriendshipRequestByCode(requestCode);
+        if (!friendRequest) {
             return opsUtil.wrapResponse({ result: 'NOT_FOUND' }, 404);
         }
+
+        if (friendRequest.initiatedUserId === systemWideUserId) {
+            return opsUtil.wrapResponse({ result: 'CANNOT_CONNECT_SELF' }, 400);
+        }
+
+        const updateResult = await persistenceWrite.connectUserToFriendRequest(systemWideUserId, requestCode);
 
         await publisher.publishUserEvent('FRIEND_REQUEST_CONNECTED_VIA_CODE', systemWideUserId, { requestCode, updateResult });
         return opsUtil.wrapResponse({ result: 'SUCCESS', updateLog: { updateResult }});
@@ -458,16 +475,13 @@ module.exports.findFriendRequestsForUser = async (event) => {
 };
 
 // todo: consolidate like functions
-const assembleFriendshipResponse = async (initiatedUserId, friendship) => {
-    const [profile, accountIdMap] = await Promise.all([
-        persistenceRead.fetchUserProfile({ systemWideUserId: initiatedUserId }),
-        persistenceRead.fetchAccountIdForUser(initiatedUserId)
-    ]);
+const assembleFriendshipResponse = async (initiatedUserId, friendship, initiatorProfile) => {
+    const accountIdMap = await persistenceRead.fetchAccountIdForUser(initiatedUserId);
 
     let profileSavingHeat = null;
 
     const accountId = accountIdMap[initiatedUserId];
-    const savingHeatFromCache = await fetchSavingHeatFromCache([accountId]);
+    const savingHeatFromCache = await persistenceRead.fetchSavingHeatFromCache([accountId]);
     logger('Saving heat from cache:', savingHeatFromCache);
 
     if (savingHeatFromCache.length === 0) {
@@ -482,10 +496,10 @@ const assembleFriendshipResponse = async (initiatedUserId, friendship) => {
 
     const transformedProfile = {
         relationshipId: friendship.relationshipId,
-        personalName: profile.personalName,
-        familyName: profile.familyName,
-        calledName: profile.calledName ? profile.calledName : profile.personalName,
-        contactMethod: profile.phoneNumber || profile.emailAddress,
+        personalName: initiatorProfile.personalName,
+        familyName: initiatorProfile.familyName,
+        calledName: initiatorProfile.calledName ? initiatorProfile.calledName : initiatorProfile.personalName,
+        contactMethod: initiatorProfile.phoneNumber || initiatorProfile.emailAddress,
         savingHeat: profileSavingHeat.savingHeat,
         shareItems: friendship.shareItems
     };
@@ -515,18 +529,27 @@ module.exports.acceptFriendshipRequest = async (event) => {
         const requestId = params.requestId;
 
         if (!requestId) {
-            throw new Error('Error! Missing requestId');
+            return { statusCode: 400, body: 'Error! Missing requestId' };
         }
 
         const friendshipRequest = await persistenceRead.fetchFriendshipRequestById(requestId);
         logger('Fetched friendship request:', friendshipRequest);
         if (!friendshipRequest) {
-            throw new Error(`Error! No friend request found for request id: ${requestId}`);
+            return { statusCode: 404, body: 'Error! No request found for that ID' };
         }
 
         const { initiatedUserId, targetUserId } = friendshipRequest;
         if (targetUserId !== systemWideUserId) {
-            throw new Error('Error! Accepting user is not friendship target');
+            return { statusCode: 400, body: 'Error! Accepting user is not friendship target' };
+        }
+
+        const [initiatedUser, targetUser] = await Promise.all([
+            persistenceRead.fetchUserProfile({ systemWideUserId: initiatedUserId, forceCacheReset: true }),
+            persistenceRead.fetchUserProfile({ systemWideUserId: targetUserId, forceCacheReset: true })
+        ]);
+
+        if (!ALLOWED_USER_STATUS.includes(initiatedUser.userStatus) || !ALLOWED_USER_STATUS.includes(targetUser.userStatus)) {
+            return { statusCode: 400, body: 'Error! One or both users has not finished their first save yet'};
         }
         
         const creationResult = await persistenceWrite.insertFriendship(requestId, initiatedUserId, targetUserId, shareItems);
@@ -538,7 +561,7 @@ module.exports.acceptFriendshipRequest = async (event) => {
         const establishedEvent = publisher.publishUserEvent(initiatedUserId, 'FRIEND_REQUEST_INITIATED_ACCEPTED', { context: eventContext });
         await Promise.all([acceptedEvent, establishedEvent]);
 
-        const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult);
+        const transformedResult = await assembleFriendshipResponse(initiatedUserId, creationResult, initiatedUser);
 
         return opsUtil.wrapResponse(transformedResult);        
     } catch (err) {
