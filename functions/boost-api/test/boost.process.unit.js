@@ -46,7 +46,7 @@ const handler = proxyquire('../boost-process-handler', {
         'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
         'insertBoostAccount': insertBoostAccountsStub,
         'insertBoostAccountLogs': insertBoostLogStub,
-        'findAccountsForPooledRewards': findPooledAccountsStub
+        'findAccountsForPooledReward': findPooledAccountsStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
@@ -226,6 +226,8 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         
         const testAccountId = uuid();
         const testSavingTxId = uuid();
+
+        const pooledAccountIds = [uuid(), uuid(), uuid(), uuid()];
         
         const testEvent = {
             accountId: testAccountId,
@@ -240,6 +242,12 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         const boostFromPersistence = { ...mockBoostToFromPersistence };
         boostFromPersistence.boostId = testBoostId;
+        boostFromPersistence.rewardParameters = {
+            rewardType: 'POOLED',
+            poolContributionPerUser: { amount: 20000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            additionalBonusToPool: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            percentPoolAsReward: 0.05
+        };
         
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
@@ -258,6 +266,8 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             accountUserMap: mockAccountUserMap
         }]);
 
+        findPooledAccountsStub.resolves(pooledAccountIds);
+
         insertBoostLogStub.resolves([{ logId: testLogId, creationTime: mockPersistedTime }]);
 
         // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the float allocation lambda
@@ -272,6 +282,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             redemptionBoosts: [boostFromPersistence], 
             revocationBoosts: [], 
             affectedAccountsDict: expectedAccountDict,
+            boostParams: { accountIds: pooledAccountIds },
             event: testEvent
         };
 

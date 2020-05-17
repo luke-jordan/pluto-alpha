@@ -18,7 +18,8 @@ const calculatePooledBoostAmount = (boost, userCount) => {
     const { poolContributionPerUser, percentPoolAsReward, additionalBonusToPool } = boost.rewardParameters;
     const contribAmount = opsUtil.convertToUnit(poolContributionPerUser.amount, poolContributionPerUser.unit, DEFAULT_UNIT);
     const bonusAmount = opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, DEFAULT_UNIT);    
-    return (userCount * contribAmount * percentPoolAsReward) + bonusAmount;
+    const calculatedBoostAmount = (userCount * contribAmount * percentPoolAsReward) + bonusAmount;
+    return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 
 const generateMultiplier = (distribution) => {
@@ -45,7 +46,7 @@ const calculateRandomBoostAmount = (boost) => {
     }
 
     logger('Returning boost amt:', calculatedBoostAmount);
-    return calculatedBoostAmount;
+    return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 
 const calculateBoostAmount = (boost, params) => {
@@ -62,31 +63,29 @@ const calculateBoostAmount = (boost, params) => {
     return boost.boostAmount;
 };
 
-// note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
-// further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
-const generateFloatTransferInstructions = (affectedAccountDict, boost, revoke = false, boostParams = {}) => {
-    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
-    // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
-    const boostAmount = boost.rewardParameters ? calculateBoostAmount(boost, boostParams) : boost.boostAmount;
-    const amount = revoke ? -boostAmount : boostAmount;
-    const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
-    const recipients = recipientAccounts.map((recipientId) => ({ 
-        recipientId, amount, recipientType: 'END_USER_ACCOUNT'
-    }));
-    return {
-        floatId: boost.fromFloatId,
-        fromId: boost.fromBonusPoolId,
-        fromType: 'BONUS_POOL',
-        currency: boost.boostCurrency,
-        unit: boost.boostUnit,
-        identifier: boost.boostId,
-        relatedEntityType: transactionType,
-        allocType: transactionType, // for float allocation
-        allocState: 'SETTLED',
-        transactionType, // for matching account records
-        settlementStatus: 'SETTLED',
-        recipients
-    };
+const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation }) => {
+    const eventType = isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED';
+    logger('Affected accounts user dict: ', affectedAccountsUserDict);
+    const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
+        const context = {
+            accountId,
+            boostId: boost.boostId,
+            boostType: boost.boostType,
+            boostCategory: boost.boostCategory,
+            boostUpdateTimeMillis: boostUpdateTime.valueOf(),
+            boostAmount: `${isRevocation ? -boost.boostAmount : boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
+            transferResults,
+            triggeringEventContext: event.eventContext
+        };
+        const options = { context };
+        if (event.accountId && affectedAccountsUserDict[event.accountId]) {
+            options.initiator = affectedAccountsUserDict[event.accountId]['userId'];
+        }
+        return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, options);
+    });
+
+    logger('Publish result: ', publishPromises);
+    return publishPromises;
 };
 
 const triggerFloatTransfers = async (transferInstructions) => {
@@ -108,6 +107,88 @@ const triggerFloatTransfers = async (transferInstructions) => {
     }
 
     return JSON.parse(resultOfTransfer.body);
+};
+
+const handleTransferToBonusPool = async (boost, boostParams, event) => {
+    const accountIds = boostParams.accountIds;
+    const { amount, unit, currency } = boost.rewardParameters.poolContributionPerUser;
+    const recipients = accountIds.map((recipientId) => ({
+        recipientId, amount: -amount, recipientType: 'END_USER_ACCOUNT'
+    }));
+
+    const transferInstruction = {
+        floatId: boost.fromFloatId,
+        fromId: boost.fromBonusPoolId,
+        fromType: 'BONUS_POOL',
+        currency,
+        unit,
+        identifier: boost.boostId,
+        relatedEntityType: 'BOOST_REVERSAL',
+        allocType: 'BOOST_REVERSAL', // for float allocation
+        allocState: 'SETTLED',
+        transactionType: 'BOOST_REVERSAL', // for matching account records
+        settlementStatus: 'SETTLED',
+        recipients
+    };
+
+    const resultOfTransfer = await triggerFloatTransfers([transferInstruction]);
+    logger('Result of transfer to bonus pool:', resultOfTransfer);
+
+    const { boostId, boostType, boostCategory } = boost;
+    const affectedAccountDict = accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: {} }), {});
+
+    const resultOfPublish = await Promise.all([createPublishEventPromises({ 
+        boost: {
+            boostId,
+            boostType,
+            boostCategory,
+            boostAmount: amount,
+            boostUnit: unit,
+            boostCurrency: currency
+        },
+        boostUpdateTime: moment().valueOf(),
+        affectedAccountsUserDict: affectedAccountDict,
+        transferResults: resultOfTransfer,
+        event,
+        isRevocation: true
+    })]);
+
+    logger('Result of publish:', resultOfPublish);
+
+    return { resultOfTransfer, resultOfPublish };
+};
+
+// note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
+// further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
+const generateFloatTransferInstructions = async (affectedAccountDict, boost, revoke = false, boostParams = {}, event) => {
+    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
+    // if pooled reward handle initial transfers from accounts to bonus pool
+    if (boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED') {
+        const resultOfInitialTransfer = await handleTransferToBonusPool(boost, boostParams, event);
+        logger('Result of initial transfer to bonus pool:', resultOfInitialTransfer);
+    }
+
+    // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
+    const boostAmount = boost.rewardParameters ? calculateBoostAmount(boost, boostParams) : boost.boostAmount;
+    const amount = revoke ? -boostAmount : boostAmount;
+    const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
+    const recipients = recipientAccounts.map((recipientId) => ({ 
+        recipientId, amount, recipientType: 'END_USER_ACCOUNT'
+    }));
+    return {
+        floatId: boost.fromFloatId,
+        fromId: boost.fromBonusPoolId,
+        fromType: 'BONUS_POOL',
+        currency: boost.boostCurrency,
+        unit: boost.boostUnit,
+        identifier: boost.boostId,
+        relatedEntityType: transactionType,
+        allocType: transactionType, // for float allocation
+        allocState: 'SETTLED',
+        transactionType, // for matching account records
+        settlementStatus: 'SETTLED',
+        recipients
+    };
 };
 
 const generateMsgInstruction = (instructionId, destinationUserId, boost) => {
@@ -188,31 +269,6 @@ const generateMessageSendInvocation = (messageInstructions) => ({
     Payload: stringify({ instructions: messageInstructions })
 });
 
-const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation }) => {
-    const eventType = isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED';
-    logger('Affected accounts user dict: ', affectedAccountsUserDict);
-    const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
-        const context = {
-            accountId,
-            boostId: boost.boostId,
-            boostType: boost.boostType,
-            boostCategory: boost.boostCategory,
-            boostUpdateTimeMillis: boostUpdateTime.valueOf(),
-            boostAmount: `${isRevocation ? -boost.boostAmount : boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
-            transferResults,
-            triggeringEventContext: event.eventContext
-        };
-        const options = { context };
-        if (event.accountId && affectedAccountsUserDict[event.accountId]) {
-            options.initiator = affectedAccountsUserDict[event.accountId]['userId'];
-        }
-        return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, options);
-    });
-
-    logger('Publish result: ', publishPromises);
-    return publishPromises;
-};
-
 /**
  * Complicated thing in here is affectedAccountsDict. It stores, for each boost, the accounts whose statusses have been changed. Format:
  * The affectedAccountsDict has as its top level keys the boost IDs for the boosts that have been triggered.
@@ -226,10 +282,10 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     const boostsToRevoke = revocationBoosts || [];
     
     logger('Boosts to redeem: ', boostsToRedeem);
-    const redeemInstructions = boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, false, boostParams));
+    const redeemInstructions = await Promise.all(boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, false, boostParams, event)));
     logger('***** Transfer instructions: ', redeemInstructions);
 
-    const revokeInstructions = boostsToRevoke.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, true));
+    const revokeInstructions = await Promise.all(boostsToRevoke.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, true)));
     logger('***** Revoke instructions: ', revokeInstructions);
 
     const transferInstructions = redeemInstructions.concat(revokeInstructions);

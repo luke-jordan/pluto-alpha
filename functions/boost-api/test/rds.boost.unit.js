@@ -389,4 +389,14 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
     });
 
+    it('Fetches account ids for pooled rewards', async () => {
+        const logType = 'BOOST_POOL_CONTRIBUTION';
+        const selectQuery = `select distinct account_id from boost_data.boost_log where log_type = $1`;
+        queryStub.resolves([{ 'account_id': 'account-1' }, { 'account_id': 'account-2' }]);
+
+        const result = await rds.findAccountsForPooledReward(logType);
+        expect(result).to.deep.equal(['account-1', 'account-2']);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [logType]);
+    });
 });

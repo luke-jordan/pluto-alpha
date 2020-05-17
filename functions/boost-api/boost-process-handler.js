@@ -86,15 +86,15 @@ const createBoostsTriggeredByEvent = async (event) => {
     return persistence.insertBoostAccount(boostsToCreate, accountId, 'CREATED');
 };
 
-const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
-    const boostsWithPooledRewards = redemptionBoosts.filter((boost) => boost.rewardParameters &&
+const fetchAccountIdsForPooledReward = async (redemptionBoosts) => {
+    const boostsWithPooledReward = redemptionBoosts.filter((boost) => boost.rewardParameters &&
         boost.rewardParameters.rewardType === 'POOLED');
 
-    if (boostsWithPooledRewards.length === 0) {
+    if (boostsWithPooledReward.length === 0) {
         return [];
     }
 
-    return persistence.findAccountsForPooledRewards('BOOST_POOL_CONTRIBUTION');
+    return persistence.findAccountsForPooledReward('BOOST_POOL_CONTRIBUTION');
 };
 
 const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
@@ -177,8 +177,9 @@ const processEventForCreatedBoosts = async (event) => {
     let resultOfTransfers = {};
     if (boostsToRedeem.length > 0 || boostsToRevoke.length > 0) {
         const redemptionCall = { redemptionBoosts: boostsToRedeem, revocationBoosts: boostsToRevoke, affectedAccountsDict: affectedAccountsDict, event };
-        const accountIds = await (boostsToRedeem.length > 0 ? fetchAccountIdsForPooledRewards(boostsToRedeem) : []);
+        const accountIds = await (boostsToRedeem.length > 0 ? fetchAccountIdsForPooledReward(boostsToRedeem) : []);
         logger('Got account ids for pooled rewards:', accountIds);
+
         if (accountIds.length > 0) {
             redemptionCall.boostParams = { accountIds };
         }
