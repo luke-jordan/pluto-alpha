@@ -109,19 +109,19 @@ const triggerFloatTransfers = async (transferInstructions) => {
     return JSON.parse(resultOfTransfer.body);
 };
 
-const handleTransferToBonusPool = async (boost, boostParams, event) => {
+const handleTransferToBonusPool = async (affectedAccountDict, boost, boostParams, event) => {
     const accountIds = boostParams.accountIds;
-    const { amount, unit, currency } = boost.rewardParameters.poolContributionPerUser;
+    const poolContrib = boost.rewardParameters.poolContributionPerUser;
     const recipients = accountIds.map((recipientId) => ({
-        recipientId, amount: -amount, recipientType: 'END_USER_ACCOUNT'
+        recipientId, amount: -poolContrib.amount, recipientType: 'END_USER_ACCOUNT'
     }));
 
     const transferInstruction = {
         floatId: boost.fromFloatId,
         fromId: boost.fromBonusPoolId,
         fromType: 'BONUS_POOL',
-        currency,
-        unit,
+        currency: poolContrib.currency,
+        unit: poolContrib.unit,
         identifier: boost.boostId,
         relatedEntityType: 'BOOST_REVERSAL',
         allocType: 'BOOST_REVERSAL', // for float allocation
@@ -131,20 +131,18 @@ const handleTransferToBonusPool = async (boost, boostParams, event) => {
         recipients
     };
 
+    logger('Invoking float transfer lambda with payload:', transferInstruction);
     const resultOfTransfer = await triggerFloatTransfers([transferInstruction]);
     logger('Result of transfer to bonus pool:', resultOfTransfer);
 
-    const { boostId, boostType, boostCategory } = boost;
-    const affectedAccountDict = accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: {} }), {});
-
-    const resultOfPublish = await Promise.all([createPublishEventPromises({ 
+    const resultOfPublish = await Promise.all([createPublishEventPromises({
         boost: {
-            boostId,
-            boostType,
-            boostCategory,
-            boostAmount: amount,
-            boostUnit: unit,
-            boostCurrency: currency
+            boostId: boost.boostId,
+            boostType: boost.boostType,
+            boostCategory: boost.boostCategory,
+            boostAmount: poolContrib.amount,
+            boostUnit: poolContrib.unit,
+            boostCurrency: poolContrib.currency
         },
         boostUpdateTime: moment().valueOf(),
         affectedAccountsUserDict: affectedAccountDict,
@@ -160,11 +158,11 @@ const handleTransferToBonusPool = async (boost, boostParams, event) => {
 
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
 // further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
-const generateFloatTransferInstructions = async (affectedAccountDict, boost, revoke = false, boostParams = {}, event) => {
+const generateFloatTransferInstructions = async (affectedAccountDict, boost, revoke, boostParams = {}, event = {}) => {
     const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // if pooled reward handle initial transfers from accounts to bonus pool
     if (boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED') {
-        const resultOfInitialTransfer = await handleTransferToBonusPool(boost, boostParams, event);
+        const resultOfInitialTransfer = await handleTransferToBonusPool(affectedAccountDict, boost, boostParams, event);
         logger('Result of initial transfer to bonus pool:', resultOfInitialTransfer);
     }
 
