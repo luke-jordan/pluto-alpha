@@ -8,7 +8,7 @@ module.exports.resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
-module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
+module.exports.wrapEvent = (requestBody, systemWideUserId, userRole = 'ORDINARY_USER') => ({
     body: JSON.stringify(requestBody),
     requestContext: {
         authorizer: {

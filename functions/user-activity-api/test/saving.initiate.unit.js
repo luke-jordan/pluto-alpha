@@ -193,6 +193,37 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
     });
 
+    it('Happy path again, including tag (in this case, social saving pot)', async () => {
+        const saveEventToWrapper = testSavePendingBase();
+        
+        const mockPotId = uuid();
+        saveEventToWrapper.tags = [`FRIEND_SAVING_POT::${mockPotId}`];
+
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        momentStub.returns(testTimeInitiated);
+
+        const mockTxToRds = { ...wellFormedMinimalPendingRequestToRds };
+        mockTxToRds.tags = [`FRIEND_SAVING_POT::${mockPotId}`];
+
+        const mockTxFromRds = { ...mockTxDetails };
+        mockTxFromRds.tags = [`FRIEND_SAVING_POT::${mockPotId}`];
+
+        addSavingsRdsStub.withArgs(mockTxToRds).resolves({ transactionDetails: mockTxFromRds });
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+
+        const expectedResult = { ...expectedResponseBody };
+        expectedResult.tags = [`FRIEND_SAVING_POT::${mockPotId}`];
+        expect(saveBody).to.deep.equal(expectedResponseBody);
+
+        expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(mockTxToRds);
+    });
+
     it('Most common route, as wrapper, but with manual EFT as payment method', async () => {
         const saveEventToWrapper = testSavePendingBase();
         Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
