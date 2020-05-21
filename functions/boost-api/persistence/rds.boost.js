@@ -503,7 +503,7 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 };
 
 // ///////////////////////////////////////////////////////////////
-// ////// ANOTHER SIMPLE AUX METHODS TO FIND OWNER IDS ///////////
+// //////  OTHER SIMPLE AUX METHODS TO FIND OWNER IDS  ///////////
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds) => {
@@ -515,4 +515,15 @@ module.exports.findUserIdsForAccounts = async (accountIds) => {
     }
 
     throw Error('Given non-existent or bad account IDs');
+};
+
+module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
+    const query = `select initiated_user_id, accepted_user_id from ${config.get('tables.friendshipTable')} where ` +
+        `relationship_id in (${extractArrayIndices(relationshipIds)})`;
+    const result = await rdsConnection.selectQuery(query, relationshipIds);
+    if (Array.isArray(result) && result.length > 0) {
+        return result.map((row) => camelizeKeys(row));
+    }
+
+    throw Error('Given non-existent or bad relationship IDs');
 };

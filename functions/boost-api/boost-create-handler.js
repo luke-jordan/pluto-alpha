@@ -61,6 +61,10 @@ const convertParamsToRedemptionCondition = (gameParams) => {
             }
             break;
         }
+        case 'FRIEND_BOOST': {
+            conditions.push('friend_boost_created');
+            break;
+        }
         default:
             logger('ERROR! Unimplemented game');
             break;
@@ -270,7 +274,7 @@ const obtainAudienceDetails = async (params) => {
     let audienceId = '';
     if (typeof params.audienceId === 'string' && params.audienceId.trim().length > 0) {
         audienceId = params.audienceId;
-    } else {  
+    } else {
         audienceId = await generateAudienceInline(params);
         logger('Created audience: ', audienceId);
     }
@@ -324,6 +328,29 @@ const retrieveBoostAmounts = (params) => {
     return { boostAmountDetails, boostBudget };
 };
 
+const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => {
+    const resultOfFetch = await persistence.fetchUserIdsForRelationships(friendshipIds);
+    logger('Got relationships:', resultOfFetch);
+    const validFriendships = resultOfFetch.filter((friendship) => Object.values(friendship).includes(creatingUserId));
+    const friendUserIds = validFriendships.map((relationship) => {
+        const friendUserId = relationship.initiatedUserId === creatingUserId
+            ? relationship.acceptedUserId
+            : relationship.initiatedUserId;
+        return friendUserId; 
+    });
+
+    logger('Got friend user ids:', friendUserIds);
+
+    if (friendUserIds.length === 0) {
+        throw new Error('Error! No valid friendships found');
+    }
+
+    return {
+        table: config.get('tables.accountLedger'),
+        conditions: [{ op: 'in', prop: 'owner_user_id', value: friendUserIds }]
+    };
+};
+
 const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boostId, boostAmountDict, initiator }) => {
     const eventType = `BOOST_CREATED_${boostType}`;
     const options = {
@@ -368,10 +395,10 @@ const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boos
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
  * @property {string} audienceId The ID of the audience that the boost will be offered to. If left out, must have boostAudienceSelection.
  * @property {object} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
- * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} rewardParameters An optional object with reward details. expected properties are rewardType (valid values: 'SIMPLE', 'RANDOM', 'POOLED'). See Note (3) above.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
@@ -518,16 +545,19 @@ module.exports.createBoost = async (event) => {
  * @property {string} startTimeMillis A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller.
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
+ * @property {array}  friendships An optional array of relationship ids. Used to create a custom boost audience targeted at the users in the relationships.
+ * @property {object} rewardParameters An object caontaining reward parameters to be persisted with the boost.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
- * @property {string} boostAudienceSelection A DSL string containing instructions as to which users to send the boost to. 
- * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {string} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
+ * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
 module.exports.createBoostWrapper = async (event) => {
     try {
         const userDetails = util.extractUserDetails(event);
 
+        // allow ordinary user but validate 
         logger('Boost create, user details: ', userDetails);
         if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
             return { statusCode: status('Forbidden') };
@@ -536,6 +566,18 @@ module.exports.createBoostWrapper = async (event) => {
         const params = util.extractEventBody(event);
         logger('Boost create, params: ', params);
         params.creatingUserId = userDetails.systemWideUserId;
+
+        if (params.friendships && params.friendships.length > 0) {
+            if (!params.rewardParameters || params.rewardParameters.rewardType !== 'POOLED') {
+                return { statusCode: status('Forbidden') };
+            }
+
+            const { creatingUserId, friendships } = params;
+            const audienceSelection = await assembleBoostAudienceSelection(creatingUserId, friendships);
+            logger('Created friendship-based audience selection instruction:', audienceSelection);
+            params.boostAudienceSelection = audienceSelection;
+            Reflect.deleteProperty(params, 'friendships');
+        }
 
         const resultOfCall = await exports.createBoost(params);
         return util.wrapHttpResponse(resultOfCall);    

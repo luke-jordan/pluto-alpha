@@ -399,4 +399,36 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [logType]);
     });
+
+    it('Fetches user Ids for accounts', async () => {
+        const testAccountIds = testHelper.createUUIDArray(2);
+        const [firstUserId, secondUserId] = testHelper.createUUIDArray(2);
+        const selectQuery = `select distinct(owner_user_id) from ${config.get('tables.accountLedger')} where ` +
+            `account_id in ($1, $2)`;
+        queryStub.resolves([{ 'owner_user_id': firstUserId }, { 'owner_user_id': secondUserId }]);
+
+        const result = await rds.findUserIdsForAccounts(testAccountIds);
+
+        expect(result).to.deep.equal([firstUserId, secondUserId]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, testAccountIds);
+    });
+
+    it('Fetches friendship user ids', async () => {
+        const testRelationshipIds = testHelper.createUUIDArray(2);
+        const [firstUserId, secondUserId, thirdUserId] = testHelper.createUUIDArray(3);
+        const selectQuery = `select initiated_user_id, accepted_user_id from ${config.get('tables.friendshipTable')} where ` +
+            `relationship_id in ($1, $2)`;
+        queryStub.resolves([
+            { 'initiated_user_id': firstUserId, 'accepted_user_id': secondUserId },
+            { 'initiated_user_id': thirdUserId, 'accepted_user_id': firstUserId }
+        ]);
+
+        const result = await rds.fetchUserIdsForRelationships(testRelationshipIds);
+
+        expect(result).to.deep.equal([
+            { initiatedUserId: firstUserId, acceptedUserId: secondUserId },
+            { initiatedUserId: thirdUserId, acceptedUserId: firstUserId }
+        ]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, testRelationshipIds);
+    });
 });
