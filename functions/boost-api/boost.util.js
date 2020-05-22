@@ -42,9 +42,18 @@ module.exports.extractQueryParams = (event) => {
     return event;
 };
 
-module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN') => {
+module.exports.isUserAuthorized = (userDetails, requiredRole = 'SYSTEM_ADMIN', event = null) => {
     if (!userDetails || !Reflect.has(userDetails, 'systemWideUserId')) {
         return false;
+    }
+
+    if (userDetails.role === 'ORDINARY_USER' && event) {
+        const params = exports.extractEventBody(event);
+        if (!params.friendships || params.friendships.length === 0 || params.boostAudienceSelection) {
+            return false;
+        }
+
+        return true;
     }
 
     return userDetails.role === requiredRole;

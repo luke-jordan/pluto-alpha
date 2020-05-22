@@ -61,10 +61,6 @@ const convertParamsToRedemptionCondition = (gameParams) => {
             }
             break;
         }
-        case 'FRIEND_BOOST': {
-            conditions.push('friend_boost_created');
-            break;
-        }
         default:
             logger('ERROR! Unimplemented game');
             break;
@@ -330,7 +326,7 @@ const retrieveBoostAmounts = (params) => {
 
 const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => {
     const resultOfFetch = await persistence.fetchUserIdsForRelationships(friendshipIds);
-    logger('Got relationships:', resultOfFetch);
+    logger('Got friendships:', resultOfFetch);
     const validFriendships = resultOfFetch.filter((friendship) => Object.values(friendship).includes(creatingUserId));
     const friendUserIds = validFriendships.map((relationship) => {
         const friendUserId = relationship.initiatedUserId === creatingUserId
@@ -347,7 +343,7 @@ const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => 
 
     return {
         table: config.get('tables.accountLedger'),
-        conditions: [{ op: 'in', prop: 'owner_user_id', value: friendUserIds }]
+        conditions: [{ op: 'in', prop: 'owner_user_id', value: [creatingUserId, ...friendUserIds] }]
     };
 };
 
@@ -557,9 +553,8 @@ module.exports.createBoostWrapper = async (event) => {
     try {
         const userDetails = util.extractUserDetails(event);
 
-        // allow ordinary user but validate 
         logger('Boost create, user details: ', userDetails);
-        if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
+        if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN', event)) {
             return { statusCode: status('Forbidden') };
         }
 

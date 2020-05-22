@@ -228,6 +228,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const testSavingTxId = uuid();
 
         const pooledAccountIds = [uuid(), uuid(), uuid(), uuid()];
+        const pooledContribObject = { boostId: testBoostId, accountIds: pooledAccountIds };
         
         const testEvent = {
             accountId: testAccountId,
@@ -266,12 +267,11 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             accountUserMap: mockAccountUserMap
         }]);
 
-        findPooledAccountsStub.resolves(pooledAccountIds);
+        findPooledAccountsStub.resolves(pooledContribObject);
 
         insertBoostLogStub.resolves([{ logId: testLogId, creationTime: mockPersistedTime }]);
 
-        // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the float allocation lambda
-
+        // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the floa
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
 
@@ -282,7 +282,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             redemptionBoosts: [boostFromPersistence], 
             revocationBoosts: [], 
             affectedAccountsDict: expectedAccountDict,
-            boostParams: { accountIds: pooledAccountIds },
+            pooledContributionMap: { [testBoostId]: pooledAccountIds },
             event: testEvent
         };
 
@@ -298,6 +298,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedBoostLog]);
+        expect(findPooledAccountsStub).to.have.been.calledOnceWithExactly(testBoostId, 'BOOST_POOL_CONTRIBUTION');
         expect(insertBoostAccountsStub).to.have.not.been.called;
         expect(getAccountIdForUserStub).to.have.not.been.called;
     });

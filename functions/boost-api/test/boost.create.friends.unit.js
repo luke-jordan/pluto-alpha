@@ -65,12 +65,20 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
         { initiatedUserId: testCreatingUserId, acceptedUserId: testAcceptedUserId },
         { initiatedUserId: testInitiatedUserId, acceptedUserId: testCreatingUserId }
     ];
+
+    const gameParams = {
+        gameType: 'TAP_SCREEN',
+        timeLimitSeconds: 20,
+        winningThreshold: 20,
+        instructionBand: 'Tap the screen as many times as you can in 20 seconds',
+        entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
+    };
     
     const mockBoostToFromPersistence = {
         creatingUserId: testCreatingUserId,
         label: 'Friend Initiated Boost',
-        boostType: 'SIMPLE',
-        boostCategory: 'TIME_LIMITED',
+        boostType: 'GAME',
+        boostCategory: 'TAP_SCREEN',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
@@ -80,17 +88,18 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
         forClientId: 'some_client_co',
         boostStartTime: testStartTime,
         boostEndTime: testEndTime,
-        statusConditions: { REDEEMED: ['friend_boost_created'] },
+        statusConditions: { REDEEMED: ['number_taps_greater_than #{20::20000}'] },
         rewardParameters: {
             rewardType: 'POOLED',
             poolContributionPerUser: { amount: 50000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             additionalBonusToPool: { amount: 5000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             percentPoolAsReward: 0.05
         },
-        boostAudienceType: 'FRIENDS',
+        boostAudienceType: 'FRIENDSHIPS',
         audienceId: testCreatedAudienceId,
         defaultStatus: 'PENDING',
-        messageInstructionIds: [{ accountId: 'ALL', status: 'REDEEMED', msgInstructionId: testRedemptionMsgId }]
+        messageInstructionIds: {},
+        gameParams
     };
 
     it('Happy path creating a friend-based pooled boost', async () => {
@@ -115,18 +124,14 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
 
         const testBodyOfEvent = {
             label: 'Friend Initiated Boost',
-            boostTypeCategory: 'SIMPLE::TIME_LIMITED',
+            boostTypeCategory: 'GAME::TAP_SCREEN',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
             boostBudget: 10000000,
-            boostSource: {
-                bonusPoolId: 'primary_bonus_pool',
-                clientId: testClientId,
-                floatId: testFloatId
-            },
+            boostSource: { bonusPoolId: 'primary_bonus_pool', clientId: testClientId, floatId: testFloatId },
+            redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }],
             endTimeMillis: testEndTime.valueOf(),
-            gameParams: { gameType: 'FRIEND_BOOST' },
             initialStatus: 'PENDING',
-            boostAudienceType: 'FRIENDS',
+            boostAudienceType: 'FRIENDSHIPS',
             friendships: testRelationshipIds,
             rewardParameters: {
                 rewardType: 'POOLED',
@@ -134,10 +139,10 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
                 additionalBonusToPool: { amount: 5000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
                 percentPoolAsReward: 0.05
             },
-            redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
+            gameParams
         };
 
-        const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testCreatingUserId, 'SYSTEM_ADMIN'));
+        const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testCreatingUserId, 'ORDINARY_USER'));
 
         const expectedAudiencePayload = {
             operation: 'create',
@@ -146,7 +151,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
                 creatingUserId: testCreatingUserId,
                 isDynamic: false,
                 propertyConditions: {
-                    conditions: [{ op: 'in', prop: 'owner_user_id', value: testFriendshipUserIds }],
+                    conditions: [{ op: 'in', prop: 'owner_user_id', value: [testCreatingUserId, ...testFriendshipUserIds] }],
                     table: config.get('tables.accountLedger')
                 }
             }
@@ -183,7 +188,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
 
         const testBodyOfEvent = {
             label: 'Friend Initiated Boost',
-            boostTypeCategory: 'SIMPLE::TIME_LIMITED',
+            boostTypeCategory: 'GAME::TAP_SCREEN',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
             boostBudget: 10000000,
             boostSource: {
@@ -194,7 +199,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
             endTimeMillis: testEndTime.valueOf(),
             gameParams: { gameType: 'FRIEND_BOOST' },
             initialStatus: 'PENDING',
-            boostAudienceType: 'FRIENDS',
+            boostAudienceType: 'FRIENDSHIPS',
             friendships: testRelationshipIds,
             rewardParameters: {
                 rewardType: 'RANDOM',
@@ -204,7 +209,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
             redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
         };
 
-        const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testCreatingUserId, 'SYSTEM_ADMIN'));
+        const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testCreatingUserId, 'ORDINARY_USER'));
 
         expect(resultOfInstruction).to.deep.equal({ statusCode: 403 });
         expect(insertBoostStub).to.have.not.been.called;

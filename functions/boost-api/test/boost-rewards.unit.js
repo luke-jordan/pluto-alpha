@@ -223,7 +223,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const mockEvent = { 
             redemptionBoosts: [mockBoost], 
             affectedAccountsDict: mockAccountMap, 
-            boostParams: { accountIds: testPooledAccountIds },
+            pooledContributionMap: { [testBoostId]: testPooledAccountIds },
             event: {
                 accountId: testAccountId,
                 eventType: 'SAVING_EVENT_COMPLETED',

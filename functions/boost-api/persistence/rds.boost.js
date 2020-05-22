@@ -179,10 +179,11 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
     return resultOfQuery.map((row) => camelizeKeys(row));
 };
 
-module.exports.findAccountsForPooledReward = async (logType) => {
-    const selectQuery = `select distinct account_id from ${boostLogTable} where log_type = $1`;
-    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [logType]);
-    return resultOfQuery.length > 0 ? resultOfQuery.map((result) => result['account_id']) : [];
+module.exports.findAccountsForPooledReward = async (boostId, logType) => {
+    const selectQuery = `select distinct(account_id) from ${boostLogTable} where log_type = $1 and boost_id = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [logType, boostId]);
+    const accountIds = resultOfQuery.map((result) => result['account_id']);
+    return { boostId, accountIds };
 };
 
 // todo : validation / catching of status downgrade in here
@@ -503,7 +504,7 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 };
 
 // ///////////////////////////////////////////////////////////////
-// //////  OTHER SIMPLE AUX METHODS TO FIND OWNER IDS  ///////////
+// ////// ANOTHER SIMPLE AUX METHODS TO FIND OWNER IDS ///////////
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds) => {
