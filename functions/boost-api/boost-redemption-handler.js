@@ -3,7 +3,6 @@
 const logger = require('debug')('jupiter:boost:redemption');
 const config = require('config');
 const moment = require('moment');
-const seedrandom = require('seedrandom');
 const stringify = require('json-stable-stringify');
 
 const publisher = require('publish-common');
@@ -25,6 +24,8 @@ const calculatePooledBoostAmount = (boost, userCount) => {
 const generateMultiplier = (distribution) => {
     if (distribution === 'UNIFORM') {
         if (config.get('seedrandom.active')) {
+            // eslint-disable-next-line global-require
+            const seedrandom = require('seedrandom');
             seedrandom(config.get('seedrandom.value'), { global: true });
         }
     
