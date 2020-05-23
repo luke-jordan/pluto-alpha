@@ -2,7 +2,7 @@
 'use strict';
 
 // const logger = require('debug')('jupiter:friends:test');
-// const config = require('config');
+const config = require('config');
 const uuid = require('uuid/v4');
 
 const moment = require('moment');
@@ -22,9 +22,12 @@ const fetchAccountStub = sinon.stub();
 const fetchRequestStub = sinon.stub();
 const fetchProfileStub = sinon.stub();
 const fecthSavingHeatStub = sinon.stub();
+const findPossibleRequestStub = sinon.stub();
 
 const publishUserEventStub = sinon.stub();
 const insertFriendshipStub = sinon.stub();
+const connectTargetViaIdStub = sinon.stub();
+const insertFriendRequestStub = sinon.stub();
 const countMutualFriendsStub = sinon.stub();
 
 const testAccountId = uuid();
@@ -52,10 +55,13 @@ const handler = proxyquire('../friend-request-handler', {
         'fetchAccountIdForUser': fetchAccountStub,
         'fetchUserProfile': fetchProfileStub,
         'fetchSavingHeatFromCache': fecthSavingHeatStub,
+        'findPossibleFriendRequest': findPossibleRequestStub,
         '@noCallThru': true
     },
     './persistence/write.friends': {
         'insertFriendship': insertFriendshipStub,
+        'connectTargetViaId': connectTargetViaIdStub,
+        'insertFriendRequest': insertFriendRequestStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -68,8 +74,8 @@ const handler = proxyquire('../friend-request-handler', {
     'ioredis': MockRedis
 });
 
-const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendshipStub, 
-    fetchRequestStub, lamdbaInvokeStub, publishUserEventStub);
+const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendshipStub, findPossibleRequestStub,
+    fetchRequestStub, lamdbaInvokeStub, publishUserEventStub, connectTargetViaIdStub, insertFriendRequestStub);
 
 describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
     const testCreationTime = moment().format();
@@ -199,4 +205,154 @@ describe('*** UNIT TEST FRIENDSHIP CREATION ***', () => {
         expect(insertFriendshipStub).to.have.not.been.called;
     });
 
+});
+
+describe('*** UNIT TEST FRIENDSHIPS FROM REFERRAL CODE ***', () => {
+    const testCreationTime = moment().format();
+    const testUpdatedTime = moment().format();
+
+    const testCountryCode = 'ZAF';
+    const testReferralCode = 'LETMEIN';
+    const testUserEmail = 'user@email.com';
+
+    const testReferralDetails = {
+        codeType: 'USER',
+        referralCode: 'LETMEIN',
+        creatingUserId: testInitiatedUserId,
+        context: { boostAmountOffered: 'BIGCHEESE' }
+    };
+
+    const friendReqToPersistence = {
+        initiatedUserId: testInitiatedUserId,
+        targetUserId: testTargetUserId,
+        requestType: 'CREATE',
+        requestedShareItems: ['SHARE_ACTIVITY'],
+        targetContactDetails: {
+            contactType: 'EMAIL',
+            contactMethod: testUserEmail
+        }
+    };
+
+    const friendReqFromPersistence = {
+        requestId: testRequestId,
+        requestType: 'CREATE',
+        initiatedUserId: testInitiatedUserId,
+        targetUserId: testTargetUserId,
+        requestedShareItems: ['LAST_ACTIVITY'],
+        targetContactDetails: { contactType: 'EMAIL', contactMethod: testUserEmail },
+        creationTime: testCreationTime
+    };
+
+    const referralPayload = { referralCode: testReferralCode, countryCode: testCountryCode, includeCreatingUserId: true };
+    const referralInvocation = helper.wrapLambdaInvoc(config.get('lambdas.referralDetails'), false, referralPayload);
+    
+    beforeEach(() => {
+        resetStubs();
+    });
+
+    it('Initializes a friendship from referral code', async () => {
+        const testEvent = {
+            targetUserId: testTargetUserId,
+            referralCodeUsed: testReferralCode,
+            countryCode: testCountryCode,
+            emailAddress: testUserEmail
+        };
+
+        const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'SUCCESS', codeDetails: testReferralDetails })})};
+        lamdbaInvokeStub.returns({ promise: () => referralResult });
+        findPossibleRequestStub.resolves(null);
+        insertFriendRequestStub.resolves(friendReqFromPersistence);
+
+        const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
+
+        expect(initializationResult).to.exist;
+        expect(initializationResult).to.deep.equal({ result: 'CREATED' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(findPossibleRequestStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, testUserEmail);
+        expect(insertFriendRequestStub).to.have.been.calledOnceWithExactly(friendReqToPersistence);
+    });
+
+    it('Accepts pending friend request if found', async () => {
+        const testEvent = {
+            targetUserId: testTargetUserId,
+            referralCodeUsed: testReferralCode,
+            countryCode: testCountryCode,
+            emailAddress: testUserEmail
+        };
+
+        const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'SUCCESS', codeDetails: testReferralDetails })})};
+        lamdbaInvokeStub.returns({ promise: () => referralResult });
+        findPossibleRequestStub.resolves(friendReqFromPersistence);
+        connectTargetViaIdStub.resolves({ updatedTime: testUpdatedTime });
+
+        const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
+
+        expect(initializationResult).to.exist;
+        expect(initializationResult).to.deep.equal({ result: 'CONNECTED' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(findPossibleRequestStub).to.have.been.calledOnceWithExactly(testInitiatedUserId, testUserEmail);
+        expect(insertFriendRequestStub).to.have.not.been.called;
+    });
+
+    it('It fails if user tries to friend themselves', async () => {
+        const referralDetails = { ...testReferralDetails };
+        referralDetails.creatingUserId = testTargetUserId;
+
+        const testEvent = {
+            targetUserId: testTargetUserId,
+            referralCodeUsed: testReferralCode,
+            countryCode: testCountryCode,
+            emailAddress: testUserEmail
+        };
+
+        const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'SUCCESS', codeDetails: referralDetails })})};
+        lamdbaInvokeStub.returns({ promise: () => referralResult });
+
+        const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
+
+        expect(initializationResult).to.exist;
+        expect(initializationResult).to.deep.equal({ result: 'FAILURE' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(findPossibleRequestStub).to.have.not.been.called;
+        expect(insertFriendRequestStub).to.have.not.been.called;
+    });
+
+    it('Fails where referral code not found', async () => {
+        const testEvent = {
+            targetUserId: testTargetUserId,
+            referralCodeUsed: testReferralCode,
+            countryCode: testCountryCode,
+            emailAddress: testUserEmail
+        };
+
+        const referralResult = { Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify({ result: 'CODE_NOT_FOUND' })})};
+        lamdbaInvokeStub.returns({ promise: () => referralResult });
+
+        const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
+
+        expect(initializationResult).to.exist;
+        expect(initializationResult).to.deep.equal({ result: 'NO_USER_CODE_FOUND' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(findPossibleRequestStub).to.have.not.been.called;
+        expect(insertFriendRequestStub).to.have.not.been.called;
+    });
+
+    it('Catches thrown errors', async () => {
+        const testEvent = {
+            targetUserId: testTargetUserId,
+            referralCodeUsed: testReferralCode,
+            countryCode: testCountryCode,
+            emailAddress: testUserEmail
+        };
+
+        lamdbaInvokeStub.throws(new Error('Error!'));
+
+        const initializationResult = await handler.initiateRequestFromReferralCode(testEvent);
+
+        expect(initializationResult).to.exist;
+        expect(initializationResult).to.deep.equal({ result: 'FAILURE' });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(referralInvocation);
+        expect(findPossibleRequestStub).to.have.not.been.called;
+        expect(insertFriendRequestStub).to.have.not.been.called;
+    });
 });

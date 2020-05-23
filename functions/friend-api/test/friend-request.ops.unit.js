@@ -100,7 +100,7 @@ describe('*** UNIT TEST TARGET USER CONNECTION ***', async () => {
     });
 
     it('Rejects unauthorized requests', async () => {
-        const connectionResult = await handler.addFriendshipRequest({ requestCode: testRequestCode });
+        const connectionResult = await handler.connectFriendshipRequest({ requestCode: testRequestCode });
         expect(connectionResult).to.exist;
         expect(connectionResult).to.deep.equal({ statusCode: 403 });
         expect(connectUserStub).to.have.not.been.called;
