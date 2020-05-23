@@ -199,6 +199,20 @@ module.exports.getTransactionDetails = async (transactionId) => {
     return camelCaseKeys(transactionFetchRow[0]);
 };
 
+module.exports.countTransactionsBySameAccount = async (transactionId) => {
+    const countQuery = `select count(transaction_id) from ${config.get('tables.transactionTable')} where ` +
+        `settlement_status = $1 and transaction_type = $2 and account_id = ` +
+        `(select account_id from transaction_data.core_transaction_ledger where transaction_id = $3)`;
+    
+    logger('Counting settled saves with query: ', countQuery);
+    const resultOfQuery = await rdsConnection.selectQuery(countQuery, ['SETTLED', 'USER_SAVING_EVENT', transactionId]);
+    if (!Array.isArray(resultOfQuery) || resultOfQuery.length === 0 || !resultOfQuery[0]['count']) {
+        return 0;
+    }
+
+    return parseInt(resultOfQuery[0]['count'], 10);
+};
+
 module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId, logType, logContext }) => {
     let relevantAccountId = accountId;
     if (!relevantAccountId) {
