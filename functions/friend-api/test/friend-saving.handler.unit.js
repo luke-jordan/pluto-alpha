@@ -15,6 +15,7 @@ const persistFriendSavingStub = sinon.stub();
 const updateSavingPoolStub = sinon.stub();
 
 const listSavingPoolsStub = sinon.stub();
+const calculatePoolBalancesStub = sinon.stub();
 const fetchSavingPoolStub = sinon.stub();
 
 const fetchProfileStub = sinon.stub();
@@ -28,6 +29,7 @@ const handler = proxyquire('../friend-saving-handler', {
         'obtainFriendIds': extractFriendIdsStub,
         'fetchSavingPoolsForUser': listSavingPoolsStub,
         'fetchSavingPoolDetails': fetchSavingPoolStub,
+        'calculatedPoolBalances': calculatePoolBalancesStub,
     },
 });
 
@@ -77,7 +79,10 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
     it('Unit testing disallows pot where user is not in a friendship', async () => {
         const mockFriendships = ['relationship-1', 'relationship-2', 'relationship-3'];
         // user 3 is missing, so friendship 3 must not include the calling user
-        const mockUsers = ['user-1', 'user-2'];
+        const mockUsers = [
+            { userId: 'user-1', relationshipId: 'relationship-1' }, 
+            { userId: 'user-2', relationshipId: 'relationship-2' }
+        ];
 
         const testBody = {
             name: 'Attempted laundering scheme',
@@ -234,16 +239,22 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
         const testCreatedMoment2 = moment().subtract(3, 'weeks');
         
         const mockPoolsFromPersistence = [
-            { savingPoolId: 'pool-1', name: 'Pool 1', ...mockAmountSpread(100, 'target'), ...mockAmountSpread(20, 'current'), creationTime: testCreatedMoment1 },
-            { savingPoolId: 'pool-2', name: 'Pool 2', ...mockAmountSpread(30, 'target'), ...mockAmountSpread(35, 'current'), creationTime: testCreatedMoment2 }
+            { savingPoolId: 'pool-1', poolName: 'Pool 1', ...mockAmountSpread(100, 'target'), creationTime: testCreatedMoment1 },
+            { savingPoolId: 'pool-2', poolName: 'Pool 2', ...mockAmountSpread(30, 'target'), creationTime: testCreatedMoment2 }
         ];
 
+        const mockBalancesFromPersistence = [
+            { savingPoolId: 'pool-1', ...mockAmountDict(20) },
+            { savingPoolId: 'pool-2', ...mockAmountDict(35) }
+        ]
+
         const expectedPoolsToConsumer = [
-            { savingPoolId: 'pool-1', name: 'Pool 1', target: mockAmountDict(100), current: mockAmountDict(20), creationTimeMillis: testCreatedMoment1.valueOf() },
-            { savingPoolId: 'pool-2', name: 'Pool 2', target: mockAmountDict(30), current: mockAmountDict(35), creationTimeMillis: testCreatedMoment2.valueOf() }
+            { savingPoolId: 'pool-1', poolName: 'Pool 1', target: mockAmountDict(100), current: mockAmountDict(20), creationTimeMillis: testCreatedMoment1.valueOf() },
+            { savingPoolId: 'pool-2', poolName: 'Pool 2', target: mockAmountDict(30), current: mockAmountDict(35), creationTimeMillis: testCreatedMoment2.valueOf() }
         ];
 
         listSavingPoolsStub.resolves(mockPoolsFromPersistence);
+        calculatePoolBalancesStub.resolves(mockBalancesFromPersistence);
         
         const resultOfFetch = await handler.readSavingsPool(testEvent('list', testUserId));
         const resultBody = helper.standardOkayChecks(resultOfFetch);
@@ -265,7 +276,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
             creatingUserId: 'some-other-user',
             ...mockAmountSpread(100, 'target'),
             ...mockAmountSpread(20, 'current'),
-            participatingUsers: ['some-other-user', 'some-user-2', 'some-user-3'],
+            participatingUsers: [{ userId: 'some-other-user' }, { userId: 'some-user-2', relationshipId: 'rel-1' }, { userId: 'some-user-3', relationshipId: 'rel-2' }],
             transactionRecord: [
                 { transactionId: mockSaveIds[0], ownerUserId: 'some-user-2', ...mockAmountDict(5), creationTime: mockSaveTimes[0] },
                 { transactionId: mockSaveIds[1], ownerUserId: 'some-other-user', ...mockAmountDict(5), creationTime: mockSaveTimes[1] },
