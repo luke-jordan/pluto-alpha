@@ -18,7 +18,7 @@ module.exports.EVENT_TYPE_CONDITION_MAP = {
     'SAVING_PAYMENT_SUCCESSFUL': ['save_event_greater_than', 'save_completed_by', 'first_save_by', 'first_save_above'],
     'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
     'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above'],
-    'BOOST_EXPIRED': ['number_taps_in_first_N'],
+    'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N'],
     'FRIEND_REQUEST_INITIATED_ACCEPTED': ['friends_added_since', 'total_number_friends'],
     'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends']
 };
