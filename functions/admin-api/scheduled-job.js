@@ -39,7 +39,8 @@ const expireBoosts = async () => {
         InvocationType: 'Event',
         Payload: JSON.stringify({ boostId, eventType: 'BOOST_EXPIRED' })
     })).map((invocation) => lambda.invoke(invocation).promise());
-    await Promise.all(boostProcessInvocations);
+    const expiryResults = await Promise.all(boostProcessInvocations);
+    logger('Boost expiry results: ', expiryResults);
     return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };
 };
 

@@ -148,7 +148,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
 
     const assembledQuery = `${queryBase} ${querySuffix} order by boost_id, account_id`;
     const resultOfQuery = await rdsConnection.selectQuery(assembledQuery, runningValues);
-    logger('Received : ', resultOfQuery);
+    logger('Selecting accounts relevant for boost (boost-account-map), received : ', resultOfQuery);
 
     if (resultOfQuery.length === 0) {
         throw new Error('Account id not found');

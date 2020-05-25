@@ -251,12 +251,14 @@ const handleExpiredBoost = async (boostId) => {
 
     if (boost.boostType !== 'GAME' || !boostGameLogs || boostGameLogs.length === 0) {
         // just expire the boosts and be done
+        logger('No game logs found, expiring all');
         await expireAccountsForBoost(boostId);
         return { resultCode: 200, body: 'Not a game, or no responses' };
     }
 
     const { statusConditions } = boost;
     if (!statusConditions || !statusConditions.REDEEMED) {
+        logger('No redemption conditions, exiting');
         await expireAccountsForBoost(boostId);
         return { resultCode: 200, body: 'No redemption condition' };
     }
