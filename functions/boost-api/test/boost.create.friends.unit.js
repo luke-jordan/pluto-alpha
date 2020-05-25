@@ -191,11 +191,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
             boostTypeCategory: 'GAME::TAP_SCREEN',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
             boostBudget: 10000000,
-            boostSource: {
-                bonusPoolId: 'primary_bonus_pool',
-                clientId: testClientId,
-                floatId: testFloatId
-            },
+            boostSource: { bonusPoolId: 'primary_bonus_pool', clientId: testClientId, floatId: testFloatId },
             endTimeMillis: testEndTime.valueOf(),
             gameParams: { gameType: 'FRIEND_BOOST' },
             initialStatus: 'PENDING',

@@ -304,6 +304,17 @@ const validateBoostParams = (boostType, boostCategory, boostBudget, params) => {
     return true;
 };
 
+const isPooledReward = (event, userDetails) => {
+    if (userDetails.role === 'ORDINARY_USER' && event) {
+        const params = util.extractEventBody(event);
+        if (!params.friendships || params.friendships.length === 0 || params.boostAudienceSelection) {
+            return false;
+        }
+
+        return true;
+    }
+};
+
 const retrieveBoostAmounts = (params) => {
     const boostAmountDetails = params.boostAmountOffered.split('::');
     logger('Boost amount details: ', boostAmountDetails);
@@ -530,7 +541,6 @@ module.exports.createBoost = async (event) => {
 
 };
 
-
 /**
  * Wrapper method for API gateway, handling authorization via the header, extracting body, etc. 
  * @param {object} event An event object containing the request context and request body.
@@ -554,7 +564,7 @@ module.exports.createBoostWrapper = async (event) => {
         const userDetails = util.extractUserDetails(event);
 
         logger('Boost create, user details: ', userDetails);
-        if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN', event)) {
+        if (!userDetails || (!util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN') && !isPooledReward(event, userDetails))) {
             return { statusCode: status('Forbidden') };
         }
 

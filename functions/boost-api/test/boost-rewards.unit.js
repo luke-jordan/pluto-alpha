@@ -74,21 +74,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
 
-        // then we do a user log, on each side (tested via the expect call underneath)
-        const publishOptions = {
-            initiator: testUserId,
-            context: {
-                accountId: testAccountId,
-                boostAmount: '100000::HUNDREDTH_CENT::USD',
-                boostId: testBoostId,
-                boostType: 'SIMPLE',
-                boostCategory: 'TIME_LIMITED',
-                boostUpdateTimeMillis: moment().valueOf(),
-                transferResults: expectedAllocationResult[testBoostId],
-                triggeringEventContext: 'SAVING_EVENT_COMPLETED'
-            }
-        };
-        publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
+        publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
             boostId: testBoostId,
@@ -124,6 +110,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
 
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+        expect(publishStub).to.have.been.calledOnce;
     });
 
     it('Handles pooled rewards', async () => {
@@ -180,22 +167,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
 
-        // then we do a user log, on each side (tested via the expect call underneath)
-        const publishOptions = {
-            initiator: testUserId,
-            context: {
-                accountId: testAccountId,
-                boostAmount: '100000::HUNDREDTH_CENT::USD',
-                boostId: testBoostId,
-                boostType: 'SIMPLE',
-                boostCategory: 'TIME_LIMITED',
-                boostUpdateTimeMillis: moment().valueOf(),
-                transferResults: expectedAllocationResult[testBoostId],
-                triggeringEventContext: 'SAVING_EVENT_COMPLETED'
-            }
-        };
 
-        publishStub.withArgs(testUserId, 'BOOST_REDEEMED', sinon.match(publishOptions)).resolves({ result: 'SUCCESS' });
+        publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
             boostId: testBoostId,
@@ -244,6 +217,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedAllocationInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedTransferToBonusPoolInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        expect(publishStub).to.have.been.calledTwice;
     });
 
 });

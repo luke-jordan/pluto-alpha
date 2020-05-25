@@ -51,9 +51,9 @@ const calculateRandomBoostAmount = (boost) => {
 };
 
 const calculateBoostAmount = (boost, pooledContributionMap) => {
-    const rewardType = boost.rewardParameters.rewardType;
-    const accountIds = pooledContributionMap[boost.boostId];
+    const rewardType = boost.rewardParameters ? boost.rewardParameters.rewardType : 'STANDARD';
     if (rewardType === 'POOLED') {
+        const accountIds = pooledContributionMap[boost.boostId];
         const userCount = accountIds.length;
         return calculatePooledBoostAmount(boost, userCount);
     }

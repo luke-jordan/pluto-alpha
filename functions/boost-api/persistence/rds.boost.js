@@ -183,6 +183,9 @@ module.exports.findAccountsForPooledReward = async (boostId, logType) => {
     const selectQuery = `select distinct(account_id) from ${boostLogTable} where log_type = $1 and boost_id = $2`;
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [logType, boostId]);
     const accountIds = resultOfQuery.map((result) => result['account_id']);
+
+    // The returned objects from this function are later reduced
+    // to a single object with boosts as keys and accountId arrays as values
     return { boostId, accountIds };
 };
 
@@ -504,7 +507,7 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 };
 
 // ///////////////////////////////////////////////////////////////
-// ////// ANOTHER SIMPLE AUX METHODS TO FIND OWNER IDS ///////////
+// ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS ////////////
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds) => {
