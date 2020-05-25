@@ -41,7 +41,9 @@ const evaluateGameResponse = (eventContext, parameterValue, responseValueKey) =>
     return valueToCheck >= requiredThreshold && timeTakenMillis <= maxTimeMillis;
 };
 
-const gameResponseFilter = (logContext, maxTimeMillis) => logContext && logContext.numberTaps && logContext.timeTakenMillis <= maxTimeMillis;
+const gameResponseFilter = (logContext, maxTimeMillis, responseValueKey) => ( 
+    logContext && logContext[responseValueKey] && logContext.timeTakenMillis <= maxTimeMillis
+);
 
 const evaluateGameTournament = (event, parameterValue, responseValueKey) => {
     const [selectTop, maxTimeMillis] = parameterValue.split('::');
@@ -51,12 +53,12 @@ const evaluateGameTournament = (event, parameterValue, responseValueKey) => {
         return false;
     }
 
-    const { accountTapList } = event.eventContext;
-    const withinTimeList = accountTapList.filter((response) => gameResponseFilter(response.logContext, maxTimeMillis));
+    const { accountScoreList } = event.eventContext;
+    const withinTimeList = accountScoreList.filter((response) => gameResponseFilter(response.logContext, maxTimeMillis, responseValueKey));
     
     const scoreSorter = (response1, response2) => response2.logContext[responseValueKey] - response1.logContext[responseValueKey];
     const sortedList = withinTimeList.sort(scoreSorter);
-    // logger('Evaluating game tournament results, sorted list: ', sortedList);
+    logger('Evaluating game tournament results, sorted list: ', sortedList);
 
     const topList = sortedList.slice(0, selectTop).map((response) => response.accountId);
     logger('Tournament top accounts: ', topList, ' checked against: ', event.accountId);
