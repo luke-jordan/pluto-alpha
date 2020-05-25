@@ -47,30 +47,39 @@ const testBoostId = uuid();
 
 describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
-    beforeEach(() => testHelper.resetStubs(fetchBoostStub, findAccountsStub, updateBoostAccountStub, publishMultiUserStub));
+    beforeEach(() => (testHelper.resetStubs(
+        fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub
+    )));
 
-    it('Happy path, awards boost to top two scorers', async () => {
+    const formAccountResponse = (accountUserMap) => [{ boostId: testBoostId, accountUserMap }];
+    const mockTournamentBoost = (boostCategory, statusConditions) => ({
+        boostId: testBoostId,
+        boostType: 'GAME',
+        boostCategory,
+        boostCurrency: 'USD',
+        boostUnit: 'HUNDREDTH_CENT',
+        boostAmount: 50000,
+        fromFloatId: 'test-float',
+        fromBonusPoolId: 'test-bonus-pool',
+        statusConditions
+    });
+
+    const mockAccountUserMap = (indices, status) => indices.reduce((obj, index) => ({
+        ...obj, [`account-id-${index}`]: { userId: `some-user-id${index}`, status }
+    }), {});
+
+    it('Happy path, awards boost to top two scorers, number taps', async () => {
 
         const testEvent = {
             eventType: 'BOOST_EXPIRED',
             boostId: testBoostId
         };
 
-        const mockBoost = {
-            boostId: testBoostId,
-            boostType: 'GAME',
-            boostCategory: 'TAP_SCREEN',
-            boostCurrency: 'USD',
-            boostUnit: 'HUNDREDTH_CENT',
-            boostAmount: 50000,
-            fromFloatId: 'test-float',
-            fromBonusPoolId: 'test-bonus-pool',
-            statusConditions: {
-                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
-                PENDING: ['number_taps_greater_than #{0::10000}'],
-                REDEEMED: ['number_taps_in_first_N #{2::10000}']
-            }
-        };
+        const mockBoost = mockTournamentBoost('TAP_SCREEN', {
+            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+            PENDING: ['number_taps_greater_than #{0::10000}'],
+            REDEEMED: ['number_taps_in_first_N #{2::10000}']
+        });
 
         fetchBoostStub.resolves(mockBoost);
 
@@ -80,21 +89,19 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             { accountId: 'account-id-3', logContext: { numberTaps: 40, timeTakenMillis: 10000 } }
         ];
         findBoostLogsStub.resolves(mockUserResponseList);
-
-        const formAccountResponse = (accountUserMap) => [{ boostId: testBoostId, accountUserMap }];
         
         // todo : clean up, bit of a mess (should only need one call then pass the map around)
-        findAccountsStub.onFirstCall().resolves(formAccountResponse({
+        findAccountsStub.onFirstCall().resolves(formAccountResponse({ // winners
             'account-id-3': { userId: 'some-user-id', status: 'PENDING' },
             'account-id-1': { userId: 'some-user-id2', status: 'PENDING' }
         }));
-        findAccountsStub.onSecondCall().resolves(formAccountResponse({
+        findAccountsStub.onSecondCall().resolves(formAccountResponse({ // all players
             'account-id-2': { userId: 'some-user-id3', status: 'PENDING' },
             'account-id-3': { userId: 'some-user-id', status: 'PENDING' },
             'account-id-1': { userId: 'some-user-id2', status: 'PENDING' },
             'account-id-4': { userId: 'some-user-id4', status: 'PENDING' }
         }));
-        findAccountsStub.onThirdCall().resolves(formAccountResponse({
+        findAccountsStub.onThirdCall().resolves(formAccountResponse({ // losers
             'account-id-2': { userId: 'some-user-id3', status: 'PENDING' },
             'account-id-4': { userId: 'some-user-id4', status: 'PENDING' }
         }));
@@ -140,8 +147,9 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             boostId: testBoostId,
             accountId,
             logType: 'GAME_OUTCOME',
-            logContext: { ranking, numberTaps, topScore: 40 }
+            logContext: { ranking, numberTaps, accountScore: numberTaps, scoreType: 'NUMBER', topScore: 40 }
         });
+
         const expectedLogs = [expectedLogObject('account-id-1', 2, 20), expectedLogObject('account-id-2', 3, 10), expectedLogObject('account-id-3', 1, 40)];
 
         expect(updateBoostAccountStub).to.have.been.calledTwice;
@@ -154,6 +162,86 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const publishOptions = { context: { boostId: testBoostId }};
         expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_TOURNAMENT_WON', publishOptions);
         expect(publishMultiUserStub).to.have.been.calledWithExactly(['some-user-id3', 'some-user-id4'], 'BOOST_EXPIRED', publishOptions);
+    });
+
+    it('Also works for percent destroyed tournament', async () => {
+        const testEvent = {
+            eventType: 'BOOST_EXPIRED',
+            boostId: testBoostId
+        };
+
+        const mockBoost = mockTournamentBoost('DESTROY_IMAGE', {
+                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+                PENDING: ['percent_destroyed_above #{0::10000}'],
+                REDEEMED: ['percent_destroyed_in_first_N #{2::10000}']
+        });
+
+        fetchBoostStub.resolves(mockBoost);
+
+        const mockUserResponseList = [
+            { accountId: 'account-id-1', logContext: { percentDestroyed: 20, timeTakenMillis: 10000 } },
+            { accountId: 'account-id-2', logContext: { percentDestroyed: 40, timeTakenMillis: 10000 } },
+            { accountId: 'account-id-3', logContext: { percentDestroyed: 10, timeTakenMillis: 10000 } }
+        ];
+        findBoostLogsStub.resolves(mockUserResponseList);
+
+        findAccountsStub.onFirstCall().resolves(formAccountResponse(mockAccountUserMap([1, 2], 'PENDING'))); // for winners
+        findAccountsStub.onSecondCall().resolves(formAccountResponse(mockAccountUserMap([1, 2, 3, 4], 'PENDING'))); // all
+        findAccountsStub.onThirdCall().resolves(formAccountResponse(mockAccountUserMap([3, 4], 'PENDING')));
+
+        const resultOfExpiry = await handler.processEvent(testEvent);
+        expect(resultOfExpiry).to.deep.equal({ statusCode: 200, boostsRedeemed: 2 });
+
+        // just testing the most important things, rest covered above
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+        expect(findBoostLogsStub).to.have.been.calledOnceWithExactly(testBoostId, 'GAME_RESPONSE');
+        
+        const expectedRedemptionMap = {
+            [testBoostId]: {
+                'account-id-1': { userId: 'some-user-id1', status: 'PENDING' },
+                'account-id-2': { userId: 'some-user-id2', status: 'PENDING' }
+            }
+        };
+
+        const redemptionEvent = { eventType: 'BOOST_TOURNAMENT_WON', boostId: testBoostId };
+        const redemptionCall = { redemptionBoosts: [mockBoost], affectedAccountsDict: expectedRedemptionMap, event: redemptionEvent };
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(redemptionCall);
+
+        const expectedRedemptionUpdate = {
+            boostId: testBoostId,
+            accountIds: ['account-id-1', 'account-id-2'],
+            newStatus: 'REDEEMED',
+            logType: 'STATUS_CHANGE'
+        };
+
+        const expectedExpiredUpdate = {
+            boostId: testBoostId,
+            accountIds: ['account-id-3', 'account-id-4'],
+            newStatus: 'EXPIRED',
+            logType: 'STATUS_CHANGE'
+        };
+
+        const expectedLogObject = (accountId, ranking, percentDestroyed) => ({ 
+            boostId: testBoostId,
+            accountId,
+            logType: 'GAME_OUTCOME',
+            logContext: { ranking, percentDestroyed, accountScore: percentDestroyed, scoreType: 'PERCENT', topScore: 40 }
+        });
+
+        const expectedLogs = [
+            expectedLogObject('account-id-1', 2, 20), 
+            expectedLogObject('account-id-2', 1, 40), 
+            expectedLogObject('account-id-3', 3, 10)
+        ];
+
+        expect(updateBoostAccountStub).to.have.been.calledTwice;
+        expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedRedemptionUpdate]);
+        expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedExpiredUpdate]);
+
+        expect(insertBoostLogStub).to.have.been.calledWithExactly(expectedLogs);
+
+        // if we reach here then remainder is covered above
+        expect(publishMultiUserStub).to.have.been.calledTwice;        
     });
 
     it('Expires all accounts for non-game boost', async () => {

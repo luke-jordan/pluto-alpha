@@ -184,24 +184,43 @@ const checkIfAccountWinsTournament = (accountId, redemptionConditions, boostLogs
 const sortAndRankBestScores = (boostGameLogs, accountIds) => {
     // first, create a map that has the unique highest score
     const highScoreMap = new Map();
+    
+    // no comparison is even possible if scores are of different types, so this can be set from first log
+    const { logContext: firstLogContext } = boostGameLogs[0];
+    const scoreType = typeof firstLogContext.numberTaps === 'number' ? 'NUMBER' : 'PERCENT';
+    
     boostGameLogs.forEach((log) => {
         const { accountId, logContext } = log;
-        const { numberTaps } = logContext; // todo : remove ones over time
-        if (!highScoreMap.has(accountId) || highScoreMap.get(accountId) < numberTaps) {
-            highScoreMap.set(accountId, numberTaps);
+        const accountScore = logContext.numberTaps || logContext.percentDestroyed;
+        
+        if (!highScoreMap.has(accountId) || highScoreMap.get(accountId) < accountScore) {
+            highScoreMap.set(accountId, accountScore);
         }
     });
 
     logger('High score map: ', highScoreMap);
-    // eslint-disable-next-line id-length
-    const sortedEntries = [...highScoreMap.values()].sort((a, b) => b - a);
+
+    const sortedEntries = [...highScoreMap.values()].sort((score1, score2) => score2 - score1);
     logger('Entry scores, sorted: ', sortedEntries);
 
-    const getAccountIdRanking = (accountId) => ({ 
-        numberTaps: highScoreMap.get(accountId), 
-        ranking: sortedEntries.indexOf(highScoreMap.get(accountId)) + 1,
-        topScore: sortedEntries[0]
-    });
+    const getAccountIdRanking = (accountId) => {
+        const accountScore = highScoreMap.get(accountId);
+        const gameAccountResult = { 
+            accountScore,
+            scoreType,
+            ranking: sortedEntries.indexOf(highScoreMap.get(accountId)) + 1,
+            topScore: sortedEntries[0]
+        };
+
+        // this next bit for backward compatibility (for on app itself), remove in a couple app versions
+        if (scoreType === 'NUMBER') {
+            gameAccountResult.numberTaps = accountScore; // leaving in temporarily for legacy
+        } else {
+            gameAccountResult.percentDestroyed = accountScore;
+        }
+
+        return gameAccountResult;
+    };
 
     return accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: getAccountIdRanking(accountId) }), {});
 };
@@ -327,6 +346,23 @@ module.exports.processEvent = async (event) => {
 const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusConditions.REDEEMED && 
     boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N') || condition.startsWith('percent_destroyed_in_first_N'));
 
+const recordGameResult = async (params, boost, accountId) => {
+    const gameLogContext = { 
+        timeTakenMillis: params.timeTakenMillis 
+    };
+    
+    if (params.numberTaps) {
+        gameLogContext.numberTaps = params.numberTaps;
+    }
+
+    if (params.percentDestroyed) {
+        gameLogContext.percentDestroyed = params.percentDestroyed;
+    }
+
+    const boostLog = { boostId: boost.boostId, accountId, logType: 'GAME_RESPONSE', logContext: gameLogContext };
+    await persistence.insertBoostAccountLogs([boostLog]);
+};
+
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
  * @property {number} numberTaps The number of taps (if a boost game)
@@ -358,9 +394,7 @@ module.exports.processUserBoostResponse = async (event) => {
         const statusResult = conditionTester.extractStatusChangesMet(statusEvent, boost);
 
         if (boost.boostType === 'GAME' && eventType === 'USER_GAME_COMPLETION') {
-            const gameLogContext = { numberTaps: params.numberTaps, timeTakenMillis: params.timeTakenMillis };
-            const boostLog = { boostId: boost.boostId, accountId, logType: 'GAME_RESPONSE', logContext: gameLogContext };
-            await persistence.insertBoostAccountLogs([boostLog]);
+            await recordGameResult(params, boost, accountId);
         }
         
         if (statusResult.length === 0) {
