@@ -117,16 +117,23 @@ const initiateTransaction = async (systemWideUserId, parameters, requestContext)
     return { result: 'SUCCESS', saveDetails: saveBody };
 };
 
+// settlement is recorded by here, so this save counts in the count (i.e., no need to increment it here)
 const publishSaveSettledLog = async ({ adminUserId, systemWideUserId, logContext, transactionId }) => {
-    const txDetails = await persistence.getTransactionDetails(transactionId);
+    const [txDetails, saveCount] = await Promise.all([
+        persistence.getTransactionDetails(transactionId), persistence.countTransactionsBySameAccount(transactionId)
+    ]);
+    
     const context = {
         transactionId,
         accountId: txDetails.accountId,
         timeInMillis: moment().valueOf(),
         bankReference: txDetails.humanReference,
         savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`,
+        firstSave: saveCount === 1,
+        saveCount,
         logContext
     };
+
     return publishUserLog({ adminUserId, systemWideUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL', context });
 };
 
