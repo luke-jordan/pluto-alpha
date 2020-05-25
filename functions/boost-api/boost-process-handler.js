@@ -325,7 +325,7 @@ module.exports.processEvent = async (event) => {
 };
 
 const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusConditions.REDEEMED && 
-    boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N'));
+    boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N') || condition.startsWith('percent_destroyed_in_first_N'));
 
 /**
  * @param {object} event The event from API GW. Contains a body with the parameters:
