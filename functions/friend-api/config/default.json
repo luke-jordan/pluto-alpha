@@ -15,6 +15,10 @@
         "friendRequestTable": "friend_data.friend_request",
         "friendLogTable": "friend_data.friend_log",
         "friendUserIdTable": "friend_data.user_reference_table",
+        "friendPoolTable": "friend_data.saving_pool",
+        "friendPoolJoinTable": "friend_data.saving_pool_participant",
+        "transactionTable": "transaction_data.core_transaction_ledger",
+
         "profileTable": "UserProfileTable",
         "phoneTable": "UserPhoneTable",
         "emailTable": "UserEmailTable"

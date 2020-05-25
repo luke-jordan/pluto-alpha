@@ -4,7 +4,7 @@
   "description": "API for joint savings",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:*:test nyc mocha",
+    "test": "DEBUG=jupiter:* mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },

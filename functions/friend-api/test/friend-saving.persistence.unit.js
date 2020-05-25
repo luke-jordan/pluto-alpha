@@ -1,6 +1,7 @@
 'use strict';
 
 const uuid = require('uuid/v4');
+const moment = require('moment');
 
 const helper = require('./test-helper');
 const util = require('ops-util-common');
@@ -11,6 +12,7 @@ const sinon = require('sinon');
 const chai = require('chai');
 chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
+const { expect } = chai;
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -23,7 +25,7 @@ const queryStub = sinon.stub();
 const uuidStub = sinon.stub();
 
 class MockRdsConnection {
-    constructor() {
+    constructor () {
         this.selectQuery = queryStub;
         this.largeMultiTableInsert = multiTableStub;
         this.multiTableUpdateAndInsert = multiOpStub;
@@ -36,7 +38,9 @@ const persistenceWrite = proxyquire('../persistence/write.friends', {
 });
 
 const persistenceRead = proxyquire('../persistence/read.friends', {
-    'rds-common': MockRdsConnection
+    'rds-common': MockRdsConnection,
+    // eslint-disable-next-line
+    'ioredis': class { constructor() {} } 
 });
 
 const testUserId = uuid();
@@ -67,7 +71,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             creatingUserId: testUserId,
             targetAmount: 10000 * 10000,
             targetUnit: 'HUNDREDTH_CENT',
-            targetCurrency: 'EUR',
+            targetCurrency: 'EUR'
         };
 
         const poolColumns = ['saving_pool_id', 'creating_user_id', 'pool_name', 'target_amount', 'target_amount', 'target_unit', 'target_currency'];
@@ -119,13 +123,13 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             [], // no return clause for creating user participation, not needed
             [], // similarly, not needed for other user joins
             [], // or for create log
-            [], // or for join logs
+            [] // or for join logs
         ]);
 
         const resultOfPersistence = await persistenceWrite.persistNewSavingPool(testInput);
         expect(resultOfPersistence).to.deep.equal({ savingPoolId: testPoolId, persistedTime: testPersistedMoment });
 
-        expect(insertionArgs).to.have.been.calledOnce;
+        expect(multiTableStub).to.have.been.calledOnce;
         const insertionArgs = multiTableStub.getCall(0).args;
 
         expect(insertionArgs).to.have.length(5);
@@ -150,7 +154,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
 
         const expectedUpdateDef = {
             table: 'friend_data.saving_pool',
-            key: { savingPoolId },
+            key: { savingPoolId: testPoolId },
             value: { poolName: 'Trip to Taipei' },
             returnClause: 'updated_time'
         };
@@ -165,7 +169,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const expectedLogDef = {
             query: `insert into friend_data.friend_log (log_id, saving_pool_id, relevant_user_id, log_type, log_context) values %L`,
             columnTemplate: '${logId}, ${savingPoolId}, ${userId}, *{SAVING_POOL_UPDATE}, ${logContext}',
-            rows: [logObject],
+            rows: [logObject]
         };
 
         multiOpStub.resolves([
@@ -173,7 +177,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             [] // dont need log return
         ]);
 
-        const resultOfUpdate = await handler.updateSavingPool(testInput);
+        const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
         expect(multiOpStub).to.have.been.calledOnce;
@@ -220,7 +224,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             []
         ]);
 
-        const resultOfUpdate = await handler.updateSavingPool(testInput);
+        const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
         expect(queryStub).to.have.been.calledOnceWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
@@ -240,7 +244,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const checkExistenceQuery = 'select participation_id, active from friend_data.saving_pool_participant where saving_pool_id = $1 and user_id = $2';
         queryStub.resolves([{ 'active': true }]);
 
-        await expect(handler.updateSavingPool(testInput)).to.eventually.be.rejectedWith('Attempt to add user when already active part of pool');
+        await expect(persistenceWrite.updateSavingPool(testInput)).to.eventually.be.rejectedWith('Attempt to add user when already active part of pool');
 
         expect(queryStub).to.have.been.calledOnceWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
         expect(multiTableStub).to.not.have.been.called;
@@ -289,7 +293,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             []
         ]);
 
-        const resultOfUpdate = await handler.updateSavingPool(testInput);
+        const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
         expect(queryStub).to.have.been.calledOnceWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
@@ -311,7 +315,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
 
         const expectedUpdateDef = {
             table: 'friend_data.saving_pool',
-            key: { savingPoolId },
+            key: { savingPoolId: testPoolId },
             value: { targetAmount: 15000 * 10000, targetUnit: 'HUNDREDTH_CENT', targetCurrency: 'EUR' },
             returnClause: 'updated_time'
         };
@@ -326,10 +330,10 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const expectedLogDef = {
             query: `insert into friend_data.friend_log (log_id, saving_pool_id, relevant_user_id, log_type, log_context)`,
             columnTemplate: '${logId}, ${savingPoolId}, ${userId}, *{SAVING_POOL_UPDATE}, ${logContext}',
-            rows: [logObject],
+            rows: [logObject]
         };
 
-        const resultOfUpdate = await handler.updateSavingPool(testInput);
+        const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
         expect(multiOpStub).to.have.been.calledOnce;
@@ -341,6 +345,8 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
 
 describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
+    const testPoolId = uuid();
+
     // if this starts to strain, we can either unnnest tags to select on & group by tag, but for each call, volumes should
     // easily be low enough to allow the in-memory summation to be fine, but keep an eye out
     const expectedTransactionQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, tags from ` + 
@@ -348,7 +354,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
         `where transaction_data.core_transaction_ledger.tags %% $1`; 
     
-    const mockTransaction = (poolId, amount, unit = 'HUNDREDTH_CENT') => ({ 'transaction_id': uuid(), 'amount': amount, unit, currency: 'EUR', tag: `SAVING_POOL::${poolId}` });
+    const mockTransaction = (poolId, amount, unit = 'HUNDREDTH_CENT') => ({ 'transaction_id': uuid(), 'amount': amount, unit, currency: 'EUR', tags: [`SAVING_POOL::${poolId}`] });
 
     beforeEach(() => helper.resetStubs(queryStub));
 
@@ -362,8 +368,8 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         const mockCreationTime2 = moment().subtract(2, 'weeks');
 
         const mockPoolsFromPersistence = [
-           { 'saving_pool_id': 'pool-1', 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime1.format() },
-           { 'saving_pool_id': 'pool-2', 'active': true, 'pool_name': 'Second pool', 'creation_time': mockCreationTime2.format() }
+           { 'saving_pool_id': 'pool-1', 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime1.format(), 'updated_time': mockCreationTime1.format() },
+           { 'saving_pool_id': 'pool-2', 'active': true, 'pool_name': 'Second pool', 'creation_time': mockCreationTime2.format(), 'updated_time': mockCreationTime2.format() }
         ];
 
         queryStub.resolves(mockPoolsFromPersistence);
@@ -371,8 +377,8 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         const fetchResult = await persistenceRead.fetchSavingPoolsForUser(testUserId);
 
         const expectedPools = [
-            { ...camelcaseKeys(mockPoolsFromPersistence[0]), creationTime: moment(mockCreationTime1.format()) },
-            { ...camelcaseKeys(mockPoolsFromPersistence[1]), creationTime: moment(mockCreationTime2.format()) },
+            { ...camelcaseKeys(mockPoolsFromPersistence[0]), creationTime: moment(mockCreationTime1.format()), updatedTime: moment(mockCreationTime1.format()) },
+            { ...camelcaseKeys(mockPoolsFromPersistence[1]), creationTime: moment(mockCreationTime2.format()), updatedTime: moment(mockCreationTime2.format()) }
         ];
 
         expect(fetchResult).to.deep.equal(expectedPools);
@@ -388,11 +394,11 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         const mockResultsFromPersistence = [
             mockTransaction('mock-pool-1', 20 * 10000),
             mockTransaction('mock-pool-1', 10, 'WHOLE_CURRENCY'),
-            mockTransaction('mock-pool-2', 50 * 100, 'WHOLE_CENT'),
+            mockTransaction('mock-pool-2', 50 * 100, 'WHOLE_CENT')
         ];
         queryStub.resolves(mockResultsFromPersistence);
 
-        const resultOfQuery = await persistenceRead.calculatedPoolBalances(mockPools);
+        const resultOfQuery = await persistenceRead.calculatePoolBalances(mockPools, 'EUR');
 
         const expectedResult = [
             { savingPoolId: 'mock-pool-1', amount: 30 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
@@ -409,7 +415,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
         const mockCreationTime = moment().subtract(2, 'days');
         const mockPool = { 'saving_pool_id': testPoolId, 'creating_user_id': testUserId, 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime.format() };
-        queryStub.withArgs(expectedFetchQuery, [testPoolId]).resolves([mockPool]);
+        queryStub.withArgs(expectedQuery, [testPoolId]).resolves([mockPool]);
 
         const fetchResult = await persistenceRead.fetchSavingPoolDetails(testPoolId, false);
         expect(fetchResult).to.deep.equal({
@@ -417,8 +423,8 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
             creatingUserid: testUserId,
             active: true,
             poolName: 'First pool',
-            creationTime: moment(mockCreationTime.format());
-        })
+            creationTime: moment(mockCreationTime.format())
+        });
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['mock-pool-id']);
     });
@@ -466,7 +472,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
             transactionRecord: [
                 { ownerUserid: 'user-1', settlementTime: moment(mockTxTimes[0].format()), amount: 10 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
-                { ownerUserid: 'user-2', settlementTime: moment(mockTxTimes[1].format()), amount: 20 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
+                { ownerUserid: 'user-2', settlementTime: moment(mockTxTimes[1].format()), amount: 20 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' }
             ]
         };
 

@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:friends:dynamo');
 const config = require('config');
+const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
 const camelCaseKeys = require('camelcase-keys');
@@ -300,9 +301,54 @@ module.exports.fetchAlertLogsForUser = async (systemWideUserId, logTypes) => {
         `$1 = any(to_alert_user_id) and not($1 = any(alerted_user_id)) ` +
         `and log_type in (${opsUtil.extractArrayIndices(logTypes, 2)})`;
     
-        const queryValues = [systemWideUserId, ...logTypes];
+    const queryValues = [systemWideUserId, ...logTypes];
     logger('Finding alerts with query: ', selectQuery, ' and values: ', queryValues);
 
     const alertLogs = await rdsConnection.selectQuery(selectQuery, queryValues);
     return alertLogs.map(camelCaseKeys);
+};
+
+/**
+ * Finds savings pools for a user
+ */
+module.exports.fetchSavingPoolsForUser = async (systemWideUserId) => {
+    const fetchQuery = `select * from ${config.get('tables.friendPoolTable')} inner join ${config.get('tables.friendPoolJoinTable')} ` +
+        `on ${config.get('tables.friendPoolTable')}.saving_pool_id = ${config.get('tables.friendPoolJoinTable')}.saving_pool_id ` +
+        `where friend_data.saving_pool.active = true and friend_data.saving_pool_participant.active = true and ` + 
+        `friend_data.saving_pool_participant.participant_id = $1`;
+    logger('Fetching pools for user with query: ', fetchQuery);
+
+    const queryResult = await rdsConnection.selectQuery(fetchQuery, [systemWideUserId]);
+
+    const convertTimeStamps = (camelizedPool) => ({ ...camelizedPool, creationTime: moment(camelizedPool.creationTime), updatedTime: moment(camelizedPool.creationTime) });
+    return queryResult.map((row) => camelCaseKeys(row)).map((row) => convertTimeStamps(row));
+};
+
+/**
+ * Calculates current balance of a set of pools. See tests for notes on future optimizations. What currency a zero balance displays in should be default for user in time, hence
+ * passed in here rather than stored with pool (other option, but at some point may very well want multi-currency pools)
+ */
+module.exports.calculatePoolBalances = async (savingPoolIds, zeroCurrency = 'ZAR') => {
+    const rawFetchQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, tags from ` + 
+        `${config.get('tables.transactionTable')} inner join ${config.get('tables.accountTable')} ` +
+        `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
+        `where transaction_data.core_transaction_ledger.tags %% $1`;
+    const tagArray = savingPoolIds.map((poolId) => `SAVING_POOL::${poolId}`);
+
+    logger('Going to get transaction details, with this query: ', rawFetchQuery, ' and tags: ', tagArray);
+    const queryResult = await rdsConnection.selectQuery(rawFetchQuery, [tagArray]);
+    logger('Raw result: ', queryResult);
+
+    const poolAggregator = (rows, savingPoolId) => {
+        const poolTransactions = rows.filter((row) => row.tags && row.tags.includes(`SAVING_POOL::${savingPoolId}`));
+        if (poolTransactions.length === 0) {
+            return { amount: 0, unit: 'HUNDREDTH_CENT', savingPoolId, currency: zeroCurrency };
+        }
+        logger('Pool transactions: ', poolTransactions);
+        const currency = poolTransactions[0]['currency']; // obv only works as long as users are single-currency
+        const amount = opsUtil.sumOverUnits(poolTransactions, 'HUNDREDTH_CENT', 'amount');
+        return { savingPoolId, amount, unit: 'HUNDREDTH_CENT', currency };
+    };
+
+    return savingPoolIds.map((poolId) => poolAggregator(queryResult, poolId));
 };

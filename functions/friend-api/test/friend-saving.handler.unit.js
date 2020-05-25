@@ -20,31 +20,42 @@ const fetchSavingPoolStub = sinon.stub();
 
 const fetchProfileStub = sinon.stub();
 
+const proxyquire = require('proxyquire').noCallThru();
+
 const handler = proxyquire('../friend-saving-handler', {
     './persistence/write.friends.js': {
         'persistNewSavingPool': persistFriendSavingStub,
-        'updateSavingPool': updateSavingPoolStub,
+        'updateSavingPool': updateSavingPoolStub
     },
     './persistence/read.friends.js': {
         'obtainFriendIds': extractFriendIdsStub,
         'fetchSavingPoolsForUser': listSavingPoolsStub,
         'fetchSavingPoolDetails': fetchSavingPoolStub,
-        'calculatedPoolBalances': calculatePoolBalancesStub,
-    },
+        'calculatePoolBalances': calculatePoolBalancesStub,
+        'fetchUserProfile': fetchProfileStub
+    }
 });
+
+const mockAmountDict = (amount, currency = 'EUR') => (
+    { amount: amount * 10000, unit: 'HUNDREDTH_CENT', currency }
+);
+
+const mockAmountSpread = (amount, prefix, currency = 'EUR') => (
+    { [`${prefix}Amount`]: amount * 10000, [`${prefix}Unit`]: 'HUNDREDTH_CENT', [`${prefix}Currency`]: currency }
+);
 
 const testUserId = uuid();
 
 describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
-    beforeEach(() => helper.resetStubs(extractFriendIdsStub, persistFriendSavingStub));
+    beforeEach(() => helper.resetStubs(extractFriendIdsStub, persistFriendSavingStub, updateSavingPoolStub, fetchSavingPoolStub));
 
     it('Unit test creating a friend savings pot', async () => {
         const mockFriendships = ['relationship-1', 'relationship-2', 'relationship-3'];
         const mockUsers = ['user-1', 'user-2', 'user-3'];
 
         const testBody = {
-            name: 'Trip to Japan',
+            name: 'Trip to Japan ',
             target: {
                 amount: 10000,
                 unit: 'WHOLE_CURRENCY',
@@ -54,23 +65,47 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         };
 
         const expectedPersistenceParams = {
-            name: 'Trip to Japan',
-            creatingUserid: testUserId,
+            poolName: 'Trip to Japan',
+            creatingUserId: testUserId,
             targetAmount: 10000,
-            targetUnit: 'WOHLE_CURRENCY',
+            targetUnit: 'WHOLE_CURRENCY',
             targetCurrency: 'ZAR',
             participatingUsers: mockFriendships.map((relationshipId, index) => ({ relationshipId, userId: mockUsers[index] }))
         };
 
-        const mockPersistenceResult = { savingPoolId: uuid(), persistedTime: moment() };
+        const mockPersistedTime = moment();
+        const mockPoolId = uuid();
+        const mockPersistenceResult = { savingPoolId: mockPoolId, persistedTime: mockPersistedTime };
 
-        extractFriendIdsStub.resolves(mockUsers);
+        extractFriendIdsStub.resolves(mockFriendships.map((relationshipId, index) => ({ userId: mockUsers[index], relationshipId })));
         persistFriendSavingStub.resolves(mockPersistenceResult);
 
-        const resultOfCreation = await handler.createSavingPool(helper.wrapEvent(testBody, testUserId));
+        // these are so the consumer can stick the pool directly into its list, deeper tests are below in read section
+        fetchSavingPoolStub.resolves({ 
+            savingPoolId: mockPoolId, 
+            creationTime: mockPersistedTime,
+            creatingUserId: testUserId,
+            ...mockAmountSpread(1, 'target', 'ZAR'),
+            ...mockAmountSpread(0, 'current', 'ZAR'),
+            participatingUsers: [...expectedPersistenceParams.participatingUsers, { userId: testUserId }],
+            transactionRecord: [], 
+        });
+        fetchProfileStub.resolves({ personalName: 'A', familyName: 'User' });
+
+        const testEvent = helper.wrapParamsWithPath(testBody, 'create', testUserId);
+        const resultOfCreation = await handler.writeSavingPool(testEvent);
         const resultBody = helper.standardOkayChecks(resultOfCreation);
 
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS', persistedValues: mockPersistenceResult })
+        const expectedPool = {
+            savingPoolId: mockPoolId,
+            creationTimeMillis: mockPersistedTime.valueOf(),
+            creatingUser: { personalName: 'A', familyName: 'User', relationshipId: 'CREATOR' },
+            current: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
+            target: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
+            participatingUsers: [...mockFriendships, 'CREATOR'].map((relationshipId) => ({ personalName: 'A', familyName: 'User', relationshipId })),
+            transactionRecord: []
+        };
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', createdSavingPool: expectedPool });
 
         expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(mockFriendships);
         expect(persistFriendSavingStub).to.have.been.calledOnceWithExactly(expectedPersistenceParams);
@@ -96,10 +131,12 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         
         extractFriendIdsStub.resolves(mockUsers);
 
-        const resultOfAttempt = await handler.createSavingPool(helper.wrapEvent(testBody, testUserId));
+        const testEvent = helper.wrapParamsWithPath(testBody, 'create', testUserId);
+        const resultOfAttempt = await handler.writeSavingPool(testEvent);
 
         // 403 logs the user out, so send bad request (also, no ability to trigger this from front-end, so does not need message)
-        expect(resultOfAttempt).to.deep.equal({ statusCode: 400 }); 
+        const bodyMsg = JSON.stringify({ result: 'ERROR', message: 'User trying to involve non-friends' });
+        expect(resultOfAttempt).to.deep.equal({ statusCode: 400, body: bodyMsg }); 
 
         expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(mockFriendships);
         expect(persistFriendSavingStub).to.not.have.been.called;
@@ -111,6 +148,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         // arrays so can pass in multiple
         const mockFriendship = ['relationship-N'];
         const mockFriendUserPair = { relationshipId: 'relationship-N', userId: 'user-N' };
+        const mockUpdatedTime = moment();
 
         const testBody = {
             savingPoolId: testPoolId,
@@ -125,15 +163,16 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
         fetchSavingPoolStub.resolves({ creatingUserId: testUserId });
         extractFriendIdsStub.resolves([mockFriendUserPair]);
-        updateSavingPoolStub.resolves({ updatedTime: moment() });
+        updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
 
-        const resultOfUpdate = await handler.updateSavingPool(helper.wrapEvent(testBody), testUserId);
+        const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
+        const resultOfUpdate = await handler.writeSavingPool(testEvent);
 
         const resultBody = helper.standardOkayChecks(resultOfUpdate);
-        expect(resultBody).to.deep.equal({ updatedTime: mockUpdatedTime.valueOf() });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
 
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
-        expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(mockFriendship);
+        expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(testUserId, mockFriendship);
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
     });
 
@@ -148,16 +187,19 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         const expectedToPersistence = {
             savingPoolId: testPoolId,
             updatingUserId: testUserId,
-            name: 'Trip to Taipei'
+            poolName: 'Trip to Taipei'
         };
+
+        const mockUpdatedTime = moment();
 
         fetchSavingPoolStub.resolves({ creatingUserId: testUserId });
         updateSavingPoolStub.resolves({ updatedTime: moment() });
 
-        const resultOfAttempt = await handler.updateSavingPool(helper.wrapEvent(testBody, testUserId));
+        const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
+        const resultOfAttempt = await handler.writeSavingPool(testEvent);
 
         const resultBody = helper.standardOkayChecks(resultOfAttempt);
-        expect(resultBody).to.deep.equal({ updatedTime: mockUpdatedTime.valueOf() });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
 
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
@@ -188,14 +230,16 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         fetchSavingPoolStub.resolves({ creatingUserId: testUserId });
         updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
 
-        const resultOfAttempt = await handler.updateSavingPool(helper.wrapEvent(testBody, testUserId));
+        const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
+        const resultOfAttempt = await handler.writeSavingPool(testEvent);
+
         const resultBody = helper.standardOkayChecks(resultOfAttempt);
 
-        expect(resultBody).to.deep.equal({ updatedTime: mockUpdatedTime.valueOf() });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
 
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
 
-        expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, { ...expectedUpdateArg });
+        expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedUpdateArg);
     });
 
     it('Rejects attempts to update by non-creating user', async () => {
@@ -209,10 +253,12 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
         fetchSavingPoolStub.resolves({ creatingUserId: testUserId });
 
-        const resultOfAttempt = await handler.updateSavingPool(helper.wrapEvent(testBody, testOtherUserId));
+        const testEvent = helper.wrapParamsWithPath(testBody, 'update', testOtherUserId);
+        const resultOfAttempt = await handler.writeSavingPool(testEvent);
 
-        expect(resultOfAttempt).to.deep.equal({ statusCode: 400 });
-        expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId);
+        const bodyMsg = { result: 'ERROR', message: 'Trying to modify pool but not creator' };
+        expect(resultOfAttempt).to.deep.equal({ statusCode: 400, body: JSON.stringify(bodyMsg) });
+        expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
         expect(updateSavingPoolStub).to.not.have.been.called;
     });
 
@@ -220,8 +266,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
 describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
 
-    const mockAmountDict = (amount) => ({ amount: amount * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' });
-    const mockAmountSpread = (amount, prefix) => ({ [`${prefix}Amount`]: amount * 1000, [`${prefix}Unit`]: 'HUNDREDTH_CENT', [`${prefix}Currency`]: 'EUR' });
+    beforeEach(() => helper.resetStubs(listSavingPoolsStub, calculatePoolBalancesStub, fetchSavingPoolStub, fetchProfileStub));
 
     const testEvent = (path, systemWideUserId, queryStringParameters) => ({
         requestContext: {
@@ -232,7 +277,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
             proxy: path
         },
         queryStringParameters   
-    })
+    });
 
     it('Unit test getting a list of saving pots with their saved amounts', async () => {
         const testCreatedMoment1 = moment().subtract(5, 'days');
@@ -246,7 +291,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
         const mockBalancesFromPersistence = [
             { savingPoolId: 'pool-1', ...mockAmountDict(20) },
             { savingPoolId: 'pool-2', ...mockAmountDict(35) }
-        ]
+        ];
 
         const expectedPoolsToConsumer = [
             { savingPoolId: 'pool-1', poolName: 'Pool 1', target: mockAmountDict(100), current: mockAmountDict(20), creationTimeMillis: testCreatedMoment1.valueOf() },
@@ -256,7 +301,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
         listSavingPoolsStub.resolves(mockPoolsFromPersistence);
         calculatePoolBalancesStub.resolves(mockBalancesFromPersistence);
         
-        const resultOfFetch = await handler.readSavingsPool(testEvent('list', testUserId));
+        const resultOfFetch = await handler.readSavingPool(testEvent('list', testUserId));
         const resultBody = helper.standardOkayChecks(resultOfFetch);
         expect(resultBody).to.deep.equal({ currentSavingPools: expectedPoolsToConsumer });
 
@@ -264,10 +309,10 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
     });
 
     it('Unit test getting a saving pot details', async () => {
-        const testPoolId = uuid();
+        const testPoolId = 'pool-id';
 
         const mockCreationTime = moment().subtract(2, 'weeks');
-        const mockSaveTimes = [moment().subtract(3, 'days'), moment().subtract(2, 'weeks'), moment().subtract(1, 'days')]
+        const mockSaveTimes = [moment().subtract(3, 'days'), moment().subtract(2, 'weeks'), moment().subtract(1, 'days')];
         const mockSaveIds = [uuid(), uuid(), uuid()];
 
         const mockPoolFromPersistence = {
@@ -276,42 +321,46 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
             creatingUserId: 'some-other-user',
             ...mockAmountSpread(100, 'target'),
             ...mockAmountSpread(20, 'current'),
-            participatingUsers: [{ userId: 'some-other-user' }, { userId: 'some-user-2', relationshipId: 'rel-1' }, { userId: 'some-user-3', relationshipId: 'rel-2' }],
+            participatingUsers: [{ userId: 'some-other-user' }, { userId: testUserId, relationshipId: 'rel-0'}, { userId: 'some-user-2', relationshipId: 'rel-1' }, { userId: 'some-user-3', relationshipId: 'rel-2' }],
             transactionRecord: [
-                { transactionId: mockSaveIds[0], ownerUserId: 'some-user-2', ...mockAmountDict(5), creationTime: mockSaveTimes[0] },
-                { transactionId: mockSaveIds[1], ownerUserId: 'some-other-user', ...mockAmountDict(5), creationTime: mockSaveTimes[1] },
-                { transactionId: mockSaveIds[2], ownerUserId: testUserId, ...mockAmountDict(10), creationTime: mockSaveTimes[2] },
+                { transactionId: mockSaveIds[0], ownerUserId: 'some-user-2', ...mockAmountDict(5), settlementTime: mockSaveTimes[0] },
+                { transactionId: mockSaveIds[1], ownerUserId: 'some-other-user', ...mockAmountDict(5), settlementTime: mockSaveTimes[1] },
+                { transactionId: mockSaveIds[2], ownerUserId: testUserId, ...mockAmountDict(10), settlementTime: mockSaveTimes[2] }
             ]
         };
 
+        // NOTE : these relationship IDs are from the _creator_ of the pool to the participating user (if this becomes important in future, one extra call can replace them)
         const mockProfiles = {
-            'some-other-user': { personalName: 'Another', familyName: 'Person' },
-            'some-user-2': { personalName: 'Thisone', familyName: 'That' },
-            'some-user-3': { personalName: 'Oneorother', familyName: 'Here' }
+            'some-other-user': { personalName: 'Another', familyName: 'Person', relationshipId: 'CREATOR' },
+            [testUserId]: { personalName: 'Calling', familyName: 'User', relationshipId: 'rel-0' },
+            'some-user-2': { personalName: 'Thisone', familyName: 'That', relationshipId: 'rel-1' },
+            'some-user-3': { personalName: 'Oneorother', familyName: 'Here', relationshipId: 'rel-2' }
         };
 
         const expectedResult = {
             savingPoolId: 'pool-id',
             creationTimeMillis: mockCreationTime.valueOf(),
-            creatingUser: { personalName: 'Another', familyName: 'Person' },
+            creatingUser: { personalName: 'Another', familyName: 'Person', relationshipId: 'CREATOR' },
             target: mockAmountDict(100),
             current: mockAmountDict(20),
             participatingUsers: Object.values(mockProfiles),
             transactionRecord: [
                 { transactionId: mockSaveIds[0], saveBySelf: false, saverName: 'Thisone That', saveAmount: mockAmountDict(5), creationTimeMillis: mockSaveTimes[0].valueOf() },
-                { transactionId: mockSaveIds[1], saveBySelf: false, saverName: 'Another person', saveAmount: mockAmountDict(5), creationTimeMillis: mockSaveTimes[1].valueOf() },
-                { transactionId: mockSaveIds[2], saveBySelf: true, saveAmount: mockAmountDict(10), creationTimeMillis: mockSaveTimes[2].valueOf() }
+                { transactionId: mockSaveIds[1], saveBySelf: false, saverName: 'Another Person', saveAmount: mockAmountDict(5), creationTimeMillis: mockSaveTimes[1].valueOf() },
+                { transactionId: mockSaveIds[2], saveBySelf: true, saverName: 'Calling User', saveAmount: mockAmountDict(10), creationTimeMillis: mockSaveTimes[2].valueOf() }
             ]
-        }
+        };
 
+        Object.keys(mockProfiles).forEach((userId) => fetchProfileStub.withArgs(userId).resolves(mockProfiles[userId]));
         fetchSavingPoolStub.resolves(mockPoolFromPersistence);
 
-        const resultOfFetch = await handler.readSavingsPool(testEvent('fetch', testUserId, { savingPoolId: testPoolId }));
+        const resultOfFetch = await handler.readSavingPool(testEvent('fetch', testUserId, { savingPoolId: testPoolId }));
         const resultBody = helper.standardOkayChecks(resultOfFetch);
         expect(resultBody).to.deep.equal(expectedResult);
 
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly('pool-id', true); // flag says want full details
-        expect(fetchProfileStub).to.have.been.calledThrice;
+        expect(fetchProfileStub).to.have.callCount(4);
+        expect(fetchProfileStub).to.have.been.calledWith(testUserId);
         expect(fetchProfileStub).to.have.been.calledWith('some-other-user');
         expect(fetchProfileStub).to.have.been.calledWith('some-user-2');
         expect(fetchProfileStub).to.have.been.calledWith('some-user-3');
