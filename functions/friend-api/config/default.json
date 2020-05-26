@@ -10,13 +10,15 @@
         "port" :"5430"
     },
     "tables": {
-        "accountTable": "account_data.core_account_ledger",
         "friendshipTable": "friend_data.core_friend_relationship",
         "friendRequestTable": "friend_data.friend_request",
         "friendLogTable": "friend_data.friend_log",
         "friendUserIdTable": "friend_data.user_reference_table",
+
         "friendPoolTable": "friend_data.saving_pool",
         "friendPoolJoinTable": "friend_data.saving_pool_participant",
+        
+        "accountTable": "account_data.core_account_ledger",
         "transactionTable": "transaction_data.core_transaction_ledger",
 
         "profileTable": "UserProfileTable",

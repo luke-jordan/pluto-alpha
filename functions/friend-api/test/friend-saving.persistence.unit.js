@@ -32,7 +32,7 @@ class MockRdsConnection {
     }
 }
 
-const persistenceWrite = proxyquire('../persistence/write.friends', {
+const persistenceWrite = proxyquire('../persistence/write.friends.pools', {
     'rds-common': MockRdsConnection,
     'uuid/v4': uuidStub 
 });
@@ -58,7 +58,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const testPersistedMoment = moment();
 
         const testInput = {
-            name: 'Trip to Japan',
+            poolName: 'Trip to Japan',
             creatingUserId: testUserId,
             targetAmount: 10000,
             targetUnit: 'WHOLE_CURRENCY',
@@ -71,7 +71,8 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             creatingUserId: testUserId,
             targetAmount: 10000 * 10000,
             targetUnit: 'HUNDREDTH_CENT',
-            targetCurrency: 'EUR'
+            targetCurrency: 'EUR',
+            poolName: 'Trip to Japan'
         };
 
         const poolColumns = ['saving_pool_id', 'creating_user_id', 'pool_name', 'target_amount', 'target_amount', 'target_unit', 'target_currency'];
@@ -86,8 +87,8 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         uuidStub.onFirstCall().returns(mockJoinerPartId);
         const joinCreatorDef = {
             query: `insert into friend_data.saving_pool_participant (participation_id, saving_pool_id, user_id) values %L`,
-            columnTemplate: '${participationId}, ${poolId}, ${userId}',
-            rows: [{ participationId: mockJoinerPartId, poolId: testPoolId, userId: testUserId }]
+            columnTemplate: '${participationId}, ${savingPoolId}, ${creatingUserId}',
+            rows: [{ participationId: mockJoinerPartId, savingPoolId: testPoolId, userId: testUserId }]
         };
 
         const mockPartIds = [];
