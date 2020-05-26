@@ -567,4 +567,51 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         expect(updateRecordStub).to.have.been.calledWith(updateQuery, updateValues);
     });
 
+    it('Fetches a transaction details, to publish settled log', async () => {
+        const expectedCols = [
+            'transaction_id',
+            'account_id', 
+            'creation_time', 
+            'updated_time',
+            'transaction_type', 
+            'settlement_status', 
+            'settlement_time',
+            'client_id',
+            'float_id', 
+            'amount', 
+            'currency',
+            'unit',
+            'human_reference', 
+            'tags', 
+            'flags'
+        ];
+        const expectedQuery = `select ${expectedCols.join(', ')} from transaction_data.core_transaction_ledger where transaction_id = $1`;
+        
+        // leaving out the cols as just verbosity, all will be in returned object
+        queryStub.resolves([{ 'transaction_id': 'some-id', 'amount': 100 }]);
+        const result = await persistence.getTransactionDetails('some-id');
+        expect(result).to.deep.equal({ transactionId: 'some-id', amount: 100 });
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id']);
+    });
+
+    it('Counts a users settled saves, to include in published event', async () => {
+        const countQuery = `select count(transaction_id) from transaction_data.core_transaction_ledger where ` +
+            `settlement_status = $1 and transaction_type = $2 and account_id = ` +
+            `(select account_id from transaction_data.core_transaction_ledger where transaction_id = $3)`;
+        
+        queryStub.onFirstCall().resolves([{ 'count': 10 }]);
+        const firstCall = await persistence.countTransactionsBySameAccount('transaction_1');
+        expect(firstCall).to.deep.equal(10);
+
+        // handles empty return (just in case)
+        queryStub.onSecondCall().resolves([]);
+        const secondCall = await persistence.countTransactionsBySameAccount('transaction_2');
+        expect(secondCall).to.deep.equal(0);
+
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWith(countQuery, ['SETTLED', 'USER_SAVING_EVENT', 'transaction_1']);
+        expect(queryStub).to.have.been.calledWith(countQuery, ['SETTLED', 'USER_SAVING_EVENT', 'transaction_2']);
+    });
+
 });

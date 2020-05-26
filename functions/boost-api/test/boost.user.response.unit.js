@@ -246,7 +246,12 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
 
-        const expectedGameLog = { boostId: testBoostId, accountId: testAccountId, logType: 'GAME_RESPONSE', logContext: { numberTaps: 20, timeTakenMillis: 9000 }};
+        const expectedGameLog = { 
+            boostId: testBoostId, 
+            accountId: testAccountId, 
+            logType: 'GAME_RESPONSE', 
+            logContext: { numberTaps: 20, timeTakenMillis: 9000 }
+        };
         expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedGameLog]);
 
         expect(updateBoostAccountStub).to.not.have.been.called;

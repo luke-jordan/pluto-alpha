@@ -25,6 +25,7 @@ const fetchBsheetTagStub = sinon.stub();
 const updateBsheetTagStub = sinon.stub();
 const insertAccountLogStub = sinon.stub();
 const fetchTxDetailsStub = sinon.stub();
+const countSettledTxStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -40,6 +41,7 @@ const handler = proxyquire('../admin-user-manage', {
         'updateBsheetTag': updateBsheetTagStub,
         'insertAccountLog': insertAccountLogStub,
         'getTransactionDetails': fetchTxDetailsStub,
+        'countTransactionsBySameAccount': countSettledTxStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -64,7 +66,10 @@ const testUpdatedTime = moment().format();
 
 describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
-    beforeEach(() => helper.resetStubs(fetchTxDetailsStub, lamdbaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub, fetchBsheetTagStub));
+    beforeEach(() => helper.resetStubs(
+        fetchTxDetailsStub, lamdbaInvokeStub, publishEventStub, insertAccountLogStub, 
+        updateBsheetTagStub, fetchBsheetTagStub, countSettledTxStub
+    ));
 
     it('Settles user transaction', async () => {
 
@@ -81,7 +86,8 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         publishEventStub.resolves({ result: 'SUCCESS' });
         insertAccountLogStub.resolves({ creationTime: testCreationTime });
         fetchTxDetailsStub.resolves({ accountId: testAccountId, humanReference: 'JSAVE111', amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' });
-        
+        countSettledTxStub.resolves(1);
+
         const testLogTime = moment();
         momentStub.returns(testLogTime);
 
@@ -105,6 +111,8 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
                 timeInMillis: testLogTime.valueOf(),
                 bankReference: 'JSAVE111',
                 savedAmount: '100000::HUNDREDTH_CENT::USD',
+                saveCount: 1,
+                firstSave: true,
                 logContext: expectedLogContext
             }
         };

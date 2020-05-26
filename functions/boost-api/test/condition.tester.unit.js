@@ -29,7 +29,7 @@ describe('*** TESTING CONDITIONS ****', () => {
             { accountId: 'account-id-3', logContext: { numberTaps: 40, timeTakenMillis: 10000 } }
         ];
 
-        const eventContext = { accountTapList: mockUserResponseList };
+        const eventContext = { accountScoreList: mockUserResponseList };
 
         const eventId1 = { eventType: 'BOOST_EXPIRED', accountId: 'account-id-1', eventContext };
         const result1 = tester.testConditionsForStatus(eventId1, [condition]);
@@ -188,6 +188,27 @@ describe('*** GAME CONDITIONS ***', () => {
 
         const result = tester.testConditionsForStatus(sampleEvent, condition);
         expect(result).to.be.false;
+    });
+
+    it('Does a tournament for percent destroyed properly', () => {
+        const condition = 'percent_destroyed_in_first_N #{1::10000}';
+
+        const mockUserResponseList = [
+            { accountId: 'account-id-1', logContext: { percentDestroyed: 20, timeTakenMillis: 10000 } },
+            { accountId: 'account-id-2', logContext: { percentDestroyed: 10, timeTakenMillis: 10000 } },
+            { accountId: 'account-id-3', logContext: { percentDestroyed: 40, timeTakenMillis: 10000 } }
+        ];
+
+        const eventContext = { accountScoreList: mockUserResponseList };
+
+        const eventId1 = { eventType: 'BOOST_EXPIRED', accountId: 'account-id-1', eventContext };
+        const result1 = tester.testConditionsForStatus(eventId1, [condition]);
+
+        const eventId3 = { eventType: 'BOOST_EXPIRED', accountId: 'account-id-3', eventContext };
+        const result2 = tester.testConditionsForStatus(eventId3, [condition]);
+
+        expect(result1).to.be.false;
+        expect(result2).to.be.true;
     });
 
 });
