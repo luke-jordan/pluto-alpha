@@ -4,12 +4,143 @@ const logger = require('debug')('jupiter:friend:saving-pool');
 
 const util = require('ops-util-common');
 
-const persistenceWrite = require('./persistence/write.friends');
 const persistenceRead = require('./persistence/read.friends');
+const persistenceWrite = require('./persistence/write.friends');
 
-//////////////////////////////////////////////////////////////
-/////////////////// WRITING POOLS ////////////////////////////
-//////////////////////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////
+// ///////////////// READING POOLS ////////////////////////////
+// ////////////////////////////////////////////////////////////
+
+const listPoolsForUser = async ({ systemWideUserId }) => {
+    const rawPools = await persistenceRead.fetchSavingPoolsForUser(systemWideUserId);
+    logger('For user ', systemWideUserId, ' fetched raw pools : ', rawPools);
+    if (!rawPools || rawPools.length === 0) {
+        return [];
+    }
+
+    const poolIds = rawPools.map((savingPool) => savingPool.poolId);
+    const calculatedBalances = await persistenceRead.calculatePoolBalances(poolIds);
+    logger('And retrieved calculated balances: ', calculatedBalances);
+
+    const combinedPoolBalances = rawPools.map((rawPool) => {
+        const balance = calculatedBalances.find((balanceDict) => balanceDict.savingPoolId === rawPool.savingPoolId);
+        return {
+            savingPoolId: rawPool.savingPoolId,
+            creationTimeMillis: rawPool.creationTime.valueOf(),
+            poolName: rawPool.poolName,
+            target: { amount: rawPool.targetAmount, currency: rawPool.targetCurrency, unit: rawPool.targetUnit },
+            current: { amount: balance.amount, currency: balance.currency, unit: balance.unit }
+        };
+    });
+    
+    logger('Assembled: ', combinedPoolBalances);
+    return { currentSavingPools: combinedPoolBalances };
+};
+
+// NOTE : these relationship IDs are from the _creator_ of the pool to the participating user (if this becomes important in future, one extra call can replace them)
+const fetchProfileWithKey = async (userIdFriendPair, addDefaultRelationshipId = 'CREATOR') => {
+    const { userId, relationshipId } = userIdFriendPair;
+    const rawProfile = await persistenceRead.fetchUserProfile(userId);
+    
+    const strippedProfile = {
+        personalName: rawProfile.personalName,
+        familyName: rawProfile.familyName
+    };
+
+    if (relationshipId) {
+        strippedProfile.relationshipId = relationshipId;
+    } else if (addDefaultRelationshipId) {
+        strippedProfile.relationshipId = addDefaultRelationshipId;
+    }
+
+    return { userId, profile: strippedProfile };
+};
+
+const transformTransaction = (rawTransaction, profileMap, systemWideUserId) => ({
+    transactionId: rawTransaction.transactionId,
+    creationTimeMillis: rawTransaction.settlementTime.valueOf(),
+    saveAmount: { amount: rawTransaction.amount, currency: rawTransaction.currency, unit: rawTransaction.unit },
+    saveBySelf: rawTransaction.ownerUserId === systemWideUserId,
+    saverName: `${profileMap[rawTransaction.ownerUserId].personalName} ${profileMap[rawTransaction.ownerUserId].familyName}`
+});
+
+const fetchPoolDetails = async ({ systemWideUserId }, { savingPoolId }) => {
+    logger('Fetching pool with ID: ', savingPoolId, ' for user: ', systemWideUserId);
+
+    const rawPool = await persistenceRead.fetchSavingPoolDetails(savingPoolId, true);
+    logger('Received from persistence: ', rawPool);
+
+    const transformedPool = {
+        savingPoolId: rawPool.savingPoolId,
+        creationTimeMillis: rawPool.creationTime.valueOf(),
+        target: {
+            amount: rawPool.targetAmount, unit: rawPool.targetUnit, currency: rawPool.targetCurrency
+        },
+        current: {
+            amount: rawPool.currentAmount, unit: rawPool.currentUnit, currency: rawPool.currentCurrency 
+        }
+    };
+
+    const participatingUserIds = rawPool.participatingUsers.map((userFriendPair) => userFriendPair.userId);
+    if (!participatingUserIds.includes(systemWideUserId)) {
+        return { result: 'ERROR', message: 'Not part of pool' };
+    }
+
+    const profileFetches = rawPool.participatingUsers.map((userFriendPair) => fetchProfileWithKey(userFriendPair));
+    const userProfilesFetched = await Promise.all(profileFetches);
+    const userProfileMap = userProfilesFetched.reduce((obj, entry) => ({ ...obj, [entry.userId]: entry.profile }), {});
+    logger('Assembled profile map: ', userProfileMap);
+
+    transformedPool.creatingUser = userProfileMap[rawPool.creatingUserId];
+    transformedPool.participatingUsers = Object.values(userProfileMap);
+
+    // in case some transaction was by a user who is no longer in the pool (not )
+    const transactionUserIds = rawPool.transactionRecord.map((transaction) => transaction.ownerUserId);
+    const removedUserIds = transactionUserIds.filter((userId) => !participatingUserIds.includes(userId));
+    logger('Any removed user IDs ? : ', removedUserIds);
+
+    if (removedUserIds.length > 0) {
+        const priorUserProfilesFetched = await Promise.all(transactionUserIds.map((userId) => fetchProfileWithKey({ userId }, false)));
+        priorUserProfilesFetched.forEach((entry) => { 
+            userProfileMap[entry.userId] = entry.profile; 
+        }); // maybe do with a reduce in future
+    }
+
+    logger('Transforming transaction records');
+    transformedPool.transactionRecord = rawPool.transactionRecord.map((transaction) => transformTransaction(transaction, userProfileMap, systemWideUserId));
+    logger('Result of pool fetch & transform: ', JSON.stringify(transformedPool, null, 2));
+    return transformedPool;
+};
+
+const readDispatcher = {
+    'list': (userDetails) => listPoolsForUser(userDetails),
+    'fetch': (userDetails, params) => fetchPoolDetails(userDetails, params)
+};
+
+module.exports.readSavingPool = async (event) => {
+    try {
+        const userDetails = util.extractUserDetails(event);
+        if (!userDetails) {
+            return { statusCode: 403 };
+        }
+
+        const { operation, params } = util.extractPathAndParams(event);
+
+        const resultOfOperation = await readDispatcher[operation](userDetails, params);
+        if (!resultOfOperation || resultOfOperation.result === 'ERROR') {
+            return { statusCode: 400, message: 'Bad request' };
+        }
+
+        return { statusCode: 200, body: JSON.stringify(resultOfOperation) };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500, message: err.message };
+    }
+};
+
+// ////////////////////////////////////////////////////////////
+// ///////////////// WRITING POOLS ////////////////////////////
+// ////////////////////////////////////////////////////////////
 
 const createSavingPool = async (params, { systemWideUserId }) => {
     logger('Creating a pool with params: ', params);
@@ -26,7 +157,7 @@ const createSavingPool = async (params, { systemWideUserId }) => {
         targetAmount: target.amount,
         targetUnit: target.unit,
         targetCurrency: target.currency,
-        participatingUsers: friendUserIds,
+        participatingUsers: friendUserIds
     };
 
     logger('Handler sending to persistence new pool: ', persistenceObject);
@@ -93,7 +224,7 @@ module.exports.writeSavingPool = async (event) => {
         }
 
         if (!resultOfOperation) {
-            return  { statusCode: 400, message: 'Unknown operation' };
+            return { statusCode: 400, message: 'Unknown operation' };
         }
 
         if (resultOfOperation.result === 'SUCCESS') {
@@ -101,135 +232,6 @@ module.exports.writeSavingPool = async (event) => {
         }
 
         return { statusCode: 400, body: JSON.stringify(resultOfOperation) };
-    } catch (err) {
-        logger('FATAL_ERROR: ', err);
-        return { statusCode: 500, message: err.message };
-    }
-};
-
-//////////////////////////////////////////////////////////////
-/////////////////// READING POOLS ////////////////////////////
-//////////////////////////////////////////////////////////////
-
-const listPoolsForUser = async ({ systemWideUserId }) => {
-    const rawPools = await persistenceRead.fetchSavingPoolsForUser(systemWideUserId);
-    logger('For user ', systemWideUserId, ' fetched raw pools : ', rawPools);
-    if (!rawPools || rawPools.length === 0) {
-        return [];
-    }
-
-    const poolIds = rawPools.map((savingPool) => savingPool.poolId);
-    const calculatedBalances = await persistenceRead.calculatePoolBalances(poolIds);
-    logger('And retrieved calculated balances: ', calculatedBalances);
-
-    const combinedPoolBalances = rawPools.map((rawPool) => {
-        const balance = calculatedBalances.find((balanceDict) => balanceDict.savingPoolId === rawPool.savingPoolId);
-        return {
-            savingPoolId: rawPool.savingPoolId,
-            creationTimeMillis: rawPool.creationTime.valueOf(),
-            poolName: rawPool.poolName,
-            target: { amount: rawPool.targetAmount, currency: rawPool.targetCurrency, unit: rawPool.targetUnit },
-            current: { amount: balance.amount, currency: balance.currency, unit: balance.unit }
-        };
-    });
-    
-    logger('Assembled: ', combinedPoolBalances);
-    return { currentSavingPools: combinedPoolBalances };
-};
-
-// NOTE : these relationship IDs are from the _creator_ of the pool to the participating user (if this becomes important in future, one extra call can replace them)
-const fetchProfileWithKey = async (userIdFriendPair, addDefaultRelationshipId = 'CREATOR') => {
-    const { userId, relationshipId } = userIdFriendPair;
-    const rawProfile = await persistenceRead.fetchUserProfile(userId);
-    
-    const strippedProfile = {
-        personalName: rawProfile.personalName,
-        familyName: rawProfile.familyName
-    };
-
-    if (relationshipId) {
-        strippedProfile.relationshipId = relationshipId;
-    } else if (addDefaultRelationshipId) {
-        strippedProfile.relationshipId = addDefaultRelationshipId;
-    }
-
-    return { userId, profile: strippedProfile };
-};
-
-const transformTransaction = (rawTransaction, profileMap, systemWideUserId) => ({
-    transactionId: rawTransaction.transactionId,
-    creationTimeMillis: rawTransaction.settlementTime.valueOf(),
-    saveAmount: { amount: rawTransaction.amount, currency: rawTransaction.currency, unit: rawTransaction.unit },
-    saveBySelf: rawTransaction.ownerUserId === systemWideUserId,
-    saverName: `${profileMap[rawTransaction.ownerUserId].personalName} ${profileMap[rawTransaction.ownerUserId].familyName}`,
-});
-
-const fetchPoolDetails = async ({ systemWideUserId }, { savingPoolId }) => {
-    logger('Fetching pool with ID: ', savingPoolId, ' for user: ', systemWideUserId);
-
-    const rawPool = await persistenceRead.fetchSavingPoolDetails(savingPoolId, true);
-    logger('Received from persistence: ', rawPool);
-
-    const transformedPool = {
-        savingPoolId: rawPool.savingPoolId,
-        creationTimeMillis: rawPool.creationTime.valueOf(),
-        target: {
-            amount: rawPool.targetAmount, unit: rawPool.targetUnit, currency: rawPool.targetCurrency
-        },
-        current: {
-            amount: rawPool.currentAmount, unit: rawPool.currentUnit, currency: rawPool.currentCurrency 
-        }
-    };
-
-    const participatingUserIds = rawPool.participatingUsers.map((userFriendPair) => userFriendPair.userId);
-    if (!participatingUserIds.includes(systemWideUserId)) {
-        return { result: 'ERROR', message: 'Not part of pool' };
-    }
-
-    const profileFetches = rawPool.participatingUsers.map((userFriendPair) => fetchProfileWithKey(userFriendPair));
-    const userProfilesFetched = await Promise.all(profileFetches);
-    const userProfileMap = userProfilesFetched.reduce((obj, entry) => ({ ...obj, [entry.userId]: entry.profile }), {});
-    logger('Assembled profile map: ', userProfileMap);
-
-    transformedPool.creatingUser = userProfileMap[rawPool.creatingUserId];
-    transformedPool.participatingUsers = Object.values(userProfileMap);
-
-    // in case some transaction was by a user who is no longer in the pool (not )
-    const transactionUserIds = rawPool.transactionRecord.map((transaction) => transaction.ownerUserId);
-    const removedUserIds = transactionUserIds.filter((userId) => !participatingUserIds.includes(userId));
-    logger('Any removed user IDs ? : ', removedUserIds);
-
-    if (removedUserIds.length > 0) {
-        const priorUserProfilesFetched = await Promise.all(transactionUserIds.map((userId) => fetchProfileWithKey({ userId }, false)));
-        priorUserProfilesFetched.forEach((entry) => userProfileMap[entry.userId] = entry.profile);
-    }
-
-    logger('Transforming transaction records');
-    transformedPool.transactionRecord = rawPool.transactionRecord.map((transaction) => transformTransaction(transaction, userProfileMap, systemWideUserId));
-    logger('Result of pool fetch & transform: ', JSON.stringify(transformedPool, null, 2));
-    return transformedPool;
-};
-
-const readDispatcher = {
-    'list': (userDetails) => listPoolsForUser(userDetails),
-    'fetch': (userDetails, params) => fetchPoolDetails(userDetails, params)
-};
-
-module.exports.readSavingPool = async (event) => {
-    try {
-        const userDetails = util.extractUserDetails(event);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-
-        const { operation, params } = util.extractPathAndParams(event);
-
-        const resultOfOperation = await readDispatcher[operation](userDetails, params);
-        if (!resultOfOperation || resultOfOperation.result === 'ERROR') {
-            return { statusCode: 400, message: 'Bad request' };
-        }
-
-        return { statusCode: 200, body: JSON.stringify(resultOfOperation) };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { statusCode: 500, message: err.message };

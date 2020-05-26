@@ -34,13 +34,13 @@ class MockRdsConnection {
 
 const persistenceWrite = proxyquire('../persistence/write.friends.pools', {
     'rds-common': MockRdsConnection,
-    'uuid/v4': uuidStub 
+    'uuid/v4': uuidStub
 });
 
 const persistenceRead = proxyquire('../persistence/read.friends', {
     'rds-common': MockRdsConnection,
     // eslint-disable-next-line
-    'ioredis': class { constructor() {} } 
+    'ioredis': class { constructor() { } }
 });
 
 const testUserId = uuid();
@@ -66,6 +66,8 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             participatingUsers: [mockRelUser(1), mockRelUser(2), mockRelUser(3)]
         };
 
+        uuidStub.onFirstCall().returns(testPoolId);
+
         const expectedObject = {
             savingPoolId: testPoolId,
             creatingUserId: testUserId,
@@ -75,47 +77,47 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             poolName: 'Trip to Japan'
         };
 
-        const poolColumns = ['saving_pool_id', 'creating_user_id', 'pool_name', 'target_amount', 'target_amount', 'target_unit', 'target_currency'];
+        const poolColumns = ['saving_pool_id', 'creating_user_id', 'target_amount', 'target_unit', 'target_currency', 'pool_name'];
         const primaryInputDef = {
-            query: `insert into friend_data.saving_pool (${poolColumns.join(', ')}) values %L return creation_time`,
+            query: `insert into friend_data.saving_pool (${poolColumns.join(', ')}) values %L returning creation_time`,
             columnTemplate: util.extractColumnTemplate(Object.keys(expectedObject)),
             rows: [expectedObject]
         };
 
         // very very likely this will evolve into an entity, so giving it a pkey (auto-gen uuid would be nice right now, but)
         const mockJoinerPartId = uuid();
-        uuidStub.onFirstCall().returns(mockJoinerPartId);
+        uuidStub.onSecondCall().returns(mockJoinerPartId);
         const joinCreatorDef = {
             query: `insert into friend_data.saving_pool_participant (participation_id, saving_pool_id, user_id) values %L`,
             columnTemplate: '${participationId}, ${savingPoolId}, ${creatingUserId}',
-            rows: [{ participationId: mockJoinerPartId, savingPoolId: testPoolId, userId: testUserId }]
+            rows: [{ participationId: mockJoinerPartId, savingPoolId: testPoolId, creatingUserId: testUserId }]
         };
 
         const mockPartIds = [];
         testInput.participatingUsers.forEach((_, index) => {
             const mockId = uuid();
             mockPartIds.push(mockId);
-            uuidStub.onCall(index + 1).returns(mockId);
+            uuidStub.onCall(index + 3).returns(mockId);
         });
-        
+
         const joinParticipantsDef = {
-            query: `insert into friend_data.saving_pool_participant (participation_id, saving_pool_id, user_id, relationship_id) values %L`,
-            columnTemplate: '${participationId}, ${poolId}, ${userId}, ${relationshipId}',
+            query: `insert into friend_data.saving_pool_participant (participation_id, saving_pool_id, user_id, relationship_id) values %L returning creation_time`,
+            columnTemplate: '${participationId}, ${savingPoolId}, ${userId}, ${relationshipId}',
             rows: testInput.participatingUsers.map(({ userId, relationshipId }, index) => (
-                { participationId: mockPartIds[index], poolId: testPoolId, userId, relationshipId })
+                { participationId: mockPartIds[index], savingPoolId: testPoolId, userId, relationshipId })
             )
         };
 
         const poolCreateLogDef = {
-            query: `insert into friend_data.friend_log (log_id, saving_pool_id, relevant_user_id, log_type) values %L`,
-            columnTemplate: '${logId}, ${savingPoolId}, ${userId}, *{SAVING_POOL_CREATED}',
-            rows: [{ logId: uuid(), savingPoolId: testPoolId, userId: testUserId }]
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relevant_user_id) values %L`,
+            columnTemplate: '${logId}, *{SAVING_POOL_CREATED}, ${savingPoolId}, ${creatingUserId}',
+            rows: [{ logId: 'ugh', savingPoolId: testPoolId, creatingUserId: testUserId }]
         };
 
         const expectedLogRows = testInput.participatingUsers.map(({ userId, relationshipId }) => ({ logId: uuid(), relationshipId, savingPoolId: testPoolId, userId }));
         const poolJoinLogDef = {
-            query: `insert into friend_data.friend_log (log_id, saving_pool_id, relationship_id, relevant_user_id, log_type) values %L`,
-            columnTemplate: '${logId}, ${savingPoolId}, ${relationshipId}, ${userId}, *{FRIEND_ADDED_TO_POOL}',
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relationship_id, relevant_user_id) values %L`,
+            columnTemplate: '${logId}, *{FRIEND_ADDED_TO_POOL}, ${savingPoolId}, ${relationshipId}, ${userId}',
             rows: expectedLogRows
         };
 
@@ -128,17 +130,19 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         ]);
 
         const resultOfPersistence = await persistenceWrite.persistNewSavingPool(testInput);
-        expect(resultOfPersistence).to.deep.equal({ savingPoolId: testPoolId, persistedTime: testPersistedMoment });
+        expect(resultOfPersistence).to.deep.equal({ savingPoolId: testPoolId, persistedTime: moment(testPersistedMoment.format()) });
 
         expect(multiTableStub).to.have.been.calledOnce;
-        const insertionArgs = multiTableStub.getCall(0).args;
+        const insertArgs = multiTableStub.getCall(0).args;
+        expect(insertArgs).to.have.length(1);
 
-        expect(insertionArgs).to.have.length(5);
-        expect(insertionArgs[0]).to.deep.equal(primaryInputDef);
-        expect(insertionArgs[1]).to.deep.equal(joinCreatorDef);
-        expect(insertionArgs[2]).to.deep.equal(joinParticipantsDef);
-        expect(insertionArgs[3]).to.deep.equal(poolCreateLogDef);
-        expect(insertionArgs[4]).to.deep.equal(poolJoinLogDef);
+        const insertDefs = insertArgs[0];
+        expect(insertDefs).to.have.length(5);
+        expect(insertDefs[0]).to.deep.equal(primaryInputDef);
+        expect(insertDefs[1]).to.deep.equal(joinCreatorDef);
+        helper.matchWithoutLogId(insertDefs[2], poolCreateLogDef);
+        expect(insertDefs[3]).to.deep.equal(joinParticipantsDef);
+        helper.matchWithoutLogId(insertDefs[4], poolJoinLogDef);
     });
 
     it('Updates a saving pot name', async () => {
@@ -146,12 +150,12 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const testInput = {
             savingPoolId: testPoolId,
             updatingUserId: testUserId,
-            name: 'Trip to Taipei'
+            poolName: 'Trip to Taipei'
         };
 
         // to store old values
         const expectedFetchQuery = 'select * from friend_data.saving_pool where saving_pool_id = $1';
-        queryStub.withArgs(expectedFetchQuery, [testPoolId]).resolves({ poolName: 'Trip to Japan' });
+        queryStub.resolves([{ 'pool_name': 'Trip to Japan', 'creating_user_id': testUserId }]);
 
         const expectedUpdateDef = {
             table: 'friend_data.saving_pool',
@@ -164,12 +168,12 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             logId: uuid(),
             savingPoolId: testPoolId,
             userId: testUserId,
-            logContext: { changeFields: [{ fieldName: 'poolName', oldValue: 'Trip to Japan', newValue: 'Trip to Taipei' }]}
+            logContext: { changeFields: [{ fieldName: 'poolName', oldValue: 'Trip to Japan', newValue: 'Trip to Taipei' }] }
         };
 
         const expectedLogDef = {
-            query: `insert into friend_data.friend_log (log_id, saving_pool_id, relevant_user_id, log_type, log_context) values %L`,
-            columnTemplate: '${logId}, ${savingPoolId}, ${userId}, *{SAVING_POOL_UPDATE}, ${logContext}',
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relevant_user_id, log_context) values %L`,
+            columnTemplate: '${logId}, *{SAVING_POOL_UPDATE}, ${savingPoolId}, ${updatingUserId}, ${logContext}',
             rows: [logObject]
         };
 
@@ -181,12 +185,13 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedFetchQuery, [testPoolId]);
         expect(multiOpStub).to.have.been.calledOnce;
-        expect(multiOpStub.getCall(0).args[0]).to.deep.equal(expectedUpdateDef);
-        expect(multiOpStub.getCall(0).args[1]).to.deep.equal(expectedLogDef);
+        expect(multiOpStub.getCall(0).args[0]).to.deep.equal([expectedUpdateDef]);
+        helper.matchWithoutLogId(multiOpStub.getCall(0).args[1][0], expectedLogDef);
     });
 
-    it('Adds someone to a saving pot', async () => {
+    it('Adds someone to a saving pot, normal happy path', async () => {
         const mockUpdatedTime = moment();
         const testInput = {
             savingPoolId: testPoolId,
@@ -194,15 +199,19 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             friendshipsToAdd: [mockRelUser(10)]
         };
 
-        const checkExistenceQuery = 'select participation_id, active from friend_data.saving_pool_participant where saving_pool_id = $1 and user_id = $2';
-        queryStub.resolves([]);
+        // first call is existence of pool & user rights
+        queryStub.onFirstCall().resolves([{ 'creating_user_id': testUserId }]);
+
+        const checkExistenceQuery = 'select participation_id, relationship_id, user_id, active from friend_data.saving_pool_participant ' +
+            'where saving_pool_id = $1 and user_id in ($2)';
+        queryStub.onSecondCall().resolves([]);
 
         const mockParticipationId = uuid();
         uuidStub.onFirstCall().returns(mockParticipationId);
         const joinParticipantsDef = {
-            query: `insert into friend_data.saving_pool_participant (saving_pool_id, user_id, relationship_id) values %L returning creation_time`,
-            columnTemplate: '${poolId}, ${userId}, ${relationshipId}',
-            rows: [{ participationId: mockParticipationId, poolId: testPoolId, userId: 'user-10', relationshipId: 'relationship-10' }]
+            query: `insert into friend_data.saving_pool_participant (participation_id, saving_pool_id, user_id, relationship_id) values %L returning creation_time`,
+            columnTemplate: '${participationId}, ${savingPoolId}, ${userId}, ${relationshipId}',
+            rows: [{ participationId: mockParticipationId, savingPoolId: testPoolId, userId: 'user-10', relationshipId: 'relationship-10' }]
         };
 
         const mockLogId = uuid();
@@ -215,8 +224,8 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         };
 
         const poolJoinLogDef = {
-            query: `insert into friend_data.friend_log (log_id, saving_pool_id, relationship_id, relevant_user_id, log_type) values %L`,
-            columnTemplate: '${logId}, ${savingPoolId}, ${relationshipId}, ${userId}, *{FRIEND_ADDED_TO_POOL}',
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relationship_id, relevant_user_id) values %L`,
+            columnTemplate: '${logId}, *{FRIEND_ADDED_TO_POOL}, ${savingPoolId}, ${relationshipId}, ${userId}',
             rows: [logObject]
         };
 
@@ -228,11 +237,12 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
-        expect(queryStub).to.have.been.calledOnceWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
+        expect(queryStub).to.have.been.calledTwice; // first call for existing values covered above
+        expect(queryStub).to.have.been.calledWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
 
         expect(multiTableStub).to.have.been.calledOnce;
         expect(multiTableStub.getCall(0).args[0][0]).to.deep.equal(joinParticipantsDef);
-        expect(multiTableStub.getCall(0).args[0][1]).to.deep.equal(poolJoinLogDef);
+        helper.matchWithoutLogId(multiTableStub.getCall(0).args[0][1], poolJoinLogDef);
     });
 
     it('Does not add someone if they are already part and active', async () => {
@@ -242,27 +252,29 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             friendshipsToAdd: [mockRelUser(10)]
         };
 
-        const checkExistenceQuery = 'select participation_id, active from friend_data.saving_pool_participant where saving_pool_id = $1 and user_id = $2';
-        queryStub.resolves([{ 'active': true }]);
+        queryStub.onFirstCall().resolves([{ 'creating_user_id': testUserId }]); // for user rights check
 
-        await expect(persistenceWrite.updateSavingPool(testInput)).to.eventually.be.rejectedWith('Attempt to add user when already active part of pool');
+        const checkExistenceQuery = 'select participation_id, relationship_id, user_id, active from friend_data.saving_pool_participant ' +
+            'where saving_pool_id = $1 and user_id in ($2)';
+        queryStub.onSecondCall().resolves([{ 'active': true, 'user_id': 'user-10' }]);
 
-        expect(queryStub).to.have.been.calledOnceWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
+        await expect(persistenceWrite.updateSavingPool(testInput)).to.eventually.be.rejectedWith('Error, nothing to do!');
+
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
         expect(multiTableStub).to.not.have.been.called;
         expect(multiOpStub).to.not.have.been.called;
     });
 
     it('Flips someone to active if re-added', async () => {
         const mockParticipationId = uuid();
-        const mockUpdatedTime = uuid();
+        const mockUpdatedTime = moment();
 
         const testInput = {
             savingPoolId: testPoolId,
             updatingUserId: testUserId,
             friendshipsToAdd: [mockRelUser(10)]
         };
-
-        const checkExistenceQuery = 'select participation_id, active from friend_data.saving_pool_participant where saving_pool_id = $1 and user_id = $2';
 
         const updateParticipantDef = {
             table: 'friend_data.saving_pool_participant',
@@ -271,10 +283,8 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             returnClause: 'updated_time'
         };
 
-        const mockLogId = uuid();
-        uuidStub.returns(mockLogId);
         const logObject = {
-            logId: mockLogId,
+            logId: 'ugh',
             savingPoolId: testPoolId,
             relationshipId: 'relationship-10',
             userId: 'user-10',
@@ -282,13 +292,14 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         };
 
         const insertLogDef = {
-            query: `insert into friend_data.friend_log (log_id, saving_pool_id, relationship_id, relevant_user_id, log_type) values %L`,
-            columnTemplate: '${logId}, ${savingPoolId}, ${relationshipId}, ${userId}, *{FRIEND_ADDED_TO_POOL}',
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relationship_id, relevant_user_id, log_context) values %L`,
+            columnTemplate: '${logId}, *{FRIEND_READDED_TO_POOL}, ${savingPoolId}, ${relationshipId}, ${userId}, ${logContext}',
             rows: [logObject]
         };
 
-        queryStub.resolves([{ 'participation_id': mockParticipationId, 'active': false }]);
-        
+        queryStub.onFirstCall().resolves([{ 'creating_user_id': testUserId }]); // for user rights check
+        queryStub.onSecondCall().resolves([{ 'participation_id': mockParticipationId, 'user_id': 'user-10', 'active': false, 'relationship_id': 'relationship-10' }]);
+
         multiOpStub.resolves([
             [{ 'updated_time': mockUpdatedTime.format() }],
             []
@@ -297,10 +308,12 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
-        expect(queryStub).to.have.been.calledOnceWithExactly(checkExistenceQuery, [testPoolId, 'user-10']);
+        // query stub covered amply above
+
         expect(multiTableStub).to.not.have.been.called;
-        
-        expect(multiOpStub).to.have.been.calledOnceWithExactly([updateParticipantDef], [insertLogDef]);
+        expect(multiOpStub).to.have.been.calledOnce;
+        expect(multiOpStub.getCall(0).args[0][0]).to.deep.equal(updateParticipantDef);
+        helper.matchWithoutLogId(multiOpStub.getCall(0).args[1][0], insertLogDef);
     });
 
     it('Updates a saving pot target', async () => {
@@ -309,15 +322,15 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const testInput = {
             savingPoolId: testPoolId,
             updatingUserId: testUserId,
-            targetAmount: 15000, 
-            targetUnit: 'WHOLE_CURRENCY', 
-            targetCurrency: 'EUR' 
+            targetAmount: 15000,
+            targetUnit: 'WHOLE_CURRENCY',
+            targetCurrency: 'EUR'
         };
 
         const expectedUpdateDef = {
             table: 'friend_data.saving_pool',
             key: { savingPoolId: testPoolId },
-            value: { targetAmount: 15000 * 10000, targetUnit: 'HUNDREDTH_CENT', targetCurrency: 'EUR' },
+            value: { targetAmount: 15000 * 10000 },
             returnClause: 'updated_time'
         };
 
@@ -325,21 +338,27 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             logId: uuid(),
             savingPoolId: testPoolId,
             userId: testUserId,
-            logContext: { changeFields: [{ fieldName: 'targetAmount', oldValue: 10000 * 10000, newValue: 15000 * 10000 }]}
+            logContext: { changeFields: [{ fieldName: 'targetAmount', oldValue: 10000 * 10000, newValue: 15000 * 10000 }] }
         };
 
         const expectedLogDef = {
-            query: `insert into friend_data.friend_log (log_id, saving_pool_id, relevant_user_id, log_type, log_context)`,
-            columnTemplate: '${logId}, ${savingPoolId}, ${userId}, *{SAVING_POOL_UPDATE}, ${logContext}',
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relevant_user_id, log_context) values %L`,
+            columnTemplate: '${logId}, *{SAVING_POOL_UPDATE}, ${savingPoolId}, ${updatingUserId}, ${logContext}',
             rows: [logObject]
         };
+
+        queryStub.resolves([{ 'target_amount': 10000 * 10000, 'target_unit': 'HUNDREDTH_CENT', 'target_currency': 'EUR', 'creating_user_id': testUserId }]);
+        multiOpStub.resolves([
+            [{ 'updated_time': mockUpdatedTime.format() }],
+            [] // dont need log return
+        ]);
 
         const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
 
         expect(multiOpStub).to.have.been.calledOnce;
-        expect(multiOpStub.getCall(0).args[0]).to.deep.equal(expectedUpdateDef);
-        expect(multiOpStub.getCall(0).args[1]).to.deep.equal(expectedLogDef);
+        expect(multiOpStub.getCall(0).args[0][0]).to.deep.equal(expectedUpdateDef);
+        helper.matchWithoutLogId(multiOpStub.getCall(0).args[1][0], expectedLogDef);
     });
 
 });
@@ -350,11 +369,11 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
     // if this starts to strain, we can either unnnest tags to select on & group by tag, but for each call, volumes should
     // easily be low enough to allow the in-memory summation to be fine, but keep an eye out
-    const expectedTransactionQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, tags from ` + 
+    const expectedTransactionQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, tags from ` +
         `transaction_data.core_transaction_ledger inner join account_data.core_account_ledger ` +
         `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
-        `where transaction_data.core_transaction_ledger.tags %% $1`; 
-    
+        `where transaction_data.core_transaction_ledger.tags %% $1`;
+
     const mockTransaction = (poolId, amount, unit = 'HUNDREDTH_CENT') => ({ 'transaction_id': uuid(), 'amount': amount, unit, currency: 'EUR', tags: [`SAVING_POOL::${poolId}`] });
 
     beforeEach(() => helper.resetStubs(queryStub));
@@ -362,15 +381,15 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
     it('Finds savings pots (basic details) that user is part of', async () => {
         const expectedQuery = 'select * from friend_data.saving_pool inner join friend_data.saving_pool_participant ' +
             `on friend_data.saving_pool.saving_pool_id = friend_data.saving_pool_participant.saving_pool_id ` +
-            `where friend_data.saving_pool.active = true and friend_data.saving_pool_participant.active = true and ` + 
+            `where friend_data.saving_pool.active = true and friend_data.saving_pool_participant.active = true and ` +
             `friend_data.saving_pool_participant.participant_id = $1`;
 
         const mockCreationTime1 = moment().subtract(1, 'weeks');
         const mockCreationTime2 = moment().subtract(2, 'weeks');
 
         const mockPoolsFromPersistence = [
-           { 'saving_pool_id': 'pool-1', 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime1.format(), 'updated_time': mockCreationTime1.format() },
-           { 'saving_pool_id': 'pool-2', 'active': true, 'pool_name': 'Second pool', 'creation_time': mockCreationTime2.format(), 'updated_time': mockCreationTime2.format() }
+            { 'saving_pool_id': 'pool-1', 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime1.format(), 'updated_time': mockCreationTime1.format() },
+            { 'saving_pool_id': 'pool-2', 'active': true, 'pool_name': 'Second pool', 'creation_time': mockCreationTime2.format(), 'updated_time': mockCreationTime2.format() }
         ];
 
         queryStub.resolves(mockPoolsFromPersistence);
@@ -389,7 +408,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
     it('Calculates balance of set of savings pools', async () => {
         const mockPools = ['mock-pool-1', 'mock-pool-2', 'mock-pool-3'];
-        
+
         const expectedTagArray = mockPools.map((poolId) => `SAVING_POOL::${poolId}`);
 
         const mockResultsFromPersistence = [
@@ -415,38 +434,50 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         const expectedQuery = 'select * from friend_data.saving_pool where saving_pool_id = $1';
 
         const mockCreationTime = moment().subtract(2, 'days');
-        const mockPool = { 'saving_pool_id': testPoolId, 'creating_user_id': testUserId, 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime.format() };
+        const mockUpdatedTime = moment().subtract(1, 'days');
+        const mockPool = { 'saving_pool_id': testPoolId, 'creating_user_id': testUserId, 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime.format(), 'updated_time': mockUpdatedTime.format() };
         queryStub.withArgs(expectedQuery, [testPoolId]).resolves([mockPool]);
 
         const fetchResult = await persistenceRead.fetchSavingPoolDetails(testPoolId, false);
         expect(fetchResult).to.deep.equal({
             savingPoolId: testPoolId,
-            creatingUserid: testUserId,
+            creatingUserId: testUserId,
             active: true,
             poolName: 'First pool',
-            creationTime: moment(mockCreationTime.format())
+            creationTime: moment(mockCreationTime.format()),
+            updatedTime: moment(mockUpdatedTime.format())
         });
 
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['mock-pool-id']);
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testPoolId]);
     });
 
     it('Gets history (all relevant info) on saving pot, including participants', async () => {
         const expectedFetchQuery = 'select * from friend_data.saving_pool where saving_pool_id = $1';
-        const expectedParticipantQuery = 'select user_id, relationship_id from friend_data.saving_pool_participant ' +
-            'where saving_pool_id = $1';
+        const expectedParticipantQuery = 'select user_id, relationship_id, saving_pool_id from friend_data.saving_pool_participant ' +
+            'where saving_pool_id in ($1) and active = true';
         const expectedContributionQuery = expectedTransactionQuery;
 
         const mockCreationTime = moment().subtract(1, 'week');
-        const mockPool = { 'saving_pool_id': testPoolId, 'creating_user_id': testUserId, 'active': true, 'pool_name': 'First pool', 'creation_time': mockCreationTime.format() };
+        const mockPool = { 
+            'saving_pool_id': testPoolId, 
+            'creating_user_id': testUserId, 
+            'active': true, 
+            'pool_name': 'First pool', 
+            'creation_time': mockCreationTime.format(),
+            'updated_time': mockCreationTime.format(),
+            'target_amount': 50 * 10000,
+            'target_unit': 'HUNDREDTH_CENT',
+            'target_currency': 'EUR'
+        };
         queryStub.withArgs(expectedFetchQuery, [testPoolId]).resolves([mockPool]);
-        
+
         const mockParticipants = [{ 'user_id': testUserId }, { 'user_id': 'user-1', 'relationship_id': 'rel-1' }, { 'user_id': 'user-2', 'relationship_id': 'rel-2' }];
         queryStub.withArgs(expectedParticipantQuery, [testPoolId]).resolves(mockParticipants);
 
         const mockTxTimes = [moment().subtract(1, 'week'), moment().subtract(3, 'days')];
         const mockTransactions = [
-            { ...mockTransaction(testPoolId, 10), 'owner_user_id': testUserId, 'settlement_time': mockTxTimes[0].format() }, 
-            { ...mockTransaction(testPoolId, 20), 'owner_user_id': 'user-2', 'settlement_time': mockTxTimes[1].format() }
+            { ...mockTransaction(testPoolId, 10 * 10000), 'owner_user_id': testUserId, 'settlement_time': mockTxTimes[0].format() },
+            { ...mockTransaction(testPoolId, 20 * 10000), 'owner_user_id': 'user-2', 'settlement_time': mockTxTimes[1].format() }
         ];
         queryStub.withArgs(expectedContributionQuery, [[`SAVING_POOL::${testPoolId}`]]).resolves(mockTransactions);
 
@@ -454,26 +485,30 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
         const expectedResult = {
             savingPoolId: testPoolId,
-            creationTime: moment(mockCreationTime.format()),
             creatingUserId: testUserId,
-            
+            active: true,
+            poolName: 'First pool',
+
+            creationTime: moment(mockCreationTime.format()),
+            updatedTime: moment(mockCreationTime.format()),
+
             targetAmount: 50 * 10000,
             targetUnit: 'HUNDREDTH_CENT',
             targetCurrency: 'EUR',
-            
+
             currentAmount: 30 * 10000,
             currentUnit: 'HUNDREDTH_CENT',
             currentCurrency: 'EUR',
-            
+
             participatingUsers: [
-                { userId: testUserId }, 
+                { userId: testUserId, relationshipId: 'CREATOR' },
                 { userId: 'user-1', relationshipId: 'rel-1' },
                 { userId: 'user-2', relationshipId: 'rel-2' }
             ],
 
-            transactionRecord: [
-                { ownerUserid: 'user-1', settlementTime: moment(mockTxTimes[0].format()), amount: 10 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
-                { ownerUserid: 'user-2', settlementTime: moment(mockTxTimes[1].format()), amount: 20 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' }
+            transactionRecords: [
+                { ownerUserId: testUserId, settlementTime: moment(mockTxTimes[0].format()), amount: 10 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
+                { ownerUserId: 'user-2', settlementTime: moment(mockTxTimes[1].format()), amount: 20 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' }
             ]
         };
 
@@ -487,8 +522,8 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
     // useful aux method, first written for here
     it('Gets user IDs for set of friendships based on calling user id', async () => {
         const expectedFetchQuery = 'select initiated_user_id, accepted_user_id, relationship_id from ' +
-            `friend_data.core_friend_relatinship relationship_status = $1 and (initiated_user_id = $2) or (accepted_user_id = $2) ` +
-            `and relationship_id in (${util.extractArrayIndices(['rel-1', 'rel-2', 'rel-3'])})`;
+            `friend_data.core_friend_relationship where relationship_status = $1 and (initiated_user_id = $2) or (accepted_user_id = $2) ` +
+            `and relationship_id in (${util.extractArrayIndices(['rel-1', 'rel-2', 'rel-3'], 3)})`;
 
         const mockRows = [
             { 'initiated_user_id': testUserId, 'accepted_user_id': 'user-1', 'relationship_id': 'rel-1' },
@@ -499,8 +534,8 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
         const fetchResult = await persistenceRead.obtainFriendIds(testUserId, ['rel-1', 'rel-2', 'rel-3']);
         expect(fetchResult).to.deep.equal([{ userId: 'user-1', relationshipId: 'rel-1' }, { userId: 'user-2', relationshipId: 'rel-2' }]);
-        
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedFetchQuery, ['ACTIVE', testUserId]);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedFetchQuery, ['ACTIVE', testUserId, 'rel-1', 'rel-2', 'rel-3']);
     });
 
 });

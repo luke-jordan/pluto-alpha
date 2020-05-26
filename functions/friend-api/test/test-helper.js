@@ -63,3 +63,15 @@ module.exports.standardOkayChecks = (result, checkHeaders = false) => {
     }
     return JSON.parse(result.body);
 };
+
+// sinon match any and log ids not behaving well, and add no value to anyone in the world anywhere at any time, so using this
+module.exports.matchWithoutLogId = (expectedInsertDef, logInsertDef) => {
+    expect(expectedInsertDef.query).to.equal(logInsertDef.query);
+    expect(expectedInsertDef.columnTemplate).to.equal(logInsertDef.columnTemplate);
+    expectedInsertDef.rows.forEach((expectedRow, index) => {
+        const actualRow = logInsertDef.rows[index];
+        Reflect.deleteProperty(actualRow, 'logId');
+        Reflect.deleteProperty(expectedRow, 'logId');
+        expect(expectedRow).to.deep.equal(actualRow);
+    });
+};

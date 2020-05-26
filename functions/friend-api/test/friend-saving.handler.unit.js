@@ -88,7 +88,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
             ...mockAmountSpread(1, 'target', 'ZAR'),
             ...mockAmountSpread(0, 'current', 'ZAR'),
             participatingUsers: [...expectedPersistenceParams.participatingUsers, { userId: testUserId }],
-            transactionRecord: [], 
+            transactionRecord: []
         });
         fetchProfileStub.resolves({ personalName: 'A', familyName: 'User' });
 
