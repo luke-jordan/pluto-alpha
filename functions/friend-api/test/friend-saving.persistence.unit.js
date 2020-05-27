@@ -372,7 +372,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
     const expectedTransactionQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, ` +
         `transaction_data.core_transaction_ledger.tags from transaction_data.core_transaction_ledger inner join account_data.core_account_ledger ` +
         `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
-        `where transaction_data.core_transaction_ledger.tags && $1`;
+        `where settlement_status = $1 and transaction_data.core_transaction_ledger.tags && $2`;
 
     const mockTransaction = (poolId, amount, unit = 'HUNDREDTH_CENT') => ({ 'transaction_id': uuid(), 'amount': amount, unit, currency: 'EUR', tags: [`SAVING_POOL::${poolId}`] });
 
@@ -427,7 +427,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         ];
 
         expect(resultOfQuery).to.deep.equal(expectedResult);
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedTransactionQuery, [expectedTagArray]); // note [[]]
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedTransactionQuery, ['SETTLED', expectedTagArray]); // note [[]]
     });
 
     it('Gets basic details on a savings pool', async () => {
@@ -479,7 +479,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
             { ...mockTransaction(testPoolId, 10 * 10000), 'owner_user_id': testUserId, 'settlement_time': mockTxTimes[0].format() },
             { ...mockTransaction(testPoolId, 20 * 10000), 'owner_user_id': 'user-2', 'settlement_time': mockTxTimes[1].format() }
         ];
-        queryStub.withArgs(expectedContributionQuery, [[`SAVING_POOL::${testPoolId}`]]).resolves(mockTransactions);
+        queryStub.withArgs(expectedContributionQuery, ['SETTLED', [`SAVING_POOL::${testPoolId}`]]).resolves(mockTransactions);
 
         const fetchResult = await persistenceRead.fetchSavingPoolDetails(testPoolId, true);
 
@@ -516,7 +516,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
         expect(queryStub).to.have.been.calledWith(expectedFetchQuery, [testPoolId]);
         expect(queryStub).to.have.been.calledWith(expectedParticipantQuery, [testPoolId]);
-        expect(queryStub).to.have.been.calledWith(expectedContributionQuery, [[`SAVING_POOL::${testPoolId}`]]); // note [[]]
+        expect(queryStub).to.have.been.calledWith(expectedContributionQuery, ['SETTLED', [`SAVING_POOL::${testPoolId}`]]); // note [[]]
     });
 
     // useful aux method, first written for here

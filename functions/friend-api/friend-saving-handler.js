@@ -146,7 +146,7 @@ const createSavingPool = async (params, { systemWideUserId }) => {
     logger('Creating a pool with params: ', params);
 
     const { name, target, friendships } = params;
-    const friendUserIds = await (friendships.length > 0 ? persistenceRead.obtainFriendIds(friendships) : []);
+    const friendUserIds = await (friendships.length > 0 ? persistenceRead.obtainFriendIds(systemWideUserId, friendships) : []);
     if (friendUserIds.length < friendships.length) {
         return { result: 'ERROR', message: 'User trying to involve non-friends' };
     }

@@ -331,12 +331,12 @@ const fetchTransactionsForPools = async (savingPoolIds) => {
         `${config.get('tables.transactionTable')}.tags from ${config.get('tables.transactionTable')} ` +
         `inner join ${config.get('tables.accountTable')} ` +
         `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
-        `where ${config.get('tables.transactionTable')}.tags && $1`;
+        `where settlement_status = $1 and ${config.get('tables.transactionTable')}.tags && $2`;
 
     const tagArray = savingPoolIds.map((poolId) => `SAVING_POOL::${poolId}`);
 
     logger('Going to get transaction details, with this query: ', rawFetchQuery, ' and tags: ', tagArray);
-    const queryResult = await rdsConnection.selectQuery(rawFetchQuery, [tagArray]);
+    const queryResult = await rdsConnection.selectQuery(rawFetchQuery, ['SETTLED', tagArray]);
     logger('Raw result fetching transactions for pool: ', queryResult);
     return queryResult;
 };

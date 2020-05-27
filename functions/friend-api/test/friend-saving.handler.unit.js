@@ -107,7 +107,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         };
         expect(resultBody).to.deep.equal({ result: 'SUCCESS', createdSavingPool: expectedPool });
 
-        expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(mockFriendships);
+        expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(testUserId, mockFriendships);
         expect(persistFriendSavingStub).to.have.been.calledOnceWithExactly(expectedPersistenceParams);
     });
 
@@ -138,7 +138,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         const bodyMsg = JSON.stringify({ result: 'ERROR', message: 'User trying to involve non-friends' });
         expect(resultOfAttempt).to.deep.equal({ statusCode: 400, body: bodyMsg }); 
 
-        expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(mockFriendships);
+        expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(testUserId, mockFriendships);
         expect(persistFriendSavingStub).to.not.have.been.called;
     });
 
