@@ -23,7 +23,7 @@ const fetchProfileStub = sinon.stub();
 const proxyquire = require('proxyquire').noCallThru();
 
 const handler = proxyquire('../friend-saving-handler', {
-    './persistence/write.friends.js': {
+    './persistence/write.friends.pools.js': {
         'persistNewSavingPool': persistFriendSavingStub,
         'updateSavingPool': updateSavingPoolStub
     },

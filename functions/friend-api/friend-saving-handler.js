@@ -5,7 +5,7 @@ const logger = require('debug')('jupiter:friend:saving-pool');
 const util = require('ops-util-common');
 
 const persistenceRead = require('./persistence/read.friends');
-const persistenceWrite = require('./persistence/write.friends');
+const persistenceWrite = require('./persistence/write.friends.pools');
 
 // ////////////////////////////////////////////////////////////
 // ///////////////// READING POOLS ////////////////////////////
