@@ -7,7 +7,7 @@ resource "aws_lambda_function" "friend_pool_write" {
 
   function_name                  = "${var.friend_pool_write}"
   role                           = "${aws_iam_role.friend_pool_write_role.arn}"
-  handler                        = "friend-saving-handler.readSavingPool"
+  handler                        = "friend-saving-handler.writeSavingPool"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
   timeout                        = 15

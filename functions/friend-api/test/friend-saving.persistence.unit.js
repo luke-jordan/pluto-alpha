@@ -382,7 +382,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         const expectedQuery = 'select * from friend_data.saving_pool inner join friend_data.saving_pool_participant ' +
             `on friend_data.saving_pool.saving_pool_id = friend_data.saving_pool_participant.saving_pool_id ` +
             `where friend_data.saving_pool.active = true and friend_data.saving_pool_participant.active = true and ` +
-            `friend_data.saving_pool_participant.participant_id = $1`;
+            `friend_data.saving_pool_participant.participation_id = $1`;
 
         const mockCreationTime1 = moment().subtract(1, 'weeks');
         const mockCreationTime2 = moment().subtract(2, 'weeks');

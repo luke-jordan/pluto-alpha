@@ -315,7 +315,7 @@ module.exports.fetchSavingPoolsForUser = async (systemWideUserId) => {
     const fetchQuery = `select * from ${config.get('tables.friendPoolTable')} inner join ${config.get('tables.friendPoolJoinTable')} ` +
         `on ${config.get('tables.friendPoolTable')}.saving_pool_id = ${config.get('tables.friendPoolJoinTable')}.saving_pool_id ` +
         `where friend_data.saving_pool.active = true and friend_data.saving_pool_participant.active = true and ` + 
-        `friend_data.saving_pool_participant.participant_id = $1`;
+        `friend_data.saving_pool_participant.participation_id = $1`;
     logger('Fetching pools for user with query: ', fetchQuery);
 
     const queryResult = await rdsConnection.selectQuery(fetchQuery, [systemWideUserId]);
