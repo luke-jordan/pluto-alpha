@@ -317,22 +317,6 @@ const handlePaymentPendingOrFailed = async (statusType, transactionDetails) => {
   return { result: 'PAYMENT_PENDING', bankDetails };
 };
 
-// used quite a lot in testing
-const dummyPaymentResult = async (systemWideUserId, params, transactionDetails) => {
-  const paymentSuccessful = !params.failureType; // for now
-  
-  if (paymentSuccessful) {
-    const dummyPaymentRef = `some-payment-reference-${(new Date().getTime())}`;
-    const { transactionId } = transactionDetails;
-    const resultOfSave = await exports.settle({ transactionId, paymentProvider: 'OZOW', paymentRef: dummyPaymentRef, settlingUserId: systemWideUserId });
-    logger('Result of save: ', resultOfSave);
-    await publishSaveSucceeded(systemWideUserId, transactionId);
-    return { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
-  }
-
-  return handlePaymentPendingOrFailed(params.failureType, transactionDetails);
-};
-
 /**
  * Checks on the backend whether this payment is done
  * @param {string} transactionId The transaction ID of the pending payment
@@ -372,12 +356,6 @@ module.exports.checkPendingPayment = async (event) => {
 
     await publisher.publishUserEvent(systemWideUserId, 'SAVING_EVENT_PAYMENT_CHECK', { context: { transactionId }});
 
-    const dummySuccess = config.has('payment.dummy') && config.get('payment.dummy') === 'ON';
-    if (dummySuccess) {
-      const dummyResult = await dummyPaymentResult(systemWideUserId, params, transactionRecord);
-      return { statusCode: 200, body: JSON.stringify(dummyResult) };
-    }
-
     if (transactionRecord.paymentProvider === 'MANUAL_EFT') {
       // by definition, has not been marked as received, so must be pending
       const pendingResponse = await handlePaymentPendingOrFailed('PAYMENT_PENDING', transactionRecord);
@@ -385,7 +363,7 @@ module.exports.checkPendingPayment = async (event) => {
     }
 
     const statusCheckResult = await payment.checkPayment({ transactionId });
-    logger('Result of check: ', statusCheckResult);
+    logger('Result of check with payment provider: ', statusCheckResult);
     
     let responseBody = { };
 
@@ -393,7 +371,7 @@ module.exports.checkPendingPayment = async (event) => {
       // do these one after the other instead of parallel because don't want to fire if something goes wrong
       const resultOfSave = await exports.settle({ transactionId, settlingUserId: systemWideUserId });
       await publishSaveSucceeded(systemWideUserId, transactionId);
-      responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave };
+      responseBody = { result: 'PAYMENT_SUCCEEDED', ...resultOfSave, tags: transactionRecord.tags };
     } else if (statusCheckResult.result === 'PENDING') {
       responseBody = await handlePaymentPendingOrFailed('PAYMENT_PENDING', transactionRecord);
     } else if (statusCheckResult.result === 'ERROR') {

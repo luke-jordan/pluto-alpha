@@ -165,12 +165,15 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         transactionDetails: mockTxDetails
     };
 
-    before(() => {
+    beforeEach(() => {
+        resetStubHistory();
+        
+        findFloatOrIdStub.reset();
+        addSavingsRdsStub.reset();
+
         findFloatOrIdStub.withArgs(testAccountId).resolves({ clientId: testClientId, floatId: testFloatId });
         addSavingsRdsStub.withArgs(wellFormedMinimalPendingRequestToRds).resolves({ transactionDetails: mockTxDetails });
     });
-
-    beforeEach(() => resetStubHistory());
 
     it('Most common route, initiated payment, works as wrapper, happy path', async () => {
         const saveEventToWrapper = testSavePendingBase();
@@ -191,6 +194,39 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(fetchInfoForBankRefStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfo);
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
+    });
+
+    it('Happy path again, including tag (in this case, social saving pot)', async () => {
+        const saveEventToWrapper = testSavePendingBase();
+        
+        const mockPotId = uuid();
+        saveEventToWrapper.tags = [`SAVING_POOL::${mockPotId}`];
+
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+        momentStub.returns(testTimeInitiated);
+
+        const mockTxToRds = { ...wellFormedMinimalPendingRequestToRds };
+        mockTxToRds.tags = [`SAVING_POOL::${mockPotId}`];
+
+        const mockTxFromRds = { ...mockTxDetails[0] };
+        mockTxFromRds.tags = [`SAVING_POOL::${mockPotId}`];
+
+        addSavingsRdsStub.withArgs(mockTxToRds).resolves({ transactionDetails: [mockTxFromRds] });
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
+        getPaymentUrlStub.resolves(expectedPaymentParams);
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+        logger('Save body: ', saveBody);
+
+        const expectedResult = JSON.parse(JSON.stringify(expectedResponseBody)); // this is deep, so spread will not suffice
+        
+        expectedResult.transactionDetails[0].tags = [`SAVING_POOL::${mockPotId}`];
+        expect(saveBody).to.deep.equal(expectedResult);
+
+        expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(mockTxToRds);
     });
 
     it('Most common route, as wrapper, but with manual EFT as payment method', async () => {
@@ -282,7 +318,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         
         // should be prior creation time
-        const expectedResponse = { ...expectedResponseBody };
+        const expectedResponse = JSON.parse(JSON.stringify(expectedResponseBody)); // this is deep, so spread will not suffice
+
         // there are utterly absurd failures here that make no sense, and causing spurious fails, so overriding them
         expectedResponse.transactionDetails[0].persistedTimeEpochMillis = moment(asFormatted).valueOf();
         // saveBody.transactionDetails.persistedTimeEpochMillis = expectedResponse.transactionDetails.persistedTimeEpochMillis;
