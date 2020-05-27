@@ -369,10 +369,10 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
     // if this starts to strain, we can either unnnest tags to select on & group by tag, but for each call, volumes should
     // easily be low enough to allow the in-memory summation to be fine, but keep an eye out
-    const expectedTransactionQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, tags from ` +
-        `transaction_data.core_transaction_ledger inner join account_data.core_account_ledger ` +
+    const expectedTransactionQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, ` +
+        `transaction_data.core_transaction_ledger.tags from transaction_data.core_transaction_ledger inner join account_data.core_account_ledger ` +
         `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
-        `where transaction_data.core_transaction_ledger.tags %% $1`;
+        `where transaction_data.core_transaction_ledger.tags && $1`;
 
     const mockTransaction = (poolId, amount, unit = 'HUNDREDTH_CENT') => ({ 'transaction_id': uuid(), 'amount': amount, unit, currency: 'EUR', tags: [`SAVING_POOL::${poolId}`] });
 
@@ -382,7 +382,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         const expectedQuery = 'select * from friend_data.saving_pool inner join friend_data.saving_pool_participant ' +
             `on friend_data.saving_pool.saving_pool_id = friend_data.saving_pool_participant.saving_pool_id ` +
             `where friend_data.saving_pool.active = true and friend_data.saving_pool_participant.active = true and ` +
-            `friend_data.saving_pool_participant.participation_id = $1`;
+            `friend_data.saving_pool_participant.user_id = $1`;
 
         const mockCreationTime1 = moment().subtract(1, 'weeks');
         const mockCreationTime2 = moment().subtract(2, 'weeks');
@@ -506,7 +506,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
                 { userId: 'user-2', relationshipId: 'rel-2' }
             ],
 
-            transactionRecords: [
+            transactionRecord: [
                 { ownerUserId: testUserId, settlementTime: moment(mockTxTimes[0].format()), amount: 10 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
                 { ownerUserId: 'user-2', settlementTime: moment(mockTxTimes[1].format()), amount: 20 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' }
             ]

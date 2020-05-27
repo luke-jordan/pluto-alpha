@@ -19,6 +19,9 @@ create table if not exists friend_data.saving_pool_participant (
     active boolean not null default true
 );
 
+alter table friend_data.friend_log add column saving_pool_id uuid references friend_data.saving_pool (saving_pool_id);
+alter table friend_data.friend_log add column relevant_user_id uuid references friend_data.user_reference_table (user_id);
+
 grant select, insert, update on friend_data.saving_pool to friend_api_worker;
 grant select, insert, update on friend_data.saving_pool_participant to friend_api_worker;
 

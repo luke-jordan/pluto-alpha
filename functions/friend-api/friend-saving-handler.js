@@ -18,7 +18,7 @@ const listPoolsForUser = async ({ systemWideUserId }) => {
         return [];
     }
 
-    const poolIds = rawPools.map((savingPool) => savingPool.poolId);
+    const poolIds = rawPools.map((savingPool) => savingPool.savingPoolId);
     const calculatedBalances = await persistenceRead.calculatePoolBalances(poolIds);
     logger('And retrieved calculated balances: ', calculatedBalances);
 
@@ -40,7 +40,7 @@ const listPoolsForUser = async ({ systemWideUserId }) => {
 // NOTE : these relationship IDs are from the _creator_ of the pool to the participating user (if this becomes important in future, one extra call can replace them)
 const fetchProfileWithKey = async (userIdFriendPair, addDefaultRelationshipId = 'CREATOR') => {
     const { userId, relationshipId } = userIdFriendPair;
-    const rawProfile = await persistenceRead.fetchUserProfile(userId);
+    const rawProfile = await persistenceRead.fetchUserProfile({ systemWideUserId: userId });
     
     const strippedProfile = {
         personalName: rawProfile.personalName,

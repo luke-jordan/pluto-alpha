@@ -315,7 +315,7 @@ module.exports.fetchSavingPoolsForUser = async (systemWideUserId) => {
     const fetchQuery = `select * from ${config.get('tables.friendPoolTable')} inner join ${config.get('tables.friendPoolJoinTable')} ` +
         `on ${config.get('tables.friendPoolTable')}.saving_pool_id = ${config.get('tables.friendPoolJoinTable')}.saving_pool_id ` +
         `where friend_data.saving_pool.active = true and friend_data.saving_pool_participant.active = true and ` + 
-        `friend_data.saving_pool_participant.participation_id = $1`;
+        `friend_data.saving_pool_participant.user_id = $1`;
     logger('Fetching pools for user with query: ', fetchQuery);
 
     const queryResult = await rdsConnection.selectQuery(fetchQuery, [systemWideUserId]);
@@ -325,10 +325,14 @@ module.exports.fetchSavingPoolsForUser = async (systemWideUserId) => {
 };
 
 const fetchTransactionsForPools = async (savingPoolIds) => {
-    const rawFetchQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, tags from ` + 
-        `${config.get('tables.transactionTable')} inner join ${config.get('tables.accountTable')} ` +
+    logger('Fetching transactions for pools: ', savingPoolIds);
+
+    const rawFetchQuery = `select transaction_id, settlement_time, amount, currency, unit, owner_user_id, ` +
+        `${config.get('tables.transactionTable')}.tags from ${config.get('tables.transactionTable')} ` +
+        `inner join ${config.get('tables.accountTable')} ` +
         `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
-        `where transaction_data.core_transaction_ledger.tags %% $1`;
+        `where ${config.get('tables.transactionTable')}.tags && $1`;
+
     const tagArray = savingPoolIds.map((poolId) => `SAVING_POOL::${poolId}`);
 
     logger('Going to get transaction details, with this query: ', rawFetchQuery, ' and tags: ', tagArray);
@@ -395,21 +399,21 @@ module.exports.fetchSavingPoolDetails = async (savingPoolId, includeDetails = fa
     const participatingUsers = participantRows.map((row) => ({ userId: row['user_id'], relationshipId: row['relationship_id'] || 'CREATOR' }));
     logger('Transformed participating users: ', participatingUsers);
 
-    const transactionRecords = transactionRows.map(camelCaseKeys).map((transaction) => ({
+    const transactionRecord = transactionRows.map(camelCaseKeys).map((transaction) => ({
         ownerUserId: transaction.ownerUserId,
         settlementTime: moment(transaction.settlementTime),
         amount: transaction.amount,
         unit: transaction.unit,
         currency: transaction.currency
     }));
-    logger('Transformed transaction records: ', transactionRecords);
+    logger('Transformed transaction records: ', transactionRecord);
 
     savingPool.currentAmount = opsUtil.sumOverUnits(transactionRows, 'HUNDREDTH_CENT', 'amount');
     savingPool.currentUnit = 'HUNDREDTH_CENT';
     savingPool.currentCurrency = savingPool.targetCurrency;
 
     savingPool.participatingUsers = participatingUsers;
-    savingPool.transactionRecords = transactionRecords;
+    savingPool.transactionRecord = transactionRecord;
 
     logger('Assembled: ', savingPool);
     return savingPool;

@@ -351,7 +351,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
             ]
         };
 
-        Object.keys(mockProfiles).forEach((userId) => fetchProfileStub.withArgs(userId).resolves(mockProfiles[userId]));
+        Object.keys(mockProfiles).forEach((userId) => fetchProfileStub.withArgs({ systemWideUserId: userId }).resolves(mockProfiles[userId]));
         fetchSavingPoolStub.resolves(mockPoolFromPersistence);
 
         const resultOfFetch = await handler.readSavingPool(testEvent('fetch', testUserId, { savingPoolId: testPoolId }));
@@ -360,10 +360,10 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
 
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly('pool-id', true); // flag says want full details
         expect(fetchProfileStub).to.have.callCount(4);
-        expect(fetchProfileStub).to.have.been.calledWith(testUserId);
-        expect(fetchProfileStub).to.have.been.calledWith('some-other-user');
-        expect(fetchProfileStub).to.have.been.calledWith('some-user-2');
-        expect(fetchProfileStub).to.have.been.calledWith('some-user-3');
+        expect(fetchProfileStub).to.have.been.calledWith({ systemWideUserId: testUserId });
+        expect(fetchProfileStub).to.have.been.calledWith({ systemWideUserId: 'some-other-user' });
+        expect(fetchProfileStub).to.have.been.calledWith({ systemWideUserId: 'some-user-2' });
+        expect(fetchProfileStub).to.have.been.calledWith({ systemWideUserId: 'some-user-3' });
     });
 
 });
