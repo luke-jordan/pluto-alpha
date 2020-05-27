@@ -241,14 +241,16 @@ describe('*** UNIT TESTING CHECK PENDING PAYMENT ****', () => {
         expect(momentStub).to.have.been.called;
     });
 
-    it('Includes tags in payment result (e.g., for savings pots)', async () => {
+    it('Includes tags in payment result (e.g., for savings pots/pools)', async () => {
         const mockTags = [`FRIEND_SAVING_POT::${uuid()}`];
         const expectedResult = { ...responseToTxUpdated, result: 'PAYMENT_SUCCEEDED', tags: mockTags };
         const dummyTx = { ...testTransaction, settlementStatus: 'PENDING', tags: mockTags };
 
         fetchTransactionStub.withArgs(testPendingTxId).resolves(dummyTx);
         findFloatOrIdStub.withArgs(testAccountId).resolves({ systemWideUserId: testUserId });
+        
         getPaymentStatusStub.withArgs({ transactionId: testPendingTxId }).resolves({ paymentStatus: 'SETTLED' });
+        
         updateSaveRdsStub.resolves(responseToTxUpdated);
         countSettledSavesStub.withArgs(testAccountId).resolves(5);
         momentStub.returns(testSettlementTime);
