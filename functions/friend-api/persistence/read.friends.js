@@ -421,7 +421,7 @@ module.exports.fetchSavingPoolDetails = async (savingPoolId, includeDetails = fa
 
 module.exports.obtainFriendIds = async (referenceUserId, relationshipIds) => {
     const fetchQuery = `select initiated_user_id, accepted_user_id, relationship_id from ${config.get('tables.friendshipTable')} ` +
-        `where relationship_status = $1 and (initiated_user_id = $2) or (accepted_user_id = $2) ` +
+        `where relationship_status = $1 and (initiated_user_id = $2 or accepted_user_id = $2) ` +
         `and relationship_id in (${opsUtil.extractArrayIndices(relationshipIds, 3)})`;
     logger('Fetching user IDs with query: ', fetchQuery);
     const rawResult = await rdsConnection.selectQuery(fetchQuery, ['ACTIVE', referenceUserId, ...relationshipIds]);
