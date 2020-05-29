@@ -100,6 +100,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         const expectedPool = {
             savingPoolId: mockPoolId,
             creationTimeMillis: mockPersistedTime.valueOf(),
+            createdByFetcher: true,
             poolName: 'Trip to Japan',
             creatingUser: { personalName: 'A', familyName: 'User', relationshipId: 'CREATOR' },
             current: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
@@ -344,6 +345,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
             savingPoolId: 'pool-id',
             poolName: '2021 holiday',
             creationTimeMillis: mockCreationTime.valueOf(),
+            createdByFetcher: false,
             creatingUser: { personalName: 'Another', familyName: 'Person', relationshipId: 'CREATOR' },
             target: mockAmountDict(100),
             current: mockAmountDict(20),
