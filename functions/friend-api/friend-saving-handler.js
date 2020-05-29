@@ -72,6 +72,7 @@ const fetchPoolDetails = async ({ systemWideUserId }, { savingPoolId }) => {
 
     const transformedPool = {
         savingPoolId: rawPool.savingPoolId,
+        poolName: rawPool.poolName,
         creationTimeMillis: rawPool.creationTime.valueOf(),
         target: {
             amount: rawPool.targetAmount, unit: rawPool.targetUnit, currency: rawPool.targetCurrency

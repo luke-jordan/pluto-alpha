@@ -575,7 +575,7 @@ resource "aws_api_gateway_resource" "friend_pool_read" {
 resource "aws_api_gateway_method" "friend_pool_read" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   resource_id   = aws_api_gateway_resource.friend_pool_read.id
-  http_method   = "ANY"
+  http_method   = "GET"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
 }
@@ -613,7 +613,7 @@ resource "aws_api_gateway_resource" "friend_pool_write" {
 resource "aws_api_gateway_method" "friend_pool_write" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   resource_id   = aws_api_gateway_resource.friend_pool_write.id
-  http_method   = "ANY"
+  http_method   = "POST"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
 }

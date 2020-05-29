@@ -85,6 +85,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
             savingPoolId: mockPoolId, 
             creationTime: mockPersistedTime,
             creatingUserId: testUserId,
+            poolName: 'Trip to Japan',
             ...mockAmountSpread(1, 'target', 'ZAR'),
             ...mockAmountSpread(0, 'current', 'ZAR'),
             participatingUsers: [...expectedPersistenceParams.participatingUsers, { userId: testUserId }],
@@ -99,6 +100,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         const expectedPool = {
             savingPoolId: mockPoolId,
             creationTimeMillis: mockPersistedTime.valueOf(),
+            poolName: 'Trip to Japan',
             creatingUser: { personalName: 'A', familyName: 'User', relationshipId: 'CREATOR' },
             current: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
             target: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'ZAR' },
@@ -317,6 +319,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
 
         const mockPoolFromPersistence = {
             savingPoolId: 'pool-id',
+            poolName: '2021 holiday',
             creationTime: mockCreationTime,
             creatingUserId: 'some-other-user',
             ...mockAmountSpread(100, 'target'),
@@ -339,6 +342,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
 
         const expectedResult = {
             savingPoolId: 'pool-id',
+            poolName: '2021 holiday',
             creationTimeMillis: mockCreationTime.valueOf(),
             creatingUser: { personalName: 'Another', familyName: 'Person', relationshipId: 'CREATOR' },
             target: mockAmountDict(100),
@@ -364,6 +368,37 @@ describe('*** UNIT TEST COLLECTIVE SAVING, FETCHES ***', () => {
         expect(fetchProfileStub).to.have.been.calledWith({ systemWideUserId: 'some-other-user' });
         expect(fetchProfileStub).to.have.been.calledWith({ systemWideUserId: 'some-user-2' });
         expect(fetchProfileStub).to.have.been.calledWith({ systemWideUserId: 'some-user-3' });
+    });
+
+    it('Unit test forbidding a saving pot fetch if user is not part of it', async () => {
+        const testPoolId = 'pool-id';
+
+        const mockCreationTime = moment().subtract(2, 'weeks');
+        const mockSaveTimes = [moment().subtract(3, 'days'), moment().subtract(2, 'weeks'), moment().subtract(1, 'days')];
+        const mockSaveIds = [uuid(), uuid(), uuid()];
+
+        const mockPoolFromPersistence = {
+            savingPoolId: 'pool-id',
+            poolName: '2021 holiday',
+            creationTime: mockCreationTime,
+            creatingUserId: 'some-other-user',
+            ...mockAmountSpread(100, 'target'),
+            ...mockAmountSpread(20, 'current'),
+            participatingUsers: [{ userId: 'some-other-user' }, { userId: testUserId, relationshipId: 'rel-0'}, { userId: 'some-user-2', relationshipId: 'rel-1' }, { userId: 'some-user-3', relationshipId: 'rel-2' }],
+            transactionRecord: [
+                { transactionId: mockSaveIds[0], ownerUserId: 'some-user-2', ...mockAmountDict(5), settlementTime: mockSaveTimes[0] },
+                { transactionId: mockSaveIds[1], ownerUserId: 'some-other-user', ...mockAmountDict(5), settlementTime: mockSaveTimes[1] },
+                { transactionId: mockSaveIds[2], ownerUserId: testUserId, ...mockAmountDict(10), settlementTime: mockSaveTimes[2] }
+            ]
+        };
+
+        fetchSavingPoolStub.resolves(mockPoolFromPersistence);
+
+        const resultOfFetch = await handler.readSavingPool(testEvent('fetch', 'dodgy-spying-user', { savingPoolId: testPoolId }));
+        expect(resultOfFetch).to.deep.equal({ statusCode: 400, message: 'Bad request' });
+
+        expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly('pool-id', true); // flag says want full details
+        expect(fetchProfileStub).to.not.have.been.called;
     });
 
 });
