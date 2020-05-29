@@ -335,7 +335,8 @@ const assembleAccountTxInsertion = (accountTxId, transactionDetails, floatTxIds)
         initiationTime: transactionDetails.initiationTime.format(),
         floatId: transactionDetails.floatId,
         clientId: transactionDetails.clientId,
-        humanRef: transactionDetails.humanRef || ''
+        humanRef: transactionDetails.humanRef || '',
+        tags: transactionDetails.tags || []
     };
 
     let accountQuery = '';
@@ -356,9 +357,9 @@ const assembleAccountTxInsertion = (accountTxId, transactionDetails, floatTxIds)
 
     } else {
         accountQuery = `insert into ${accountTxTable} (transaction_id, transaction_type, account_id, currency, unit, amount, float_id, client_id, ` +
-            `settlement_status, initiation_time, human_reference) values %L returning transaction_id, creation_time`;
+            `settlement_status, initiation_time, human_reference, tags) values %L returning transaction_id, creation_time`;
         accountColumnKeys = '${accountTransactionId}, *{' + transactionType + '}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
-            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${humanRef}';
+            '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${humanRef}, ${tags}';
     }
 
     return {

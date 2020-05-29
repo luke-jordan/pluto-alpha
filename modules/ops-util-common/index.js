@@ -201,4 +201,5 @@ module.exports.extractPathAndParams = (event) => {
 // couple of helper methods for assembling SQL insertions; could go in rds-common/index, but that would
 // then mess around, a lot, with call throughs, etc., so just placing them here
 module.exports.extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
+
 module.exports.extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');

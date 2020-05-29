@@ -266,7 +266,7 @@ module.exports.insertBoostAccountLogs = async (boostLogs) => {
     const queryDef = constructLogDefinition(['boostId', 'accountId', 'logType', 'logContext'], boostLogs);
     logger('Inserting boost log using: ', queryDef);
     const resultOfQuery = await rdsConnection.insertRecords(queryDef.query, queryDef.columnTemplate, queryDef.rows);
-    logger('And with this result: ', resultOfQuery);
+    // logger('And with this result: ', resultOfQuery);
     if (!resultOfQuery || !resultOfQuery.rows) {
         return [];
     }

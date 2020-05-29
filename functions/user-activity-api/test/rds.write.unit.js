@@ -63,14 +63,14 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
     const testSaveAmount = 1050000;
 
     const insertAccNotSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
-        `amount, float_id, client_id, settlement_status, initiation_time, human_reference) values %L returning transaction_id, creation_time`;
+        `amount, float_id, client_id, settlement_status, initiation_time, human_reference, tags) values %L returning transaction_id, creation_time`;
     const insertAccSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
-        `amount, float_id, client_id, human_reference, settlement_status, initiation_time, settlement_time, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
+        `amount, float_id, client_id, human_reference, tags, settlement_status, initiation_time, settlement_time, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
     const insertFloatTxQuery = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, ` +
         `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
     
     const accountColKeysNotSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
-        '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${humanRef}'; 
+        '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${humanRef}, ${tags}'; 
     const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
         '${floatId}, ${clientId}, ${humanRef}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${currency}, ${unit}, ${amount}, ' + 
@@ -124,7 +124,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             initiationTime: testInitiationTime.format(),
             floatId: testFloatId,
             clientId: testClientId,
-            humanRef: ''
+            humanRef: '',
+            tags: []
         };
         
         const expectedAccountQueryDef = {
@@ -184,7 +185,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
             clientId: testClientId,
             settlementStatus: 'SETTLED',
             initiationTime: testInitiationTime.format(),
-            settlementTime: testSettlementTime.format()
+            settlementTime: testSettlementTime.format(),
+            tags: []
         };
 
         const expectedAccountRow = JSON.parse(JSON.stringify(expectedRowItem));

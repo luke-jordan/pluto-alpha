@@ -25,6 +25,9 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.user_friend_list,
   aws_api_gateway_integration.friend_deactivate,
   aws_api_gateway_integration.friend_request_manage,
+  aws_api_gateway_integration.friend_alert_manage,
+  aws_api_gateway_integration.friend_pool_read,
+  aws_api_gateway_integration.friend_pool_write
   ]
 
   variables = {
@@ -546,6 +549,90 @@ resource "aws_api_gateway_integration" "friend_alert_manage" {
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
   uri                     = aws_lambda_function.friend_alert_manage.invoke_arn
+}
+
+/////////////// FRIEND SAVING POOLS (SPLIT READ, WRITE, PATTERN ABOVE) ////////////////////////////////////
+
+resource "aws_api_gateway_resource" "friend_pool_path_root" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_path_root.id
+  path_part     = "pool"
+}
+
+// READING
+resource "aws_api_gateway_resource" "friend_pool_read_path_root" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_pool_path_root.id
+  path_part     = "read"
+}
+
+resource "aws_api_gateway_resource" "friend_pool_read" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_pool_read_path_root.id
+  path_part     = "{proxy+}" 
+}
+
+resource "aws_api_gateway_method" "friend_pool_read" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.friend_pool_read.id
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "friend_pool_read" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.friend_pool_read.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "friend_pool_read" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.friend_pool_read.id
+  http_method   = aws_api_gateway_method.friend_pool_read.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.friend_pool_read.invoke_arn
+}
+
+// WRITE
+resource "aws_api_gateway_resource" "friend_pool_write_path_root" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_pool_path_root.id
+  path_part     = "write"
+}
+
+resource "aws_api_gateway_resource" "friend_pool_write" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_pool_write_path_root.id
+  path_part     = "{proxy+}" 
+}
+
+resource "aws_api_gateway_method" "friend_pool_write" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.friend_pool_write.id
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "friend_pool_write" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.friend_pool_write.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "friend_pool_write" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.friend_pool_write.id
+  http_method   = aws_api_gateway_method.friend_pool_write.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.friend_pool_write.invoke_arn
 }
 
 /////////////// USER HISTORY LAMBDA (OWN USER, NOT ADMIN) /////////////////////////////////////////////////
