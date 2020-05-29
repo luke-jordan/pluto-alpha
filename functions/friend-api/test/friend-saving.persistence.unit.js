@@ -522,7 +522,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
     // useful aux method, first written for here
     it('Gets user IDs for set of friendships based on calling user id', async () => {
         const expectedFetchQuery = 'select initiated_user_id, accepted_user_id, relationship_id from ' +
-            `friend_data.core_friend_relationship where relationship_status = $1 and (initiated_user_id = $2) or (accepted_user_id = $2) ` +
+            `friend_data.core_friend_relationship where relationship_status = $1 and (initiated_user_id = $2 or accepted_user_id = $2) ` +
             `and relationship_id in (${util.extractArrayIndices(['rel-1', 'rel-2', 'rel-3'], 3)})`;
 
         const mockRows = [
