@@ -74,6 +74,7 @@ const fetchPoolDetails = async ({ systemWideUserId }, { savingPoolId }) => {
         savingPoolId: rawPool.savingPoolId,
         poolName: rawPool.poolName,
         creationTimeMillis: rawPool.creationTime.valueOf(),
+        createdByFetcher: rawPool.creatingUserId === systemWideUserId,
         target: {
             amount: rawPool.targetAmount, unit: rawPool.targetUnit, currency: rawPool.targetCurrency
         },
