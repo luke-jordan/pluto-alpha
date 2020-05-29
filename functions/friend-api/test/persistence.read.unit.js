@@ -5,6 +5,8 @@ const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
+const camelCaseKeys = require('camelcase-keys');
+
 const proxyquire = require('proxyquire').noCallThru();
 const sinon = require('sinon');
 const chai = require('chai');
@@ -55,12 +57,16 @@ const expectedProfileColumns = [
 ];
 
 describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
+    const testCreationTime = moment().format();
+    const testUpdatedTime = moment().format();
+
     const testSystemId = uuid();
     const testTargetUserId = uuid();
     const testInitiatedUserId = uuid();
     const testRelationshipId = uuid();
     const testRequestId = uuid();
     const testAccountId = uuid();
+    const testLogId = uuid();
 
     const friendRequestTable = config.get('tables.friendRequestTable');
     const accountTable = config.get('tables.accountTable');
@@ -74,6 +80,21 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         calledName: 'Lao Tzu',
         emailAddress: 'laotzu@tao.com',
         userStatus: 'USER_HAS_SAVED'
+    };
+
+    const friendRequestFromRds = {
+        'request_id': testRequestId,
+        'creation_time': testCreationTime,
+        'updated_time': testUpdatedTime,
+        'request_status': 'PENDING',
+        'initiated_user_id': testInitiatedUserId,
+        'targetUser_id': testTargetUserId,
+        'target_contact_details': {
+            'contactType': 'PHONE',
+            'contactMethod': '27850324843'
+        },
+        'request_type': 'CREATE',
+        'request_code': 'SPOOKY ACTION'
     };
 
     beforeEach(() => {
@@ -217,38 +238,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
     });
 
     it('Fetches friend requests for user', async () => {
-        const testCreationTime = moment().format();
-        const testUpdatedTime = moment().format();
-
-        const friendRequestFromRds = {
-            'request_id': testRequestId,
-            'creation_time': testCreationTime,
-            'updated_time': testUpdatedTime,
-            'request_status': 'PENDING',
-            'initiated_user_id': testInitiatedUserId,
-            'targetUser_id': testTargetUserId,
-            'target_contact_details': {
-                'contactType': 'PHONE',
-                'contactMethod': '27850324843'
-            },
-            'request_type': 'CREATE',
-            'request_code': 'SPOOKY ACTION' // at a distance
-        };
-
-        const expectedFriendRequest = {
-            requestId: testRequestId,
-            creationTime: testCreationTime,
-            updatedTime: testUpdatedTime,
-            requestStatus: 'PENDING',
-            initiatedUserId: testInitiatedUserId,
-            targetUserId: testTargetUserId,
-            targetContactDetails: {
-                contactType: 'PHONE',
-                contactMethod: '27850324843'
-            },
-            requestType: 'CREATE',
-            requestCode: 'SPOOKY ACTION'
-        };
+        const expectedFriendRequest = camelCaseKeys(friendRequestFromRds);
 
         const receivedQuery = `select * from ${friendRequestTable} where target_user_id = $1 and request_status = $2`;
         const initiatedQuery = `select * from ${friendRequestTable} where initiated_user_id = $1 and request_status = $2`;
@@ -299,5 +289,27 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledWithExactly(acceptedSelectQuery, [testTargetUserId, 'ACTIVE']);
         expect(queryStub).to.have.been.calledWithExactly(initiatedSelectQuery, [firstUserId, 'ACTIVE']);
         expect(queryStub).to.have.been.calledWithExactly(initiatedSelectQuery, [secondUserId, 'ACTIVE']);
+    });
+
+    it('Fetches alert logs for user', async () => {
+        const testLogType = 'FRIENDSHIP_REQUEST';
+        const testLogObject = {
+            'log_id': testLogId,
+            'request_id': testRequestId,
+            'log_type': testLogType,
+            'log_context': camelCaseKeys(friendRequestFromRds),
+            'to_alert_user_id': [testTargetUserId],
+            'is_alert_active': true
+        };
+
+        const selectQuery = `select * from ${config.get('tables.friendLogTable')} where is_alert_active = true and ` +
+            `$1 = any(to_alert_user_id) and not($1 = any(alerted_user_id)) and log_type in ($2)`;
+
+        queryStub.resolves([testLogObject, testLogObject]);
+
+        const resultOfFetch = await persistence.fetchAlertLogsForUser(testSystemId, [testLogType]);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([camelCaseKeys(testLogObject), camelCaseKeys(testLogObject)]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSystemId, testLogType]);
     });
 });
