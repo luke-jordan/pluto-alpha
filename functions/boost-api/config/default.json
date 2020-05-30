@@ -30,12 +30,17 @@
         "boostLogTable": "boost_data.boost_log",
         "msgInstructionTable": "message_data.message_instruction",
         "audienceTable": "audience_data.audience",
-        "audienceJoinTable": "audience_data.audience_account_join"
+        "audienceJoinTable": "audience_data.audience_account_join",
+        "friendshipTable": "friend_data.core_friend_relationship"
     },
     "lambdas": {
         "floatTransfer": "float_transfer",
         "messageSend": "message_user_create_once",
         "messageInstruct": "message_instruct_create",
         "audienceHandle": "audience_selection"
+    },
+    "seedrandom": {
+        "active": true,
+        "value": "JupiterSave"
     }
 }

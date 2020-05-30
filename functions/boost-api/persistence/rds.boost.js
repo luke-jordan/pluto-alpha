@@ -179,6 +179,16 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
     return resultOfQuery.map((row) => camelizeKeys(row));
 };
 
+module.exports.findAccountsForPooledReward = async (boostId, logType) => {
+    const selectQuery = `select distinct(account_id) from ${boostLogTable} where log_type = $1 and boost_id = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [logType, boostId]);
+    const accountIds = resultOfQuery.map((result) => result['account_id']);
+
+    // The returned objects from this function are later reduced
+    // to a single object with boosts as keys and accountId arrays as values
+    return { boostId, accountIds };
+};
+
 // todo : validation / catching of status downgrade in here
 const updateAccountDefinition = (boostId, accountId, newStatus) => ({
     table: boostAccountJoinTable,
@@ -497,7 +507,7 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 };
 
 // ///////////////////////////////////////////////////////////////
-// ////// ANOTHER SIMPLE AUX METHODS TO FIND OWNER IDS ///////////
+// ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS ////////////
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds) => {
@@ -509,4 +519,15 @@ module.exports.findUserIdsForAccounts = async (accountIds) => {
     }
 
     throw Error('Given non-existent or bad account IDs');
+};
+
+module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
+    const query = `select initiated_user_id, accepted_user_id from ${config.get('tables.friendshipTable')} where ` +
+        `relationship_id in (${extractArrayIndices(relationshipIds)})`;
+    const result = await rdsConnection.selectQuery(query, relationshipIds);
+    if (Array.isArray(result) && result.length > 0) {
+        return result.map((row) => camelizeKeys(row));
+    }
+
+    throw Error('Given non-existent or bad relationship IDs');
 };

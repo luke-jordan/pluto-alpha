@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:boosts:tests');
 const stringify = require('json-stable-stringify');
+const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -65,3 +66,11 @@ module.exports.mockLambdaResponse = (body, statusCode = 200) => ({
         body: JSON.stringify(body)
     })
 });
+
+module.exports.createUUIDArray = (arraySize) => {
+    const uuidArray = [];
+    while (uuidArray.length < arraySize) {
+        uuidArray.push(uuid());
+    }
+    return uuidArray;
+};
