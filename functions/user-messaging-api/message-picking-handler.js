@@ -34,7 +34,7 @@ const UNIT_DIVISORS = {
     'WHOLE_CURRENCY': 1 
 };
 
-const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
+const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'called_name', 'creation_time_epoch_millis', 'default_currency'];
 
 const getSubParamOrDefault = (paramSplit, defaultValue) => (paramSplit.length > 1 ? paramSplit[1] : defaultValue);
 
