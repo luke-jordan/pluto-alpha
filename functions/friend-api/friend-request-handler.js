@@ -213,7 +213,7 @@ const handleUserNotFound = async (friendRequest) => {
     logger('Persisting friend request resulted in:', createdFriendRequest);
 
     const userProfile = await persistenceRead.fetchUserProfile({ systemWideUserId: friendRequest.initiatedUserId });
-    const initiatedUserName = userProfile.calledName || userProfile.firstName;
+    const initiatedUserName = userProfile.calledName || userProfile.personalName;
 
     const { contactType, contactMethod } = friendRequest.targetContactDetails;
     const initiatedUserId = friendRequest.initiatedUserId;

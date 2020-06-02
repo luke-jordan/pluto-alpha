@@ -24,6 +24,8 @@ const insertStub = sinon.stub();
 const updateRecordStub = sinon.stub();
 const multiTableStub = sinon.stub();
 
+const momentStub = sinon.stub();
+
 class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
@@ -35,6 +37,7 @@ class MockRdsConnection {
 
 const rds = proxyquire('../persistence/rds', {
     'rds-common': MockRdsConnection,
+    'moment': momentStub,
     '@noCallThru': true
 });
 
@@ -42,6 +45,7 @@ const resetStubs = () => {
     queryStub.reset();
     insertStub.reset();
     multiTableStub.reset();
+    momentStub.reset();
 };
 
 const config = require('config');
@@ -131,6 +135,7 @@ describe('Float balance add or subtract', () => {
         };
         const mockLogId = uuid();
 
+        momentStub.withArgs(refTime.valueOf()).returns(refTime);
         multiTableStub.resolves([[{ 'transaction_id': floatBalanceAdjustment.transactionId }], [{ 'log_id': mockLogId }]]);
 
         const expectedUpdateQuery = `update float_data.float_transaction_ledger set log_id = array_append(log_id, $1) where transaction_id = $2`;
@@ -337,9 +342,9 @@ describe('User account allocation', () => {
     };
 
     const baseAccountAllocationQueryDef = {
-        query: `insert into ${config.get('tables.accountTransactions')} (transaction_id, account_id, transaction_type, settlement_status, ` +
+        query: `insert into ${config.get('tables.accountTransactions')} (transaction_id, account_id, transaction_type, initiation_time, settlement_status, ` +
             `settlement_time, amount, currency, unit, float_id, client_id, float_alloc_tx_id, tags) values %L returning transaction_id, amount`,
-        columnTemplate: '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${settlement_time}, ' + 
+        columnTemplate: '${transaction_id}, ${account_id}, ${transaction_type}, ${initiation_time}, ${settlement_status}, ${settlement_time}, ' + 
             '${amount}, ${currency}, ${unit}, ${float_id}, ${client_id}, ${float_alloc_tx_id}, ${tags}'
     };
 
@@ -347,6 +352,8 @@ describe('User account allocation', () => {
         const floatQueryDef = { ...baseFloatAllocationQueryDef };
         const allocRequests = generateAllocations(100, 100 * 100 * 100); // a hundred rand in hundredth cents (as daily interest, equals ind account of R1m roughly)
         // logger('Requests: ', allocRequests);
+
+        const mockMoment = moment();
 
         floatQueryDef.rows = allocRequests.map((request) => ({
             'transaction_id': request.floatTxId,
@@ -369,6 +376,7 @@ describe('User account allocation', () => {
             'transaction_id': request.accountTxId,
             'account_id': request.accountId,
             'transaction_type': 'BOOST_REDEMPTION',
+            'initiation_time': mockMoment.format(),
             'settlement_status': 'ACCRUED',
             'settlement_time': null,
             'amount': request.amount,
@@ -382,6 +390,8 @@ describe('User account allocation', () => {
 
         const floatTxArray = allocRequests.map((request) => ({ 'transaction_id': request.floatTxId }));
         const accountTxArray = allocRequests.map((request) => ({ 'transaction_id': request.accountTxId, 'amount': request.amount }));
+
+        momentStub.returns(mockMoment);
 
         multiTableStub.reset();
         multiTableStub.resolves([floatTxArray, accountTxArray]);
