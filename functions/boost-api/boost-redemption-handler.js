@@ -83,6 +83,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
         if (event.accountId && affectedAccountsUserDict[event.accountId]) {
             options.initiator = affectedAccountsUserDict[event.accountId]['userId'];
         }
+        logger(`Publishing: ${affectedAccountsUserDict[accountId]['userId']}::${eventType}`);
         return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, options);
     });
 
@@ -124,6 +125,7 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
 
     const transferInstruction = {
         floatId: boost.fromFloatId,
+        clientId: boost.forClientId,
         fromId: boost.fromBonusPoolId,
         fromType: 'BONUS_POOL',
         currency: poolContrib.currency,
@@ -181,6 +183,7 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
     }));
     return {
         floatId: boost.fromFloatId,
+        clientId: boost.forClientId,
         fromId: boost.fromBonusPoolId,
         fromType: 'BONUS_POOL',
         currency: boost.boostCurrency,

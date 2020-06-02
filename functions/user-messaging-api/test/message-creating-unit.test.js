@@ -168,7 +168,7 @@ describe('*** UNIT TESTING USER MESSAGE INSERTION ***', () => {
         expect(publishMultiLogStub).to.have.been.calledWith(testUserIds, 'MESSAGE_CREATED', sinon.match.any);
     });
 
-    it('Deactivates mand expires message on instruction failure', async () => {
+    it('Deactivates and expires message on instruction failure', async () => {
         const badInstruction = { ...mockInstruction };
         badInstruction.templates = [];
 

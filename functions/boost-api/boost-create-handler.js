@@ -7,7 +7,9 @@ const status = require('statuses');
 const stringify = require('json-stable-stringify');
 
 const publisher = require('publish-common');
-const util = require('./boost.util');
+const opsUtil = require('ops-util-common');
+
+const boostUtil = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
@@ -108,7 +110,7 @@ const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     let gameInitialStatus = initialStatus;
     if (initialStatus === 'UNCREATED') {
         const triggeredStatus = Object.keys(passedConditions).
-            filter((boostStatus) => util.hasConditionType(passedConditions, boostStatus, 'event_occurs')).sort(util.statusSorter);
+            filter((boostStatus) => boostUtil.hasConditionType(passedConditions, boostStatus, 'event_occurs')).sort(boostUtil.statusSorter);
         gameInitialStatus = triggeredStatus.length > 0 ? triggeredStatus[0] : initialStatus;
     }
     
@@ -116,7 +118,7 @@ const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     const gameConditions = extractStatusConditions(gameParams, gameInitialStatus);
     
     logger('Merging: ', gameConditions, 'and: ', passedConditions);
-    const mergedConditions = util.ALL_BOOST_STATUS_SORTED.filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
+    const mergedConditions = boostUtil.ALL_BOOST_STATUS_SORTED.filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
         reduce((obj, boostStatus) => ({ ...obj, [boostStatus]: safeMerge(gameConditions, passedConditions, boostStatus)}), {});
 
     logger('Merged status conditions: ', mergedConditions);
@@ -305,17 +307,6 @@ const validateBoostParams = (boostType, boostCategory, boostBudget, params) => {
     return true;
 };
 
-const isPooledReward = (event, userDetails) => {
-    if (userDetails.role === 'ORDINARY_USER' && event) {
-        const params = util.extractEventBody(event);
-        if (!params.friendships || params.friendships.length === 0 || params.boostAudienceSelection) {
-            return false;
-        }
-
-        return true;
-    }
-};
-
 const retrieveBoostAmounts = (params) => {
     const boostAmountDetails = params.boostAmountOffered.split('::');
     logger('Boost amount details: ', boostAmountDetails);
@@ -326,7 +317,7 @@ const retrieveBoostAmounts = (params) => {
     } else if (typeof params.boostBudget === 'string') {
         const boostBudgetParams = params.boostBudget.split('::');
         if (boostAmountDetails[1] !== boostBudgetParams[1] || boostAmountDetails[2] !== boostBudgetParams[2]) {
-            return util.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
+            return boostUtil.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
         }
         boostBudget = parseInt(boostBudgetParams[0], 10);
     } else {
@@ -334,29 +325,6 @@ const retrieveBoostAmounts = (params) => {
     }
 
     return { boostAmountDetails, boostBudget };
-};
-
-const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => {
-    const resultOfFetch = await persistence.fetchUserIdsForRelationships(friendshipIds);
-    logger('Got friendships:', resultOfFetch);
-    const validFriendships = resultOfFetch.filter((friendship) => Object.values(friendship).includes(creatingUserId));
-    const friendUserIds = validFriendships.map((relationship) => {
-        const friendUserId = relationship.initiatedUserId === creatingUserId
-            ? relationship.acceptedUserId
-            : relationship.initiatedUserId;
-        return friendUserId; 
-    });
-
-    logger('Got friend user ids:', friendUserIds);
-
-    if (friendUserIds.length === 0) {
-        throw new Error('Error! No valid friendships found');
-    }
-
-    return {
-        table: config.get('tables.accountLedger'),
-        conditions: [{ op: 'in', prop: 'owner_user_id', value: [creatingUserId, ...friendUserIds] }]
-    };
 };
 
 const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boostId, boostAmountDict, initiator }) => {
@@ -542,6 +510,42 @@ module.exports.createBoost = async (event) => {
 
 };
 
+// /////////////////////// SECTION FOR WRAPPER (FOR ADMIN FRONTEND CALLS) AND USER-GENERATED BOOSTS, I.E., FRIEND TOURNAMENTS ///
+
+// todo next : get some basic defaults here, e.g., minimum number in tournament, and the Jupiter contribution (make dynamic)
+
+const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => {
+    const userIdsForFriends = await persistence.fetchUserIdsForRelationships(friendshipIds);
+    logger('Got user ID pairs for the friendship list:', userIdsForFriends);
+
+    // this is to make sure user only creates the tournament for users actually in a friend relationship with them
+    const validFriendships = userIdsForFriends.filter((friendship) => Object.values(friendship).includes(creatingUserId));
+    const friendUserIds = validFriendships.map((relationship) => {
+        const friendUserId = relationship.initiatedUserId === creatingUserId ? relationship.acceptedUserId : relationship.initiatedUserId;
+        return friendUserId;
+    });
+
+    logger('Got friend user ids:', friendUserIds);
+
+    if (friendUserIds.length === 0) {
+        throw new Error('Error! No valid friendships found');
+    }
+
+    return {
+        table: config.get('tables.accountLedger'),
+        conditions: [{ op: 'in', prop: 'owner_user_id', value: [creatingUserId, ...friendUserIds] }]
+    };
+};
+
+const isFriendTournament = (event) => {
+    const params = boostUtil.extractEventBody(event);
+    if (!Array.isArray(params.friendships) || params.friendships.length === 0 || params.boostAudienceSelection) {
+        return false;
+    }
+
+    return true;
+};
+
 /**
  * Wrapper method for API gateway, handling authorization via the header, extracting body, etc. 
  * @param {object} event An event object containing the request context and request body.
@@ -562,14 +566,19 @@ module.exports.createBoost = async (event) => {
  */
 module.exports.createBoostWrapper = async (event) => {
     try {
-        const userDetails = util.extractUserDetails(event);
+        const userDetails = opsUtil.extractUserDetails(event);
 
         logger('Boost create, user details: ', userDetails);
-        if (!userDetails || (!util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN') && !isPooledReward(event, userDetails))) {
+        if (!userDetails) {
             return { statusCode: status('Forbidden') };
         }
 
-        const params = util.extractEventBody(event);
+        const isUserAdmin = userDetails.role === 'SYSTEM_ADMIN';
+        if (!isUserAdmin && !isFriendTournament(event)) {
+            return { statusCode: status('Forbidden') };
+        }
+
+        const params = boostUtil.extractEventBody(event);
         logger('Boost create, params: ', params);
         params.creatingUserId = userDetails.systemWideUserId;
 
@@ -586,7 +595,7 @@ module.exports.createBoostWrapper = async (event) => {
         }
 
         const resultOfCall = await exports.createBoost(params);
-        return util.wrapHttpResponse(resultOfCall);    
+        return boostUtil.wrapHttpResponse(resultOfCall);    
     } catch (err) {
         return handleError(err);
     }

@@ -413,7 +413,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
             bsheetPrefix: 'TEST_PREFIX'
         };
 
-        const firstQuery = 'select owner_user_id from account_data.core_account_ledger where human_ref = $1'; // TEST_VALUE
+        const firstQuery = 'select owner_user_id from account_data.core_account_ledger where human_ref like $1'; // %TEST_VALUE%
         const secondQuery = 'select owner_user_id from account_data.core_account_ledger where $1 = any(tags)'; // 'TEST_PREFIX::TEST_VALUE'
         const thirdQuery = `select owner_user_id from ${config.get('tables.accountTable')} inner join ${config.get('tables.transactionTable')} ` +
             `on ${config.get('tables.accountTable')}.account_id = ${config.get('tables.transactionTable')}.account_id ` +
@@ -423,7 +423,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
 
         const resultOfFirstSearch = await persistence.findUserFromRef(params);
         expect(resultOfFirstSearch).to.deep.equal(testUserId);
-        expect(queryStub).to.have.been.calledOnceWithExactly(firstQuery, ['TEST_VALUE']);
+        expect(queryStub).to.have.been.calledOnceWithExactly(firstQuery, ['%TEST_VALUE%']);
         queryStub.reset();
 
         queryStub.resolves([]);

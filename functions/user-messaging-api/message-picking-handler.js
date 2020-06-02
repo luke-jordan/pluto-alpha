@@ -194,13 +194,13 @@ module.exports.assembleMessage = async (msgDetails) => {
         const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
         const messageBase = {
             messageId: msgDetails.messageId,
+            instructionId: msgDetails.instructionId, // for logging & tracing
             title: msgDetails.messageTitle,
             body: completedMessageBody,
             priority: msgDetails.messagePriority,
             display: msgDetails.display,
             persistedTimeMillis: msgDetails.creationTime.valueOf(),
-            hasFollowingMessage: msgDetails.hasFollowingMessage,
-            instructionId: msgDetails.instructionId // for logging & tracing
+            hasFollowingMessage: msgDetails.hasFollowingMessage
         };
         
         let actionContextForReturn = { };
