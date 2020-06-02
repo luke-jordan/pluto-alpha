@@ -248,8 +248,9 @@ module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId
 module.exports.findUserFromRef = async ({ searchValue, bsheetPrefix }) => {
     // first search
     const normalizedValue = searchValue.trim().toUpperCase();
-    const firstQuery = `select owner_user_id from ${config.get('tables.accountTable')} where human_ref = $1`;
-    const firstSearch = await rdsConnection.selectQuery(firstQuery, [normalizedValue]);
+    
+    const firstQuery = `select owner_user_id from ${config.get('tables.accountTable')} where human_ref like $1`;
+    const firstSearch = await rdsConnection.selectQuery(firstQuery, [`%${normalizedValue}%`]);
     logger('Result of first account ref search: ', firstSearch);
     if (firstSearch.length > 0) {
         return firstSearch[0]['owner_user_id'];

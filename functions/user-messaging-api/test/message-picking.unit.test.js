@@ -63,7 +63,7 @@ const handler = proxyquire('../message-picking-handler', {
 
 describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
-    const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
+    const relevantProfileCols = ['system_wide_user_id', 'personal_name', 'family_name', 'called_name', 'creation_time_epoch_millis', 'default_currency'];
 
     const minimalMsgFromTemplate = (template, priority, followsPriorMsg = false) => ({
         messageId: uuid(),

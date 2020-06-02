@@ -296,6 +296,57 @@ describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
         expect(fetchActiveCodesStub).to.have.been.calledOnceWithExactly();
         expect(randomWordStub).to.have.been.calledOnce;
     });
+    
+    it('Composes subject properly when no called name', async () => {
+        const requestedShareItems = ['BALANCE', 'ACTIVITY_COUNT'];
+        const testContactDetails = { contactType: 'EMAIL', contactMethod: 'juitsung@yuan.com' };
+        const customShareMessage = 'Hey Jane.\n\nLets save some lettuce, take over the world.';
+
+        // just testing email composition
+        const expectedTemplateVars = {
+            initiatedUserName: testProfile.personalName,
+            customShareMessage,
+            downloadLink: config.get('templates.downloadLink'),
+            referralCode: 'TUNNELS',
+            requestCode: 'ORBIT PAGE'
+        };
+
+        const sendEmailArgs = {
+            subject: 'Yao wants you to save with them on Jupiter',
+            toList: [testContactDetails.contactMethod],
+            bodyTemplateKey: config.get('templates.email.default.templateKey'),
+            templateVariables: expectedTemplateVars
+        };
+
+        const expectedFriendReq = {
+            type: 'INITIATED',
+            requestId: testRequestId,
+            requestedShareItems,
+            creationTime: testCreationTime,
+            contactMethod: testContactDetails.contactMethod
+        };
+
+        const testPayload = { targetPhoneOrEmail: 'juitsung@yuan.com', requestedShareItems, customShareMessage };
+        const testEvent = helper.wrapParamsWithPath(testPayload, 'initiate', testInitiatedUserId);
+
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 404 })})});
+
+        insertFriendRequestStub.resolves(mockFriendRequest({ targetContactDetails: testContactDetails, requestedShareItems }));
+        
+        const mockProfileNoCalledName = { ...testProfile };
+        Reflect.deleteProperty(mockProfileNoCalledName, 'calledName');
+        fetchProfileStub.withArgs({ systemWideUserId: testInitiatedUserId }).resolves(mockProfileNoCalledName);
+        sendEmailStub.withArgs(sendEmailArgs).resolves({ result: 'SUCCESS' });
+
+        fetchActiveCodesStub.withArgs().resolves(['DRY SLABS', 'POETRY BEAN', 'COMPASS MAJOR']);
+        randomWordStub.returns('ORBIT PAGE');
+
+        const insertionResult = await handler.directRequestManagement(testEvent);
+
+        expect(insertionResult).to.deep.equal(helper.wrapResponse(expectedFriendReq));
+
+        expect(sendEmailStub).to.have.been.calledOnceWithExactly(sendEmailArgs);        
+    });
 
     it('Throws an error on potential phishing in custom share message', async () => {
         const customShareMessage = 'Hey potential victim. Give me your password. Everything will be fine.';

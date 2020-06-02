@@ -118,11 +118,6 @@ const obtainSystemWideIdFromProfile = async (lookUpPayload) => {
     return systemWideUserId;
 };
 
-const obtainSystemWideIdFromBankRef = async (lookUpPayload) => {
-    logger('Trying to find user from bank reference or account name');
-    return persistence.findUserFromRef({ searchValue: lookUpPayload.bankReference, bsheetPrefix: config.get('bsheet.prefix') });
-};
-
 /**
  * Function for looking up a user and returning basic data about them
  * @param {object} event An event object containing the request context and query paramaters specifying the search to make
@@ -146,8 +141,22 @@ module.exports.findUsers = async (event) => {
         }
 
         let systemWideUserId = null;
+        
         if (Reflect.has(lookUpPayload, 'bankReference')) {
-            systemWideUserId = await obtainSystemWideIdFromBankRef(lookUpPayload);
+            logger('Trying to find user from bank reference or account name');
+            const candidateUsers = await persistence.findUserFromRef({ searchValue: lookUpPayload.bankReference, bsheetPrefix: config.get('bsheet.prefix') });
+            logger('Candidate users: ', candidateUsers);
+            
+            if (!candidateUsers || candidateUsers.length === 0) {
+                return opsCommonUtil.wrapResponse({ result: 'USER_NOT_FOUND' }, status('Not Found'));
+            }
+
+            if (candidateUsers.length > 1) {
+                const searchResponse = candidateUsers.map((account) => ({ ...account, creationTime: moment(account.creationTime).valueOf() }));
+                return adminUtil.wrapHttpResponse(searchResponse);
+            }
+
+            systemWideUserId = candidateUsers[0];
         } else {
             systemWideUserId = await obtainSystemWideIdFromProfile(lookUpPayload);
         }
@@ -155,7 +164,6 @@ module.exports.findUsers = async (event) => {
         if (!systemWideUserId) {
             return opsCommonUtil.wrapResponse({ result: 'USER_NOT_FOUND' }, status('Not Found'));
         }
-
 
         const [userProfile, pendingTransactions, userHistory] = await Promise.all([
             fetchUserProfile(systemWideUserId), obtainUserPendingTx(systemWideUserId), obtainUserHistory(systemWideUserId)

@@ -34,7 +34,7 @@ const UNIT_DIVISORS = {
     'WHOLE_CURRENCY': 1 
 };
 
-const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'creation_time_epoch_millis', 'default_currency'];
+const PROFILE_COLS = ['system_wide_user_id', 'personal_name', 'family_name', 'called_name', 'creation_time_epoch_millis', 'default_currency'];
 
 const getSubParamOrDefault = (paramSplit, defaultValue) => (paramSplit.length > 1 ? paramSplit[1] : defaultValue);
 
@@ -194,13 +194,13 @@ module.exports.assembleMessage = async (msgDetails) => {
         const completedMessageBody = await fillInTemplate(msgDetails.messageBody, msgDetails.destinationUserId);
         const messageBase = {
             messageId: msgDetails.messageId,
+            instructionId: msgDetails.instructionId, // for logging & tracing
             title: msgDetails.messageTitle,
             body: completedMessageBody,
             priority: msgDetails.messagePriority,
             display: msgDetails.display,
             persistedTimeMillis: msgDetails.creationTime.valueOf(),
-            hasFollowingMessage: msgDetails.hasFollowingMessage,
-            instructionId: msgDetails.instructionId // for logging & tracing
+            hasFollowingMessage: msgDetails.hasFollowingMessage
         };
         
         let actionContextForReturn = { };
