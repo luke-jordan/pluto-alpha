@@ -20,6 +20,15 @@ const constants = require('../constants');
 
 const allocatePoolStub = sinon.stub();
 const allocateUserStub = sinon.stub();
+const redisGetStub = sinon.stub();
+const redisSetStub = sinon.stub();
+
+class MockRedis {
+    constructor () { 
+        this.get = redisGetStub;
+        this.set = redisSetStub;
+    }
+}
 
 const handler = proxyquire('../transfer-handler', {
     './persistence/rds': {
@@ -33,6 +42,7 @@ const handler = proxyquire('../transfer-handler', {
     './accrual-handler': {
         '@noCallThru': true
     },
+    'ioredis': MockRedis,
     '@noCallThru': true
 });
 
@@ -63,6 +73,15 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         accountTxIds: accountTxIds.map((id) => ({ 'transaction_id': id }))
     };
 
+    const testTxResult = {
+        id: 'this_transaction', 
+        details: {
+            result: 'SUCCESS',
+            floatTxIds,
+            accountTxIds
+        }
+    };
+
     const expectedResult = {
         'this_transaction': {
             result: 'SUCCESS',
@@ -71,11 +90,19 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         }
     };
 
-    it('Happy path, pretty simple, for now', async () => {
+    // eslint-disable-next-line
+    it('Happy path, pretty simple, for now', async function () {
+        // eslint-disable-next-line
+        this.timeout(15000);
         logger('Testing a basic transfer');
         allocatePoolStub.resolves(poolAllocResult);
         allocateUserStub.resolves(userAllocResult);
+        redisGetStub.onFirstCall().resolves('PENDING');
+        redisGetStub.onSecondCall().resolves('PENDING');
+        redisGetStub.onThirdCall().resolves(JSON.stringify(testTxResult));
+        
         const resultOfTransfer = await handler.floatTransfer({ instructions: [testInstruction]});
+
         expect(resultOfTransfer).to.exist;
         expect(resultOfTransfer).to.have.property('statusCode', 200);
         expect(resultOfTransfer).to.have.property('body');
