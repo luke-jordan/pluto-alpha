@@ -76,7 +76,7 @@ const resetStubs = () => helper.resetStubs(fetchProfileStub, insertFriendRequest
     fetchActiveCodesStub, randomWordStub, sendEmailStub, sendSmsStub, fetchAllRequestsStub, ignoreRequestStub, lamdbaInvokeStub);
 
 
-describe.only('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
+describe('*** UNIT TEST FRIEND REQUEST INSERTION ***', () => {
 
     const testProfile = {
         systemWideUserId: testInitiatedUserId,

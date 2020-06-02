@@ -147,13 +147,15 @@ module.exports.readSavingPool = async (event) => {
 
 const publishFriendAddedToPool = async (friendUserIds, creatingUserId, poolName) => {
     const { personalName, calledName, familyName } = await persistenceRead.fetchUserProfile(creatingUserId);
-    const messageParameters = { };
+    
+    const friendName = `${calledName || personalName} ${familyName}`;
+    const messageParameters = { poolName, friendName };
 
     const userIds = friendUserIds.map(({ userId }) => userId);
     const context = { messageParameters };
 
     return publisher.publishMultiUserEvent(userIds, 'ADDED_TO_FRIEND_SAVING_POOL', { context });
-}
+};
 
 const createSavingPool = async (params, { systemWideUserId }) => {
     logger('Creating a pool with params: ', params);
@@ -181,8 +183,8 @@ const createSavingPool = async (params, { systemWideUserId }) => {
 
     const createdSavingPool = await fetchPoolDetails({ systemWideUserId }, { savingPoolId });
     
-    const publishCreatorEvent = publisher.publishUserEvent(systemWideUserId, 'CREATED_SAVING_POOL');
-    const friendPublishEvents = publisher.publishMultiUserEvent(friendUserIds, 'ADDED_TO_FRIEND_SAVING_POOL');
+    const publishCreatorEvent = publisher.publishUserEvent(systemWideUserId, 'CREATED_SAVING_POOL', { context: { savingPoolId }});
+    const friendPublishEvents = publishFriendAddedToPool(friendUserIds, systemWideUserId, persistenceObject.poolName);
     await Promise.all([publishCreatorEvent, friendPublishEvents]);
 
     return { result: 'SUCCESS', createdSavingPool };
@@ -211,6 +213,7 @@ const updateSavingPool = async (params, { systemWideUserId }) => {
         const friendshipIds = params.friendshipsToAdd;
         const friendUserIds = await persistenceRead.obtainFriendIds(systemWideUserId, friendshipIds);
         persistenceArgs.friendshipsToAdd = friendUserIds;
+        userEventPublishPromises.push(publisher.publishUserEvent(systemWideUserId, 'MODIFIED_SAVING_POOL', { context: { friendUserIds } }));
         userEventPublishPromises.push(publishFriendAddedToPool(friendUserIds, systemWideUserId, poolInfo.poolName));
     } else if (params.name) {
         persistenceArgs.poolName = params.name;
@@ -236,9 +239,8 @@ const updateSavingPool = async (params, { systemWideUserId }) => {
     return { result: 'SUCCESS', updatedTime: resultOfUpdate.updatedTime.valueOf() };
 };
 
-const deactivateSavingPool = async (systemWideUserId, savingPoolId) => {
-    
-};
+// const deactivateSavingPool = async (systemWideUserId, savingPoolId) => { 
+// };
 
 module.exports.writeSavingPool = async (event) => {
     try {
@@ -256,9 +258,9 @@ module.exports.writeSavingPool = async (event) => {
         if (operation === 'update') {
             resultOfOperation = await updateSavingPool(params, util.extractUserDetails(event));
         }
-        if (operation === 'deactivate') {
 
-        }
+        // if (operation === 'deactivate') {
+        // }
 
         if (!resultOfOperation) {
             return { statusCode: 400, message: 'Unknown operation' };
