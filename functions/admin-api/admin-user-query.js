@@ -151,7 +151,7 @@ module.exports.findUsers = async (event) => {
             }
 
             if (candidateUsers.length > 1) {
-                const searchResponse = listOfAccounts.map((account) => ({ ...account, creationTime: moment(creationTime).valueOf() }));
+                const searchResponse = candidateUsers.map((account) => ({ ...account, creationTime: moment(account.creationTime).valueOf() }));
                 return adminUtil.wrapHttpResponse(searchResponse);
             }
 
