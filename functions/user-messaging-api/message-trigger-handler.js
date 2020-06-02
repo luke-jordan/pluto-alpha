@@ -20,10 +20,16 @@ const createMsgInvocation = (instructionDestinationPairs) => ({
     Payload: stringify({ instructions: instructionDestinationPairs })
 });
 
-const processInstructionForUser = (instruction, destinationUserId) => {
+const processInstructionForUser = (instruction, destinationUserId, context) => {
     const { instructionId, triggerParameters } = instruction;
+    
+    const basePayload = { instructionId, destinationUserId };
+    if (context && context.messageParameters) {
+        basePayload.parameters = context.messageParameters;
+    }
+    
     if (!triggerParameters || !triggerParameters.messageSchedule) {
-        return { instructionId, destinationUserId };
+        return basePayload;
     }
 
     const messageMoment = moment();
@@ -31,12 +37,12 @@ const processInstructionForUser = (instruction, destinationUserId) => {
     
     if (type === 'RELATIVE') {
         messageMoment.add(offset.number, offset.unit);
-        return { instructionId, destinationUserId, scheduledTimeEpochMillis: messageMoment.valueOf() };
+        return { ...basePayload, scheduledTimeEpochMillis: messageMoment.valueOf() };
     }
 
     if (type === 'FIXED') {
         messageMoment.add(offset.number, offset.unit).set({ hour: fixed.hour, minute: fixed.minute });
-        return { instructionId, destinationUserId, scheduledTimeEpochMillis: messageMoment.valueOf() };
+        return { ...basePayload, scheduledTimeEpochMillis: messageMoment.valueOf() };
     }
 
     throw Error('Unsupported type of trigger schedule');
@@ -49,7 +55,7 @@ const disableMsgInvocation = (messageId) => ({
 });
 
 
-const findAndGenerateMessages = async (userId, eventType) => {
+const findAndGenerateMessages = async (userId, eventType, context) => {
     const instructions = await rdsUtil.findMsgInstructionTriggeredByEvent(eventType);
     logger('Found instructions to generate, for event type: ', eventType, ' as: ', instructions);
     if (!instructions || instructions.length === 0) {
@@ -57,7 +63,7 @@ const findAndGenerateMessages = async (userId, eventType) => {
         return;
     }
 
-    const messageCreationInstructions = instructions.map((instruction) => processInstructionForUser(instruction, userId));
+    const messageCreationInstructions = instructions.map((instruction) => processInstructionForUser(instruction, userId, context));
     await lambda.invoke(createMsgInvocation(messageCreationInstructions)).promise();
 };
 
@@ -80,7 +86,7 @@ const findAndHaltMessages = async (userId, eventType) => {
 
 module.exports.createFromUserEvent = async (event) => {
     try {
-        const { eventType, userId } = event;
+        const { eventType, userId, context } = event;
 
         if (!userId) {
             throw Error('Event does not include a specific user ID');
@@ -95,7 +101,7 @@ module.exports.createFromUserEvent = async (event) => {
             return { statusCode: 200 };
         }
 
-        await Promise.all([findAndGenerateMessages(userId, eventType), findAndHaltMessages(userId, eventType)]);
+        await Promise.all([findAndGenerateMessages(userId, eventType, context), findAndHaltMessages(userId, eventType)]);
 
         return { statusCode: 200 };
 

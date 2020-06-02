@@ -104,6 +104,30 @@ describe('*** UNIT TEST SIMPLE EVENT TRIGGERED MESSAGES ***', () => {
         expect(lambdaInvokeStub).to.have.been.calledWith(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
     });
 
+    it('Includes event context message params (if present) as parameters', async () => {
+        findMsgInstructionByFlagStub.resolves([mockInstruction]);
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+
+        const mockMsgParameters = { friendName: 'Busani Ndlovu', savingPoolName: 'Education' };
+        const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'ADDED_TO_FRIEND_SAVING_POOL', context: { messageParameters: mockMsgParameters } });
+
+        const result = await handler.handleBatchUserEvents(mockEvent);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal([{ statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }, { statusCode: 200 }]);
+
+        expect(findMsgInstructionByFlagStub).to.have.been.calledWith('ADDED_TO_FRIEND_SAVING_POOL');
+
+        const expectedInstruction = {
+            instructionId: mockInstructionId,
+            destinationUserId: mockUserId,
+            parameters: mockMsgParameters
+        };
+
+        const expectedPaylod = { instructions: [expectedInstruction] };
+        expect(lambdaInvokeStub).to.have.been.calledWith(testHelper.wrapLambdaInvoc('message_user_create_once', true, expectedPaylod));
+    });
+
     it('Returns 200 when called by blacklisted event', async () => {
         const mockEvent = mockSQSBatchEvent({ userId: mockUserId, eventType: 'MESSAGE_PUSH_NOTIFICATION_SENT' });
 

@@ -20,6 +20,9 @@ const fetchSavingPoolStub = sinon.stub();
 
 const fetchProfileStub = sinon.stub();
 
+const publishSingleEventStub = sinon.stub();
+const publishMultiEventStub = sinon.stub();
+
 const proxyquire = require('proxyquire').noCallThru();
 
 const handler = proxyquire('../friend-saving-handler', {
@@ -33,6 +36,10 @@ const handler = proxyquire('../friend-saving-handler', {
         'fetchSavingPoolDetails': fetchSavingPoolStub,
         'calculatePoolBalances': calculatePoolBalancesStub,
         'fetchUserProfile': fetchProfileStub
+    },
+    'publish-common': {
+        'publishUserEvent': publishSingleEventStub,
+        'publishMultiUserEvent': publishMultiEventStub
     }
 });
 
@@ -48,7 +55,7 @@ const testUserId = uuid();
 
 describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
-    beforeEach(() => helper.resetStubs(extractFriendIdsStub, persistFriendSavingStub, updateSavingPoolStub, fetchSavingPoolStub));
+    beforeEach(() => helper.resetStubs(extractFriendIdsStub, persistFriendSavingStub, updateSavingPoolStub, fetchSavingPoolStub, publishSingleEventStub, publishMultiEventStub));
 
     it('Unit test creating a friend savings pot', async () => {
         const mockFriendships = ['relationship-1', 'relationship-2', 'relationship-3'];
@@ -112,6 +119,14 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
         expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(testUserId, mockFriendships);
         expect(persistFriendSavingStub).to.have.been.calledOnceWithExactly(expectedPersistenceParams);
+
+        const expectedCreationContext = { savingPoolId: mockPoolId };
+        const expectedFriendAddedContext = { 
+            messageParameters: { poolName: 'Trip to Japan', friendName: 'A User' }
+        };
+
+        expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testUserId, 'CREATED_SAVING_POOL', { context: expectedCreationContext });
+        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(mockUsers, 'ADDED_TO_FRIEND_SAVING_POOL', { context: expectedFriendAddedContext });
     });
 
     it('Unit testing disallows pot where user is not in a friendship', async () => {
@@ -164,9 +179,11 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
             friendshipsToAdd: [mockFriendUserPair]
         };
 
-        fetchSavingPoolStub.resolves({ creatingUserId: testUserId });
+        fetchSavingPoolStub.resolves({ creatingUserId: testUserId, poolName: 'Trip to Japan' });
         extractFriendIdsStub.resolves([mockFriendUserPair]);
         updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
+
+        fetchProfileStub.withArgs({ systemWideUserId: testUserId }).resolves({ calledName: 'Some', familyName: 'Person' });
 
         const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
         const resultOfUpdate = await handler.writeSavingPool(testEvent);
@@ -177,6 +194,14 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
         expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(testUserId, mockFriendship);
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
+
+        const modContext = { friendUserIds: [mockFriendUserPair] };
+        const expectedFriendAddedContext = { 
+            messageParameters: { poolName: 'Trip to Japan', friendName: 'Some Person' }
+        };
+
+        expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testUserId, 'MODIFIED_SAVING_POOL', { context: modContext });
+        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(['user-N'], 'ADDED_TO_FRIEND_SAVING_POOL', { context: expectedFriendAddedContext });
     });
 
     it('Unit test renaming a saving pot', async () => {
@@ -195,7 +220,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
         const mockUpdatedTime = moment();
 
-        fetchSavingPoolStub.resolves({ creatingUserId: testUserId });
+        fetchSavingPoolStub.resolves({ creatingUserId: testUserId, poolName: 'Trip to Tokyo' });
         updateSavingPoolStub.resolves({ updatedTime: moment() });
 
         const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
@@ -206,6 +231,9 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
+
+        const expectedContext = { priorName: 'Trip to Tokyo', newName: 'Trip to Taipei' };
+        expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testUserId, 'MODIFIED_SAVING_POOL', { context: expectedContext });
     });
 
     it('Unit test changing a goal for a saving pot', async () => {

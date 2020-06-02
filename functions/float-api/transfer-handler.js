@@ -17,7 +17,7 @@ const floatAdjustmentRequest = (instruction) => ({
     floatId: instruction.floatId,
     transactionType: instruction.transactionType,
     backingEntityType: instruction.relatedEntity,
-    backingEntityIdentifer: instruction.relatedEntityId,
+    backingEntityIdentifier: instruction.relatedEntityId,
     logType: instruction.logType
 });
 

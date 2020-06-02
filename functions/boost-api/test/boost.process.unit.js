@@ -24,6 +24,8 @@ const redemptionHandlerStub = sinon.stub();
 const getAccountIdForUserStub = sinon.stub();
 const fetchUncreatedBoostsStub = sinon.stub();
 const insertBoostAccountsStub = sinon.stub();
+const insertBoostLogStub = sinon.stub();
+const findPooledAccountsStub = sinon.stub();
 
 const momentStub = sinon.stub();
 
@@ -42,7 +44,9 @@ const handler = proxyquire('../boost-process-handler', {
         'alterBoost': alterBoostStub,
         'getAccountIdForUser': getAccountIdForUserStub,
         'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
-        'insertBoostAccount': insertBoostAccountsStub
+        'insertBoostAccount': insertBoostAccountsStub,
+        'insertBoostAccountLogs': insertBoostLogStub,
+        'findAccountsForPooledReward': findPooledAccountsStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
@@ -215,12 +219,16 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     };
 
     it('Happy path awarding a boost after a user has saved enough', async () => {
+        const testLogId = uuid();
         const testUserId = uuid();
         const timeSaveCompleted = moment();
         const mockPersistedTime = moment();
         
         const testAccountId = uuid();
         const testSavingTxId = uuid();
+
+        const pooledAccountIds = [uuid(), uuid(), uuid(), uuid()];
+        const pooledContribObject = { boostId: testBoostId, accountIds: pooledAccountIds };
         
         const testEvent = {
             accountId: testAccountId,
@@ -235,6 +243,12 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
 
         const boostFromPersistence = { ...mockBoostToFromPersistence };
         boostFromPersistence.boostId = testBoostId;
+        boostFromPersistence.rewardParameters = {
+            rewardType: 'POOLED',
+            poolContributionPerUser: { amount: 20000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            additionalBonusToPool: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            percentPoolAsReward: 0.05
+        };
         
         // first, see if this account has offered or pending boosts against it
         const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
@@ -253,8 +267,11 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             accountUserMap: mockAccountUserMap
         }]);
 
-        // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the float allocation lambda
+        findPooledAccountsStub.resolves(pooledContribObject);
 
+        insertBoostLogStub.resolves([{ logId: testLogId, creationTime: mockPersistedTime }]);
+
+        // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the floa
         const resultOfEventRecord = await handler.processEvent(testEvent);
         logger('Result of record: ', resultOfEventRecord);
 
@@ -265,13 +282,23 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             redemptionBoosts: [boostFromPersistence], 
             revocationBoosts: [], 
             affectedAccountsDict: expectedAccountDict,
+            pooledContributionMap: { [testBoostId]: pooledAccountIds },
             event: testEvent
+        };
+
+        const expectedBoostLog = {
+            boostId: testBoostId,
+            accountId: testAccountId,
+            logType: 'BOOST_POOL_CONTRIBUTION',
+            logContext: testEvent
         };
 
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
 
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedBoostLog]);
+        expect(findPooledAccountsStub).to.have.been.calledOnceWithExactly(testBoostId, 'BOOST_POOL_CONTRIBUTION');
         expect(insertBoostAccountsStub).to.have.not.been.called;
         expect(getAccountIdForUserStub).to.have.not.been.called;
     });

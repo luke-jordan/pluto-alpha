@@ -86,6 +86,23 @@ const createBoostsTriggeredByEvent = async (event) => {
     return persistence.insertBoostAccount(boostsToCreate, accountId, 'CREATED');
 };
 
+const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
+    const boostsWithPooledReward = redemptionBoosts.filter((boost) => boost.rewardParameters &&
+        boost.rewardParameters.rewardType === 'POOLED');
+
+    if (boostsWithPooledReward.length === 0) {
+        return [];
+    }
+
+    const boostIds = boostsWithPooledReward.map((boost) => boost.boostId);
+    // todo: reduce to one call to persistence
+    const pooledContributionPromises = boostIds.map((boostId) => persistence.findAccountsForPooledReward(boostId, 'BOOST_POOL_CONTRIBUTION'));
+    const resultOfFetch = await Promise.all(pooledContributionPromises);
+    logger('Result from persistence:', resultOfFetch);
+    const pooledContributionMap = resultOfFetch.reduce((obj, result) => ({ ...obj, [result.boostId]: result.accountIds }), {});
+    return pooledContributionMap;
+};
+
 const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
     logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
     return alteredBoosts.map((boost) => {
@@ -135,6 +152,23 @@ const processEventForCreatedBoosts = async (event) => {
         return { boostsTriggered: 0 };
     }
 
+    if (event.eventType === 'SAVING_PAYMENT_SUCCESSFUL') {
+        const boostsWithPooledReward = boostsForStatusChange.filter((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED');
+
+        if (boostsWithPooledReward.length > 0) {
+            const boostIds = boostsWithPooledReward.map((boost) => boost.boostId);
+            const resultLogs = boostIds.map((boostId) => ({
+                boostId,
+                accountId: event.accountId,
+                logType: 'BOOST_POOL_CONTRIBUTION',
+                logContext: event
+            }));
+    
+            const resultOfLogInsertion = await persistence.insertBoostAccountLogs(resultLogs);
+            logger('Result of log insertion: ', resultOfLogInsertion);
+        }
+    }
+
     logger('At least one boost was triggered. First step is to extract affected accounts, then tell the float to transfer from bonus pool');
     // note : this is in the form, top level keys: boostID, which gives a dict, whose own key is the account ID, and an object with userId and status
     const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange);
@@ -153,6 +187,11 @@ const processEventForCreatedBoosts = async (event) => {
     let resultOfTransfers = {};
     if (boostsToRedeem.length > 0 || boostsToRevoke.length > 0) {
         const redemptionCall = { redemptionBoosts: boostsToRedeem, revocationBoosts: boostsToRevoke, affectedAccountsDict: affectedAccountsDict, event };
+
+        if (boostsToRedeem.some((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED')) {
+            redemptionCall.pooledContributionMap = await fetchAccountIdsForPooledRewards(boostsToRedeem);
+        }
+
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
     }
 

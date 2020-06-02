@@ -314,4 +314,3 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
     });
 
 });
-

@@ -169,7 +169,7 @@ const safelyGetLogIdArray = (request) => {
  * @param {string} relatedEntityType Optional. Type of the backing or parent entity that spawned this allocation, e.g., the accrual or capitalization event
  * @param {string} relatedEntityId Optional. As above, here the ID (in the relevant namespace) for that entity type
  */
-module.exports.allocateFloat = async (clientId = 'someSavingCo', floatId = 'cashFloat', allocationRequests = [{
+module.exports.allocateFloat = async (clientId, floatId, allocationRequests = [{
     label: 'BONUS',
     amount: 100,
     currency: 'ZAR',
@@ -258,11 +258,11 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
     };
 
     const accountQuery = `insert into ${config.get('tables.accountTransactions')} ` +
-        `(transaction_id, account_id, transaction_type, settlement_status, settlement_time, ` + 
+        `(transaction_id, account_id, transaction_type, initiation_time, settlement_status, settlement_time, ` + 
         `amount, currency, unit, float_id, client_id, float_alloc_tx_id, tags) values %L ` +
         `returning transaction_id, amount`;
 
-    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${settlement_status}, ${settlement_time}, ' + 
+    const accountColumns = '${transaction_id}, ${account_id}, ${transaction_type}, ${initiation_time}, ${settlement_status}, ${settlement_time}, ' + 
         '${amount}, ${currency}, ${unit}, ${float_id}, ${client_id}, ${float_alloc_tx_id}, ${tags}';
 
     // logger('Allocation request, account IDs: ', allocationRequests.map((request) => request.accountId));
@@ -276,12 +276,18 @@ module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'ca
             tags.push(`FLOAT_LOG_ID::${request.logId}`);
         }
 
+        const currentTimeFormatted = moment().format();
+
+        const initiationTime = request.initiationTime || currentTimeFormatted;
+
         const settlementStatus = request.settlementStatus || request.allocState || 'ACCRUED';
-        const settlementTime = settlementStatus === 'SETTLED' ? moment().format() : null;
+        const settlementTime = settlementStatus === 'SETTLED' ? currentTimeFormatted : null;
+        
         return {
             'transaction_id': request.accountTxId || uuid(),
             'account_id': request.accountId,
             'transaction_type': request.allocType || 'FLOAT_ALLOCATION',
+            'initiation_time': initiationTime,
             'settlement_status': settlementStatus,
             'settlement_time': settlementTime,
             'amount': request.amount,

@@ -433,4 +433,16 @@ describe('*** UNIT TEST PERSISTENCE WRITE FUNCTIONS ***', async () => {
         expect(multiOpStub).to.have.been.calledOnceWithExactly([updateFriendReqDef, testUpdateLogDef], [testInsertLogDef]);
     });
 
+    it('Updates alert logs to viewed', async () => {
+        const updateQuery = `update ${friendLogTable} set alerted_user_id = array_append(alerted_user_id, $1) where ` +
+            `log_id in ($2) and $1 = any(to_alert_user_id) returning updated_time`;
+        
+        updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }] });
+
+        const resultOfUpdate = await persistence.updateAlertLogsToViewedForUser(testSystemId, [testLogId]);
+
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([{ updatedTime: testUpdatedTime }]);
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [testSystemId, testLogId]);
+    });
 });

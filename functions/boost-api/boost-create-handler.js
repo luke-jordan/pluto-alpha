@@ -7,7 +7,9 @@ const status = require('statuses');
 const stringify = require('json-stable-stringify');
 
 const publisher = require('publish-common');
-const util = require('./boost.util');
+const opsUtil = require('ops-util-common');
+
+const boostUtil = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
@@ -108,7 +110,7 @@ const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     let gameInitialStatus = initialStatus;
     if (initialStatus === 'UNCREATED') {
         const triggeredStatus = Object.keys(passedConditions).
-            filter((boostStatus) => util.hasConditionType(passedConditions, boostStatus, 'event_occurs')).sort(util.statusSorter);
+            filter((boostStatus) => boostUtil.hasConditionType(passedConditions, boostStatus, 'event_occurs')).sort(boostUtil.statusSorter);
         gameInitialStatus = triggeredStatus.length > 0 ? triggeredStatus[0] : initialStatus;
     }
     
@@ -116,7 +118,7 @@ const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     const gameConditions = extractStatusConditions(gameParams, gameInitialStatus);
     
     logger('Merging: ', gameConditions, 'and: ', passedConditions);
-    const mergedConditions = util.ALL_BOOST_STATUS_SORTED.filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
+    const mergedConditions = boostUtil.ALL_BOOST_STATUS_SORTED.filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
         reduce((obj, boostStatus) => ({ ...obj, [boostStatus]: safeMerge(gameConditions, passedConditions, boostStatus)}), {});
 
     logger('Merged status conditions: ', mergedConditions);
@@ -271,7 +273,7 @@ const obtainAudienceDetails = async (params) => {
     let audienceId = '';
     if (typeof params.audienceId === 'string' && params.audienceId.trim().length > 0) {
         audienceId = params.audienceId;
-    } else {  
+    } else {
         audienceId = await generateAudienceInline(params);
         logger('Created audience: ', audienceId);
     }
@@ -315,7 +317,7 @@ const retrieveBoostAmounts = (params) => {
     } else if (typeof params.boostBudget === 'string') {
         const boostBudgetParams = params.boostBudget.split('::');
         if (boostAmountDetails[1] !== boostBudgetParams[1] || boostAmountDetails[2] !== boostBudgetParams[2]) {
-            return util.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
+            return boostUtil.wrapHttpResponse('Error! Budget must be in same unit & currency as amount', 400);
         }
         boostBudget = parseInt(boostBudgetParams[0], 10);
     } else {
@@ -352,6 +354,15 @@ const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boos
  * 
  * Note (2): If multiple of the types above are passed, (3) will override the others (as it is called last)
  * Also note that if none are provided the boost will have no message and just hang in the ether
+ * 
+ * Note (3) on rewardParameters: where provided the following properties are expected:
+ * rewardType, required. Valid values are 'SIMPLE', 'RANDOM', and 'POOLED'. If reward rewardType is 'SIMPLE' no other properties are required.
+ * If the rewardType is 'RANDOM' the following properties may be provided: distribution (default is UNIFORM), targetMean (default is use boostAmount),
+ * significantFigures (optional - rounding amount, if not specified, amounts will be rounded to whole numbers), and realizedRewardModuloZeroTarget (optional - when provided only
+ * amounts that leave no remainder when divided by this number will be used as rewards).
+ * If rewardType is 'POOLED' the following properties must be provided: poolContributionPerUser (a sub-dict, with amount, unit, currency).
+ * percentPoolAsReward (specifies how much of the pool gets awarded as the reward amount), additionalBonusToPool (defines how much the overall Jupiter bonus pool will
+ * contribute to the reward, also a sub-dict with usual amount-unit-etc format).
  * @param {object} event An event object containing the request context and request body.
  * @property {string} creatingUserId The system wide user id of the user who is creating the boost.
  * @property {string} boostTypeCategory A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'.
@@ -360,10 +371,11 @@ const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boos
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
  * @property {string} audienceId The ID of the audience that the boost will be offered to. If left out, must have boostAudienceSelection.
  * @property {object} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
- * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {object} rewardParameters An optional object with reward details. expected properties are rewardType (valid values: 'SIMPLE', 'RANDOM', 'POOLED'). See Note (3) above.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
 module.exports.createBoost = async (event) => {
@@ -440,6 +452,10 @@ module.exports.createBoost = async (event) => {
         instructionToRds.statusConditions = params.statusConditions;
     }
 
+    if (params.rewardParameters) {
+        instructionToRds.rewardParameters = params.rewardParameters;
+    }
+
     // logger('Sending to persistence: ', instructionToRds);
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
@@ -494,6 +510,41 @@ module.exports.createBoost = async (event) => {
 
 };
 
+// /////////////////////// SECTION FOR WRAPPER (FOR ADMIN FRONTEND CALLS) AND USER-GENERATED BOOSTS, I.E., FRIEND TOURNAMENTS ///
+
+// todo next : get some basic defaults here, e.g., minimum number in tournament, and the Jupiter contribution (make dynamic)
+
+const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => {
+    const userIdsForFriends = await persistence.fetchUserIdsForRelationships(friendshipIds);
+    logger('Got user ID pairs for the friendship list:', userIdsForFriends);
+
+    // this is to make sure user only creates the tournament for users actually in a friend relationship with them
+    const validFriendships = userIdsForFriends.filter((friendship) => Object.values(friendship).includes(creatingUserId));
+    const friendUserIds = validFriendships.map((relationship) => {
+        const friendUserId = relationship.initiatedUserId === creatingUserId ? relationship.acceptedUserId : relationship.initiatedUserId;
+        return friendUserId;
+    });
+
+    logger('Got friend user ids:', friendUserIds);
+
+    if (friendUserIds.length === 0) {
+        throw new Error('Error! No valid friendships found');
+    }
+
+    return {
+        table: config.get('tables.accountLedger'),
+        conditions: [{ op: 'in', prop: 'owner_user_id', value: [creatingUserId, ...friendUserIds] }]
+    };
+};
+
+const isFriendTournament = (event) => {
+    const params = boostUtil.extractEventBody(event);
+    if (!Array.isArray(params.friendships) || params.friendships.length === 0 || params.boostAudienceSelection) {
+        return false;
+    }
+
+    return true;
+};
 
 /**
  * Wrapper method for API gateway, handling authorization via the header, extracting body, etc. 
@@ -505,27 +556,46 @@ module.exports.createBoost = async (event) => {
  * @property {string} startTimeMillis A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller.
  * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
  * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
+ * @property {array}  friendships An optional array of relationship ids. Used to create a custom boost audience targeted at the users in the relationships.
+ * @property {object} rewardParameters An object caontaining reward parameters to be persisted with the boost.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {sting} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
- * @property {string} boostAudienceSelection A DSL string containing instructions as to which users to send the boost to. 
- * @property {array} redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
+ * @property {string} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
+ * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
  */
 module.exports.createBoostWrapper = async (event) => {
     try {
-        const userDetails = util.extractUserDetails(event);
+        const userDetails = opsUtil.extractUserDetails(event);
 
         logger('Boost create, user details: ', userDetails);
-        if (!userDetails || !util.isUserAuthorized(userDetails, 'SYSTEM_ADMIN')) {
+        if (!userDetails) {
             return { statusCode: status('Forbidden') };
         }
 
-        const params = util.extractEventBody(event);
+        const isUserAdmin = userDetails.role === 'SYSTEM_ADMIN';
+        if (!isUserAdmin && !isFriendTournament(event)) {
+            return { statusCode: status('Forbidden') };
+        }
+
+        const params = boostUtil.extractEventBody(event);
         logger('Boost create, params: ', params);
         params.creatingUserId = userDetails.systemWideUserId;
 
+        if (params.friendships && params.friendships.length > 0) {
+            if (!params.rewardParameters || params.rewardParameters.rewardType !== 'POOLED') {
+                return { statusCode: status('Forbidden') };
+            }
+
+            const { creatingUserId, friendships } = params;
+            const audienceSelection = await assembleBoostAudienceSelection(creatingUserId, friendships);
+            logger('Created friendship-based audience selection instruction:', audienceSelection);
+            params.boostAudienceSelection = audienceSelection;
+            Reflect.deleteProperty(params, 'friendships');
+        }
+
         const resultOfCall = await exports.createBoost(params);
-        return util.wrapHttpResponse(resultOfCall);    
+        return boostUtil.wrapHttpResponse(resultOfCall);    
     } catch (err) {
         return handleError(err);
     }
