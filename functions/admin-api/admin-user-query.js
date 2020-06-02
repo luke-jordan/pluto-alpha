@@ -144,7 +144,8 @@ module.exports.findUsers = async (event) => {
         
         if (Reflect.has(lookUpPayload, 'bankReference')) {
             logger('Trying to find user from bank reference or account name');
-            const candidateUsers = persistence.findUserFromRef({ searchValue: lookUpPayload.bankReference, bsheetPrefix: config.get('bsheet.prefix') });
+            const candidateUsers = await persistence.findUserFromRef({ searchValue: lookUpPayload.bankReference, bsheetPrefix: config.get('bsheet.prefix') });
+            logger('Candidate users: ', candidateUsers);
             
             if (!candidateUsers || candidateUsers.length === 0) {
                 return opsCommonUtil.wrapResponse({ result: 'USER_NOT_FOUND' }, status('Not Found'));

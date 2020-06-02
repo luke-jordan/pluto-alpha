@@ -523,8 +523,8 @@ module.exports.findUserIdsForAccounts = async (accountIds) => {
 
 module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
     const query = `select initiated_user_id, accepted_user_id from ${config.get('tables.friendshipTable')} where ` +
-        `relationship_id in (${extractArrayIndices(relationshipIds)})`;
-    const result = await rdsConnection.selectQuery(query, relationshipIds);
+        `relationship_status = $1 and relationship_id in (${extractArrayIndices(relationshipIds, 2)})`;
+    const result = await rdsConnection.selectQuery(query, ['ACTIVE', ...relationshipIds]);
     if (Array.isArray(result) && result.length > 0) {
         return result.map((row) => camelizeKeys(row));
     }
