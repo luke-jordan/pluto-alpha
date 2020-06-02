@@ -117,7 +117,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
     });
 
     it('Fetches a list of current users', async () => {
-
         const expectedQuery = `select account_data.core_account_ledger.account_id, human_ref, ` +
             `account_data.core_account_ledger.creation_time, count(transaction_id) from ` + 
             `account_data.core_account_ledger left join transaction_data.core_transaction_ledger on ` +
@@ -129,7 +128,25 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         const expectedValues = ['USER_SAVING_EVENT', moment(0).format(), sinon.match.string]; 
         queryStub.resolves([{ 'account_id': 'account1' }, { 'account_id': 'account2' }]);
 
-        const userList = await persistence.listAccounts();
+        const userList = await persistence.listAccounts({ includeNoSave: true });
+        expect(userList).to.deep.equal([{ accountId: 'account1' }, { accountId: 'account2' }]);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
+    });
+
+    it('Fetches a list when given specified user IDs', async () => {
+        const expectedQuery = `select account_data.core_account_ledger.account_id, human_ref, ` +
+            `account_data.core_account_ledger.creation_time, count(transaction_id) from ` + 
+            `account_data.core_account_ledger left join transaction_data.core_transaction_ledger on ` +
+            `account_data.core_account_ledger.account_id = transaction_data.core_transaction_ledger.account_id ` +
+            `where transaction_type = $1 and account_data.core_account_ledger.owner_user_id in ($2, $3) ` + 
+            `group by account_data.core_account_ledger.account_id`;
+    
+        // current_timestamp does not play well with formatting in this way, so matching any string
+        const expectedValues = ['USER_SAVING_EVENT', 'userid1', 'userid2']; 
+        queryStub.resolves([{ 'account_id': 'account1' }, { 'account_id': 'account2' }]);
+
+        const userList = await persistence.listAccounts({ specifiedUserIds: ['userid1', 'userid2'], includeNoSave: true });
         expect(userList).to.deep.equal([{ accountId: 'account1' }, { accountId: 'account2' }]);
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
@@ -422,14 +439,14 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         queryStub.onFirstCall().resolves([{ 'owner_user_id': testUserId }]);
 
         const resultOfFirstSearch = await persistence.findUserFromRef(params);
-        expect(resultOfFirstSearch).to.deep.equal(testUserId);
+        expect(resultOfFirstSearch).to.deep.equal([{ ownerUserId: testUserId }]);
         expect(queryStub).to.have.been.calledOnceWithExactly(firstQuery, ['%TEST_VALUE%']);
         queryStub.reset();
 
         queryStub.resolves([]);
         queryStub.onSecondCall().resolves([{ 'owner_user_id': testUserId }]);
         const resultOfSecondSearch = await persistence.findUserFromRef(params);
-        expect(resultOfSecondSearch).to.deep.equal(testUserId);
+        expect(resultOfSecondSearch).to.deep.equal([{ ownerUserId: testUserId }]);
         expect(queryStub).to.have.been.calledTwice;
         expect(queryStub).to.have.been.calledWith(secondQuery, ['TEST_PREFIX::TEST_VALUE']);
 
@@ -438,7 +455,7 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         queryStub.resolves([]);
         queryStub.onThirdCall().resolves([{ 'owner_user_id': testUserId }]);
         const resultOfThirdSearch = await persistence.findUserFromRef(params);
-        expect(resultOfThirdSearch).to.deep.equal(testUserId);
+        expect(resultOfThirdSearch).to.deep.equal([{ ownerUserId: testUserId }]);
         expect(queryStub).to.have.been.calledThrice;
         expect(queryStub).to.have.been.calledWith(thirdQuery, ['TEST_VALUE']);
         queryStub.reset();
