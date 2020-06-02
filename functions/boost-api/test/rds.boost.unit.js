@@ -417,7 +417,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const testRelationshipIds = testHelper.createUUIDArray(2);
         const [firstUserId, secondUserId, thirdUserId] = testHelper.createUUIDArray(3);
         const selectQuery = `select initiated_user_id, accepted_user_id from ${config.get('tables.friendshipTable')} where ` +
-            `relationship_id in ($1, $2)`;
+            `relationship_status = $1 and relationship_id in ($2, $3)`;
         queryStub.resolves([
             { 'initiated_user_id': firstUserId, 'accepted_user_id': secondUserId },
             { 'initiated_user_id': thirdUserId, 'accepted_user_id': firstUserId }
@@ -429,6 +429,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             { initiatedUserId: firstUserId, acceptedUserId: secondUserId },
             { initiatedUserId: thirdUserId, acceptedUserId: firstUserId }
         ]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, testRelationshipIds);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, ['ACTIVE', ...testRelationshipIds]);
     });
 });
