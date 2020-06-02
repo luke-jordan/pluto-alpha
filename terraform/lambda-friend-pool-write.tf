@@ -39,7 +39,15 @@ resource "aws_lambda_function" "friend_pool_write" {
                 "names": {
                     "friend_api_worker": "${terraform.workspace}/ops/psql/friend"
                 }
-              }
+              },
+              "publishing": {
+                "userEvents": {
+                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                },
+                "hash": {
+                  "key": "${var.log_hashing_secret[terraform.workspace]}"
+                }
+              },
           }
       )}"
     }
@@ -100,6 +108,11 @@ resource "aws_iam_role_policy_attachment" "friend_pool_write_secret_get" {
 resource "aws_iam_role_policy_attachment" "friend_pool_write_profile_invoke_policy" {
   role = aws_iam_role.friend_pool_write_role.name
   policy_arn = var.user_profile_table_read_policy_arn[terraform.workspace]
+}
+
+resource "aws_iam_role_policy_attachment" "friend_pool_event_publish" {
+  role = aws_iam_role.friend_pool_event_publish.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
