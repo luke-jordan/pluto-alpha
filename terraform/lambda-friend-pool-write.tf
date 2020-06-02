@@ -111,7 +111,7 @@ resource "aws_iam_role_policy_attachment" "friend_pool_write_profile_invoke_poli
 }
 
 resource "aws_iam_role_policy_attachment" "friend_pool_event_publish" {
-  role = aws_iam_role.friend_pool_event_publish.name
+  role = aws_iam_role.friend_pool_write_role.name
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 

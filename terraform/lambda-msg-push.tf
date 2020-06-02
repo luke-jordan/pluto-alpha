@@ -84,6 +84,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "message_push" {
   name = "/aws/lambda/${var.message_push}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"
