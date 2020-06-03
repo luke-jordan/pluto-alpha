@@ -15,10 +15,11 @@ const Redis = require('ioredis');
 const redis = new Redis({
     host: config.get('cache.host'),
     port: config.get('cache.port'),
-    retryStrategy: () => `dont retry`
+    retryStrategy: () => `dont retry`,
+    keyPrefix: `${config.get('cache.keyPrefixes.float')}::`
 });
 
-const txStateCheckDelay = 5000;
+const txStateCheckInterval = config.get('cache.txStateCheckInterval');
 
 const floatAdjustmentRequest = (instruction) => ({
     amount: instruction.recipients[0].amount,
@@ -81,19 +82,19 @@ const allUserAllocation = (instruction) => ({
 
 const isBonusOrCompany = (type) => type === constants.entityTypes.BONUS_POOL || type === constants.entityTypes.COMPANY_SHARE;
 
-const handleActiveTx = async (activeTxKey, activeTx = null) => {
+const handleActiveTx = async (activeTxId, activeTx = null) => {
     let cacheResult = activeTx;
     if (!cacheResult) {
-        cacheResult = await redis.get(activeTxKey);
+        cacheResult = await redis.get(activeTxId);
     }
 
     logger('Got cached transaction state:', cacheResult);
 
     if (cacheResult === 'PENDING') {
         logger('Transaction is pending. Waiting for completion');
-        await new Promise((resolve) => setTimeout(resolve, txStateCheckDelay));
+        await new Promise((resolve) => setTimeout(resolve, txStateCheckInterval));
         logger('Checking transaction state');
-        return handleActiveTx(activeTxKey);
+        return handleActiveTx(activeTxId);
     }
 
     logger('Transaction complete. Returning result');
@@ -118,16 +119,14 @@ const handleActiveTx = async (activeTxKey, activeTx = null) => {
 const handleInstruction = async (instruction) => {
     logger('Received transfer instruction, recipients: ', instruction.recipients);
 
-    const activeTxId = uuid5(instruction.identifier, config.get('cache.namespace'));
-    const activeTxKey = `${config.get('cache.keyPrefixes.float')}::${activeTxId}`;
-    const activeTx = await redis.get(activeTxKey);
+    const activeTxId = uuid5(JSON.stringify(instruction), config.get('cache.namespace'));
+    const activeTx = await redis.get(activeTxId);
     logger('Got cached transaction state:', activeTx);
-
     if (activeTx) {
-        return handleActiveTx(activeTxKey, activeTx);
+        return handleActiveTx(activeTxId, activeTx);
     }
 
-    await redis.set(activeTxKey, 'PENDING', 'EX', config.get('cache.ttls.float'));
+    await redis.set(activeTxId, 'PENDING', 'EX', config.get('cache.ttls.float'));
 
     const nonUserAllocRequests = []; // for bonus pool and client share
     const userAllocRequests = [];
@@ -207,7 +206,7 @@ const handleInstruction = async (instruction) => {
         }
     };
 
-    await redis.set(activeTxKey, JSON.stringify(finalResult), 'EX', config.get('cache.ttls.float'));
+    await redis.set(activeTxId, JSON.stringify(finalResult), 'EX', config.get('cache.ttls.float'));
     return finalResult;
 };
 
