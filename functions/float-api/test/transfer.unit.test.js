@@ -129,7 +129,11 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         logger('Testing a basic transfer');
         allocatePoolStub.resolves(poolAllocResult);
         allocateUserStub.resolves(userAllocResult);
+        redisGetStub.resolves(null);
+        redisSetStub.resolves('OK');
+
         const resultOfTransfer = await handler.floatTransfer({ instructions: [testInstruction]});
+
         expect(resultOfTransfer).to.exist;
         expect(resultOfTransfer).to.have.property('statusCode', 200);
         expect(resultOfTransfer).to.have.property('body');
@@ -168,6 +172,8 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
     it('Happy path, transfer is settled', async () => {
         allocatePoolStub.resolves(poolAllocResult);
         allocateUserStub.resolves(userAllocResult);
+        redisGetStub.resolves(null);
+        redisSetStub.resolves('OK');
         
         const thisInstruction = { ...testInstruction };
         thisInstruction.settlementStatus = 'SETTLED';
@@ -247,6 +253,8 @@ describe('*** UNIT TEST FLOAT TRANSFER TO BONUS AND COMPANY ***', () => {
         };    
         
         allocatePoolStub.resolves(poolAllocResult);
+        redisGetStub.resolves(null);
+        redisSetStub.resolves('OK');
 
         const resultOfTransfer = await handler.floatTransfer(payload);
         
@@ -276,6 +284,8 @@ describe('*** UNIT TEST FLOAT TRANSFER TO BONUS AND COMPANY ***', () => {
         };
 
         allocatePoolStub.resolves(poolAllocResult);
+        redisGetStub.resolves(null);
+        redisSetStub.resolves('OK');
 
         const resultOfTransfer = await handler.floatTransfer(newPayload);
 
