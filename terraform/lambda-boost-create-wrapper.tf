@@ -104,6 +104,11 @@ resource "aws_iam_role_policy_attachment" "boost_create_wrapper_user_event_publi
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
+resource "aws_iam_role_policy_attachment" "boost_create_wrapper_audience_invoke" {
+  role = aws_iam_role.boost_create_wrapper_role.name
+  policy_arn = aws_iam_policy.audience_lambda_invoke_policy.arn
+}
+
 resource "aws_iam_role_policy_attachment" "boost_create_wrapper_secret_get" {
   role = aws_iam_role.boost_create_wrapper_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"

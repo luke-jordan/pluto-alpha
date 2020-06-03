@@ -189,7 +189,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 clientId: testClientId,
                 creatingUserId: testCreatingUserId,
                 isDynamic: false,
-                propertyConditions: testBodyOfEvent.boostAudienceSelection
+                conditions: testBodyOfEvent.boostAudienceSelection.conditions
             }
         };
         const wrappedInvoke = testHelper.wrapLambdaInvoc('audience_selection', false, expectedAudiencePayload);

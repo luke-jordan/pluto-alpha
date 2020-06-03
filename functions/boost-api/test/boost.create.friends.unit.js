@@ -150,10 +150,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
                 clientId: testClientId,
                 creatingUserId: testCreatingUserId,
                 isDynamic: false,
-                propertyConditions: {
-                    conditions: [{ op: 'in', prop: 'owner_user_id', value: [testCreatingUserId, ...testFriendshipUserIds] }],
-                    table: config.get('tables.accountLedger')
-                }
+                conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testCreatingUserId, ...testFriendshipUserIds] }]
             }
         };
         const expectedInvocation = helper.wrapLambdaInvoc(config.get('lambdas.audienceHandle'), false, expectedAudiencePayload);

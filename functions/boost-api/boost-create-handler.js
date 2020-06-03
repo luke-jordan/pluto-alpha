@@ -244,7 +244,7 @@ const generateAudienceInline = async (boostParams, isDynamic = false) => {
             creatingUserId: boostParams.creatingUserId,
             clientId: boostParams.boostSource.clientId,
             isDynamic,
-            propertyConditions: boostParams.boostAudienceSelection
+            conditions: boostParams.boostAudienceSelection.conditions
         }
     };
 
@@ -255,6 +255,8 @@ const generateAudienceInline = async (boostParams, isDynamic = false) => {
     };
 
     const resultOfAudienceCreation = await lambda.invoke(audienceInvocation).promise();
+    logger('Raw result of audience creation: ', resultOfAudienceCreation);
+
     const resultPayload = JSON.parse(resultOfAudienceCreation['Payload']);
     const resultBody = JSON.parse(resultPayload.body);
     logger('Result body for audience creation: ', resultBody);
@@ -532,8 +534,7 @@ const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => 
     }
 
     return {
-        table: config.get('tables.accountLedger'),
-        conditions: [{ op: 'in', prop: 'owner_user_id', value: [creatingUserId, ...friendUserIds] }]
+        conditions: [{ op: 'in', prop: 'systemWideUserId', value: [creatingUserId, ...friendUserIds] }]
     };
 };
 

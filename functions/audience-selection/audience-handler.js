@@ -59,6 +59,13 @@ const stdProperties = {
         type: 'aggregate',
         description: 'Number of (any) status save',
         expects: 'number'
+    },
+    systemWideUserId: {
+        type: 'match',
+        description: 'System user ID (system only)',
+        expects: 'stringMultiple',
+        table: 'accountTable',
+        excludeOnPanel: true
     }
 };
 
@@ -104,8 +111,8 @@ const convertPendingCountToColumns = (condition) => convertTxCountToColumns(cond
 const convertAnySaveCountToColumns = (condition) => convertTxCountToColumns(condition);
 
 const convertSumBalanceToColumns = (condition) => {
-    const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
-    const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
+    const settlementStatusToInclude = ['SETTLED', 'ACCRUED'];
+    const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
     const convertAmountToSingleUnitQuery = `SUM(
         CASE
             WHEN unit = 'WHOLE_CENT' THEN
@@ -143,6 +150,10 @@ const convertSumBalanceToColumns = (condition) => {
     };
 };
 
+const humanRefInValueConversion = (value) => (Array.isArray(value) 
+    ? value.map((item) => item.trim().toUpperCase()) 
+    : value.split(', ').map((item) => item.trim().toUpperCase()));
+
 const columnConverters = {
     saveCount: (condition) => convertSaveCountToColumns(condition),
     pendingCount: (condition) => convertPendingCountToColumns(condition),
@@ -176,7 +187,12 @@ const columnConverters = {
     }),
     humanReference: (condition) => ({
         conditions: [
-            { op: condition.op, prop: 'human_ref', value: condition.value.toUpperCase() }
+            { op: condition.op, prop: 'human_ref', value: condition.op === 'is' ? condition.value.trim().toUpperCase() : humanRefInValueConversion(condition.value) }
+        ]
+    }),
+    systemWideUserId: (condition) => ({
+        conditions: [
+            { op: condition.op, prop: 'owner_user_id', value: condition.value }
         ]
     })
 };

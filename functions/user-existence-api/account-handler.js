@@ -85,7 +85,7 @@ const getReferralRevocationConditions = (referralContext) => {
 // this handles redeeming a referral code, if it is present and includes an amount
 // the method will create a boost in 'PENDING', triggered when the referred user saves
 const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) => {
-  if (typeof referralCodeDetails !== 'object' || Object.keys(referralCodeDetails).length === 0) {
+  if (!referralCodeDetails || Object.keys(referralCodeDetails).length === 0) {
     logger('No referral code details provided, exiting');
     return;
   }

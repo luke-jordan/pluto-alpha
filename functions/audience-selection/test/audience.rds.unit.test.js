@@ -423,8 +423,8 @@ describe('Audience Selection - fetch users given JSON', () => {
     });
 
     it('Should convert sum balance to columns', async () => {
-        const settlementStatusToInclude = `'SETTLED', 'ACCRUED'`;
-        const transactionTypesToInclude = `'USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'`;
+        const settlementStatusToInclude = ['SETTLED', 'ACCRUED'];
+        const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
         const convertAmountToSingleUnitQuery = `SUM(
             CASE
                 WHEN unit = 'WHOLE_CENT' THEN
@@ -440,15 +440,15 @@ describe('Audience Selection - fetch users given JSON', () => {
             'conditions': [{
                 op: 'and',
                 children: [
-                    {prop: 'settlement_status', op: 'in', value: settlementStatusToInclude},
-                    {prop: 'transaction_type', op: 'in', value: transactionTypesToInclude}
+                    { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
+                    { prop: 'transaction_type', op: 'in', value: transactionTypesToInclude }
                 ]
              }],
             'groupBy': ['account_id', 'unit'],
             'postConditions': [{
                 'op': 'and', 'children': [
-                    {'op': 'greater_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 10},
-                    {'op': 'less_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 50}
+                    { 'op': 'greater_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 10 },
+                    { 'op': 'less_than_or_equal_to', 'prop': convertAmountToSingleUnitQuery, 'valueType': 'int', 'value': 50 }
                 ]
             }]
         });

@@ -48,13 +48,29 @@ const addDefaultColumnSpecifications = (selectionJSON) => {
     return selectionJSON;
 };
 
+const handleInValue = (value, valueType) => {
+    if (typeof value === 'string') {
+        return value;
+    }
+
+    if (Array.isArray(value) && (valueType === 'int' || valueType === 'boolean')) {
+        return value.map((item) => String(item)).join(', ');
+    }
+
+    if (Array.isArray(value)) {
+        return value.map((item) => `'${item}'`).join(', ');
+    }
+
+    throw Error('Invalid value type for in clause');
+};
+
 const baseCaseQueryBuilder = (unit, operatorTranslated) => {
     if (unit.valueType === 'int' || unit.valueType === 'boolean') {
         return `${unit.prop}${operatorTranslated}${unit.value}`;
     }
 
     if (operatorTranslated === 'in') {
-        return `${unit.prop} ${operatorTranslated} (${unit.value})`;
+        return `${unit.prop} ${operatorTranslated} (${handleInValue(unit.value, unit.valueType)})`;
     }
 
     return `${unit.prop}${operatorTranslated}'${unit.value}'`;
