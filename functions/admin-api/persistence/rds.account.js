@@ -49,13 +49,11 @@ module.exports.countUserIdsWithAccounts = async (sinceMoment, untilMoment, inclu
 
 // reversed order here because most likely to call this with no timestamps
 // todo : require client-float on here
-module.exports.listAccounts = async (includeNoSave = true, sinceMoment = null, untilMoment = null) => {
+module.exports.listAccounts = async ({ specifiedUserIds, includeNoSave, sinceMoment, untilMoment }) => {
     const accountTable = config.get('tables.accountTable');
     const transactionTable = config.get('tables.transactionTable');
 
-    const start = sinceMoment ? sinceMoment.format() : moment(0).format();
-    const end = untilMoment ? untilMoment.format() : moment().format();
-    const values = ['USER_SAVING_EVENT', start, end];
+    const values = ['USER_SAVING_EVENT'];
 
     let joinType = 'left join';
     let txTypeSuffix = '';
@@ -65,12 +63,23 @@ module.exports.listAccounts = async (includeNoSave = true, sinceMoment = null, u
         txTypeSuffix = ' and settlement_status = $4';
         values.push('SETTLED');
     }
+
+    let whereClause = '';
+
+    if (specifiedUserIds) {
+        whereClause = `where transaction_type = $1 and ${accountTable}.owner_user_id in (${opsUtil.extractArrayIndices(specifiedUserIds, 2)})`;
+        values.push(...specifiedUserIds);
+    } else {
+        whereClause = `where transaction_type = $1 and ${accountTable}.creation_time between $2 and $3${txTypeSuffix}`;
+        const start = sinceMoment ? sinceMoment.format() : moment(0).format();
+        const end = untilMoment ? untilMoment.format() : moment().format();
+        values.push(start, end);
+    }
     
     const selectQuery = `select ${accountTable}.account_id, human_ref, ${accountTable}.creation_time, count(transaction_id) from ` + 
             `${accountTable} ${joinType} ${transactionTable} on ${accountTable}.account_id = ${transactionTable}.account_id ` +
-            `where transaction_type = $1 and ${accountTable}.creation_time between $2 and $3${txTypeSuffix} ` + 
-            `group by ${accountTable}.account_id`;
-
+            `${whereClause} group by ${accountTable}.account_id`;
+            
     logger('Assembled select query: ', selectQuery);
     logger('Assembled select values: ', values);
     const resultOfList = await rdsConnection.selectQuery(selectQuery, values);
@@ -244,7 +253,6 @@ module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId
     return resultOfInsert;
 };
 
-// we use this to find accounts by either bank reference or balance sheet (FinWorks) reference
 module.exports.findUserFromRef = async ({ searchValue, bsheetPrefix }) => {
     // first search
     const normalizedValue = searchValue.trim().toUpperCase();
@@ -253,14 +261,14 @@ module.exports.findUserFromRef = async ({ searchValue, bsheetPrefix }) => {
     const firstSearch = await rdsConnection.selectQuery(firstQuery, [`%${normalizedValue}%`]);
     logger('Result of first account ref search: ', firstSearch);
     if (firstSearch.length > 0) {
-        return firstSearch[0]['owner_user_id'];
+        return camelCaseKeys(firstSearch);
     }
 
     const secondQuery = `select owner_user_id from ${config.get('tables.accountTable')} where $1 = any(tags)`;
     const secondSearch = await rdsConnection.selectQuery(secondQuery, [`${bsheetPrefix}::${normalizedValue}`]);
     logger('Result of second account ref search: ', secondSearch);
     if (secondSearch.length > 0) {
-        return secondSearch[0]['owner_user_id'];
+        return camelCaseKeys(secondSearch);
     }
 
     const thirdQuery = `select owner_user_id from ${config.get('tables.accountTable')} inner join ${config.get('tables.transactionTable')} ` +
@@ -269,7 +277,7 @@ module.exports.findUserFromRef = async ({ searchValue, bsheetPrefix }) => {
     const thirdSearch = await rdsConnection.selectQuery(thirdQuery, [normalizedValue]);
     logger('Result of final search: ', thirdSearch);
     if (thirdSearch.length > 0) {
-        return thirdSearch[0]['owner_user_id'];
+        return camelCaseKeys(thirdSearch);
     }
 
     return null;

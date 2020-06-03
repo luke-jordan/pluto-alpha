@@ -23,6 +23,8 @@ const countUsersStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 const fetchBsheetTagStub = sinon.stub();
 const fetchTxDetailsStub = sinon.stub();
+
+const findUserByRefStub = sinon.stub();
 const listUserAccountsStub = sinon.stub();
 
 class MockLambdaClient {
@@ -37,6 +39,7 @@ const handler = proxyquire('../admin-user-query', {
         'fetchUserPendingTransactions': pendingTxStub,
         'getTransactionDetails': fetchTxDetailsStub,
         'countUserIdsWithAccounts': countUsersStub,
+        'findUserFromRef': findUserByRefStub,
         'listAccounts': listUserAccountsStub,
         '@noCallThru': true
     },
@@ -48,6 +51,7 @@ const handler = proxyquire('../admin-user-query', {
 });
 
 describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
+
     const testUserId = uuid();
     const testAccountId = uuid();
 
@@ -56,8 +60,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
     const startDay = 5;
     const interval = 1;
-
-    const testTime = moment();
 
     const expectedTxResponse = {
         transactionId: uuid(),
@@ -146,7 +148,11 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         })
     };
 
-    it('Looks up user', async () => {
+    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, findUserByRefStub, fetchBsheetTagStub, listUserAccountsStub));
+
+    it('Looks up user by national ID, ahppy path', async () => {
+        const testTime = moment();
+        const mockBalance = JSON.parse(JSON.stringify(expectedBalance));
 
         const testHistoryEvent = {
             userId: testUserId,
@@ -182,7 +188,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         });
 
         lamdbaInvokeStub.withArgs(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload)).returns({
-            promise: () => helper.mockLambdaResponse(expectedBalance)
+            promise: () => helper.mockLambdaResponse(mockBalance)
         });
 
         pendingTxStub.withArgs(testUserId, sinon.match.any).resolves(expectedTxResponse);
@@ -190,7 +196,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         const expectedResult = {
             ...expectedProfile,
-            userBalance: { ...expectedBalance, bsheetIdentifier: 'TUSER1234' },
+            userBalance: { ...mockBalance, bsheetIdentifier: 'TUSER1234' },
             pendingTransactions: expectedTxResponse,
             userHistory: JSON.parse(expectedHistory.Payload).userEvents
         };
@@ -211,16 +217,98 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         const result = await handler.findUsers(testEvent);
         logger('Result of user look up:', result);
 
-        expect(result).to.exist;
-        expect(result).to.have.property('statusCode', 200);
-        expect(result.headers).to.deep.equal(helper.expectedHeaders);
-        expect(result.body).to.deep.equal(JSON.stringify(expectedResult));
+        const resultBody = helper.standardOkayChecks(result, true);
+        expect(resultBody).to.deep.equal(expectedResult);
+
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.systemWideIdLookup'), false, { nationalId: testNationalId }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchUserBalance'), false, testBalancePayload));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userHistory'), false, testHistoryEvent));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId, includeContactMethod: true }));
         expect(pendingTxStub).to.have.been.calledWith(testUserId, sinon.match.any);
     });
+
+    it('Finds and returns based on exact match on bank reference', async () => {
+        const testTime = moment().subtract(1, 'month');
+
+        const testEvent = {
+            requestContext: {
+                authorizer: {
+                    role: 'SYSTEM_ADMIN',
+                    systemWideUserId: testUserId
+                }
+            },
+            httpMethod: 'GET',
+            queryStringParameters: {
+                bankReference: 'BOLU'
+            }
+        };
+
+        const mockUserList = [{ ownerUserId: testUserId }];
+
+        findUserByRefStub.resolves(mockUserList);
+
+        // args are covered above
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(expectedProfile) });
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => expectedHistory });
+        lamdbaInvokeStub.onThirdCall().returns({ promise: () => helper.mockLambdaResponse({ ...expectedBalance }) });
+        fetchBsheetTagStub.resolves('BOLU');
+
+        momentStub.returns(testTime);
+
+        const result = await handler.findUsers(testEvent);
+
+        // specifics are covered above, here just check this is okay and lambdas are called to assemble
+        const resultBody = helper.standardOkayChecks(result, true);
+        expect(resultBody).to.exist;
+        expect(resultBody).to.haveOwnProperty('systemWideUserId', testUserId);
+        
+        const assembledBalance = resultBody.userBalance;
+        expect(assembledBalance).to.deep.equal({ ...expectedBalance, bsheetIdentifier: 'BOLU' });
+
+        expect(findUserByRefStub).to.have.been.calledWith({ searchValue: 'BOLU', bsheetPrefix: config.get('bsheet.prefix') });
+        expect(lamdbaInvokeStub).to.have.been.calledThrice;
+
+        expect(listUserAccountsStub).to.not.have.been.called;
+        // expect(lamdbaInvokeStub).to.not.have.been.called;
+    });
+
+    it('Finds and returns based list of potential matches', async () => {
+        const testTime = moment().subtract(1, 'month');
+        const testTimeFormat = testTime.format();
+        const testTimeValue = testTime.valueOf();
+
+        const testEvent = {
+            requestContext: {
+                authorizer: {
+                    role: 'SYSTEM_ADMIN',
+                    systemWideUserId: testUserId
+                }
+            },
+            httpMethod: 'GET',
+            queryStringParameters: {
+                bankReference: 'BOLU'
+            }
+        };
+
+        const mockUserIds = [{ ownerUserId: 'someaccount' }, { ownerUserId: 'otheraccount'}];
+
+        const mockUserList = [{ accountId: 'someaccount', humanRef: 'BOLU1', creationTime: testTimeFormat }, { accountId: 'otheraccount', humanRef: 'BOLU2', creationTime: testTimeFormat }];
+        const expectedUserList = [{ accountId: 'someaccount', humanRef: 'BOLU1', creationTime: testTimeValue }, { accountId: 'otheraccount', humanRef: 'BOLU2', creationTime: testTimeValue }];
+
+        findUserByRefStub.resolves(mockUserIds);
+        listUserAccountsStub.resolves(mockUserList);
+        momentStub.returns(testTime);
+
+        const result = await handler.findUsers(testEvent);
+        const resultBody = helper.standardOkayChecks(result, true);
+
+        expect(resultBody).to.deep.equal(expectedUserList);
+        expect(findUserByRefStub).to.have.been.calledWith({ searchValue: 'BOLU', bsheetPrefix: config.get('bsheet.prefix') });
+        expect(listUserAccountsStub).to.have.been.calledOnceWithExactly({ specifiedUserIds: ['someaccount', 'otheraccount'], includeNoSave: true });
+
+        expect(lamdbaInvokeStub).to.not.have.been.called;
+    });
+    
 });
 
 
@@ -238,7 +326,7 @@ describe('*** UNIT TEST USER COUNT ***', () => {
         return rawResult + normalizer;
     };
 
-    beforeEach(() => helper.resetStubs(momentStub));
+    beforeEach(() => helper.resetStubs(momentStub, listUserAccountsStub));
 
     it('Fetches user count', async () => {
         const testUserCount = generateUserCount;
@@ -296,7 +384,7 @@ describe('*** UNIT TEST USER COUNT ***', () => {
 
         expect(userListBody).to.deep.equal(expectedUserList);
 
-        expect(listUserAccountsStub).to.have.been.calledOnceWithExactly();
+        expect(listUserAccountsStub).to.have.been.calledOnceWithExactly({ includeNoSave: true });
     });
 
     it('Rejects with error unauthorized call to list events', async () => {

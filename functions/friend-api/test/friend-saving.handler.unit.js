@@ -183,7 +183,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         extractFriendIdsStub.resolves([mockFriendUserPair]);
         updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
 
-        fetchProfileStub.withArgs(testUserId).resolves({ calledName: 'Some', familyName: 'Person' });
+        fetchProfileStub.withArgs({ systemWideUserId: testUserId }).resolves({ calledName: 'Some', familyName: 'Person' });
 
         const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
         const resultOfUpdate = await handler.writeSavingPool(testEvent);

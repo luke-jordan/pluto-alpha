@@ -146,7 +146,7 @@ module.exports.readSavingPool = async (event) => {
 // ////////////////////////////////////////////////////////////
 
 const publishFriendAddedToPool = async (friendUserIds, creatingUserId, poolName) => {
-    const { personalName, calledName, familyName } = await persistenceRead.fetchUserProfile(creatingUserId);
+    const { personalName, calledName, familyName } = await persistenceRead.fetchUserProfile({ systemWideUserId: creatingUserId });
     
     const friendName = `${calledName || personalName} ${familyName}`;
     const messageParameters = { poolName, friendName };

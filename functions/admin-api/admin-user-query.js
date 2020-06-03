@@ -135,7 +135,7 @@ module.exports.findUsers = async (event) => {
 
         // simple thing for now, will add much more stuff when we actually have users
         if (lookUpPayload.type && lookUpPayload.type === 'list') {
-            const listOfAccounts = await persistence.listAccounts();
+            const listOfAccounts = await persistence.listAccounts({ includeNoSave: true });
             const responseList = listOfAccounts.map((account) => ({ ...account, creationTime: moment(account.creationTime).valueOf() }));
             return adminUtil.wrapHttpResponse(responseList);        
         }
@@ -145,18 +145,21 @@ module.exports.findUsers = async (event) => {
         if (Reflect.has(lookUpPayload, 'bankReference')) {
             logger('Trying to find user from bank reference or account name');
             const candidateUsers = await persistence.findUserFromRef({ searchValue: lookUpPayload.bankReference, bsheetPrefix: config.get('bsheet.prefix') });
-            logger('Candidate users: ', candidateUsers);
+            logger('Candidate user IDs: ', candidateUsers);
             
             if (!candidateUsers || candidateUsers.length === 0) {
                 return opsCommonUtil.wrapResponse({ result: 'USER_NOT_FOUND' }, status('Not Found'));
             }
 
             if (candidateUsers.length > 1) {
-                const searchResponse = candidateUsers.map((account) => ({ ...account, creationTime: moment(account.creationTime).valueOf() }));
+                const userIds = candidateUsers.map(({ ownerUserId }) => ownerUserId);
+                const candidateAccounts = await persistence.listAccounts({ specifiedUserIds: userIds, includeNoSave: true });
+                logger('And now these candidate accounts: ', candidateAccounts);
+                const searchResponse = candidateAccounts.map((account) => ({ ...account, creationTime: moment(account.creationTime).valueOf() }));
                 return adminUtil.wrapHttpResponse(searchResponse);
             }
 
-            systemWideUserId = candidateUsers[0];
+            systemWideUserId = candidateUsers[0].ownerUserId;
         } else {
             systemWideUserId = await obtainSystemWideIdFromProfile(lookUpPayload);
         }
