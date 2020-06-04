@@ -27,5 +27,17 @@
     },
     "records": {
         "bucket": "floatrecordsbucket"
+    },
+    "cache": {
+        "port": 6739,
+        "host": "localhost",
+        "txStateCheckInterval": 5000,
+        "namespace": "62e804e1-5bea-4b65-98db-de385ebf81e0",
+        "keyPrefixes": {
+            "float": "ACTIVE_TRANSFER_INSTRUCTIONS"
+        },
+        "ttls": {
+            "float": 300
+        }
     }
 }

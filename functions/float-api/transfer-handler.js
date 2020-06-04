@@ -1,6 +1,8 @@
 'use strict';
 
 const logger = require('debug')('jupiter:float:transfer');
+const config = require('config');
+const uuid5 = require('uuid/v5');
 
 const rds = require('./persistence/rds');
 const constants = require('./constants');
@@ -8,6 +10,16 @@ const constants = require('./constants');
 // todo : pull "allocate" method into here, and rename this allocation-handler, which is more in keeping with how
 // the two parts have evolved (see FM-30)
 const accrualModule = require('./accrual-handler');
+
+const Redis = require('ioredis');
+const redis = new Redis({
+    host: config.get('cache.host'),
+    port: config.get('cache.port'),
+    retryStrategy: () => `dont retry`,
+    keyPrefix: `${config.get('cache.keyPrefixes.float')}::`
+});
+
+const txStateCheckInterval = config.get('cache.txStateCheckInterval');
 
 const floatAdjustmentRequest = (instruction) => ({
     amount: instruction.recipients[0].amount,
@@ -64,11 +76,30 @@ const allUserAllocation = (instruction) => ({
     settlementStatus: instruction.settlementStatus,
     allocType: instruction.transactionType,
     backingEntityType: instruction.relatedEntityType,
-    backingEntityIdentifer: instruction.identifider,
+    backingEntityIdentifer: instruction.identifier,
     allocState: instruction.settlementStatus
 });
 
 const isBonusOrCompany = (type) => type === constants.entityTypes.BONUS_POOL || type === constants.entityTypes.COMPANY_SHARE;
+
+const handleActiveTx = async (activeTxId, activeTx = null) => {
+    let cacheResult = activeTx;
+    if (!cacheResult) {
+        cacheResult = await redis.get(activeTxId);
+    }
+
+    logger('Got cached transaction state:', cacheResult);
+
+    if (cacheResult === 'PENDING') {
+        logger('Transaction is pending. Waiting for completion');
+        await new Promise((resolve) => setTimeout(resolve, txStateCheckInterval));
+        logger('Checking transaction state');
+        return handleActiveTx(activeTxId);
+    }
+
+    logger('Transaction complete. Returning result');
+    return JSON.parse(cacheResult);
+};
 
 /**
  * Method in need of some cleaning up / refactoring to simplify cases, but which is purposefully highly flexible. Cases:
@@ -87,6 +118,15 @@ const isBonusOrCompany = (type) => type === constants.entityTypes.BONUS_POOL || 
  */
 const handleInstruction = async (instruction) => {
     logger('Received transfer instruction, recipients: ', instruction.recipients);
+
+    const activeTxId = uuid5(JSON.stringify(instruction), config.get('cache.namespace'));
+    const activeTx = await redis.get(activeTxId);
+    logger('Got cached transaction state:', activeTx);
+    if (activeTx) {
+        return handleActiveTx(activeTxId, activeTx);
+    }
+
+    await redis.set(activeTxId, 'PENDING', 'EX', config.get('cache.ttls.float'));
 
     const nonUserAllocRequests = []; // for bonus pool and client share
     const userAllocRequests = [];
@@ -157,7 +197,7 @@ const handleInstruction = async (instruction) => {
         accountTxIds = accountTxIds.concat(userAllocResult.accountTxIds.map((row) => row['transaction_id']));
     }
 
-    return {
+    const finalResult = {
         id: instruction.identifier, 
         details: {
             result: 'SUCCESS',
@@ -165,6 +205,9 @@ const handleInstruction = async (instruction) => {
             accountTxIds
         }
     };
+
+    await redis.set(activeTxId, JSON.stringify(finalResult), 'EX', config.get('cache.ttls.float'));
+    return finalResult;
 };
 
 /**
