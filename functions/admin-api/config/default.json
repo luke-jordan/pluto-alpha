@@ -40,6 +40,11 @@
         "sendOutboundMessages": "outbound_comms_send",
         "boostProcessEvent": "boost_event_process"
     },
+    "s3": {
+        "binaries": {
+            "bucket": "jupiter.binary.uploads"
+        }
+    },
     "email": {
         "systemStats": {
             "toList": ["luke@jupitersave.com"],
