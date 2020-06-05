@@ -212,3 +212,20 @@ describe('*** GAME CONDITIONS ***', () => {
     });
 
 });
+
+// todo allow it to be from message as well
+describe('*** MATCHED BOOST CONDITION ***', () => {
+
+    it('Handles correctly that a save was made from the boost', () => {
+        const condition = 'save_tagged_with #{THIS_BOOST}';
+
+        const eventContext = { boostId: 'some-boost', tags: ['BOOST::some-boost'] };
+    });
+
+    it('Ignores when a save was made from another boost', () => {
+        const condition = 'save_tagged_with #{THIS_BOOST}';
+
+        const eventContext = { boostId: 'some-boost', tags: ['BOOST::some-boost'] };
+    });
+
+});
