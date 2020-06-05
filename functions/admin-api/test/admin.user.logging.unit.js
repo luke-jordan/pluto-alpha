@@ -39,7 +39,8 @@ const handler = proxyquire('../admin-user-logging', {
         'Lambda': MockLambdaClient,
         'S3': MockS3Client
     },
-    'moment': momentStub
+    'moment': momentStub,
+    '@noCallThru': true
 });
 
 describe('*** UNIT TEST ADMIN USER LOGGING ***', () => {
