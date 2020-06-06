@@ -13,6 +13,7 @@ const expect = chai.expect;
 const extractFriendIdsStub = sinon.stub();
 const persistFriendSavingStub = sinon.stub();
 const updateSavingPoolStub = sinon.stub();
+const removeTransactionStub = sinon.stub();
 
 const listSavingPoolsStub = sinon.stub();
 const calculatePoolBalancesStub = sinon.stub();
@@ -28,7 +29,8 @@ const proxyquire = require('proxyquire').noCallThru();
 const handler = proxyquire('../friend-saving-handler', {
     './persistence/write.friends.pools.js': {
         'persistNewSavingPool': persistFriendSavingStub,
-        'updateSavingPool': updateSavingPoolStub
+        'updateSavingPool': updateSavingPoolStub,
+        'removeTransactionsFromPool': removeTransactionStub
     },
     './persistence/read.friends.js': {
         'obtainFriendIds': extractFriendIdsStub,
@@ -122,11 +124,13 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
         const expectedCreationContext = { savingPoolId: mockPoolId };
         const expectedFriendAddedContext = { 
-            messageParameters: { poolName: 'Trip to Japan', friendName: 'A User' }
+            savingPoolId: mockPoolId,
+            messageParameters: { poolName: 'Trip to Japan', friendName: 'A' }
         };
+        const expectedFriendOptions = { context: expectedFriendAddedContext, initiator: testUserId };
 
         expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testUserId, 'CREATED_SAVING_POOL', { context: expectedCreationContext });
-        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(mockUsers, 'ADDED_TO_FRIEND_SAVING_POOL', { context: expectedFriendAddedContext });
+        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(mockUsers, 'ADDED_TO_FRIEND_SAVING_POOL', expectedFriendOptions);
     });
 
     it('Unit testing disallows pot where user is not in a friendship', async () => {
@@ -195,13 +199,15 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(testUserId, mockFriendship);
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
 
-        const modContext = { friendUserIds: [mockFriendUserPair] };
+        const modContext = { savingPoolId: testPoolId, friendUserIds: [mockFriendUserPair] };
         const expectedFriendAddedContext = { 
-            messageParameters: { poolName: 'Trip to Japan', friendName: 'Some Person' }
+            savingPoolId: testPoolId,
+            messageParameters: { poolName: 'Trip to Japan', friendName: 'Some' }
         };
+        const friendLogOptions = { initiator: testUserId, context: expectedFriendAddedContext };
 
         expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testUserId, 'MODIFIED_SAVING_POOL', { context: modContext });
-        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(['user-N'], 'ADDED_TO_FRIEND_SAVING_POOL', { context: expectedFriendAddedContext });
+        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(['user-N'], 'ADDED_TO_FRIEND_SAVING_POOL', friendLogOptions);
     });
 
     it('Unit test renaming a saving pot', async () => {
@@ -232,7 +238,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
 
-        const expectedContext = { priorName: 'Trip to Tokyo', newName: 'Trip to Taipei' };
+        const expectedContext = { savingPoolId: testPoolId, priorName: 'Trip to Tokyo', newName: 'Trip to Taipei' };
         expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testUserId, 'MODIFIED_SAVING_POOL', { context: expectedContext });
     });
 
@@ -291,6 +297,145 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         expect(resultOfAttempt).to.deep.equal({ statusCode: 400, body: JSON.stringify(bodyMsg) });
         expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
         expect(updateSavingPoolStub).to.not.have.been.called;
+        expect(removeTransactionStub).to.not.have.been.called;
+    });
+});
+
+describe('*** UNIT TEST DEACTIVATION AND REMOVAL ***', () => {
+
+    beforeEach(() => helper.resetStubs(fetchSavingPoolStub, updateSavingPoolStub, removeTransactionStub, publishSingleEventStub, publishMultiEventStub));
+
+    it('Unit test removing people from pot', async () => {
+        const testPoolId = uuid();
+        const mockUpdatedTime = moment();
+
+        const mockFriendship = 'relationship-N';
+        const mockFriendUserPair = { relationshipId: 'relationship-N', userId: 'user-N' };
+
+        const mockTransactions = [{ ownerUserId: testUserId, transactionId: 'tx-1' }, { ownerUserId: 'user-N', transactionId: 'tx-2' }];
+        
+        const testBody = {
+            savingPoolId: testPoolId,
+            friendshipToRemove: mockFriendship
+        };
+
+        const expectedToPersistence = {
+            savingPoolId: testPoolId,
+            updatingUserId: testUserId,
+            friendshipsToRemove: [mockFriendUserPair]
+        };
+
+        fetchSavingPoolStub.withArgs(testPoolId, false).resolves({ creatingUserId: testUserId, poolName: 'Trip to Japan' });
+        fetchSavingPoolStub.withArgs(testPoolId, true).resolves({ participatingUsers: [mockFriendUserPair], transactionRecord: mockTransactions, poolName: 'Trip to Japan' });
+
+        extractFriendIdsStub.resolves([mockFriendUserPair]);
+        updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
+
+        fetchProfileStub.withArgs({ systemWideUserId: testUserId }).resolves({ calledName: 'Some', familyName: 'Person' });
+
+        const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
+        const resultOfUpdate = await handler.writeSavingPool(testEvent);
+
+        const resultBody = helper.standardOkayChecks(resultOfUpdate);
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
+
+        expect(fetchSavingPoolStub).to.have.been.calledTwice;
+        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, false); // standard check on this path
+        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true); // to get transactions, so can remove them
+
+        expect(removeTransactionStub).to.have.been.calledOnceWithExactly(testPoolId, ['tx-2']);
+        expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
+
+        // we don't include message parameters because this is a silent operation
+        const modContext = { savingPoolId: testPoolId, removedFriend: [mockFriendUserPair] };
+        const friendContext = { savingPoolId: testPoolId, messageParameters: { poolName: 'Trip to Japan', friendName: 'Some' } };
+        const friendLogOptions = { initiator: testUserId, context: friendContext };
+
+        expect(publishSingleEventStub).to.have.been.calledTwice;
+        expect(publishSingleEventStub).to.have.been.calledWithExactly(testUserId, 'MODIFIED_SAVING_POOL', { context: modContext });
+        expect(publishSingleEventStub).to.have.been.calledWithExactly('user-N', 'REMOVED_FROM_FRIEND_SAVING_POOL', friendLogOptions);
+    });
+
+    it('Unit test removing a transaction', async () => {
+        const testPoolId = uuid();
+        const mockUserId = 'user-2';
+        const mockUpdatedTime = moment();
+
+        const testBody = {
+            savingPoolId: testPoolId,
+            transactionId: 'transaction-id'
+        };
+
+        const mockUsers = [{ userId: 'user-2', relationshipId: 'rel-1' }];
+        const mockTxRecord = [{ ownerUserId: testUserId, transactionId: 'some-tx' }, { ownerUserId: 'user-2', transactionId: 'transaction-id' }];
+
+        const expectedTxRecord = [{ ownerUserId: testUserId, transactionId: 'some-tx' }];
+        const expectedRevisedPool = { participatingUsers: mockUsers, transactionRecord: expectedTxRecord };
+
+        fetchSavingPoolStub.onFirstCall().resolves({ participatingUsers: mockUsers, transactionRecord: mockTxRecord });
+        fetchSavingPoolStub.onSecondCall().resolves(expectedRevisedPool);
+
+        removeTransactionStub.resolves({ updatedTime: mockUpdatedTime });
+
+        const testEvent = helper.wrapParamsWithPath(testBody, 'retract', mockUserId);
+        const resultOfRetract = await handler.writeSavingPool(testEvent);
+        
+        const resultBody = helper.standardOkayChecks(resultOfRetract);
+        
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf(), updatedPool: expectedRevisedPool });
+        
+        expect(fetchSavingPoolStub).to.have.been.calledTwice;
+        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true);
+        expect(removeTransactionStub).to.have.been.calledOnceWithExactly(testPoolId, ['transaction-id']);
+        expect(updateSavingPoolStub).to.not.have.been.called;
+
+        const expectedContext = { savingPoolId: testPoolId, transactionId: 'transaction-id' };
+        expect(publishSingleEventStub).to.have.been.calledOnceWithExactly('user-2', 'RETRACTED_FROM_SAVING_POOL', { context: expectedContext });
+    });
+    
+    it('Unit test deactivating a pot', async () => {
+        const testPoolId = uuid();
+        const mockUpdatedTime = moment();
+
+        const expectedToPersistence = {
+            savingPoolId: testPoolId,
+            active: false,
+        };
+
+        const mockUserIdResults = [{ userId: testUserId, relationshipId: 'CREATOR' }, { userId: 'some-user', relationshipId: 'relationship-1' }];
+
+        fetchSavingPoolStub.onFirstCall().resolves({ 
+            savingPoolId: testPoolId, 
+            creatingUserId: testUserId, 
+            poolName: 'Old Pot',
+            participatingUsers: mockUserIdResults
+        });
+
+        updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
+
+        fetchProfileStub.withArgs({ systemWideUserId: testUserId }).resolves({ calledName: 'Deactivate', familyName: 'This' });
+
+        const testEvent = helper.wrapParamsWithPath({ savingPoolId: testPoolId }, 'deactivate', testUserId);
+        
+        const resultOfUpdate = await handler.writeSavingPool(testEvent);
+        
+        const resultBody = helper.standardOkayChecks(resultOfUpdate);
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
+
+        expect(fetchSavingPoolStub).to.have.been.calledWith(testPoolId, true);
+        expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
+        
+        // for the moment we leave the transactions, as does not block, and preserves record, in case want to reverse (or check)
+        expect(removeTransactionStub).to.not.have.been.called;
+
+        const modContext = { savingPoolId: testPoolId, active: false };
+        expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testUserId, 'DEACTIVATED_SAVING_POOL', { context: modContext });
+        
+        const messageParameters = { friendName: 'Deactivate', poolName: 'Old Pot' };
+        const friendContext = { savingPoolId: testPoolId, messageParameters };
+        const friendLogOptions = { initiator: testUserId, context: friendContext };
+
+        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(['some-user'], 'SAVING_POOL_DEACTIVATED_BY_CREATOR', friendLogOptions);
     });
 
 });

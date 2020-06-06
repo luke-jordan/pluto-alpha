@@ -17,6 +17,7 @@ const { expect } = chai;
 const proxyquire = require('proxyquire').noCallThru();
 
 const simpleInsertStub = sinon.stub();
+const plainUpdateStub = sinon.stub();
 const multiTableStub = sinon.stub();
 const multiOpStub = sinon.stub();
 
@@ -27,6 +28,7 @@ const uuidStub = sinon.stub();
 class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
+        this.updateRecord = plainUpdateStub;
         this.largeMultiTableInsert = multiTableStub;
         this.multiTableUpdateAndInsert = multiOpStub;
     }
@@ -361,6 +363,122 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         helper.matchWithoutLogId(multiOpStub.getCall(0).args[1][0], expectedLogDef);
     });
 
+    it.only('Removes someone (flips them to inactive)', async () => {
+        const mockParticipationId = uuid();
+        const mockUpdatedTime = moment();
+
+        const testInput = {
+            savingPoolId: testPoolId,
+            updatingUserId: testUserId,
+            friendshipsToRemove: [mockRelUser(1)]
+        };
+
+        const updateParticipantDef = {
+            table: 'friend_data.saving_pool_participant',
+            key: { participationId: mockParticipationId },
+            value: { active: false },
+            returnClause: 'updated_time'
+        };
+
+        const logObject = {
+            logId: 'this-log',
+            savingPoolId: testPoolId,
+            relationshipId: 'relationship-1',
+            userId: 'user-1',
+            logContext: { deactivation: true }
+        };
+
+        const insertLogDef = {
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relationship_id, relevant_user_id, log_context) values %L`,
+            columnTemplate: '${logId}, *{FRIEND_REMOVED_FROM_POOL}, ${savingPoolId}, ${relationshipId}, ${userId}, ${logContext}',
+            rows: [logObject]
+        };
+
+        queryStub.onFirstCall().resolves([{ 'creating_user_id': testUserId }]); // for user rights check
+        queryStub.onSecondCall().resolves([{ 'participation_id': mockParticipationId, 'user_id': 'user-10', 'active': true, 'relationship_id': 'relationship-10' }]);
+
+        multiOpStub.resolves([
+            [{ 'updated_time': mockUpdatedTime.format() }], []
+        ]);
+
+        const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
+        expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
+
+        // query stub covered amply above
+        expect(multiTableStub).to.not.have.been.called;
+        expect(multiOpStub).to.have.been.calledOnce;
+        expect(multiOpStub.getCall(0).args[0][0]).to.deep.equal(updateParticipantDef);
+        helper.matchWithoutLogId(multiOpStub.getCall(0).args[1][0], insertLogDef);
+    });
+
+    it.only('Deactivates a saving pot', async () => {
+        // flip everyone to deactivated, and change the pot, but assume transactions are handled elsewhere
+        // note : might at some point want to fetch currently active users and log for all of them, but overkill for now while pools are just a kind of high powered tag
+        const deactivateFriendDef = {
+            table: 'friend_data.saving_pool_participant',
+            key: { savingPoolId: 'test-pool-id', active: true },
+            value: { active: false }
+        };
+
+        const deactivatePoolDef = {
+            table: 'friend_data.saving_pool',
+            key: { savingPoolId: 'test-pool-id' },
+            value: { active: false },
+            returnClause: 'updated_time'
+        };
+
+        const logObject = {
+            logId: uuid(),
+            savingPoolId: 'test-pool-id',
+            userId: 'this-user',
+            logContext: { deactivated: true }
+        };
+
+        const expectedLogDef = {
+            query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relevant_user_id, log_context) values %L`,
+            columnTemplate: '${logId}, *{SAVING_POOL_DEACTIVATED}, ${savingPoolId}, ${updatingUserId}, ${logContext}',
+            rows: [logObject]
+        };
+
+        const mockUpdatedTime = moment();
+        multiOpStub.resolves([
+            [], [{ 'updated_time': mockUpdatedTime.format() }], []
+        ]);
+
+        const testInput = {
+            savingPoolId: 'test-pool-id',
+            active: false,
+        };
+
+        const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
+        expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
+
+        // query stub covered amply above
+        expect(multiTableStub).to.not.have.been.called;
+        expect(multiOpStub).to.have.been.calledOnce;
+        
+        const multiOpArgs = multiOpStub.getCall(0).args;
+        expect(multiOpArgs[0][0]).to.deep.equal(deactivateFriendDef);
+        expect(multiOpArgs[0][1]).to.deep.equal(deactivatePoolDef);
+        helper.matchWithoutLogId(multiOpArgs[1][0], expectedLogDef);
+    });
+
+    it('Removes transactions from the pot', async () => {
+        // this is too light an operation to add tx logs etc (and overall operation will have system-wide user logs published)
+        const expectedQuery = `update transaction_data.core_transaction_ledger set tags = array_remove(tags, $1) where ` +
+            `transaction_id in ($2, $3) returning updated_time`;
+        const expectedValues = [`SAVING_POOL::test-pool-id`, 'tx-1', 'tx-2'];
+
+        const mockUpdatedTimes = [moment(), moment()];
+        plainUpdateStub.resolves({ rows: mockUpdatedTimes.map((time) => ({ 'updated_time': time.format() }))});
+
+        const testOperation = await persistenceWrite.removeTransactionsFromPool('test-pool-id', ['tx-1', 'tx-2']);
+        expect(testOperation).to.be.an('array').with.length(2);
+        expect(testOperation[0].updatedTime.format()).to.equal(mockUpdatedTimes[0].format());
+
+        expect(plainUpdateStub).to.have.been.calledOnceWithExactly(expectedQuery, expectedValues);
+    });
+
 });
 
 describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
@@ -374,7 +492,7 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
         `on transaction_data.core_transaction_ledger.account_id = account_data.core_account_ledger.account_id ` +
         `where settlement_status = $1 and transaction_data.core_transaction_ledger.tags && $2`;
 
-    const mockTransaction = (poolId, amount, unit = 'HUNDREDTH_CENT') => ({ 'transaction_id': uuid(), 'amount': amount, unit, currency: 'EUR', tags: [`SAVING_POOL::${poolId}`] });
+    const mockTransaction = (poolId, amount, unit = 'HUNDREDTH_CENT', txId = 'UGH') => ({ 'transaction_id': txId, 'amount': amount, unit, currency: 'EUR', tags: [`SAVING_POOL::${poolId}`] });
 
     beforeEach(() => helper.resetStubs(queryStub));
 
@@ -476,8 +594,8 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
 
         const mockTxTimes = [moment().subtract(1, 'week'), moment().subtract(3, 'days')];
         const mockTransactions = [
-            { ...mockTransaction(testPoolId, 10 * 10000), 'owner_user_id': testUserId, 'settlement_time': mockTxTimes[0].format() },
-            { ...mockTransaction(testPoolId, 20 * 10000), 'owner_user_id': 'user-2', 'settlement_time': mockTxTimes[1].format() }
+            { ...mockTransaction(testPoolId, 10 * 10000, 'HUNDREDTH_CENT', 'tx1'), 'owner_user_id': testUserId, 'settlement_time': mockTxTimes[0].format() },
+            { ...mockTransaction(testPoolId, 20 * 10000, 'HUNDREDTH_CENT', 'tx2'), 'owner_user_id': 'user-2', 'settlement_time': mockTxTimes[1].format() }
         ];
         queryStub.withArgs(expectedContributionQuery, ['SETTLED', [`SAVING_POOL::${testPoolId}`]]).resolves(mockTransactions);
 
@@ -507,8 +625,8 @@ describe('**** UNIT TEST FRIEND SAVING PERSISTENCE, READS ***', async () => {
             ],
 
             transactionRecord: [
-                { ownerUserId: testUserId, settlementTime: moment(mockTxTimes[0].format()), amount: 10 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
-                { ownerUserId: 'user-2', settlementTime: moment(mockTxTimes[1].format()), amount: 20 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' }
+                { transactionId: 'tx1', ownerUserId: testUserId, settlementTime: moment(mockTxTimes[0].format()), amount: 10 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' },
+                { transactionId: 'tx2', ownerUserId: 'user-2', settlementTime: moment(mockTxTimes[1].format()), amount: 20 * 10000, unit: 'HUNDREDTH_CENT', currency: 'EUR' }
             ]
         };
 
