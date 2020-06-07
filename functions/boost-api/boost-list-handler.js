@@ -40,7 +40,22 @@ module.exports.listUserBoosts = async (event) => {
             return util.wrapHttpResponse({ message: 'No account found for this user' }, status('Forbidden'));
         }
 
-        const listBoosts = await persistence.fetchUserBoosts(accountId);
+        let listBoosts = [];
+
+        const queryParams = opsUtil.extractQueryParams(event);
+        if (opsUtil.isObjectEmpty(queryParams)) {
+            listBoosts = await persistence.fetchUserBoosts(accountId);
+        } else {
+            const fetchParameters = {};
+            if (queryParams.onlyActive) {
+                fetchParameters.excludedStatus = util.COMPLETE_BOOST_STATUS;
+            }
+            if (queryParams.flag) {
+                fetchParameters.flags = [queryParams.flag];
+            }
+            listBoosts = await persistence.fetchUserBoosts(accountId, fetchParameters); 
+        }
+
         logger('Got boosts:', listBoosts);
 
         return util.wrapHttpResponse(listBoosts);
@@ -68,7 +83,7 @@ const obtainSortedAndLoggedActiveBoosts = async (accountId) => {
     const changeCutOff = moment().subtract(config.get('time.changeCutOff.number'), config.get('time.changeCutOff.unit'));
     const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED'];
     
-    const listActiveBoosts = await persistence.fetchUserBoosts(accountId, changeCutOff, excludedForActive);
+    const listActiveBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: changeCutOff, excludedStatus: excludedForActive });
 
     // if a boost has been redeemed, and it is a game, we attach game outcome logs to tell the user how they did, else just return all
     const redeemedGameBoosts = listActiveBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
@@ -78,7 +93,7 @@ const obtainSortedAndLoggedActiveBoosts = async (accountId) => {
 const obtainSortedAndLoggedExpiredBoosts = async (accountId) => {
     const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));        
     const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
-    const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, expiredCutOff, excludedForExpired);
+    const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: expiredCutOff, excludedStatus: excludedForExpired });
 
     const expiredGameBoosts = listExpiredBoosts.filter((boost) => boost.boostStatus === 'EXPIRED' && boost.boostType === 'GAME');
     return expiredGameBoosts.length > 0 ? addLogsToGameBoosts(expiredGameBoosts, listExpiredBoosts, accountId) : listExpiredBoosts;

@@ -227,7 +227,7 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         const mockUpdatedTime = moment();
 
         fetchSavingPoolStub.resolves({ creatingUserId: testUserId, poolName: 'Trip to Tokyo' });
-        updateSavingPoolStub.resolves({ updatedTime: moment() });
+        updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
 
         const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
         const resultOfAttempt = await handler.writeSavingPool(testEvent);
@@ -399,7 +399,7 @@ describe('*** UNIT TEST DEACTIVATION AND REMOVAL ***', () => {
 
         const expectedToPersistence = {
             savingPoolId: testPoolId,
-            active: false,
+            active: false
         };
 
         const mockUserIdResults = [{ userId: testUserId, relationshipId: 'CREATOR' }, { userId: 'some-user', relationshipId: 'relationship-1' }];

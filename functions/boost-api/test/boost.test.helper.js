@@ -37,10 +37,13 @@ module.exports.expectedHeaders = {
     'Access-Control-Allow-Origin': '*'
 };
 
-module.exports.standardOkayChecks = (result) => {
+module.exports.standardOkayChecks = (result, includeHeaders = false) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
     expect(result).to.have.property('body');
+    if (includeHeaders) {
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
     return JSON.parse(result.body);
 };
 

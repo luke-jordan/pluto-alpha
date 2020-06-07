@@ -221,7 +221,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
                 conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testCreatingUserId, ...testFriendshipUserIds] }]
             },
             gameParams: { ...testGameParams, numberWinners: 1 },
-            tags: ['FRIEND_TOURNAMENT']
+            flags: ['FRIEND_TOURNAMENT']
         };
 
         fetchRelationshipsStub.resolves(testFriendships);
@@ -266,12 +266,213 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
         expect(publishSingleEventStub).to.have.been.calledOnceWithExactly(testCreatingUserId, 'CREATED_FRIEND_TOURNAMENT', { context: expectedContext });
     });
 
-    it('Handles disabled tournament params', async () => {
+    it('Handles disabled boost contribution', async () => {
+        momentStub.withArgs().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
 
+        const testPersistedTime = moment();
+        const persistenceResult = {
+            boostId: testBoostId,
+            persistedTimeMillis: testPersistedTime.valueOf(),
+            numberOfUsersEligible: testRelationshipIds.length + 1
+        };
+
+        const testGameParams = {
+            gameType: 'TAP_SCREEN',
+            timeLimitSeconds: 20,
+            entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
+        };
+
+        const testFloatParams = {
+            maxPoolEntry: { amount: 50 * 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' }, 
+            maxPoolPercent: 0.1, 
+            clientFloatContribution: { type: 'NONE' }
+        };
+    
+        const testBodyOfEvent = {
+            label: 'Friend Initiated Boost',
+            endTimeMillis: testEndTime.valueOf(),
+            friendships: testRelationshipIds,
+            rewardParameters: {
+                rewardType: 'POOLED',
+                poolContributionPerUser: { amount: 500000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                percentPoolAsReward: 0.05
+            },
+            gameParams: testGameParams
+        };
+
+        const expectedBudget = 500000 * (testFriendships.length + 1) * (0.05); // percent of pool but no amount from bonus
+        
+        const expectedBoostToHandler = {
+            creatingUserId: testCreatingUserId,
+            label: 'Friend Initiated Boost',
+            initialStatus: 'OFFERED',
+            boostTypeCategory: 'GAME::TAP_SCREEN',
+            boostAmountOffered: '0::HUNDREDTH_CENT::USD',
+            boostBudget: expectedBudget,
+            boostSource: {
+                bonusPoolId: 'primary_bonus_pool',
+                clientId: 'some_client_co',
+                floatId: 'primary_cash'
+            },
+            endTimeMillis: testEndTime.valueOf(),
+            statusConditions: { 
+                UNLOCKED: ['save_event_greater_than #{500000::HUNDREDTH_CENT::USD}', 'save_tagged_with #{THIS_BOOST}'],
+                PENDING: ['number_taps_greater_than #{0::20000}'],
+                REDEEMED: ['number_taps_in_first_N #{1::20000}'] 
+            },
+            rewardParameters: {
+                rewardType: 'POOLED',
+                poolContributionPerUser: { amount: 500000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                percentPoolAsReward: 0.05,
+                clientFloatContribution: testFloatParams.clientFloatContribution
+            },
+            boostAudienceType: 'SOCIAL',
+            boostAudienceSelection: {
+                conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testCreatingUserId, ...testFriendshipUserIds] }]
+            },
+            gameParams: { ...testGameParams, numberWinners: 1 },
+            flags: ['FRIEND_TOURNAMENT']
+        };
+
+        fetchRelationshipsStub.resolves(testFriendships);
+
+        fetchDynamoRowStub.onFirstCall().resolves({ clientId: testClientId, floatId: testFloatId, personalName: 'Someone' });
+        fetchDynamoRowStub.onSecondCall().resolves({
+            bonusPoolSystemWideId: 'primary_bonus_pool',
+            friendTournamentParameters: testFloatParams,
+            currency: 'USD'
+        });
+
+        createBoostStub.resolves(persistenceResult);
+        fetchBoostStub.resolves({ boostId: testBoostId, ...expectedBoostToHandler });
+
+        const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testCreatingUserId, 'ORDINARY_USER'));
+
+        const bodyOfResult = helper.standardOkayChecks(resultOfInstruction);
+        
+        const { result, createdBoost } = bodyOfResult;
+        expect(result).to.equal('SUCCESS');
+        expect(createdBoost).to.deep.equal({ boostId: testBoostId, ...expectedBoostToHandler });
+
+        // most expectations are covered above
+        expect(createBoostStub).to.have.been.calledOnceWithExactly(expectedBoostToHandler);
+
+        const expectedMessageParameters = {
+            friendName: 'Someone',
+            tournamentName: 'Friend Initiated Boost',
+            entryAmount: '$50', // this is a message-specific parameter, so message pusher will not apply logic, it will just inject
+            bonusAmountMax: '$12.50'
+        };
+
+        const expectedContext = { boostId: testBoostId, messageParameters: expectedMessageParameters };
+        const expectedMultiOptions = { initiator: testCreatingUserId, context: expectedContext };
+        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(testFriendshipUserIds, 'INVITED_TO_FRIEND_TOURNAMENT', expectedMultiOptions);        
     });
 
     it('Applies max correctly', async () => {
+        momentStub.withArgs().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
 
+        const testPersistedTime = moment();
+        const persistenceResult = {
+            boostId: testBoostId,
+            persistedTimeMillis: testPersistedTime.valueOf(),
+            numberOfUsersEligible: testRelationshipIds.length + 1
+        };
+
+        const testGameParams = {
+            gameType: 'TAP_SCREEN',
+            timeLimitSeconds: 20,
+            entryCondition: 'save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'
+        };
+
+        const testFloatParams = {
+            maxPoolEntry: { amount: 50 * 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' }, 
+            maxPoolPercent: 0.1, 
+            clientFloatContribution: { type: 'PERCENT_OF_POOL', value: 0.01, requiredFriends: 3 }
+        };
+    
+        const testBodyOfEvent = {
+            label: 'Friend Initiated Boost',
+            endTimeMillis: testEndTime.valueOf(),
+            friendships: testRelationshipIds,
+            rewardParameters: {
+                rewardType: 'POOLED',
+                poolContributionPerUser: { amount: 500 * 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                percentPoolAsReward: 0.5
+            },
+            gameParams: testGameParams
+        };
+
+        const expectedBudget = 500000 * (testFriendships.length + 1) * (0.1 + 0.01); // percent of pool + amount from bonus
+        
+        const expectedBoostToHandler = {
+            creatingUserId: testCreatingUserId,
+            label: 'Friend Initiated Boost',
+            initialStatus: 'OFFERED',
+            boostTypeCategory: 'GAME::TAP_SCREEN',
+            boostAmountOffered: '0::HUNDREDTH_CENT::USD',
+            boostBudget: expectedBudget,
+            boostSource: {
+                bonusPoolId: 'primary_bonus_pool',
+                clientId: 'some_client_co',
+                floatId: 'primary_cash'
+            },
+            endTimeMillis: testEndTime.valueOf(),
+            statusConditions: { 
+                UNLOCKED: ['save_event_greater_than #{500000::HUNDREDTH_CENT::USD}', 'save_tagged_with #{THIS_BOOST}'],
+                PENDING: ['number_taps_greater_than #{0::20000}'],
+                REDEEMED: ['number_taps_in_first_N #{1::20000}'] 
+            },
+            rewardParameters: {
+                rewardType: 'POOLED',
+                poolContributionPerUser: { amount: 500000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                percentPoolAsReward: 0.1,
+                clientFloatContribution: testFloatParams.clientFloatContribution
+            },
+            boostAudienceType: 'SOCIAL',
+            boostAudienceSelection: {
+                conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testCreatingUserId, ...testFriendshipUserIds] }]
+            },
+            gameParams: { ...testGameParams, numberWinners: 1 },
+            flags: ['FRIEND_TOURNAMENT']
+        };
+
+        fetchRelationshipsStub.resolves(testFriendships);
+
+        fetchDynamoRowStub.onFirstCall().resolves({ clientId: testClientId, floatId: testFloatId, personalName: 'Someone' });
+        fetchDynamoRowStub.onSecondCall().resolves({
+            bonusPoolSystemWideId: 'primary_bonus_pool',
+            friendTournamentParameters: testFloatParams,
+            currency: 'USD'
+        });
+
+        createBoostStub.resolves(persistenceResult);
+        fetchBoostStub.resolves({ boostId: testBoostId, ...expectedBoostToHandler });
+
+        const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testCreatingUserId, 'ORDINARY_USER'));
+
+        const bodyOfResult = helper.standardOkayChecks(resultOfInstruction);
+        
+        const { result, createdBoost } = bodyOfResult;
+        expect(result).to.equal('SUCCESS');
+        expect(createdBoost).to.deep.equal({ boostId: testBoostId, ...expectedBoostToHandler });
+
+        // most expectations are covered above
+        expect(createBoostStub).to.have.been.calledOnceWithExactly(expectedBoostToHandler);
+
+        const expectedMessageParameters = {
+            friendName: 'Someone',
+            tournamentName: 'Friend Initiated Boost',
+            entryAmount: '$50', // this is a message-specific parameter, so message pusher will not apply logic, it will just inject
+            friendsForBonus: 3,
+            bonusAmountMax: '$27.50'
+        };
+
+        const expectedContext = { boostId: testBoostId, messageParameters: expectedMessageParameters };
+        const expectedMultiOptions = { initiator: testCreatingUserId, context: expectedContext };
+        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(testFriendshipUserIds, 'INVITED_TO_FRIEND_TOURNAMENT', expectedMultiOptions);        
     });
 
     it('Rejects non-pooled reward creation', async () => {

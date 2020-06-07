@@ -15,11 +15,6 @@ const publisher = require('publish-common');
 
 const GAME_RESPONSE = 'GAME_RESPONSE';
 
-const handleError = (err) => {
-    logger('FATAL_ERROR: ', err);
-    return { statusCode: statusCodes('Internal Server Error'), body: JSON.stringify(err.message) };
-};
-
 // //////////////////////////// HELPER METHODS ///////////////////////////////////////////
 
 // this takes the event and creates the arguments to pass to persistence to get applicable boosts, i.e.,
@@ -127,7 +122,7 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
     });
 };
 
-const processEventForCreatedBoosts = async (event) => {
+const processEventForExistingBoosts = async (event) => {
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
     logger('Found these open boosts: ', offeredOrPendingBoosts);
 
@@ -212,6 +207,10 @@ const processEventForCreatedBoosts = async (event) => {
     };
 };
 
+// /////////////////////////////////////////////////////////////////////////////////////
+// ///////////////////////// SECTION FOR EXPIRING BOOSTS ///////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////
+
 const checkIfAccountWinsTournament = (accountId, redemptionConditions, boostLogs) => {
     const eventContext = { accountScoreList: boostLogs };
     // logger('Created event context: ', eventContext);
@@ -284,6 +283,30 @@ const expireAccountsForBoost = async (boostId, specifiedAccountIds) => {
     publisher.publishMultiUserEvent(userIds, 'BOOST_EXPIRED', { context: { boostId }});
 };
 
+const handleTournamentWinners = async (boost, winningAccounts) => {
+    const { boostId } = boost;
+
+    const redemptionAccountDict = await generateRedemptionAccountMap(boostId, winningAccounts);
+    logger('Redemption account dict: ', redemptionAccountDict);
+
+    const redemptionEvent = { eventType: 'BOOST_TOURNAMENT_WON', boostId };
+    const redemptionCall = { 
+        redemptionBoosts: [boost], 
+        affectedAccountsDict: redemptionAccountDict, 
+        event: redemptionEvent 
+    };
+    
+    const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
+    logger('Result of redemptions for winners: ', resultOfRedemptions);
+
+    const redemptionUpdate = { boostId, accountIds: winningAccounts, logType: 'STATUS_CHANGE', newStatus: 'REDEEMED' };
+    const resultOfRedeemUpdate = await persistence.updateBoostAccountStatus([redemptionUpdate]);
+    logger('And result of redemption account update: ', resultOfRedeemUpdate);
+
+    const winningUserIds = Object.values(redemptionAccountDict[boostId]).map((entry) => entry.userId);
+    await publisher.publishMultiUserEvent(winningUserIds, 'BOOST_TOURNAMENT_WON', { context: { boostId }});
+};
+
 const handleExpiredBoost = async (boostId) => {
     const [boost, boostGameLogs] = await Promise.all([persistence.fetchBoost(boostId), persistence.findLogsForBoost(boostId, GAME_RESPONSE)]);
     logger('Processing boost for expiry: ', boost);
@@ -310,17 +333,8 @@ const handleExpiredBoost = async (boostId) => {
     const winningAccounts = accountIdsThatResponded.filter((accountId) => checkIfAccountWinsTournament(accountId, statusConditions.REDEEMED, boostGameLogs));
     
     if (winningAccounts.length > 0) {
-        const redemptionAccountDict = await generateRedemptionAccountMap(boostId, winningAccounts);
-        logger('Redemption account dict: ', redemptionAccountDict);
-        const redemptionEvent = { eventType: 'BOOST_TOURNAMENT_WON', boostId };
-        const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: redemptionAccountDict, event: redemptionEvent };
-        const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
-        logger('Result of redemptions for winners: ', resultOfRedemptions);
-        const redemptionUpdate = { boostId, accountIds: winningAccounts, logType: 'STATUS_CHANGE', newStatus: 'REDEEMED' };
-        const resultOfRedeemUpdate = await persistence.updateBoostAccountStatus([redemptionUpdate]);
-        logger('And result of redemption account update: ', resultOfRedeemUpdate);
-        const winningUserIds = Object.values(redemptionAccountDict[boostId]).map((entry) => entry.userId);
-        await publisher.publishMultiUserEvent(winningUserIds, 'BOOST_TOURNAMENT_WON', { context: { boostId }});
+        logger('Handling tournament result, awarding to winners: ', winningAccounts);
+        await handleTournamentWinners(boost, winningAccounts);
     }
 
     const allAccountMap = await persistence.findAccountsForBoost({ boostIds: [boostId], status: util.ACTIVE_BOOST_STATUS });
@@ -376,109 +390,10 @@ module.exports.processEvent = async (event) => {
     const creationResult = await createBoostsTriggeredByEvent(event);
     logger('Result of boost-account creation creation:', creationResult);
 
-    const resultToReturn = await processEventForCreatedBoosts(event);
+    const resultToReturn = await processEventForExistingBoosts(event);
 
     return {
         statusCode: 200,
         body: JSON.stringify(resultToReturn)
     };
-};
-
-const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusConditions.REDEEMED && 
-    boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N') || condition.startsWith('percent_destroyed_in_first_N'));
-
-const recordGameResult = async (params, boost, accountId) => {
-    const gameLogContext = { 
-        timeTakenMillis: params.timeTakenMillis 
-    };
-    
-    if (params.numberTaps) {
-        gameLogContext.numberTaps = params.numberTaps;
-    }
-
-    if (params.percentDestroyed) {
-        gameLogContext.percentDestroyed = params.percentDestroyed;
-    }
-
-    const boostLog = { boostId: boost.boostId, accountId, logType: 'GAME_RESPONSE', logContext: gameLogContext };
-    await persistence.insertBoostAccountLogs([boostLog]);
-};
-
-/**
- * @param {object} event The event from API GW. Contains a body with the parameters:
- * @property {number} numberTaps The number of taps (if a boost game)
- * @property {number} percentDestroyed The amount of the image/screen 'destroyed' (for that game)
- * @property {number} timeTaken The amount of time taken to complete the game (in seconds)  
- */
-module.exports.processUserBoostResponse = async (event) => {
-    try {        
-        const userDetails = util.extractUserDetails(event);
-        if (!userDetails) {
-            return { statusCode: statusCodes('Forbidden') };
-        }
-
-        const params = util.extractEventBody(event);
-        logger('Event params: ', params);
-
-        const { systemWideUserId } = userDetails;
-        const { boostId, eventType } = params;
-
-        // todo : make sure boost is available for this account ID
-        const [boost, accountId] = await Promise.all([
-            persistence.fetchBoost(boostId), 
-            persistence.getAccountIdForUser(systemWideUserId)
-        ]);
-
-        logger('Fetched boost: ', boost);
-
-        const statusEvent = { eventType, eventContext: params };
-        const statusResult = conditionTester.extractStatusChangesMet(statusEvent, boost);
-
-        if (boost.boostType === 'GAME' && eventType === 'USER_GAME_COMPLETION') {
-            await recordGameResult(params, boost, accountId);
-        }
-        
-        if (statusResult.length === 0) {
-            const returnResult = isBoostTournament(boost) ? { result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() } : { result: 'NO_CHANGE' };
-            return { statusCode: 200, body: JSON.stringify(returnResult)};
-        }
-
-        const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};
-        const boostStatusDict = { [boostId]: statusResult };
-
-        const resultBody = { result: 'TRIGGERED', statusMet: statusResult, endTime: boost.boostEndTime.valueOf() };
-
-        let resultOfTransfer = {};
-        if (statusResult.includes('REDEEMED')) {
-            // do this first, as if it fails, we do not want to proceed
-            const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict: accountDict, event: { accountId, eventType }};
-            resultOfTransfer = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
-            logger('Boost process-redemption, result of transfer: ', resultOfTransfer);
-        }
-
-        if (resultOfTransfer[boostId] && resultOfTransfer[boostId].result !== 'SUCCESS') {
-            throw Error('Error transferring redemption');
-        }
-
-        const updateInstructions = generateUpdateInstructions([boost], boostStatusDict, accountDict);
-        logger('Sending this update instruction to persistence: ', updateInstructions);
-        
-        const adjustedLogContext = { ...updateInstructions[0].logContext, processType: 'USER', submittedParams: params };
-        updateInstructions[0].logContext = adjustedLogContext;
-        const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
-        logger('Result of update operation: ', resultOfUpdates);
-   
-        if (statusResult.includes('REDEEMED')) {
-            resultBody.amountAllocated = { amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency };
-            await persistence.updateBoostAmountRedeemed([boostId]);
-        }
-
-        return {
-            statusCode: 200,
-            body: JSON.stringify(resultBody)
-        };
-        
-    } catch (err) {
-        return handleError(err);
-    }
 };

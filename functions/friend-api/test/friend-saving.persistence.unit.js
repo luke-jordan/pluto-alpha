@@ -363,8 +363,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         helper.matchWithoutLogId(multiOpStub.getCall(0).args[1][0], expectedLogDef);
     });
 
-    it.only('Removes someone (flips them to inactive)', async () => {
-        const mockParticipationId = uuid();
+    it('Removes someone (flips them to inactive)', async () => {
         const mockUpdatedTime = moment();
 
         const testInput = {
@@ -375,7 +374,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
 
         const updateParticipantDef = {
             table: 'friend_data.saving_pool_participant',
-            key: { participationId: mockParticipationId },
+            key: { savingPoolId: testPoolId, userId: 'user-1', relationshipId: 'relationship-1', active: true }, // ie only do this if they are active
             value: { active: false },
             returnClause: 'updated_time'
         };
@@ -385,7 +384,7 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
             savingPoolId: testPoolId,
             relationshipId: 'relationship-1',
             userId: 'user-1',
-            logContext: { deactivation: true }
+            logContext: { updatingUserId: testUserId }
         };
 
         const insertLogDef = {
@@ -395,7 +394,6 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         };
 
         queryStub.onFirstCall().resolves([{ 'creating_user_id': testUserId }]); // for user rights check
-        queryStub.onSecondCall().resolves([{ 'participation_id': mockParticipationId, 'user_id': 'user-10', 'active': true, 'relationship_id': 'relationship-10' }]);
 
         multiOpStub.resolves([
             [{ 'updated_time': mockUpdatedTime.format() }], []
@@ -411,14 +409,14 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         helper.matchWithoutLogId(multiOpStub.getCall(0).args[1][0], insertLogDef);
     });
 
-    it.only('Deactivates a saving pot', async () => {
-        // flip everyone to deactivated, and change the pot, but assume transactions are handled elsewhere
+    it('Deactivates a saving pot', async () => {
+        // note : leaving in deactivating participation cascade def, but for now, as explained in note in code, *not* cascading
         // note : might at some point want to fetch currently active users and log for all of them, but overkill for now while pools are just a kind of high powered tag
-        const deactivateFriendDef = {
-            table: 'friend_data.saving_pool_participant',
-            key: { savingPoolId: 'test-pool-id', active: true },
-            value: { active: false }
-        };
+        // const deactivateFriendDef = {
+        //     table: 'friend_data.saving_pool_participant',
+        //     key: { savingPoolId: 'test-pool-id', active: true },
+        //     value: { active: false }
+        // };
 
         const deactivatePoolDef = {
             table: 'friend_data.saving_pool',
@@ -430,25 +428,29 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         const logObject = {
             logId: uuid(),
             savingPoolId: 'test-pool-id',
-            userId: 'this-user',
-            logContext: { deactivated: true }
+            userId: testUserId,
+            logContext: { 
+                changeFields: [{ fieldName: 'active', oldValue: true, newValue: false }]}
         };
 
         const expectedLogDef = {
             query: `insert into friend_data.friend_log (log_id, log_type, saving_pool_id, relevant_user_id, log_context) values %L`,
-            columnTemplate: '${logId}, *{SAVING_POOL_DEACTIVATED}, ${savingPoolId}, ${updatingUserId}, ${logContext}',
+            columnTemplate: '${logId}, *{SAVING_POOL_UPDATE}, ${savingPoolId}, ${updatingUserId}, ${logContext}',
             rows: [logObject]
         };
 
         const mockUpdatedTime = moment();
         multiOpStub.resolves([
-            [], [{ 'updated_time': mockUpdatedTime.format() }], []
+            [{ 'updated_time': mockUpdatedTime.format() }], []
         ]);
 
         const testInput = {
             savingPoolId: 'test-pool-id',
-            active: false,
+            updatingUserId: testUserId,
+            active: false
         };
+
+        queryStub.onFirstCall().resolves([{ 'creating_user_id': testUserId, 'active': true }]); 
 
         const resultOfUpdate = await persistenceWrite.updateSavingPool(testInput);
         expect(resultOfUpdate).to.deep.equal({ updatedTime: moment(mockUpdatedTime.format()) });
@@ -458,8 +460,8 @@ describe('*** UNIT TEST FRIEND SAVING PERSISTENCE, WRITES ***', async () => {
         expect(multiOpStub).to.have.been.calledOnce;
         
         const multiOpArgs = multiOpStub.getCall(0).args;
-        expect(multiOpArgs[0][0]).to.deep.equal(deactivateFriendDef);
-        expect(multiOpArgs[0][1]).to.deep.equal(deactivatePoolDef);
+        // expect(multiOpArgs[0][0]).to.deep.equal(deactivateFriendDef);
+        expect(multiOpArgs[0][0]).to.deep.equal(deactivatePoolDef);
         helper.matchWithoutLogId(multiOpArgs[1][0], expectedLogDef);
     });
 

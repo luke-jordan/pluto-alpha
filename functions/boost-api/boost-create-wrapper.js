@@ -24,7 +24,9 @@ const handleError = (err) => {
 
 const isValidFriendTournament = (event) => {
     const params = boostUtil.extractEventBody(event);
+    logger('Checking if friend tournament, with params: ', params);
     if (params.boostAudienceSelection) {
+        logger('Have an audience selection, canont be friend based');
         return false;
     }
 
@@ -126,7 +128,9 @@ const createFriendTournament = async (params) => {
     };
 
     logger('Calculating boost budget from entry amount: ', entryAmount, ' and percent: ', percentPoolAsReward);
-    const boostBudget = Math.round(entryAmount * (percentPoolAsReward + clientFloatContribution.value) * (friendships.length + 1));
+    const clientProportion = clientFloatContribution && clientFloatContribution.type === 'PERCENT_OF_POOL' 
+        ? clientFloatContribution.value : 0;
+    const boostBudget = Math.round(entryAmount * (percentPoolAsReward + clientProportion) * (friendships.length + 1));
 
     gameParams.numberWinners = 1; // we enforce this for now
     const statusConditions = constructStatusConditionsForFriendTournament(gameParams, rewardParameters.poolContributionPerUser);
@@ -154,7 +158,7 @@ const createFriendTournament = async (params) => {
         boostAmountOffered: `0::HUNDREDTH_CENT::${clientFloatParams.currency}`,
         boostBudget,
 
-        tags: ['FRIEND_TOURNAMENT']
+        flags: ['FRIEND_TOURNAMENT']
     };
 
     logger('Assembled parameters for boost: ', boostParameters);
@@ -165,13 +169,17 @@ const createFriendTournament = async (params) => {
     const createdBoost = await rds.fetchBoost(boostId);
 
     // need tournament name, friend name, entry amount, pool amount, pool contribution, pool threshold
+    const needCentsInBonus = opsUtil.convertToUnit(boostBudget, poolContributionPerUser.unit, 'WHOLE_CENT') % 100 !== 0;
     const messageParameters = {
         friendName: clientFloatParams.calledName || clientFloatParams.personalName,
-        friendsForBonus: clientFloatContribution.requiredFriends,
         tournamentName: params.label,
-        entryAmount: opsUtil.formatAmountCurrency(poolContributionPerUser),
-        bonusAmountMax: opsUtil.formatAmountCurrency({ ...poolContributionPerUser, amount: boostBudget })
+        entryAmount: opsUtil.formatAmountCurrency(rewardParameters.poolContributionPerUser),
+        bonusAmountMax: opsUtil.formatAmountCurrency({ ...poolContributionPerUser, amount: boostBudget }, needCentsInBonus ? 2 : 0)
     };
+    
+    if (clientFloatContribution.requiredFriends) {
+        messageParameters.friendsForBonus = clientFloatContribution.requiredFriends;
+    }
     const logContext = { boostId, messageParameters };
 
     const eventOptions = { initiator: creatingUserId, context: logContext };

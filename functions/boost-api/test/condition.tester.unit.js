@@ -67,6 +67,16 @@ describe('*** TESTING CONDITIONS ****', () => {
         const sampleContext2 = { savedAmount: '0::HUNDREDTH_CENT::ZAR', saveCount: 1, firstSave: true };
         expect(tester.testConditionsForStatus({ eventType, eventContext: sampleContext2 }, condition)).to.be.false;        
     });
+
+    it('Returns false on save if tagged with another boost, regardless', () => {
+        const condition = ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'];
+
+        const eventContext = { transactionTags: ['BOOST::some-boost'] };
+        const eventParameters = { eventType: 'SAVING_PAYMENT_SUCCESSFUL', boostId: 'different-boost', eventContext };
+
+        expect(tester.testConditionsForStatus(eventParameters, condition)).to.be.false;
+    });
+    
 });
 
 describe('** FRIEND CONDITION ***', () => {
@@ -218,14 +228,25 @@ describe('*** MATCHED BOOST CONDITION ***', () => {
 
     it('Handles correctly that a save was made from the boost', () => {
         const condition = 'save_tagged_with #{THIS_BOOST}';
+        
+        const boost = {
+            boostId: 'some-boost',
+            statusConditions: {
+                UNLOCKED: [condition]
+            }
+        };
 
-        const eventContext = { boostId: 'some-boost', tags: ['BOOST::some-boost'] };
+        const event = { eventType: 'SAVING_PAYMENT_SUCCESSFUL', eventContext: { transactionTags: ['BOOST::some-boost'] }};
+        
+        const result = tester.extractStatusChangesMet(event, boost);
+        expect(result).to.deep.equal(['UNLOCKED']);
     });
 
     it('Ignores when a save was made from another boost', () => {
         const condition = 'save_tagged_with #{THIS_BOOST}';
+        const eventParameters = { boostId: 'some-boost', eventContext: { transactionTags: ['BOOST::other-boost'] }};
 
-        const eventContext = { boostId: 'some-boost', tags: ['BOOST::some-boost'] };
+        expect(tester.testConditionsForStatus(eventParameters, [condition])).to.be.false;
     });
 
 });
