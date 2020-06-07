@@ -56,8 +56,8 @@ const appendEventBinary = async (event) => {
     if (context.file) {
         const { filePath } = context.file;
         const params = { Bucket: config.get('binaries.s3.bucket'), Key: filePath };
-        const attachment = await s3.getObject(params).promise();
-        event.file = attachment.Body.toString('base64');
+        const fileContent = await s3.getObject(params).promise();
+        event.file = fileContent.Body.toString('base64');
     }
     return event;
 };
@@ -144,7 +144,7 @@ module.exports.uploadLogBinary = async (event) => {
         logger('Result of upload:', response);
 
         if (!response || typeof response !== 'object' || response.statusCode !== 200) {
-            return adminUtil.wrapHttpResponse({ status: 'ERROR', details: response });
+            throw new Error('Error uploading binary');
         }
 
         const { filePath } = JSON.parse(response.body);

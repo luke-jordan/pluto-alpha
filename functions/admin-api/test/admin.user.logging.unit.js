@@ -289,7 +289,7 @@ describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
     });
 
     it('Catches thrown errors', async () => {
-        requestStub.throws(new Error('Error! Something went wrong.'));
+        requestStub.resolves({ statusCode: 500 });
 
         const eventBody = {
             systemWideUserId: testSystemId,
@@ -306,6 +306,6 @@ describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
         expect(resultOfUpload).to.exist;
         expect(resultOfUpload).to.have.property('statusCode', 500);
         expect(resultOfUpload.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfUpload.body).to.deep.equal(JSON.stringify('Error! Something went wrong.'));
+        expect(resultOfUpload.body).to.deep.equal(JSON.stringify('Error uploading binary'));
     });
 });
