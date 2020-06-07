@@ -221,7 +221,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
                 conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testCreatingUserId, ...testFriendshipUserIds] }]
             },
             gameParams: { ...testGameParams, numberWinners: 1 },
-            tags: ['FRIEND_TOURNAMENT']
+            flags: ['FRIEND_TOURNAMENT']
         };
 
         fetchRelationshipsStub.resolves(testFriendships);
@@ -332,7 +332,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
                 conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testCreatingUserId, ...testFriendshipUserIds] }]
             },
             gameParams: { ...testGameParams, numberWinners: 1 },
-            tags: ['FRIEND_TOURNAMENT']
+            flags: ['FRIEND_TOURNAMENT']
         };
 
         fetchRelationshipsStub.resolves(testFriendships);
@@ -436,7 +436,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
                 conditions: [{ op: 'in', prop: 'systemWideUserId', value: [testCreatingUserId, ...testFriendshipUserIds] }]
             },
             gameParams: { ...testGameParams, numberWinners: 1 },
-            tags: ['FRIEND_TOURNAMENT']
+            flags: ['FRIEND_TOURNAMENT']
         };
 
         fetchRelationshipsStub.resolves(testFriendships);

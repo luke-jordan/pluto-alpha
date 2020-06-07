@@ -451,6 +451,11 @@ module.exports.createBoost = async (event) => {
         instructionToRds.rewardParameters = params.rewardParameters;
     }
 
+    if (Array.isArray(params.flags) && params.flags.length > 0) {
+        logger('This boost is flagged, with: ', params.flags);
+        instructionToRds.flags = params.flags;
+    }
+
     // logger('Sending to persistence: ', instructionToRds);
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);

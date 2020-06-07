@@ -635,6 +635,39 @@ resource "aws_api_gateway_integration" "friend_pool_write" {
   uri                     = aws_lambda_function.friend_pool_write.invoke_arn
 }
 
+/////////////// FRIEND TOURNAMENTS (ACTUALLY INVOKES BOOST) ////////////////////////////////////
+
+resource "aws_api_gateway_method" "user_friend_tournament" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.user_friend_tournament.id
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_api_gateway_resource" "user_friend_tournament" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  parent_id     = aws_api_gateway_resource.friend_path_root.id
+  path_part     = "tournament"
+}
+
+resource "aws_lambda_permission" "user_friend_tournament" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.boost_create_wrapper.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "user_friend_tournament" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_method.user_friend_tournament.resource_id
+  http_method   = aws_api_gateway_method.user_friend_tournament.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.boost_create_wrapper.invoke_arn
+}
+
 /////////////// USER HISTORY LAMBDA (OWN USER, NOT ADMIN) /////////////////////////////////////////////////
 
 // in future we will probably add some more endpoints like graphing etc., so just future-proofing

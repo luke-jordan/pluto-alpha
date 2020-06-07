@@ -27,6 +27,7 @@ const handler = proxyquire('../boost-list-handler', {
 });
 
 const wrapEvent = (params, systemWideUserId, role) => ({
+    httpMethod: 'GET',
     queryStringParameters: params,
     requestContext: {
         authorizer: { systemWideUserId, role }
@@ -72,13 +73,26 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         const resultOfListing = await handler.listUserBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
         logger('Boost listing resulted in:', resultOfListing);
 
-        expect(resultOfListing).to.exist;
-        expect(resultOfListing).to.have.property('statusCode', 200);
-        expect(resultOfListing.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfListing.body).to.deep.equal(JSON.stringify([expectedBoostResult, expectedBoostResult]));
+        const resultBody = helper.standardOkayChecks(resultOfListing, true);
+        expect(resultBody).to.deep.equal([expectedBoostResult, expectedBoostResult]);
+        
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(fetchBoostLogsStub).to.not.have.been.called;
+    });
+
+    it('Lists all active boosts with flag', async () => {
+        const excludedStatus = ['REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED']; // starting to grandfather in FAILED
+        findAccountsStub.resolves([testAccountId]);
+        fetchBoostStub.resolves([expectedBoostResult]); // not relevant to test
+
+        const resultOfListing = await handler.listUserBoosts(wrapEvent({ flag: 'FRIEND_TOURNAMENT', onlyActive: true }, testUserId));
+        
+        const bodyOfResult = helper.standardOkayChecks(resultOfListing);
+        expect(bodyOfResult).to.deep.equal([expectedBoostResult]);
+
+        expect(fetchBoostStub).to.have.been.calledOnce;
+        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, { flags: ['FRIEND_TOURNAMENT'], excludedStatus });
     });
 
     it('Checks for boosts with recently changed status', async () => {
@@ -94,8 +108,8 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
 
         expect(resultBody).to.deep.equal([expectedBoostResult, expiredBoostResult]);
         
-        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED', 'EXPIRED']);
-        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, sinon.match.any, ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED']);
+        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: ['CREATED', 'OFFERED', 'EXPIRED'] });
+        expect(fetchBoostStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'] });
 
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
         expect(fetchBoostLogsStub).to.not.have.been.called;

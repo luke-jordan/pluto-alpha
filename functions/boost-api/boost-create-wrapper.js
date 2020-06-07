@@ -155,7 +155,7 @@ const createFriendTournament = async (params) => {
         boostAmountOffered: `0::HUNDREDTH_CENT::${clientFloatParams.currency}`,
         boostBudget,
 
-        tags: ['FRIEND_TOURNAMENT']
+        flags: ['FRIEND_TOURNAMENT']
     };
 
     logger('Assembled parameters for boost: ', boostParameters);

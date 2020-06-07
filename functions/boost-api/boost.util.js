@@ -10,6 +10,7 @@ const corsHeaders = {
 };
 
 module.exports.ACTIVE_BOOST_STATUS = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING'];
+module.exports.COMPLETE_BOOST_STATUS = ['REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED'];
 
 // note: keep an eye on sort order of final statusses, but at present this seems right
 module.exports.ALL_BOOST_STATUS_SORTED = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING', 'REDEEMED', 'REVOKED', 'EXPIRED'];
