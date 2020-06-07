@@ -3,6 +3,7 @@
 const logger = require('debug')('jupiter:admin:logging');
 const config = require('config');
 const moment = require('moment');
+const request = require('request-promise');
 
 const adminUtil = require('./admin.util');
 const publisher = require('publish-common');
@@ -27,7 +28,7 @@ const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, contex
  * @property {string} systemWideUserId The user id whom the log pertains to.
  * @property {string} eventType The type of event to be logged.
  * @property {string} note An optional note describing details relevant to the log.
- * @property {string} binaryFile An optional object containing a binary file and the files name, e.g. { fileName, fileContent }
+ * @property {string} file An optional object containing the file path to an attachment file to be associated with the log being written.
  */
 module.exports.writeLog = async (event) => {
     if (!adminUtil.isUserAuthorized(event)) {
@@ -37,9 +38,9 @@ module.exports.writeLog = async (event) => {
     try {
         const adminUserId = event.requestContext.authorizer.systemWideUserId;
         const params = adminUtil.extractEventBody(event);
-        const { systemWideUserId, eventType, note, binaryS3Key } = params;
+        const { systemWideUserId, eventType, note, file } = params;
 
-        const context = { systemWideUserId, note, binaryS3Key };
+        const context = { systemWideUserId, note, file };
         const publishResult = await publishUserLog({ adminUserId, systemWideUserId, eventType, context });
         logger('Result of publish:', publishResult);
 
@@ -52,10 +53,11 @@ module.exports.writeLog = async (event) => {
 
 const appendEventBinary = async (event) => {
     const context = JSON.parse(event.context);
-    if (context.binaryS3Key) {
-        const params = { Bucket: config.get('s3.binaries.bucket'), Key: context.binaryS3Key };
+    if (context.file) {
+        const { filePath } = context.file;
+        const params = { Bucket: config.get('binaries.s3.bucket'), Key: filePath };
         const attachment = await s3.getObject(params).promise();
-        event.binaryFile = attachment.Body.toString('base64');
+        event.file = attachment.Body.toString('base64');
     }
     return event;
 };
@@ -122,21 +124,31 @@ module.exports.uploadLogBinary = async (event) => {
        
     try {
         const params = adminUtil.extractEventBody(event);
-        const { systemWideUserId, binaryFile } = params;
-        const { fileName, fileContent } = binaryFile;
-        const fileKey = `${systemWideUserId}/${fileName}`;
-
-        const uploadParams = {
-            Bucket: config.get('s3.binaries.bucket'),
-            Key: fileKey,
-            Body: Buffer.from(fileContent, 'base64')
+        const { systemWideUserId, file } = params;
+        const { filename, fileContent, mimeType } = file;
+        
+        const options = {
+            method: 'POST',
+            uri: config.get('binaries.endpoint'),
+            formData: {
+                userId: systemWideUserId,
+                file: {
+                    value: fileContent, // file stream object
+                    options: { filename, mimeType }
+                }
+            }
         };
 
-        logger('Uploading binary with params:', uploadParams);
-        const result = await s3.upload(uploadParams).promise();
-        logger('Result of upload:', result);
-        // todo: result validation
-        return adminUtil.wrapHttpResponse({ binaryS3Key: fileKey });
+        logger('Uploading binary with params:', options);
+        const response = await request(options);
+        logger('Result of upload:', response);
+
+        if (!response || typeof response !== 'object' || response.statusCode !== 200) {
+            return adminUtil.wrapHttpResponse({ status: 'ERROR', details: response });
+        }
+
+        const { filePath } = JSON.parse(response.body);
+        return adminUtil.wrapHttpResponse({ filePath });
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return adminUtil.wrapHttpResponse(err.message, 500);

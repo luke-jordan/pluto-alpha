@@ -1,5 +1,6 @@
 'use strict';
 
+
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
@@ -15,7 +16,7 @@ const helper = require('./test.helper');
 const lamdbaInvokeStub = sinon.stub();
 const publishEventStub = sinon.stub();
 const getObjectStub = sinon.stub();
-const uploadStub = sinon.stub();
+const requestStub = sinon.stub();
 const momentStub = sinon.stub();
 
 class MockLambdaClient {
@@ -27,7 +28,6 @@ class MockLambdaClient {
 class MockS3Client {
     constructor () { 
         this.getObject = getObjectStub;
-        this.upload = uploadStub;
     }
 }
 
@@ -39,15 +39,14 @@ const handler = proxyquire('../admin-user-logging', {
         'Lambda': MockLambdaClient,
         'S3': MockS3Client
     },
+    'request-promise': requestStub,
     'moment': momentStub,
     '@noCallThru': true
 });
 
 const testSystemId = uuid();
 const testAdminId = uuid();
-
-const mockAttachment = 'JVBERi0xLjUKJdDUxdgKNiAwIG9iago8PAovTGVuZ3RoIDE5NTYgICAgICAKL0ZpbHRlci...';
-
+const mockBase64EncodedFile = 'JVBERi0xLjUKJdDUxdgKNiAwIG9iago8PAovTGVuZ3RoIDE5NTYgICAgICAKL0ZpbHRlci...';
 
 describe('*** UNIT TEST ADMIN USER LOGGING ***', () => {
     beforeEach(() => {
@@ -62,7 +61,9 @@ describe('*** UNIT TEST ADMIN USER LOGGING ***', () => {
             context: {
                 systemWideUserId: testSystemId,
                 note: 'User has proved their identity.',
-                binaryS3Key: `${testSystemId}/user_documents.pdf`
+                file: {
+                    filePath: `${testSystemId}/user_documents.pdf`
+                }
             }
         };
 
@@ -72,7 +73,9 @@ describe('*** UNIT TEST ADMIN USER LOGGING ***', () => {
             systemWideUserId: testSystemId,
             eventType: 'VERIFIED_AS_PERSON',
             note: 'User has proved their identity.',
-            binaryS3Key: `${testSystemId}/user_documents.pdf`
+            file: {
+                filePath: `${testSystemId}/user_documents.pdf`
+            }
         };
 
         const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
@@ -101,7 +104,7 @@ describe('*** UNIT TEST ADMIN USER LOGGING ***', () => {
             systemWideUserId: testSystemId,
             eventType: 'VERIFIED_AS_PERSON',
             note: 'User has proved their identity.',
-            binaryS3Key: `${testSystemId}/user_documents.pdf`
+            filePath: `${testSystemId}/user_documents.pdf`
         };
 
         const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
@@ -125,7 +128,9 @@ describe('*** UNIT TEST FETCH USER LOGS ***', () => {
         const testContext = {
             systemWideUserId: testSystemId,
             note: 'User has proved their identity.',
-            binaryS3Key: `${testSystemId}/user_documents.pdf`
+            file: {
+                filePath: `${testSystemId}/user_documents.pdf`
+            }
         };
 
         const expectedResult = [{
@@ -135,7 +140,7 @@ describe('*** UNIT TEST FETCH USER LOGS ***', () => {
             timestamp: testTimestamp,
             userId: testSystemId,
             eventType: 'VERIFIED_AS_PERSON',
-            binaryFile: mockAttachment
+            file: mockBase64EncodedFile
         }];
 
         const expectedLogFromLambda = {
@@ -164,12 +169,12 @@ describe('*** UNIT TEST FETCH USER LOGS ***', () => {
         };
 
         const expectedS3Params = {
-            Bucket: config.get('s3.binaries.bucket'),
+            Bucket: config.get('binaries.s3.bucket'),
             Key: `${testSystemId}/user_documents.pdf`
         };
 
         lamdbaInvokeStub.returns({ promise: () => expectedLogFromLambda });
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockAttachment }}) });
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => mockBase64EncodedFile }}) });
         momentStub.returns({ valueOf: () => testEndDate });
 
         const eventBody = {
@@ -219,27 +224,49 @@ describe('*** UNIT TEST FETCH USER LOGS ***', () => {
 });
 
 describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
+    const mockFileStream = {
+        _readableState: {
+            buffer: {
+                head: {
+                    data: '<Buffer 25 50 44 46 2d 31 2e 34 0a 25 ... >'
+                }
+            }
+        }
+    };
+
     beforeEach(() => {
-        helper.resetStubs(uploadStub);
+        helper.resetStubs(requestStub);
     });
    
     it('Uploads user log attachments', async () => {
-        const expectedResult = { binaryS3Key: `${testSystemId}/user_documents.pdf` };
+        const expectedResult = { filePath: `${testSystemId}/user_documents.pdf` };
 
-        const expectedUploadArgs = {
-            Bucket: config.get('s3.binaries.bucket'),
-            Key: `${testSystemId}/user_documents.pdf`,
-            Body: Buffer.from(mockAttachment, 'base64')
+        const mockRequestOptions = {
+            method: 'POST',
+            uri: config.get('binaries.endpoint'),
+            formData: {
+                userId: testSystemId,
+                file: {
+                    value: mockFileStream,
+                    options: { filename: 'user_documents.pdf', mimeType: 'application/pdf' }
+                }
+            }
         };
 
-        const testUploadResult = { Location: `${testSystemId}/user_documents.pdf` };
-        uploadStub.returns({ promise: () => testUploadResult });
+        // non-redundant usage
+        const testUploadResult = {
+            statusCode: 200,
+            body: JSON.stringify({ filePath: `${testSystemId}/user_documents.pdf` })
+        };
+       
+        requestStub.resolves(testUploadResult);
 
         const eventBody = {
             systemWideUserId: testSystemId,
-            binaryFile: {
-                fileName: 'user_documents.pdf',
-                fileContent: mockAttachment
+            file: {
+                filename: 'user_documents.pdf',
+                mimeType: 'application/pdf',
+                fileContent: mockFileStream
             }
         };
 
@@ -250,7 +277,7 @@ describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
         expect(resultOfUpload).to.have.property('statusCode', 200);
         expect(resultOfUpload.headers).to.deep.equal(helper.expectedHeaders);
         expect(resultOfUpload.body).to.deep.equal(JSON.stringify(expectedResult));
-        expect(uploadStub).to.have.been.calledOnceWithExactly(expectedUploadArgs);
+        expect(requestStub).to.have.been.calledOnceWithExactly(mockRequestOptions);
     });
 
     it('Fails on unauthorized user', async () => {
@@ -258,17 +285,18 @@ describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
         expect(resultOfUpload).to.exist;
         expect(resultOfUpload).to.have.property('statusCode', 403);
         expect(resultOfUpload.headers).to.deep.equal(helper.expectedHeaders);
-        expect(uploadStub).to.have.not.been.called;
+        expect(requestStub).to.have.not.been.called;
     });
 
     it('Catches thrown errors', async () => {
-        uploadStub.throws(new Error('Error! Something went wrong.'));
+        requestStub.throws(new Error('Error! Something went wrong.'));
 
         const eventBody = {
             systemWideUserId: testSystemId,
-            binaryFile: {
-                fileName: 'user_documents.pdf',
-                fileContent: mockAttachment
+            file: {
+                filename: 'user_documents.pdf',
+                mimeType: 'application/pdf',
+                fileContent: mockBase64EncodedFile
             }
         };
 

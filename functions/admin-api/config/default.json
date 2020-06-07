@@ -40,8 +40,9 @@
         "sendOutboundMessages": "outbound_comms_send",
         "boostProcessEvent": "boost_event_process"
     },
-    "s3": {
-        "binaries": {
+    "binaries": {
+        "endpoint": "<binary-upload-endpoint>",
+        "s3": {
             "bucket": "jupiter.binary.uploads"
         }
     },
