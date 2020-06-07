@@ -24,7 +24,9 @@ const handleError = (err) => {
 
 const isValidFriendTournament = (event) => {
     const params = boostUtil.extractEventBody(event);
+    logger('Checking if friend tournament, with params: ', params);
     if (params.boostAudienceSelection) {
+        logger('Have an audience selection, canont be friend based');
         return false;
     }
 
@@ -126,7 +128,8 @@ const createFriendTournament = async (params) => {
     };
 
     logger('Calculating boost budget from entry amount: ', entryAmount, ' and percent: ', percentPoolAsReward);
-    const clientProportion = clientFloatContribution.type === 'PERCENT_OF_POOL' ? clientFloatContribution.value : 0;
+    const clientProportion = clientFloatContribution && clientFloatContribution.type === 'PERCENT_OF_POOL' 
+        ? clientFloatContribution.value : 0;
     const boostBudget = Math.round(entryAmount * (percentPoolAsReward + clientProportion) * (friendships.length + 1));
 
     gameParams.numberWinners = 1; // we enforce this for now

@@ -109,6 +109,16 @@ resource "aws_iam_role_policy_attachment" "boost_create_wrapper_audience_invoke"
   policy_arn = aws_iam_policy.audience_lambda_invoke_policy.arn
 }
 
+resource "aws_iam_role_policy_attachment" "boost_create_wrapper_client_float_table_access" {
+  role = aws_iam_role.boost_create_wrapper_role.name
+  policy_arn = aws_iam_policy.dynamo_table_client_float_table_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "boost_create_wrapper_profile_read_policy" {
+  role = aws_iam_role.boost_create_wrapper_role.name
+  policy_arn = var.user_profile_table_read_policy_arn[terraform.workspace]
+}
+
 resource "aws_iam_role_policy_attachment" "boost_create_wrapper_secret_get" {
   role = aws_iam_role.boost_create_wrapper_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"

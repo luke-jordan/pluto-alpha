@@ -92,8 +92,21 @@ const extractStatusConditions = (gameParams, initialStatus) => {
     return statusConditions;
 };
 
+// some processing help in here, to make sure we don't overwrite conditions already passed to us,
+// but also that all conditions required for game params (= ground truth) to operate properly
 const safeList = (conditionList) => (Array.isArray(conditionList) ? conditionList : []);
-const safeMerge = (gameConditions, passedConditions, condition) => [...safeList(gameConditions[condition]), ...safeList(passedConditions[condition])];
+
+const checkConditionNotInList = (condition, comparisonList) => {
+    const conditionType = condition.substring(0, condition.indexOf(' ')); // we could require strict match, but for now avoiding confusion
+    const existsInList = comparisonList.some((otherCondition) => otherCondition.includes(conditionType));
+    return !existsInList;
+};
+
+const safeMerge = (gameConditions, passedConditions, status) => {
+    const gameConditionsNotInPassed = safeList(gameConditions[status]).
+        filter((condition) => checkConditionNotInList(condition, safeList(passedConditions[status])));
+    return [...safeList(passedConditions[status]), ...gameConditionsNotInPassed];
+};
 
 const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     if (!passedConditions || Object.keys(passedConditions).length === 0) {
@@ -111,7 +124,8 @@ const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     const gameConditions = extractStatusConditions(gameParams, gameInitialStatus);
     
     logger('Merging: ', gameConditions, 'and: ', passedConditions);
-    const mergedConditions = boostUtil.ALL_BOOST_STATUS_SORTED.filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
+    const mergedConditions = boostUtil.ALL_BOOST_STATUS_SORTED.
+        filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
         reduce((obj, boostStatus) => ({ ...obj, [boostStatus]: safeMerge(gameConditions, passedConditions, boostStatus)}), {});
 
     logger('Merged status conditions: ', mergedConditions);

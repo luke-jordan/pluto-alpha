@@ -437,6 +437,42 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
     });
 
+    it('Happy path creates a game boost, with default status offered, but does not overwrite existing status conditions', async () => {
+        const alreadyStatusDefinedBoost = { ...testBodyOfEvent };
+        alreadyStatusDefinedBoost.initialStatus = 'OFFERED';
+        alreadyStatusDefinedBoost.statusConditions = testStatusConditions;
+    
+        const mockResultFromRds = {
+            boostId: testBoostId,
+            persistedTimeMillis: testPersistedTime.valueOf(),
+            numberOfUsersEligible: 100,
+            accountIds: [uuid(), uuid()]
+        };
+
+        momentStub.onFirstCall().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
+        insertBoostStub.resolves(mockResultFromRds);
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+        alterBoostStub.resolves({ updatedTime: moment() });
+
+        const expectedResult = { ...mockResultFromRds, messageInstructions: mockMsgIdDict };
+        const expectedMsgInstruct = assembleMessageInstruction();
+
+        // now we do the call
+        const resultOfCreate = await handler.createBoost(alreadyStatusDefinedBoost);
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal(expectedResult);
+
+        // then set up invocation checks
+        const expectedBoost = { ...mockBoostToFromPersistence };
+        expectedBoost.defaultStatus = 'OFFERED';        
+        expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
+
+        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
+        expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+    });
+
     it('Happy path creates a game boost, and sets up conditions for tournament', async () => {
         const tournParams = {
             gameType: 'CHASE_ARROW',
