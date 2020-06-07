@@ -20,26 +20,11 @@ const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, contex
     return publisher.publishUserEvent(systemWideUserId, eventType, logOptions);
 };
 
-const uploadBinaryFile = async (systemWideUerId, data) => {
-    const { fileName, fileContent } = data;
-    const fileKey = `${systemWideUerId}/${fileName}`;
-    const params = {
-        Bucket: config.get('s3.binaries.bucket'),
-        Key: fileKey,
-        Body: Buffer.from(fileContent, 'base64')
-    };
-    logger('Uploading binary with params:', params);
-    const result = await s3.upload(params).promise();
-    logger('Result of upload:', result);
-    // todo: result validation
-    return fileKey;
-};
-
 /**
  * This function write a user log. If a binary file is included the file is uploaded to s3 and the path to
  * the file is stored in the user logs event context.
  * @param {object} event An admin event.
- * @property {string} systemWideUerId The user id whom the log pertains to.
+ * @property {string} systemWideUserId The user id whom the log pertains to.
  * @property {string} eventType The type of event to be logged.
  * @property {string} note An optional note describing details relevant to the log.
  * @property {string} binaryFile An optional object containing a binary file and the files name, e.g. { fileName, fileContent }
@@ -52,15 +37,9 @@ module.exports.writeLog = async (event) => {
     try {
         const adminUserId = event.requestContext.authorizer.systemWideUserId;
         const params = adminUtil.extractEventBody(event);
-        const { systemWideUserId, eventType, note, binaryFile } = params;
+        const { systemWideUserId, eventType, note, binaryS3Key } = params;
 
-        const context = { systemWideUserId, note };
-
-        if (binaryFile) {
-            const uploadResult = await uploadBinaryFile(systemWideUserId, binaryFile);
-            context.binaryS3Key = uploadResult;
-        }
-
+        const context = { systemWideUserId, note, binaryS3Key };
         const publishResult = await publishUserLog({ adminUserId, systemWideUserId, eventType, context });
         logger('Result of publish:', publishResult);
 
@@ -75,9 +54,8 @@ const appendEventBinary = async (event) => {
     const context = JSON.parse(event.context);
     if (context.binaryS3Key) {
         const params = { Bucket: config.get('s3.binaries.bucket'), Key: context.binaryS3Key };
-        const binaryFile = await s3.getObject(params).promise();
-        // todo: map file type in key to relevent decoder
-        event.binaryFile = binaryFile.Body.toString('base64');
+        const attachment = await s3.getObject(params).promise();
+        event.binaryFile = attachment.Body.toString('base64');
     }
     return event;
 };
@@ -105,7 +83,7 @@ const fetchUserEventLog = async (systemWideUserId, eventType, startDate) => {
  * This file fetches a user log. If the s3 file path of a binary file is found the file is retrieved and
  * return with the function ooutput.
  * @param {object} event An admin event.
- * @property {string} systemWideUerId The user whose logs we seek.
+ * @property {string} systemWideUserId The user whose logs we seek.
  * @property {string} eventType The log event type to be retrieved.
  * @property {string} timestamp The target event timestamp.
  */
@@ -121,10 +99,44 @@ module.exports.fetchLog = async (event) => {
         logger('Got user user log event:', userEventLog);
     
         const userEvents = userEventLog.userEvents;
-        const logsWithBinaryFiles = await Promise.all(userEvents.map((userEvent) => appendEventBinary(userEvent)));
-        logger('Log with binaries:', logsWithBinaryFiles);
+        const logsWithFileAttachments = await Promise.all(userEvents.map((userEvent) => appendEventBinary(userEvent)));
+        logger('Log with binaries:', logsWithFileAttachments);
     
-        return adminUtil.wrapHttpResponse(logsWithBinaryFiles);
+        return adminUtil.wrapHttpResponse(logsWithFileAttachments);
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return adminUtil.wrapHttpResponse(err.message, 500);
+    }
+};
+
+/**
+ * Uploads a log associated attachment. Returns the uploaded attachments s3 key.
+ * @param {object} event An admin event.
+ * @param {string} systemWideUserId The system id of the user associated with the file attachment. 
+ * @param {object} data An object containing attachment information. The properties required by this function are fileName and fileContent.
+ */
+module.exports.uploadLogBinary = async (event) => {
+    if (!adminUtil.isUserAuthorized(event)) {
+        return adminUtil.unauthorizedResponse;
+    }
+       
+    try {
+        const params = adminUtil.extractEventBody(event);
+        const { systemWideUserId, binaryFile } = params;
+        const { fileName, fileContent } = binaryFile;
+        const fileKey = `${systemWideUserId}/${fileName}`;
+
+        const uploadParams = {
+            Bucket: config.get('s3.binaries.bucket'),
+            Key: fileKey,
+            Body: Buffer.from(fileContent, 'base64')
+        };
+
+        logger('Uploading binary with params:', uploadParams);
+        const result = await s3.upload(uploadParams).promise();
+        logger('Result of upload:', result);
+        // todo: result validation
+        return adminUtil.wrapHttpResponse({ binaryS3Key: fileKey });
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return adminUtil.wrapHttpResponse(err.message, 500);
