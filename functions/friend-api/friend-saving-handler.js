@@ -209,8 +209,9 @@ const handleRemovingFriend = async (creatingUserId, savingPoolId, friendshipToRe
         filter((transaction) => transaction.ownerUserId === userId).
         map(({ transactionId }) => transactionId);
     
+    // note : update to pool itself is handled as bundle, below
     await persistenceWrite.removeTransactionsFromPool(savingPoolId, userTransactions);
-
+    
     const creatorContext = { savingPoolId, removedFriend: friendUserId };
     const messageParameters = { friendName: creatorProfile.calledName || creatorProfile.firstName, poolName: savingPoolDetails.poolName };
     const friendContext = { savingPoolId, messageParameters };

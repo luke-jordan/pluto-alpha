@@ -7,7 +7,7 @@ resource "aws_lambda_function" "boost_user_process" {
 
   function_name                  = "${var.boost_user_process_lambda_function_name}"
   role                           = "${aws_iam_role.boost_user_process_role.arn}"
-  handler                        = "boost-process-handler.processUserBoostResponse"
+  handler                        = "boost-user-handler.processUserBoostResponse"
   memory_size                    = 512
   runtime                        = "nodejs10.x"
   timeout                        = 900

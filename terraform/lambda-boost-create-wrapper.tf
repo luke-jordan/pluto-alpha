@@ -7,7 +7,7 @@ resource "aws_lambda_function" "boost_create_wrapper" {
 
   function_name                  = "${var.boost_create_wrapper_lambda_function_name}"
   role                           = "${aws_iam_role.boost_create_wrapper_role.arn}"
-  handler                        = "boost-create-handler.createBoostWrapper"
+  handler                        = "boost-create-wrapper.createBoostWrapper"
   memory_size                    = 512
   runtime                        = "nodejs10.x"
   timeout                        = 15

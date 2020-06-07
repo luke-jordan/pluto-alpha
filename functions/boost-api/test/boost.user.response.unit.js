@@ -20,7 +20,7 @@ const redemptionHandlerStub = sinon.stub();
 
 const proxyquire = require('proxyquire').noCallThru();
 
-const handler = proxyquire('../boost-process-handler', {
+const handler = proxyquire('../boost-user-handler', {
     './persistence/rds.boost': {
         'fetchBoost': fetchBoostStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
@@ -107,7 +107,6 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostId: testBoostId,
             accountIds: [testAccountId],
             newStatus: 'REDEEMED',
-            stillActive: true,
             logType: 'STATUS_CHANGE',
             logContext: expectedLogContext
         };
@@ -160,7 +159,6 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
             boostId: testBoostId,
             accountIds: [testAccountId],
             newStatus: 'PENDING',
-            stillActive: true,
             logType: 'STATUS_CHANGE',
             logContext: expectedLogContext
         };

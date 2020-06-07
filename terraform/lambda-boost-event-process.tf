@@ -7,7 +7,7 @@ resource "aws_lambda_function" "boost_event_process" {
 
   function_name                  = "${var.boost_event_process_lambda_function_name}"
   role                           = "${aws_iam_role.boost_event_process_role.arn}"
-  handler                        = "boost-process-handler.processEvent"
+  handler                        = "boost-event-handler.processEvent"
   memory_size                    = 512
   runtime                        = "nodejs10.x"
   timeout                        = 900

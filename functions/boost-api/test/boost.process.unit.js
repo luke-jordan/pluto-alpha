@@ -33,7 +33,7 @@ const publishStub = sinon.stub();
 
 const proxyquire = require('proxyquire').noCallThru();
 
-const handler = proxyquire('../boost-process-handler', {
+const handler = proxyquire('../boost-event-handler', {
     './persistence/rds.boost': {
         'insertBoost': insertBoostStub,
         'findBoost': findBoostStub,

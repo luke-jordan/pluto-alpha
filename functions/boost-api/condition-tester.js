@@ -80,6 +80,16 @@ const evaluateTotalFriends = (parameterValue, friendshipList) => {
     return numberFriends.length >= targetNumber;
 };
 
+const extractTaggedBoosts = (eventContext) => (
+    eventContext && eventContext.transactionTags 
+        ? eventContext.transactionTags.filter((tag) => tag.startsWith('BOOST::')).map((tag) => tag.substring('BOOST::'.length)) : []
+);
+
+const checkBoostTagged = (parameterValue, boostTags, boostId) => {
+    const soughtBoostId = parameterValue === 'THIS_BOOST' ? boostId : parameterValue;
+    return boostTags.includes(soughtBoostId);
+};
+
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
@@ -90,7 +100,7 @@ module.exports.testCondition = (event, statusCondition) => {
     logger('Parameter value: ', parameterValue);
     const eventHasContext = typeof event.eventContext === 'object';
     
-    const { eventType, eventContext } = event;
+    const { eventType, eventContext, boostId } = event;
 
     // these two lines ensure we do not get caught in infinite loops because of boost/messages publishing, and that we only check the right events for the right conditions
     const isEventTriggeredButForbidden = (conditionType === 'event_occurs' && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));
@@ -99,6 +109,13 @@ module.exports.testCondition = (event, statusCondition) => {
     const isNonEventTriggeredButForbidden = conditionType !== 'event_occurs' && isConditionAndEventTypeForbidden;
     
     if (isEventTriggeredButForbidden || isNonEventTriggeredButForbidden) {
+        return false;
+    }
+
+    const transactionBoostTags = extractTaggedBoosts(eventContext);
+    const isTxForOtherBoost = transactionBoostTags.length > 0 && !transactionBoostTags.includes(boostId);
+    if (isTxForOtherBoost) {
+        logger('Transaction had tags: ', eventContext.transactionTags, ' and this boost ID: ', boostId, ' so must be for another');
         return false;
     }
     
@@ -132,9 +149,13 @@ module.exports.testCondition = (event, statusCondition) => {
             return evaluateFriendsSince(parameterValue, eventContext.friendshipList);
         case 'total_number_friends':
             return evaluateTotalFriends(parameterValue, eventContext.friendshipList);
+        // specific tag conditions
+        case 'save_tagged_with':
+            logger('Checking if tagged, have tx tags: ', transactionBoostTags);
+            return checkBoostTagged(parameterValue, transactionBoostTags, boostId);
         // event trigger conditions
         case 'event_occurs':
-            logger('Checking if event type matches paramater: ', eventType === parameterValue);
+            logger('Checking if event type matches parameter: ', eventType === parameterValue);
             return eventType === parameterValue;
         default:
             logger('Condition type not supported yet');
@@ -142,9 +163,11 @@ module.exports.testCondition = (event, statusCondition) => {
     }
 };
 
-module.exports.testConditionsForStatus = (event, statusConditions) => statusConditions.every((condition) => exports.testCondition(event, condition));
+module.exports.testConditionsForStatus = (eventParameters, statusConditions) => statusConditions.
+    every((condition) => exports.testCondition(eventParameters, condition));
 
 module.exports.extractStatusChangesMet = (event, boost) => {
     const statusConditions = boost.statusConditions;
-    return Object.keys(statusConditions).filter((key) => exports.testConditionsForStatus(event, statusConditions[key]));
+    const eventParameters = { boostId: boost.boostId, ...event };
+    return Object.keys(statusConditions).filter((key) => exports.testConditionsForStatus(eventParameters, statusConditions[key]));
 };
