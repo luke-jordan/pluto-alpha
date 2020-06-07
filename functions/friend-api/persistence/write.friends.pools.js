@@ -262,3 +262,15 @@ module.exports.updateSavingPool = async (updateParams) => {
     return { updatedTime }; 
 };
 
+module.exports.removeTransactionsFromPool = async (savingPoolId, transactionIds) => {
+    logger('Removing from pool: ', savingPoolId, ' transactions: ', transactionIds);
+    const updateQuery = `update ${config.get('tables.transactionTable')} set tags = array_remove(tags, $1) where ` +
+        `transaction_id in (${util.extractArrayIndices(transactionIds, 2)}) returning updated_time`;
+    const updateValues = [`SAVING_POOL::${savingPoolId}`, ...transactionIds];
+    
+    logger('Updating with query: ', updateQuery, ' and values: ', updateValues);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
+    logger('Raw result: ', resultOfUpdate);
+
+    return Array.isArray(resultOfUpdate.rows) ? resultOfUpdate.rows.map((row) => ({ updatedTime: moment(row['updated_time']) })) : null;
+};

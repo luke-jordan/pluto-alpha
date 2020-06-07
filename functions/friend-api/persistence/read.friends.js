@@ -400,6 +400,7 @@ module.exports.fetchSavingPoolDetails = async (savingPoolId, includeDetails = fa
     logger('Transformed participating users: ', participatingUsers);
 
     const transactionRecord = transactionRows.map(camelCaseKeys).map((transaction) => ({
+        transactionId: transaction.transactionId,
         ownerUserId: transaction.ownerUserId,
         settlementTime: moment(transaction.settlementTime),
         amount: transaction.amount,
@@ -415,7 +416,7 @@ module.exports.fetchSavingPoolDetails = async (savingPoolId, includeDetails = fa
     savingPool.participatingUsers = participatingUsers;
     savingPool.transactionRecord = transactionRecord;
 
-    logger('Assembled: ', savingPool);
+    // logger('Assembled : ', savingPool);
     return savingPool;
 };
 

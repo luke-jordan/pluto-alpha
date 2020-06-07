@@ -7,6 +7,8 @@ const moment = require('moment');
 const status = require('statuses');
 const util = require('./boost.util');
 
+const opsUtil = require('ops-util-common');
+
 const persistence = require('./persistence/rds.boost.list');
 
 const fetchUserDefaultAccount = async (systemWideUserId) => {
@@ -20,7 +22,12 @@ const fetchUserDefaultAccount = async (systemWideUserId) => {
  * This functions fetches a users boosts.
  */
 module.exports.listUserBoosts = async (event) => {
-    try {     
+    try {
+        if (opsUtil.isWarmup(event)) {
+            logger('No event! Must be warmup lambda, keep alive and continue');
+            return { statusCode: 400, body: 'Empty invocation' };
+        }
+      
         const authParams = event.requestContext.authorizer;
         if (!authParams || !authParams.systemWideUserId) {
             return util.wrapHttpResponse({ message: 'User ID not found in context' }, status('Forbidden'));
