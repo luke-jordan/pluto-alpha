@@ -115,7 +115,7 @@ module.exports.fetchLog = async (event) => {
  * Uploads a log associated attachment. Returns the uploaded attachment's s3 key.
  * @param {object} event An admin event.
  * @property {string} systemWideUserId The system id of the user associated with the file attachment. 
- * @property {object} data An object containing attachment information. The properties required by this function are fileName and fileContent.
+ * @property {object} file An object containing attachment information. The properties required by this function are { fileame, fileContent, mimeType }.
  */
 module.exports.uploadLogBinary = async (event) => {
     if (!adminUtil.isUserAuthorized(event)) {

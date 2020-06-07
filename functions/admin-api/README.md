@@ -153,7 +153,7 @@ Uploads a log associated attachment. Returns the uploaded attachment's s3 key.
 | Name | Type | Description |
 | --- | --- | --- |
 | systemWideUserId | <code>string</code> | The system id of the user associated with the file attachment. |
-| data | <code>object</code> | An object containing attachment information. The properties required by this function are fileName and fileContent. |
+| file | <code>object</code> | An object containing attachment information. The properties required by this function are { fileame, fileContent, mimeType }. |
 
 <a name="manageUser"></a>
 
