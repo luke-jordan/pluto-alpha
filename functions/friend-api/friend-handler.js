@@ -15,7 +15,6 @@ const Redis = require('ioredis');
 const redis = new Redis({
     port: config.get('cache.port'),
     host: config.get('cache.host'),
-    retryStrategy: () => `dont retry`,
     keyPrefix: `${config.get('cache.keyPrefixes.savingHeat')}::`
 });
 
@@ -184,6 +183,11 @@ const fetchOwnSavingHeat = async (systemWideUserId) => {
  */
 module.exports.obtainFriends = async (event) => {
     try {
+        if (opsUtil.isWarmup(event)) {
+            logger('No event! Must be warmup lambda, just keep going and exit');
+            return { statusCode: 400, body: 'Empty invocation' };
+        }
+      
         const userDetails = opsUtil.extractUserDetails(event);
         if (!userDetails) {
             return { statusCode: 403 };
