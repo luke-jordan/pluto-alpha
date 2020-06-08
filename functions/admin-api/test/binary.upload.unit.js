@@ -1,9 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:admin:test');
-
 const config = require('config');
-const moment = require('moment');
 const uuid = require('uuid/v4');
 
 const sinon = require('sinon');
@@ -51,7 +48,7 @@ describe('*** UNIT TEST BINARY S3 STORAGE ***', () => {
         };
 
         const testEvent = helper.wrapQueryParamEvent(eventParams, testAdminId, 'SYSTEM_ADMIN', 'POST');
-        testEvent.content = mockBase64EncodedFile
+        testEvent.content = mockBase64EncodedFile;
 
         const resultOfUpload = await handler.storeBinary(testEvent);
         expect(resultOfUpload).to.exist;
@@ -71,7 +68,7 @@ describe('*** UNIT TEST BINARY S3 STORAGE ***', () => {
         };
 
         const testEvent = helper.wrapQueryParamEvent(eventParams, testAdminId, 'SYSTEM_ADMIN', 'POST');
-        testEvent.content = mockBase64EncodedFile
+        testEvent.content = mockBase64EncodedFile;
 
         const resultOfUpload = await handler.storeBinary(testEvent);
         expect(resultOfUpload).to.exist;
