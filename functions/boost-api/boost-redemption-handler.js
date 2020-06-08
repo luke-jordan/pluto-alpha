@@ -81,8 +81,8 @@ const calculateBoostAmount = (boost, pooledContributionMap) => {
     return boost.boostAmount;
 };
 
-const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation }) => {
-    const eventType = isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED';
+const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation, specifiedEventType }) => {
+    const eventType = specifiedEventType || (isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED');
     logger('Affected accounts user dict: ', affectedAccountsUserDict);
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
         const context = {
@@ -129,12 +129,34 @@ const triggerFloatTransfers = async (transferInstructions) => {
 };
 
 const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContributionMap, event) => {
+    logger('Pool contribution map : ', pooledContributionMap);
+    
     const accountIds = pooledContributionMap[boost.boostId];
-    if (accountIds.length === 0) {
+    if (!accountIds || accountIds.length === 0) {
         throw new Error('Error! No account ids for reward pool'); 
     }
 
-    const poolContrib = boost.rewardParameters.poolContributionPerUser;
+    if (accountIds.length === 1) {
+        logger('Only one contributor, so no prize, exit');
+        return { result: 'ONLY_ONE_SAVER' }; 
+    }
+
+    const { rewardParameters } = boost;
+    logger('Reward parameters : ', rewardParameters);
+
+    const { poolContributionPerUser } = rewardParameters;
+    
+    const contribInDefault = opsUtil.convertToUnit(poolContributionPerUser.amount * rewardParameters.percentPoolAsReward, poolContributionPerUser.unit, DEFAULT_UNIT);
+    const amountToContrib = Math.max(0, Math.round(contribInDefault));
+
+    const poolContrib = {
+        amount: amountToContrib,
+        unit: DEFAULT_UNIT,
+        currency: poolContributionPerUser.currency
+    };
+
+    logger('Defined pool contribution: ', poolContrib);
+    
     const recipients = accountIds.map((recipientId) => ({
         recipientId, amount: -poolContrib.amount, recipientType: 'END_USER_ACCOUNT'
     }));
@@ -147,10 +169,10 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
         currency: poolContrib.currency,
         unit: poolContrib.unit,
         identifier: boost.boostId,
-        relatedEntityType: 'BOOST_REVERSAL',
-        allocType: 'BOOST_REVERSAL', // for float allocation
+        relatedEntityType: 'BOOST_POOL_FUNDING',
+        allocType: 'BOOST_POOL_FUNDING', // for float allocation
         allocState: 'SETTLED',
-        transactionType: 'BOOST_REVERSAL', // for matching account records
+        transactionType: 'BOOST_POOL_FUNDING', // for matching account records
         settlementStatus: 'SETTLED',
         recipients
     };
@@ -159,21 +181,23 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
     const resultOfTransfer = await triggerFloatTransfers([transferInstruction]);
     logger('Result of transfer to bonus pool:', resultOfTransfer);
 
-    const resultOfPublish = await Promise.all([createPublishEventPromises({
-        boost: {
-            boostId: boost.boostId,
-            boostType: boost.boostType,
-            boostCategory: boost.boostCategory,
-            boostAmount: poolContrib.amount,
-            boostUnit: poolContrib.unit,
-            boostCurrency: poolContrib.currency
-        },
-        boostUpdateTime: moment().valueOf(),
-        affectedAccountsUserDict: affectedAccountDict,
+    const eventLogContext = {
+        boostId: boost.boostId,
+        boostType: boost.boostType,
+        boostCategory: boost.boostCategory,
+        rewardParameters: boost.rewardParameters,
+        poolContribution: poolContrib,
         transferResults: resultOfTransfer,
-        event,
-        isRevocation: true
-    })]);
+        triggeringEventContext: event.eventContext
+    };
+
+    logger('Extracting userIds from affected account dict: ', affectedAccountDict);
+    const accountIdsAffected = Object.keys(affectedAccountDict[boost.boostId]).filter((accountId) => accountIds.includes(accountId));
+    logger('Provides accountIds with user Ids present: ', accountIdsAffected);
+    const userIds = accountIdsAffected.map((accountId) => affectedAccountDict[boost.boostId][accountId].userId);
+    logger('And user IDs: ', userIds);
+
+    const resultOfPublish = await publisher.publishMultiUserEvent(userIds, 'BOOST_POOL_FUNDED', { context: eventLogContext });
 
     logger('Result of publish:', resultOfPublish);
 
@@ -270,7 +294,7 @@ const assembleMessageForInstruction = (boost, boostInstruction, affectedAccountU
 
 const assembleMessageInstructions = (boost, affectedAccountUserDict) => {
     const boostMessageInstructions = boost.messageInstructions;
-    if (!boostMessageInstructions) {
+    if (!Array.isArray(boostMessageInstructions) || boostMessageInstructions.length === 0) {
         return [];
     }
 

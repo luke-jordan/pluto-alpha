@@ -132,7 +132,7 @@ module.exports.extractQueryParams = (event) => {
     }
 
     logger('Event parameters type: ', typeof event.queryStringParameters);
-    const nonEmptyQueryParams = typeof event.queryStringParameters && event.queryStringParameters !== null && 
+    const nonEmptyQueryParams = typeof event.queryStringParameters === 'object' && event.queryStringParameters !== null && 
         Object.keys(event.queryStringParameters).length > 0;
     logger('Are parameters empty ? : ', nonEmptyQueryParams);
 

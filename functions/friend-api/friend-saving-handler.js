@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:friend:saving-pool');
+const moment = require('moment');
 
 const publisher = require('publish-common');
 const util = require('ops-util-common');
@@ -291,10 +292,9 @@ const updateSavingPool = async ({ systemWideUserId }, params) => {
     await Promise.all(userEventPublishPromises);
     logger('Publication complete');
 
-    // finally, if we have removed a user, etc., we need a revised sum of contributions, and so forth, so do a clean fetch and pass back
-    const revisedPool = await persistenceRead.fetchSavingPoolDetails(savingPoolId, true);
-
-    return { result: 'SUCCESS', updatedPool: revisedPool, updatedTime: resultOfUpdate.updatedTime.valueOf() };
+    // note : sending back the updated pool would require doing the whole of read pool's job, because consumer would
+    // expect it in the same form; hence, rather just require reload from frontend if it wants to refresh
+    return { result: 'SUCCESS', updatedTime: resultOfUpdate.updatedTime.valueOf() };
 };
 
 const removeTransaction = async ({ systemWideUserId }, { savingPoolId, transactionId }) => {
@@ -311,13 +311,11 @@ const removeTransaction = async ({ systemWideUserId }, { savingPoolId, transacti
     const updateResult = await persistenceWrite.removeTransactionsFromPool(savingPoolId, [transactionId]);
     logger('Result of update: ', updateResult);
 
-    // need a new sum etc., so just redo the fetch
-    const revisedPool = await persistenceRead.fetchSavingPoolDetails(savingPoolId, true);
-
     const logContext = { transactionId, savingPoolId };
     await publisher.publishUserEvent(systemWideUserId, 'RETRACTED_FROM_SAVING_POOL', { context: logContext });
-    
-    return { result: 'SUCCESS', updatedPool: revisedPool, updatedTime: updateResult.updatedTime.valueOf() };
+
+    const updatedTime = updateResult && updateResult.length === 1 ? updateResult[0].updatedTime.valueOf() : moment().valueOf();
+    return { result: 'SUCCESS', updatedTime };
 };
 
 const deactivateSavingPool = async ({ systemWideUserId }, { savingPoolId }) => { 
@@ -326,7 +324,7 @@ const deactivateSavingPool = async ({ systemWideUserId }, { savingPoolId }) => {
         return { result: 'ERROR', message: 'Trying to modify pool but not creator' };
     }
 
-    const updateResult = await persistenceWrite.updateSavingPool({ savingPoolId, active: false });
+    const updateResult = await persistenceWrite.updateSavingPool({ savingPoolId, active: false, updatingUserId: systemWideUserId });
     logger('Update result from deactivating pool: ', updateResult);
 
     const { participatingUsers } = savingPoolDetails;

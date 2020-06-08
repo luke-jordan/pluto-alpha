@@ -187,8 +187,8 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         extractFriendIdsStub.resolves([mockFriendUserPair]);
         updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
 
-        const updatedPool = { poolName: 'Trip to Japan', participatingUsers: ['with-that-new-friend'] };
-        fetchSavingPoolStub.onSecondCall().resolves(updatedPool);
+        // const updatedPool = { poolName: 'Trip to Japan', participatingUsers: ['with-that-new-friend'] };
+        // fetchSavingPoolStub.onSecondCall().resolves(updatedPool);
 
         fetchProfileStub.withArgs({ systemWideUserId: testUserId }).resolves({ calledName: 'Some', familyName: 'Person' });
 
@@ -196,11 +196,11 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         const resultOfUpdate = await handler.writeSavingPool(testEvent);
 
         const resultBody = helper.standardOkayChecks(resultOfUpdate);
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf(), updatedPool });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
 
-        expect(fetchSavingPoolStub).to.have.been.calledTwice;
-        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, false);
-        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true);
+        // expect(fetchSavingPoolStub).to.have.been.calledTwice;
+        expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
+        // expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true);
 
         expect(extractFriendIdsStub).to.have.been.calledOnceWithExactly(testUserId, mockFriendship);
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
@@ -242,11 +242,11 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         const resultOfAttempt = await handler.writeSavingPool(testEvent);
 
         const resultBody = helper.standardOkayChecks(resultOfAttempt);
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf(), updatedPool });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
 
-        expect(fetchSavingPoolStub).to.have.been.calledTwice;
-        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, false);
-        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true);
+        // expect(fetchSavingPoolStub).to.have.been.calledTwice;
+        expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
+        // expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true);
         
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedToPersistence);
 
@@ -279,18 +279,18 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
         fetchSavingPoolStub.onFirstCall().resolves({ creatingUserId: testUserId });
         updateSavingPoolStub.resolves({ updatedTime: mockUpdatedTime });
 
-        const updatedPool = { targetAmount: 15000, targetUnit: 'WHOLE_CURRENCY', targetCurrency: 'ZAR' };
-        fetchSavingPoolStub.onSecondCall().resolves(updatedPool);
+        // const updatedPool = { targetAmount: 15000, targetUnit: 'WHOLE_CURRENCY', targetCurrency: 'ZAR' };
+        // fetchSavingPoolStub.onSecondCall().resolves(updatedPool);
 
         const testEvent = helper.wrapParamsWithPath(testBody, 'update', testUserId);
         const resultOfAttempt = await handler.writeSavingPool(testEvent);
 
         const resultBody = helper.standardOkayChecks(resultOfAttempt);
 
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf(), updatedPool });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
 
-        expect(fetchSavingPoolStub).to.have.been.calledTwice;
-        expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, false);
+        // expect(fetchSavingPoolStub).to.have.been.calledTwice;
+        expect(fetchSavingPoolStub).to.have.been.calledOnceWithExactly(testPoolId, false);
 
         expect(updateSavingPoolStub).to.have.been.calledOnceWithExactly(expectedUpdateArg);
     });
@@ -354,9 +354,9 @@ describe('*** UNIT TEST DEACTIVATION AND REMOVAL ***', () => {
         const resultOfUpdate = await handler.writeSavingPool(testEvent);
 
         const resultBody = helper.standardOkayChecks(resultOfUpdate);
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf(), updatedPool: poolWithDetails });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
 
-        expect(fetchSavingPoolStub).to.have.been.calledThrice;
+        expect(fetchSavingPoolStub).to.have.been.calledTwice;
         expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, false); // standard check on this path
         expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true); // to get transactions, so can remove them, later to return updated pool
 
@@ -376,6 +376,7 @@ describe('*** UNIT TEST DEACTIVATION AND REMOVAL ***', () => {
     it('Unit test removing a transaction', async () => {
         const testPoolId = uuid();
         const mockUserId = 'user-2';
+
         const mockUpdatedTime = moment();
 
         const testBody = {
@@ -386,22 +387,22 @@ describe('*** UNIT TEST DEACTIVATION AND REMOVAL ***', () => {
         const mockUsers = [{ userId: 'user-2', relationshipId: 'rel-1' }];
         const mockTxRecord = [{ ownerUserId: testUserId, transactionId: 'some-tx' }, { ownerUserId: 'user-2', transactionId: 'transaction-id' }];
 
-        const expectedTxRecord = [{ ownerUserId: testUserId, transactionId: 'some-tx' }];
-        const expectedRevisedPool = { participatingUsers: mockUsers, transactionRecord: expectedTxRecord };
+        // const expectedTxRecord = [{ ownerUserId: testUserId, transactionId: 'some-tx' }];
+        // const expectedRevisedPool = { participatingUsers: mockUsers, transactionRecord: expectedTxRecord };
 
         fetchSavingPoolStub.onFirstCall().resolves({ participatingUsers: mockUsers, transactionRecord: mockTxRecord });
-        fetchSavingPoolStub.onSecondCall().resolves(expectedRevisedPool);
+        // fetchSavingPoolStub.onSecondCall().resolves(expectedRevisedPool);
 
-        removeTransactionStub.resolves({ updatedTime: mockUpdatedTime });
+        removeTransactionStub.resolves([{ updatedTime: mockUpdatedTime }]);
 
         const testEvent = helper.wrapParamsWithPath(testBody, 'retract', mockUserId);
         const resultOfRetract = await handler.writeSavingPool(testEvent);
         
         const resultBody = helper.standardOkayChecks(resultOfRetract);
         
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf(), updatedPool: expectedRevisedPool });
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS', updatedTime: mockUpdatedTime.valueOf() });
         
-        expect(fetchSavingPoolStub).to.have.been.calledTwice;
+        // expect(fetchSavingPoolStub).to.have.been.calledTwice;
         expect(fetchSavingPoolStub).to.have.been.calledWithExactly(testPoolId, true);
         expect(removeTransactionStub).to.have.been.calledOnceWithExactly(testPoolId, ['transaction-id']);
         expect(updateSavingPoolStub).to.not.have.been.called;
@@ -416,7 +417,8 @@ describe('*** UNIT TEST DEACTIVATION AND REMOVAL ***', () => {
 
         const expectedToPersistence = {
             savingPoolId: testPoolId,
-            active: false
+            active: false,
+            updatingUserId: testUserId
         };
 
         const mockUserIdResults = [{ userId: testUserId, relationshipId: 'CREATOR' }, { userId: 'some-user', relationshipId: 'relationship-1' }];

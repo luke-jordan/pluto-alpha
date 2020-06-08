@@ -87,7 +87,7 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const columns = [
         `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
         'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-        'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters'
+        'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', `${boostMainTable}.flags`
     ];
 
     const excludedType = ['REFERRAL']; // for now
@@ -117,7 +117,7 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     logger('Assembled select query: ', selectBoostQuery);
     logger('Values for query: ', values);
     const boostsResult = await rdsConnection.selectQuery(selectBoostQuery, values);
-    logger('Retrieved boosts: ', boostsResult);
+    logger('Retrieved boosts of length: ', boostsResult.length);
     
     return boostsResult.map((boost) => camelizeKeys(boost));
 };

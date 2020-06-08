@@ -56,7 +56,7 @@ module.exports.listUserBoosts = async (event) => {
             listBoosts = await persistence.fetchUserBoosts(accountId, fetchParameters); 
         }
 
-        logger('Got boosts:', listBoosts);
+        // logger('Got boosts:', listBoosts);
 
         return util.wrapHttpResponse(listBoosts);
     } catch (err) {
@@ -91,7 +91,9 @@ const obtainSortedAndLoggedActiveBoosts = async (accountId) => {
 };
 
 const obtainSortedAndLoggedExpiredBoosts = async (accountId) => {
-    const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));        
+    const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));
+    logger('Fetching boosts since: ', expiredCutOff);
+
     const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
     const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: expiredCutOff, excludedStatus: excludedForExpired });
 

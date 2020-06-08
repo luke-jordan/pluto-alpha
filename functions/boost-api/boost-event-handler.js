@@ -82,10 +82,13 @@ const createBoostsTriggeredByEvent = async (event) => {
 };
 
 const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
+    logger('Fetching account IDs for pooled rewards');
     const boostsWithPooledReward = redemptionBoosts.filter((boost) => boost.rewardParameters &&
         boost.rewardParameters.rewardType === 'POOLED');
+    logger('Boosts with pooled rewards: ', boostsWithPooledReward);
 
     if (boostsWithPooledReward.length === 0) {
+        logger('No boosts with pooled rewards, exiting');
         return [];
     }
 
@@ -93,7 +96,7 @@ const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
     // todo: reduce to one call to persistence
     const pooledContributionPromises = boostIds.map((boostId) => persistence.findAccountsForPooledReward(boostId, 'BOOST_POOL_CONTRIBUTION'));
     const resultOfFetch = await Promise.all(pooledContributionPromises);
-    logger('Result from persistence:', resultOfFetch);
+    logger('Fetching pooled rewards, result from persistence:', resultOfFetch);
     const pooledContributionMap = resultOfFetch.reduce((obj, result) => ({ ...obj, [result.boostId]: result.accountIds }), {});
     return pooledContributionMap;
 };
@@ -122,6 +125,23 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
     });
 };
 
+const checkAndMarkSaveForPool = async (boostsForStatusChange, event) => {
+    const boostsWithPooledReward = boostsForStatusChange.filter((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED');
+    const { transactionTags } = event.eventContext;
+
+    if (boostsWithPooledReward.length > 0 && Array.isArray(transactionTags)) {
+        const boostIds = boostsWithPooledReward.map((boost) => boost.boostId);
+        const boostTag = transactionTags.find((tag) => tag.startsWith('BOOST'));
+        logger('Checking boost tag: ', boostTag, ' against IDs : ', boostIds, ' from transaction tags: ', transactionTags);
+        const taggedId = boostTag ? boostTag.split('::')[1] : null;
+        if (taggedId && boostIds.includes(taggedId)) {
+            const poolLog = { boostId: taggedId, accountId: event.accountId, logType: 'BOOST_POOL_CONTRIBUTION', logContext: event };
+            const resultOfLogInsertion = await persistence.insertBoostAccountLogs([poolLog]);
+            logger('Result of log insertion: ', resultOfLogInsertion);    
+        }
+    }
+};
+
 const processEventForExistingBoosts = async (event) => {
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
     logger('Found these open boosts: ', offeredOrPendingBoosts);
@@ -148,20 +168,7 @@ const processEventForExistingBoosts = async (event) => {
     }
 
     if (event.eventType === 'SAVING_PAYMENT_SUCCESSFUL') {
-        const boostsWithPooledReward = boostsForStatusChange.filter((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED');
-
-        if (boostsWithPooledReward.length > 0) {
-            const boostIds = boostsWithPooledReward.map((boost) => boost.boostId);
-            const resultLogs = boostIds.map((boostId) => ({
-                boostId,
-                accountId: event.accountId,
-                logType: 'BOOST_POOL_CONTRIBUTION',
-                logContext: event
-            }));
-    
-            const resultOfLogInsertion = await persistence.insertBoostAccountLogs(resultLogs);
-            logger('Result of log insertion: ', resultOfLogInsertion);
-        }
+        await checkAndMarkSaveForPool(boostsForStatusChange, event);
     }
 
     logger('At least one boost was triggered. First step is to extract affected accounts, then tell the float to transfer from bonus pool');
@@ -184,6 +191,7 @@ const processEventForExistingBoosts = async (event) => {
         const redemptionCall = { redemptionBoosts: boostsToRedeem, revocationBoosts: boostsToRevoke, affectedAccountsDict: affectedAccountsDict, event };
 
         if (boostsToRedeem.some((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED')) {
+            logger('We have a pooled reward, go fetch details');
             redemptionCall.pooledContributionMap = await fetchAccountIdsForPooledRewards(boostsToRedeem);
         }
 
@@ -295,6 +303,10 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
         affectedAccountsDict: redemptionAccountDict, 
         event: redemptionEvent 
     };
+
+    if (boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED') {
+        redemptionCall.pooledContributionMap = await fetchAccountIdsForPooledRewards([boost]);
+    }
     
     const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
     logger('Result of redemptions for winners: ', resultOfRedemptions);
@@ -369,31 +381,36 @@ const handleExpiredBoost = async (boostId) => {
  * @property {string} accountId The account id. Either the user id or the account id must be provided.
  */
 module.exports.processEvent = async (event) => {
-    logger('Processing boost event: ', event);
+    try {
+        logger('Processing boost event: ', event);
 
-    if (event.eventType === 'BOOST_EXPIRED' && event.boostId) {
-        return handleExpiredBoost(event.boostId);        
+        if (event.eventType === 'BOOST_EXPIRED' && event.boostId) {
+            return handleExpiredBoost(event.boostId);        
+        }
+
+        // second, we check if there is a pending boost for this account, or user, if we only have that
+        if (!event.accountId && !event.userId) {
+            return { statusCode: statusCodes('Bad request'), body: 'Function requires at least a user ID or accountID' };
+        }
+
+        if (!event.accountId) {
+            // eslint-disable-next-line require-atomic-updates
+            event.accountId = await persistence.getAccountIdForUser(event.userId);
+            logger('Event account ID: ', event.accountId);
+        }
+
+        // third, find boosts that do not already have an entry for this user, and are created by this event
+        const creationResult = await createBoostsTriggeredByEvent(event);
+        logger('Result of boost-account creation creation:', creationResult);
+
+        const resultToReturn = await processEventForExistingBoosts(event);
+
+        return {
+            statusCode: 200,
+            body: JSON.stringify(resultToReturn)
+        };
+    } catch (error) {
+        logger('FATAL_ERROR: ', error);
+        return { statusCode: 500 };
     }
-
-    // second, we check if there is a pending boost for this account, or user, if we only have that
-    if (!event.accountId && !event.userId) {
-        return { statusCode: statusCodes('Bad request'), body: 'Function requires at least a user ID or accountID' };
-    }
-
-    if (!event.accountId) {
-        // eslint-disable-next-line require-atomic-updates
-        event.accountId = await persistence.getAccountIdForUser(event.userId);
-        logger('Event account ID: ', event.accountId);
-    }
-
-    // third, find boosts that do not already have an entry for this user, and are created by this event
-    const creationResult = await createBoostsTriggeredByEvent(event);
-    logger('Result of boost-account creation creation:', creationResult);
-
-    const resultToReturn = await processEventForExistingBoosts(event);
-
-    return {
-        statusCode: 200,
-        body: JSON.stringify(resultToReturn)
-    };
 };

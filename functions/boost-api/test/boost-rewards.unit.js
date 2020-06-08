@@ -12,6 +12,8 @@ const expect = chai.expect;
 chai.use(require('sinon-chai'));
 
 const publishStub = sinon.stub();
+const publishMultiStub = sinon.stub();
+
 const lamdbaInvokeStub = sinon.stub();
 
 class MockLambdaClient {
@@ -27,7 +29,8 @@ const handler = proxyquire('../boost-redemption-handler', {
         'Lambda': MockLambdaClient  
     },
     'publish-common': {
-        'publishUserEvent': publishStub
+        'publishUserEvent': publishStub,
+        'publishMultiUserEvent': publishMultiStub
     }
 });
 
@@ -119,6 +122,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const testUserCount = 5;
         const testContribPerUserAmount = 25000;
+        const testPercentForPool = 0.05;
         
         const testCalculatedAmount = testUserCount * testContribPerUserAmount * (0.06);
         
@@ -128,7 +132,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             rewardType: 'POOLED',
             poolContributionPerUser: { amount: testContribPerUserAmount, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             clientFloatContribution: { type: 'PERCENT_OF_POOL', value: 0.01, requiredFriends: 3 },
-            percentPoolAsReward: 0.05
+            percentPoolAsReward: testPercentForPool
         };
 
         const testPooledAccountIds = [];
@@ -136,11 +140,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             testPooledAccountIds.push(uuid());
         }
 
-        const assembleAllocationInvocation = (recipientIds, allocationAmount, isRevoke) => {
-            const transactionType = isRevoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
-            const amount = isRevoke ? -allocationAmount : allocationAmount;
+        const assembleAllocationInvocation = (recipientIds, allocationAmount, transactionType) => {
             const recipients = recipientIds.map((recipientId) => ({
-                recipientId, amount, recipientType: 'END_USER_ACCOUNT'
+                recipientId, amount: allocationAmount, recipientType: 'END_USER_ACCOUNT'
             }));
 
             return {
@@ -161,10 +163,11 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             };
         };
 
-        const toBonusPoolPayload = assembleAllocationInvocation(testPooledAccountIds, 25000, true);
+        const expectedPerPersonAmount = testContribPerUserAmount * testPercentForPool;
+        const toBonusPoolPayload = assembleAllocationInvocation(testPooledAccountIds, -expectedPerPersonAmount, 'BOOST_POOL_FUNDING');
         const expectedTransferToBonusPoolInvocation = helper.wrapLambdaInvoc('float_transfer', false, toBonusPoolPayload);
 
-        const fromBonusPoolPayload = assembleAllocationInvocation([testAccountId], testCalculatedAmount, false);
+        const fromBonusPoolPayload = assembleAllocationInvocation([testAccountId], testCalculatedAmount, 'BOOST_REDEMPTION');
         const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, fromBonusPoolPayload);
 
         const expectedAllocationResult = {
@@ -220,7 +223,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedAllocationInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedTransferToBonusPoolInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(publishStub).to.have.been.calledTwice;
+        
+        expect(publishStub).to.have.been.calledOnce;
+        expect(publishMultiStub).to.have.been.calledOnce;
     });
 
 });
