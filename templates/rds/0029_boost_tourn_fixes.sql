@@ -1,3 +1,5 @@
+-- cleaning up some needed perms and adjusting a constraint to allow new transaction type
+
 grant usage on schema friend_data to boost_worker;
 
 grant select (updated_time) on transaction_data.core_transaction_ledger to friend_api_worker;
