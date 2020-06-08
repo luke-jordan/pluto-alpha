@@ -195,6 +195,30 @@ const createSavingPool = async ({ systemWideUserId }, params) => {
     return { result: 'SUCCESS', createdSavingPool };
 };
 
+const handleGenericChanges = (params, poolInfo, systemWideUserId) => {
+    const persistenceArgs = {};
+    const eventPromises = [];
+
+    const { savingPoolId } = params;
+
+    if (params.name) {
+        persistenceArgs.poolName = params.name;
+        const logContext = { priorName: poolInfo.poolName, newName: params.name, savingPoolId };
+        eventPromises.push(publisher.publishUserEvent(systemWideUserId, 'MODIFIED_SAVING_POOL', { context: logContext }));
+    }
+
+    if (params.target) {
+        const { target } = params;
+        persistenceArgs.targetAmount = target.amount;
+        persistenceArgs.targetUnit = target.unit;
+        persistenceArgs.targetCurrency = target.currency;
+        const logContext = { newTarget: target, oldTargetAmount: poolInfo.targetAmount, oldTargetUnit: poolInfo.targetUnit, savingPoolId };
+        eventPromises.push(publisher.publishUserEvent(systemWideUserId, 'MODIFIED_SAVING_POOL', { context: logContext }));
+    }
+
+    return { persistenceArgs, eventPromises };
+};
+
 const handleRemovingFriend = async (creatingUserId, savingPoolId, friendshipToRemove) => {
     const [friendUserId, savingPoolDetails, creatorProfile] = await Promise.all([
         persistenceRead.obtainFriendIds(creatingUserId, [friendshipToRemove]),
@@ -238,7 +262,7 @@ const updateSavingPool = async ({ systemWideUserId }, params) => {
     }
 
     // also at present we only do one at a time
-    const persistenceArgs = { savingPoolId, updatingUserId: systemWideUserId };
+    let persistenceArgs = { savingPoolId, updatingUserId: systemWideUserId };
 
     // could send multiple of these in time, so doing this way for now
     const userEventPublishPromises = [];
@@ -249,17 +273,10 @@ const updateSavingPool = async ({ systemWideUserId }, params) => {
         persistenceArgs.friendshipsToAdd = friendUserIds;
         userEventPublishPromises.push(publisher.publishUserEvent(systemWideUserId, 'MODIFIED_SAVING_POOL', { context: { friendUserIds, savingPoolId } }));
         userEventPublishPromises.push(publishFriendAddedToPool({ friendUserIds, creatingUserId: systemWideUserId, poolName: poolInfo.poolName, savingPoolId }));
-    } else if (params.name) {
-        persistenceArgs.poolName = params.name;
-        const logContext = { priorName: poolInfo.poolName, newName: params.name, savingPoolId };
-        userEventPublishPromises.push(publisher.publishUserEvent(systemWideUserId, 'MODIFIED_SAVING_POOL', { context: logContext }));
-    } else if (params.target) {
-        const { target } = params;
-        persistenceArgs.targetAmount = target.amount;
-        persistenceArgs.targetUnit = target.unit;
-        persistenceArgs.targetCurrency = target.currency;
-        const logContext = { newTarget: target, oldTargetAmount: poolInfo.targetAmount, oldTargetUnit: poolInfo.targetUnit, savingPoolId };
-        userEventPublishPromises.push(publisher.publishUserEvent(systemWideUserId, 'MODIFIED_SAVING_POOL', { context: logContext }));
+    } else if (params.name || params.target) {
+        const { persistenceArgs: argsToAdd, eventPromises } = handleGenericChanges(params, poolInfo, systemWideUserId);
+        userEventPublishPromises.push(...eventPromises);
+        persistenceArgs = { ...persistenceArgs, ...argsToAdd };
     } else if (params.friendshipToRemove) {
         const { friendUserId, eventPromises } = await handleRemovingFriend(systemWideUserId, savingPoolId, params.friendshipToRemove);
         persistenceArgs.friendshipsToRemove = friendUserId;
@@ -274,7 +291,10 @@ const updateSavingPool = async ({ systemWideUserId }, params) => {
     await Promise.all(userEventPublishPromises);
     logger('Publication complete');
 
-    return { result: 'SUCCESS', updatedTime: resultOfUpdate.updatedTime.valueOf() };
+    // finally, if we have removed a user, etc., we need a revised sum of contributions, and so forth, so do a clean fetch and pass back
+    const revisedPool = await persistenceRead.fetchSavingPoolDetails(savingPoolId, true);
+
+    return { result: 'SUCCESS', updatedPool: revisedPool, updatedTime: resultOfUpdate.updatedTime.valueOf() };
 };
 
 const removeTransaction = async ({ systemWideUserId }, { savingPoolId, transactionId }) => {

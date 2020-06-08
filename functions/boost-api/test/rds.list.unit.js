@@ -224,7 +224,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const expectedColumns = [
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-            'status_conditions', 'message_instruction_ids', 'game_params'
+            'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters'
         ];
     
         const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
@@ -246,7 +246,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const expectedColumns = [
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-            'status_conditions', 'message_instruction_ids', 'game_params'
+            'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters'
         ];
     
         const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
@@ -268,7 +268,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const expectedColumns = [
             `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-            'status_conditions', 'message_instruction_ids', 'game_params'
+            'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters'
         ];
     
         const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 

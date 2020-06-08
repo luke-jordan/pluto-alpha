@@ -87,7 +87,7 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const columns = [
         `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
         'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-        'status_conditions', 'message_instruction_ids', 'game_params'
+        'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters'
     ];
 
     const excludedType = ['REFERRAL']; // for now

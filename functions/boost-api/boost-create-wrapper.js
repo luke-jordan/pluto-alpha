@@ -24,7 +24,7 @@ const handleError = (err) => {
 
 const isValidFriendTournament = (event) => {
     const params = boostUtil.extractEventBody(event);
-    logger('Checking if friend tournament, with params: ', params);
+    logger('Checking if friend tournament, after being passed params: ', params);
     if (params.boostAudienceSelection) {
         logger('Have an audience selection, canont be friend based');
         return false;
@@ -133,6 +133,15 @@ const createFriendTournament = async (params) => {
     const boostBudget = Math.round(entryAmount * (percentPoolAsReward + clientProportion) * (friendships.length + 1));
 
     gameParams.numberWinners = 1; // we enforce this for now
+
+    if (gameParams.gameType === 'CHASE_ARROW' && !gameParams.arrowSpeedMultiplier) { // present UI does not allow selection, so have here
+        gameParams.arrowSpeedMultiplier = 5;
+    }
+
+    if (gameParams.gameType === 'DESTROY_IMAGE' && !gameParams.tapsPerSquare) {
+        gameParams.tapsPerSquare = 8; // seems to be optimal from first plays
+    }
+    
     const statusConditions = constructStatusConditionsForFriendTournament(gameParams, rewardParameters.poolContributionPerUser);
 
     const boostParameters = {

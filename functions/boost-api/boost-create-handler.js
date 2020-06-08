@@ -103,7 +103,7 @@ const checkConditionNotInList = (condition, comparisonList) => {
 };
 
 const safeMerge = (gameConditions, passedConditions, status) => {
-    const gameConditionsNotInPassed = safeList(gameConditions[status]).
+    const gameConditionsNotInPassed = safeList(gameConditions[status]).filter((condition) => typeof condition === 'string').
         filter((condition) => checkConditionNotInList(condition, safeList(passedConditions[status])));
     return [...safeList(passedConditions[status]), ...gameConditionsNotInPassed];
 };
@@ -123,7 +123,7 @@ const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     logger('Game initial status: ', gameInitialStatus);
     const gameConditions = extractStatusConditions(gameParams, gameInitialStatus);
     
-    logger('Merging: ', gameConditions, 'and: ', passedConditions);
+    logger('Merging game conditions: ', gameConditions, 'and passed conditions: ', passedConditions);
     const mergedConditions = boostUtil.ALL_BOOST_STATUS_SORTED.
         filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
         reduce((obj, boostStatus) => ({ ...obj, [boostStatus]: safeMerge(gameConditions, passedConditions, boostStatus)}), {});

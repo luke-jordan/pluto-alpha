@@ -116,12 +116,20 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
     it('Handles pooled rewards', async () => {
         const testUserId = uuid();
         const testAccountId = uuid();
-        const testCalculatedAmount = 11250;
-        const testContribPerUserAmount = 25000;
-
-        const timeSaveCompleted = moment();
 
         const testUserCount = 5;
+        const testContribPerUserAmount = 25000;
+        
+        const testCalculatedAmount = testUserCount * testContribPerUserAmount * (0.06);
+        
+        const timeSaveCompleted = moment();
+        
+        const testRewardParams = {
+            rewardType: 'POOLED',
+            poolContributionPerUser: { amount: testContribPerUserAmount, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            clientFloatContribution: { type: 'PERCENT_OF_POOL', value: 0.01, requiredFriends: 3 },
+            percentPoolAsReward: 0.05
+        };
 
         const testPooledAccountIds = [];
         while (testPooledAccountIds.length < testUserCount) {
@@ -153,9 +161,11 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             };
         };
 
-        const expectedTransferToBonusPoolInvocation = helper.wrapLambdaInvoc('float_transfer', false, assembleAllocationInvocation(testPooledAccountIds, 25000, true));
+        const toBonusPoolPayload = assembleAllocationInvocation(testPooledAccountIds, 25000, true);
+        const expectedTransferToBonusPoolInvocation = helper.wrapLambdaInvoc('float_transfer', false, toBonusPoolPayload);
 
-        const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, assembleAllocationInvocation([testAccountId], testCalculatedAmount, false));
+        const fromBonusPoolPayload = assembleAllocationInvocation([testAccountId], testCalculatedAmount, false);
+        const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, fromBonusPoolPayload);
 
         const expectedAllocationResult = {
             [testBoostId]: {
@@ -166,8 +176,6 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         };
 
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
-
-
         publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
@@ -177,12 +185,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             boostCurrency: 'USD',
             fromFloatId: testFloatId,
             fromBonusPoolId: testBonusPoolId,
-            rewardParameters: {
-                rewardType: 'POOLED',
-                poolContributionPerUser: { amount: testContribPerUserAmount, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                additionalBonusToPool: { amount: 5000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
-                percentPoolAsReward: 0.05
-            },
+            rewardParameters: testRewardParams,
             messageInstructions: [],
             flags: []    
         };

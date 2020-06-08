@@ -14,10 +14,26 @@ const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 const DEFAULT_UNIT = 'HUNDREDTH_CENT';
 
 const calculatePooledBoostAmount = (boost, userCount) => {
-    const { poolContributionPerUser, percentPoolAsReward, additionalBonusToPool } = boost.rewardParameters;
+    if (userCount <= 1) {
+        return 0;
+    }
+
+    const { poolContributionPerUser, percentPoolAsReward, clientFloatContribution } = boost.rewardParameters;
+    
     const contribAmount = opsUtil.convertToUnit(poolContributionPerUser.amount, poolContributionPerUser.unit, DEFAULT_UNIT);
-    const bonusAmount = opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, DEFAULT_UNIT);    
-    const calculatedBoostAmount = (userCount * contribAmount * percentPoolAsReward) + bonusAmount;
+    const totalPoolFromUsers = userCount * contribAmount;
+
+    let calculatedBoostAmount = totalPoolFromUsers * percentPoolAsReward;
+    
+    const floatContributionAvailable = clientFloatContribution && userCount >= clientFloatContribution.requiredFriends;
+    if (floatContributionAvailable && clientFloatContribution.type === 'PERCENT_OF_POOL') {
+        calculatedBoostAmount += totalPoolFromUsers * clientFloatContribution.value;
+    }
+    if (floatContributionAvailable && clientFloatContribution.type === 'ABS_AMOUNT') {
+        const { additionalBonusToPool } = clientFloatContribution;
+        calculatedBoostAmount += opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, DEFAULT_UNIT);    
+    }
+
     return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 
@@ -176,6 +192,10 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
 
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
     const boostAmount = boost.rewardParameters ? calculateBoostAmount(boost, pooledContributionMap) : boost.boostAmount;
+    if (boostAmount === 0) {
+        return null;
+    }
+
     const amount = revoke ? -boostAmount : boostAmount;
     const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
     const recipients = recipientAccounts.map((recipientId) => ({ 
@@ -289,10 +309,14 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     const boostsToRevoke = revocationBoosts || [];
     
     logger('Boosts to redeem: ', boostsToRedeem);
-    const redeemInstructions = await Promise.all(boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, false, pooledContributionMap, event)));
+    const redeemInstructions = (await Promise.all(boostsToRedeem.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, false, pooledContributionMap, event)))).
+            filter((instruction) => instruction !== null);
+
     logger('***** Transfer instructions: ', redeemInstructions);
 
-    const revokeInstructions = await Promise.all(boostsToRevoke.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, true)));
+    const revokeInstructions = (await Promise.all(boostsToRevoke.map((boost) => generateFloatTransferInstructions(affectedAccountsDict, boost, true)))).
+            filter((instruction) => instruction !== null);
+
     logger('***** Revoke instructions: ', revokeInstructions);
 
     const transferInstructions = redeemInstructions.concat(revokeInstructions);
