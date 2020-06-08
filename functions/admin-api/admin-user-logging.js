@@ -154,3 +154,34 @@ module.exports.uploadLogBinary = async (event) => {
         return adminUtil.wrapHttpResponse(err.message, 500);
     }
 };
+
+/**
+ * This is the binary upload functions integration function. Called by API gateway, it accepts requests
+ * from uploadLogBinary, decodes the base 64 encoded file content and persists the file to an s3
+ * bucket.
+ * @param {object} event 
+ * @property {string} userId The user associated with the file to be stored.
+ * @property {string} filename The name of the file.
+ * @property {string} content The base 64 encoded file.
+ */
+module.exports.storeBinary = async (event) => {
+    try {
+        const fileContent = event.content;
+        const { userId, filename, mimeType } = opsCommonUtil.extractParamsFromEvent(event);
+
+        const params = {
+            Bucket: config.get('binaries.s3.bucket'),
+            Key: `${userId}/${filename}`,
+            ContentType: mimeType,
+            Body: Buffer.from(fileContent, 'base64')
+        };
+
+        const result = await s3.putObject(params).promise();
+        logger('Result of binary upload to s3:', result);
+
+        return adminUtil.wrapHttpResponse({ filePath: `${userId}/${filename}` });
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return adminUtil.wrapHttpResponse(err.message, 500);
+    }
+};
