@@ -376,6 +376,10 @@ module.exports.insertBoost = async (boostDetails) => {
         boostObject.gameParams = boostDetails.gameParams;
     }
 
+    if (boostDetails.rewardParameters) {
+        boostObject.rewardParameters = boostDetails.rewardParameters;
+    }
+
     // be careful here, array handling is a little more sensitive than most types in node-pg
     if (Array.isArray(boostDetails.flags) && boostDetails.flags.length > 0) {
         boostObject.flags = boostDetails.flags;

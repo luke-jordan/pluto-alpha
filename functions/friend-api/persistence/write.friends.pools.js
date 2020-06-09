@@ -104,6 +104,13 @@ module.exports.persistNewSavingPool = async (savingPool) => {
     return { savingPoolId, persistedTime: moment(persistedTimeRaw) };
 };
 
+// in time use this to clean some stuff above
+const assembleLogDef = (logType, logRows, includeRelationshipId = false) => ({
+    query: `insert into ${friendLogTable} (log_id, log_type, saving_pool_id,${includeRelationshipId ? ' relationship_id, ' : ' '}relevant_user_id, log_context) values %L`,
+    columnTemplate: `\${logId}, *{${logType}}, \${savingPoolId},${includeRelationshipId ? ' ${relationshipId}, ' : ' '}\${userId}, \${logContext}`,
+    rows: logRows.map((row) => ({ logId: uuid(), ...row }))
+});
+
 const assembleAddFriendsToPoolDefs = async (savingPoolId, friendshipsToAdd) => {
     const existingFriendQuery = `select participation_id, relationship_id, user_id, active from ${poolJoinTable} where saving_pool_id = $1 ` +
         `and user_id in (${util.extractArrayIndices(friendshipsToAdd, 2)})`;
@@ -137,16 +144,10 @@ const assembleAddFriendsToPoolDefs = async (savingPoolId, friendshipsToAdd) => {
         updateDefinitions.push(...reactivateDefs);
 
         const logRows = participationPairs.map(({ userId, relationshipId }) => ({
-            logId: uuid(), userId, savingPoolId, relationshipId, logContext: { reactivation: true }
+            userId, savingPoolId, relationshipId, logContext: { reactivation: true }
         }));
 
-        const logInsertDef = {
-            query: `insert into ${friendLogTable} (log_id, log_type, saving_pool_id, relationship_id, relevant_user_id, log_context) values %L`,
-            columnTemplate: '${logId}, *{FRIEND_READDED_TO_POOL}, ${savingPoolId}, ${relationshipId}, ${userId}, ${logContext}',
-            rows: logRows
-        };
-
-        insertDefinitions.push(logInsertDef);
+        insertDefinitions.push(assembleLogDef('FRIEND_READDED_TO_POOL', logRows, true));
     }
 
     if (pairsToAdd.length > 0) {
@@ -155,6 +156,23 @@ const assembleAddFriendsToPoolDefs = async (savingPoolId, friendshipsToAdd) => {
     }
 
     return { updateDefinitions, insertDefinitions };
+};
+
+const removeFriendsFromPool = (savingPoolId, updatingUserId, friendshipsToRemove) => {
+    // we only do this for one at a time in UX flow at present, as deactivate does at one swoop, but writing for 
+    // array for future, in case. does imply one query per friendship, but can optimize later if becomes worth it.
+    const updatesToRemoveFriends = friendshipsToRemove.map(({ userId, relationshipId }) => ({
+        table: poolJoinTable,
+        key: { savingPoolId, userId, relationshipId, active: true }, // include rel ID as final check vs third party interference, active to cut redundancy
+        value: { active: false },
+        returnClause: 'updated_time'
+    }));
+
+    const logDefForRemoveFriends = assembleLogDef('FRIEND_REMOVED_FROM_POOL', friendshipsToRemove.map(({ userId, relationshipId }) => ({
+        userId, savingPoolId, relationshipId, logContext: { updatingUserId }
+    })), true);
+
+    return { updatesToRemoveFriends, logDefForRemoveFriends };
 };
 
 module.exports.updateSavingPool = async (updateParams) => {
@@ -185,31 +203,16 @@ module.exports.updateSavingPool = async (updateParams) => {
     };
 
     if (updateParams.poolName) {
-        changeFields.push({
-            fieldName: 'poolName',
-            oldValue: existingPool.poolName,
-            newValue: updateParams.poolName
-        });
-
-        updateDefinitions.push({ 
-            ...baseUpdateDef, 
-            value: { poolName: updateParams.poolName }
-        });
+        changeFields.push({ fieldName: 'poolName', oldValue: existingPool.poolName, newValue: updateParams.poolName });
+        updateDefinitions.push({ ...baseUpdateDef, value: { poolName: updateParams.poolName } });
     }
 
     if (updateParams.targetAmount) { 
         // so we only have to change the amount, convert new target to old unit
         const newTargetAmount = util.convertToUnit(updateParams.targetAmount, updateParams.targetUnit, existingPool.targetUnit);
-        changeFields.push({
-            fieldName: 'targetAmount',
-            oldValue: existingPool.targetAmount,
-            newValue: newTargetAmount
-        });
 
-        updateDefinitions.push({
-            ...baseUpdateDef,
-            value: { targetAmount: newTargetAmount }
-        });
+        changeFields.push({ fieldName: 'targetAmount', oldValue: existingPool.targetAmount, newValue: newTargetAmount });
+        updateDefinitions.push({ ...baseUpdateDef, value: { targetAmount: newTargetAmount } });
     }
 
     if (updateParams.friendshipsToAdd) {
@@ -220,6 +223,20 @@ module.exports.updateSavingPool = async (updateParams) => {
         } = await assembleAddFriendsToPoolDefs(savingPoolId, updateParams.friendshipsToAdd);
         updateDefinitions.push(...addingFriendUpdates);
         insertDefinitions.push(...addingFriendInserts);
+    }
+
+    if (updateParams.friendshipsToRemove) {
+        const { updatesToRemoveFriends, logDefForRemoveFriends } = removeFriendsFromPool(savingPoolId, updatingUserId, updateParams.friendshipsToRemove);
+        updateDefinitions.push(...updatesToRemoveFriends);
+        insertDefinitions.push(logDefForRemoveFriends); // logs have multi rows bundled
+    }
+
+    // don't use truthiness here as param is boolean (so will cause false negatives)
+    // at present we _do not_ cascade the deactivation to the participations and transactions, as caller is expected to take care 
+    // of those if the caller logic requires it, and flipping pool to active = false will remove pool from lists etc
+    if (typeof updateParams.active === 'boolean' && existingPool.active !== updateParams.active) {
+        changeFields.push({ fieldName: 'active', oldValue: existingPool.active, newValue: updateParams.active });
+        updateDefinitions.push({ ...baseUpdateDef, value: { active: updateParams.active }});
     }
 
     logger('Updating saving pool, assembled update definitions: ', updateDefinitions);
@@ -262,3 +279,15 @@ module.exports.updateSavingPool = async (updateParams) => {
     return { updatedTime }; 
 };
 
+module.exports.removeTransactionsFromPool = async (savingPoolId, transactionIds) => {
+    logger('Removing from pool: ', savingPoolId, ' transactions: ', transactionIds);
+    const updateQuery = `update ${config.get('tables.transactionTable')} set tags = array_remove(tags, $1) where ` +
+        `transaction_id in (${util.extractArrayIndices(transactionIds, 2)}) returning updated_time`;
+    const updateValues = [`SAVING_POOL::${savingPoolId}`, ...transactionIds];
+    
+    logger('Updating with query: ', updateQuery, ' and values: ', updateValues);
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, updateValues);
+    logger('Raw result: ', resultOfUpdate);
+
+    return Array.isArray(resultOfUpdate.rows) ? resultOfUpdate.rows.map((row) => ({ updatedTime: moment(row['updated_time']) })) : null;
+};

@@ -315,7 +315,7 @@ describe('Converts standard properties into column conditions', () => {
             table: 'account_data.core_account_ledger',
             conditions: [
                 { op: 'and', children: [
-                    { op: 'in', prop: 'human_ref', value: 'TESTREF1, TESTREF2, TESTREF3' },
+                    { op: 'in', prop: 'human_ref', value: ['TESTREF1', 'TESTREF2', 'TESTREF3'] },
                     { op: 'is', prop: 'responsible_client_id', value: mockClientId }
                 ]
             }]

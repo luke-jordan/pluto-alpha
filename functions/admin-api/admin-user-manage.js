@@ -131,6 +131,7 @@ const publishSaveSettledLog = async ({ adminUserId, systemWideUserId, logContext
         savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`,
         firstSave: saveCount === 1,
         saveCount,
+        transactionTags: txDetails.tags,
         logContext
     };
 

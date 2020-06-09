@@ -33,7 +33,7 @@ const publishStub = sinon.stub();
 
 const proxyquire = require('proxyquire').noCallThru();
 
-const handler = proxyquire('../boost-process-handler', {
+const handler = proxyquire('../boost-event-handler', {
     './persistence/rds.boost': {
         'insertBoost': insertBoostStub,
         'findBoost': findBoostStub,
@@ -286,18 +286,11 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             event: testEvent
         };
 
-        const expectedBoostLog = {
-            boostId: testBoostId,
-            accountId: testAccountId,
-            logType: 'BOOST_POOL_CONTRIBUTION',
-            logContext: testEvent
-        };
-
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
 
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(insertBoostLogStub).to.have.been.calledOnceWithExactly([expectedBoostLog]);
+        
         expect(findPooledAccountsStub).to.have.been.calledOnceWithExactly(testBoostId, 'BOOST_POOL_CONTRIBUTION');
         expect(insertBoostAccountsStub).to.have.not.been.called;
         expect(getAccountIdForUserStub).to.have.not.been.called;

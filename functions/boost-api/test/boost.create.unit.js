@@ -61,30 +61,7 @@ const resetStubs = () => testHelper.resetStubs(insertBoostStub, findBoostStub, f
 
 const testStartTime = moment();
 const testEndTime = moment().add(7, 'days');
-const testMktingAdmin = uuid();
 const testAudienceId = uuid();
-
-describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () => {
-
-    it('Rejects event without authorization', async () => {
-        const resultOfCall = await handler.createBoostWrapper({ boostType: 'FRAUD' });
-        expect(resultOfCall).to.exist;
-        expect(resultOfCall).to.deep.equal({ statusCode: 403 });
-    });
-
-    it('Rejects all categories except referrals if user is ordinary role', async () => {
-        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER'));
-        expect(resultOfCall).to.exist;
-        expect(resultOfCall).to.deep.equal({ statusCode: 403 });
-    });
-
-    it('Swallows an error and return its message', async () => {
-        const resultOfCall = await handler.createBoostWrapper(testHelper.wrapEvent({ badObject: 'This is bad' }, uuid(), 'SYSTEM_ADMIN'));
-        expect(resultOfCall).to.exist;
-        expect(resultOfCall).to.have.property('statusCode', 500);
-    });
-
-});
 
 describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
@@ -189,7 +166,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 clientId: testClientId,
                 creatingUserId: testCreatingUserId,
                 isDynamic: false,
-                propertyConditions: testBodyOfEvent.boostAudienceSelection
+                conditions: testBodyOfEvent.boostAudienceSelection.conditions
             }
         };
         const wrappedInvoke = testHelper.wrapLambdaInvoc('audience_selection', false, expectedAudiencePayload);
@@ -210,76 +187,6 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
             }
         };
         expect(publishMultiStub).to.have.been.calledOnceWithExactly(['user-id-1', 'user-id-2'], 'BOOST_CREATED_REFERRAL', expectedUserLogOptions);
-    });
-
-});
-
-describe('*** UNIT TEST BOOSTS *** General audience', () => {
-
-    beforeEach(() => resetStubs());
-
-    const testRedemptionMsgId = uuid();
-    
-    const mockBoostToFromPersistence = {
-        creatingUserId: testMktingAdmin,
-        label: 'Monday Limited Time Boost',
-        boostType: 'SIMPLE',
-        boostCategory: 'TIME_LIMITED',
-        boostAmount: 100000,
-        boostUnit: 'HUNDREDTH_CENT',
-        boostCurrency: 'USD',
-        boostBudget: 10000000,
-        fromBonusPoolId: 'primary_bonus_pool',
-        fromFloatId: 'primary_cash',
-        forClientId: 'some_client_co',
-        boostStartTime: testStartTime,
-        boostEndTime: testEndTime,
-        statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
-        boostAudienceType: 'GENERAL',
-        audienceId: testAudienceId,
-        defaultStatus: 'CREATED',
-        messageInstructionIds: [{ accountId: 'ALL', status: 'REDEEMED', msgInstructionId: testRedemptionMsgId }]
-    };
-
-    it('Happy path creating a time-limited simple, general boost', async () => {
-        logger('About to create a simple boost');
-
-        momentStub.withArgs().returns(testStartTime);
-        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
-
-        const testNumberOfUsersInAudience = 100000;
-
-        const testPersistedTime = moment();
-        const persistenceResult = {
-            boostId: uuid(),
-            persistedTimeMillis: testPersistedTime.valueOf(),
-            numberOfUsersEligible: testNumberOfUsersInAudience
-        };
-        insertBoostStub.resolves(persistenceResult);
-
-        const testBodyOfEvent = {
-            label: 'Monday Limited Time Boost',
-            boostTypeCategory: 'SIMPLE::TIME_LIMITED',
-            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
-            boostBudget: 10000000,
-            boostSource: {
-                bonusPoolId: 'primary_bonus_pool',
-                clientId: 'some_client_co',
-                floatId: 'primary_cash'
-            },
-            endTimeMillis: testEndTime.valueOf(),
-            statusConditions: { REDEEMED: ['save_event_greater_than #{200000::HUNDREDTH_CENT::USD}'] },
-            boostAudienceType: 'GENERAL',
-            audienceId: testAudienceId,
-            redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
-        };
-
-        const resultOfInstruction = await handler.createBoostWrapper(testHelper.wrapEvent(testBodyOfEvent, testMktingAdmin, 'SYSTEM_ADMIN'));
-
-        const bodyOfResult = testHelper.standardOkayChecks(resultOfInstruction);
-        expect(bodyOfResult).to.deep.equal(persistenceResult);
-
-        expect(insertBoostStub).to.have.been.calledWithExactly(mockBoostToFromPersistence);
     });
 
 });
@@ -523,6 +430,42 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
             REDEEMED: ['number_taps_greater_than #{20::20000}']
         };
         
+        expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
+
+        const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);
+        expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
+        expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+    });
+
+    it('Happy path creates a game boost, with default status offered, but does not overwrite existing status conditions', async () => {
+        const alreadyStatusDefinedBoost = { ...testBodyOfEvent };
+        alreadyStatusDefinedBoost.initialStatus = 'OFFERED';
+        alreadyStatusDefinedBoost.statusConditions = testStatusConditions;
+    
+        const mockResultFromRds = {
+            boostId: testBoostId,
+            persistedTimeMillis: testPersistedTime.valueOf(),
+            numberOfUsersEligible: 100,
+            accountIds: [uuid(), uuid()]
+        };
+
+        momentStub.onFirstCall().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
+        insertBoostStub.resolves(mockResultFromRds);
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockMsgInstructReturnBody) });
+        alterBoostStub.resolves({ updatedTime: moment() });
+
+        const expectedResult = { ...mockResultFromRds, messageInstructions: mockMsgIdDict };
+        const expectedMsgInstruct = assembleMessageInstruction();
+
+        // now we do the call
+        const resultOfCreate = await handler.createBoost(alreadyStatusDefinedBoost);
+        expect(resultOfCreate).to.exist;
+        expect(resultOfCreate).to.deep.equal(expectedResult);
+
+        // then set up invocation checks
+        const expectedBoost = { ...mockBoostToFromPersistence };
+        expectedBoost.defaultStatus = 'OFFERED';        
         expect(insertBoostStub).to.have.been.calledOnceWithExactly(expectedBoost);
 
         const lambdaPayload = JSON.parse(lamdbaInvokeStub.getCall(0).args[0].Payload);

@@ -85,7 +85,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
         publishEventStub.resolves({ result: 'SUCCESS' });
         insertAccountLogStub.resolves({ creationTime: testCreationTime });
-        fetchTxDetailsStub.resolves({ accountId: testAccountId, humanReference: 'JSAVE111', amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+        fetchTxDetailsStub.resolves({ accountId: testAccountId, humanReference: 'JSAVE111', amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD', tags: [] });
         countSettledTxStub.resolves(1);
 
         const testLogTime = moment();
@@ -113,6 +113,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
                 savedAmount: '100000::HUNDREDTH_CENT::USD',
                 saveCount: 1,
                 firstSave: true,
+                transactionTags: [],
                 logContext: expectedLogContext
             }
         };

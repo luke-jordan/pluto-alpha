@@ -87,6 +87,37 @@ module.exports.assembleCurrencyTotals = (rows, targetUnit = 'HUNDREDTH_CENT', am
     return assembledResult;
 };
 
+// some basic formatting
+module.exports.convertAmountDictToString = (amountDict) => `${amountDict.amount}::${amountDict.unit}::${amountDict.currency}`;
+
+module.exports.convertAmountStringToDict = (amountString) => {
+    const [amount, unit, currency] = amountString.split('::');
+    return { amount, unit, currency };
+};
+
+module.exports.formatAmountCurrency = (amountResult, desiredDigits = 0) => {
+    // logger('Formatting amount result: ', amountResult);
+    const wholeCurrencyAmount = exports.convertToUnit(amountResult.amount, amountResult.unit, 'WHOLE_CURRENCY');
+
+    // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
+    // implement for those countries where client opcos have launched
+    if (amountResult.currency === 'ZAR') {
+        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: desiredDigits, minimumFractionDigits: desiredDigits });
+        return `R${emFormat.format(wholeCurrencyAmount)}`;
+    }
+
+    const numberFormat = new Intl.NumberFormat('en-US', {
+        style: 'currency',
+        currency: amountResult.currency,
+        maximumFractionDigits: desiredDigits,
+        minimumFractionDigits: desiredDigits
+    });
+    
+    return numberFormat.format(wholeCurrencyAmount);
+};
+
+
+// For handling various events
 module.exports.extractQueryParams = (event) => {
     const isEventEmpty = typeof event !== 'object' || Object.keys(event).length === 0;
     logger('Is event empty ? : ', isEventEmpty);
@@ -101,7 +132,7 @@ module.exports.extractQueryParams = (event) => {
     }
 
     logger('Event parameters type: ', typeof event.queryStringParameters);
-    const nonEmptyQueryParams = typeof event.queryStringParameters && event.queryStringParameters !== null && 
+    const nonEmptyQueryParams = typeof event.queryStringParameters === 'object' && event.queryStringParameters !== null && 
         Object.keys(event.queryStringParameters).length > 0;
     logger('Are parameters empty ? : ', nonEmptyQueryParams);
 

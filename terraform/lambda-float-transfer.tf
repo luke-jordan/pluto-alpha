@@ -40,6 +40,10 @@ resource "aws_lambda_function" "float_transfer" {
               "database": "${local.database_config.database}",
               "port" :"${local.database_config.port}"
             },
+            "cache": {
+              "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+              "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+            }
         }
       )}"
     }
@@ -47,7 +51,10 @@ resource "aws_lambda_function" "float_transfer" {
 
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id, 
+      aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id,
+      aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id
+    ]
   }
 
   depends_on = [aws_cloudwatch_log_group.float_transfer]

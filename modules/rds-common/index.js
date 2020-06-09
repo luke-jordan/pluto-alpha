@@ -624,6 +624,7 @@ class RdsConnection {
         const setPart = Object.keys(valueObject).map((column, index) => `${column} = $${baseIndex + index}`).join(', ');
         // logger('And setting: ', setPart);
         
+        // todo : protect this against injection
         const returnPart = updateQueryDef.returnClause ? `RETURNING ${updateQueryDef.returnClause}` : '';
 
         const assembledQuery = `UPDATE ${updateQueryDef.table} SET ${setPart} WHERE ${keyPart} ${returnPart}`.trim(); // avoids ugly no-ws

@@ -3,11 +3,9 @@
 const logger = require('debug')('jupiter:boosts:create');
 const config = require('config');
 const moment = require('moment');
-const status = require('statuses');
 const stringify = require('json-stable-stringify');
 
 const publisher = require('publish-common');
-const opsUtil = require('ops-util-common');
 
 const boostUtil = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
@@ -32,11 +30,6 @@ const STANDARD_BOOST_TYPES = {
 };
 
 const DEFAULT_BOOST_PRIORITY = 100;
-
-const handleError = (err) => {
-    logger('FATAL_ERROR: ', err);
-    return { statusCode: status('Internal Server Error'), body: JSON.stringify(err.message) };
-};
 
 const obtainStdAction = (msgKey) => (Reflect.has(STANDARD_GAME_ACTIONS, msgKey) ? STANDARD_GAME_ACTIONS[msgKey].action : 'ADD_CASH'); 
 
@@ -99,8 +92,21 @@ const extractStatusConditions = (gameParams, initialStatus) => {
     return statusConditions;
 };
 
+// some processing help in here, to make sure we don't overwrite conditions already passed to us,
+// but also that all conditions required for game params (= ground truth) to operate properly
 const safeList = (conditionList) => (Array.isArray(conditionList) ? conditionList : []);
-const safeMerge = (gameConditions, passedConditions, condition) => [...safeList(gameConditions[condition]), ...safeList(passedConditions[condition])];
+
+const checkConditionNotInList = (condition, comparisonList) => {
+    const conditionType = condition.substring(0, condition.indexOf(' ')); // we could require strict match, but for now avoiding confusion
+    const existsInList = comparisonList.some((otherCondition) => otherCondition.includes(conditionType));
+    return !existsInList;
+};
+
+const safeMerge = (gameConditions, passedConditions, status) => {
+    const gameConditionsNotInPassed = safeList(gameConditions[status]).filter((condition) => typeof condition === 'string').
+        filter((condition) => checkConditionNotInList(condition, safeList(passedConditions[status])));
+    return [...safeList(passedConditions[status]), ...gameConditionsNotInPassed];
+};
 
 const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     if (!passedConditions || Object.keys(passedConditions).length === 0) {
@@ -117,8 +123,9 @@ const mergeStatusConditions = (gameParams, passedConditions, initialStatus) => {
     logger('Game initial status: ', gameInitialStatus);
     const gameConditions = extractStatusConditions(gameParams, gameInitialStatus);
     
-    logger('Merging: ', gameConditions, 'and: ', passedConditions);
-    const mergedConditions = boostUtil.ALL_BOOST_STATUS_SORTED.filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
+    logger('Merging game conditions: ', gameConditions, 'and passed conditions: ', passedConditions);
+    const mergedConditions = boostUtil.ALL_BOOST_STATUS_SORTED.
+        filter((boostStatus) => gameConditions[boostStatus] || passedConditions[boostStatus]).
         reduce((obj, boostStatus) => ({ ...obj, [boostStatus]: safeMerge(gameConditions, passedConditions, boostStatus)}), {});
 
     logger('Merged status conditions: ', mergedConditions);
@@ -244,7 +251,7 @@ const generateAudienceInline = async (boostParams, isDynamic = false) => {
             creatingUserId: boostParams.creatingUserId,
             clientId: boostParams.boostSource.clientId,
             isDynamic,
-            propertyConditions: boostParams.boostAudienceSelection
+            conditions: boostParams.boostAudienceSelection.conditions
         }
     };
 
@@ -255,6 +262,8 @@ const generateAudienceInline = async (boostParams, isDynamic = false) => {
     };
 
     const resultOfAudienceCreation = await lambda.invoke(audienceInvocation).promise();
+    logger('Raw result of audience creation: ', resultOfAudienceCreation);
+
     const resultPayload = JSON.parse(resultOfAudienceCreation['Payload']);
     const resultBody = JSON.parse(resultPayload.body);
     logger('Result body for audience creation: ', resultBody);
@@ -456,6 +465,11 @@ module.exports.createBoost = async (event) => {
         instructionToRds.rewardParameters = params.rewardParameters;
     }
 
+    if (Array.isArray(params.flags) && params.flags.length > 0) {
+        logger('This boost is flagged, with: ', params.flags);
+        instructionToRds.flags = params.flags;
+    }
+
     // logger('Sending to persistence: ', instructionToRds);
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
@@ -508,95 +522,4 @@ module.exports.createBoost = async (event) => {
 
     return persistedBoost;
 
-};
-
-// /////////////////////// SECTION FOR WRAPPER (FOR ADMIN FRONTEND CALLS) AND USER-GENERATED BOOSTS, I.E., FRIEND TOURNAMENTS ///
-
-// todo next : get some basic defaults here, e.g., minimum number in tournament, and the Jupiter contribution (make dynamic)
-
-const assembleBoostAudienceSelection = async (creatingUserId, friendshipIds) => {
-    const userIdsForFriends = await persistence.fetchUserIdsForRelationships(friendshipIds);
-    logger('Got user ID pairs for the friendship list:', userIdsForFriends);
-
-    // this is to make sure user only creates the tournament for users actually in a friend relationship with them
-    const validFriendships = userIdsForFriends.filter((friendship) => Object.values(friendship).includes(creatingUserId));
-    const friendUserIds = validFriendships.map((relationship) => {
-        const friendUserId = relationship.initiatedUserId === creatingUserId ? relationship.acceptedUserId : relationship.initiatedUserId;
-        return friendUserId;
-    });
-
-    logger('Got friend user ids:', friendUserIds);
-
-    if (friendUserIds.length === 0) {
-        throw new Error('Error! No valid friendships found');
-    }
-
-    return {
-        table: config.get('tables.accountLedger'),
-        conditions: [{ op: 'in', prop: 'owner_user_id', value: [creatingUserId, ...friendUserIds] }]
-    };
-};
-
-const isFriendTournament = (event) => {
-    const params = boostUtil.extractEventBody(event);
-    if (!Array.isArray(params.friendships) || params.friendships.length === 0 || params.boostAudienceSelection) {
-        return false;
-    }
-
-    return true;
-};
-
-/**
- * Wrapper method for API gateway, handling authorization via the header, extracting body, etc. 
- * @param {object} event An event object containing the request context and request body.
- * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
- * @property {string} creatingUserId The system wide user id of the user who is creating the boost.
- * @property {string} boostTypeCategory A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'.
- * @property {string/number} boostBudget This may either be a number or a composite key containing the amount, the unit, and the currency, seperated by '::', e.g '10000000::HUNDREDTH_CENT::USD'.
- * @property {string} startTimeMillis A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller.
- * @property {string} endTime A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change).
- * @property {object} boostSource An object containing the bonusPoolId, clientId, and floatId associated with the boost being created.
- * @property {array}  friendships An optional array of relationship ids. Used to create a custom boost audience targeted at the users in the relationships.
- * @property {object} rewardParameters An object caontaining reward parameters to be persisted with the boost.
- * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {string} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
- * @property {string} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
- * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
- * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
- */
-module.exports.createBoostWrapper = async (event) => {
-    try {
-        const userDetails = opsUtil.extractUserDetails(event);
-
-        logger('Boost create, user details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: status('Forbidden') };
-        }
-
-        const isUserAdmin = userDetails.role === 'SYSTEM_ADMIN';
-        if (!isUserAdmin && !isFriendTournament(event)) {
-            return { statusCode: status('Forbidden') };
-        }
-
-        const params = boostUtil.extractEventBody(event);
-        logger('Boost create, params: ', params);
-        params.creatingUserId = userDetails.systemWideUserId;
-
-        if (params.friendships && params.friendships.length > 0) {
-            if (!params.rewardParameters || params.rewardParameters.rewardType !== 'POOLED') {
-                return { statusCode: status('Forbidden') };
-            }
-
-            const { creatingUserId, friendships } = params;
-            const audienceSelection = await assembleBoostAudienceSelection(creatingUserId, friendships);
-            logger('Created friendship-based audience selection instruction:', audienceSelection);
-            params.boostAudienceSelection = audienceSelection;
-            Reflect.deleteProperty(params, 'friendships');
-        }
-
-        const resultOfCall = await exports.createBoost(params);
-        return boostUtil.wrapHttpResponse(resultOfCall);    
-    } catch (err) {
-        return handleError(err);
-    }
 };

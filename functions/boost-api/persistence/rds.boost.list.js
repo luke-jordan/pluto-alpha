@@ -80,37 +80,44 @@ module.exports.updateBoost = async (updateParameters) => {
     return response.map(camelizeKeys);
 };
 
-module.exports.fetchUserBoosts = async (accountId, changedSinceTime = null, excludedStatus = ['CREATED']) => {
+module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinceTime, flags } = { excludedStatus: ['CREATED'] }) => {
     const boostMainTable = config.get('tables.boostTable');
     const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
     
     const columns = [
         `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
         'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
-        'status_conditions', 'message_instruction_ids', 'game_params'
+        'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', `${boostMainTable}.flags`
     ];
 
-    const statusIndex = 2;
     const excludedType = ['REFERRAL']; // for now
+
+    const statusIndex = 2;
     const typeIndex = statusIndex + excludedStatus.length;
 
-    const updatedTimeRestriction = changedSinceTime ? `and ${boostAccountJoinTable}.updated_time > $${typeIndex + excludedType.length}` : '';
+    // man but this needs a refactor sometime (just use length of array for index and keep adding to it)
+    const updatedTimeRestriction = changedSinceTime ? `and ${boostAccountJoinTable}.updated_time > $${typeIndex + excludedType.length} ` : '';
+    const flagRestriction = flags ? `and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)} ` : '';
+    const finalClause = `${updatedTimeRestriction}${flagRestriction}`;
 
     const selectBoostQuery = `select ${columns} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
        `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 and ` + 
        `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
-       `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${updatedTimeRestriction} ` +
+       `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +
        `order by ${boostAccountJoinTable}.creation_time desc`;
 
     const values = [accountId, ...excludedStatus, ...excludedType];
     if (changedSinceTime) {
         values.push(changedSinceTime.format());
     }
+    if (flags) {
+        values.push(flags); // not using spread (as this should be formatted into sql as array)
+    }
 
     logger('Assembled select query: ', selectBoostQuery);
     logger('Values for query: ', values);
     const boostsResult = await rdsConnection.selectQuery(selectBoostQuery, values);
-    logger('Retrieved boosts: ', boostsResult);
+    logger('Retrieved boosts of length: ', boostsResult.length);
     
     return boostsResult.map((boost) => camelizeKeys(boost));
 };
