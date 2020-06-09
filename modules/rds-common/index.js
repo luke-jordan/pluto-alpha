@@ -439,7 +439,6 @@ class RdsConnection {
      * @param {list} insertQueryDefs As above in multi table inserts
      */
     async multiTableUpdateAndInsert (updateQueryDefs, insertQueryDefs) {
-        logger(('Running in Alpha target'))
         // updates with no inserts permitted, but reverse not, as have dedicated method for it
         if (!Array.isArray(updateQueryDefs) || updateQueryDefs.length === 0) {
             throw new NoValuesError('No update queries provided, use large multi table insert instead');
