@@ -439,6 +439,7 @@ class RdsConnection {
      * @param {list} insertQueryDefs As above in multi table inserts
      */
     async multiTableUpdateAndInsert (updateQueryDefs, insertQueryDefs) {
+        logger(('Running in Alpha target'))
         // updates with no inserts permitted, but reverse not, as have dedicated method for it
         if (!Array.isArray(updateQueryDefs) || updateQueryDefs.length === 0) {
             throw new NoValuesError('No update queries provided, use large multi table insert instead');
@@ -624,8 +625,9 @@ class RdsConnection {
         const setPart = Object.keys(valueObject).map((column, index) => `${column} = $${baseIndex + index}`).join(', ');
         // logger('And setting: ', setPart);
         
-        // todo : protect this against injection
-        const returnPart = updateQueryDef.returnClause ? `RETURNING ${updateQueryDef.returnClause}` : '';
+        const whitelist = [...Object.keys(valueObject), 'updated_time'];
+        const returnPart = updateQueryDef.returnClause && whitelist.includes(updateQueryDef.returnClause)
+            ? `RETURNING ${updateQueryDef.returnClause}` : '';
 
         const assembledQuery = `UPDATE ${updateQueryDef.table} SET ${setPart} WHERE ${keyPart} ${returnPart}`.trim(); // avoids ugly no-ws
         const assembledArray = Object.values(keyObject).concat(Object.values(valueObject));
