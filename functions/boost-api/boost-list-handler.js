@@ -18,6 +18,13 @@ const fetchUserDefaultAccount = async (systemWideUserId) => {
     return Array.isArray(userAccounts) && userAccounts.length > 0 ? userAccounts[0] : null;
 };
 
+// because this is how users expect to see it (and legacy versions of app will show bad things if this is not the case)
+const convertBoostToWholeNumber = (boost) => ({
+    ...boost,
+    boostAmount: opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, 'WHOLE_CURRENCY'),
+    boostUnit: 'WHOLE_CURRENCY'
+});
+
 /**
  * This functions fetches a users boosts.
  */
@@ -84,10 +91,11 @@ const obtainSortedAndLoggedActiveBoosts = async (accountId) => {
     const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED'];
     
     const listActiveBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: changeCutOff, excludedStatus: excludedForActive });
+    const unitConvertedBoosts = listActiveBoosts.map(convertBoostToWholeNumber);
 
     // if a boost has been redeemed, and it is a game, we attach game outcome logs to tell the user how they did, else just return all
-    const redeemedGameBoosts = listActiveBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
-    return redeemedGameBoosts.length > 0 ? addLogsToGameBoosts(redeemedGameBoosts, listActiveBoosts, accountId) : listActiveBoosts;    
+    const redeemedGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'REDEEMED' && boost.boostType === 'GAME');
+    return redeemedGameBoosts.length > 0 ? addLogsToGameBoosts(redeemedGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;    
 };
 
 const obtainSortedAndLoggedExpiredBoosts = async (accountId) => {
@@ -96,9 +104,12 @@ const obtainSortedAndLoggedExpiredBoosts = async (accountId) => {
 
     const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];
     const listExpiredBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: expiredCutOff, excludedStatus: excludedForExpired });
+    const unitConvertedBoosts = listExpiredBoosts.map(convertBoostToWholeNumber);
 
-    const expiredGameBoosts = listExpiredBoosts.filter((boost) => boost.boostStatus === 'EXPIRED' && boost.boostType === 'GAME');
-    return expiredGameBoosts.length > 0 ? addLogsToGameBoosts(expiredGameBoosts, listExpiredBoosts, accountId) : listExpiredBoosts;
+    const expiredGameBoosts = unitConvertedBoosts.filter((boost) => boost.boostStatus === 'EXPIRED' && boost.boostType === 'GAME').
+        map(convertBoostToWholeNumber);
+    
+    return expiredGameBoosts.length > 0 ? addLogsToGameBoosts(expiredGameBoosts, unitConvertedBoosts, accountId) : unitConvertedBoosts;
 };
 
 module.exports.listChangedBoosts = async (event) => {

@@ -318,6 +318,16 @@ module.exports.updateBoostAmountRedeemed = async (boostIds) => {
     return resultOfUpdates;
 };
 
+// todo : add logs, and tie down access to this
+module.exports.updateBoostAmount = async (boostId, boostAmount) => {
+    logger('Updating boost ID: ', boostId, ' and amount : ', boostAmount);
+    const updateDef = { table: boostTable, key: { boostId }, value: { boostAmount }};
+    logger('Update def: ', updateDef);
+    const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);
+    logger('Result of updating amount: ', resultOfUpdate);
+    return resultOfUpdate;
+};
+
 // ///////////////////////////////////////////////////////////////
 // //////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
 // ///////////////////////////////////////////////////////////////
