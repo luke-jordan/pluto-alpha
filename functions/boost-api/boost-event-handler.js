@@ -305,7 +305,13 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
     };
 
     if (boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED') {
-        redemptionCall.pooledContributionMap = await fetchAccountIdsForPooledRewards([boost]);
+        const pooledContributionMap = await fetchAccountIdsForPooledRewards([boost]);
+        // todo this is going to cause trouble with random rewards but minus 20 on time and just too much to do now, so fix when 
+        // we actually start using random rewards (easy fix is pass this amount to boost redemption handler)
+        const revisedBoostAmount = boostRedemptionHandler.calculateBoostAmount(boost, pooledContributionMap);
+        logger('Updating boost amount to: ', revisedBoostAmount);
+        await persistence.updateBoostAmount(boost.boostId, revisedBoostAmount);
+        redemptionCall.pooledContributionMap = pooledContributionMap;
     }
     
     const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);

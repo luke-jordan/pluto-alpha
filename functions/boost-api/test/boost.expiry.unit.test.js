@@ -17,7 +17,11 @@ const updateBoostAccountStub = sinon.stub();
 const updateBoostRedeemedStub = sinon.stub();
 const insertBoostLogStub = sinon.stub();
 
+const findPooledAccountsStub = sinon.stub();
+const updateBoostAmountStub = sinon.stub();
+
 const redemptionHandlerStub = sinon.stub();
+const calculateAmountStub = sinon.stub();
 
 const publishMultiUserStub = sinon.stub();
 
@@ -30,10 +34,13 @@ const handler = proxyquire('../boost-event-handler', {
         'findLogsForBoost': findBoostLogsStub, 
         'updateBoostAccountStatus': updateBoostAccountStub,
         'updateBoostAmountRedeemed': updateBoostRedeemedStub,
-        'insertBoostAccountLogs': insertBoostLogStub
+        'insertBoostAccountLogs': insertBoostLogStub,
+        'updateBoostAmount': updateBoostAmountStub,
+        'findAccountsForPooledReward': findPooledAccountsStub
     },
     './boost-redemption-handler': {
-        'redeemOrRevokeBoosts': redemptionHandlerStub
+        'redeemOrRevokeBoosts': redemptionHandlerStub,
+        'calculateBoostAmount': calculateAmountStub
     },
     'publish-common': {
         'publishMultiUserEvent': publishMultiUserStub
@@ -242,6 +249,75 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
         // if we reach here then remainder is covered above
         expect(publishMultiUserStub).to.have.been.calledTwice;        
+    });
+
+    // note : will also have to do this for random boosts
+    it('Sets boost amount to prize, if a pooled reward', async () => {
+        const testEvent = {
+            eventType: 'BOOST_EXPIRED',
+            boostId: testBoostId
+        };
+
+        const mockBoost = mockTournamentBoost('DESTROY_IMAGE', {
+                UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+                PENDING: ['percent_destroyed_above #{0::10000}'],
+                REDEEMED: ['percent_destroyed_in_first_N #{2::10000}']
+        });
+
+        const mockPoolContrib = 500000; // 50 bucks in bc
+        const mockPercentAward = 0.05;
+
+        mockBoost.rewardParameters = {
+            rewardType: 'POOLED',
+            poolContributionPerUser: { amount: mockPoolContrib, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            percentPoolAsReward: mockPercentAward,
+            clientFloatContribution: { type: 'NONE' }
+        };
+
+        fetchBoostStub.resolves(mockBoost);
+
+        const mockUserResponseList = [
+            { accountId: 'account-id-1', logContext: { percentDestroyed: 20, timeTakenMillis: 10000 } },
+            { accountId: 'account-id-2', logContext: { percentDestroyed: 40, timeTakenMillis: 10000 } },
+            { accountId: 'account-id-3', logContext: { percentDestroyed: 10, timeTakenMillis: 10000 } }
+        ];
+        findBoostLogsStub.resolves(mockUserResponseList);
+
+        findAccountsStub.onFirstCall().resolves(formAccountResponse(mockAccountUserMap([1, 2], 'PENDING'))); // for winners
+        findAccountsStub.onSecondCall().resolves(formAccountResponse(mockAccountUserMap([1, 2, 3, 4], 'PENDING'))); // all
+        findAccountsStub.onThirdCall().resolves(formAccountResponse(mockAccountUserMap([3, 4], 'PENDING')));
+
+        const mockPoolContribMap = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2', 'account-id-3']};
+        findPooledAccountsStub.resolves(mockPoolContribMap);
+
+        const expectedRewardAmount = 3 * mockPoolContrib * mockPercentAward;
+        calculateAmountStub.returns(expectedRewardAmount);
+
+        const resultOfExpiry = await handler.processEvent(testEvent);
+        expect(resultOfExpiry).to.deep.equal({ statusCode: 200, boostsRedeemed: 2 });
+
+        // just testing the most important things, rest covered above
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+        expect(findBoostLogsStub).to.have.been.calledOnceWithExactly(testBoostId, 'GAME_RESPONSE');
+        
+        const expectedRedemptionMap = {
+            [testBoostId]: {
+                'account-id-1': { userId: 'some-user-id1', status: 'PENDING' },
+                'account-id-2': { userId: 'some-user-id2', status: 'PENDING' }
+            }
+        };
+
+        const redemptionEvent = { eventType: 'BOOST_TOURNAMENT_WON', boostId: testBoostId };
+        const redemptionCall = { 
+            redemptionBoosts: [mockBoost], 
+            affectedAccountsDict: expectedRedemptionMap, 
+            event: redemptionEvent,
+            pooledContributionMap: { [testBoostId]: mockPoolContribMap.accountIds}
+        };
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(redemptionCall);
+
+        // everything else is handled above
+        expect(updateBoostAmountStub).to.have.been.calledOnceWithExactly(testBoostId, expectedRewardAmount);
     });
 
     it('Expires all accounts for non-game boost', async () => {

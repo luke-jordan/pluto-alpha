@@ -184,7 +184,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
             friendships: testRelationshipIds,
             rewardParameters: {
                 rewardType: 'POOLED',
-                poolContributionPerUser: { amount: 500000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+                poolContributionPerUser: { amount: 50, unit: 'WHOLE_CURRENCY', currency: 'USD' }, // make sure we convert
                 percentPoolAsReward: 0.05
             },
             gameParams: testGameParams
@@ -197,7 +197,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
             label: 'Friend Initiated Boost',
             initialStatus: 'OFFERED',
             boostTypeCategory: 'GAME::TAP_SCREEN',
-            boostAmountOffered: '0::HUNDREDTH_CENT::USD',
+            boostAmountOffered: `${expectedBudget}::HUNDREDTH_CENT::USD`,
             boostBudget: expectedBudget,
             boostSource: {
                 bonusPoolId: 'primary_bonus_pool',
@@ -308,7 +308,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
             label: 'Friend Initiated Boost',
             initialStatus: 'OFFERED',
             boostTypeCategory: 'GAME::TAP_SCREEN',
-            boostAmountOffered: '0::HUNDREDTH_CENT::USD',
+            boostAmountOffered: `${expectedBudget}::HUNDREDTH_CENT::USD`,
             boostBudget: expectedBudget,
             boostSource: {
                 bonusPoolId: 'primary_bonus_pool',
@@ -412,7 +412,7 @@ describe('*** UNIT TEST BOOSTS *** Friends audience', () => {
             label: 'Friend Initiated Boost',
             initialStatus: 'OFFERED',
             boostTypeCategory: 'GAME::TAP_SCREEN',
-            boostAmountOffered: '0::HUNDREDTH_CENT::USD',
+            boostAmountOffered: `${expectedBudget}::HUNDREDTH_CENT::USD`,
             boostBudget: expectedBudget,
             boostSource: {
                 bonusPoolId: 'primary_bonus_pool',

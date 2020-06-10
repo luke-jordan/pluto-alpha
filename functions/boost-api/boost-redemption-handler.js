@@ -66,21 +66,6 @@ const calculateRandomBoostAmount = (boost) => {
     return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 
-const calculateBoostAmount = (boost, pooledContributionMap) => {
-    const rewardType = boost.rewardParameters ? boost.rewardParameters.rewardType : 'STANDARD';
-    if (rewardType === 'POOLED') {
-        const accountIds = pooledContributionMap[boost.boostId];
-        const userCount = accountIds.length;
-        return calculatePooledBoostAmount(boost, userCount);
-    }
-
-    if (rewardType === 'RANDOM') {
-        return calculateRandomBoostAmount(boost);
-    }
-
-    return boost.boostAmount;
-};
-
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation, specifiedEventType }) => {
     const eventType = specifiedEventType || (isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED');
     logger('Affected accounts user dict: ', affectedAccountsUserDict);
@@ -215,7 +200,7 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
     }
 
     // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
-    const boostAmount = boost.rewardParameters ? calculateBoostAmount(boost, pooledContributionMap) : boost.boostAmount;
+    const boostAmount = boost.rewardParameters ? exports.calculateBoostAmount(boost, pooledContributionMap) : boost.boostAmount;
     if (boostAmount === 0) {
         return null;
     }
@@ -319,6 +304,22 @@ const generateMessageSendInvocation = (messageInstructions) => ({
     InvocationType: 'Event',
     Payload: stringify({ instructions: messageInstructions })
 });
+
+/** Used also in expiry handler to set the boost amount once this is done, so exporting */
+module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
+    const rewardType = boost.rewardParameters ? boost.rewardParameters.rewardType : 'STANDARD';
+    if (rewardType === 'POOLED') {
+        const accountIds = pooledContributionMap[boost.boostId];
+        const userCount = accountIds.length;
+        return calculatePooledBoostAmount(boost, userCount);
+    }
+
+    if (rewardType === 'RANDOM') {
+        return calculateRandomBoostAmount(boost);
+    }
+
+    return boost.boostAmount;
+};
 
 /**
  * Complicated thing in here is affectedAccountsDict. It stores, for each boost, the accounts whose statusses have been changed. Format:

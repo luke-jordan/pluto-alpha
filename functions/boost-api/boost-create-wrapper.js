@@ -13,6 +13,8 @@ const rds = require('./persistence/rds.boost');
 const dynamo = require('dynamo-common');
 const publisher = require('publish-common');
 
+const DEFAULT_UNIT = 'HUNDREDTH_CENT'; // since _lots_ of percents of small numbers
+
 // /////////////////////// SECTION FOR WRAPPER (FOR ADMIN FRONTEND CALLS) AND USER-GENERATED BOOSTS, I.E., FRIEND TOURNAMENTS ///
 
 // todo next : get some basic defaults here, e.g., minimum number in tournament, and the Jupiter contribution (make dynamic)
@@ -107,10 +109,16 @@ const createFriendTournament = async (params) => {
 
     logger('Created friendship-based audience selection instruction:', audienceSelection);
 
-    const { poolContributionPerUser } = rewardParams;
+    const { poolContributionPerUser: submittedContribution } = rewardParams;
+    const poolContributionPerUser = {
+        amount: opsUtil.convertToUnit(submittedContribution.amount, submittedContribution.unit, DEFAULT_UNIT),
+        unit: DEFAULT_UNIT,
+        currency: submittedContribution.currency
+    };
+
     const { maxPoolEntry } = clientFloatParams;
-    
     logger('Max pool entry: ', maxPoolEntry, ' vs psased contribution: ', poolContributionPerUser);
+    
     const maxEntryInSameUnit = opsUtil.convertToUnit(maxPoolEntry.amount, maxPoolEntry.unit, poolContributionPerUser.unit);
     const entryAmount = Math.min(maxEntryInSameUnit, poolContributionPerUser.amount);
 
@@ -163,8 +171,8 @@ const createFriendTournament = async (params) => {
         },
         rewardParameters,
 
-        // because unpredictable, set amount to zero (redemption handler calcs from contributions)
-        boostAmountOffered: `0::HUNDREDTH_CENT::${clientFloatParams.currency}`,
+        // set to budget because this is displayed to user in several places as 'could win'
+        boostAmountOffered: `${boostBudget}::HUNDREDTH_CENT::${clientFloatParams.currency}`,
         boostBudget,
 
         flags: ['FRIEND_TOURNAMENT']
