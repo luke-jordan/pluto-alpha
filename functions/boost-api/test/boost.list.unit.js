@@ -43,7 +43,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
     const testStartTime = moment();
     const testEndTime = moment().add(1, 'week');
 
-    const expectedBoostResult = {
+    const mockBoostFromRds = {
         boostId: testBoostId,
         creatingUserId: '',
         label: 'BOOST LABEL',
@@ -62,19 +62,25 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         boostStatus: 'OFFERED'
     };
 
+    const expectedBoostToUser = {
+        ...mockBoostFromRds,
+        boostAmount: 10,
+        boostUnit: 'WHOLE_CURRENCY'
+    };
+
     beforeEach(() => {
         helper.resetStubs(fetchBoostStub, findAccountsStub, fetchBoostLogsStub);
     });
 
     it('Lists all user boosts, active and inactive', async () => {
-        fetchBoostStub.withArgs(testAccountId).resolves([expectedBoostResult, expectedBoostResult]);
+        fetchBoostStub.withArgs(testAccountId).resolves([mockBoostFromRds, mockBoostFromRds]);
         findAccountsStub.resolves([testAccountId]);
 
         const resultOfListing = await handler.listUserBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
         logger('Boost listing resulted in:', resultOfListing);
 
         const resultBody = helper.standardOkayChecks(resultOfListing, true);
-        expect(resultBody).to.deep.equal([expectedBoostResult, expectedBoostResult]);
+        expect(resultBody).to.deep.equal([mockBoostFromRds, mockBoostFromRds]);
         
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findAccountsStub).to.have.been.calledOnceWithExactly(testUserId);
@@ -84,29 +90,32 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
     it('Lists all active boosts with flag', async () => {
         const excludedStatus = ['REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED']; // starting to grandfather in FAILED
         findAccountsStub.resolves([testAccountId]);
-        fetchBoostStub.resolves([expectedBoostResult]); // not relevant to test
+        fetchBoostStub.resolves([mockBoostFromRds]); // not relevant to test
 
         const resultOfListing = await handler.listUserBoosts(wrapEvent({ flag: 'FRIEND_TOURNAMENT', onlyActive: true }, testUserId));
         
         const bodyOfResult = helper.standardOkayChecks(resultOfListing);
-        expect(bodyOfResult).to.deep.equal([expectedBoostResult]);
+        expect(bodyOfResult).to.deep.equal([mockBoostFromRds]);
 
         expect(fetchBoostStub).to.have.been.calledOnce;
         expect(fetchBoostStub).to.have.been.calledWith(testAccountId, { flags: ['FRIEND_TOURNAMENT'], excludedStatus });
     });
 
     it('Checks for boosts with recently changed status', async () => {
-        const expiredBoostResult = { ...expectedBoostResult };
+        const expiredBoostResult = { ...mockBoostFromRds };
         expiredBoostResult.boostStatus = 'EXPIRED';
+        expiredBoostResult.boostUnit = 'WHOLE_CURRENCY';
+        expiredBoostResult.boostAmount = 10;
+
         findAccountsStub.resolves([testAccountId]);
-        fetchBoostStub.onFirstCall().resolves([expectedBoostResult]);
+        fetchBoostStub.onFirstCall().resolves([mockBoostFromRds]);
         fetchBoostStub.onSecondCall().resolves([expiredBoostResult]);
 
         const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
         const resultBody = helper.standardOkayChecks(resultOfChangeFetch);
         logger('Result body: ', resultBody);
 
-        expect(resultBody).to.deep.equal([expectedBoostResult, expiredBoostResult]);
+        expect(resultBody).to.deep.equal([expectedBoostToUser, expiredBoostResult]);
         
         expect(fetchBoostStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: ['CREATED', 'OFFERED', 'EXPIRED'] });
         expect(fetchBoostStub).to.have.been.calledWith(testAccountId, { changedSinceTime: sinon.match.any, excludedStatus: ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'] });
@@ -116,7 +125,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
     });
 
     it('Attach game outcome result to game logs, won tournament', async () => {
-        const gameBoost = { ...expectedBoostResult };
+        const gameBoost = { ...mockBoostFromRds };
         gameBoost.boostType = 'GAME';
         gameBoost.boostStatus = 'REDEEMED';
 
@@ -131,7 +140,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
         const bodyOfResult = helper.standardOkayChecks(resultOfChangeFetch);
 
-        const expectedBoost = { ...gameBoost, gameLogs: [mockGameLog] }; 
+        const expectedBoost = { ...expectedBoostToUser, boostType: 'GAME', boostStatus: 'REDEEMED', gameLogs: [mockGameLog] }; 
         const fetchedBoost = bodyOfResult[0];
         expect(fetchedBoost).to.deep.equal(expectedBoost);
 
@@ -139,7 +148,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
     });
 
     it('Attach game outcome result to game logs, lost tournament', async () => {
-        const gameBoost = { ...expectedBoostResult };
+        const gameBoost = { ...mockBoostFromRds };
         gameBoost.boostType = 'GAME';
         gameBoost.boostStatus = 'EXPIRED';
 
@@ -154,7 +163,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         const resultOfChangeFetch = await handler.listChangedBoosts(wrapEvent({}, testUserId, 'ORDINARY_USER'));
         const bodyOfResult = helper.standardOkayChecks(resultOfChangeFetch);
 
-        const expectedBoost = { ...gameBoost, gameLogs: [mockGameLog] }; 
+        const expectedBoost = { ...expectedBoostToUser, boostType: 'GAME', boostStatus: 'EXPIRED', gameLogs: [mockGameLog] }; 
         const fetchedBoost = bodyOfResult[0];
         expect(fetchedBoost).to.deep.equal(expectedBoost);
 
