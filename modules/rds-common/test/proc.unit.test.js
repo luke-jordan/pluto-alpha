@@ -342,6 +342,44 @@ describe('*** UNIT TEST MULTI-TABLE UPDATE AND INSERT ***', () => {
         await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [insertDef])).to.be.rejectedWith('Error! No update values found');
     });
 
+    it('Detects and handles malicious return clauses', async () => {
+        const stdStubExpectations = (expectedUpdateQuery, updateValues) => {
+            expect(connectStub).to.have.been.calledOnce;
+            expect(queryStub).to.have.been.calledWithExactly('BEGIN');
+            expect(queryStub).to.have.been.calledWithExactly('SET TRANSACTION READ WRITE');
+            expect(queryStub).to.have.been.calledWithExactly(expectedUpdateQuery, sinon.match(updateValues));
+            expect(queryStub).to.have.been.calledWithExactly('COMMIT');
+            expect(releaseStub).to.have.been.calledOnce;
+        };
+
+        const testTime = new Date();
+
+        const updateQueryKeyObject = { someId: 101, someTime: testTime };
+        const updateQueryValueObject = { someStatus: 'SETTLED', someText: 'something_else', someBoolean: false };
+        const updateDef = { table: 'schema1.tableX', key: updateQueryKeyObject, value: updateQueryValueObject, returnClause: 'updated_time' };
+        updateDef.returnClause = 'update_time; SELECT * FROM users';
+
+        const expectedUpdateQuery = 'UPDATE schema1.tableX SET some_status = $3, some_text = $4, some_boolean = $5 WHERE some_id = $1 and some_time = $2';
+        const updateValues = [101, testTime, 'SETTLED', 'something_else', false];
+                
+        queryStub.withArgs(expectedUpdateQuery, sinon.match(updateValues)).resolves({ command: 'UPDATE', rows: []});
+
+        // malicious clauses
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [])).to.eventually.deep.equal([[]]);
+        stdStubExpectations(expectedUpdateQuery, updateValues);
+        clearStubHistory();
+        updateDef.returnClause = 'updated_time; DROP TABLE user CASCADE';
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [])).to.eventually.deep.equal([[]]);
+        stdStubExpectations(expectedUpdateQuery, updateValues);
+        clearStubHistory();
+
+        // valid clause
+        updateDef.returnClause = 'updated_time';
+        const expectedQuery = 'UPDATE schema1.tableX SET some_status = $3, some_text = $4, some_boolean = $5 WHERE some_id = $1 and some_time = $2 RETURNING updated_time';
+        queryStub.withArgs(expectedQuery, sinon.match(updateValues)).resolves({ command: 'UPDATE', rows: [{ 'updated_time': testTime }]});
+        await expect(rdsClient.multiTableUpdateAndInsert([updateDef], [])).to.eventually.deep.equal([[{ 'updated_time': testTime }]]);
+        stdStubExpectations(expectedQuery, updateValues);
+    });
 
 });
 
