@@ -336,14 +336,9 @@ const retrieveBoostAmounts = (params) => {
     return { boostAmountDetails, boostBudget };
 };
 
-const publishBoostUserLogs = async ({ accountIds, boostType, boostCategory, boostId, boostAmountDict, initiator }) => {
-    const eventType = `BOOST_CREATED_${boostType}`;
-    const options = {
-        initiator,
-        context: {
-            boostType, boostCategory, boostId, ...boostAmountDict
-        }
-    };
+const publishBoostUserLogs = async (initiator, accountIds, boostContext) => {
+    const eventType = `BOOST_CREATED_${boostContext.boostType}`;    
+    const options = { initiator, context: boostContext };
     const userIds = await persistence.findUserIdsForAccounts(accountIds);
     logger('Triggering user logs for boost ...');
     const resultOfLogPublish = await publisher.publishMultiUserEvent(userIds, eventType, options);
@@ -478,19 +473,24 @@ module.exports.createBoost = async (event) => {
 
     if (Array.isArray(accountIds) && accountIds.length > 0) {
         const logParams = {
-            accountIds,
             boostId,
             boostType,
             boostCategory,
-            boostAmountDict: {
-                boostAmount: parseInt(boostAmountDetails[0], 10),
-                boostUnit: boostAmountDetails[1],
-                boostCurrency: boostAmountDetails[2]
-            },
-            initiator: params.creatingUserId
+
+            boostStartTime: boostStartTime.valueOf(),
+            boostEndTime: boostEndTime.valueOf(),
+
+            // some extra context, to seed ML properly
+            statusConditions: instructionToRds.statusConditions,
+            rewardParameters: instructionToRds.rewardParameters,
+            gameParams: instructionToRds.gameParams,
+            
+            boostAmount: parseInt(boostAmountDetails[0], 10),
+            boostUnit: boostAmountDetails[1],
+            boostCurrency: boostAmountDetails[2]
         };
         logger('Publishing user logs with params: ', logParams);
-        await publishBoostUserLogs(logParams);
+        await publishBoostUserLogs(params.creatingUserId, accountIds, logParams);
     }
 
     // logger('Do we have messages ? :', params.messagesToCreate);
