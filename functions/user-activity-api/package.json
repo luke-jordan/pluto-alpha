@@ -4,7 +4,7 @@
   "description": "API for adding savings to a user account",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:*:test nyc mocha",
+    "test": "DEBUG=jupiter:*:* mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
@@ -12,7 +12,7 @@
   "license": "ISC",
   "dependencies": {
     "aws-sdk": "^2.536.0",
-    "camelcase": "^5.3.1",
+    "camelcase-keys": "^6.2.2",
     "config": "^3.1.0",
     "debug": "^4.1.1",
     "decamelize": "^4.0.0",

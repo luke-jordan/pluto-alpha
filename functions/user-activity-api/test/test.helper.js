@@ -58,6 +58,17 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole = 'ORDINARY_
     }
 });
 
+module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod = 'GET') => ({
+    queryStringParameters: requestBody,
+    httpMethod: httpMethod,
+    requestContext: {
+        authorizer: {
+            systemWideUserId,
+            role: userRole
+        }
+    }
+});
+
 module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
     FunctionName: functionName,
     InvocationType: async ? 'Event' : 'RequestResponse',

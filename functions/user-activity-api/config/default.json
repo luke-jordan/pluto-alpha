@@ -17,7 +17,9 @@
         "accountLog": "account_data.account_log",
         "boostMaster": "boost_data.boost",
         "boostJoin": "boost_data.boost_account_status",
-        "clientFloatVars": "ClientFloatTable"
+        "clientFloatVars": "ClientFloatTable",
+        "factoidTable": "factoid_data.factoid",
+        "previewTable": "factoid_data.preview_table"
     },
     "db": {
         "user": "save_tx_api_worker",

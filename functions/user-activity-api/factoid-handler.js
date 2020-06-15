@@ -23,10 +23,10 @@ module.exports.createFactoid = async (event) => {
         const params = opsUtil.extractParamsFromEvent(event);
         logger('Got params:', params);
         const factoid = {
-            creatingUserId: systemWideUserId,
-            factoidBody: params.text,
-            active: params.active ? params.active : true,
-            responseOptions: params.responseOptions
+            createdBy: systemWideUserId,
+            title: params.title,
+            body: params.text,
+            active: params.active ? params.active : true
         };
 
         const creationResult = await persistence.addFactoid(factoid);
@@ -48,21 +48,20 @@ module.exports.createFactoid = async (event) => {
  */
 module.exports.updateFactoid = async (event) => {
     try {
-        const userDetails = opsUtil.extractUserDetails(event);
-        if (!userDetails) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
             return { statusCode: 403 };
         }
 
-        // const systemWideUserId = userDetails.systemWideUserId;
         const params = opsUtil.extractParamsFromEvent(event);
-        if (!params.text && !Reflect.has(params, 'active')) {
-            throw new Error('Error! Either factoid text or active status must be provided');
+        if (!params.factoidId || (!params.text && !Reflect.has(params, 'active'))) {
+            return { statusCode: 400, body: `Error! 'factoidId' and either the factoids 'text' or 'active' properties are required` };
         }
 
-        const updateParams = {};
+        const updateParams = { factoidId: params.factoidId };
         if (params.text) {
-            updateParams.factoidBody = params.text;
+            updateParams.body = params.text;
         }
+
         if (Reflect.has(params, 'active')) {
             updateParams.active = params.active;
         }
@@ -89,6 +88,7 @@ module.exports.fetchFactoidForUser = async (event) => {
         }
 
         const systemWideUserId = userDetails.systemWideUserId;
+        logger('Got user:', systemWideUserId)
         const resultOfFetch = await persistence.fetchUnreadFactoid(systemWideUserId);
         logger('Result of fetch:', resultOfFetch);
         return opsUtil.wrapResponse(resultOfFetch);
