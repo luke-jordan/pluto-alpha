@@ -2,7 +2,7 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('jupiter:factoid-rds:test');
+// const logger = require('debug')('jupiter:factoid-rds:test');
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
@@ -26,24 +26,38 @@ class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
-        this.updateRecord = updateRecordStub;
+        this.updateRecordObject = updateRecordStub;
     }
 }
 
-const rds = proxyquire('../persistence/factoids', {
+const rds = proxyquire('../persistence/rds.factoids', {
     'rds-common': MockRdsConnection,
     'uuid/v4': uuidStub,
     '@noCallThru': true
 });
 
-describe.only('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
+describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
     const testFactId = uuid();
     const testSystemId = uuid();
 
     const testCreationTime = moment().format();
     const testUpdatedTime = moment().format();
 
+    beforeEach(() => {
+        helper.resetStubs(queryStub, insertStub, updateRecordStub);
+    });
+
     it('Persists new factoids', async () => {
+        const insertQuery = 'insert into factoid_data.factoid (title, body, active, factoid_id) values %L returning creation_time';
+        const expectedColumns = '${title}, ${body}, ${active}, ${factoidId}';
+
+        const expectedFactoid = {
+            title: 'Jupiter Fun Fact #12',
+            body: 'Jupiter helps you grow.',
+            active: true,
+            factoidId: testFactId
+        };
+
         uuidStub.returns(testFactId);
         insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
 
@@ -54,14 +68,39 @@ describe.only('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         };
 
         const resultOfInsert = await rds.addFactoid(testFactoid);
-        logger('Result:', resultOfInsert)
+
+        expect(resultOfInsert).to.exist;
+        expect(resultOfInsert).to.deep.equal({ creationTime: testCreationTime });
+        expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, expectedColumns, [expectedFactoid]);
     });
 
-    it.only('Updates factoid properly', async () => {
-        const updateQuery = 'update factoid_data.factoid set body = $1, active = $2 where factoid_id = $3 returning updated_time';
-        const updateValues = ['upiter rewards you for saving', true, testFactId];
+    it('Fetches factoid properly', async () => {
+        const mockFactoid = {
+            title: 'Jupiter Factoid #21',
+            body: 'Jupiter helps you save.'
+        };
 
-        updateRecordStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
+        const selectQuery = 'select * from factoid_data.factoid where factoid_id not in (select factoid_id ' +
+            'from factoid_data.factoid_user_join_table where user_id = $1)';
+
+        queryStub.resolves([{ 'title': 'Jupiter Factoid #21', 'body': 'Jupiter helps you save.' }]);
+
+        const resultOfFetch = await rds.fetchUnreadFactoids(testSystemId);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([mockFactoid]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId]);
+    });
+
+    it('Updates factoid properly', async () => {
+        const mockUpdateDef = { 
+            key: { factoidId: testFactId },
+            value: { body: 'Jupiter rewards you for saving', active: true },
+            table: config.get('tables.factoidTable'),
+            returnClause: 'updated_time'
+        };
+
+        updateRecordStub.resolves([{ 'updated_time': testUpdatedTime }]);
 
         const testUpdateParams = {
             factoidId: testFactId,
@@ -70,31 +109,29 @@ describe.only('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         };
         
         const resultOfUpdate = await rds.updateFactoid(testUpdateParams);
-        logger('Result:', resultOfUpdate)
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal({ updatedTime: testUpdatedTime });
-        // expect(updateRecordStub).to.have.been.calledOnceWithExactly(updateQuery, [])
+        expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateDef);
     });
 
-    it('Fetches factoid properly', async () => {
-        const expectedResult = {
-            title: 'Jupiter Factoid #21',
-            body: 'Jupiter helps you save.'
+    it('Marks a factoid as viewed by a user', async () => {
+        const insertArgs = {
+            userId: testSystemId,
+            factoidId: testFactId,
+            factoidStatus: 'VIEWED'
         };
 
-        const findQuery = `select factoid_id from factoid_data.preview_table where user_id = $1 and factoid_status = $2`;
-        const selectQuery = 'select title, body from factoid_data.factoid where factoid_id not in ($1, $2) limit 1';
+        const insertQuery = 'insert into factoid_data.factoid_user_join_table (user_id, factoid_id, factoid_status) ' +
+            'values %L returning creation_time';
+        const expectedColumns = '${userId}, ${factoidId}, ${factoidStatus}';
 
-        queryStub.onFirstCall().resolves([{ 'factoid_id': testFactId }, { 'factoid_id': testFactId }]);
-        queryStub.onSecondCall().resolves([{ 'title': 'Jupiter Factoid #21', 'body': 'Jupiter helps you save.' }]);
+        insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
 
-        const resultOfFetch = await rds.fetchUnreadFactoid(testSystemId);
+        const resultOfInsert = await rds.updateFactoidToViewed(testSystemId, testFactId);
 
-        expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal(expectedResult);
-        expect(queryStub).to.have.been.calledWithExactly(findQuery, [testSystemId, 'VIEWED']);
-        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testFactId, testFactId]);
-        expect(queryStub).to.have.been.calledTwice;
+        expect(resultOfInsert).to.exist;
+        expect(resultOfInsert).to.deep.equal({ creationTime: testCreationTime });
+        expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, expectedColumns, [insertArgs]);
     });
 });

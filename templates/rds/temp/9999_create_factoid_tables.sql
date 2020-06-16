@@ -4,9 +4,10 @@ create table if not exists factoid_data.factoid (
     factoid_id uuid not null primary key,
     title varchar (100) not null,
     body text not null,
-    creating_user_id uuid not null,
+    created_by uuid not null,
     active boolean not null default true,
     factoid_status  varchar (100) not null,
+    factoid_priority int not null,
     response_options jsonb,
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
@@ -14,7 +15,7 @@ create table if not exists factoid_data.factoid (
     flags text[] default '{}'
 );
 
-create table if not exists factoid_data.preview_table (
+create table if not exists factoid_data.factoid_user_join_table (
     user_id uuid not null primary key,
     factoid_id uuid not null  references factoid_data.factoid (factoid_id),
     factoid_status varchar (100) references factoid_data.factoid (factoid_status),

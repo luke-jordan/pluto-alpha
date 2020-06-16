@@ -4,7 +4,7 @@
   "description": "API for adding savings to a user account",
   "main": "handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:*:* mocha",
+    "test": "DEBUG=jupiter:*:test nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },

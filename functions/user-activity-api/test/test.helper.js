@@ -45,6 +45,11 @@ module.exports.standardOkayChecks = (result) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
     expect(result).to.have.property('body');
+
+    if (result.headers) {
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
+    
     return JSON.parse(result.body);
 };
 

@@ -14,18 +14,19 @@ const moment = require('moment');
 const helper = require('./test.helper');
 
 const addFactStub = sinon.stub();
-const updateFactStub = sinon.stub();
 const fetchFactStub = sinon.stub();
+const updateFactStub = sinon.stub();
+const updatedViewedFactStub = sinon.stub();
 
 const handler = proxyquire('../factoid-handler', {
-    './persistence/rds': {
+    './persistence/rds.factoids': {
         'addFactoid': addFactStub,
         'updateFactoid': updateFactStub,
-        'fetchUnreadFactoid': fetchFactStub
+        'fetchUnreadFactoids': fetchFactStub,
+        'updateFactoidToViewed': updatedViewedFactStub
     },
     '@noCallThru': true
 });
-
 
 
 describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
@@ -53,16 +54,30 @@ describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
         };
 
         const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
-
         const creationResult = await handler.createFactoid(testEvent);
 
-        expect(creationResult).to.exist;
-        expect(creationResult).to.have.property('statusCode', 200);
-        expect(creationResult).to.have.property('body');
-        expect(creationResult).to.have.property('headers');
-        expect(creationResult.headers).to.deep.equal(helper.expectedHeaders);
-        expect(creationResult.body).to.deep.equal(JSON.stringify(expectedResult));
+        const body = helper.standardOkayChecks(creationResult);
+        expect(body).to.deep.equal(expectedResult);
         expect(addFactStub).to.have.been.calledOnceWithExactly(expectedFactoid);
+    });
+
+    it('Fetches an unread factoid', async () => {
+        const mockFactoid = (priority) => ({
+            factoidId: testFactId,
+            title: 'Jupiter Factoid 22',
+            body: 'Jupiter helps you save.',
+            factoidPriority: priority,
+            responseOptions: { future: ['Options'] }
+        });
+
+        fetchFactStub.resolves([mockFactoid(9), mockFactoid(5)]);
+
+        const testEvent = helper.wrapQueryParamEvent({}, testSystemId, 'GET');
+        const resultOfFetch = await handler.fetchFactoidForUser(testEvent);
+
+        const body = helper.standardOkayChecks(resultOfFetch);
+        expect(body).to.deep.equal(mockFactoid(9));
+        expect(fetchFactStub).to.have.been.calledOnceWithExactly(testSystemId);
     });
 
     it('Updates a factoid properly', async () => {
@@ -73,47 +88,29 @@ describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
             body: 'Jupiter gives you an annual interest rate of up to 5%.'
         };
 
-        updateFactStub.resolves({ updatedTime: testUpdatedTime })
+        updateFactStub.resolves({ updatedTime: testUpdatedTime });
 
         const eventBody = {
             factoidId: testFactId,
             active: true,
-            text: 'Jupiter gives you an annual interest rate of up to 5%.'
+            body: 'Jupiter gives you an annual interest rate of up to 5%.'
         };
 
         const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
-
         const resultOfUpdate = await handler.updateFactoid(testEvent);
 
-        expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.have.property('statusCode', 200);
-        expect(resultOfUpdate).to.have.property('body');
-        expect(resultOfUpdate).to.have.property('headers');
-        expect(resultOfUpdate.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfUpdate.body).to.deep.equal(JSON.stringify(expectedResult));
+        const body = helper.standardOkayChecks(resultOfUpdate);
+        expect(body).to.deep.equal(expectedResult);
         expect(updateFactStub).to.have.been.calledOnceWithExactly(expectedUpdateParams);
     });
 
-    it('Fetches an unread factoid', async () => {
-        const testFactoid = {
-            factoidId: testFactId,
-            title: 'Jupiter Factoid 22',
-            body: 'Jupiter helps you save.',
-            responseOptions: { future: ['Options'] }
-        };
-
-        fetchFactStub.resolves(testFactoid);
-
-        const testEvent = helper.wrapQueryParamEvent({}, testSystemId, 'GET');
-
-        const resultOfFetch = await handler.fetchFactoidForUser(testEvent);
-
-        expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.have.property('statusCode', 200);
-        expect(resultOfFetch).to.have.property('body');
-        expect(resultOfFetch).to.have.property('headers');
-        expect(resultOfFetch.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfFetch.body).to.deep.equal(JSON.stringify(testFactoid));
-        expect(fetchFactStub).to.have.been.calledOnceWithExactly(testSystemId);
+    it('Marks a factoid as viewed', async () => {
+        const expectedResult = { result: 'SUCCESS', updatedTime: testCreationTime };
+        updatedViewedFactStub.resolves({ creationTime: testCreationTime });
+        const testEvent = helper.wrapEvent({ factoidId: testFactId }, testSystemId, 'ORDINARY_USER');
+        const resultOfUpdate = await handler.markFactoidViewed(testEvent);
+        const body = helper.standardOkayChecks(resultOfUpdate);
+        expect(body).to.deep.equal(expectedResult);
+        expect(updatedViewedFactStub).to.have.been.calledOnceWithExactly(testSystemId, testFactId);
     });
 });

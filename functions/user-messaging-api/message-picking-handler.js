@@ -181,7 +181,7 @@ const fireOffMsgStatusUpdate = async (userMessages, destinationUserId, eventCont
  * @param {Object} messageDetails An object containing the message details. This object contains the following properties:
  * @property {String} messageId The message's id.
  * @property {String} messageTitle The message's title.
- * @property {Number} messagePriority The message's priority (ranging from 0 to 10, with 0 being the lowest and q0 being the highest priority)
+ * @property {Number} messagePriority The message's priority (ranging from 0 to 10, with 0 being the lowest and 10 being the highest priority)
  * @property {Object} display An object conataining additional icons to display within the message, e.g. { type: 'MODAL', iconType: 'SMILEY_FACE' }
  * @property {String} creationTime The message's creation time.
  * @property {Boolean} hasFollowingMessage a boolean value indicating whether the current message other message following it.
