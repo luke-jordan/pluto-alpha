@@ -88,7 +88,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
         return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, options);
     });
 
-    logger('Publish result: ', publishPromises);
+    // logger('Publish result: ', publishPromises);
     return publishPromises;
 };
 

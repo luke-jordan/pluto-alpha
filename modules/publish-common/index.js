@@ -92,7 +92,7 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     try {
         // note: SNS does not have a batch publish method, so we do this -- do not ever call this in user facing method
         const publishPromises = userIds.map((userId) => exports.publishUserEvent(userId, eventType, options));
-        logger('Sending ', publishPromises.length, ' events to the user log topic');
+        logger('Sending ', publishPromises.length, ' events to the user log topic, with type: ', eventType);
         const resultOfAll = await Promise.all(publishPromises);
         const successCount = resultOfAll.filter((returned) => returned.result === 'SUCCESS').length;
         logger(`Of promises, ${successCount} were successful`);

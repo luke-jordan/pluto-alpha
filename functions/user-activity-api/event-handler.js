@@ -276,7 +276,7 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails) => {
         subject: 'Jupiter withdrawal cancelled', 
         htmlBody, textBody
     });
-    const emailResult = await publisher.sendSystemEmail(emailParams);
+    const emailResult = await publisher.safeEmailSendPlain(emailParams);
     logger('Result of sending email: ', emailResult);
 };
 

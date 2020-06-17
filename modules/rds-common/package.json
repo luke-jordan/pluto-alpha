@@ -4,7 +4,7 @@
   "description": "Common module layer for interfacing with RDS",
   "main": "index.js",
   "scripts": {
-    "test": "DEBUG=jupiter:rds-common:*:test nyc mocha './test/*.unit.test.js'",
+    "test": "DEBUG=jupiter:rds-common:test nyc mocha './test/*.unit.test.js'",
     "test-all": "DEBUG=jupiter:rds-common:* nyc mocha --exit",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
