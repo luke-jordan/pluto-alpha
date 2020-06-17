@@ -262,6 +262,29 @@ describe('createAccountMethod and wrapper', () => {
         testInsertArgs('JUPSAVE11X');
     });
 
+    // a number of systems do not like these
+    it('End to end, all same, but strips accents from human ref', async () => {
+        getAccountIdForUserStub.withArgs(testUserId).resolves(null);
+        countRefStemStub.resolves(1);
+        insertRecordStub.resolves(testAccountOpeningResult);
+        
+        getAccountIdForUserStub.withArgs(testReferringUserId).resolves(testReferringAccId);
+        lambdaInvokeStub.returns({ promise: () => ({ statusCode: 200 })});
+        
+        const testRequest = { ...testCreationRequest, personalName: 'Öller', familyName: 'COETZÉ' };
+        const response = await accountHandler.createAccount(testRequest);
+        
+        expect(response).to.exist;
+        expect(response.accountId).to.be.a.uuid('v4');
+        expect(response.persistedTimeMillis).to.equal(expectedMillis);
+        
+        expect(countRefStemStub).to.have.been.calledOnceWithExactly('OCOETZE');
+        expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
+        expect(lambdaInvokeStub).to.have.been.calledOnce;
+        
+        testInsertArgs('OCOETZE2X');
+    });
+
     it('Handles errors in accordance with standards', async () => {
         const response = await accountHandler.create({ userFirstName: 'Luke' });
         expect(response.statusCode).to.equal(400);

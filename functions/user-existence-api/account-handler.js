@@ -162,6 +162,7 @@ const handleReferral = async (newAccountId, ownerUserId, referralCodeDetails) =>
 
 // helper, just given elevated problems if failures in here
 const isNonEmptyString = (param) => typeof param === 'string' && param.length > 0;
+const stripAccents = (name) => name.normalize('NFD').replace(/[\u0300-\u036f]/gu, '');
 
 // note : possible race conditions means that the ref is composed of three parts:
 // a stem : upper case initial & surname, or JSAVE if none provided
@@ -171,7 +172,9 @@ const isNonEmptyString = (param) => typeof param === 'string' && param.length > 
 const generateHumanRef = async (creationRequest) => {
   let humanRefStem = '';
   if (creationRequest && isNonEmptyString(creationRequest.personalName) && isNonEmptyString(creationRequest.familyName)) {
-    humanRefStem = `${creationRequest.personalName.substring(0, 1)}${creationRequest.familyName}`.toUpperCase();
+    const noAccentPersonalName = stripAccents(creationRequest.personalName);
+    const noAccentFamilyName = stripAccents(creationRequest.familyName);
+    humanRefStem = `${noAccentPersonalName.substring(0, 1)}${noAccentFamilyName}`.toUpperCase();
   } else {
     humanRefStem = 'JUPSAVE';
   }
