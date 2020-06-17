@@ -43,6 +43,17 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
     const testCreationTime = moment().format();
     const testUpdatedTime = moment().format();
 
+    const mockFactoidFromRds = {
+        'factoid_id': testFactId,
+        'title': 'Jupiter Factoid #21',
+        'body': 'Jupiter helps you save.',
+        'factoid_status': 'CREATED',
+        'factoid_priority': 2,
+        'creation_time': testCreationTime,
+        'updated_time': testUpdatedTime,
+        'country_code': 'ZAF'
+    };
+
     beforeEach(() => {
         helper.resetStubs(queryStub, insertStub, updateRecordStub);
     });
@@ -74,21 +85,53 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, expectedColumns, [expectedFactoid]);
     });
 
-    it('Fetches factoid properly', async () => {
+    it('Fetches unviewed factoids properly', async () => {
         const mockFactoid = {
+            factoidId: testFactId,
             title: 'Jupiter Factoid #21',
-            body: 'Jupiter helps you save.'
+            body: 'Jupiter helps you save.',
+            factoidStatus: 'CREATED',
+            factoidPriority: 2,
+            creationTime: testCreationTime,
+            updatedTime: testUpdatedTime,
+            countryCode: 'ZAF'
         };
 
         const selectQuery = 'select * from factoid_data.factoid where factoid_id not in (select factoid_id ' +
             'from factoid_data.factoid_user_join_table where user_id = $1)';
 
-        queryStub.resolves([{ 'title': 'Jupiter Factoid #21', 'body': 'Jupiter helps you save.' }]);
+        queryStub.resolves([mockFactoidFromRds, mockFactoidFromRds]);
 
-        const resultOfFetch = await rds.fetchUnreadFactoids(testSystemId);
+        const resultOfFetch = await rds.fetchUnviewedFactoids(testSystemId);
 
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([mockFactoid]);
+        expect(resultOfFetch).to.deep.equal([mockFactoid, mockFactoid]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId]);
+    });
+
+    it.only('Fetches viewed factoids properly', async () => {
+        const factoidFromRds = { ...mockFactoidFromRds };
+        factoidFromRds['factoid_status'] = 'VIEWED';
+        const mockFactoid = {
+            factoidId: testFactId,
+            title: 'Jupiter Factoid #21',
+            body: 'Jupiter helps you save.',
+            factoidStatus: 'VIEWED',
+            factoidPriority: 2,
+            creationTime: testCreationTime,
+            updatedTime: testUpdatedTime,
+            countryCode: 'ZAF'
+        };
+
+        const selectQuery = 'select * from factoid_data.factoid where factoid_id not in (select factoid_id ' +
+            'from factoid_data.factoid_user_join_table where user_id = $1)';
+
+        queryStub.resolves([factoidFromRds, factoidFromRds]);
+
+        const resultOfFetch = await rds.fetchUnviewedFactoids(testSystemId);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([mockFactoid, mockFactoid]);
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId]);
     });
 

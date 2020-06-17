@@ -14,7 +14,7 @@ const moment = require('moment');
 const helper = require('./test.helper');
 
 const addFactStub = sinon.stub();
-const fetchFactStub = sinon.stub();
+const fetchNewFactStub = sinon.stub();
 const updateFactStub = sinon.stub();
 const updatedViewedFactStub = sinon.stub();
 
@@ -22,7 +22,7 @@ const handler = proxyquire('../factoid-handler', {
     './persistence/rds.factoids': {
         'addFactoid': addFactStub,
         'updateFactoid': updateFactStub,
-        'fetchUnreadFactoids': fetchFactStub,
+        'fetchUnviewedFactoids': fetchNewFactStub,
         'updateFactoidToViewed': updatedViewedFactStub
     },
     '@noCallThru': true
@@ -66,18 +66,23 @@ describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
             factoidId: testFactId,
             title: 'Jupiter Factoid 22',
             body: 'Jupiter helps you save.',
+            countryCode: 'ZAF',
             factoidPriority: priority,
             responseOptions: { future: ['Options'] }
         });
 
-        fetchFactStub.resolves([mockFactoid(9), mockFactoid(5)]);
+        fetchNewFactStub.resolves([mockFactoid(9), mockFactoid(5)]);
 
         const testEvent = helper.wrapQueryParamEvent({}, testSystemId, 'GET');
         const resultOfFetch = await handler.fetchFactoidForUser(testEvent);
 
         const body = helper.standardOkayChecks(resultOfFetch);
         expect(body).to.deep.equal(mockFactoid(9));
-        expect(fetchFactStub).to.have.been.calledOnceWithExactly(testSystemId);
+        expect(fetchNewFactStub).to.have.been.calledOnceWithExactly(testSystemId);
+    });
+
+    it('Fetches the oldest viewed factoid', async () => {
+        // const resultOfFetch = await handler
     });
 
     it('Updates a factoid properly', async () => {

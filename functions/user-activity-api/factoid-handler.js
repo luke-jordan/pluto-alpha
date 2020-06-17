@@ -27,6 +27,7 @@ module.exports.createFactoid = async (event) => {
             createdBy: systemWideUserId,
             title: params.title,
             body: params.text,
+            countryCode: params.countryCode,
             active: params.active ? params.active : true
         };
 
@@ -40,15 +41,32 @@ module.exports.createFactoid = async (event) => {
     }
 };
 
-const getNextFactoid = (factoids) => {
+const updateReadCount = async (systemWideUserId, factoid) => {
+    const { factoidId, readCount } = factoid;
+    const resultOfReadCountUpdate = await persistence.incrementReadCount(systemWideUserId, factoidId, readCount + 1);
+    logger('Update result:', resultOfReadCountUpdate);
+    return resultOfReadCountUpdate;
+};
+
+const findFactoidByDate = (factoids, targetDate) => factoids.filter((factoid) => moment(factoid.creationTime) === targetDate);
+
+const getNextFactoid = (factoids, factoidDetails, ignorePriority = false, ignoreReadCount = true) => {
     const highestPriority = Math.max(...factoids.map((factoid) => factoid.factoidPriority));
-    const selectedFactoids = factoids.filter((factoid) => factoid.factoidPriority === highestPriority);
+    const selectedFactoids = ignorePriority ? factoids : factoids.filter((factoid) => factoid.factoidPriority === highestPriority);
     if (selectedFactoids.length === 1) {
         return selectedFactoids[0];
     }
 
-    const earliestFactoidDate = Math.min(selectedFactoids.map((factoid) => moment(factoid.creatime).valueOf()));
-    return selectedFactoids.filter((factoid) => moment(factoid.creationTime) === earliestFactoidDate);
+    if (!ignoreReadCount) {
+        const minReadCount = Math.min(factoidDetails.map((factoidInfo) => factoidInfo.readCount));
+        const leastViewedFactoidDetails = factoidDetails.filter((factoidInfo) => factoidInfo.readCount === minReadCount);
+        const earliestReadDate = Math.min(leastViewedFactoidDetails.map((factoidInfo) => moment(factoidInfo.updatedTime).valueOf()));
+        const selectedFactoidId = findFactoidByDate(leastViewedFactoids, earliestReadDate).factoidId;
+        return selectedFactoids.filter((factoid) => factoid.factoidId === selectedFactoidId);
+    }
+
+    const earliestFactoidDate = Math.min(selectedFactoids.map((factoid) => moment(factoid.creationTime).valueOf()));
+    return findFactoidByDate(selectedFactoids, earliestFactoidDate);
 };
 
 /**
@@ -63,13 +81,23 @@ module.exports.fetchFactoidForUser = async (event) => {
         }
 
         const systemWideUserId = userDetails.systemWideUserId;
-        const factoids = await persistence.fetchUnreadFactoids(systemWideUserId);
-        logger('Result of fetch:', factoids);
 
-        const selectedFactoid = getNextFactoid(factoids);
-        logger('Got selected factoid:', selectedFactoid);
+        const factoidToDisplay = [];
+        const unviewedFactoids = await persistence.fetchUnviewedFactoids(systemWideUserId);
+        logger('Found unviewed factoids:', unviewedFactoids);
 
-        return opsUtil.wrapResponse(selectedFactoid);
+        if (!unviewedFactoids || unviewedFactoids.length === 0) {
+           const [viewedFactoids, factoidDetails] = await persistence.fetchViewedFactoids(systemWideUserId);
+           logger('Found viewed factoids:', viewedFactoids);
+           factoidToDisplay.push(getNextFactoid(viewedFactoids, factoidDetails, true, false));
+           await updateReadCount(systemWideUserId, factoidToDisplay);
+        } else {
+            factoidToDisplay.push(getNextFactoid(unviewedFactoids));
+        }
+
+        logger('Got selected factoid:', factoidToDisplay);
+
+        return opsUtil.wrapResponse(factoidToDisplay);
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ error: err.message }, 500);
@@ -80,9 +108,9 @@ module.exports.fetchFactoidForUser = async (event) => {
  * This function updates a factoids properties. The only property updates allowed by the this function are
  * the factoids text and the factoids active status.
  * @param {object} event User or admin event.
- * @property {string}  body The main factoid text.
+ * @property {string} body The main factoid text.
  * @property {boolean} active Can be used to activate or deactivate a factoid.
- * @property {number}  factoidPriority Used to update the factoids priority.
+ * @property {number} factoidPriority Used to update the factoids priority.
  */
 module.exports.updateFactoid = async (event) => {
     try {

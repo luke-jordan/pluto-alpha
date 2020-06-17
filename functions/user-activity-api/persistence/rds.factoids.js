@@ -45,14 +45,26 @@ module.exports.addFactoid = async (factoid) => {
 };
 
 /**
- * This function fetches an unread factoid for a user.
- * @param {string} systemWideUserId The user for whom the factoid is sought.
+ * This function fetches unread factoids for a user.
+ * @param {string} systemWideUserId The user for whom the factoids are sought.
  */
-module.exports.fetchUnreadFactoids = async (systemWideUserId) => {
+module.exports.fetchUnviewedFactoids = async (systemWideUserId) => {
     const selectQuery = `select * from ${factoidTable} where factoid_id not in (select factoid_id from ${factoidJoinTable} where user_id = $1)`;
     logger('Fetching unread factoids with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId]);
     return resultOfFetch.length > 0 ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
+};
+
+/**
+ * This function fetches viewed factoids for a user.
+ * @param {string} systemWideUserId The user for whom the factoids are sought.
+ */
+module.exports.fetchViewedFactoids = async (systemWideUserId) => {
+    const selectQuery = `select * from ${factoidTable} where factoid_id in (select factoid_id from ${factoidJoinTable} where user_id = $1)`;
+    logger('Fetching unread factoids with query:', selectQuery);
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId]);
+    return resultOfFetch.length > 0 ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
+    // todo: return user join table output
 };
 
 /**
