@@ -149,12 +149,13 @@ variable "events_email_receipients" {
     }
 }
 
+# todo : make client dependent
 variable "events_phone_reciepients" {
-    description = "Recipient list for daily stats and system emails"
+    description = "Recipient list for account opened SMSs"
     type = "map"
     default = {
         "staging" = [""],
-        "master" = ["+27813074085", "+27834013558"]
+        "master" = ["+27834013558"]
     }
 }
 

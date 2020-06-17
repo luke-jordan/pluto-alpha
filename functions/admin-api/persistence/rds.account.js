@@ -92,8 +92,10 @@ module.exports.fetchPendingTransactionsForAllUsers = async (startTime, endTime) 
 
     const txTable = config.get('tables.transactionTable');
     const columns = `creation_time, transaction_type, settlement_status, amount, currency, unit, human_reference`;
+    
+    // ordering is to put withdrawal first
     const fetchQuery = `select ${columns} from ${txTable} where settlement_status = $1 ` +
-        `and creation_time > $2 and creation_time <= $3 and transaction_type in ($4, $5)`;
+        `and creation_time > $2 and creation_time <= $3 and transaction_type in ($4, $5) order by transaction_type desc`;
     const values = ['PENDING', startTime, endTime, 'USER_SAVING_EVENT', 'WITHDRAWAL'];
     logger('Sending query to RDS: ', fetchQuery);
     logger('With values: ', values);
