@@ -246,12 +246,12 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(currencyQuery, [testAccountId]);
     });
 
-    it('Fetches human ref properly', async () => {
-        const query = `select account_id, human_ref from account_data.core_account_ledger where owner_user_id = $1 ` + 
+    it('Fetches human ref & tags properly', async () => {
+        const query = `select account_id, human_ref, tags from account_data.core_account_ledger where owner_user_id = $1 ` + 
             `order by creation_time desc limit 1`;
-        queryStub.resolves([{ 'human_ref': 'SOMEREF', 'account_id': 'some-id' }]);
+        queryStub.resolves([{ 'human_ref': 'SOMEREF', 'account_id': 'some-id', 'tags': ['some_tag'] }]);
         const result = await rds.findHumanRefForUser(testUserId);
-        expect(result).to.deep.equal([{ humanRef: 'SOMEREF', accountId: 'some-id' }]);
+        expect(result).to.deep.equal([{ humanRef: 'SOMEREF', accountId: 'some-id', tags: ['some_tag'] }]);
         expect(queryStub).to.have.been.calledOnceWithExactly(query, [testUserId]);
     });
 

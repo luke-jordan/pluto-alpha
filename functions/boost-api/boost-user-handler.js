@@ -72,6 +72,19 @@ module.exports.processUserBoostResponse = async (event) => {
         ]);
 
         logger('Fetched boost: ', boost);
+        logger('Relevant account ID: ', accountId);
+
+        const boostAccountJoin = await persistence.fetchCurrentBoostStatus(boostId, accountId);
+        logger('And current boost status: ', boostAccountJoin);
+        if (!boostAccountJoin) {
+            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'User is not offered this boost' }) };
+        }
+
+        const { boostStatus: currentStatus } = boostAccountJoin;
+        const allowableStatus = ['CREATED', 'OFFERED', 'UNLOCKED']; // as long as not redeemed or pending, status check will do the rest
+        if (!allowableStatus.includes(currentStatus)) {
+            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not unlocked', status: currentStatus }) };
+        }
 
         const statusEvent = { eventType, eventContext: params };
         const statusResult = conditionTester.extractStatusChangesMet(statusEvent, boost);

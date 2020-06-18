@@ -117,7 +117,7 @@ module.exports.findAccountsForUser = async (userId = 'some-user-uid') => {
 };
 
 module.exports.findHumanRefForUser = async (userId) => {
-    const query = `select account_id, human_ref from ${config.get('tables.accountLedger')} where owner_user_id = $1 ` + 
+    const query = `select account_id, human_ref, tags from ${config.get('tables.accountLedger')} where owner_user_id = $1 ` + 
         `order by creation_time desc limit 1`;
     const result = await rdsConnection.selectQuery(query, [userId]);
     return result.map((row) => camelizeKeys(row)); // slightly more robust than camelizeKeys(rows[0])

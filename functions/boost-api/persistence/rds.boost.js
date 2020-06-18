@@ -172,6 +172,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     return resultObject;
 };
 
+// a simple version for when we absolutely know the boost id
+module.exports.fetchCurrentBoostStatus = async (boostId, accountId) => {
+    const selectQuery = `select * from ${boostAccountJoinTable} where boost_id = $1 and account_id = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId]);
+    return resultOfQuery.length > 0 ? camelizeKeys(resultOfQuery[0]) : null;
+};
+
 module.exports.findLogsForBoost = async (boostId, logType) => {
     // for the moment, nothing fancy
     const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and log_type = $2`;

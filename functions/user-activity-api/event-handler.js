@@ -398,6 +398,31 @@ const findPendingFriendRequest = async (userProfile) => {
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+const setupBsheetAccIfNone = async (userProfile, accountInfo) => {
+    const { tags } = accountInfo[0];
+    logger('Fetched tags for account: ', tags);
+
+    if (Array.isArray(tags) && tags.some((tag) => tag.startsWith(config.get('defaults.balanceSheet.accountPrefix')))) {
+        logger('Already has FinWorks account');
+        return;
+    }
+
+    const bsheetAccountResult = await createFinWorksAccount({ 
+        idNumber: userProfile.nationalId, 
+        surname: userProfile.familyName, 
+        firstNames: userProfile.personalName, 
+        humanRef: accountInfo[0].humanRef 
+    });
+
+    if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
+        throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
+    }
+
+    logger('Finworks account creation resulted in:', bsheetAccountResult);
+    const accountUpdateResult = await updateAccountTags(userProfile.systemWideUserId, bsheetAccountResult.accountNumber);
+    logger(`Result of user account update: ${accountUpdateResult}`);
+};
+
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
     const { userId } = eventBody;
@@ -407,15 +432,12 @@ const handleAccountOpenedEvent = async (eventBody) => {
     if (Array.isArray(accountInfo) && accountInfo.length > 0) {
         userDetails.humanRef = accountInfo[0].humanRef;
     }
-    const bsheetAccountResult = await createFinWorksAccount(userDetails);
-    if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
-        throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
+    
+    if (userProfile.kycStatus === 'VERIFIED_AS_PERSON') {
+        logger('User is KYC verified, create ground-truth account if none already');
+        await setupBsheetAccIfNone(userProfile, accountInfo);
     }
 
-    logger('Finworks account creation resulted in:', bsheetAccountResult);
-    const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
-    logger(`Result of user account update: ${accountUpdateResult}`);
-    
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
 
@@ -426,6 +448,19 @@ const handleAccountOpenedEvent = async (eventBody) => {
     finalProcesses.push(lambda.invoke(boostProcessInvocation).promise());
 
     await Promise.all(finalProcesses);
+};
+
+const handleKyCompletedEvent = async (eventBody) => {
+    const { userId } = eventBody;
+    logger('Handling KYC completed event: ', eventBody);
+
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId, true), persistence.findHumanRefForUser(userId)]);
+    if (!Array.isArray(accountInfo) || accountInfo.length === 0) {
+        logger('Account not opened yet, let account open handle');
+        return;
+    }
+
+    await setupBsheetAccIfNone(userProfile, accountInfo);
 };
 
 const handleSaveInitiatedEvent = async (eventBody) => {
@@ -587,6 +622,9 @@ module.exports.handleUserEvent = async (snsEvent) => {
         switch (eventType) {
             case 'USER_CREATED_ACCOUNT':
                 await handleAccountOpenedEvent(eventBody);
+                break;
+            case 'VERIFIED_AS_PERSON':
+                await handleKyCompletedEvent(eventBody);
                 break;
             case 'SAVING_EVENT_INITIATED':
                 await handleSaveInitiatedEvent(eventBody);
