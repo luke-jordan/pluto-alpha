@@ -166,7 +166,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
             countryCode: testCountryCode,
             nationalId: testNationalId,
             userStatus: 'CREATED',
-            kycStatus: 'CONTACT_VERIFIED',
+            kycStatus: 'FAILED_VERIFICATION',
             securedStatus: 'PASSWORD_SET',
             updatedTimeEpochMillis: moment().valueOf()
         };
@@ -207,7 +207,43 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(sqsSendStub).to.have.not.been.called;
     });
 
-    it('Creates balance sheet account after KYC verification', async () => {
+    it('Account open creates balance sheet account if KYC already verified', async () => {
+        const testUserId = uuid();
+
+        const testUserProfile = {
+            systemWideUserId: testUserId,
+            creationTimeEpochMillis: moment().valueOf(),
+            personalName: 'Meng',
+            familyName: 'Ke',
+            emailAddress: 'mencius@confucianism.com',
+            kycStatus: 'VERIFIED_AS_PERSON'
+        };
+
+        redisGetStub.onFirstCall().returns(JSON.stringify(testUserProfile));
+        getHumanRefStub.resolves([{ humanRef: 'MKZ0010', accountId: 'some-id', tags: [] }]);
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ accountNumber: 'MKZ0010' }) })});
+        
+        const snsEvent = wrapEventSns({ userId: testUserId, eventType: 'USER_CREATED_ACCOUNT' });
+        const resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
+
+        expect(resultOfHandle).to.exist;
+        expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
+        expect(redisGetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${testUserId}`);
+        expect(getHumanRefStub).to.have.been.calledOnceWithExactly(testUserId);
+        
+        expect(lamdbaInvokeStub.callCount).to.equal(3); // other calls covered above
+
+        const bsheetInvocation = helper.wrapLambdaInvoc(config.get('lambdas.createBalanceSheetAccount'), false, {
+            idNumber: testUserProfile.nationalId,
+            surname: testUserProfile.familyName,
+            firstNames: testUserProfile.personalName,
+            humanRef: 'MKZ0010'
+        });
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(bsheetInvocation);
+        // as are the rest of them
+    });
+
+    it('Creates balance sheet account after KYC verification, if not done prior', async () => {
         const testUserId = uuid();
         const testNationalId = 'some-national-id';
         const testUpdateTime = moment();

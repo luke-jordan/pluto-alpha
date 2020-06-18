@@ -398,33 +398,7 @@ const findPendingFriendRequest = async (userProfile) => {
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const handleAccountOpenedEvent = async (eventBody) => {
-    logger('Handling event:', eventBody);
-    const { userId } = eventBody;
-    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId, true), persistence.findHumanRefForUser(userId)]);
-    logger('Result of account info retrieval: ', accountInfo);
-    const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
-    if (Array.isArray(accountInfo) && accountInfo.length > 0) {
-        userDetails.humanRef = accountInfo[0].humanRef;
-    }
-    
-    const notificationContacts = config.get('publishing.accountsPhoneNumbers');
-    const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
-
-    finalProcesses.push(findPendingFriendRequest(userProfile));
-
-    const boostEvent = { ...eventBody, context: { accountId: accountInfo[0].accountId }};
-    const boostProcessInvocation = assembleBoostProcessInvocation(boostEvent);
-    finalProcesses.push(lambda.invoke(boostProcessInvocation).promise());
-
-    await Promise.all(finalProcesses);
-};
-
-const handleKyCompletedEvent = async (eventBody) => {
-    const { userId } = eventBody;
-    logger('Handling KYC completed event: ', eventBody);
-
-    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId, true), persistence.findHumanRefForUser(userId)]);
+const setupBsheetAccIfNone = async (userProfile, accountInfo) => {
     const { tags } = accountInfo[0];
     logger('Fetched tags for account: ', tags);
 
@@ -445,8 +419,48 @@ const handleKyCompletedEvent = async (eventBody) => {
     }
 
     logger('Finworks account creation resulted in:', bsheetAccountResult);
-    const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
+    const accountUpdateResult = await updateAccountTags(userProfile.systemWideUserId, bsheetAccountResult.accountNumber);
     logger(`Result of user account update: ${accountUpdateResult}`);
+};
+
+const handleAccountOpenedEvent = async (eventBody) => {
+    logger('Handling event:', eventBody);
+    const { userId } = eventBody;
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId, true), persistence.findHumanRefForUser(userId)]);
+    logger('Result of account info retrieval: ', accountInfo);
+    const userDetails = { idNumber: userProfile.nationalId, surname: userProfile.familyName, firstNames: userProfile.personalName };
+    if (Array.isArray(accountInfo) && accountInfo.length > 0) {
+        userDetails.humanRef = accountInfo[0].humanRef;
+    }
+    
+    if (userProfile.kycStatus === 'VERIFIED_AS_PERSON') {
+        logger('User is KYC verified, create ground-truth account if none already');
+        await setupBsheetAccIfNone(userProfile, accountInfo);
+    }
+
+    const notificationContacts = config.get('publishing.accountsPhoneNumbers');
+    const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
+
+    finalProcesses.push(findPendingFriendRequest(userProfile));
+
+    const boostEvent = { ...eventBody, context: { accountId: accountInfo[0].accountId }};
+    const boostProcessInvocation = assembleBoostProcessInvocation(boostEvent);
+    finalProcesses.push(lambda.invoke(boostProcessInvocation).promise());
+
+    await Promise.all(finalProcesses);
+};
+
+const handleKyCompletedEvent = async (eventBody) => {
+    const { userId } = eventBody;
+    logger('Handling KYC completed event: ', eventBody);
+
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId, true), persistence.findHumanRefForUser(userId)]);
+    if (!Array.isArray(accountInfo) || accountInfo.length === 0) {
+        logger('Account not opened yet, let account open handle');
+        return;
+    }
+
+    await setupBsheetAccIfNone(userProfile, accountInfo);
 };
 
 const handleSaveInitiatedEvent = async (eventBody) => {
