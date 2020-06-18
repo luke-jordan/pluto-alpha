@@ -86,6 +86,17 @@ const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate
 
     logger('Returning result: ', returnResult);
 
+    // then these ones are special
+    const statusForUserLog = ['VERIFIED_AS_PERSON', 'FAILED_VERIFICATION', 'FLAGGED_FOR_REVIEW', 'REVIEW_CLEARED', 'REVIEW_FAILED'];
+    if (statusForUserLog.includes(newStatus)) {
+        const logOptions = { 
+            initiator: adminUserId,
+            context: { reasonToLog } 
+        };
+        logger('Status triggers user log, so fire off');
+        await publisher.publishUserEvent(systemWideUserId, newStatus, logOptions);
+    }
+
     return returnResult;
 };
 

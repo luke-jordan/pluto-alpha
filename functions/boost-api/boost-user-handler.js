@@ -73,6 +73,16 @@ module.exports.processUserBoostResponse = async (event) => {
 
         logger('Fetched boost: ', boost);
 
+        const boostAccountJoin = await persistence.fetchCurrentBoostStatus(boostId, accountId);
+        if (!boostAccountJoin) {
+            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'User is not offered this boost' }) };
+        }
+
+        const { boostStatus: currentStatus } = boostAccountJoin;
+        if (currentStatus !== 'UNLOCKED') {
+            return { statusCode: statusCodes('Bad Request'), body: JSON.stringify({ message: 'Boost is not unlocked', status: currentStatus }) };
+        }
+
         const statusEvent = { eventType, eventContext: params };
         const statusResult = conditionTester.extractStatusChangesMet(statusEvent, boost);
 
