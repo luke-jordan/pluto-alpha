@@ -13,8 +13,9 @@ const audienceJoinTable = config.get('tables.audienceJoinTable');
 const opsCommonUtil = require('ops-util-common');
 
 const DEFAULT_TABLE = 'transactionTable';
+
 // frontend has a complex nesteed structure that makes it very complex to insert the unit specification, hence this
-const DEFAULT_BALANCE_UNIT = 'WHOLE_CURRENCY';
+const DEFAULT_FRONTEND_UNIT = 'WHOLE_CURRENCY';
 
 const stdProperties = {
     saveCount: {
@@ -23,10 +24,16 @@ const stdProperties = {
         expects: 'number'
     },
     currentBalance: {
-      type: 'aggregate',
-      description: 'Sum of account balance',
-      expects: 'amount',
-      unit: DEFAULT_BALANCE_UNIT
+        type: 'aggregate',
+        description: 'Sum of account balance',
+        expects: 'amount',
+        unit: DEFAULT_FRONTEND_UNIT
+    },
+    savedThisMonth: {
+        type: 'aggregate',
+        description: 'Saved this month',
+        expects: 'amount',
+        unit: DEFAULT_FRONTEND_UNIT
     },
     lastSaveTime: {
         type: 'aggregate', // since we select on max(creation_time)
@@ -60,6 +67,16 @@ const stdProperties = {
         description: 'Number of (any) status save',
         expects: 'number'
     },
+    numberFriends: {
+        type: 'aggregate',
+        description: 'Number of saving friends',
+        expects: 'number'
+    },
+    boostResponded: {
+        type: 'match',
+        description: 'Has not engaged with boost',
+        expects: 'string'
+    },
     systemWideUserId: {
         type: 'match',
         description: 'System user ID (system only)',
@@ -71,9 +88,7 @@ const stdProperties = {
 
 module.exports.fetchAvailableProperties = () => {
     const propertyKeys = Object.keys(stdProperties);
-    return propertyKeys.map((name) => ({
-        name, ...stdProperties[name]
-    }));
+    return propertyKeys.map((name) => ({ name, ...stdProperties[name] }));
 };
 
 const convertEpochToFormat = (epochMilli) => moment(parseInt(epochMilli, 10)).format();
@@ -105,20 +120,19 @@ const convertTxCountToColumns = (condition, txStatus) => {
 };
 
 const convertSaveCountToColumns = (condition) => convertTxCountToColumns(condition, 'SETTLED');
-
 const convertPendingCountToColumns = (condition) => convertTxCountToColumns(condition, 'PENDING');
-
 const convertAnySaveCountToColumns = (condition) => convertTxCountToColumns(condition);
 
 const convertSumBalanceToColumns = (condition) => {
     const settlementStatusToInclude = ['SETTLED', 'ACCRUED'];
     const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
-    const convertAmountToSingleUnitQuery = `SUM(
+    
+    const convertAmountToDefaultUnitQuery = `SUM(
         CASE
             WHEN unit = 'WHOLE_CENT' THEN
-                amount / 100
+                amount * 100
             WHEN unit = 'WHOLE_CURRENCY' THEN
-                amount / 10000
+                amount * 10000
         ELSE
             amount
         END
@@ -137,7 +151,7 @@ const convertSumBalanceToColumns = (condition) => {
         columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
     }
 
-    const fromUnit = condition.unit || DEFAULT_BALANCE_UNIT;
+    const fromUnit = condition.unit || DEFAULT_FRONTEND_UNIT;
     logger(`Transforming ${parseInt(condition.value, 10)} from ${fromUnit} to hundredth cent ...`);
     const amountInHundredthCent = opsCommonUtil.convertToUnit(parseInt(condition.value, 10), fromUnit, 'HUNDREDTH_CENT');
 
@@ -145,7 +159,7 @@ const convertSumBalanceToColumns = (condition) => {
         conditions: [{ op: 'and', children: columnConditions }],
         groupBy: ['account_id', 'unit'],
         postConditions: [
-            { op: condition.op, prop: convertAmountToSingleUnitQuery, value: amountInHundredthCent, valueType: 'int' }
+            { op: condition.op, prop: convertAmountToDefaultUnitQuery, value: amountInHundredthCent, valueType: 'int' }
         ]
     };
 };
@@ -153,6 +167,18 @@ const convertSumBalanceToColumns = (condition) => {
 const humanRefInValueConversion = (value) => (Array.isArray(value) 
     ? value.map((item) => item.trim().toUpperCase()) 
     : value.split(', ').map((item) => item.trim().toUpperCase()));
+
+// necessary because date-time 'is' does not mean 'is', it actually means 'in the interval of that day' 
+const convertDateCondition = (condition, propToUse) => {
+    if (condition.op !== 'is') {
+        return { op: condition.op, prop: propToUse, value: convertEpochToFormat(condition.value) };
+    }
+
+    return { op: 'and', children: [
+        { op: 'greater_than_or_equal_to', prop: propToUse, value: moment(condition.value).startOf('day').format() },
+        { op: 'less_than_or_equal_to', prop: propToUse, value: moment(condition.value).endOf('day').format() }
+    ]};
+};
 
 const columnConverters = {
     saveCount: (condition) => convertSaveCountToColumns(condition),
@@ -174,7 +200,7 @@ const columnConverters = {
     lastCapitalization: (condition) => ({
         conditions: [
             { op: 'and', children: [
-                { op: condition.op, prop: 'creation_time', value: convertEpochToFormat(condition.value) },
+                convertDateCondition(condition, 'creation_time'),
                 { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                 { op: 'is', prop: 'transaction_type', value: 'CAPITALIZATION' }
             ]}
@@ -182,7 +208,7 @@ const columnConverters = {
     }),
     accountOpenTime: (condition) => ({
         conditions: [
-            { op: condition.op, prop: 'creation_time', value: convertEpochToFormat(condition.value) }
+            convertDateCondition(condition, 'creation_time')
         ]
     }),
     humanReference: (condition) => ({
@@ -280,20 +306,11 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
     return columnCondition.conditions[0];
 };
 
+// restore as part of this general tune-up
 const validateColumnConditions = (conditions) => {
     if (conditions.length === 0) {
         return true;
     }
-    // todo : restore when have a better way to do this
-    // conditions.forEach((condition) => {
-    //     if (condition.op === 'and') {
-    //         condition.children.forEach((child) => {
-    //             if (child.prop === 'humanReference') {
-    //                 throw new Error(`The 'human_ref' condition cannot be used in combination with others`);
-    //             }
-    //         });
-    //     }
-    // });
 };
 
 const hasAccountTableProperty = (conditions) => {
@@ -406,7 +423,6 @@ module.exports.previewAudience = async (params) => {
     const persistedAudience = await persistence.executeColumnConditions(columnConditions);
 
     logger('Result of preview: ', persistedAudience);
-
     return { audienceCount: persistedAudience.length };
 };
 
@@ -436,25 +452,12 @@ module.exports.refreshAudience = async ({ audienceId }) => {
 };
 
 const extractParamsFromHttpEvent = (event) => {
-    const params = event.httpMethod.toUpperCase() === 'POST' ? JSON.parse(event.body) : event.queryStringParameters;
+    const { operation, params } = opsUtil.extractPathAndParams(event);
     const userDetails = opsUtil.extractUserDetails(event);
     if (params && userDetails) {
         params.creatingUserId = userDetails.systemWideUserId;
     }
-    return params;
-};
-
-// utility method as essentially the same logic will be called in several different ways
-const extractRequestType = (event) => {
-    // if it's an http request, validate that it is admin calling, and extract from path parameters
-    if (Reflect.has(event, 'httpMethod')) {
-        const operation = event.pathParameters.proxy;
-        const params = extractParamsFromHttpEvent(event);
-        return { operation, params };
-    }
-
-    logger('Event is not http, must be another lambda, return event itself');
-    return event;
+    return { operation, params };
 };
 
 const dispatcher = {
@@ -480,8 +483,9 @@ module.exports.handleInboundRequest = async (event) => {
             return opsUtil.wrapResponse({ }, 403);
         }
 
-        const requestInfo = extractRequestType(event);
-        const { operation, params } = requestInfo;
+        // const requestInfo = extractRequestType(event);
+        const { operation, params } = extractParamsFromHttpEvent(event);
+        
 
         const resultOfProcess = await dispatcher[operation.trim().toLowerCase()](params);
         logger('Result of audience processing: ', resultOfProcess);

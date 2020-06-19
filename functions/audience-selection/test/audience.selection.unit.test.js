@@ -11,7 +11,7 @@ const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const expect = chai.expect;
-const proxyquire = require('proxyquire').noCallThru();
+const proxyquire = require('proxyquire');
 
 const executeConditionsStub = sinon.stub();
 const countAudienceStub = sinon.stub();
@@ -27,7 +27,8 @@ const audienceHandler = proxyquire('../audience-handler', {
         'selectAudienceActive': selectAudienceStub,
         'deactivateAudienceAccounts': deactivateAudienceAccountsStub,
         'upsertAudienceAccounts': upsertAudienceAccountsStub,
-        'fetchAudience': fetchAudienceStub
+        'fetchAudience': fetchAudienceStub,
+        '@noCallThru': true
     }
 });
 
@@ -316,61 +317,6 @@ describe('Converts standard properties into column conditions', () => {
             conditions: [
                 { op: 'and', children: [
                     { op: 'in', prop: 'human_ref', value: ['TESTREF1', 'TESTREF2', 'TESTREF3'] },
-                    { op: 'is', prop: 'responsible_client_id', value: mockClientId }
-                ]
-            }]
-        };
-
-        const expectedPersistenceParams = {
-            audienceType: 'PRIMARY',
-            clientId: 'test-client-id',
-            creatingUserId: mockUserId,
-            isDynamic: false,
-            propertyConditions: mockSelectionJSON.conditions
-        };
-
-        const authorizedRequest = {
-            httpMethod: 'POST',
-            pathParameters: { proxy: 'create' },
-            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
-            body: JSON.stringify(mockSelectionJSON)
-        };
-
-        const mockAudienceId = uuid();
-
-        executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
-
-        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
-
-        expect(wrappedResult).to.have.property('statusCode', 200);
-        expect(wrappedResult).to.have.property('headers');
-        expect(wrappedResult).to.have.property('body');
-
-        const unWrappedResult = JSON.parse(wrappedResult.body);
-        expect(unWrappedResult).to.deep.equal({ audienceId: mockAudienceId, audienceCount: 10000 });
-
-        expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
-    });
-
-    it('Should handle account opened date well', async () => {
-        const testOpenTime = moment().subtract(30, 'days');
-
-        const mockSelectionJSON = {
-            clientId: mockClientId,
-            isDynamic: false,
-            conditions: [
-                { op: 'and', children: [
-                    { prop: 'accountOpenTime', op: 'greater_than', value: testOpenTime.valueOf() }
-                ]}
-            ]
-        };
-
-        const expectedSelection = {
-            creatingUserId: mockUserId,
-            table: 'account_data.core_account_ledger',
-            conditions: [
-                { op: 'and', children: [
-                    { op: 'greater_than', prop: 'creation_time', value: testOpenTime.format() },
                     { op: 'is', prop: 'responsible_client_id', value: mockClientId }
                 ]
             }]
