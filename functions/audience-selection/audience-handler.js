@@ -3,188 +3,29 @@
 const logger = require('debug')('jupiter:audience-selection:main');
 const config = require('config');
 
-const moment = require('moment');
 const opsUtil = require('ops-util-common');
 
+const converter = require('./condition-converter');
 const persistence = require('./persistence');
 
 const txTable = config.get('tables.transactionTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');
-const opsCommonUtil = require('ops-util-common');
 
 const DEFAULT_TABLE = 'transactionTable';
 
-// frontend has a complex nesteed structure that makes it very complex to insert the unit specification, hence this
-const DEFAULT_FRONTEND_UNIT = 'WHOLE_CURRENCY';
-
-const stdProperties = {
-    saveCount: {
-        type: 'aggregate',
-        description: 'Number of saves',
-        expects: 'number'
-    },
-    currentBalance: {
-        type: 'aggregate',
-        description: 'Sum of account balance',
-        expects: 'amount',
-        unit: DEFAULT_FRONTEND_UNIT
-    },
-    savedThisMonth: {
-        type: 'aggregate',
-        description: 'Saved this month',
-        expects: 'amount',
-        unit: DEFAULT_FRONTEND_UNIT
-    },
-    lastSaveTime: {
-        type: 'aggregate', // since we select on max(creation_time)
-        description: 'Last save date',
-        expects: 'epochMillis'
-    },
-    accountOpenTime: {
-        type: 'match',
-        description: 'Account open date',
-        expects: 'epochMillis',
-        table: 'accountTable'
-    },
-    lastCapitalization: {
-        type: 'match',
-        description: 'Last capitalization',
-        expects: 'epochMillis'
-    },
-    humanReference: {
-        type: 'match',
-        description: 'Human reference',
-        expects: 'stringMultiple',
-        table: 'accountTable'
-    },
-    pendingCount: {
-        type: 'aggregate',
-        description: 'Number of pending',
-        expects: 'number'
-    },
-    anySaveCount: {
-        type: 'aggregate',
-        description: 'Number of (any) status save',
-        expects: 'number'
-    },
-    numberFriends: {
-        type: 'aggregate',
-        description: 'Number of saving friends',
-        expects: 'number'
-    },
-    boostResponded: {
-        type: 'match',
-        description: 'Has not engaged with boost',
-        expects: 'string'
-    },
-    systemWideUserId: {
-        type: 'match',
-        description: 'System user ID (system only)',
-        expects: 'stringMultiple',
-        table: 'accountTable',
-        excludeOnPanel: true
-    }
-};
-
 module.exports.fetchAvailableProperties = () => {
-    const propertyKeys = Object.keys(stdProperties);
-    return propertyKeys.map((name) => ({ name, ...stdProperties[name] }));
-};
-
-const convertEpochToFormat = (epochMilli) => moment(parseInt(epochMilli, 10)).format();
-
-const convertTxCountToColumns = (condition, txStatus) => {
-    const columnConditions = [
-        { prop: 'transaction_type', op: 'is', value: 'USER_SAVING_EVENT' }
-    ];
-
-    if (txStatus) {
-        columnConditions.push({ prop: 'settlement_status', op: 'is', value: txStatus });
-    }
-
-    if (Number.isInteger(condition.startTime)) {
-        columnConditions.push({ prop: 'creation_time', op: 'greater_than', value: convertEpochToFormat(condition.startTime) });
-    }
-
-    if (Number.isInteger(condition.endTime)) {
-        columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
-    }
-
-    return {
-        conditions: [{ op: 'and', children: columnConditions }],
-        groupBy: ['account_id'],
-        postConditions: [
-            { op: condition.op, prop: 'count(transaction_id)', value: condition.value, valueType: 'int' }
-        ]
-    };
-};
-
-const convertSaveCountToColumns = (condition) => convertTxCountToColumns(condition, 'SETTLED');
-const convertPendingCountToColumns = (condition) => convertTxCountToColumns(condition, 'PENDING');
-const convertAnySaveCountToColumns = (condition) => convertTxCountToColumns(condition);
-
-const convertSumBalanceToColumns = (condition) => {
-    const settlementStatusToInclude = ['SETTLED', 'ACCRUED'];
-    const transactionTypesToInclude = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
-    
-    const convertAmountToDefaultUnitQuery = `SUM(
-        CASE
-            WHEN unit = 'WHOLE_CENT' THEN
-                amount * 100
-            WHEN unit = 'WHOLE_CURRENCY' THEN
-                amount * 10000
-        ELSE
-            amount
-        END
-    )`;
-
-    const columnConditions = [
-        { prop: 'settlement_status', op: 'in', value: settlementStatusToInclude },
-        { prop: 'transaction_type', op: 'in', value: transactionTypesToInclude }
-    ];
-
-    if (Number.isInteger(condition.startTime)) {
-        columnConditions.push({ prop: 'creation_time', op: 'greater_than', value: convertEpochToFormat(condition.startTime) });
-    }
-
-    if (Number.isInteger(condition.endTime)) {
-        columnConditions.push({ prop: 'creation_time', op: 'less_than', value: convertEpochToFormat(condition.endTime) });
-    }
-
-    const fromUnit = condition.unit || DEFAULT_FRONTEND_UNIT;
-    logger(`Transforming ${parseInt(condition.value, 10)} from ${fromUnit} to hundredth cent ...`);
-    const amountInHundredthCent = opsCommonUtil.convertToUnit(parseInt(condition.value, 10), fromUnit, 'HUNDREDTH_CENT');
-
-    return {
-        conditions: [{ op: 'and', children: columnConditions }],
-        groupBy: ['account_id', 'unit'],
-        postConditions: [
-            { op: condition.op, prop: convertAmountToDefaultUnitQuery, value: amountInHundredthCent, valueType: 'int' }
-        ]
-    };
-};
-
-const humanRefInValueConversion = (value) => (Array.isArray(value) 
-    ? value.map((item) => item.trim().toUpperCase()) 
-    : value.split(', ').map((item) => item.trim().toUpperCase()));
-
-// necessary because date-time 'is' does not mean 'is', it actually means 'in the interval of that day' 
-const convertDateCondition = (condition, propToUse) => {
-    if (condition.op !== 'is') {
-        return { op: condition.op, prop: propToUse, value: convertEpochToFormat(condition.value) };
-    }
-
-    return { op: 'and', children: [
-        { op: 'greater_than_or_equal_to', prop: propToUse, value: moment(condition.value).startOf('day').format() },
-        { op: 'less_than_or_equal_to', prop: propToUse, value: moment(condition.value).endOf('day').format() }
-    ]};
+    const propertyKeys = Object.keys(converter.stdProperties);
+    return propertyKeys.map((name) => ({ name, ...converter.stdProperties[name] }));
 };
 
 const columnConverters = {
-    saveCount: (condition) => convertSaveCountToColumns(condition),
-    pendingCount: (condition) => convertPendingCountToColumns(condition),
-    anySaveCount: (condition) => convertAnySaveCountToColumns(condition),
-    currentBalance: (condition) => convertSumBalanceToColumns(condition),
+    saveCount: (condition) => converter.convertSaveCountToColumns(condition),
+    pendingCount: (condition) => converter.convertPendingCountToColumns(condition),
+    anySaveCount: (condition) => converter.convertAnySaveCountToColumns(condition),
+
+    currentBalance: (condition) => converter.convertSumBalanceToColumns(condition),
+    savedThisMonth: (condition) => converter.convertSavedThisMonth(condition),
+    
     lastSaveTime: (condition) => ({
         conditions: [
             { op: 'and', children: [
@@ -194,26 +35,24 @@ const columnConverters = {
         ],
         groupBy: ['account_id'],
         postConditions: [
-           { op: condition.op, prop: 'max(creation_time)', value: convertEpochToFormat(condition.value) }
+           { op: condition.op, prop: 'max(creation_time)', value: converter.convertEpochToFormat(condition.value) }
         ]
     }),
     lastCapitalization: (condition) => ({
         conditions: [
             { op: 'and', children: [
-                convertDateCondition(condition, 'creation_time'),
+                converter.convertDateCondition(condition, 'creation_time'),
                 { op: 'is', prop: 'settlement_status', value: 'SETTLED' },
                 { op: 'is', prop: 'transaction_type', value: 'CAPITALIZATION' }
             ]}
         ]
     }),
     accountOpenTime: (condition) => ({
-        conditions: [
-            convertDateCondition(condition, 'creation_time')
-        ]
+        conditions: [converter.convertDateCondition(condition, 'creation_time')]
     }),
     humanReference: (condition) => ({
         conditions: [
-            { op: condition.op, prop: 'human_ref', value: condition.op === 'is' ? condition.value.trim().toUpperCase() : humanRefInValueConversion(condition.value) }
+            { op: condition.op, prop: 'human_ref', value: condition.op === 'is' ? condition.value.trim().toUpperCase() : converter.humanRefInValueConversion(condition.value) }
         ]
     }),
     systemWideUserId: (condition) => ({
@@ -260,8 +99,8 @@ const addTableAndClientId = (selection, clientId, tableKey) => {
 };
 
 const convertAggregateIntoEntity = async (aggregateCondition, persistenceParams) => {
-    const converter = columnConverters[aggregateCondition.prop];
-    const columnSelection = { creatingUserId: persistenceParams.creatingUserId, ...converter(aggregateCondition) };
+    const propConverter = columnConverters[aggregateCondition.prop];
+    const columnSelection = { creatingUserId: persistenceParams.creatingUserId, ...propConverter(aggregateCondition) };
     const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId, DEFAULT_TABLE);
     
     logger('Transforming aggregate condition: ', clientRestricted);
@@ -277,6 +116,7 @@ const convertAggregateIntoEntity = async (aggregateCondition, persistenceParams)
 // requires client ID for restriction of sub-audience creation (possibly redundant, but otherwise could lead to massive inefficiency 
 // & possible leaks later down the line)
 const convertPropertyCondition = async (propertyCondition, persistenceParams) => {
+    logger('Passed property condition: ', propertyCondition);
     // first check if this combinatorial, if so, do recursion
     if (propertyCondition.op === 'or' || propertyCondition.op === 'and') {
         const childConditions = propertyCondition.children;
@@ -322,7 +162,7 @@ const hasAccountTableProperty = (conditions) => {
         if (['and', 'or'].includes(condition.op)) {
             return hasAccountTableProperty(condition.children);
         }
-        return Reflect.has(stdProperties[condition.prop], 'table');
+        return Reflect.has(converter.stdProperties[condition.prop], 'table');
     });
 };
 
@@ -337,7 +177,7 @@ const extractTableArrayFromCondition = (condition) => {
             reduce((list, cum) => [...list, ...cum], []);
     }
 
-    const propTable = stdProperties[condition.prop].table;
+    const propTable = converter.stdProperties[condition.prop].table;
     return propTable ? [propTable] : [DEFAULT_TABLE];
 };
 
@@ -395,6 +235,7 @@ const constructColumnConditions = async (params) => {
     const selectionObject = {
         conditions: columnConditions, creatingUserId
     };
+    logger('Selection object here: ', JSON.stringify(selectionObject));
     
     if (sample) {
         selectionObject.sample = sample;

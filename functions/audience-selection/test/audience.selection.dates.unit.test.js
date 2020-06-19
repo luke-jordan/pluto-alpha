@@ -11,6 +11,8 @@ chai.use(require('sinon-chai'));
 const expect = chai.expect;
 const proxyquire = require('proxyquire').noCallThru();
 
+const helper = require('./test.helper');
+
 const executeConditionsStub = sinon.stub();
 const audienceHandler = proxyquire('../audience-handler', {
     './persistence': {
@@ -26,22 +28,6 @@ describe('Audience selection - date based properties', () => {
 
     beforeEach(() => executeConditionsStub.reset());
 
-    const wrapAuthorizedRequest = (body) => ({
-        httpMethod: 'POST',
-        pathParameters: { proxy: 'create' },
-        requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
-        body: JSON.stringify(body)
-    });
-
-    const standardOkayChecks = (wrappedResult, expectedBody) => {
-        expect(wrappedResult).to.have.property('statusCode', 200);
-        expect(wrappedResult).to.have.property('headers');
-        expect(wrappedResult).to.have.property('body');
-
-        const unWrappedResult = JSON.parse(wrappedResult.body);
-        expect(unWrappedResult).to.deep.equal(expectedBody);
-    };
-
     it('Should handle account opened date well, if simple range', async () => {
         const testOpenTime = moment().subtract(30, 'days');
 
@@ -50,7 +36,7 @@ describe('Audience selection - date based properties', () => {
             isDynamic: false,
             conditions: [
                 { op: 'and', children: [
-                    { prop: 'accountOpenTime', op: 'greater_than', value: testOpenTime.valueOf() }
+                    { prop: 'accountOpenTime', op: 'greater_than', value: String(testOpenTime.valueOf()) }
                 ]}
             ]
         };
@@ -78,9 +64,9 @@ describe('Audience selection - date based properties', () => {
         const mockAudienceId = 'created-audience-id';
         executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
 
-        const authorizedRequest = wrapAuthorizedRequest(mockSelectionJSON);
+        const authorizedRequest = helper.wrapAuthorizedRequest(mockSelectionJSON, mockUserId);
         const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
-        standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 10000 });
+        helper.standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 10000 });
 
         expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
     });
@@ -133,9 +119,9 @@ describe('Audience selection - date based properties', () => {
         const mockAudienceId = 'created-audience-id';
         executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
 
-        const authorizedRequest = wrapAuthorizedRequest(mockSelectionJSON);
+        const authorizedRequest = helper.wrapAuthorizedRequest(mockSelectionJSON, mockUserId);
         const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
-        standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 10000 });
+        helper.standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 10000 });
 
         expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
     });
@@ -188,9 +174,9 @@ describe('Audience selection - date based properties', () => {
         const mockAudienceId = 'created-audience-id';
         executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
 
-        const authorizedRequest = wrapAuthorizedRequest(mockSelectionJSON);
+        const authorizedRequest = helper.wrapAuthorizedRequest(mockSelectionJSON, mockUserId);
         const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
-        standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 10000 });
+        helper.standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 10000 });
 
         // handy for debugging, if necessary
         // const passedSelection = executeConditionsStub.getCall(0).args[0];
