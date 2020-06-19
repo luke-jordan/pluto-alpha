@@ -20,7 +20,8 @@ create table if not exists factoid_data.factoid_user_join_table (
     user_id uuid not null primary key,
     factoid_id uuid not null  references factoid_data.factoid (factoid_id),
     factoid_status varchar (100) references factoid_data.factoid (factoid_status),
-    read_count int not null default 1,
+    read_count int not null default 0,
+    fetch_count int not null default 0,
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp
 );
