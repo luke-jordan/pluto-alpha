@@ -27,7 +27,7 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
     it('Handles conversion into boost offered but not redeemed', async () => {
         const mockSelectionJSON = {
             clientId: mockClientId,
-            isDynamic: false,
+            isDynamic: true,
             conditions: [
                 { prop: 'boostNotRedeemed', op: 'is', value: 'this-boost-here', type: 'match' }
             ]
@@ -35,42 +35,77 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
 
         const expectedSelection = {
             table: 'boost_data.boost_account_status',
-            creatingUserId: '',
+            creatingUserId: mockUserId,
             conditions: [{ op: 'and', children: [
-                { 'prop': 'boost_id', op: 'is', value: 'this-boost-here' },
-                { 'prop': 'boost_status', op: 'in', value: ['CREATED', 'OFFERED', 'UNLOCKED'] }
+                { prop: 'boost_id', op: 'is', value: 'this-boost-here' },
+                { prop: 'boost_status', op: 'in', value: ['CREATED', 'OFFERED', 'UNLOCKED'] }
             ]}]
         };
+
+        const expectedPersistenceParams = {
+            clientId: 'test-client-id',
+            creatingUserId: mockUserId,
+            isDynamic: true,
+            propertyConditions: mockSelectionJSON.conditions,
+            audienceType: 'PRIMARY'
+        };
+
+        const mockAudienceId = 'created-audience-id';
+
+        executeConditionsStub.onFirstCall().resolves({ audienceId: mockAudienceId, audienceCount: 20 });
+
+        const authorizedRequest = helper.wrapAuthorizedRequest(mockSelectionJSON, mockUserId);
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+        helper.standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 20 });
+
+        expect(executeConditionsStub).to.have.been.calledOnce;
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams, expectedSelection);
 
     });
 
 
     // going to be a bit more complex because of the issues with the friend counting, so come back to it
-    // it('Handles conversion into friend numbers', async () => {
-    //     const mockSelectionJSON = {
-    //         clientId: mockClientId,
-    //         isDynamic: false,
-    //         conditions: [
-    //             { prop: 'numberFriends', op: 'greater_than', value: 2, type: 'match' }
-    //         ]
-    //     };
+    it('Handles conversion into friend numbers', async () => {
+        const countSubQuery = `(select count(*) from friend_data.core_friend_relationship where (initiated_user_id = owner_user_id or accepted_user_id = owner_user_id) and ` +
+            `relationship_status = 'ACTIVE')`;
+        
+        const mockSelectionJSON = {
+            clientId: mockClientId,
+            isDynamic: true,
+            conditions: [
+                { prop: 'numberFriends', op: 'greater_than', value: 2, type: 'match' }
+            ]
+        };
 
-    //     const expectedIntermediateSelection = {
-    //         table: 'friend_data.core_friend_relationship',
-    //         creatingUserId: mockUserId,
-    //         conditions: [
-    //             { op: 'and', children: [
-    //                 { prop: 'settlement_status', op: 'in', value: ['SETTLED', 'ACCRUED'] },
-    //                 { prop: 'transaction_type', op: 'in', value: ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'] },
-    //                 { prop: 'client_id', op: 'is', value: 'test-client-id' }
-    //             ]
-    //         }],
-    //         groupBy: ['account_id', 'unit'],
-    //         postConditions: [
-    //             { op: 'less_than', prop: summationProperty, value: 20 * 100 * 100, valueType: 'int' }
-    //         ]
+        const expectedSelection = {
+            table: 'account_data.core_account_ledger', // see note in condition-converter std properties list
+            creatingUserId: mockUserId,
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'is', prop: 'responsible_client_id', value: 'test-client-id' },
+                    { op: 'greater_than', prop: countSubQuery, value: 2, valueType: 'int' }
+                ]}
+            ]
+        };
 
-    //     }
-    // });
+        const expectedPersistenceParams = {
+            clientId: 'test-client-id',
+            creatingUserId: mockUserId,
+            isDynamic: true,
+            propertyConditions: mockSelectionJSON.conditions,
+            audienceType: 'PRIMARY'
+        };
+
+        const mockAudienceId = 'created-audience-id';
+
+        executeConditionsStub.onFirstCall().resolves({ audienceId: mockAudienceId, audienceCount: 12 });
+
+        const authorizedRequest = helper.wrapAuthorizedRequest(mockSelectionJSON, mockUserId);
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+        helper.standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 12 });
+
+        expect(executeConditionsStub).to.have.been.calledOnce;
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams, expectedSelection);
+    });
 
 });

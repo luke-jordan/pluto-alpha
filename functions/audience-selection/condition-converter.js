@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:audience:converter');
+const config = require('config');
 const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
@@ -59,14 +60,17 @@ module.exports.stdProperties = {
         expects: 'number'
     },
     numberFriends: {
-        type: 'aggregate',
+        type: 'match',
         description: 'Number of saving friends',
-        expects: 'number'
+        expects: 'number',
+        table: 'accountTable' // since we use a subquery on match (pattern to be avoided, but else JSON structure far too complex, given user-id/account-id differences)
     },
     boostNotRedeemed: {
         type: 'match',
         description: 'Has not redeemed boost',
-        expects: 'string'
+        expects: 'string',
+        table: 'boostTable',
+        skipClient: true
     },
     systemWideUserId: {
         type: 'match',
@@ -179,9 +183,23 @@ module.exports.convertSavedThisMonth = (condition) => {
 // //////////////////////////////////// BOOST, FRIEND SECTION  /////////////////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-module.exports.convertBoostCreatedOffered = (condition) => {
+module.exports.convertBoostCreatedOffered = (condition) => ({
+    conditions: [{ op: 'and', children: [
+        { prop: 'boost_id', op: condition.op, value: condition.value },
+        { prop: 'boost_status', op: 'in', value: ['CREATED', 'OFFERED', 'UNLOCKED'] }
+    ]}]
+});
 
-}
+module.exports.convertNumberFriends = (condition) => {
+    const countSubQuery = `(select count(*) from ${config.get('tables.friendTable')} where (initiated_user_id = owner_user_id or accepted_user_id = owner_user_id) and ` +
+        `relationship_status = 'ACTIVE')`;
+
+    return {
+        conditions: [
+            { op: condition.op, prop: countSubQuery, value: condition.value, valueType: 'int' }
+        ]
+    };
+};
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // //////////////////////////////////// UTILITY / AUX CONDITIONS ///////////////////////////////////////////////////////////
