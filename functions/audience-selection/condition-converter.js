@@ -149,7 +149,7 @@ module.exports.convertSumBalanceToColumns = (condition) => {
 
     return {
         conditions: [{ op: 'and', children: columnConditions }],
-        groupBy: ['account_id', 'unit'],
+        groupBy: ['account_id'],
         postConditions: [
             { op: condition.op, prop: convertAmountToDefaultUnitQuery, value: amountInHundredthCent, valueType: 'int' }
         ]
@@ -168,7 +168,7 @@ module.exports.convertSavedThisMonth = (condition) => {
 
     return {
         conditions: [{ op: 'and', children: txInclusionConditions }],
-        groupBy: ['account_id', 'unit'],
+        groupBy: ['account_id'],
         postConditions: [
             { op: condition.op, prop: convertAmountToDefaultUnitQuery, value: amountInHundredthCent, valueType: 'int' }
         ]
