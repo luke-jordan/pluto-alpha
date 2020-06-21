@@ -76,6 +76,7 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         const resultOfPublish = await sns.publish(messageForQueue).promise();
 
         if (typeof resultOfPublish === 'object' && Reflect.has(resultOfPublish, 'MessageId')) {
+            logger(`Completed publishing ${userId}::${eventType}, result: `, resultOfPublish);
             return { result: 'SUCCESS' };
         }
 
