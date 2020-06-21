@@ -57,7 +57,7 @@ describe('*** TEST BALANCE SELECTION ***', () => {
                     { prop: 'client_id', op: 'is', value: 'test-client-id' }
                 ]
             }],
-            groupBy: ['account_id', 'unit'],
+            groupBy: ['account_id'],
             postConditions: [
                 { op: 'less_than', prop: summationProperty, value: 20 * 100 * 100, valueType: 'int' }
             ]
@@ -119,7 +119,7 @@ describe('*** TEST BALANCE SELECTION ***', () => {
                     { prop: 'client_id', op: 'is', value: 'test-client-id' }
                 ]
             }],
-            groupBy: ['account_id', 'unit'],
+            groupBy: ['account_id'],
             postConditions: [
                 { op, prop: summationProperty, value, valueType: 'int' }
             ]
