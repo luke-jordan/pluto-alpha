@@ -18,6 +18,12 @@ module.exports.fetchAvailableProperties = () => {
     return propertyKeys.map((name) => ({ name, ...converter.stdProperties[name] }));
 };
 
+const tableClientIdColumns = {
+    transactionTable: 'client_id',
+    accountTable: 'responsible_client_id',
+    boostTable: null
+};
+
 const columnConverters = {
     saveCount: (condition) => converter.convertSaveCountToColumns(condition),
     pendingCount: (condition) => converter.convertPendingCountToColumns(condition),
@@ -47,6 +53,7 @@ const columnConverters = {
             ]}
         ]
     }),
+
     accountOpenTime: (condition) => ({
         conditions: [converter.convertDateCondition(condition, 'creation_time')]
     }),
@@ -55,6 +62,10 @@ const columnConverters = {
             { op: condition.op, prop: 'human_ref', value: condition.op === 'is' ? condition.value.trim().toUpperCase() : converter.humanRefInValueConversion(condition.value) }
         ]
     }),
+
+    boostNotRedeemed: (condition) => converter.convertBoostCreatedOffered(condition),
+    numberFriends: (condition) => converter.convertNumberFriends(condition),
+    
     systemWideUserId: (condition) => ({
         conditions: [
             { op: condition.op, prop: 'owner_user_id', value: condition.value }
@@ -69,9 +80,13 @@ const addTableAndClientId = (selection, clientId, tableKey) => {
     const existingTopLevel = { ...selectionConditions[0] };
 
     logger('*** Table Key? : ', tableKey);
-    const clientColumn = tableKey === 'accountTable' ? 'responsible_client_id' : 'client_id';
-    const clientCondition = { op: 'is', prop: clientColumn, value: clientId };
+    const clientColumn = tableClientIdColumns[tableKey];
+    if (!clientColumn) {
+        selection.table = tableName;
+        return selection;
+    }
 
+    const clientCondition = { op: 'is', prop: clientColumn, value: clientId };
     let newTopLevel = {};
 
     // three cases: either no top level, or it's an and, so just add the client condition, or it's more complex, and need to construct a new head
@@ -84,7 +99,7 @@ const addTableAndClientId = (selection, clientId, tableKey) => {
         topLevelChildren.push(clientCondition);
         newTopLevel = { op: 'and', children: topLevelChildren };    
     } else {
-        // the case of a top level 'or' and top-level simple operation are the same, we construct an 'and' above it
+        // the case of a top level 'or' and top-level simple operation are the same, we construct an 'and' above it, unless the property has a 'skip' attached to it
         const copiedCondition = { ...existingTopLevel };
         newTopLevel = { op: 'and', children: [clientCondition, copiedCondition] };
     }
