@@ -17,11 +17,15 @@ const accountTypeMap = {
 
 const validateParams = (params) => {
     const supportedBanks = config.get('pbVerify.supportedBanks');
+    const manualBanks = config.get('pbVerify.manualBanks'); // these are for ones very popular but without automated support
+    const validBanks = [...supportedBanks, ...manualBanks];
+
     const accountTypes = config.get('pbVerify.accountTypes');
+    
     switch (true) {
         case !params.bankName:
             throw new Error('NO_BANK_NAME');
-        case !supportedBanks.includes(params.bankName.toUpperCase()):
+        case !validBanks.includes(params.bankName.toUpperCase()):
             throw new Error('BANK_NOT_SUPPORTED');
         case !params.accountNumber:
             throw new Error('NO_ACCOUNT_NUMBER');
@@ -46,7 +50,7 @@ const assembleRequest = (params, action) => {
     if (action === 'INITIALISE') {
         return {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: `${config.get('pbVerify.endpoint')}/${config.get('pbVerify.path.bankstart')}`,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
@@ -65,7 +69,7 @@ const assembleRequest = (params, action) => {
     if (action === 'CHECKSTATUS') {
         return {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: `${config.get('pbVerify.endpoint')}/${config.get('pbVerify.path.bankstatus')}`,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
@@ -99,13 +103,19 @@ module.exports.initialize = async (event) => {
         const mockVerifyOn = config.has('mock.enabled') && typeof config.get('mock.enabled') === 'boolean' && config.get('mock.enabled');
         if (mockVerifyOn) {
             const mockResult = Boolean(config.get('mock.result'));
-            logger('Mock result: ', mockResult);
+            logger('Returning mock result: ', mockResult);
             return { status: 'SUCCESS', jobId: 'mock-job-id' };
         }
 
         const params = extractEventBody(event);
         const validParams = validateParams(params);
         logger('Validated params:', validParams);
+
+        const isManualBank = config.get('pbVerify.manualBanks').includes(params.bankName.toUpperCase());
+        logger('Is this a bank that requires manual verification: ', isManualBank);
+        if (isManualBank) {
+            return { status: 'SUCCESS', jobId: 'MANUAL_JOB' };
+        }
 
         const options = assembleRequest(validParams, 'INITIALISE');
         logger('Created options:', options);
@@ -156,13 +166,18 @@ module.exports.checkStatus = async (event) => {
         const mockVerifyOn = config.has('mock.enabled') && typeof config.get('mock.enabled') === 'boolean' && config.get('mock.enabled');
         if (mockVerifyOn) {
             const mockResult = Boolean(config.get('mock.result'));
-            logger('Mock result: ', mockResult);
+            logger('Mock result in check status: ', mockResult);
             return { result: mockResult };
         }
 
         const params = extractEventBody(event);
         if (!params.jobId) {
             throw new Error('Missing job id');
+        }
+
+        if (params.jobId === 'MANUAL_JOB') {
+            logger('Job ID is for manual bank, return true');
+            return { result: 'VERIFY_MANUALLY' };
         }
 
         const options = assembleRequest(params, 'CHECKSTATUS');
