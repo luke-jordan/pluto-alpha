@@ -73,7 +73,9 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
             clientId: mockClientId,
             isDynamic: true,
             conditions: [
-                { prop: 'numberFriends', op: 'greater_than', value: 2, type: 'match' }
+                { op: 'and', children: [
+                    { prop: 'numberFriends', op: 'greater_than', value: 2, type: 'match' }
+                ]}
             ]
         };
 
@@ -82,8 +84,8 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
             creatingUserId: mockUserId,
             conditions: [
                 { op: 'and', children: [
-                    { op: 'is', prop: 'responsible_client_id', value: 'test-client-id' },
-                    { op: 'greater_than', prop: countSubQuery, value: 2, valueType: 'int' }
+                    { op: 'greater_than', prop: countSubQuery, value: 2, valueType: 'int' },
+                    { op: 'is', prop: 'responsible_client_id', value: 'test-client-id' }
                 ]}
             ]
         };

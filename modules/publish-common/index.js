@@ -47,11 +47,10 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             throw Error('Publish event called with undefined event type');
         }
 
-        const eventTime = options.timestamp || moment().valueOf();
         const eventToPublish = {
             userId,
             eventType,
-            timestamp: eventTime,
+            timestamp: options.timestamp || moment().valueOf(),
             interface: options.interface,
             initiator: options.initiator,
             context: options.context,
@@ -83,7 +82,6 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         logger('PUBLISHING_ERROR: Published message: ', messageForQueue);
         return { result: 'FAILURE' };
     } catch (err) {
-        // we need to know if these are not going out
         logger('FATAL_ERROR: ', err);
         return { result: 'FAILURE' };
     }
