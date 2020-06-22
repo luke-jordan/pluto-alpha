@@ -12,9 +12,10 @@ const rdsConnection = new RdsConnection(config.get('db'));
 
 const defaultTable = config.get('tables.transactionTable');
 const accountTable = config.get('tables.accountTable');
+const boostTable = config.get('tables.boostTable');
 const dummyTableForTests = 'transactions';
 
-const supportedTables = [dummyTableForTests, defaultTable, accountTable];
+const supportedTables = [dummyTableForTests, defaultTable, accountTable, boostTable];
 
 const audienceTable = config.get('tables.audienceTable');
 const audienceJoinTable = config.get('tables.audienceJoinTable');

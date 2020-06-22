@@ -26,3 +26,7 @@ module.exports.itemizedSelectionCheck = (executeConditionsStub, expectedPersiste
     expect(executedArgs[1]).to.be.true;
     expect(executedArgs[2]).to.deep.equal(expectedPersistenceParams);
 };
+
+module.exports.resetStubs = (...stubs) => {
+    stubs.forEach((stub) => stub.reset());
+};
