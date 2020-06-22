@@ -62,7 +62,12 @@
         ]
     },
     "pbVerify": {
-        "endpoint": "",
+        "endpoint": "https://some.url/webservice",
+        "path": {
+            "idverify": "pbverify-profile-id-verification",
+            "bankstart": "pbv-bank-account-verification",
+            "bankstatus": "pbv-bank-account-verification-job-status"
+        },
         "memberKey": "",
         "password": "",
         "supportedBanks": [
@@ -71,6 +76,9 @@
             "STANDARD",
             "NEDBANK",
             "CAPITEC"
+        ],
+        "manualBanks": [
+            "TYME"
         ],
         "accountTypes": [
             "CURRENT",
