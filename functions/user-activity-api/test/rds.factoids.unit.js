@@ -87,31 +87,31 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, expectedColumns, [expectedInsertObj]);
     });
 
-    it('Pushes a factoid to a user (creates new entry in user-factoid join table', async () => {
+    it('Creates new entry in user-factoid join table', async () => {
         const insertQuery = 'insert into factoid_data.factoid_user_join_table (user_id, factoid_id, factoid_status) values %L returning creation_time';
         const expectedColumns = '${userId}, ${factoidId}, ${factoidStatus}';
 
         const expectedInsertObj = {
             userId: testSystemId,
             factoidId: testFactId,
-            factoidStatus: 'PUSHED'
+            factoidStatus: 'CREATED'
         };
 
         insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
 
-        const resultOfInsert = await rds.pushFactoidToUser(testFactId, testSystemId);
+        const resultOfInsert = await rds.createFactoidUserJoin(testFactId, testSystemId);
 
         expect(resultOfInsert).to.exist;
         expect(resultOfInsert).to.deep.equal({ creationTime: testCreationTime });
         expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, expectedColumns, [expectedInsertObj]);
     });
 
-    it('Fetches factoid details from user-factoid join table', async () => {
+    it('Fetches user-factoid statuses from join table', async () => {
         const mockFactoidDetailsFromRds = {
             'user_id': testSystemId,
             'factoid_id': testFactId,
             'factoid_status': 'PUSHED',
-            'read_count': 2,
+            'view_count': 2,
             'fetch_count': 3,
             'creation_time': testCreationTime,
             'updated_time': testUpdatedTime
@@ -121,7 +121,7 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
             userId: testSystemId,
             factoidId: testFactId,
             factoidStatus: 'PUSHED',
-            readCount: 2,
+            viewCount: 2,
             fetchCount: 3,
             creationTime: testCreationTime,
             updatedTime: testUpdatedTime
@@ -131,75 +131,73 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
 
         queryStub.resolves([mockFactoidDetailsFromRds, mockFactoidDetailsFromRds]);
 
-        const resultOfFetch = await rds.fetchFactoidDetails([testFactId, testFactId], testSystemId);
+        const resultOfFetch = await rds.fetchFactoidUserStatuses([testFactId, testFactId], testSystemId);
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedDetails, expectedDetails]);
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, testFactId, testFactId]);
     });
 
-    it('Fetches unviewed factoids properly', async () => {
-        const mockFactoid = {
+    it('Fetches uncreated factoids properly', async () => {
+        const mockFactoidFromPersistence = { ...mockFactoidFromRds };
+        mockFactoidFromPersistence.factoid_status = 'UNCREATED';
+        const expectedFactoid = {
             factoidId: testFactId,
             title: 'Jupiter Factoid #21',
-            body: 'Jupiter helps you save.',
-            factoidStatus: 'PUSHED',
-            factoidPriority: 2,
-            creationTime: testCreationTime,
-            updatedTime: testUpdatedTime,
-            countryCode: 'ZAF'
+            text: 'Jupiter helps you save.',
+            fetchCount: 0,
+            viewCount: 0,
+            factoidStatus: 'UNCREATED',
+            factoidPriority: 2
         };
-
 
         const selectQuery = `select * from factoid_data.factoid where factoid_id not in ` +
             `(select factoid_id from factoid_data.factoid_user_join_table where user_id = $1 and factoid_status = $2)`;
 
+        queryStub.resolves([mockFactoidFromPersistence, mockFactoidFromPersistence]);
 
-        queryStub.resolves([mockFactoidFromRds, mockFactoidFromRds]);
-
-        const resultOfFetch = await rds.fetchUnviewedFactoids(testSystemId);
+        const resultOfFetch = await rds.fetchUncreatedFactoids(testSystemId);
+        logger('Res:', resultOfFetch)
 
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([mockFactoid, mockFactoid]);
+        expect(resultOfFetch).to.deep.equal([expectedFactoid, expectedFactoid]);
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, 'VIEWED']);
     });
 
-    it('Fetches viewed factoids properly', async () => {
+    it('Fetches created factoids properly', async () => {
         const factoidFromRds = { ...mockFactoidFromRds };
         factoidFromRds['factoid_status'] = 'VIEWED';
-        const mockFactoid = {
+        const expectedFactoid = {
             factoidId: testFactId,
             title: 'Jupiter Factoid #21',
-            body: 'Jupiter helps you save.',
+            text: 'Jupiter helps you save.',
+            fetchCount: 0,
+            viewCount: 0,
             factoidStatus: 'VIEWED',
-            factoidPriority: 2,
-            creationTime: testCreationTime,
-            updatedTime: testUpdatedTime,
-            countryCode: 'ZAF'
+            factoidPriority: 2
         };
 
-        const selectQuery = `select * from factoid_data.factoid where factoid_id in (select factoid_id from ` +
-            `factoid_data.factoid_user_join_table where user_id = $1)`;
-
+        const selectQuery = `select * from factoid_data.factoid_user_join_table inner join factoid_data.factoid where user_id = $1`;           
+        
         queryStub.resolves([factoidFromRds, factoidFromRds]);
 
-        const resultOfFetch = await rds.fetchViewedFactoids(testSystemId);
+        const resultOfFetch = await rds.fetchCreatedFactoids(testSystemId);
 
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([mockFactoid, mockFactoid]);
+        expect(resultOfFetch).to.deep.equal([expectedFactoid, expectedFactoid]);
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId]);
     });
 
     it('Increments a factoid view or fetch count', async () => {
-        const updateQuery = `UPDATE factoid_data.factoid_user_join_table SET read_count = read_count + 1 WHERE factoid_id = $1 ` +
-            `and user_id = $2 returning updated_time`;
+        const updateQuery = `UPDATE factoid_data.factoid_user_join_table SET view_count = view_count + 1 WHERE factoid_id = $1 ` +
+            `and user_id = $2 returning view_count, updated_time`;
 
-        updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
+        updateStub.resolves({ rows: [{ 'view_count': 3, 'updated_time': testUpdatedTime }]});
 
         const resultOfUpdate = await rds.incrementCount(testFactId, testSystemId, 'VIEWED');
 
         expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal({ updatedTime: testUpdatedTime });
+        expect(resultOfUpdate).to.deep.equal({ viewCount: 3, updatedTime: testUpdatedTime });
         expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [testFactId, testSystemId]);
     });
 

@@ -74,7 +74,8 @@
         "userEvents": {
             "topicArn": "<<override here>>",
             "processingDlq": "<<insert_here>>",
-            "withdrawalTopic": "<<insert_here>>"
+            "withdrawalTopic": "<<insert_here>>",
+            "factoidQueue": "<<insert_here>>"
         },
         "processingLambdas": {
             "boosts": "boost_event_process",

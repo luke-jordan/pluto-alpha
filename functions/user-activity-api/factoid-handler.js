@@ -1,9 +1,26 @@
 'use strict';
 
 const logger = require('debug')('jupiter:factoid:main');
-const moment = require('moment');
+const config = require('config');
+
 const persistence = require('./persistence/rds.factoids');
 const opsUtil = require('ops-util-common');
+
+const AWS = require('aws-sdk');
+AWS.config.update({ region: config.get('aws.region') });
+
+const sqs = new AWS.SQS();
+
+const statusOrder = ['UNCREATED', 'CREATED', 'PUSHED', 'VIEWED'];
+const isStatusAfter = (statusA, statusB) => statusOrder.indexOf(statusA) < statusOrder.indexOf(statusB);
+
+// eslint-disable-next-line
+const byStatus = (factoidA, factoidB) => (isStatusAfter(factoidA.factoidStatus, factoidB.factoidStatus) ? -1 : 1);
+// eslint-disable-next-line
+const byPriority = (factoidA, factoidB) => (factoidA.factoidPriority > factoidB.factoidPriority ? -1 : 1);
+const byViewCount = (factoidA, factoidB) => factoidA.viewCount - factoidB.viewCount;
+
+const sortFactoids = (factoids) => factoids.sort(byStatus).sort(byPriority).sort(byViewCount);
 
 /**
  * This function creates and persists a new factoid.
@@ -28,7 +45,7 @@ module.exports.createFactoid = async (event) => {
             title: params.title,
             body: params.text,
             countryCode: params.countryCode,
-            active: params.active ? params.active : true
+            active: typeof params.active === 'boolean' || true
         };
 
         const creationResult = await persistence.addFactoid(factoid);
@@ -41,37 +58,35 @@ module.exports.createFactoid = async (event) => {
     }
 };
 
-const handleFactoidUpdate = async (factoidId, userId, status) => {
+// The expected factoid status changes here either PUSHED or VIEWED
+const handleFactoidUpdate = async (factoidId, systemWideUserId, factoidStatus) => {
     // fetch the reference to the factoid from the user-factoid join table
-    const userFactoidDetails = await persistence.fetchFactoidDetails([factoidId], userId);
-    logger('Got factoid details:', userFactoidDetails);
+    const factoidUserStatuses = await persistence.fetchFactoidUserStatuses([factoidId], systemWideUserId);
+    logger('Got factoid details:', factoidUserStatuses);
 
     // if no reference is found in the join table create one
-    if (!userFactoidDetails || userFactoidDetails.length === 0) {
-        const resultOfPush = await persistence.pushFactoidToUser(factoidId, userId);
-        logger('Result of pushing factoid to user join table:', resultOfPush);
-        return { result: 'PUSHED', factoidId, details: resultOfPush };
+    if (!factoidUserStatuses || factoidUserStatuses.length === 0) {
+        const resultOfCreation = await persistence.createFactoidUserJoin(factoidId, systemWideUserId);
+        logger('Resultof creating user-factoid join table entry:', resultOfCreation);
     }
 
-    // if an entry exists in the user-factoid join table and the new status is VIEWED increment the view count    
-    const incrementResult = await persistence.incrementCount(factoidId, userId, status);
+    const initialStatus = factoidUserStatuses && factoidUserStatuses.length > 0 ? factoidUserStatuses[0].factoidStatus : 'CREATED';
+    logger('Is status after:', isStatusAfter(initialStatus, factoidStatus));
+    if (isStatusAfter(initialStatus, factoidStatus)) {
+        const resultOfUpdate = await persistence.updateFactoidStatus(factoidId, systemWideUserId, factoidStatus);
+        logger('Result of updating factoid state:', resultOfUpdate);
+    }
+
+    const incrementResult = await persistence.incrementCount(factoidId, systemWideUserId, factoidStatus);
     logger('Incrementing view/fetch count resulted in:', incrementResult);
 
-    // if the factoid has been viewed do nothing more
-    if (userFactoidDetails[0].factoidStatus === 'VIEWED') {
-        return { result: 'VIEWED', factoidId, details: incrementResult };
-    }
-
-    // if the factoid status is PUSHED update it to VIEWED
-    const resultOfUpdate = await persistence.updateFactoidStatus(factoidId, userId, 'VIEWED');
-    logger('Result of updating factoid state:', resultOfUpdate);
-    return { result: 'VIEWED', factoidId, details: resultOfUpdate };
+    return factoidStatus === 'PUSHED' ? { fetchCount: incrementResult.fetchCount } : { viewCount: incrementResult.viewCount };   
 };
 
 /**
  * This function updates a factoids status for a user. 
  * @param {object} event A user, admin, or direct invocation.
- * @property {array} factoidIds An array of factoid ids.
+ * @property {array}  factoidIds An array of factoid ids.
  * @property {string} userId The identifier of the user associated with the above factoid ids.
  * @property {string} status The new status. Valid values are PUSHED and VIEWED. 
  */
@@ -85,35 +100,37 @@ module.exports.updateFactoidStateForUser = async (event) => {
         const updatePromises = factoidIds.map((factoidId) => handleFactoidUpdate(factoidId, userId, status));
         const resultOfUpdate = await Promise.all(updatePromises);
         logger('Result of update:', resultOfUpdate);
-        return opsUtil.wrapResponse({ result: 'SUCCESS', details: resultOfUpdate });
+        return { result: 'SUCCESS', details: resultOfUpdate };
     } catch (err) {
         logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse({ error: err.message }, 500);
+        return { result: 'FAILURE', details: err.message };
     }
 };
 
-// Handles batch calls from SQS to updateFactoidStateForUser
+// Handles batch calls from SQS to updateFactoidStateForUser as SQS may pull multiple events from from multiple users.
 module.exports.handleBatchFactoidUpdates = async (sqsEvent) => {
     const sqsEvents = opsUtil.extractSQSEvents(sqsEvent);
     logger('Got SQS events: ', sqsEvents);
     return Promise.all(sqsEvents.map((event) => exports.updateFactoidStateForUser(event)));
 };
 
-const sortFactoids = (factoidsToDisplay, factoidDetails, factoidType) => {
-    if (factoidType === 'PUSHED') {
-        // for unviewed factoids, sort by highest priority then by earliest creation date
-        // eslint-disable-next-line
-        factoidsToDisplay[factoidType].sort((a, b) => (a.factoidPriority < b.factoidPriority) ? 1 : (a.factoidPriority === b.factoidPriority)
-            ? ((moment(a.creationTime).valueOf() > moment(b.creationTime).valueOf()) ? 1 : -1) : -1 );
-        return factoidsToDisplay[factoidType];
-    } else {
-        // for viewed factoids sort by least viewed then by last view date
-        // eslint-disable-next-line
-        factoidDetails.sort((a, b) => (a.readCount > b.readCount) ? 1 : (a.readCount === b.readCount)
-            ? ((moment(a.updatedTime).valueOf() > moment(b.updatedTime).valueOf()) ? 1 : -1) : -1 );
-        const factoidIds = factoidDetails.map((factoid) => factoid.factoidId);
-        return factoidIds.map((factoidId) => factoidsToDisplay[factoidType].filter((factoid) => factoid.factoidId === factoidId)[0]);
-    }
+const queueStatusUpdate = async (payload) => {
+    const queueName = config.get('publishing.userEvents.factoidQueue');
+    logger('Looking for SQS queue name: ', queueName);
+    const queueUrlResult = await sqs.getQueueUrl({ QueueName: queueName }).promise();
+    const queueUrl = queueUrlResult.QueueUrl;
+
+    const dataType = { DataType: 'String', StringValue: 'JSON' };
+
+    const params = {
+        MessageAttributes: { MessageBodyDataType: dataType },
+        MessageBody: JSON.stringify(payload),
+        QueueUrl: queueUrl
+    };
+
+    logger('Sending factoid update request to SQS: ', params);
+    const sqsResult = await sqs.sendMessage(params).promise();
+    logger('Queue result:', sqsResult);
 };
 
 /**
@@ -128,39 +145,18 @@ module.exports.fetchFactoidsForUser = async (event) => {
         }
 
         const systemWideUserId = userDetails.systemWideUserId;
+        const uncreatedFactoids = await persistence.fetchUncreatedFactoids(systemWideUserId);
+        logger('Found unread factoids:', uncreatedFactoids);
 
-        const factoidsToDisplay = {};
-
-        // fetch unviewed factoids
-        const unviewedFactoids = await persistence.fetchUnviewedFactoids(systemWideUserId);
-        logger('Found unread factoids:', factoidsToDisplay);
-
-        if (Array.isArray(unviewedFactoids) && unviewedFactoids.length > 0) {
-            // if user has unviewed factoids, update the factoid status of each retrieved factoid to PUSHED
-            const factoidIds = unviewedFactoids.map((factoid) => factoid.factoidId);
-            const statusUpdateResult = await exports.updateFactoidStateForUser({ factoidIds, userId: systemWideUserId, status: 'PUSHED' });
-            if (statusUpdateResult.statusCode !== 200) {
-                throw new Error('Something went wrong updating factoid states:', JSON.parse(statusUpdateResult.body));
-            }
-            factoidsToDisplay['PUSHED'] = unviewedFactoids;
-        } else {
-            const viewedFactoids = await persistence.fetchViewedFactoids(systemWideUserId);
-            logger('Found viewed factoids:', viewedFactoids);
-            factoidsToDisplay['VIEWED'] = viewedFactoids;
+        if (Array.isArray(uncreatedFactoids) && uncreatedFactoids.length > 0) {
+            const factoidIds = uncreatedFactoids.map((factoid) => factoid.factoidId);
+            await queueStatusUpdate({ factoidIds, userId: systemWideUserId, status: 'PUSHED' });
         }
-
-        const factoidType = Object.keys(factoidsToDisplay)[0];
-
-        if (factoidsToDisplay[factoidType].length === 0) {
-            return opsUtil.wrapResponse([]);
-        }
-
-        const factoidIds = factoidsToDisplay[factoidType].map((factoid) => factoid.factoidId);
-        const factoidDetails = await persistence.fetchFactoidDetails(factoidIds, systemWideUserId);
-        logger('Got factoid details:', factoidDetails);
-
-        const sortedFactoids = sortFactoids(factoidsToDisplay, factoidDetails, factoidType);
-        logger('Sorted factoids:', sortedFactoids)
+     
+        const factoidsForUser = await persistence.fetchCreatedFactoids(systemWideUserId);
+        logger('Got factoids for user:', factoidsForUser);
+        const sortedFactoids = sortFactoids(factoidsForUser);
+        logger('Sorted factoids:', sortedFactoids);
 
         return opsUtil.wrapResponse(sortedFactoids);
     } catch (err) {

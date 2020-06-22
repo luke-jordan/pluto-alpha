@@ -252,7 +252,7 @@ const safeWithdrawalEmail = async (eventBody, userProfile, bankAccountDetails) =
         logger('Result of sending email: ', emailResult);
     } catch (err) {
         // we want the rest to execute, so we manually publish to the dlq, and alert admins
-        addToDlq({ eventType: 'WITHDRAWAL', eventBody, templateVariables });
+        await addToDlq({ eventType: 'WITHDRAWAL', eventBody, templateVariables });
         const snsMessage = {
             Message: `Jupiter Withdrawal! Withdrawal triggered for ${contactMethod}, but failed on email dispatch.`,
             MessageStructure: 'string',

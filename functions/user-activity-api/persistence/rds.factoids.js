@@ -17,6 +17,16 @@ const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', 
 const factoidTable = config.get('tables.factoidTable');
 const factoidJoinTable = config.get('tables.factoidJoinTable');
 
+const transformFactoid = (factoid) => ({
+    factoidId: factoid['factoid.factoid_id'] || factoid['factoid_id'],
+    title: factoid['title'],
+    text: factoid['body'],
+    fetchCount: factoid['fetch_count'] || 0,
+    viewCount: factoid['view_count'] || 0,
+    factoidStatus: factoid['factoid_data.factoid_user_join_table.factoid_status'] ||  factoid['factoid_status'] || 'UNCREATED',
+    factoidPriority: factoid['factoid_priority']
+});
+
 const extractColumnDetails = (object) => {
     const objectKeys = Object.keys(object);
     return [extractColumnNames(objectKeys), extractColumnTemplate(objectKeys)];
@@ -46,8 +56,8 @@ module.exports.addFactoid = async (factoid) => {
 };
 
 // Creates a factoid reference in the user-factoid join table.
-module.exports.pushFactoidToUser = async (factoidId, userId) => {
-    const factoidRefObject = { userId, factoidId, factoidStatus: 'PUSHED' };
+module.exports.createFactoidUserJoin = async (factoidId, userId) => {
+    const factoidRefObject = { userId, factoidId, factoidStatus: 'CREATED' };
 
     const [columnNames, columnTemplate] = extractColumnDetails(factoidRefObject);
     const insertQuery = `insert into ${factoidJoinTable} (${columnNames}) values %L returning creation_time`;
@@ -58,7 +68,7 @@ module.exports.pushFactoidToUser = async (factoidId, userId) => {
 };
 
 // Fetches a factoid reference from the user-factoid join table created above.
-module.exports.fetchFactoidDetails = async (factoidIds, userId) => {
+module.exports.fetchFactoidUserStatuses = async (factoidIds, userId) => {
     const selectQuery = `select * from ${factoidJoinTable} where user_id = $1 and factoid_id in (${opsUtil.extractArrayIndices(factoidIds, 2)})`;
     logger('Fetching factoids with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [userId, ...factoidIds]);
@@ -71,9 +81,9 @@ module.exports.incrementCount = async (factoidId, userId, status) => {
         throw new Error(`Invalid status: ${status}`);
     }
 
-    const updateColumn = status === 'PUSHED' ? 'fetch_count' : 'read_count';
-    const updateQuery = `UPDATE ${factoidJoinTable} SET read_count = ${updateColumn} + 1 WHERE factoid_id = $1 ` +
-        `and user_id = $2 returning updated_time`;
+    const updateColumn = status === 'PUSHED' ? 'fetch_count' : 'view_count';
+    const updateQuery = `UPDATE ${factoidJoinTable} SET ${updateColumn} = ${updateColumn} + 1 WHERE factoid_id = $1 ` +
+        `and user_id = $2 returning ${updateColumn}, updated_time`;
 
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [factoidId, userId]);
     logger('Result of update: ', resultOfUpdate);
@@ -98,23 +108,23 @@ module.exports.updateFactoidStatus = async (factoidId, userId, status) => {
  * This function fetches unread factoids for a user.
  * @param {string} systemWideUserId The user for whom the factoids are sought.
  */
-module.exports.fetchUnviewedFactoids = async (systemWideUserId) => {
+module.exports.fetchUncreatedFactoids = async (systemWideUserId) => {
     const selectQuery = `select * from ${factoidTable} where factoid_id not in ` +
         `(select factoid_id from ${factoidJoinTable} where user_id = $1 and factoid_status = $2)`;
     logger('Fetching unread factoids with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId, 'VIEWED']);
-    return resultOfFetch.length > 0 ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
+    return resultOfFetch.length > 0 ? resultOfFetch.map((result) => transformFactoid(result)) : [];
 };
 
 /**
  * This function fetches viewed factoids for a user.
  * @param {string} systemWideUserId The user for whom the factoids are sought.
  */
-module.exports.fetchViewedFactoids = async (systemWideUserId) => {
-    const selectQuery = `select * from ${factoidTable} where factoid_id in (select factoid_id from ${factoidJoinTable} where user_id = $1)`;
+module.exports.fetchCreatedFactoids = async (systemWideUserId) => {
+    const selectQuery = `select * from ${factoidJoinTable} inner join ${factoidTable} where user_id = $1`;
     logger('Fetching unread factoids with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId]);
-    return resultOfFetch.length > 0 ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
+    return resultOfFetch.length > 0 ? resultOfFetch.map((result) => transformFactoid(result)) : [];
 };
 
 /**
