@@ -94,8 +94,8 @@ const expectNoCalls = (...stubs) => {
 };
 
 const resetStubs = () => helper.resetStubs(
-    lamdbaInvokeStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, 
-    fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub, sendEmailStub, sendSmsStub, publishUserEventStub
+    lamdbaInvokeStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, fetchBSheetAccStub,
+    redisGetStub, redisSetStub, getHumanRefStub, sendEmailStub, sendSmsStub, publishUserEventStub, addToDlqStub
 );
 
 const mockUserId = uuid();
@@ -338,8 +338,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWith(userProfileInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWith(FWAccCreationInvocation);
         expect(updateTagsStub).to.have.not.been.called;
-        expect(getQueueUrlStub).to.have.been.calledOnce;
-        expect(sqsSendStub).to.have.been.calledOnce;
+        expect(addToDlqStub).to.have.been.calledOnce;
     });
 
 });
@@ -479,7 +478,7 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(fetchBSheetAccStub).to.have.been.calledOnce;
         expect(sendEmailStub).to.have.not.been.called;
-        expect(sqsSendStub).to.have.been.calledOnce;
+        expect(addToDlqStub).to.have.been.calledOnce;
         expect(publishUserEventStub).to.not.have.been.called;
     });
 
