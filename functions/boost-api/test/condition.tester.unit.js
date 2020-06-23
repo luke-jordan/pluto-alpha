@@ -266,7 +266,7 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
                 saveCount: 5,
 
                 preSaveBalance: '70::WHOLE_CURRENCY::USD',
-                postSaveBalance: '120::WHOLE_CURRENCY::USD',
+                postSaveBalance: '120::WHOLE_CURRENCY::USD'
             }
         };
 
@@ -286,7 +286,7 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
                 saveCount: 5,
 
                 preSaveBalance: '70000::HUNDREDTH_CENT::USD',
-                postSaveBalance: '120000::HUNDREDTH_CENT::USD',
+                postSaveBalance: '120000::HUNDREDTH_CENT::USD'
             }
         };
 
@@ -306,7 +306,7 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
                 saveCount: 5,
 
                 preSaveBalance: '120::WHOLE_CURRENCY::USD',
-                postSaveBalance: '170::WHOLE_CURRENCY::USD',
+                postSaveBalance: '170::WHOLE_CURRENCY::USD'
             }
         };
 
