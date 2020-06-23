@@ -16,14 +16,13 @@ chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
 const getMessagesStub = sinon.stub();
-const getAccountFigureStub = sinon.stub();
 const updateMessageStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
 const publishEventStub = sinon.stub();
 
 const fetchDynamoRowStub = sinon.stub();
 
-const resetStubs = () => testHelper.resetStubs(getMessagesStub, getAccountFigureStub, updateMessageStub, fetchDynamoRowStub, lamdbaInvokeStub, publishEventStub);
+const resetStubs = () => testHelper.resetStubs(getMessagesStub, updateMessageStub, fetchDynamoRowStub, lamdbaInvokeStub, publishEventStub);
 
 const profileTable = config.get('tables.dynamoProfileTable');
 
@@ -43,7 +42,6 @@ class MockLambdaClient {
 const handler = proxyquire('../message-picking-handler', {
     './persistence/rds.usermessages': {
         'getNextMessage': getMessagesStub, 
-        'getUserAccountFigure': getAccountFigureStub,
         'updateUserMessage': updateMessageStub,
         '@noCallThru': true
     },
@@ -88,10 +86,6 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
             creationTimeEpochMillis: testOpenMoment.valueOf(), 
             defaultCurrency: 'USD'
         });
-        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CENT::USD::0' }).
-            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 10000 });
-        getAccountFigureStub.withArgs({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CENT::USD' }).
-            resolves({ currency: 'USD', unit: 'WHOLE_CENT', amount: 800000 });
     });
 
     it('Assembles message base properly', async () => {
@@ -225,6 +219,24 @@ describe('**** UNIT TESTING MESSAGE ASSEMBLY **** Simple assembly', () => {
 
         // this gets the last capitalization event so by definition it doesn't need a unit to convert into
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(assembleLambdaInvoke('capitalization::USD'));
+    });
+
+    it('Handles next level target properly', async () => {
+        const msgTemplate = minimalMsgFromTemplate('Hello #{user_first_name}. You need to get to #{next_major_digit}');
+        getMessagesStub.withArgs(testUserId, ['CARD']).resolves([msgTemplate]);
+
+        const testAmountPairs = async (balanceInCent, expectedInMessage) => {
+            const queryResult = testHelper.mockLambdaResponse({ results: [{ amount: balanceInCent, unit: 'WHOLE_CENT', currency: 'USD' }] });
+            lamdbaInvokeStub.returns({ promise: () => queryResult});
+    
+            const filledMessage = await handler.fetchAndFillInNextMessage({ destinationUserId: testUserId });
+            expect(filledMessage[0].body).to.equal(`Hello Luke. You need to get to $${expectedInMessage}`);
+        };
+
+        await testAmountPairs(7350, '100');
+        await testAmountPairs(17350, '300');
+        await testAmountPairs(317350, '5,000');
+        await testAmountPairs(7317350, '100,000');
     });
 
     it('Handles currencies not supported by JS i18n', async () => {

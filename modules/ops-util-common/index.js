@@ -5,6 +5,10 @@ const config = require('config');
 
 const decamelize = require('decamelize');
 
+// //////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////// AMOUNT + UNIT HANDLING //////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////
+
 // format: from key into values, e.g., UNIT_MULTIPLIERS[WHOLE_CURRENCY][WHOLE_CENT] = 100;
 const ADMISSABLE_UNITS = ['WHOLE_CURRENCY', 'WHOLE_CENT', 'HUNDREDTH_CENT'];
 
@@ -27,24 +31,6 @@ const UNIT_MULTIPLIERS = {
 };
 
 const isUnitValid = (unit) => ADMISSABLE_UNITS.indexOf(unit) >= 0;
-
-module.exports.wrapResponse = (body, statusCode = 200) => {
-    const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
-    return {
-        statusCode,
-        headers: {
-            'Content-Type': 'application/json',
-            'Access-Control-Allow-Origin': allowedCors
-        },
-        body: JSON.stringify(body)
-    };
-};
-
-module.exports.extractSQSEvents = (sqsEvent) => sqsEvent.Records.map((record) => JSON.parse(record.body));
-
-module.exports.extractSNSEvent = (snsEvent) => JSON.parse(snsEvent.Message);
-
-module.exports.extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
 
 module.exports.convertToUnit = (amount, fromUnit, toUnit) => {
     if (!isUnitValid(fromUnit)) {
@@ -119,6 +105,36 @@ module.exports.formatAmountCurrency = (amountResult, desiredDigits = 0) => {
 module.exports.extractAndFormatAmountString = (amountString, desiredDigits = 0) => (
     exports.formatAmountCurrency(exports.convertAmountStringToDict(amountString), desiredDigits)
 );
+
+module.exports.findNearestMajorDigit = (amountDict, targetUnit, anchorDigits = [3, 5, 10]) => {
+    logger(`Finding nearest major digit, to: ${JSON.stringify(amountDict)}, in ${targetUnit}, with anchors ${anchorDigits}`);
+    const wholeCurrencyAmount = exports.convertToUnit(amountDict.amount, amountDict.unit, targetUnit);
+
+    const base10divisor = 10 ** Math.floor(Math.log10(wholeCurrencyAmount));
+    const majorDigit = Math.floor(wholeCurrencyAmount / base10divisor); // okay there is a more elegant way to do this somewhere
+    const nextMilestoneDigit = anchorDigits.sort((a, b) => a - b).find((digit) => majorDigit < digit);
+    return nextMilestoneDigit * base10divisor;
+}
+
+// //////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////// EVENT + RESPONSE HANDLING ///////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////
+
+module.exports.wrapResponse = (body, statusCode = 200) => {
+    const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
+    return {
+        statusCode,
+        headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': allowedCors
+        },
+        body: JSON.stringify(body)
+    };
+};
+
+module.exports.extractSQSEvents = (sqsEvent) => sqsEvent.Records.map((record) => JSON.parse(record.body));
+
+module.exports.extractSNSEvent = (snsEvent) => JSON.parse(snsEvent.Message);
 
 // For handling various events
 module.exports.extractQueryParams = (event) => {
@@ -231,6 +247,12 @@ module.exports.extractPathAndParams = (event) => {
     logger('Event is not http, must be another lambda, return event itself');
     return event;
 };
+
+// //////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////// QUERY HELPERS ////////////////////////////////////////////
+// ////////////////////////////////////////////////////////////////////////////////////
+
+module.exports.extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
 
 // couple of helper methods for assembling SQL insertions; could go in rds-common/index, but that would
 // then mess around, a lot, with call throughs, etc., so just placing them here

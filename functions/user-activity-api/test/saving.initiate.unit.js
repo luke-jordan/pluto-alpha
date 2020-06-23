@@ -1,8 +1,6 @@
 'use strict';
 
-process.env.NODE_ENV = 'test';
-
-const logger = require('debug')('jupiter:save:test');
+// const logger = require('debug')('jupiter:save:test');
 
 const chai = require('chai');
 const expect = chai.expect;
@@ -26,16 +24,6 @@ const testPaymentRef = 'some_ref_at_bank';
 const testAuthContext = {
     authorizer: { systemWideUserId: testUserId }
 };
-
-const testSettlementTimeSeconds = 10;
-const testTimeInitiated = moment().subtract(testSettlementTimeSeconds, 'seconds');
-const testTimeSettled = moment();
-
-const testNumberOfSaves = 5;
-const testBaseAmount = 1000000;
-const testAmounts = Array(testNumberOfSaves).fill().map(() => Math.floor(Math.random() * testBaseAmount));
-const sumOfTestAmounts = testAmounts.reduce((cum, value) => cum + value, 0);
-logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmounts);
 
 const findMatchingTxStub = sinon.stub();
 const findFloatOrIdStub = sinon.stub();
@@ -100,6 +88,15 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
     const testTransactionId = uuid();
 
+    const testSettlementTimeSeconds = 10;
+    const testTimeInitiated = moment().subtract(testSettlementTimeSeconds, 'seconds');
+    const testTimeSettled = moment();
+
+    const testNumberOfSaves = 5;
+    const testBaseAmount = 1000000;
+    const testAmounts = Array(testNumberOfSaves).fill().map(() => Math.floor(Math.random() * testBaseAmount));
+    // logger('Setting up, test amounts: ', testAmounts, ' with sum: ', sumOfTestAmounts);
+    
     const wrapTestEvent = (eventBody) => ({ body: JSON.stringify(eventBody), requestContext: testAuthContext });
 
     const testSaveSettlementBase = (amount = testAmounts[0]) => ({
@@ -186,7 +183,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
-        logger('Received: ', resultOfWrapperCall);
 
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         expect(saveBody).to.deep.equal(expectedResponseBody);
@@ -219,7 +215,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
-        logger('Save body: ', saveBody);
 
         const expectedResult = JSON.parse(JSON.stringify(expectedResponseBody)); // this is deep, so spread will not suffice
         
@@ -245,7 +240,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
-        logger('Received: ', resultOfWrapperCall);
 
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         expect(saveBody).to.deep.equal({ 
@@ -282,7 +276,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         testAdminContext.authorizer.role = 'SYSTEM_ADMIN';
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
-        logger('Received: ', resultOfWrapperCall);
 
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         expect(saveBody).to.deep.equal({ 
@@ -313,7 +306,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
-        logger('Received: ', resultOfWrapperCall);
 
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         
@@ -323,8 +315,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         // there are utterly absurd failures here that make no sense, and causing spurious fails, so overriding them
         expectedResponse.transactionDetails[0].persistedTimeEpochMillis = moment(asFormatted).valueOf();
         // saveBody.transactionDetails.persistedTimeEpochMillis = expectedResponse.transactionDetails.persistedTimeEpochMillis;
-        // logger('WHAT ON GODS EARTH: ', saveBody.transactionDetails.persistedTimeEpochMillis);
-        // logger('ABOUT TO SHOOT MYSELF: ', expectedResponse.transactionDetails.persistedTimeEpochMillis);
         expect(saveBody).to.deep.equal(expectedResponse);
 
         expect(checkDuplicateStub).to.have.been.calledOnce;
@@ -388,7 +378,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         
         const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
         const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
-        logger('Received: ', resultOfWrapperCall);
+        
         const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
         expect(saveBody).to.deep.equal(expectedResponseBody);
 
@@ -413,7 +403,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
             amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
         };
         
-        logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
         fetchInfoForBankRefStub.resolves(testBankRefInfo);
         getPaymentUrlStub.resolves(expectedPaymentParams);
 
@@ -441,7 +430,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
             amountDict: { amount: testAmounts[0], currency: 'USD', unit: 'HUNDREDTH_CENT' }
         };
 
-        logger('Well formed request: ', wellFormedMinimalPendingRequestToRds);
         fetchInfoForBankRefStub.resolves(testBankRefInfo);
         getPaymentUrlStub.resolves(expectedPaymentParams);
 

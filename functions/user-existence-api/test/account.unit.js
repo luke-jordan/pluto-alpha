@@ -38,7 +38,7 @@ const accountHandler = proxyquire('../account-handler', {
     'uuid/v4': uuidStub 
 });
 
-const testValidApiEvent = require('./mock/api-event-valid.json');
+const testValidApiEvent = require('./api-event-valid.json');
 const testUserId = '2c957aca-47f9-4b4d-857f-a3205bfc6a78';
 const testAccountId = uuid();
 

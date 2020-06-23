@@ -25,7 +25,8 @@ const STANDARD_PARAMS = [
     'total_interest',
     'last_capitalization',
     'total_earnings',
-    'last_saved_amount'
+    'last_saved_amount',
+    'next_major_digit'
 ];
 
 const UNIT_DIVISORS = {
@@ -86,9 +87,7 @@ const extractParamsFromTemplate = (template) => {
     return extractedParams.filter((paramName) => STANDARD_PARAMS.indexOf(paramName) >= 0);
 };
 
-// todo : all at once if multiple params
-// todo : warmup (esp for agg figure)
-const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId, desiredDigits = 0) => {
+const fetchAccountFigureRaw = async (aggregateOperation, systemWideUserId) => {
     const invocation = {
         FunctionName: config.get('lambdas.fetchAccountAggregate'),
         InvocationType: 'RequestResponse',
@@ -97,7 +96,24 @@ const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId, desir
     const resultOfInvoke = await lambda.invoke(invocation).promise();
     // logger('Aggregate response: ', resultOfInvoke);
     const resultBody = JSON.parse(resultOfInvoke['Payload']);
-    return formatAmountResult(resultBody.results[0], desiredDigits);
+    return resultBody.results[0];
+};
+
+// todo : all at once if multiple params
+const fetchAccountAggFigure = async (aggregateOperation, systemWideUserId, desiredDigits = 0) => {
+    const amountDict = await fetchAccountFigureRaw(aggregateOperation, systemWideUserId);
+    return formatAmountResult(amountDict, desiredDigits);
+};
+
+const calculateNextMilestoneDigit = async (userProfile) => {
+    const { defaultCurrency: currency } = userProfile;
+    const currentBalance = await fetchAccountFigureRaw(`balance::WHOLE_CURRENCY::${currency}`, userProfile.systemWideUserId);
+    logger('Calculating next milestone digit for user with balance: ', currentBalance);
+
+    const nextMilestoneAmount = opsUtil.findNearestMajorDigit(currentBalance, 'WHOLE_CURRENCY');
+    logger('Calculed next amount: ', nextMilestoneAmount);
+
+    return formatAmountResult({ amount: nextMilestoneAmount, unit: 'WHOLE_CURRENCY', currency }, 0);
 };
 
 const retrieveParamValue = async (param, destinationUserId, userProfile) => {
@@ -134,6 +150,8 @@ const retrieveParamValue = async (param, destinationUserId, userProfile) => {
         const opSuffix = `HUNDREDTH_CENT::${userProfile.defaultCurrency}${thisMonthOnly ? moment().startOf('month').valueOf() : ''}`;
         const aggregateOperation = `total_earnings::${opSuffix}`;
         return fetchAccountAggFigure(aggregateOperation, destinationUserId);
+    } else if (paramName === 'next_major_digit') {
+        return calculateNextMilestoneDigit(userProfile);
     }
 };
 

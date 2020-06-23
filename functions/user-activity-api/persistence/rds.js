@@ -207,7 +207,7 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     const transTypeIdxs = opsUtil.extractArrayIndices(transTypesToInclude, preTransParamCount + 1);
 
     const sumQuery = `select sum(amount), unit from ${tableToQuery} where account_id = $1 and currency = $2 and ` +
-        `settlement_status in ($3, $4) and creation_time < to_timestamp($5) and transaction_type in (${transTypeIdxs}) group by unit`;
+        `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${transTypeIdxs}) group by unit`;
 
     const params = [accountId, currency, 'SETTLED', 'ACCRUED', time.unix(), ...transTypesToInclude];
     logger('Summing with query: ', sumQuery, ' and params: ', params);

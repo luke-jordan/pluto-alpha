@@ -1,8 +1,6 @@
 'use strict';
 
-process.env.NODE_ENV = 'test';
-
-const logger = require('debug')('jupiter:activity-rds:test');
+// const logger = require('debug')('jupiter:activity-rds:test');
 const config = require('config');
 const moment = require('moment-timezone');
 const camelcase = require('camelcase');
@@ -87,7 +85,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         const transTypes = ['USER_SAVING_EVENT', 'ACCRUAL', 'CAPITALIZATION', 'WITHDRAWAL', 'BOOST_REDEMPTION'];
         const txIndices = '$6, $7, $8, $9, $10';
         const sumQuery = `select sum(amount), unit from ${txTable} where account_id = $1 and currency = $2 and ` +
-            `settlement_status in ($3, $4) and creation_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
+            `settlement_status in ($3, $4) and settlement_time < to_timestamp($5) and transaction_type in (${txIndices}) group by unit`;
         // on this one we leave out the accrued
         const latestTxQuery = `select creation_time from ${txTable} where account_id = $1 and currency = $2 and settlement_status = 'SETTLED' ` +
             `and creation_time < to_timestamp($3) order by creation_time desc limit 1`;
@@ -98,9 +96,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         const testTime = moment();
         const testLastTxTime = moment().subtract(5, 'hours');
         const queryArgs = [testAccountId, 'USD', 'SETTLED', 'ACCRUED', testTime.unix(), ...transTypes];
-        
-        logger('Test time value of: ', testTime.valueOf());
-        
+                
         queryStub.withArgs(sumQuery, queryArgs).resolves([
             { 'unit': 'HUNDREDTH_CENT', 'sum': testBalance }, { 'unit': 'WHOLE_CENT', 'sum': testBalanceCents }
         ]);
@@ -124,7 +120,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Sums balances', () => {
         queryStub.withArgs(latestTxQuery, [testAccountId, 'USD', testTime.unix()]).resolves([]);
         
         const balanceResult = await rds.sumAccountBalance(testAccountId, 'USD', testTime);
-        logger('Result:', balanceResult);
+        
         expect(balanceResult).to.exist;
         expect(balanceResult).to.deep.equal({ amount: 0, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
     });
@@ -216,7 +212,6 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
         queryStub.resolves([expectedTxRow, expectedTxRow, expectedTxRow]);
         const priorTxs = await rds.fetchTransactionsForHistory(testAccountId);
-        logger('Got prior txs:', priorTxs);
 
         expect(priorTxs).to.exist;
         expect(priorTxs).to.deep.equal([expectedTxRow, expectedTxRow, expectedTxRow].map((row) => camelizeKeys(row)));
@@ -230,7 +225,6 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
 
         queryStub.resolves(testPendingTransactions);
         const priorTxs = await rds.fetchPendingTransactions(testAccountId);
-        logger('Got prior txs:', priorTxs);
 
         expect(priorTxs).to.exist;
         expect(priorTxs).to.deep.equal(testPendingTransactions.map((row) => camelizeKeys(row)));
@@ -306,7 +300,6 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         queryStub.resolves([{ tags: ['TEST_TAG::1', 'TEST_TAG::2', 'FINWORKS::POL1'] }]);
 
         const result = await rds.fetchAccountTagByPrefix(testAccountId, 'FINWORKS');
-        logger('Result of FinWorks account number extraction:', result);
 
         expect(result).to.exist;
         expect(result).to.deep.equal('POL1');
@@ -324,7 +317,6 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         queryStub.resolves([{ 'human_ref': 'BUS123', 'count': 2, 'owner_user_id': testUserId }]);
 
         const bankRefInfo = await rds.fetchInfoForBankRef(testAccountId);
-        logger('Result of reference info extraction:', bankRefInfo);
 
         expect(bankRefInfo).to.exist;
         expect(bankRefInfo).to.deep.equal({ humanRef: 'BUS123', count: 2, ownerUserId: testUserId });
@@ -348,7 +340,6 @@ describe('*** UNIT TEST UTILITY FUNCTIONS ***', async () => {
         };
 
         const resultOfCheck = await rds.checkForDuplicateSave(params);
-        logger('Duplicates:', resultOfCheck);
 
         expect(resultOfCheck).to.exist;
         expect(resultOfCheck).to.deep.equal(camelizeKeys(expectedTxRow));
@@ -378,7 +369,6 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
         ]);
 
         const resultOfFetch = await rds.fetchAccounts();
-        logger('Result:', resultOfFetch);
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([testAccountId, testAccountId, testAccountId, testAccountId]);
@@ -394,7 +384,6 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
         ]);
 
         const resultOfFetch = await rds.findAccountsForFloat(testFloatId);
-        logger('Result:', resultOfFetch);
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([testAccountId, testAccountId, testAccountId, testAccountId]);
@@ -410,7 +399,6 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
         ]);
 
         const resultOfFetch = await rds.findAccountsForClient(testClientId);
-        logger('Result:', resultOfFetch);
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([testAccountId, testAccountId, testAccountId, testAccountId]);
@@ -425,7 +413,6 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
         const expectedBalance = testBalance + (100 * testBalanceCents);
 
         const resultOfSum = await rds.sumTotalAmountSaved(testAccountId, 'ZAR');
-        logger('Result:', resultOfSum);
 
         expect(resultOfSum).to.exist;
         expect(resultOfSum).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
@@ -440,7 +427,6 @@ describe('*** UNIT TEST SAVINGS HEAT PERSISTENCE FUNCTIONS ***', () => {
         const expectedBalance = testBalance + (100 * testBalanceCents);
 
         const resultOfSum = await rds.sumAmountSavedLastMonth(testAccountId, 'ZAR');
-        logger('Result:', resultOfSum);
 
         expect(resultOfSum).to.exist;
         expect(resultOfSum).to.deep.equal({ amount: expectedBalance, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });

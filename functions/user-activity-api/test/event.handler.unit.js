@@ -26,6 +26,8 @@ const getHumanRefStub = sinon.stub();
 const updateTagsStub = sinon.stub();
 const updateTxFlagsStub = sinon.stub();
 const fetchBSheetAccStub = sinon.stub();
+const fetchTransactionStub = sinon.stub();
+const sumAccountBalanceStub = sinon.stub();
 const getFriendListStub = sinon.stub();
 
 const publishUserEventStub = sinon.stub();
@@ -74,6 +76,8 @@ const eventHandler = proxyquire('../event-handler', {
         'updateTxTags': updateTxFlagsStub,
         'fetchAccountTagByPrefix': fetchBSheetAccStub,
         'getMinimalFriendListForUser': getFriendListStub,
+        'fetchTransaction': fetchTransactionStub,
+        'sumAccountBalance': sumAccountBalanceStub,
         '@noCallThru': true
     },
     'publish-common': {
@@ -94,8 +98,8 @@ const expectNoCalls = (...stubs) => {
 };
 
 const resetStubs = () => helper.resetStubs(
-    lamdbaInvokeStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, fetchBSheetAccStub,
-    redisGetStub, redisSetStub, getHumanRefStub, sendEmailStub, sendSmsStub, publishUserEventStub, addToDlqStub
+    lamdbaInvokeStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, fetchBSheetAccStub, fetchTransactionStub,
+    redisGetStub, redisSetStub, getHumanRefStub, sumAccountBalanceStub, sendEmailStub, sendSmsStub, publishUserEventStub, addToDlqStub
 );
 
 const mockUserId = uuid();
@@ -386,7 +390,12 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         expect(fetchBSheetAccStub).to.have.been.calledOnce;
         expect(updateTxFlagsStub).to.have.been.calledOnce;
         expectNoCalls(getQueueUrlStub, sqsSendStub);
-    };    
+    };
+
+    const extractLambdaPayload = (functionName) => {
+        const relevantCall = lamdbaInvokeStub.getCalls().find((call) => call.args[0]['FunctionName'] === functionName);
+        return JSON.parse(relevantCall.args[0]['Payload']);
+    };
 
     it('Handles saving initiation (EFT) correctly', async () => {
         const saveStartEvent = {
@@ -425,9 +434,12 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWith(userProfileInvocation);
     });
 
-    // extremely complicated. even for its author. todo : split this thing so it is possible to debug without as much pain.
     it('Handles saving event happy path correctly', async () => {
         const testAccountNumber = 'POL1';
+
+        fetchTransactionStub.resolves({ settlementTime: moment().subtract(1, 'second') });
+        sumAccountBalanceStub.onFirstCall().resolves({ amount: 200 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+        sumAccountBalanceStub.onSecondCall().resolves({ amount: 300 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD' });
 
         setStubsForSaveComplete('INVEST', { accountNumber: testAccountNumber, amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' });
         
@@ -435,11 +447,23 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         const resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
 
         commonAssertions(resultOfHandle);
+        const boostLambdaPayload = extractLambdaPayload('boost_event_process');
+        expect(boostLambdaPayload.eventContext).to.deep.equal({
+            accountId: testAccountId,
+            saveCount: mockSavingEvent.context.saveCount,
+            savedAmount: mockSavingEvent.context.savedAmount,
+            preSaveBalance: '2000000::HUNDREDTH_CENT::USD',
+            postSaveBalance: '3000000::HUNDREDTH_CENT::USD'
+        });
     });
 
     it('Swallows email failure', async () => {
         const savingEvent = { ...mockSavingEvent };
         savingEvent.context.saveCount = 2; // special case of 1 is tested elsewhere
+
+        fetchTransactionStub.resolves({ settlementTime: moment().subtract(1, 'second') });
+        sumAccountBalanceStub.onFirstCall().resolves({ amount: 200 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD' });
+        sumAccountBalanceStub.onSecondCall().resolves({ amount: 300 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD' });
         
         const bsheetPayload = { accountNumber: 'POL1', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' };
         setStubsForSaveComplete('INVEST', bsheetPayload);
@@ -456,35 +480,43 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         savingEvent.context.savedAmount = '1000000::HUNDREDTH_CENT::ZAR';
         const bsheetPayload = { accountNumber: 'APERSON', amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' };
 
+        fetchTransactionStub.resolves({ settlementTime: moment().subtract(1, 'second') });
+        sumAccountBalanceStub.onFirstCall().resolves({ amount: 250 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
+        sumAccountBalanceStub.onSecondCall().resolves({ amount: 350 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
+
         setStubsForSaveComplete('INVEST', bsheetPayload);
         fetchBSheetAccStub.resolves('APERSON');
 
         const resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
         commonAssertions(resultOfHandle);
+
+        const boostLambdaPayload = extractLambdaPayload('boost_event_process');
+        expect(boostLambdaPayload.eventContext).to.deep.equal({
+            accountId: testAccountId,
+            saveCount: 3,
+            savedAmount: '1000000::HUNDREDTH_CENT::ZAR',
+            preSaveBalance: '2500000::HUNDREDTH_CENT::ZAR',
+            postSaveBalance: '3500000::HUNDREDTH_CENT::ZAR'
+        });
     });
 
     it('Does not process on empty amount', async () => {
-        // todo : this should actually throw an error
         const savingEvent = { ...mockSavingEvent };
         savingEvent.context.savedAmount = '::::';
-        setStubsForSaveComplete('INVEST', { accountNumber: 'OTHERPERSON', amount: null, unit: 'WHOLE_CURRENCY', currency: '' });
-        getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'test/queue/url' })});
-        sqsSendStub.returns({ promise: () => 'DLQ activated' });
 
         const resultOfBadAmount = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
-        logger('Result:', resultOfBadAmount);
         expect(resultOfBadAmount).to.deep.equal({ statusCode: 500 });
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        expect(fetchBSheetAccStub).to.have.been.calledOnce;
-        expect(sendEmailStub).to.have.not.been.called;
         expect(addToDlqStub).to.have.been.calledOnce;
+        expect(sendEmailStub).to.not.have.been.called;
+        expect(fetchBSheetAccStub).to.not.have.been.called;
+        expect(lamdbaInvokeStub).to.not.have.been.called;
         expect(publishUserEventStub).to.not.have.been.called;
     });
 
 });
 
-describe('*** UNIT TEST WITHDRAWAL EVENTS ***', () => {
+describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
 
     beforeEach(resetStubs);
 
@@ -573,7 +605,7 @@ describe('*** UNIT TEST WITHDRAWAL EVENTS ***', () => {
 
         const savingEvent = {
             userId: mockUserId,
-            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
             timeInMillis: timeNow,
             context: {
                 accountId: testAccountId,

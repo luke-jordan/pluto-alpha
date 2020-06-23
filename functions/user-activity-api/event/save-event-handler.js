@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:event:save');
 const config = require('config');
+const moment = require('moment');
 
 const opsUtil = require('ops-util-common');
 const dispatchHelper = require('./dispatch-helper');
@@ -89,6 +90,26 @@ const assembleStatusUpdateInvocation = (systemWideUserId, statusInstruction) => 
     return invokeParams;
 };
 
+const sendEnrichedSaveEventToBoostProcess = async ({ eventBody, persistence, lambda }) => {
+    const { context: saveContext } = eventBody;
+    const { accountId, transactionId } = saveContext;
+    
+    const transactionDetails = await persistence.fetchTransaction(transactionId);
+    const settlementTime = moment(transactionDetails.settlementTime);
+    
+    // in theory we could just subtract one from the other, but this feels more robust to gaming and this is non-blocking
+    const preSaveBalance = await persistence.sumAccountBalance(accountId, transactionDetails.currency, settlementTime);
+    const postSaveBalance = await persistence.sumAccountBalance(accountId, transactionDetails.currency, settlementTime.add(1, 'second'));
+
+    saveContext.preSaveBalance = opsUtil.convertAmountDictToString(preSaveBalance);
+    saveContext.postSaveBalance = opsUtil.convertAmountDictToString(postSaveBalance);
+
+    logger('Save context after enrichment: ', saveContext);
+
+    const boostProcessInvocation = dispatchHelper.assembleBoostProcessInvocation(eventBody);
+    lambda.invoke(boostProcessInvocation).promise();
+};
+
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
 
 module.exports.handleSaveInitiatedEvent = async ({ eventBody, userProfile, lambda, publisher }) => {
@@ -111,18 +132,24 @@ module.exports.handleSaveInitiatedEvent = async ({ eventBody, userProfile, lambd
 
 module.exports.handleSavingEvent = async ({ eventBody, persistence, publisher, lambda }) => {
     logger('Saving event triggered!: ', eventBody);
+    
+    const { accountId, transactionId, savedAmount } = eventBody.context;
+    
+    const savedAmountDict = opsUtil.convertAmountStringToDict(savedAmount);
+    logger('Extracted saved amount dict: ', savedAmountDict);
+    if (!savedAmountDict || !savedAmountDict.amount || savedAmountDict.amount === 0) {
+        throw Error('Save event with empty or malformed save amount in context');
+    }
 
     const promisesToInvoke = [];
-        
-    const boostProcessInvocation = dispatchHelper.assembleBoostProcessInvocation(eventBody);
-    promisesToInvoke.push(lambda.invoke(boostProcessInvocation).promise());
+    
+    promisesToInvoke.push(sendEnrichedSaveEventToBoostProcess({ eventBody, persistence, lambda }));
     
     if (emailSendingEnabled) {
         promisesToInvoke.push(sendSaveSucceededEmail(eventBody, publisher));
     }
 
-    const { context } = eventBody;
-    const { accountId, transactionId, savedAmount } = context;
+    // const { accountId, transactionId } = context;
 
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_SAVED', reasonToLog: 'Saving event completed' }};
     const statusInvocation = assembleStatusUpdateInvocation(eventBody.userId, statusInstruction);
