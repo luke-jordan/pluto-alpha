@@ -15,6 +15,7 @@ const stringify = require('json-stable-stringify');
 const AWS = require('aws-sdk');
 const sns = new AWS.SNS({ region: config.get('aws.region') });
 
+const sqs = new AWS.SQS();
 const s3 = new AWS.S3();
 const lambda = new AWS.Lambda();
 
@@ -100,6 +101,36 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     } catch (err) {
         // means was not caught in interior (i.e., above)
         logger('PUBLISHING_ERROR: Bulk error: ', err);
+        return { result: 'FAILURE' };
+    }
+};
+
+const assembleQueueParams = async (payload, queueName) => {
+    logger('Looking for SQS queue name: ', queueName);
+    const queueUrlResult = await sqs.getQueueUrl({ QueueName: queueName }).promise();
+    const queueUrl = queueUrlResult.QueueUrl;
+
+    const dataType = { DataType: 'String', StringValue: 'JSON' };
+
+    return {
+        MessageAttributes: { MessageBodyDataType: dataType },
+        MessageBody: JSON.stringify(payload),
+        QueueUrl: queueUrl
+    };
+};
+
+module.exports.queueEvents = async (events) => {
+    try {
+        const queueParameters = await Promise.all(events.map((event) => assembleQueueParams(event.payload, event.queueName)));
+        logger('Assembled queue parameters:', queueParameters);
+        const sqsPromises = queueParameters.map((params) => sqs.sendMessage(params).promise());
+        const sqsResult = await Promise.all(sqsPromises);
+        logger('Queue result:', sqsResult);
+        const successCount = sqsResult.filter((result) => typeof result === 'object' && result.MessageId).length;
+        logger(`${successCount}/${events.length} events were queued successfully`);
+        return { successCount, failureCount: events.length - successCount };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
         return { result: 'FAILURE' };
     }
 };

@@ -2,7 +2,7 @@
 
 process.env.NODE_ENV = 'test';
 
-const logger = require('debug')('jupiter:factoid-rds:test');
+// const logger = require('debug')('jupiter:factoid-rds:test');
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
@@ -27,7 +27,7 @@ class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
         this.insertRecords = insertStub;
-        this.updateRecord = updateStub,
+        this.updateRecord = updateStub;
         this.updateRecordObject = updateRecordObjStub;
     }
 }
@@ -38,7 +38,7 @@ const rds = proxyquire('../persistence/rds.factoids', {
     '@noCallThru': true
 });
 
-describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
+describe.only('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
     const testFactId = uuid();
     const testSystemId = uuid();
 
@@ -49,7 +49,6 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         'factoid_id': testFactId,
         'title': 'Jupiter Factoid #21',
         'body': 'Jupiter helps you save.',
-        'factoid_status': 'PUSHED',
         'factoid_priority': 2,
         'creation_time': testCreationTime,
         'updated_time': testUpdatedTime,
@@ -110,17 +109,17 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         const mockFactoidDetailsFromRds = {
             'user_id': testSystemId,
             'factoid_id': testFactId,
-            'factoid_status': 'PUSHED',
+            'factoid_status': 'FETCHED',
             'view_count': 2,
             'fetch_count': 3,
             'creation_time': testCreationTime,
             'updated_time': testUpdatedTime
         };
 
-        const expectedDetails = {
+        const expectedFactoidStatus = {
             userId: testSystemId,
             factoidId: testFactId,
-            factoidStatus: 'PUSHED',
+            factoidStatus: 'FETCHED',
             viewCount: 2,
             fetchCount: 3,
             creationTime: testCreationTime,
@@ -134,13 +133,13 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         const resultOfFetch = await rds.fetchFactoidUserStatuses([testFactId, testFactId], testSystemId);
 
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal([expectedDetails, expectedDetails]);
+        expect(resultOfFetch).to.deep.equal([expectedFactoidStatus, expectedFactoidStatus]);
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, testFactId, testFactId]);
     });
 
     it('Fetches uncreated factoids properly', async () => {
         const mockFactoidFromPersistence = { ...mockFactoidFromRds };
-        mockFactoidFromPersistence.factoid_status = 'UNCREATED';
+        mockFactoidFromPersistence['factoid_status'] = 'UNCREATED';
         const expectedFactoid = {
             factoidId: testFactId,
             title: 'Jupiter Factoid #21',
@@ -151,17 +150,16 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
             factoidPriority: 2
         };
 
-        const selectQuery = `select * from factoid_data.factoid where factoid_id not in ` +
-            `(select factoid_id from factoid_data.factoid_user_join_table where user_id = $1 and factoid_status = $2)`;
+        const selectQuery = `select * from factoid_data.factoid where active = $1 factoid_id not in ` +
+            `(select factoid_id from factoid_data.factoid_user_join_table where user_id = $2 and factoid_status = $3)`;
 
         queryStub.resolves([mockFactoidFromPersistence, mockFactoidFromPersistence]);
 
         const resultOfFetch = await rds.fetchUncreatedFactoids(testSystemId);
-        logger('Res:', resultOfFetch)
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedFactoid, expectedFactoid]);
-        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, 'VIEWED']);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [true, testSystemId, 'VIEWED']);
     });
 
     it('Fetches created factoids properly', async () => {
@@ -177,7 +175,7 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
             factoidPriority: 2
         };
 
-        const selectQuery = `select * from factoid_data.factoid_user_join_table inner join factoid_data.factoid where user_id = $1`;           
+        const selectQuery = `select * from factoid_data.factoid_user_join_table inner join factoid_data.factoid where user_id = $1 and active = $2`;           
         
         queryStub.resolves([factoidFromRds, factoidFromRds]);
 
@@ -185,7 +183,7 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedFactoid, expectedFactoid]);
-        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, true]);
     });
 
     it('Increments a factoid view or fetch count', async () => {
@@ -207,11 +205,11 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
 
         updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
 
-        const resultOfUpdate = await rds.updateFactoidStatus(testFactId, testSystemId, 'PUSHED');
+        const resultOfUpdate = await rds.updateFactoidStatus(testFactId, testSystemId, 'FETCHED');
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal({ updatedTime: testUpdatedTime });
-        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['PUSHED', testFactId, testSystemId]);
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['FETCHED', testFactId, testSystemId]);
     });
 
     it('Updates factoid properly', async () => {
