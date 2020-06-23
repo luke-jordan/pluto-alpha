@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:event:dispatch-helper')
+const logger = require('debug')('jupiter:event:dispatch-helper');
 const config = require('config');
 
 const util = require('ops-util-common');
@@ -37,7 +37,7 @@ module.exports.addInvestmentToBSheet = async ({ operation, parameters, persisten
             return;
         }
         
-        const wholeCurrencyAmount = util.convertToUnit(parseInt(amount, 10), unit, 'WHOLE_CURRENCY')
+        const wholeCurrencyAmount = util.convertToUnit(parseInt(amount, 10), unit, 'WHOLE_CURRENCY');
         const transactionDetails = { accountNumber, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
 
         if (operation === 'WITHDRAW') {

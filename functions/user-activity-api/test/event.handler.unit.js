@@ -14,13 +14,13 @@ const proxyquire = require('proxyquire').noCallThru();
 const helper = require('./test.helper');
 
 const lamdbaInvokeStub = sinon.stub();
-const getObjectStub = sinon.stub();
 const sqsSendStub = sinon.stub();
 const snsPublishStub = sinon.stub();
 const getQueueUrlStub = sinon.stub();
 
 const sendEmailStub = sinon.stub();
 const sendSmsStub = sinon.stub();
+const addToDlqStub = sinon.stub();
 
 const getHumanRefStub = sinon.stub();
 const updateTagsStub = sinon.stub();
@@ -45,12 +45,6 @@ class MockSnsClient {
     }
 }
 
-class MockS3Client {
-    constructor () { 
-        this.getObject = getObjectStub; 
-    }
-}
-
 class MockSQSClient {
     constructor () { 
         this.sendMessage = sqsSendStub; 
@@ -69,7 +63,6 @@ const eventHandler = proxyquire('../event-handler', {
     'aws-sdk': {
         'Lambda': MockLambdaClient,
         'SQS': MockSQSClient,
-        'S3': MockS3Client,
         'SNS': MockSnsClient,
         // eslint-disable-next-line no-empty-function
         'config': { update: () => ({}) }
@@ -87,6 +80,7 @@ const eventHandler = proxyquire('../event-handler', {
         'sendSms': sendSmsStub,
         'sendSystemEmail': sendEmailStub,
         'publishUserEvent': publishUserEventStub,
+        'addToDlq': addToDlqStub,
         '@noCallThru': true
     }
 });
@@ -100,7 +94,7 @@ const expectNoCalls = (...stubs) => {
 };
 
 const resetStubs = () => helper.resetStubs(
-    lamdbaInvokeStub, getObjectStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, 
+    lamdbaInvokeStub, getQueueUrlStub, sqsSendStub, updateTagsStub, updateTxFlagsStub, 
     fetchBSheetAccStub, redisGetStub, redisSetStub, getHumanRefStub, sendEmailStub, sendSmsStub, publishUserEventStub
 );
 
@@ -120,14 +114,14 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         logger('Result: ', resultOfHandle);
         expect(resultOfHandle).to.exist;
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
-        expectNoCalls(lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, redisGetStub);
+        expectNoCalls(lamdbaInvokeStub, sqsSendStub, sendEmailStub, redisGetStub);
     });
 
     it('Ignores one among multiple account open events properly', async () => {
         const snsEvent = wrapEventSns({ userId: mockUserId, eventType: 'PASSWORD_SET' });
         const resultOfHandle = await eventHandler.handleUserEvent(snsEvent);
         expect(resultOfHandle).to.deep.equal({ statusCode: 200 }); // for now
-        expectNoCalls(lamdbaInvokeStub, getObjectStub, sqsSendStub, sendEmailStub, redisGetStub);
+        expectNoCalls(lamdbaInvokeStub, sqsSendStub, sendEmailStub, redisGetStub);
     });
 
     it('Registers account with third party, persists account id from third party, connects or creates friend requests', async () => {
@@ -354,33 +348,6 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
 
     beforeEach(resetStubs);
 
-    // todo : add argument coverage
-    const commonAssertions = (resultOfHandle) => {
-        expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
-        expect(sendEmailStub).to.have.been.calledOnce;
-        expect(lamdbaInvokeStub).to.have.been.calledThrice; // for balance & for status & investment
-        expect(fetchBSheetAccStub).to.have.been.calledOnce;
-        expect(updateTxFlagsStub).to.have.been.calledOnce;
-        expectNoCalls(getQueueUrlStub, sqsSendStub);
-    };
-
-    const setStubsForSaveComplete = (operation, transactionDetails) => {
-        const bsheetInvocation = {
-            FunctionName: config.get('lambdas.addTxToBalanceSheet'), 
-            InvocationType: 'RequestResponse',
-            Payload: JSON.stringify({ operation, transactionDetails })
-        };
-
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-        lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
-
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
-        sendEmailStub.resolves({ result: 'SUCCESS' });
-        
-        fetchBSheetAccStub.resolves('POL1');
-        updateTxFlagsStub.resolves({ updatedTime: testUpdateTime });
-    };
-
     const testAccountId = uuid();
     const timeNow = moment().valueOf();
     const testUpdateTime = moment();
@@ -395,6 +362,32 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
             savedAmount: '1000000::HUNDREDTH_CENT::USD'
         }
     };
+
+    const setStubsForSaveComplete = (operation, transactionDetails) => {
+        const bsheetInvocation = {
+            FunctionName: config.get('lambdas.addTxToBalanceSheet'), 
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({ operation, transactionDetails })
+        };
+
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+        lamdbaInvokeStub.withArgs(bsheetInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ result: 'ADDED' })})});
+
+        sendEmailStub.resolves({ result: 'SUCCESS' });
+        
+        fetchBSheetAccStub.resolves('POL1');
+        updateTxFlagsStub.resolves({ updatedTime: testUpdateTime });
+    };
+
+    // todo : add argument coverage
+    const commonAssertions = (resultOfHandle) => {
+        expect(resultOfHandle).to.deep.equal({ statusCode: 200 });
+        expect(sendEmailStub).to.have.been.calledOnce;
+        expect(lamdbaInvokeStub).to.have.been.calledThrice; // for balance & for status & investment
+        expect(fetchBSheetAccStub).to.have.been.calledOnce;
+        expect(updateTxFlagsStub).to.have.been.calledOnce;
+        expectNoCalls(getQueueUrlStub, sqsSendStub);
+    };    
 
     it('Handles saving initiation (EFT) correctly', async () => {
         const saveStartEvent = {
@@ -423,7 +416,6 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         const statusUpdateInvoke = helper.wrapLambdaInvoc('profile_status_update', true, statusInstruct);
         lamdbaInvokeStub.withArgs(statusUpdateInvoke).returns({ promise: () => ({ StatusCode: 202 })});
 
-        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'This is an email template' }})});
         sendEmailStub.resolves({ result: 'SUCCESS' });
 
         const resultOfCall = await eventHandler.handleUserEvent(wrapEventSns(saveStartEvent));
@@ -441,7 +433,7 @@ describe('*** UNIT TEST SAVING EVENT HANDLING ***', () => {
         setStubsForSaveComplete('INVEST', { accountNumber: testAccountNumber, amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD' });
         
         const savingEvent = { ...mockSavingEvent };
-        let resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
+        const resultOfHandle = await eventHandler.handleUserEvent(wrapEventSns(savingEvent));
 
         commonAssertions(resultOfHandle);
     });
@@ -597,12 +589,10 @@ describe('*** UNIT TEST WITHDRAWAL EVENTS ***', () => {
 
         expect(resultOfHandle).to.deep.equal({ statusCode: 500 });
         expect(lamdbaInvokeStub).to.have.been.calledOnce;
-        expect(getObjectStub).to.have.not.been.called;
         expect(sendEmailStub).to.have.not.been.called;
         expect(fetchBSheetAccStub).to.have.not.been.called;
         expect(updateTxFlagsStub).to.have.not.been.called;
-        expect(getQueueUrlStub).to.have.been.calledOnce;
-        expect(sqsSendStub).to.have.been.calledOnce;
+        expect(addToDlqStub).to.have.been.calledOnce;
     });
 
     it('Handles friendship event properly', async () => {

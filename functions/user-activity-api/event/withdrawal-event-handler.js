@@ -19,8 +19,8 @@ const safeWithdrawalEmail = async ({ eventBody, userProfile, bankAccountDetails,
         withdrawalAmount,
         contactMethod,
         profileLink,
-        ...bankAccountDetails,
-    }
+        ...bankAccountDetails
+    };
 
     const emailParams = {
         toList: config.get('publishing.withdrawalEmailDestination'),
@@ -37,7 +37,7 @@ const safeWithdrawalEmail = async ({ eventBody, userProfile, bankAccountDetails,
         if (emailResult.result === 'SUCCESS') {
             logger('Email sent successfully');
             return;
-        };
+        }
 
         throw Error('Withdrawal email failed, check logs');
     } catch (err) {
@@ -54,12 +54,12 @@ const safeWithdrawalEmail = async ({ eventBody, userProfile, bankAccountDetails,
         const resultOfSns = await sns.publish(snsMessage).promise();
         logger('Result of SNS dispatch: ', resultOfSns);
 
-        addToDlq({ eventType: 'WITHDRAWAL', eventBody, templateVariables });
+        await publisher.addToDlq(config.get('publishing.userEvents.processingDlq'), { eventType: 'WITHDRAWAL', eventBody, templateVariables }, err);
     }
 };
 
 // this will be rare so just do a simple one
-const withdrawalCancelledEMail = async (userProfile, transactionDetails) => {
+const withdrawalCancelledEMail = async (userProfile, transactionDetails, publisher) => {
     const userName = `${userProfile.personalName} ${userProfile.familyName}`;
     const htmlBody = `<p>Hello,</p><p>Good news! ${userName} has decided to cancel their withdrawal. This was sent with ` +
         `bank reference, ${transactionDetails.humanReference}. Please abort the withdrawal!</p><p>The Jupiter System</p>`;
@@ -114,11 +114,10 @@ module.exports.handleWithdrawalEvent = async ({ eventBody, userProfile, publishe
 };
 
 // todo : write some tests
-module.exports.handleWithdrawalCancelled = async ({ eventBody, userProfile }) => {
+module.exports.handleWithdrawalCancelled = async ({ eventBody, userProfile, persistence, publisher }) => {
     logger('Withdrawal cancelled! Event body: ', eventBody);
 
-    const { userId, context } = eventBody;
-    const { transactionId, oldStatus, newStatus } = context;
+    const { transactionId, oldStatus, newStatus } = eventBody.context;
     
     if (!transactionId) {
         logger('Malformed context, abort');
@@ -132,6 +131,6 @@ module.exports.handleWithdrawalCancelled = async ({ eventBody, userProfile }) =>
 
     // i.e., was not just user cancelling before the end
     if (oldStatus === 'PENDING') {
-        await withdrawalCancelledEMail(userProfile, transactionDetails);
+        await withdrawalCancelledEMail(userProfile, transactionDetails, publisher);
     }
 };

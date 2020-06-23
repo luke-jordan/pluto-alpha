@@ -64,7 +64,7 @@ const sendSaveSucceededEmail = async (eventBody, publisher) => {
         subject: 'Yippie kay-yay',
         bodyTemplateKey: config.get('templates.saveEmail'),
         templateVariables
-    }
+    };
         
     logger('Assembled email parameters: ', emailParams);
     const emailResult = await publisher.sendSystemEmail(emailParams);

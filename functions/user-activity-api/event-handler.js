@@ -23,7 +23,7 @@ const lambda = new AWS.Lambda();
 
 // these do the heavy lifting; dividing as complexity was overwhelming this handler
 const accountEventHandler = require('./event/account-event-handler');
-const boostEventHandler = require('./event/boost-event-handler');
+const boostEventHandler = require('./event/boost-redeemed-event-handler');
 const friendEventHandler = require('./event/friend-event-handler');
 const saveEventHandler = require('./event/save-event-handler');
 const withdrawEventHandler = require('./event/withdrawal-event-handler');
@@ -31,29 +31,6 @@ const withdrawEventHandler = require('./event/withdrawal-event-handler');
 // for unwrapping some AWS stuff
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
 const extractSnsMessage = async (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
-
-const addToDlq = async (event, err) => {
-    const dlqName = config.get('publishing.userEvents.processingDlq');
-    logger('Looking for DLQ name: ', dlqName);
-    const dlqUrlResult = await sqs.getQueueUrl({ QueueName: dlqName }).promise();
-    const dlqUrl = dlqUrlResult.QueueUrl;
-
-    const payload = { event, err };
-    const params = {
-        MessageAttributes: {
-            MessageBodyDataType: {
-                DataType: 'String',
-                StringValue: 'JSON'
-            }
-        },
-        MessageBody: JSON.stringify(payload),
-        QueueUrl: dlqUrl
-    };
-
-    logger('Sending to SQS DLQ: ', params);
-    const sqsResult = await sqs.sendMessage(params).promise();
-    logger('Result of sqs transmission:', sqsResult);
-};
 
 const invokeProfileLambda = async (systemWideUserId, includeContactMethod) => {
     const profileFetchLambdaInvoke = {
@@ -98,8 +75,8 @@ const EVENT_DISPATCHER = {
     WITHDRAWAL_EVENT_CANCELLED: withdrawEventHandler.handleWithdrawalCancelled,
     BOOST_REDEEMED: boostEventHandler.handleBoostRedeemedEvent,
     FRIEND_REQUEST_TARGET_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent,
-    FRIEND_REQUEST_INITIATED_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent,
-}
+    FRIEND_REQUEST_INITIATED_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent
+};
 
 const EVENT_REQUIRES_CONTACT = {
     USER_CREATED_ACCOUNT: { requiresProfile: true, requiresContact: true },
@@ -140,7 +117,7 @@ module.exports.handleUserEvent = async (snsEvent) => {
         return { statusCode: 200 };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        await addToDlq(snsEvent, err);
+        await publisher.addToDlq(config.get('publishing.userEvents.processingDlq'), snsEvent, err);
         return { statusCode: 500 };
     }
 };
