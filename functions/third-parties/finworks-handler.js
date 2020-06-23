@@ -60,6 +60,12 @@ const executeRequestWithRetry = async (options, retryStatus) => {
         logger('FinWorks response: ', response.toJSON());
         return response;
     } catch (err) {
+        // first we check if the error has a status code and that is 500, in which case we do not retry
+        if (!opsUtil.isObjectEmpty(err) && err.statusCode === 500) {
+            logger('500 error so do not retry, just propogate/alert');
+            throw err;
+        }
+
         if (!retryStatus) {
             // first retry, so set and and return
             const initialTime = config.get('retry.initialPeriod');
@@ -175,7 +181,6 @@ module.exports.sendWithdrawal = async (event) => {
         logger('Assembled endpoint:', endpoint);
 
         const options = assembleRequest('POST', endpoint, { body, crt, pem });
-        logger('Withdrawal request options: ', options);
         const response = await executeRequestWithRetry(options);
         logger('Got response:', response.toJSON());
 

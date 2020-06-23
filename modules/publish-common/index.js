@@ -48,11 +48,10 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             throw Error('Publish event called with undefined event type');
         }
 
-        const eventTime = options.timestamp || moment().valueOf();
         const eventToPublish = {
             userId,
             eventType,
-            timestamp: eventTime,
+            timestamp: options.timestamp || moment().valueOf(),
             interface: options.interface,
             initiator: options.initiator,
             context: options.context,
@@ -77,13 +76,13 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         const resultOfPublish = await sns.publish(messageForQueue).promise();
 
         if (typeof resultOfPublish === 'object' && Reflect.has(resultOfPublish, 'MessageId')) {
+            logger(`Completed publishing ${userId}::${eventType}, result: `, resultOfPublish);
             return { result: 'SUCCESS' };
         }
 
         logger('PUBLISHING_ERROR: Published message: ', messageForQueue);
         return { result: 'FAILURE' };
     } catch (err) {
-        // we need to know if these are not going out
         logger('FATAL_ERROR: ', err);
         return { result: 'FAILURE' };
     }
@@ -93,7 +92,7 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     try {
         // note: SNS does not have a batch publish method, so we do this -- do not ever call this in user facing method
         const publishPromises = userIds.map((userId) => exports.publishUserEvent(userId, eventType, options));
-        logger('Sending ', publishPromises.length, ' events to the user log topic');
+        logger('Sending ', publishPromises.length, ' events to the user log topic, with type: ', eventType);
         const resultOfAll = await Promise.all(publishPromises);
         const successCount = resultOfAll.filter((returned) => returned.result === 'SUCCESS').length;
         logger(`Of promises, ${successCount} were successful`);

@@ -65,6 +65,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "balance_sheet_acc_update" {
   name = "/aws/lambda/${var.balance_sheet_acc_update_lambda_function_name}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"

@@ -13,6 +13,8 @@
     "audienceTable": "audience_data.audience",
     "audienceJoinTable": "audience_data.audience_account_join",
     "transactionTable": "transaction_data.core_transaction_ledger",
-    "accountTable": "account_data.core_account_ledger"
+    "accountTable": "account_data.core_account_ledger",
+    "boostTable": "boost_data.boost_account_status",
+    "friendTable": "friend_data.core_friend_relationship"
   }
 }

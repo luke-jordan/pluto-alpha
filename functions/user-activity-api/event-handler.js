@@ -111,27 +111,27 @@ const obtainTemplate = async (templateName) => {
     return templateText;
 };
 
-const formatAmountDict = ({ amount, unit, currency }) => {
+const formatAmountDict = ({ amount, unit, currency }, digits = 0) => {
     const wholeCurrencyAmount = amount / UNIT_DIVISORS_TO_WHOLE[unit];
 
     // JS's i18n for emerging market currencies is lousy, and gives back the 3 digit code instead of symbol, so have to hack for those
     // implement for those countries where client opcos have launched
     if (currency === 'ZAR') {
-        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: 0, minimumFractionDigits: 0 });
+        const emFormat = new Intl.NumberFormat('en-ZA', { maximumFractionDigits: digits, minimumFractionDigits: digits });
         return `R${emFormat.format(wholeCurrencyAmount)}`;
     }
 
     const numberFormat = new Intl.NumberFormat('en-US', {
         style: 'currency',
         currency: currency,
-        maximumFractionDigits: 0,
-        minimumFractionDigits: 0
+        maximumFractionDigits: digits,
+        minimumFractionDigits: digits
     });
     
     return numberFormat.format(wholeCurrencyAmount);
 };
 
-const formatAmountText = (amountText) => {
+const formatAmountText = (amountText, digits = 0) => {
     logger('Formatting amount text: ', amountText);
     if (!amountText || amountText.length === 0) {
         return 'Error. Check logs';
@@ -141,7 +141,7 @@ const formatAmountText = (amountText) => {
     const amountResult = { amount, unit, currency };
     logger('Split amount: ', amountResult);
 
-    return formatAmountDict(amountResult);
+    return formatAmountDict(amountResult, digits);
 };
 
 const assembleEmailParameters = ({ toAddresses, subject, htmlBody, textBody }) => ({
@@ -200,7 +200,7 @@ const assembleSaveEmail = async (eventBody) => {
     }
 
     const templateVariables = {
-        savedAmount: formatAmountText(saveContext.savedAmount),
+        savedAmount: formatAmountText(saveContext.savedAmount, 2),
         saveCountText: countText,
         bankReference: saveContext.bankReference,
         profileLink: profileLink(saveContext.bankReference)    
@@ -229,7 +229,7 @@ const sendSaveSucceededEmail = async (eventBody) => {
 // handling withdrawals by sending email
 const safeWithdrawalEmail = async (eventBody, userProfile, bankAccountDetails) => {
     const templateVariables = { ...bankAccountDetails };
-    templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount); // note: make positive in time
+    templateVariables.withdrawalAmount = formatAmountText(eventBody.context.withdrawalAmount, 2); // note: make positive in time
 
     const contactMethod = userProfile.emailAddress || userProfile.phoneNumber;
     const profileSearch = `users?searchValue=${encodeURIComponent(contactMethod)}&searchType=phoneOrEmail`;
@@ -276,7 +276,7 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails) => {
         subject: 'Jupiter withdrawal cancelled', 
         htmlBody, textBody
     });
-    const emailResult = await publisher.sendSystemEmail(emailParams);
+    const emailResult = await publisher.safeEmailSendPlain(emailParams);
     logger('Result of sending email: ', emailResult);
 };
 
@@ -398,6 +398,31 @@ const findPendingFriendRequest = async (userProfile) => {
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////
 
+const setupBsheetAccIfNone = async (userProfile, accountInfo) => {
+    const { tags } = accountInfo[0];
+    logger('Fetched tags for account: ', tags);
+
+    if (Array.isArray(tags) && tags.some((tag) => tag.startsWith(config.get('defaults.balanceSheet.accountPrefix')))) {
+        logger('Already has FinWorks account');
+        return;
+    }
+
+    const bsheetAccountResult = await createFinWorksAccount({ 
+        idNumber: userProfile.nationalId, 
+        surname: userProfile.familyName, 
+        firstNames: userProfile.personalName, 
+        humanRef: accountInfo[0].humanRef 
+    });
+
+    if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
+        throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
+    }
+
+    logger('Finworks account creation resulted in:', bsheetAccountResult);
+    const accountUpdateResult = await updateAccountTags(userProfile.systemWideUserId, bsheetAccountResult.accountNumber);
+    logger(`Result of user account update: ${accountUpdateResult}`);
+};
+
 const handleAccountOpenedEvent = async (eventBody) => {
     logger('Handling event:', eventBody);
     const { userId } = eventBody;
@@ -407,15 +432,12 @@ const handleAccountOpenedEvent = async (eventBody) => {
     if (Array.isArray(accountInfo) && accountInfo.length > 0) {
         userDetails.humanRef = accountInfo[0].humanRef;
     }
-    const bsheetAccountResult = await createFinWorksAccount(userDetails);
-    if (typeof bsheetAccountResult !== 'object' || !Object.keys(bsheetAccountResult).includes('accountNumber')) {
-        throw new Error(`Error creating user FinWorks account: ${bsheetAccountResult}`);
+    
+    if (userProfile.kycStatus === 'VERIFIED_AS_PERSON') {
+        logger('User is KYC verified, create ground-truth account if none already');
+        await setupBsheetAccIfNone(userProfile, accountInfo);
     }
 
-    logger('Finworks account creation resulted in:', bsheetAccountResult);
-    const accountUpdateResult = await updateAccountTags(eventBody.userId, bsheetAccountResult.accountNumber);
-    logger(`Result of user account update: ${accountUpdateResult}`);
-    
     const notificationContacts = config.get('publishing.accountsPhoneNumbers');
     const finalProcesses = notificationContacts.map((phoneNumber) => publisher.sendSms({ phoneNumber, message: `New Jupiter account opened. Human reference: ${userDetails.humanRef}` }));
 
@@ -426,6 +448,19 @@ const handleAccountOpenedEvent = async (eventBody) => {
     finalProcesses.push(lambda.invoke(boostProcessInvocation).promise());
 
     await Promise.all(finalProcesses);
+};
+
+const handleKyCompletedEvent = async (eventBody) => {
+    const { userId } = eventBody;
+    logger('Handling KYC completed event: ', eventBody);
+
+    const [userProfile, accountInfo] = await Promise.all([fetchUserProfile(userId, true), persistence.findHumanRefForUser(userId)]);
+    if (!Array.isArray(accountInfo) || accountInfo.length === 0) {
+        logger('Account not opened yet, let account open handle');
+        return;
+    }
+
+    await setupBsheetAccIfNone(userProfile, accountInfo);
 };
 
 const handleSaveInitiatedEvent = async (eventBody) => {
@@ -587,6 +622,9 @@ module.exports.handleUserEvent = async (snsEvent) => {
         switch (eventType) {
             case 'USER_CREATED_ACCOUNT':
                 await handleAccountOpenedEvent(eventBody);
+                break;
+            case 'VERIFIED_AS_PERSON':
+                await handleKyCompletedEvent(eventBody);
                 break;
             case 'SAVING_EVENT_INITIATED':
                 await handleSaveInitiatedEvent(eventBody);

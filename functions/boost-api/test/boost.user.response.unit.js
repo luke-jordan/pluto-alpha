@@ -11,6 +11,7 @@ const expect = chai.expect;
 chai.use(require('sinon-chai'));
 
 const fetchBoostStub = sinon.stub();
+const fetchAccountStatusStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const updateBoostRedeemedStub = sinon.stub();
 const getAccountIdForUserStub = sinon.stub();
@@ -23,6 +24,7 @@ const proxyquire = require('proxyquire').noCallThru();
 const handler = proxyquire('../boost-user-handler', {
     './persistence/rds.boost': {
         'fetchBoost': fetchBoostStub,
+        'fetchCurrentBoostStatus': fetchAccountStatusStub,
         'updateBoostAccountStatus': updateBoostAccountStub,
         'updateBoostAmountRedeemed': updateBoostRedeemedStub,
         'getAccountIdForUser': getAccountIdForUserStub,
@@ -40,7 +42,9 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
     const testUserId = uuid();
     const testAccountId = uuid();
 
-    beforeEach(() => testHelper.resetStubs(fetchBoostStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub));
+    beforeEach(() => testHelper.resetStubs(
+        fetchBoostStub, fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub
+    ));
 
     it('Redeems when game is won', async () => {
         const testEvent = {
@@ -68,6 +72,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
         getAccountIdForUserStub.resolves(testAccountId);
         redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
         
@@ -145,6 +150,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
 
         updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: moment().valueOf() }]);
 
@@ -199,6 +205,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
+        getAccountIdForUserStub.resolves(testAccountId);
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
         
         const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
         // logger('Result of user boost response processing:', result);
@@ -232,6 +240,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
 
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
 
         const expectedResult = { 
             result: 'TOURNAMENT_ENTERED', 
@@ -256,6 +265,45 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.not.have.been.called;
         expect(updateBoostRedeemedStub).to.not.have.been.called;
         
+    });
+
+    it('Fails on boost not unlocked', async () => {
+        const testEvent = {
+            boostId: testBoostId,
+            numberTaps: 8,
+            timeTakenMillis: 9000
+        };
+    
+        const boostAsRelevant = {
+            boostId: testBoostId,
+            statusConditions: {
+                REDEEMED: ['number_taps_greater_than #{10::10000}']
+            }
+        };
+
+        fetchBoostStub.resolves(boostAsRelevant);
+        getAccountIdForUserStub.resolves(testAccountId);
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'REDEEMED' });
+        
+        const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
+        expect(result.statusCode).to.deep.equal(400);
+        expect(result.body).to.deep.equal(JSON.stringify({ message: 'Boost is not unlocked', status: 'REDEEMED' }));
+    });
+
+    it('Fails if boost not offered to user', async () => {
+        const testEvent = {
+            boostId: testBoostId,
+            numberTaps: 8,
+            timeTakenMillis: 9000
+        };
+
+        fetchBoostStub.resolves({ boostId: testBoostId });
+        getAccountIdForUserStub.resolves(testAccountId);
+        fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves(null);
+
+        const result = await handler.processUserBoostResponse(testHelper.wrapEvent(testEvent, testUserId, 'ORDINARY_USER'));
+        expect(result.statusCode).to.deep.equal(400);
+        expect(result.body).to.deep.equal(JSON.stringify({ message: 'User is not offered this boost' }));
     });
 
     it('Fails on missing authorization', async () => {

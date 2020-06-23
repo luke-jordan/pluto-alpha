@@ -431,4 +431,25 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         ]);
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, ['ACTIVE', ...testRelationshipIds]);
     });
+
+    it('Fetches boost account join, single', async () => {
+        const expectedQuery = `select * from boost_data.boost_account_status where boost_id = $1 and account_id = $2`;
+        queryStub.resolves([{ 'boost_id': 'some-id', 'boost_status': 'UNLOCKED' }]);
+
+        const result = await rds.fetchCurrentBoostStatus('some-id', 'some-account');
+        expect(result).to.deep.equal({ boostId: 'some-id', boostStatus: 'UNLOCKED' });
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account']);
+    });
+
+    it('Handles empty boost account join', async () => {
+        const expectedQuery = `select * from boost_data.boost_account_status where boost_id = $1 and account_id = $2`;
+        queryStub.resolves([]);
+
+        const result = await rds.fetchCurrentBoostStatus('some-id', 'some-account');
+        expect(result).to.be.null;
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account']);
+    });
+
 });

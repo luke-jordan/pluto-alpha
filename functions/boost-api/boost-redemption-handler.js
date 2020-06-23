@@ -88,7 +88,7 @@ const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUs
         return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, options);
     });
 
-    logger('Publish result: ', publishPromises);
+    // logger('Publish result: ', publishPromises);
     return publishPromises;
 };
 
@@ -375,7 +375,7 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     finalPromises = finalPromises.concat(boostsToRedeem.map((boost) => mapBoostToEventPublish(boost, false)));
     finalPromises = finalPromises.concat(boostsToRevoke.map((boost) => mapBoostToEventPublish(boost, true)));
 
-    logger('Final promises: ', finalPromises);
+    logger('Final promises, of length: ', finalPromises.length);
     // then: fire all of them off, and we are done
     const resultOfFinalCalls = await Promise.all(finalPromises);
     logger('Result of final calls: ', resultOfFinalCalls);

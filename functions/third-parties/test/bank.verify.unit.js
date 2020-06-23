@@ -29,6 +29,8 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
     const testIdNumber = '8307065125487';
     const testReference = 'TEST_REF';
 
+    const expectedUrl = `${config.get('pbVerify.endpoint')}/${config.get('pbVerify.path.bankstart')}`;
+
     beforeEach(() => {
         resetStubs(requestStub);
     });
@@ -36,7 +38,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
     it('Verifies an individuals bank account', async () => {
         const expectedRequestArgs = {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: expectedUrl,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
@@ -65,6 +67,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
             jobId: '72828608'
         };
         
+        // logger('Expected URL: ', expectedUrl);
         requestStub.withArgs(expectedRequestArgs).resolves(mockRequestResponse);
 
         const testEvent = {
@@ -91,7 +94,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
     it('Fails on unexpected response from third party', async () => {
         const expectedRequestArgs = {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: expectedUrl,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
@@ -148,6 +151,28 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 
         expect(result).to.exist;
         expect(result).to.deep.equal({ status: 'ERROR', details: 'NO_BANK_NAME' });
+        expect(requestStub).to.have.not.been.called;
+    });
+
+    it('Handles appropriately for manual bank', async () => {
+        const testEvent = {
+            operation: 'initialize',
+            parameters: {
+                bankName: 'TYME',
+                accountNumber: testAccountNumber,
+                accountType: testAccountTypeInput,
+                reference: testReference,
+                initials: 'JF',
+                surname: 'Kennedy',
+                nationalId: testIdNumber
+            }
+        };
+
+        const result = await handler.handle(testEvent);
+        logger('Account verification resulted in:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal({ status: 'SUCCESS', jobId: 'MANUAL_JOB' });
         expect(requestStub).to.have.not.been.called;
     });
 
@@ -324,8 +349,11 @@ describe('*** UNIT TEST BANK ACC VERIFICATION INITIALIZER ***', () => {
 });
 
 describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
-    const testJobId = '73773590';
     
+    const expectedUrl = `${config.get('pbVerify.endpoint')}/${config.get('pbVerify.path.bankstatus')}`;
+
+    const testJobId = '73773590';
+
     const testResponse = {
         'Status': 'Success',
         'Results': {
@@ -366,7 +394,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
     it('Gets bank account verification status', async () => {
         const expectedRequestArgs = {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: expectedUrl,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
@@ -389,10 +417,21 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
     });
 
+    it('Reports appropriately if job ID indicates manual check needed', async () => {
+        const testEvent = {
+            operation: 'statusCheck',
+            parameters: { jobId: 'MANUAL_JOB' }
+        };
+
+        const result = await handler.handle(testEvent);
+        expect(result).to.deep.equal({ result: 'VERIFY_MANUALLY' });
+        expect(requestStub).to.have.not.been.called;
+    });
+
     it('Reports failure if bank account ID number does not match', async () => {
         const expectedRequestArgs = {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: expectedUrl,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
@@ -425,7 +464,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
 
         const expectedRequestArgs = {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: expectedUrl,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),
@@ -452,7 +491,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
     it('Fails on unexpected response from third party', async () => {
         const expectedRequestArgs = {
             method: 'POST',
-            url: config.get('pbVerify.endpoint'),
+            url: expectedUrl,
             formData: {
                 'memberkey': config.get('pbVerify.memberKey'),
                 'password': config.get('pbVerify.password'),

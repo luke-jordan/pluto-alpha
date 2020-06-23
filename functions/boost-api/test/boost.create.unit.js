@@ -183,7 +183,9 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
         const expectedUserLogOptions = {
             initiator: testCreatingUserId,
             context: {
-                boostType: 'REFERRAL', boostCategory: 'USER_CODE_USED', boostId: expectedFromRds.boostId, ...expectedBoostAmount
+                boostType: 'REFERRAL', boostCategory: 'USER_CODE_USED', boostId: expectedFromRds.boostId, ...expectedBoostAmount,
+                boostStartTime: testStartTime.valueOf(), boostEndTime: referralWindowEnd.valueOf(), gameParams: undefined,
+                rewardParameters: undefined, statusConditions: mockBoostToFromPersistence.statusConditions
             }
         };
         expect(publishMultiStub).to.have.been.calledOnceWithExactly(['user-id-1', 'user-id-2'], 'BOOST_CREATED_REFERRAL', expectedUserLogOptions);

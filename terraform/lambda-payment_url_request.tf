@@ -69,6 +69,7 @@ EOF
 
 resource "aws_cloudwatch_log_group" "payment_url_request" {
   name = "/aws/lambda/${var.payment_url_request_lambda_function_name}"
+  retention_in_days = 3
 
   tags = {
     environment = "${terraform.workspace}"

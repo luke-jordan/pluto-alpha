@@ -624,8 +624,11 @@ class RdsConnection {
         const setPart = Object.keys(valueObject).map((column, index) => `${column} = $${baseIndex + index}`).join(', ');
         // logger('And setting: ', setPart);
         
-        // todo : protect this against injection
-        const returnPart = updateQueryDef.returnClause ? `RETURNING ${updateQueryDef.returnClause}` : '';
+        // snuffing out potentially malicious return clauses. Assembling query regardless in the event that some valid
+        // operation one day triggers this
+        const returnPartRegex = /^[a-zA-Z_,\s]+$/;
+        const returnPart = updateQueryDef.returnClause && returnPartRegex.test(updateQueryDef.returnClause)
+            ? `RETURNING ${updateQueryDef.returnClause}` : '';
 
         const assembledQuery = `UPDATE ${updateQueryDef.table} SET ${setPart} WHERE ${keyPart} ${returnPart}`.trim(); // avoids ugly no-ws
         const assembledArray = Object.values(keyObject).concat(Object.values(valueObject));

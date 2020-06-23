@@ -400,7 +400,7 @@ describe('*** UNIT TEST USER STATUS MGMT', async () => {
 
     beforeEach(() => helper.resetStubs(fetchTxDetailsStub, lamdbaInvokeStub, publishEventStub, insertAccountLogStub, updateBsheetTagStub, fetchBsheetTagStub));
 
-    it('Updates user kyc status', async () => {
+    it('Updates user kyc status, and publishes log', async () => {
 
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({result: 'SUCCESS'}, 200) });
 
@@ -414,23 +414,28 @@ describe('*** UNIT TEST USER STATUS MGMT', async () => {
             FunctionName: config.get('lambdas.statusUpdate'),
             InvocationType: 'RequestResponse',
             Payload: JSON.stringify({
-                initiator: testUserId,
+                initiator: testAdminId,
                 systemWideUserId: testUserId,
                 updatedKycStatus: {
-                    changeTo: 'CONTACT_VERIFIED',
+                    changeTo: 'VERIFIED_AS_PERSON',
                     reasonToLog: 'User contact verified'
                 }
             })
         };
 
+        const expectedLogOptions = {
+            initiator: testAdminId,
+            context: { reasonToLog: 'User contact verified' } 
+        };
+
         const requestBody = {
             systemWideUserId: testUserId,
             fieldToUpdate: 'KYC',
-            newStatus: 'CONTACT_VERIFIED',
+            newStatus: 'VERIFIED_AS_PERSON',
             reasonToLog: 'User contact verified'
         };
 
-        const testEvent = helper.wrapEvent(requestBody, testUserId, 'SYSTEM_ADMIN');
+        const testEvent = helper.wrapEvent(requestBody, testAdminId, 'SYSTEM_ADMIN');
 
         const resultOfUpdate = await handler.manageUser(testEvent);
         logger('Result of update:', resultOfUpdate);
@@ -438,7 +443,7 @@ describe('*** UNIT TEST USER STATUS MGMT', async () => {
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(expectedResult);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
-        expect(publishEventStub).to.have.not.been.called;
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'VERIFIED_AS_PERSON', expectedLogOptions);
         expect(insertAccountLogStub).to.have.not.been.called;
     });
 
