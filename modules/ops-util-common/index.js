@@ -116,6 +116,9 @@ module.exports.formatAmountCurrency = (amountResult, desiredDigits = 0) => {
     return numberFormat.format(wholeCurrencyAmount);
 };
 
+module.exports.extractAndFormatAmountString = (amountString, desiredDigits = 0) => (
+    exports.formatAmountCurrency(exports.convertAmountStringToDict(amountString), desiredDigits)
+);
 
 // For handling various events
 module.exports.extractQueryParams = (event) => {
