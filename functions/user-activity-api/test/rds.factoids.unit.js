@@ -38,7 +38,7 @@ const rds = proxyquire('../persistence/rds.factoids', {
     '@noCallThru': true
 });
 
-describe.only('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
+describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
     const testFactId = uuid();
     const testSystemId = uuid();
 
