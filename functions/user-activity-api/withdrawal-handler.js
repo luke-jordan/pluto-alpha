@@ -161,7 +161,7 @@ const calculateAnnualInterestRate = (floatProjectionVars) => {
 
 const obtainWithdrawalCardMsg = (clientFloatVars) => {
     const annualInterestRate = calculateAnnualInterestRate(clientFloatVars);
-    const valueForText = (annualInterestRate.times(100)).toInteger().toNumber();
+    const valueForText = Math.floor((annualInterestRate.times(100)).toNumber());
     return `Every R100 kept in your Jupiter account earns you at least R${valueForText} after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you`;
 };
 

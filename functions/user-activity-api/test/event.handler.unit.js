@@ -578,7 +578,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         expect(redisGetStub).to.have.been.calledWithExactly(`USER_PROFILE::${mockUserId}`);
         expect(redisSetStub).to.have.been.calledOnceWithExactly(`USER_PROFILE::${mockUserId}`, JSON.stringify(testProfile), 'EX', 25200);
         
-        expect(sendEmailStub).to.have.been.calledOnce;
+        expect(sendEmailStub).to.have.been.calledOnce; // todo : coverage
 
         expect(lamdbaInvokeStub).to.have.callCount(4);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(userProfileInvocation);

@@ -58,7 +58,7 @@ const safeWithdrawalEmail = async ({ eventBody, userProfile, bankAccountDetails,
     }
 };
 
-// this will be rare so just do a simple one
+// this will be rare so just do a simple one; todo : really need coverage
 const withdrawalCancelledEMail = async (userProfile, transactionDetails, publisher) => {
     const userName = `${userProfile.personalName} ${userProfile.familyName}`;
     const htmlBody = `<p>Hello,</p><p>Good news! ${userName} has decided to cancel their withdrawal. This was sent with ` +
@@ -67,9 +67,10 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails, publish
     
     const emailParams = {
         from: config.get('publishing.eventsEmailAddress'),
-        toAddresses: config.get('publishing.withdrawalEmailDestination'),
+        to: config.get('publishing.withdrawalEmailDestination'),
         subject: 'Jupiter withdrawal cancelled', 
-        htmlBody, textBody
+        html: htmlBody, 
+        text: textBody
     };
     
     const emailResult = await publisher.safeEmailSendPlain(emailParams);
@@ -78,16 +79,17 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails, publish
 
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
 
+// todo : need better coverage here (e.g., that email params are correct)
 module.exports.handleWithdrawalEvent = async ({ eventBody, userProfile, publisher, persistence, lambda, sns, redis }) => {
     logger('Withdrawal event triggered! Event body: ', eventBody);
 
     const { userId, transactionId } = eventBody;
     const cachedDetails = await redis.get(`${config.get('cache.keyPrefixes.withdrawal')}::${userId}`);
-    const bankDetails = JSON.parse(cachedDetails);
+    const bankAccountDetails = JSON.parse(cachedDetails);
 
-    bankDetails.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
+    bankAccountDetails.accountHolder = `${userProfile.personalName} ${userProfile.familyName}`;
     
-    await safeWithdrawalEmail({ eventBody, userProfile, bankDetails, publisher, sns });
+    await safeWithdrawalEmail({ eventBody, userProfile, bankAccountDetails, publisher, sns });
 
     const processingPromises = [];
     const boostProcessInvocation = dispatchHelper.assembleBoostProcessInvocation(eventBody);
@@ -96,7 +98,7 @@ module.exports.handleWithdrawalEvent = async ({ eventBody, userProfile, publishe
     const accountId = eventBody.context.accountId;
     const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
 
-    const bsheetParams = { accountId, amount: Math.abs(amount), unit, currency, bankDetails, transactionId };
+    const bsheetParams = { accountId, amount: Math.abs(amount), unit, currency, bankDetails: bankAccountDetails, transactionId };
     const bsheetPromise = dispatchHelper.addInvestmentToBSheet({ operation: 'WITHDRAW', parameters: bsheetParams, persistence, lambda });
     processingPromises.push(bsheetPromise);
 
