@@ -69,7 +69,8 @@ const withdrawalCancelledEMail = async (userProfile, transactionDetails, publish
         from: config.get('publishing.eventsEmailAddress'),
         to: config.get('publishing.withdrawalEmailDestination'),
         subject: 'Jupiter withdrawal cancelled', 
-        htmlBody, textBody
+        html: htmlBody, 
+        text: textBody
     };
     
     const emailResult = await publisher.safeEmailSendPlain(emailParams);

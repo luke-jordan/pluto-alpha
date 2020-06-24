@@ -520,7 +520,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
 
     beforeEach(resetStubs);
 
-    it.only('Handles withdrawal event happy path correctly', async () => {
+    it('Handles withdrawal event happy path correctly', async () => {
         const timeNow = moment().valueOf();
         const testAccountId = uuid();
 
