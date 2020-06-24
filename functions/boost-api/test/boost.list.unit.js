@@ -49,7 +49,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         label: 'BOOST LABEL',
         active: true,
         boostType: 'SIMPLE',
-        boostCategory: 'TIME_LIMITED',
+        boostCategory: 'SIMPLE_SAVE',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
