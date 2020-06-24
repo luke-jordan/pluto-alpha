@@ -3,7 +3,16 @@
 const logger = require('debug')('jupiter:boost:condition-tester');
 const moment = require('moment');
 
-const { EVENT_TYPE_CONDITION_MAP } = require('./boost.util');
+const util = require('ops-util-common');
+
+const EVENT_TYPE_CONDITION_MAP = {
+    'SAVING_PAYMENT_SUCCESSFUL': ['save_event_greater_than', 'save_completed_by', 'first_save_by', 'first_save_above', 'save_tagged_with', 'balance_crossed_major_digit'],
+    'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
+    'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above'],
+    'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N'],
+    'FRIEND_REQUEST_INITIATED_ACCEPTED': ['friends_added_since', 'total_number_friends'],
+    'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends']
+};
 
 // expects in form AMOUNT::UNIT::CURRENCY
 const equalizeAmounts = (amountString) => {
@@ -24,6 +33,22 @@ const safeEvaluateAbove = (eventContext, amountKey, thresholdAmount) => {
     }
 
     return equalizeAmounts(eventContext[amountKey]) >= equalizeAmounts(thresholdAmount);
+};
+
+const evaluateCrossedDigit = (parameterValue, eventContext) => {
+    logger('Evaluating if crossed major level, vs threshold, param value: ', parameterValue, ' event context: ', eventContext);
+    if (equalizeAmounts(parameterValue) > equalizeAmounts(eventContext.postSaveBalance)) {
+        return false;
+    }
+
+    const postSaveBalance = util.convertAmountStringToDict(eventContext.postSaveBalance);
+    const preSaveBalance = util.convertAmountStringToDict(eventContext.preSaveBalance);
+
+    // if the post save balance is above the next level for the pre save balance, then that level was crossed
+    const preSaveLevelUp = util.findNearestMajorDigit(preSaveBalance, postSaveBalance.unit);
+    logger('Next major level pre save: ', preSaveLevelUp, ' is new balance at or above ? : ', postSaveBalance.amount >= preSaveLevelUp);
+
+    return postSaveBalance.amount >= preSaveLevelUp;
 };
 
 const evaluateWithdrawal = (parameterValue, eventContext) => {
@@ -120,6 +145,7 @@ module.exports.testCondition = (event, statusCondition) => {
     }
     
     switch (conditionType) {
+        // save and balance conditions
         case 'save_event_greater_than':
             logger('Save event greater than, param value amount: ', equalizeAmounts(parameterValue), ' and amount from event: ', equalizeAmounts(eventContext.savedAmount));
             return safeEvaluateAbove(eventContext, 'savedAmount', parameterValue) && currency(eventContext.savedAmount) === currency(parameterValue);
@@ -135,6 +161,9 @@ module.exports.testCondition = (event, statusCondition) => {
             return equalizeAmounts(eventContext.newBalance) < equalizeAmounts(parameterValue);
         case 'withdrawal_before':
             return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
+        case 'balance_crossed_major_digit':
+            return evaluateCrossedDigit(parameterValue, eventContext);
+        
         // game conditions
         case 'number_taps_greater_than':
             return evaluateGameResponse(eventContext, parameterValue, 'numberTaps');
@@ -144,15 +173,18 @@ module.exports.testCondition = (event, statusCondition) => {
             return evaluateGameResponse(eventContext, parameterValue, 'percentDestroyed');
         case 'percent_destroyed_in_first_N':
             return evaluateGameTournament(event, parameterValue, 'percentDestroyed');
+        
         // social conditions
         case 'friends_added_since':
             return evaluateFriendsSince(parameterValue, eventContext.friendshipList);
         case 'total_number_friends':
             return evaluateTotalFriends(parameterValue, eventContext.friendshipList);
+        
         // specific tag conditions
         case 'save_tagged_with':
             logger('Checking if tagged, have tx tags: ', transactionBoostTags);
             return checkBoostTagged(parameterValue, transactionBoostTags, boostId);
+        
         // event trigger conditions
         case 'event_occurs':
             logger('Checking if event type matches parameter: ', eventType === parameterValue);

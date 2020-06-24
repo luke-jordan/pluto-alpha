@@ -121,7 +121,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     const generateSimpleBoostFromPersistence = (boostId) => {
         const newBoost = JSON.parse(JSON.stringify(boostFromPersistence));
         newBoost['boost_type'] = 'SIMPLE';
-        newBoost['boost_category'] = 'TIME_LIMITED';
+        newBoost['boost_category'] = 'SIMPLE_SAVE';
         newBoost['flags'] = [];
         newBoost['boost_id'] = boostId;
         return newBoost;
@@ -130,7 +130,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
     const generateSimpleExpectedBoost = (boostId) => {
         const newBoost = JSON.parse(JSON.stringify(expectedBoostResult));
         newBoost.boostType = 'SIMPLE';
-        newBoost.boostCategory = 'TIME_LIMITED';
+        newBoost.boostCategory = 'SIMPLE_SAVE';
         newBoost.flags = [];
         newBoost.boostId = boostId;
         newBoost.boostStartTime = moment(testStartTime.format());

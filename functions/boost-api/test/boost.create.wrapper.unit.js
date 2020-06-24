@@ -63,7 +63,7 @@ describe('*** UNIT TEST BOOSTS *** Validation and error checks for insert', () =
     });
 
     it('Rejects all categories except referrals if user is ordinary role', async () => {
-        const resultOfCall = await handler.createBoostWrapper(helper.wrapEvent({ boostTypeCategory: 'SIMPLE::TIME_LIMITED' }, uuid(), 'ORDINARY_USER'));
+        const resultOfCall = await handler.createBoostWrapper(helper.wrapEvent({ boostTypeCategory: 'SIMPLE::SIMPLE_SAVE' }, uuid(), 'ORDINARY_USER'));
         expect(resultOfCall).to.exist;
         expect(resultOfCall).to.deep.equal({ statusCode: 403 });
         expect(createBoostStub).to.not.have.been.called;
@@ -105,7 +105,7 @@ describe('*** UNIT TEST BOOSTS *** General audience, via wrapper (simple admin c
 
         const testBodyOfEvent = {
             label: 'Monday Limited Time Boost',
-            boostTypeCategory: 'SIMPLE::TIME_LIMITED',
+            boostTypeCategory: 'SIMPLE::SIMPLE_SAVE',
             boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
             boostBudget: 10000000,
             boostSource: {

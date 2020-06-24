@@ -250,3 +250,88 @@ describe('*** MATCHED BOOST CONDITION ***', () => {
     });
 
 });
+
+describe('*** BALANCE MILESTONE CONDITION ***', () => {
+
+    it('Handles correctly when balance crosses major-amount', () => {
+        const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '50::WHOLE_CURRENCY::USD',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '70::WHOLE_CURRENCY::USD',
+                postSaveBalance: '120::WHOLE_CURRENCY::USD'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;
+    });
+
+    it('Handles correctly when balance hits major-amount', () => {
+        const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '500000::HUNDREDTH_CENT::ZAR',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '500000::HUNDREDTH_CENT::ZAR',
+                postSaveBalance: '1000000::HUNDREDTH_CENT::ZAR'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;
+    });
+
+    it('Responds false if below minimum', async () => {
+        const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '5::WHOLE_CURRENCY::USD',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '70000::HUNDREDTH_CENT::USD',
+                postSaveBalance: '120000::HUNDREDTH_CENT::USD'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.false;
+    });
+
+    it('Responds false if misses next bar', async () => {
+        const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '50::WHOLE_CURRENCY::USD',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '120::WHOLE_CURRENCY::USD',
+                postSaveBalance: '170::WHOLE_CURRENCY::USD'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.false;
+
+    });
+
+});

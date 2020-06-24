@@ -99,8 +99,7 @@ module.exports.findBoost = async (attributes) => {
     const retrieveBoostQuery = `select * from ${boostTable} where boost_id in (${extractArrayIndices(boostIdArray)})${querySuffix}`;
     
     const boostsRetrieved = await rdsConnection.selectQuery(retrieveBoostQuery, boostIdArray);
-    logger('Result of retrieving boosts: ', boostsRetrieved);
-
+    
     return boostsRetrieved.map(transformBoostFromRds);
 };
 

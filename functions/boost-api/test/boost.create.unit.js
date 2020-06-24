@@ -659,7 +659,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
         commonAssertions();
 
-        testEventBody.boostTypeCategory = 'REFERRAL::TIME_LIMITED';
+        testEventBody.boostTypeCategory = 'REFERRAL::SIMPLE_SAVE';
         await expect(handler.createBoost(testEventBody)).to.be.rejectedWith(expectedError);
         commonAssertions();
 

@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:history:test');
+// const logger = require('debug')('jupiter:history:test');
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
@@ -244,7 +244,6 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         // };
 
         const result = await handler.fetchUserHistory(testEvent);
-        logger('Result of user look up:', result.body);
         // logger('expected result:', expectedResult);
        
         expect(result).to.exist;
@@ -355,17 +354,17 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
             httpMethod: 'GET'
         };
 
-        const userHistoryArray = JSON.parse(mockUserLogs.Payload).userEvents.userEvents;
+        // const userHistoryArray = JSON.parse(mockUserLogs.Payload).userEvents.userEvents;
 
-        const expectedResult = {
-            userBalance: expectedBalance,
-            accruedInterest: '$20',
-            userHistory: [...helper.normalizeHistory(userHistoryArray), ...helper.normalizeTx([expectedTxResponseWithUserSavingEvent])]
-        };
+        // const expectedResult = {
+        //     userBalance: expectedBalance,
+        //     accruedInterest: '$20',
+        //     userHistory: [...helper.normalizeHistory(userHistoryArray), ...helper.normalizeTx([expectedTxResponseWithUserSavingEvent])]
+        // };
 
         const result = await handler.fetchUserHistory(testEvent);
-        logger('Result of user look up:', result);
-        logger('expected result:', expectedResult);
+        // logger('Result of user look up:', result);
+        // logger('expected result:', expectedResult);
 
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 200);
@@ -390,7 +389,6 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         };
 
         const result = await handler.fetchUserHistory(testEvent);
-        logger('Result of user look up:', result);
 
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 403);
@@ -411,7 +409,6 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         };
 
         const result = await handler.fetchUserHistory(testEvent);
-        logger('Result of user look up:', result);
 
         expect(result).to.exist;
         expect(result).to.have.property('statusCode', 500);

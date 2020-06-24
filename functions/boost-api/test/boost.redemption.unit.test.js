@@ -192,7 +192,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 boostAmount: '100000::HUNDREDTH_CENT::USD',
                 boostId: testBoostId,
                 boostType: 'SIMPLE',
-                boostCategory: 'TIME_LIMITED',
+                boostCategory: 'SIMPLE_SAVE',
                 boostUpdateTimeMillis: moment().valueOf(),
                 transferResults: expectedAllocationResult[testBoostId],
                 triggeringEventContext: 'SAVING_EVENT_COMPLETED'
@@ -273,7 +273,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 boostAmount: '-100000::HUNDREDTH_CENT::USD',
                 boostId: testBoostId,
                 boostType: 'SIMPLE',
-                boostCategory: 'TIME_LIMITED',
+                boostCategory: 'SIMPLE_SAVE',
                 boostUpdateTimeMillis: moment().valueOf(),
                 transferResults: expectedAllocationResult[testBoostId],
                 triggeringEventContext: 'SAVING_EVENT_COMPLETED'
