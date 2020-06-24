@@ -274,7 +274,7 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
     });
 
     it('Handles correctly when balance hits major-amount', () => {
-        const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
+        const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::ZAR}'; // parameter is minimum
 
         const sampleEvent = {
             accountId: uuid(),
