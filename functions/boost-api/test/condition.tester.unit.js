@@ -273,6 +273,26 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
         expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;
     });
 
+    it('Handles correctly when balance hits major-amount', () => {
+        const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '500000::HUNDREDTH_CENT::ZAR',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '500000::HUNDREDTH_CENT::ZAR',
+                postSaveBalance: '1000000::HUNDREDTH_CENT::ZAR'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;
+    });
+
     it('Responds false if below minimum', async () => {
         const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::USD}'; // parameter is minimum
 

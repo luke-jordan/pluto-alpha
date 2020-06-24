@@ -46,9 +46,9 @@ const evaluateCrossedDigit = (parameterValue, eventContext) => {
 
     // if the post save balance is above the next level for the pre save balance, then that level was crossed
     const preSaveLevelUp = util.findNearestMajorDigit(preSaveBalance, postSaveBalance.unit);
-    logger('Next major level pre save: ', preSaveLevelUp, ' is above ? : ', postSaveBalance.amount > preSaveLevelUp);
+    logger('Next major level pre save: ', preSaveLevelUp, ' is new balance at or above ? : ', postSaveBalance.amount >= preSaveLevelUp);
 
-    return postSaveBalance.amount > preSaveLevelUp;
+    return postSaveBalance.amount >= preSaveLevelUp;
 };
 
 const evaluateWithdrawal = (parameterValue, eventContext) => {
