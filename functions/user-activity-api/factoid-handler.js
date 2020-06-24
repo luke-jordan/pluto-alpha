@@ -16,7 +16,7 @@ const byStatus = (factoidA, factoidB) => (isStatusAfter(factoidA.factoidStatus, 
 const byPriority = (factoidA, factoidB) => (factoidA.factoidPriority > factoidB.factoidPriority ? -1 : 1);
 const byViewCount = (factoidA, factoidB) => factoidA.viewCount - factoidB.viewCount;
 
-const sortFactoids = (factoids) => factoids.sort(byStatus).sort(byPriority).sort(byViewCount);
+const sortFactoids = (factoids) => factoids.sort(byViewCount).sort(byPriority).sort(byStatus);
 
 /**
  * This function creates and persists a new factoid.
@@ -55,33 +55,38 @@ module.exports.createFactoid = async (event) => {
     }
 };
 
-// The expected factoid status changes here either FETCHED or VIEWED
-const handleFactoidUpdate = async (systemWideUserId, factoidId, factoidStatus) => {
+// The expected factoid status changes here are either FETCHED or VIEWED
+const handleFactoidUpdate = async (userId, factoidId, factoidStatus) => {
     // fetch the reference to the factoid from the user-factoid join table
-    const factoidUserStatuses = await persistence.fetchFactoidUserStatuses([factoidId], systemWideUserId);
+    const factoidUserStatuses = await persistence.fetchFactoidUserStatuses([factoidId], userId);
     logger('Got factoid details:', factoidUserStatuses);
 
     // if no reference is found in the join table create one
     if (!factoidUserStatuses || factoidUserStatuses.length === 0) {
-        const resultOfCreation = await persistence.createFactoidUserJoin(factoidId, systemWideUserId);
+        const resultOfCreation = await persistence.createFactoidUserJoin(factoidId, userId);
         logger('Resultof creating user-factoid join table entry:', resultOfCreation);
     }
 
     const initialStatus = factoidUserStatuses && factoidUserStatuses.length > 0 ? factoidUserStatuses[0].factoidStatus : 'CREATED';
     logger('Is status after:', isStatusAfter(initialStatus, factoidStatus));
     if (isStatusAfter(initialStatus, factoidStatus)) {
-        const resultOfUpdate = await persistence.updateFactoidStatus(factoidId, systemWideUserId, factoidStatus);
+        const resultOfUpdate = await persistence.updateFactoidStatus(factoidId, userId, factoidStatus);
         logger('Result of updating factoid state:', resultOfUpdate);
     }
 
-    const incrementResult = await persistence.incrementCount(factoidId, systemWideUserId, factoidStatus);
+    if (factoidStatus === 'VIEWED') {
+        const logId = await persistence.insertFactoidLog({ userId, factoidId, logType: 'FACTOID_VIEWED', logContext: {} });
+        logger('Factoid event logged with log id:', logId);
+    }
+
+    const incrementResult = await persistence.incrementCount(factoidId, userId, factoidStatus);
     logger('Incrementing view/fetch count resulted in:', incrementResult);
 
     return factoidStatus === 'FETCHED' ? { fetchCount: incrementResult.fetchCount } : { viewCount: incrementResult.viewCount };   
 };
 
 /**
- * This function updates a factoids status for a user. 
+ * This function updates a factoids status, e.g changes status to FETCH. 
  * @param {object} event A user, admin, or direct invocation.
  * @property {array}  factoidIds An array of factoid ids.
  * @property {string} userId The identifier of the user associated with the above factoid ids.
@@ -112,7 +117,7 @@ module.exports.handleBatchFactoidUpdates = async (sqsEvent) => {
 };
 
 /**
- * This function fetches an unread factoid for a user (or the first factoid the user ever read if new factoids are exhausted)
+ * This function fetches factoids to be displayed to a user. 
  * @param {object} event A user or admin event.
  */
 module.exports.fetchFactoidsForUser = async (event) => {
@@ -123,6 +128,7 @@ module.exports.fetchFactoidsForUser = async (event) => {
         }
 
         const systemWideUserId = userDetails.systemWideUserId;
+
         const uncreatedFactoids = await persistence.fetchUncreatedFactoids(systemWideUserId);
         logger('Found uncreated factoids:', uncreatedFactoids);
 
@@ -133,14 +139,13 @@ module.exports.fetchFactoidsForUser = async (event) => {
                 payload: { factoidIds, userId: systemWideUserId, status: 'FETCHED' }
             };
             await publisher.queueEvents([queueEvent]);
+            return opsUtil.wrapResponse(sortFactoids(uncreatedFactoids));
         }
      
-        const factoidsForUser = await persistence.fetchCreatedFactoids(systemWideUserId);
-        logger('Got factoids for user:', factoidsForUser);
-        const sortedFactoids = sortFactoids(factoidsForUser);
-        logger('Sorted factoids:', sortedFactoids);
+        const createdFactoids = await persistence.fetchCreatedFactoids(systemWideUserId);
+        logger('Found created factoids:', sortFactoids(createdFactoids));
 
-        return opsUtil.wrapResponse(sortedFactoids);
+        return opsUtil.wrapResponse(sortFactoids(createdFactoids));
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ error: err.message }, 500);

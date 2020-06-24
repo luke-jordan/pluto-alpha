@@ -16,6 +16,7 @@ const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', 
 
 const factoidTable = config.get('tables.factoidTable');
 const factoidJoinTable = config.get('tables.factoidJoinTable');
+const factoidLogTable = config.get('tables.factoidLogTable');
 
 const transformFactoid = (factoid) => ({
     factoidId: factoid.factoidId || factoid.factoidDataFactoidFactoidId,
@@ -151,4 +152,25 @@ module.exports.updateFactoid = async (updateParameters) => {
 
     return Array.isArray(resultOfUpdate) && resultOfUpdate.length > 0
         ? camelCaseKeys(resultOfUpdate[0]) : null;
+};
+
+/**
+ * This function is used to log factoid events, typically called when a factoid is viewed.
+ * @param {object} logObject An object containing the properties to be persisted (listed below)
+ * @property {string} userId The user who has interacted with the factoid.
+ * @property {string} factoidId The factoid that has been interacted with.
+ * @property {string} logType A string describing the user action/type of interaction, e.g FACTOID_VIEWED.
+ * @property {object} logContext An object containing additional properties to be persisted, pass empty object if none. 
+ */
+module.exports.insertFactoidLog = async (logObject) => {    
+    const logId = uuid();
+    const logRow = { logId, ...logObject };
+
+    const insertQuery = `insert into ${factoidLogTable} (log_id, user_id, factoid_id, log_type, log_context) values %L returning log_id`;
+    const columnTemplate = '${logId}, ${userId}, ${factoidId}, ${logType}, ${logContext}';
+    
+    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [logRow]);
+    logger('Result of inserting log: ', resultOfInsert);
+
+    return resultOfInsert['rows'][0]['log_id'];
 };

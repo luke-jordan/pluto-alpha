@@ -23,6 +23,7 @@ const incrementStub = sinon.stub();
 const updateFactoidStatusStub = sinon.stub();
 const fetchFactoidStatusesStub = sinon.stub();
 const queueEventsStub = sinon.stub();
+const insertLogStub = sinon.stub();
 
 const handler = proxyquire('../factoid-handler', {
     'publish-common': {
@@ -36,12 +37,14 @@ const handler = proxyquire('../factoid-handler', {
         'createFactoidUserJoin': createFactoidJoinStub,
         'updateFactoid': updateFactStub,
         'fetchUncreatedFactoids': fetchUncreatedFactoidsStub,
-        'fetchCreatedFactoids': fetchCreatedFactoidsStub
+        'fetchCreatedFactoids': fetchCreatedFactoidsStub,
+        'insertFactoidLog': insertLogStub
     },
     '@noCallThru': true
 });
 
 describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
+    const testLogId = uuid();
     const testFactId = uuid();
     const testAdminId = uuid();
     const testSystemId = uuid();
@@ -96,10 +99,18 @@ describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
             uppdatedTime: testUpdatedTime
         }];
 
+        const mockLogObject = (factoidId) => ({
+            userId: testSystemId,
+            factoidId,
+            logType: 'FACTOID_VIEWED',
+            logContext: {}
+        });
+
         fetchFactoidStatusesStub.onFirstCall().resolves(mockUserFactoidJoinRow('factoid-id-1', 'FETCHED'));
         fetchFactoidStatusesStub.onSecondCall().resolves(mockUserFactoidJoinRow('factoid-id-2', 'VIEWED'));
         incrementStub.resolves({ viewCount: 2, updatedTime: testUpdatedTime });
         updateFactoidStatusStub.resolves({ updatedTime: testUpdatedTime });
+        insertLogStub.resolves(testLogId);
 
         const testEventBatch = mockSQSBatchEvent({
             factoidIds: ['factoid-id-1', 'factoid-id-2'],
@@ -118,10 +129,12 @@ describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
         expect(incrementStub).to.have.been.calledWithExactly('factoid-id-1', testSystemId, 'VIEWED');
         expect(incrementStub).to.have.been.calledWithExactly('factoid-id-2', testSystemId, 'VIEWED');
         expect(updateFactoidStatusStub).to.have.been.calledOnceWithExactly('factoid-id-1', testSystemId, 'VIEWED');
-        [fetchFactoidStatusesStub, incrementStub].map((stub) => expect(stub.callCount).to.equal(2));
+        expect(insertLogStub).to.have.been.calledWithExactly(mockLogObject('factoid-id-1'));
+        expect(insertLogStub).to.have.been.calledWithExactly(mockLogObject('factoid-id-2'));
+        [fetchFactoidStatusesStub, incrementStub, insertLogStub].map((stub) => expect(stub.callCount).to.equal(2));
     });
 
-    it('Fetches factoids to display to a user', async () => {
+    it('Fetches and sorts unread factoids to display to a user', async () => {
         const mockFactoid = (factoidStatus, factoidPriority, viewCount) => ({
             factoidId: testFactId,
             title: 'Jupiter Factoid 22',
@@ -142,13 +155,39 @@ describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
             payload: { factoidIds: [testFactId, testFactId], userId: testSystemId, status: 'FETCHED' }
         }];
 
-        const mockUncreatedFactoids = [mockFactoid('UNCREATED', 1, 0), mockFactoid('UNCREATED', 1, 0)];
+        const mockUncreatedFactoids = [mockFactoid('FETCHED', 3, 1), mockFactoid('FETCHED', 5, 2)];
+
+        fetchUncreatedFactoidsStub.resolves(mockUncreatedFactoids);
+        createFactoidJoinStub.resolves({ creationTime: testCreationTime });
+        queueEventsStub.resolves(mockQueueResult);
+
+        const testEvent = helper.wrapQueryParamEvent({}, testSystemId, 'GET');
+        const resultOfFetch = await handler.fetchFactoidsForUser(testEvent);
+
+        const body = helper.standardOkayChecks(resultOfFetch);
+        expect(body).to.deep.equal([mockFactoid('FETCHED', 5, 2), mockFactoid('FETCHED', 3, 1)]);
+        expect(fetchUncreatedFactoidsStub).to.have.been.calledOnceWithExactly(testSystemId);
+        expect(queueEventsStub).to.have.been.calledOnceWithExactly(expectedQueueArgs);
+        expect(fetchCreatedFactoidsStub).to.have.not.been.called;
+    });
+
+    it('If no unread factoids exist, fetches and sorts previously read factoids', async () => {
+        const mockFactoid = (factoidStatus, factoidPriority, viewCount) => ({
+            factoidId: testFactId,
+            title: 'Jupiter Factoid 22',
+            body: 'Jupiter helps you save.',
+            fetchCount: 3,
+            viewCount,
+            factoidStatus,
+            factoidPriority
+        });
+
+        const mockUncreatedFactoids = [];
         const mockCreatedFactoids = [mockFactoid('FETCHED', 3, 0), mockFactoid('VIEWED', 5, 2), mockFactoid('FETCHED', 7, 0), mockFactoid('VIEWED', 5, 1)];
 
         fetchUncreatedFactoidsStub.resolves(mockUncreatedFactoids);
         fetchCreatedFactoidsStub.resolves(mockCreatedFactoids);
         createFactoidJoinStub.resolves({ creationTime: testCreationTime });
-        queueEventsStub.resolves(mockQueueResult);
 
         const testEvent = helper.wrapQueryParamEvent({}, testSystemId, 'GET');
         const resultOfFetch = await handler.fetchFactoidsForUser(testEvent);
@@ -157,7 +196,7 @@ describe('*** UNIT TEST FACTOID HANDLER FUNCTIONS ***', () => {
         expect(body).to.deep.equal([mockFactoid('FETCHED', 7, 0), mockFactoid('FETCHED', 3, 0), mockFactoid('VIEWED', 5, 1), mockFactoid('VIEWED', 5, 2)]);
         expect(fetchUncreatedFactoidsStub).to.have.been.calledOnceWithExactly(testSystemId);
         expect(fetchCreatedFactoidsStub).to.have.been.calledOnceWithExactly(testSystemId);
-        expect(queueEventsStub).to.have.been.calledOnceWithExactly(expectedQueueArgs);
+        expect(queueEventsStub).to.have.not.been.called;
     });
 
     it('Updates a factoid properly', async () => {

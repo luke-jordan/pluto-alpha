@@ -234,4 +234,34 @@ describe('*** UNIT TEST FACTOID RDS FUNCTIONS ***', () => {
         expect(resultOfUpdate).to.deep.equal({ updatedTime: testUpdatedTime });
         expect(updateRecordObjStub).to.have.been.calledOnceWithExactly(mockUpdateDef);
     });
+
+    it('Logs factoid events', async () => {
+        const testLogId = uuid();
+        const expectedLogRow = {
+            logId: testLogId,
+            userId: testSystemId,
+            factoidId: testFactId,
+            logType: 'FACTOID_VIEWED',
+            logContext: { some: 'value' }
+        };
+
+        const insertQuery = `insert into factoid_data.factoid_log (log_id, user_id, factoid_id, log_type, log_context) values %L returning log_id`;
+        const columnTemplate = '${logId}, ${userId}, ${factoidId}, ${logType}, ${logContext}';
+
+        uuidStub.returns(testLogId);
+        insertStub.resolves({ rows: [{ 'log_id': testLogId }]});
+
+        const testLogObject = {
+            userId: testSystemId,
+            factoidId: testFactId,
+            logType: 'FACTOID_VIEWED',
+            logContext: { some: 'value' }
+        };
+
+        const resultOfLog = await rds.insertFactoidLog(testLogObject);
+
+        expect(resultOfLog).to.exist;
+        expect(resultOfLog).to.deep.equal(testLogId);
+        expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, columnTemplate, [expectedLogRow]);
+    });
 });

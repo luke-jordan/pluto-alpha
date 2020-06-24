@@ -24,3 +24,13 @@ create table if not exists factoid_data.factoid_user_join_table (
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp
 );
+
+create table if not exists factoid_data.factoid_log (
+    log_id uuid not null primary key,
+    user_id uuid not null,
+    factoid_id varchar(255) not null,
+    creation_time timestamp with time zone not null default current_timestamp,
+    updated_time timestamp with time zone not null default current_timestamp,
+    log_type varchar(50) not null,
+    log_context jsonb default '{}'
+);

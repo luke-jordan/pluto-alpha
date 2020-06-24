@@ -19,7 +19,8 @@
         "boostJoin": "boost_data.boost_account_status",
         "clientFloatVars": "ClientFloatTable",
         "factoidTable": "factoid_data.factoid",
-        "factoidJoinTable": "factoid_data.factoid_user_join_table"
+        "factoidJoinTable": "factoid_data.factoid_user_join_table",
+        "factoidLogTable": "factoid_data.factoid_log"
     },
     "db": {
         "user": "save_tx_api_worker",
