@@ -16,7 +16,19 @@ const byStatus = (snippetA, snippetB) => (isStatusAfter(snippetA.snippetStatus, 
 const byPriority = (snippetA, snippetB) => (snippetA.snippetPriority > snippetB.snippetPriority ? -1 : 1);
 const byViewCount = (snippetA, snippetB) => snippetA.viewCount - snippetB.viewCount;
 
-const sortSnippets = (snippets) => snippets.sort(byViewCount).sort(byPriority).sort(byStatus);
+const snippetSorter = (snippetA, snippetB) => {
+    if (snippetA.snippetStatus !== snippetB.snippetStatus) {
+        return statusOrder.indexOf(statusA) - statusOrder.indexOf(statusB);
+    }
+
+    if (snippetA.viewCount !== snippetB.viewCount) {
+        return snippetA.viewCount - snippetB.viewCount;
+    }
+
+    return snippetA.priority - snippetB.priority;
+}
+
+const sortSnippets = (snippets) => snippets.sort(snippetSorter);
 
 /**
  * This function creates and persists a new snippet.
