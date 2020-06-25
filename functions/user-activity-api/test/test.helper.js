@@ -45,8 +45,34 @@ module.exports.standardOkayChecks = (result) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
     expect(result).to.have.property('body');
+
+    if (result.headers) {
+        expect(result.headers).to.deep.equal(exports.expectedHeaders);
+    }
+    
     return JSON.parse(result.body);
 };
+
+module.exports.wrapEvent = (requestBody, systemWideUserId, userRole = 'ORDINARY_USER') => ({
+    body: JSON.stringify(requestBody),
+    requestContext: {
+        authorizer: {
+            systemWideUserId,
+            role: userRole
+        }
+    }
+});
+
+module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, httpMethod = 'GET') => ({
+    queryStringParameters: requestBody,
+    httpMethod: httpMethod,
+    requestContext: {
+        authorizer: {
+            systemWideUserId,
+            role: userRole
+        }
+    }
+});
 
 module.exports.wrapLambdaInvoc = (functionName, async, payload) => ({
     FunctionName: functionName,

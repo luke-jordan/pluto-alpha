@@ -105,6 +105,36 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     }
 };
 
+const assembleQueueParams = async (payload, queueName) => {
+    logger('Looking for SQS queue name: ', queueName);
+    const queueUrlResult = await sqs.getQueueUrl({ QueueName: queueName }).promise();
+    const queueUrl = queueUrlResult.QueueUrl;
+
+    const dataType = { DataType: 'String', StringValue: 'JSON' };
+
+    return {
+        MessageAttributes: { MessageBodyDataType: dataType },
+        MessageBody: JSON.stringify(payload),
+        QueueUrl: queueUrl
+    };
+};
+
+module.exports.queueEvents = async (events) => {
+    try {
+        const queueParameters = await Promise.all(events.map((event) => assembleQueueParams(event.payload, event.queueName)));
+        logger('Assembled queue parameters:', queueParameters);
+        const sqsPromises = queueParameters.map((params) => sqs.sendMessage(params).promise());
+        const sqsResult = await Promise.all(sqsPromises);
+        logger('Queue result:', sqsResult);
+        const successCount = sqsResult.filter((result) => typeof result === 'object' && result.MessageId).length;
+        logger(`${successCount}/${events.length} events were queued successfully`);
+        return { successCount, failureCount: events.length - successCount };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { result: 'FAILURE' };
+    }
+};
+
 module.exports.sendSms = async ({ phoneNumber, message, sendSync }) => {
     try {    
         const invokeSync = sendSync || false;
