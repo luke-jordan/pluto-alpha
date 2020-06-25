@@ -13,8 +13,9 @@ const uuid = require('uuid/v4');
 const stringify = require('json-stable-stringify');
 
 const AWS = require('aws-sdk');
-const sns = new AWS.SNS({ region: config.get('aws.region') });
+AWS.config.update({ region: config.get('aws.region') });
 
+const sns = new AWS.SNS();
 const sqs = new AWS.SQS();
 const s3 = new AWS.S3();
 const lambda = new AWS.Lambda();
@@ -225,4 +226,30 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     }
     
     return { result: 'FAILURE' };
+};
+
+module.exports.sendToDlq = async (dlqName, event, err) => {
+    try {
+        logger('Looking for DLQ name: ', dlqName);
+        const dlqUrlResult = await sqs.getQueueUrl({ QueueName: dlqName }).promise();
+        const dlqUrl = dlqUrlResult.QueueUrl;
+
+        const payload = { event, err };
+        const params = {
+            MessageAttributes: {
+                MessageBodyDataType: {
+                    DataType: 'String',
+                    StringValue: 'JSON'
+                }
+            },
+            MessageBody: JSON.stringify(payload),
+            QueueUrl: dlqUrl
+        };
+
+        logger('Sending to SQS DLQ: ', params);
+        const sqsResult = await sqs.sendMessage(params).promise();
+        logger('Result of sqs transmission:', sqsResult);
+    } catch (error) {
+        logger('FATAL_ERROR: ', error);
+    }
 };

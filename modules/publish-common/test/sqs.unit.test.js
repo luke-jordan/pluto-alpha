@@ -53,7 +53,9 @@ const handler = proxyquire('../index', {
         'SNS': MockSNS,
         'SES': MockSesClient,
         'S3': MockS3Client,
-        'SQS': MockSQSClient
+        'SQS': MockSQSClient,
+        // eslint-disable-next-line no-empty-function
+        'config': { update: () => ({}) }
     },
     '@noCallThru': true
 });

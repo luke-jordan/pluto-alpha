@@ -1,8 +1,7 @@
 'use strict';
 
-process.env.NODE_ENV = 'test';
+// const logger = require('debug')('jupiter:activity-rds:test');
 
-const logger = require('debug')('jupiter:activity-rds:test');
 const config = require('config');
 const moment = require('moment-timezone');
 const testHelper = require('./test.helper');
@@ -64,15 +63,11 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
 
     const insertAccNotSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
         `amount, float_id, client_id, settlement_status, initiation_time, human_reference, tags) values %L returning transaction_id, creation_time`;
-    const insertAccSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
-        `amount, float_id, client_id, human_reference, tags, settlement_status, initiation_time, settlement_time, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
     const insertFloatTxQuery = `insert into ${config.get('tables.floatTransactions')} (transaction_id, client_id, float_id, t_type, ` +
         `currency, unit, amount, allocated_to_type, allocated_to_id, related_entity_type, related_entity_id) values %L returning transaction_id, creation_time`;
     
     const accountColKeysNotSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
         '${floatId}, ${clientId}, ${settlementStatus}, ${initiationTime}, ${humanRef}, ${tags}'; 
-    const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
-        '${floatId}, ${clientId}, ${humanRef}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
     const floatColumnKeys = '${floatTransactionId}, ${clientId}, ${floatId}, ${transactionType}, ${currency}, ${unit}, ${amount}, ' + 
         '${allocatedToType}, ${allocatedToId}, ${transactionType}, ${accountTransactionId}';
 
@@ -153,8 +148,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         };
 
         const resultOfInsertion = await rds.addTransactionToAccount(testNotSettledArgs);
-        logger('args    :', multiTableStub.getCall(0).args[0][0]);
-        logger('expected:', expectedAccountQueryDef);
+        // logger('args    :', multiTableStub.getCall(0).args[0][0]);
+        // logger('expected:', expectedAccountQueryDef);
         
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.have.property('transactionDetails');
@@ -195,13 +190,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expectedAccountRow.paymentProvider = 'STRIPE';
         expectedAccountRow.floatAddTransactionId = testFlTxAddId;
         expectedAccountRow.floatAllocTransactionId = testFlTxAllocId;
-        
-        const expectedAccountQueryDef = { 
-            query: insertAccSettledTxQuery,
-            columnTemplate: accountColKeysSettled,
-            rows: expectedAccountRow
-        };
-        
+                
         const txDetailsFromRds = [
             [{ 'transaction_id': uuid(), 'creation_time': moment().format() }],
             [{ 'transaction_id': uuid(), 'creation_time': moment().format()}, { 'transaction_id': uuid(), 'creation_time': moment().format() }]
@@ -238,8 +227,8 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         };
 
         const resultOfSaveInsertion = await rds.addTransactionToAccount(testSettledArgs);
-        logger('args    :', multiTableStub.getCall(0).args[0][0]);
-        logger('expected:', expectedAccountQueryDef);
+        // logger('args    :', multiTableStub.getCall(0).args[0][0]);
+        // logger('expected:', expectedAccountQueryDef);
 
         expect(resultOfSaveInsertion).to.exist;
         expect(resultOfSaveInsertion).to.have.property('transactionDetails');
@@ -252,6 +241,18 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         expect(resultOfSaveInsertion.newBalance).to.deep.equal({ amount: testSaveAmount, unit: 'HUNDREDTH_CENT' });
 
         expect(multiTableStub).to.have.been.calledOnce; // todo: add args
+        // const insertAccSettledTxQuery = `insert into ${config.get('tables.accountTransactions')} (transaction_id, transaction_type, account_id, currency, unit, ` +
+        //     `amount, float_id, client_id, human_reference, tags, settlement_status, initiation_time, settlement_time, payment_reference, payment_provider, float_adjust_tx_id, float_alloc_tx_id) values %L returning transaction_id, creation_time`;
+
+        // const accountColKeysSettled = '${accountTransactionId}, *{USER_SAVING_EVENT}, ${accountId}, ${currency}, ${unit}, ${amount}, ' +
+        //     '${floatId}, ${clientId}, ${humanRef}, ${settlementStatus}, ${initiationTime}, ${settlementTime}, ${paymentRef}, ${paymentProvider}, ${floatAddTransactionId}, ${floatAllocTransactionId}';
+
+        // const expectedAccountQueryDef = { 
+        //     query: insertAccSettledTxQuery,
+        //     columnTemplate: accountColKeysSettled,
+        //     rows: expectedAccountRow
+        // };
+
         expect(queryStub).to.have.been.calledTwice; // because also fetches timestamp
         expectNoCalls([insertStub]);
     });
@@ -387,8 +388,6 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         const testEvent = { transactionId: testAcTxId, paymentDetails: testPaymentDetails, settlementTime: testSettlementTime, settlingUserId: testUserId };
         const resultOfSaveUpdate = await rds.updateTxToSettled(testEvent);
 
-        logger('Query stub called with: ', queryStub.getCall(0).args);
-
         expect(resultOfSaveUpdate).to.exist;
         expect(resultOfSaveUpdate).to.have.property('transactionDetails');
         expect(resultOfSaveUpdate.transactionDetails).to.be.an('array').that.has.length(3);
@@ -427,8 +426,7 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** Insert transaction alone and w
         queryStub.onThirdCall().resolves([]);
                         
         const resultOfUpdate = await rds.updateTxToSettled({ transactionId, paymentDetails, settlementTime });
-        logger('Result of settlement of already settled transaction:', resultOfUpdate);
-        
+        expect(resultOfUpdate).to.exist;
         // todo: add expectations   
     });
 
@@ -488,7 +486,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         };
 
         const resultOfUpdate = await rds.updateTxToSettled(expectedEvent);
-        logger('Result of update:', resultOfUpdate);
         
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.have.property('transactionDetails');
@@ -557,7 +554,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         updateRecordStub.withArgs(updateQuery, [testTag, testTxId]).resolves({ rows: [{ 'updated_time': updateTime.format() }] });
 
         const updateResult = await rds.updateTxTags(testTxId, testTag);
-        logger('Result of tag update:', updateResult);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('updatedTime');
@@ -575,7 +571,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         updateRecordStub.resolves({ rows: [{ 'updated_time': updateTime.format() }] });
 
         const updateResult = await rds.updateAccountTags(testUserId, testTag);
-        logger('Result of tag update:', updateResult);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.have.property('updatedTime');
@@ -602,7 +597,6 @@ describe('*** UNIT TEST SETTLED TRANSACTION UPDATES ***', async () => {
         };
 
         const updateResult = await rds.updateTxSettlementStatus(params);
-        logger('Result of transaction settlement status update:', updateResult);
 
         expect(updateResult).to.exist;
         expect(updateResult).to.deep.equal(moment(testUpdatedTime));

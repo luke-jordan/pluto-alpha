@@ -1,8 +1,8 @@
 ## BOOST TYPES AND CATEGORIES
 
-Top level is type. Second level is category. Pass to function using string in format, `type::category`, e.g., `SIMPLE::TIME_LIMITED`.
+Top level is type. Second level is category. Pass to function using string in format, `type::category`, e.g., `SIMPLE::SIMPLE_SAVE`.
 
-*  **Simple** : just offering a user a boost for some basic response, e.g., adding cash. Categories: TIME_LIMITED, ...
+*  **Simple** : just offering a user a boost for some basic response, e.g., adding cash. Categories: SIMPLE_SAVE, ROUND_UP
 *  **Referral** : a boost for using a referral code. Categories : USER_CODE_USED (referral is a user's), CHANNEL_CODE_USED, BETA_CODE_USED
 *  **Game**: a boost that is tied to a game. Categories are implemented games, started with TAP_SCREEN and CATCH_ARROW.
 

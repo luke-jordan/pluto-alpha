@@ -17,12 +17,10 @@
     "debug": "^4.1.1",
     "decamelize": "^4.0.0",
     "decimal.js-light": "^2.5.0",
-    "html-to-text": "^5.1.1",
     "ioredis": "^4.14.1",
     "moment": "^2.24.0",
     "moment-timezone": "^0.5.25",
     "statuses": "^1.5.0",
-    "string-format": "^2.0.0",
     "uuid": "^3.3.2"
   },
   "devDependencies": {

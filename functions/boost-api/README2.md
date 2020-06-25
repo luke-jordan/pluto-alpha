@@ -83,7 +83,7 @@ Also note that if none are provided the boost will have no message and just hang
 | Name | Type | Description |
 | --- | --- | --- |
 | creatingUserId | <code>string</code> | The system wide user id of the user who is creating the boost. |
-| boostTypeCategory | <code>string</code> | A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'. |
+| boostTypeCategory | <code>string</code> | A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::SIMPLE_SAVE'. |
 | boostBudget | <code>string/number</code> | This may either be a number or a composite key containing the amount, the unit, and the currency, seperated by '::', e.g '10000000::HUNDREDTH_CENT::USD'. |
 | startTimeMillis | <code>string</code> | A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller. |
 | endTime | <code>string</code> | A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change). |
@@ -111,7 +111,7 @@ Wrapper method for API gateway, handling authorization via the header, extractin
 | --- | --- | --- |
 | requestContext | <code>object</code> | An object containing the callers id, role, and permissions. The event will not be processed without a valid request context. |
 | creatingUserId | <code>string</code> | The system wide user id of the user who is creating the boost. |
-| boostTypeCategory | <code>string</code> | A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'. |
+| boostTypeCategory | <code>string</code> | A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::SIMPLE_SAVE' (the very simplest of all saves). |
 | boostBudget | <code>string/number</code> | This may either be a number or a composite key containing the amount, the unit, and the currency, seperated by '::', e.g '10000000::HUNDREDTH_CENT::USD'. |
 | startTimeMillis | <code>string</code> | A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller. |
 | endTime | <code>string</code> | A moment formatted date string indicating when the boost should be deactivated. Defaults to 50 from now (true at time of writing, configuration may change). |

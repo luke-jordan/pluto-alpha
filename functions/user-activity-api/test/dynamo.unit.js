@@ -1,24 +1,33 @@
 'use strict';
 
-process.env.NODE_ENV = 'test';
-
 const config = require('config');
 
 const sinon = require('sinon');
 const chai = require('chai');
-const sinonChai = require('sinon-chai');
-chai.use(sinonChai);
-const chaiAsPromised = require('chai-as-promised');
-chai.use(chaiAsPromised);
+
+chai.use(require('sinon-chai'));
+chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire').noCallThru();
 const fetchStub = sinon.stub();
+const cacheGetStub = sinon.stub();
+const cacheSetStub = sinon.stub();
+
+const proxyquire = require('proxyquire').noCallThru();
+
+// todo : actually cover
+class MockRedis { 
+    constructor () { 
+        this.get = cacheGetStub;
+        this.set = cacheSetStub;
+    }
+}
 
 const dynamo = proxyquire('../persistence/dynamodb', {
     'dynamo-common': {
         fetchSingleRow: fetchStub
     },
+    'ioredis': MockRedis,
     '@noCallThru': true
 });
 

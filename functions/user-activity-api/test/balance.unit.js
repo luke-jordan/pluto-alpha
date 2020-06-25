@@ -1,8 +1,6 @@
 'use strict';
 
-process.env.NODE_ENV = 'test';
-
-const logger = require('debug')('jupiter:balance:test');
+// const logger = require('debug')('jupiter:balance:test');
 const config = require('config');
 
 const BigNumber = require('bignumber.js');
@@ -172,8 +170,6 @@ describe('Fetches user balance and makes projections', () => {
         comparatorRates: testComparatorRates
     };
 
-    // logger('Expected body: ', wellFormedResultBody);
-
     const checkResultIsWellFormed = (balanceAndProjections, expectedBody = wellFormedResultBody) => {
         expect(balanceAndProjections).to.exist;
         expect(balanceAndProjections.statusCode).to.equal(200);
@@ -226,11 +222,10 @@ describe('Fetches user balance and makes projections', () => {
     after(() => resetStubs(false));
 
     it('The wrapper retrieves defaults, and processes, based on auth context', async () => {
-        const authEvent = JSON.parse(fs.readFileSync('./test/events/auth-event-balance.json'));
+        const authEvent = JSON.parse(fs.readFileSync('./test/mock/auth-event-balance.json'));
         // accountBalanceQueryStub.withArgs(testAccountId, 'USD', testHelper.anyMoment);
         const balanceAndProjections = await handler.balanceWrapper(authEvent);
         
-        // logger('Received: ', balanceAndProjections);
         const expectedBody = stripCurrBalanceDateTime(JSON.parse(JSON.stringify(wellFormedResultBody)));
         
         // usual sinon annoying stubornness on matching means passing to helper isn't working, so unspooling
@@ -249,7 +244,6 @@ describe('Fetches user balance and makes projections', () => {
 
     it('Wrapper returns appropriate error if no authorizer', async () => {
         const balanceError1 = await handler.balanceWrapper({ queryStringParameters: { systemWideUserId: 'bad-user' }, requestContext: {} });
-        logger('This error: ', balanceError1);
         expect(balanceError1).to.have.property('statusCode', 403);
         // const balanceError2 = await handler.balanceWrapper(); 
     });
@@ -282,7 +276,6 @@ describe('Fetches user balance and makes projections', () => {
             atEpochMillis: testTimeNow.valueOf(),
             timezone: testTimeZone
         });
-        logger('Result: ', balanceAndProjections);
         checkResultIsWellFormed(balanceAndProjections);
     });
 
@@ -297,7 +290,6 @@ describe('Fetches user balance and makes projections', () => {
             atEpochMillis: testTimeNow.valueOf(),
             timezone: testTimeZone
         });
-        logger('Result: ', balanceAndProjections);
         checkResultIsWellFormed(balanceAndProjections, expectedResult);
 
         // above test is a special check for when pending transactions exists
@@ -355,7 +347,6 @@ describe('Fetches user balance and makes projections', () => {
         const resultWithoutDays = JSON.parse(JSON.stringify(wellFormedResultBody));
         Reflect.deleteProperty(resultWithoutDays, 'balanceSubsequentDays');
         const balanceWithoutProjections = await handler.balance(zeroDaysParams);
-        logger('Result: ', balanceWithoutProjections);
         checkResultIsWellFormed(balanceWithoutProjections, resultWithoutDays);
     });
 

@@ -329,7 +329,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const mockBoost = {
             boostId: testBoostId,
             boostType: 'SIMPLE',
-            boostCategory: 'TIME_LIMITED',
+            boostCategory: 'SIMPLE_SAVE',
             boostCurrency: 'USD',
             boostUnit: 'HUNDREDTH_CENT',
             boostAmount: 50000

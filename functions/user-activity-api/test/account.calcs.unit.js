@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:activity-rds:test');
+// const logger = require('debug')('jupiter:activity-rds:test');
 const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
@@ -44,9 +44,9 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
 
         queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfInterest = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'interest::WHOLE_CURRENCY::USD::0'});
-        logger('Result of interest calc: ', resultOfInterest);
-        logger('args    :', queryStub.getCall(0).args);
-        logger('expected:', [expectedInterestQuery, expectedValues]);
+        // logger('Result of interest calc: ', resultOfInterest);
+        // logger('args    :', queryStub.getCall(0).args);
+        // logger('expected:', [expectedInterestQuery, expectedValues]);
 
         expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedInterestQuery, expectedValues);
@@ -62,9 +62,9 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
 
         queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfInterest = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'balance::WHOLE_CURRENCY::USD::100'});
-        logger('Result of interest calc: ', resultOfInterest);
-        logger('args    :', queryStub.getCall(0).args);
-        logger('expected:', [expectedBalanceQuery, expectedValues]);
+        // logger('Result of interest calc: ', resultOfInterest);
+        // logger('args    :', queryStub.getCall(0).args);
+        // logger('expected:', [expectedBalanceQuery, expectedValues]);
 
         expect(resultOfInterest).to.deep.equal({ amount: 20, unit: 'WHOLE_CURRENCY', currency: 'USD' });
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedBalanceQuery, expectedValues);
@@ -85,7 +85,7 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
 
         queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfCapitalization = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `capitalization::WHOLE_CURRENCY::${testStartTimeMillis}::${testEndTimeMillis}`});
-        logger('Result of capitalization: ', resultOfCapitalization);
+        
         expect(resultOfCapitalization).to.deep.equal({ amount: 200000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedCapitalizationQuery, expectedValues);
     });
@@ -105,7 +105,7 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
 
         queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfEarnings = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `total_earnings::HUNDREDTH_CENT::WHOLE_CURRENCY::${testStartTimeMillis}::${testEndTimeMillis}`});
-        logger('Result of capitalization: ', resultOfEarnings);
+        // logger('Result of capitalization: ', resultOfEarnings);
         expect(resultOfEarnings).to.deep.equal({ amount: 200000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedEarningsQuery, expectedValues);
     });
@@ -125,7 +125,7 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
 
         queryStub.resolves([{ sum: 10, unit: 'WHOLE_CURRENCY' }, { sum: 100000, unit: 'HUNDREDTH_CENT' }]);
         const resultOfSavings = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `net_saving::HUNDREDTH_CENT::WHOLE_CURRENCY::${testStartTimeMillis}::${testEndTimeMillis}`});
-        logger('Result of savings: ', resultOfSavings);
+        
         expect(resultOfSavings).to.deep.equal({ amount: 200000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
         expect(queryStub).to.have.been.calledWith(expectedSavingsQuery, expectedValues);
     });
@@ -141,14 +141,13 @@ describe('*** UNIT TEST USER ACCOUNT BALANCE EXTRACTION ***', async () => {
 
         queryStub.resolves([{ amount: 1000, unit: 'WHOLE_CURRENCY' }]);
         const lastSavingAmount = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: `last_saved_amount::WHOLE_CURRENCY`});
-        logger('Last saved amount: ', lastSavingAmount);
+        
         expect(lastSavingAmount).to.deep.equal({ amount: 10000000, unit: 'HUNDREDTH_CENT', currency: 'WHOLE_CURRENCY' });
         expect(queryStub).to.have.been.calledWith(expectedQuery, expectedValues);
     });
 
     it('Gracefully handles unknown parameter', async () => {
         const resultOfBadQuery = await accountCalculator.getUserAccountFigure({ systemWideUserId: testUserId, operation: 'some_weird_thing' });
-        logger('Result of bad query: ', resultOfBadQuery);
         expect(resultOfBadQuery).to.be.null;
     });
 });

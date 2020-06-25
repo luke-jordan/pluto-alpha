@@ -213,7 +213,7 @@ const createFriendTournament = async (params) => {
  * @param {object} event An event object containing the request context and request body.
  * @property {object} requestContext An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
  * @property {string} creatingUserId The system wide user id of the user who is creating the boost.
- * @property {string} boostTypeCategory A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::TIME_LIMITED'.
+ * @property {string} boostTypeCategory A composite string containing the boost type and the boost category, seperated by '::'. For example, 'SIMPLE::SIMPLE_SAVE' (the very simplest form).
  * @property {string/number} boostBudget This may either be a number or a composite key containing the amount, the unit, and the currency, seperated by '::', e.g '10000000::HUNDREDTH_CENT::USD'.
  * @property {string} startTimeMillis A moment formatted date string indicating when the boost should become active. Defaults to now if not passed in by caller.
  * @property {string} endTimeMillis Epoch millis for when the boost expires. Defaults to 50 years from now (true at time of writing, configuration may change).
@@ -221,7 +221,7 @@ const createFriendTournament = async (params) => {
  * @property {array}  friendships An optional array of relationship ids. Used to create a custom boost audience targeted at the users in the relationships.
  * @property {object} rewardParameters An object caontaining reward parameters to be persisted with the boost.
  * @property {object} statusConditions An object containing an string array of DSL instructions containing details like how the boost should be saved.
- * @property {string} boostAudienceType A string denoting the boost audience. Valid values include GENERAL and INDIVIDUAL.
+ * @property {string} boostAudienceType A string denoting the boost audience. Valid values include GENERAL, INDIVIDUAL and MACHINE (the last means the ML system picks who gets offered from the audience).
  * @property {string} boostAudienceSelection A selection instruction for the audience for the boost. Primarily for internal invocations.
  * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.

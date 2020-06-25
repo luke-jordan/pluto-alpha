@@ -179,7 +179,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
     const mockBoostToFromPersistence = {
         creatingUserId: testMktingAdmin,
         boostType: 'SIMPLE',
-        boostCategory: 'TIME_LIMITED',
+        boostCategory: 'SIMPLE_SAVE',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
@@ -199,7 +199,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         boostId: testBoostId,
         creatingUserId: testMktingAdmin,
         boostType: 'SIMPLE',
-        boostCategory: 'TIME_LIMITED',
+        boostCategory: 'SIMPLE_SAVE',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
