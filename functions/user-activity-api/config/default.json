@@ -18,9 +18,10 @@
         "boostMaster": "boost_data.boost",
         "boostJoin": "boost_data.boost_account_status",
         "clientFloatVars": "ClientFloatTable",
-        "factoidTable": "factoid_data.factoid",
-        "factoidJoinTable": "factoid_data.factoid_user_join_table",
-        "factoidLogTable": "factoid_data.factoid_log"
+        "snippetTable": "snippet_data.snippet",
+        "snippetJoinTable": "snippet_data.snippet_user_join_table",
+        "previewUserTable": "snippet_data.preview_user_table",
+        "snippetLogTable": "snippet_data.snippet_log"
     },
     "db": {
         "user": "save_tx_api_worker",
@@ -76,7 +77,7 @@
             "topicArn": "<<override here>>",
             "processingDlq": "<<insert_here>>",
             "withdrawalTopic": "<<insert_here>>",
-            "factoidQueue": "<<insert_here>>"
+            "snippetQueue": "<<insert_here>>"
         },
         "processingLambdas": {
             "boosts": "boost_event_process",
