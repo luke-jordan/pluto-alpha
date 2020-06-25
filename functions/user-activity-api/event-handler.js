@@ -30,7 +30,8 @@ const withdrawEventHandler = require('./event/withdrawal-event-handler');
 
 // for unwrapping some AWS stuff
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-const extractSnsMessage = async (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
+const extractSnsMessage = (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
+const extractSnsMessageId = (snsEvent) => snsEvent.Records[0].Sns.MessageId;
 
 const invokeProfileLambda = async (systemWideUserId, includeContactMethod) => {
     const profileFetchLambdaInvoke = {
@@ -103,6 +104,9 @@ module.exports.handleUserEvent = async (snsEvent) => {
             logger(`We don't handle ${eventType}, let it pass`);
             return { statusCode: 200 };
         }
+
+        // for tracing this slippery duplicate boost redemption event
+        logger(`SNS_EVENT_HANDLING:: Handling event with message ID: SNS_MESSAGE_ID::${extractSnsMessageId(snsEvent)}`);
 
         let userProfile = {};
         if (EVENT_REQUIRES_CONTACT[eventType].requiresProfile) {

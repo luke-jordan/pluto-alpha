@@ -61,6 +61,9 @@ module.exports.listUserBoosts = async (event) => {
                 fetchParameters.flags = [queryParams.flag];
             }
             listBoosts = await persistence.fetchUserBoosts(accountId, fetchParameters); 
+            if (queryParams.flag === 'FRIEND_TOURNAMENT') {
+                
+            }
         }
 
         // logger('Got boosts:', listBoosts);

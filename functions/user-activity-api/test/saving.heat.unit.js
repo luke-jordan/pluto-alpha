@@ -99,7 +99,7 @@ describe('*** UNIT TEST SAVINGS HEAT CALCULATION ***', async () => {
         sumTotalSavedStub.withArgs(testAccountId, 'ZAR', 'HUNDREDTH_CENT').resolves({ amount: 100000 });
         sumSavedLastMonthStub.withArgs(testAccountId, 'ZAR', 'HUNDREDTH_CENT').resolves({ amount: 51000 });
 
-        const resultOfCalc = await handler.calculateSavingHeat({ });
+        const resultOfCalc = await handler.calculateSavingHeat({ accountIds: 'ALL' });
 
         expect(resultOfCalc).to.exist;
         expect(resultOfCalc).to.deep.equal({

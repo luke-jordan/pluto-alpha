@@ -273,6 +273,66 @@ describe('*** BALANCE MILESTONE CONDITION ***', () => {
         expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;
     });
 
+    it('Handles correctly when balance crosses a target amount', () => {
+        const condition = 'balance_crossed_abs_target #{1000::WHOLE_CURRENCY::EUR}'; // parameter is target (i.e., _any_ crossing will work)
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '200::WHOLE_CURRENCY::EUR',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '800::WHOLE_CURRENCY::EUR',
+                postSaveBalance: '1000::WHOLE_CURRENCY::EUR'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.true;        
+    });
+
+    it('Does not award if balance was already above target amount', () => {
+        const condition = 'balance_crossed_abs_target #{1000::WHOLE_CURRENCY::EUR}'; // parameter is target (i.e., _any_ crossing will work)
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '200::WHOLE_CURRENCY::EUR',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '1100::WHOLE_CURRENCY::EUR',
+                postSaveBalance: '1300::WHOLE_CURRENCY::EUR'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.false;
+    });
+
+    it('Does not award if balance does not cross amount', () => {
+        const condition = 'balance_crossed_abs_target #{1000::WHOLE_CURRENCY::EUR}'; // parameter is target (i.e., _any_ crossing will work)
+
+        const sampleEvent = {
+            accountId: uuid(),
+            eventType: 'SAVING_PAYMENT_SUCCESSFUL',
+            eventContext: {
+                transactionId: uuid(),
+                savedAmount: '200::WHOLE_CURRENCY::EUR',
+                firstSave: false,
+                saveCount: 5,
+
+                preSaveBalance: '800::WHOLE_CURRENCY::EUR',
+                postSaveBalance: '900::WHOLE_CURRENCY::EUR'
+            }
+        };
+
+        expect(tester.testConditionsForStatus(sampleEvent, [condition])).to.be.false;
+    });
+
     it('Handles correctly when balance hits major-amount', () => {
         const condition = 'balance_crossed_major_digit #{100::WHOLE_CURRENCY::ZAR}'; // parameter is minimum
 

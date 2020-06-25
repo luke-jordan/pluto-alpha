@@ -162,6 +162,14 @@ const createSavingPool = async ({ systemWideUserId }, params) => {
     logger('Creating a pool with params: ', params);
 
     const { name, target, friendships } = params;
+    if (!name || name.trim().length === 0) {
+        return { result: 'ERROR', message: 'Saving pool must have a non-empty name' };
+    }
+
+    if (!target || !target.amount || target.amount === '0') {
+        return { result: 'ERROR', message: 'Saving pool must have a non-zero target' };
+    }
+
     const friendUserIds = await (friendships.length > 0 ? persistenceRead.obtainFriendIds(systemWideUserId, friendships) : []);
     if (friendUserIds.length < friendships.length) {
         return { result: 'ERROR', message: 'User trying to involve non-friends' };

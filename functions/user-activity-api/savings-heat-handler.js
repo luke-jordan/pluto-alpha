@@ -133,14 +133,25 @@ const calculateAndCacheHeatScore = async (accountId, activitiesToInclude) => {
  */
 module.exports.calculateSavingHeat = async (event) => {
     try {
+        if (opsUtil.isWarmup(event)) {
+            logger('Warmup call, exit');
+            await redis.get('WARMUP_ACCOUNT');
+            return { result: 'WARMED' };
+        }
+
+        if (opsUtil.isApiCall(event)) {
+            logger('SECURITY_ERROR: Attempt to API call saving heat calculator');
+            return { statusCode: 401 };
+        }
+
         const { accountIds, floatId, clientId, includeLastActivityOfType } = opsUtil.extractParamsFromEvent(event);
 
         let accountIdsForCalc = [];
-        if (!accountIds && !floatId && !clientId) {
+        if (!floatId && !clientId && accountIds === 'ALL') {
             accountIdsForCalc = await persistence.fetchAccounts();
         }
     
-        if (accountIds) {
+        if (Array.isArray(accountIds)) {
             accountIdsForCalc = accountIds;
         }
     
