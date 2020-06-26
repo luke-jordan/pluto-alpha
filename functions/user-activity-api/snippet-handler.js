@@ -10,23 +10,17 @@ const opsUtil = require('ops-util-common');
 const statusOrder = ['UNCREATED', 'CREATED', 'FETCHED', 'VIEWED'];
 const isStatusAfter = (statusA, statusB) => statusOrder.indexOf(statusA) < statusOrder.indexOf(statusB);
 
-// eslint-disable-next-line no-magic-numbers
-const byStatus = (snippetA, snippetB) => (isStatusAfter(snippetA.snippetStatus, snippetB.snippetStatus) ? -1 : 1);
-// eslint-disable-next-line no-magic-numbers
-const byPriority = (snippetA, snippetB) => (snippetA.snippetPriority > snippetB.snippetPriority ? -1 : 1);
-const byViewCount = (snippetA, snippetB) => snippetA.viewCount - snippetB.viewCount;
-
 const snippetSorter = (snippetA, snippetB) => {
     if (snippetA.snippetStatus !== snippetB.snippetStatus) {
-        return statusOrder.indexOf(statusA) - statusOrder.indexOf(statusB);
+        return statusOrder.indexOf(snippetA.snippetStatus) - statusOrder.indexOf(snippetB.snippetStatus);
     }
 
     if (snippetA.viewCount !== snippetB.viewCount) {
         return snippetA.viewCount - snippetB.viewCount;
     }
 
-    return snippetA.priority - snippetB.priority;
-}
+    return snippetA.snippetPriority - snippetB.snippetPriority;
+};
 
 const sortSnippets = (snippets) => snippets.sort(snippetSorter);
 
@@ -83,7 +77,7 @@ const handleSnippetUpdate = async (userId, snippetId, snippetStatus) => {
 
     const initialStatus = snippetUserStatuses && snippetUserStatuses.length > 0 ? snippetUserStatuses[0].snippetStatus : 'CREATED';
     logger('Is status after:', isStatusAfter(initialStatus, snippetStatus));
-    
+
     if (isStatusAfter(initialStatus, snippetStatus)) {
         const resultOfUpdate = await persistence.updateSnippetStatus(snippetId, userId, snippetStatus);
         logger('Result of updating snippet state:', resultOfUpdate);
@@ -97,7 +91,7 @@ const handleSnippetUpdate = async (userId, snippetId, snippetStatus) => {
     const incrementResult = await persistence.incrementCount(snippetId, userId, snippetStatus);
     logger('Incrementing view/fetch count resulted in:', incrementResult);
 
-    return snippetStatus === 'FETCHED' ? { fetchCount: incrementResult.fetchCount } : { viewCount: incrementResult.viewCount };   
+    return snippetStatus === 'FETCHED' ? { fetchCount: incrementResult.fetchCount } : { viewCount: incrementResult.viewCount };
 };
 
 /**
@@ -161,9 +155,9 @@ module.exports.fetchSnippetsForUser = async (event) => {
         logger('Preview snippets:', isPreviewUser);
 
         if (isPreviewUser) {
-            const snippetsForPreview = await persistence.fetchPreviewSnippets();
-            logger('Found preview snippets:', snippetsForPreview);
-            return opsUtil.wrapResponse(sortSnippets(snippetsForPreview));
+            const previewSnippets = await persistence.fetchPreviewSnippets();
+            logger('Found preview snippets:', previewSnippets);
+            return opsUtil.wrapResponse(sortSnippets(previewSnippets));
         }
      
         const createdSnippets = await persistence.fetchCreatedSnippets(systemWideUserId);

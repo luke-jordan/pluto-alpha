@@ -141,10 +141,10 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         [fetchSnippetStatusesStub, incrementStub, insertLogStub].map((stub) => expect(stub.callCount).to.equal(2));
     });
 
-    it.only('Fetches and sorts unread snippets to display to user', async () => {
+    it('Fetches and sorts unread snippets to display to user', async () => {
         const mockSnippet = (snippetStatus, snippetPriority, viewCount) => ({
             snippetId: testFactId,
-            title: 'Jupiter Snippet 22',
+            title: 'Jupiter Snippet 1',
             body: 'Jupiter helps you save.',
             fetchCount: 3,
             viewCount,
@@ -162,8 +162,8 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             payload: { snippetIds: [testFactId, testFactId], userId: testSystemId, status: 'FETCHED' }
         }];
 
-        const expectedFirst = mockSnippet('FETCHED', 3, 1);
-        const expectedSecond = mockSnippet('FETCHED', 5, 2);
+        const expectedFirst = mockSnippet('FETCHED', 3, 0);
+        const expectedSecond = mockSnippet('VIEWED', 5, 1);
 
         const mockUncreatedSnippets = [expectedSecond, expectedFirst];
 
@@ -183,21 +183,24 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         expect(previewSnippetStub).to.have.not.been.called;
     });
 
-    it.only('Fetches and sorts snippets for (admin) preview', async () => {
+    it('Fetches and sorts snippets for (admin) preview', async () => {
         const mockSnippet = (snippetStatus, snippetPriority, viewCount) => ({
             snippetId: testFactId,
-            title: 'Jupiter Snippet 22',
-            body: 'Jupiter helps you save.',
+            title: 'Jupiter Snippet 2',
+            body: 'Jupiter offers competetive interest rates.',
             fetchCount: 3,
             viewCount,
             snippetStatus,
             snippetPriority
         });
 
-        const mockUncreatedSnippets = [];
-        const mockPreviewSnippets = [mockSnippet('FETCHED', 3, 0), mockSnippet('VIEWED', 5, 0), mockSnippet('FETCHED', 7, 0)];
+        const expectedFirst = mockSnippet('FETCHED', 7, 0);
+        const expectedSecond = mockSnippet('VIEWED', 5, 0);
+        const expectedThird = mockSnippet('VIEWED', 5, 1);
 
-        fetchUncreatedSnippetsStub.resolves(mockUncreatedSnippets);
+        const mockPreviewSnippets = [expectedSecond, expectedThird, expectedFirst];
+
+        fetchUncreatedSnippetsStub.resolves([]);
         isPreviewUserStub.resolves(true);
         previewSnippetStub.resolves(mockPreviewSnippets);
         createSnippetJoinStub.resolves({ creationTime: testCreationTime });
@@ -206,7 +209,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         const resultOfFetch = await handler.fetchSnippetsForUser(testEvent);
 
         const body = helper.standardOkayChecks(resultOfFetch);
-        expect(body).to.deep.equal([mockSnippet('FETCHED', 7, 0), mockSnippet('VIEWED', 5, 0), mockSnippet('FETCHED', 3, 0)]);
+        expect(body).to.deep.equal([expectedFirst, expectedSecond, expectedThird]);
         expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
         expect(isPreviewUserStub).to.have.been.calledOnceWithExactly(testSystemId);
         expect(previewSnippetStub).to.have.been.calledOnce;
@@ -217,18 +220,20 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
     it('If no unread snippets exist, fetches and sorts previously read snippets', async () => {
         const mockSnippet = (snippetStatus, snippetPriority, viewCount) => ({
             snippetId: testFactId,
-            title: 'Jupiter Snippet 22',
-            body: 'Jupiter helps you save.',
+            title: 'Jupiter Snippet 3',
+            body: 'Jupiter rewards you for saving.',
             fetchCount: 3,
             viewCount,
             snippetStatus,
             snippetPriority
         });
 
-        const mockUncreatedSnippets = [];
-        const mockCreatedSnippets = [mockSnippet('FETCHED', 3, 0), mockSnippet('VIEWED', 5, 2), mockSnippet('FETCHED', 7, 0), mockSnippet('VIEWED', 5, 1)];
+        const expectedFirst = mockSnippet('FETCHED', 3, 0);
+        const expectedSecond = mockSnippet('VIEWED', 5, 2);
 
-        fetchUncreatedSnippetsStub.resolves(mockUncreatedSnippets);
+        const mockCreatedSnippets = [expectedSecond, expectedFirst];
+
+        fetchUncreatedSnippetsStub.resolves([]);
         isPreviewUserStub.resolves(false);
         fetchCreatedSnippetsStub.resolves(mockCreatedSnippets);
         createSnippetJoinStub.resolves({ creationTime: testCreationTime });
@@ -237,7 +242,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         const resultOfFetch = await handler.fetchSnippetsForUser(testEvent);
 
         const body = helper.standardOkayChecks(resultOfFetch);
-        expect(body).to.deep.equal([mockSnippet('FETCHED', 7, 0), mockSnippet('FETCHED', 3, 0), mockSnippet('VIEWED', 5, 1), mockSnippet('VIEWED', 5, 2)]);
+        expect(body).to.deep.equal([expectedFirst, expectedSecond]);
         expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
         expect(fetchCreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
         expect(isPreviewUserStub).to.have.been.calledOnceWithExactly(testSystemId);
