@@ -1,0 +1,20 @@
+{
+    "db": {
+        "user": "save_tx_api_worker",
+        "host": "localhost",
+        "database": "jupiter",
+        "password": "pwd_for_transaction_api",
+        "port" :"5430"
+    },
+    "tables": {
+        "snippetTable": "snippet_data.snippet",
+        "snippetJoinTable": "snippet_data.snippet_user_join_table",
+        "previewUserTable": "snippet_data.preview_user_table",
+        "snippetLogTable": "snippet_data.snippet_log"
+    },
+    "publishing": {
+        "userEvents": {
+            "snippetQueue": "<<insert_here>>"
+        }
+    }
+}

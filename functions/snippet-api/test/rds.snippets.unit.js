@@ -1,7 +1,5 @@
 'use strict';
 
-process.env.NODE_ENV = 'test';
-
 // const logger = require('debug')('jupiter:snippet-rds:test');
 const config = require('config');
 const uuid = require('uuid/v4');
