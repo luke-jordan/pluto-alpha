@@ -2,68 +2,15 @@
 
 const logger = require('debug')('jupiter:admin:logging');
 const config = require('config');
-const moment = require('moment');
-
-const request = require('request-promise');
 
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
-
-const publisher = require('publish-common');
-
-const persistence = require('./persistence/rds.account');
 
 const AWS = require('aws-sdk');
 
 AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 const s3 = new AWS.S3();
-
-const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
-    const logOptions = { initiator: adminUserId, context };
-    logger('Dispatching user log of event type: ', eventType, ', with log options: ', logOptions);
-    return publisher.publishUserEvent(systemWideUserId, eventType, logOptions);
-};
-
-/**
- * This function write a user log. If a binary file is included the file is uploaded to s3 and the path to
- * the file is stored in the user logs event context.
- * @param {object} event An admin event.
- * @property {string} systemWideUserId The user id whom the log pertains to.
- * @property {string} eventType The type of event to be logged.
- * @property {string} note An optional note describing details relevant to the log.
- * @property {string} file An optional object containing the file path to an attachment file to be associated with the log being written.
- */
-module.exports.writeLog = async (event) => {
-    if (!adminUtil.isUserAuthorized(event)) {
-        return adminUtil.unauthorizedResponse;
-    }
-
-    try {
-        const adminUserId = event.requestContext.authorizer.systemWideUserId;
-        const params = adminUtil.extractEventBody(event);
-        const { systemWideUserId, eventType, note, file } = params;
-
-        const context = { systemWideUserId, note, file };
-        const publishResult = await publishUserLog({ adminUserId, systemWideUserId, eventType, context });
-        logger('Result of publish:', publishResult);
-
-        if (eventType === 'FLAG_USER') {
-            await persistence.flagUserAccounts(note);
-            const lambdaPayload = {
-                FunctionName: 'profile_update',
-                InvocationType: 'RequestResponse',
-                Payload: JSON.stringify({ addFlag: note })
-            };
-            await lambda.invoke(lambdaPayload).promise();
-        }
-
-        return adminUtil.wrapHttpResponse({ publishResult });
-    } catch (err) {
-        logger('FATAL_ERROR: ', err);
-        return adminUtil.wrapHttpResponse(err.message, 500);
-    }
-};
 
 const appendEventBinary = async (event) => {
     const context = JSON.parse(event.context);
@@ -81,7 +28,7 @@ const fetchUserEventLog = async (systemWideUserId, eventType, startDate) => {
         userId: systemWideUserId,
         eventTypes: [eventType],
         startDate,
-        endDate: moment().valueOf()
+        endDate: startDate + 1 // actually change log reader for this
     };
 
     const userLogInvocation = adminUtil.invokeLambda(config.get('lambdas.userHistory'), userEventParams);
@@ -125,6 +72,19 @@ module.exports.fetchLog = async (event) => {
     }
 };
 
+const uploadToS3 = async ({ userId, filename, mimeType, fileContent}) => {
+    const params = {
+        Bucket: config.get('binaries.s3.bucket'),
+        Key: `${userId}/${filename}`,
+        ContentType: mimeType,
+        Body: Buffer.from(fileContent, 'base64')
+    };
+
+    const result = await s3.putObject(params).promise();
+    logger('Result of binary upload to s3:', result);
+    return { result: 'UPLOADED', filePath: `${userId}/${filename}` };
+};
+
 /**
  * Uploads a log associated attachment. Returns the uploaded attachment's s3 key.
  * @param {object} event An admin event.
@@ -138,31 +98,15 @@ module.exports.uploadLogBinary = async (event) => {
        
     try {
         const params = adminUtil.extractEventBody(event);
+        logger('Received log binary: ', params);
+
         const { systemWideUserId, file } = params;
         const { filename, fileContent, mimeType } = file;
         
-        const options = {
-            method: 'POST',
-            uri: config.get('binaries.endpoint'),
-            formData: {
-                userId: systemWideUserId,
-                file: {
-                    value: fileContent, // file stream object
-                    options: { filename, mimeType }
-                }
-            }
-        };
-
-        logger('Uploading binary with params:', options);
-        const response = await request(options);
+        const response = await uploadToS3({ userId: systemWideUserId, filename, mimeType, fileContent });
         logger('Result of upload:', response);
 
-        if (!response || typeof response !== 'object' || response.statusCode !== 200) {
-            throw new Error('Error uploading binary');
-        }
-
-        const { filePath } = JSON.parse(response.body);
-        return adminUtil.wrapHttpResponse({ filePath });
+        return adminUtil.wrapHttpResponse(response);
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return adminUtil.wrapHttpResponse(err.message, 500);
@@ -183,15 +127,7 @@ module.exports.storeBinary = async (event) => {
         const fileContent = event.content;
         const { userId, filename, mimeType } = opsCommonUtil.extractParamsFromEvent(event);
 
-        const params = {
-            Bucket: config.get('binaries.s3.bucket'),
-            Key: `${userId}/${filename}`,
-            ContentType: mimeType,
-            Body: Buffer.from(fileContent, 'base64')
-        };
-
-        const result = await s3.putObject(params).promise();
-        logger('Result of binary upload to s3:', result);
+        await uploadToS3({ userId, filename, mimeType, fileContent });
 
         return adminUtil.wrapHttpResponse({ filePath: `${userId}/${filename}` });
     } catch (err) {

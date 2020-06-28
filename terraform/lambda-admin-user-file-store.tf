@@ -25,6 +25,11 @@ resource "aws_lambda_function" "admin_user_file_store" {
               "aws": {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
+              "binaries": {
+                "s3": {
+                  "bucket": "${aws_s3_bucket.user_record_bucket.bucket}"
+                }
+              }
               "publishing": {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
@@ -95,19 +100,9 @@ resource "aws_iam_role_policy_attachment" "admin_user_file_store_event_publish" 
   policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
-resource "aws_iam_role_policy_attachment" "admin_user_file_store_pword_update" {
+resource "aws_iam_role_policy_attachment" "admin_user_file_store_bucket_put" {
   role = aws_iam_role.admin_user_file_store_role.name
-  policy_arn = var.pword_update_policy[terraform.workspace]
-}
-
-resource "aws_iam_role_policy_attachment" "admin_user_file_store_omnibus" {
-  role = aws_iam_role.admin_user_file_store_role.name
-  policy_arn = aws_iam_policy.admin_user_file_store_lambda_policy.arn
-}
-
-resource "aws_iam_role_policy_attachment" "admin_user_file_store_secret_get" {
-  role = "${aws_iam_role.admin_user_file_store_role.name}"
-  policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_admin_worker_read"
+  policy_arn = aws_iam_policy.user_record_bucket_put.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

@@ -50,7 +50,7 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
                   "toList": "${var.events_email_receipients[terraform.workspace]}"
                 },
                 "allPendingTransactions": {
-                  "toList": "${var.events_email_receipients[terraform.workspace]}"
+                  "toList": "${var.support_email_recipients[terraform.workspace]}"
                 },
                 "systemLinks": {
                   "baseUrl": "${terraform.workspace == "master" ? "https://admin.jupitersave.com" : "https://staging-admin.jupitersave.com"}"
