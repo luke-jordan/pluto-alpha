@@ -36,9 +36,9 @@
         "detailsTTL": 900,
         "host": "localhost",
         "keyPrefixes": {
-            "profile": "FRIENDS_PROFILE",
-            "userId": "FRIENDS_USER_ID",
-            "savingHeat": "SAVINGS_HEAT"
+            "profile": "FRIEND_PROFILE",
+            "userId": "FRIEND_USER_ID",
+            "savingHeat": "SAVING_HEAT"
         },
         "ttls": {
             "profile": 25200,

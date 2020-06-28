@@ -31,6 +31,8 @@ const FINWORKS_NAMES = {
     'CAPITEC': 'Capitec'
 };
 
+const DO_NOT_RETRY_CODES = [400, 500];
+
 const fetchAccessCreds = async () => {
     const bucket = config.get('finworks.s3.bucket');
     const [crt, pem] = await Promise.all([
@@ -60,9 +62,9 @@ const executeRequestWithRetry = async (options, retryStatus) => {
         logger('FinWorks response: ', response.toJSON());
         return response;
     } catch (err) {
-        // first we check if the error has a status code and that is 500, in which case we do not retry
-        if (!opsUtil.isObjectEmpty(err) && err.statusCode === 500) {
-            logger('500 error so do not retry, just propogate/alert');
+        // first we check if the error has a status code and that is 400 500, in which case we do not retry
+        if (!opsUtil.isObjectEmpty(err) && DO_NOT_RETRY_CODES.includes(statusCode)) {
+            logger('400 or 500 error so do not retry, just propogate/alert');
             throw err;
         }
 

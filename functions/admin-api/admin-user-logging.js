@@ -3,11 +3,15 @@
 const logger = require('debug')('jupiter:admin:logging');
 const config = require('config');
 const moment = require('moment');
+
 const request = require('request-promise');
 
 const adminUtil = require('./admin.util');
-const publisher = require('publish-common');
 const opsCommonUtil = require('ops-util-common');
+
+const publisher = require('publish-common');
+
+const persistence = require('./persistence/rds.account');
 
 const AWS = require('aws-sdk');
 
@@ -43,6 +47,16 @@ module.exports.writeLog = async (event) => {
         const context = { systemWideUserId, note, file };
         const publishResult = await publishUserLog({ adminUserId, systemWideUserId, eventType, context });
         logger('Result of publish:', publishResult);
+
+        if (eventType === 'FLAG_USER') {
+            await persistence.flagUserAccounts(note);
+            const lambdaPayload = {
+                FunctionName: 'profile_update',
+                InvocationType: 'RequestResponse',
+                Payload: JSON.stringify({ addFlag: note })
+            };
+            await lambda.invoke(lambdaPayload).promise();
+        }
 
         return adminUtil.wrapHttpResponse({ publishResult });
     } catch (err) {

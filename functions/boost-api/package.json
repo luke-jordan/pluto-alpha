@@ -4,7 +4,7 @@
   "description": "Set of lambdas for managing boosts",
   "main": "boost-handler.js",
   "scripts": {
-    "test": "DEBUG=jupiter:*:test nyc mocha",
+    "test": "DEBUG=jupiter:* mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
@@ -16,6 +16,7 @@
     "config": "^3.2.2",
     "debug": "^4.1.1",
     "decamelize": "^3.2.0",
+    "ioredis": "^4.17.3",
     "json-stable-stringify": "^1.0.1",
     "moment": "^2.24.0",
     "proxyquire": "^2.1.3",

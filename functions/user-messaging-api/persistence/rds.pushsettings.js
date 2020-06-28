@@ -81,3 +81,12 @@ module.exports.deletePushToken = async ({ token, provider, userId }) => {
 
     return { deleteCount };
 };
+
+
+module.exports.insertUserMsgPreference = async ({ }) => {
+
+};
+
+module.exports.updateUserMsgPreference = async ({ }) => {
+
+};
