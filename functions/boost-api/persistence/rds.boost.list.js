@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:boosts:rds-admin');
 const config = require('config');
+const moment = require('moment');
 
 const camelizeKeys = require('camelize-keys');
 
@@ -81,6 +82,8 @@ module.exports.updateBoost = async (updateParameters) => {
 };
 
 module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinceTime, flags } = { excludedStatus: ['CREATED'] }) => {
+    logger('Fetching user boosts with excluded status: ', excludedStatus, ' and flags: ', flags);
+
     const boostMainTable = config.get('tables.boostTable');
     const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
     
@@ -135,4 +138,57 @@ module.exports.fetchUserBoostLogs = async (accountId, boostIds, logType) => {
         `boost_id in (${extractArrayIndices(boostIds, fixedParams + 1)})`;
     const resultOfQuery = await rdsConnection.selectQuery(findQuery, [accountId, logType, ...boostIds]);
     return resultOfQuery.map((row) => camelizeKeys(row)); 
+};
+
+module.exports.fetchBoostDetails = async (boostId, includeAccounts) => {
+    const queryResult = await rdsConnection.selectQuery(`select * from ${config.get('tables.boostTable')} where boost_id = $1`, [boostId]);
+    
+    const rawBoost = queryResult[0];
+    const transformedBoost = {
+        boostId: rawBoost['boost_id'],
+        label: rawBoost['label'],
+        
+        active: rawBoost['active'],
+        endTime: moment(rawBoost['end_time']),
+        startTime: moment(rawBoost['start_time']),
+        
+        statusConditions: rawBoost['status_conditions'],
+        rewardParameters: rawBoost['reward_parameters'] || {},
+
+        boostAmount: {
+            amount: rawBoost['boost_amount'],
+            unit: rawBoost['boost_unit'],
+            currency: rawBoost['boost_currency']
+        },
+        
+        flags: rawBoost['flags'] || []
+    };
+
+    if (includeAccounts) {
+        // in theory could do this as a join but gain would be minimal and subsequent complexity high, so one more query is fine
+        const accounts = await rdsConnection.selectQuery(`select account_id from ${config.get('tables.boostAccountJoinTable')} where boost_id = $1`, [boostId]);
+        transformedBoost.accountIds = camelizeKeys(accounts).map((account) => account.accountId);
+    }
+
+    return transformedBoost;
+};
+
+module.exports.fetchBoostScoreLogs = async (boostId) => {
+    const logTable = config.get('tables.boostLogTable');
+    const accountTable = config.get('tables.accountLedger');
+
+    const query = `select ${logTable}.log_context, ${accountTable}.owner_user_id from ` +
+        `${logTable} inner join ${accountTable} on ${logTable}.account_id = ${accountTable}.account_id ` + 
+        `where boost_id = $1 and log_type = $2`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [boostId, 'GAME_RESPONSE']);
+
+    const extractedScores = resultOfQuery.map((row) => {
+        const logContext = row['log_context'];
+        return { 
+            userId: row['owner_user_id'],
+            gameScore: logContext.numberTaps || logContext.percentDestroyed
+        };
+    });
+
+    return extractedScores;
 };

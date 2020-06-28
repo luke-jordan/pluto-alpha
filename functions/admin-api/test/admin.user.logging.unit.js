@@ -15,8 +15,10 @@ const helper = require('./test.helper');
 
 const lamdbaInvokeStub = sinon.stub();
 const publishEventStub = sinon.stub();
+
 const getObjectStub = sinon.stub();
-const requestStub = sinon.stub();
+const putObjectStub = sinon.stub();
+
 const momentStub = sinon.stub();
 
 class MockLambdaClient {
@@ -28,6 +30,7 @@ class MockLambdaClient {
 class MockS3Client {
     constructor () { 
         this.getObject = getObjectStub;
+        this.putObject = putObjectStub;
     }
 }
 
@@ -39,7 +42,6 @@ const handler = proxyquire('../admin-user-logging', {
         'Lambda': MockLambdaClient,
         'S3': MockS3Client
     },
-    'request-promise': requestStub,
     'moment': momentStub,
     '@noCallThru': true
 });
@@ -48,73 +50,74 @@ const testSystemId = uuid();
 const testAdminId = uuid();
 const mockBase64EncodedFile = 'JVBERi0xLjUKJdDUxdgKNiAwIG9iago8PAovTGVuZ3RoIDE5NTYgICAgICAKL0ZpbHRlci...';
 
-describe('*** UNIT TEST ADMIN USER LOGGING ***', () => {
-    beforeEach(() => {
-        helper.resetStubs(publishEventStub);
-    });
+// todo : move the below to admin.user.manage.unit.js
+// describe('*** UNIT TEST ADMIN USER LOGGING ***', () => {
+//     beforeEach(() => {
+//         helper.resetStubs(publishEventStub);
+//     });
    
-    it('Writes user log', async () => {
-        const expectedResult = { publishResult: { result: 'SUCCESS' }};
+//     it('Writes user log', async () => {
+//         const expectedResult = { publishResult: { result: 'SUCCESS' }};
 
-        const expectedPublishOptions = {
-            initiator: testAdminId,
-            context: {
-                systemWideUserId: testSystemId,
-                note: 'User has proved their identity.',
-                file: {
-                    filePath: `${testSystemId}/user_documents.pdf`
-                }
-            }
-        };
+//         const expectedPublishOptions = {
+//             initiator: testAdminId,
+//             context: {
+//                 systemWideUserId: testSystemId,
+//                 note: 'User has proved their identity.',
+//                 file: {
+//                     filePath: `${testSystemId}/user_documents.pdf`
+//                 }
+//             }
+//         };
 
-        publishEventStub.resolves({ result: 'SUCCESS' });
+//         publishEventStub.resolves({ result: 'SUCCESS' });
 
-        const eventBody = {
-            systemWideUserId: testSystemId,
-            eventType: 'VERIFIED_AS_PERSON',
-            note: 'User has proved their identity.',
-            file: {
-                filePath: `${testSystemId}/user_documents.pdf`
-            }
-        };
+//         const eventBody = {
+//             systemWideUserId: testSystemId,
+//             eventType: 'VERIFIED_AS_PERSON',
+//             note: 'User has proved their identity.',
+//             file: {
+//                 filePath: `${testSystemId}/user_documents.pdf`
+//             }
+//         };
 
-        const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
-        const resultOfLog = await handler.writeLog(testEvent);
+//         const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
+//         const resultOfLog = await handler.writeLog(testEvent);
 
-        expect(resultOfLog).to.exist;
-        expect(resultOfLog).to.have.property('statusCode', 200);
-        expect(resultOfLog.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfLog.body).to.deep.equal(JSON.stringify(expectedResult));
-        expect(publishEventStub).to.have.been.calledOnceWithExactly(testSystemId, 'VERIFIED_AS_PERSON', expectedPublishOptions);
-    });
+//         expect(resultOfLog).to.exist;
+//         expect(resultOfLog).to.have.property('statusCode', 200);
+//         expect(resultOfLog.headers).to.deep.equal(helper.expectedHeaders);
+//         expect(resultOfLog.body).to.deep.equal(JSON.stringify(expectedResult));
+//         expect(publishEventStub).to.have.been.calledOnceWithExactly(testSystemId, 'VERIFIED_AS_PERSON', expectedPublishOptions);
+//     });
 
-    // unhappy paths included to improve branch coverage
-    it('Fails on unauthorized user', async () => {
-        const resultOfLog = await handler.writeLog({});
-        expect(resultOfLog).to.exist;
-        expect(resultOfLog).to.have.property('statusCode', 403);
-        expect(resultOfLog.headers).to.deep.equal(helper.expectedHeaders);
-        expect(publishEventStub).to.have.not.been.called;
-    });
+//     // unhappy paths included to improve branch coverage
+//     it('Fails on unauthorized user', async () => {
+//         const resultOfLog = await handler.writeLog({});
+//         expect(resultOfLog).to.exist;
+//         expect(resultOfLog).to.have.property('statusCode', 403);
+//         expect(resultOfLog.headers).to.deep.equal(helper.expectedHeaders);
+//         expect(publishEventStub).to.have.not.been.called;
+//     });
 
-    it('Catches thrown errors', async () => {
-        publishEventStub.throws(new Error('Error! Something went wrong.'));
+//     it('Catches thrown errors', async () => {
+//         publishEventStub.throws(new Error('Error! Something went wrong.'));
 
-        const eventBody = {
-            systemWideUserId: testSystemId,
-            eventType: 'VERIFIED_AS_PERSON',
-            note: 'User has proved their identity.',
-            filePath: `${testSystemId}/user_documents.pdf`
-        };
+//         const eventBody = {
+//             systemWideUserId: testSystemId,
+//             eventType: 'VERIFIED_AS_PERSON',
+//             note: 'User has proved their identity.',
+//             filePath: `${testSystemId}/user_documents.pdf`
+//         };
 
-        const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
-        const resultOfLog = await handler.writeLog(testEvent);
-        expect(resultOfLog).to.exist;
-        expect(resultOfLog).to.have.property('statusCode', 500);
-        expect(resultOfLog.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfLog.body).to.deep.equal(JSON.stringify('Error! Something went wrong.'));
-    });
-});
+//         const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
+//         const resultOfLog = await handler.writeLog(testEvent);
+//         expect(resultOfLog).to.exist;
+//         expect(resultOfLog).to.have.property('statusCode', 500);
+//         expect(resultOfLog.headers).to.deep.equal(helper.expectedHeaders);
+//         expect(resultOfLog.body).to.deep.equal(JSON.stringify('Error! Something went wrong.'));
+//     });
+// });
 
 describe('*** UNIT TEST FETCH USER LOGS ***', () => {
     const testTimestamp = moment().subtract(5, 'days').valueOf();
@@ -162,9 +165,9 @@ describe('*** UNIT TEST FETCH USER LOGS ***', () => {
         };
 
         const expectedLogPayload = {
-            endDate: testEndDate,
             eventTypes: ['VERIFIED_AS_PERSON'],
             startDate: testTimestamp,
+            endDate: testTimestamp + 1,
             userId: testSystemId
         };
 
@@ -224,60 +227,39 @@ describe('*** UNIT TEST FETCH USER LOGS ***', () => {
 });
 
 describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
-    const mockFileStream = {
-        _readableState: {
-            buffer: {
-                head: {
-                    data: '<Buffer 25 50 44 46 2d 31 2e 34 0a 25 ... >'
-                }
-            }
-        }
-    };
 
     beforeEach(() => {
-        helper.resetStubs(requestStub);
+        helper.resetStubs(putObjectStub);
     });
    
     it('Uploads user log attachments', async () => {
-        const expectedResult = { filePath: `${testSystemId}/user_documents.pdf` };
+        const expectedResult = { result: 'UPLOADED', filePath: `${testSystemId}/user_documents.pdf` };
 
-        const mockRequestOptions = {
-            method: 'POST',
-            uri: config.get('binaries.endpoint'),
-            formData: {
-                userId: testSystemId,
-                file: {
-                    value: mockFileStream,
-                    options: { filename: 'user_documents.pdf', mimeType: 'application/pdf' }
-                }
-            }
-        };
-
-        // non-redundant usage
-        const testUploadResult = {
-            statusCode: 200,
-            body: JSON.stringify({ filePath: `${testSystemId}/user_documents.pdf` })
-        };
-       
-        requestStub.resolves(testUploadResult);
+        putObjectStub.returns(({ promise: () => ({ })}));
 
         const eventBody = {
             systemWideUserId: testSystemId,
             file: {
                 filename: 'user_documents.pdf',
                 mimeType: 'application/pdf',
-                fileContent: mockFileStream
+                fileContent: mockBase64EncodedFile
             }
         };
 
         const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
         const resultOfUpload = await handler.uploadLogBinary(testEvent);
 
-        expect(resultOfUpload).to.exist;
-        expect(resultOfUpload).to.have.property('statusCode', 200);
-        expect(resultOfUpload.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfUpload.body).to.deep.equal(JSON.stringify(expectedResult));
-        expect(requestStub).to.have.been.calledOnceWithExactly(mockRequestOptions);
+        const uploadResult = helper.standardOkayChecks(resultOfUpload, true);
+        expect(uploadResult).to.deep.equal(expectedResult);
+
+        const expectedS3Params = {
+            Bucket: config.get('binaries.s3.bucket'),
+            Key: `${testSystemId}/user_documents.pdf`,
+            ContentType: 'application/pdf',
+            Body: Buffer.from(mockBase64EncodedFile, 'base64')
+        };
+
+        expect(putObjectStub).to.have.been.calledOnceWithExactly(expectedS3Params);
     });
 
     it('Fails on unauthorized user', async () => {
@@ -285,11 +267,11 @@ describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
         expect(resultOfUpload).to.exist;
         expect(resultOfUpload).to.have.property('statusCode', 403);
         expect(resultOfUpload.headers).to.deep.equal(helper.expectedHeaders);
-        expect(requestStub).to.have.not.been.called;
+        expect(putObjectStub).to.have.not.been.called;
     });
 
     it('Catches thrown errors', async () => {
-        requestStub.resolves({ statusCode: 500 });
+        putObjectStub.throws(Error('Error uploading file'));
 
         const eventBody = {
             systemWideUserId: testSystemId,
@@ -306,6 +288,6 @@ describe('*** UNIT TEST UPLOAD LOG ATTACHMENTS ***', () => {
         expect(resultOfUpload).to.exist;
         expect(resultOfUpload).to.have.property('statusCode', 500);
         expect(resultOfUpload.headers).to.deep.equal(helper.expectedHeaders);
-        expect(resultOfUpload.body).to.deep.equal(JSON.stringify('Error uploading binary'));
+        expect(resultOfUpload.body).to.deep.equal(JSON.stringify('Error uploading file'));
     });
 });

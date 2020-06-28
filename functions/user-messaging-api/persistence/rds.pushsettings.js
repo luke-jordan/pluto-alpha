@@ -7,6 +7,7 @@ const camelcase = require('camelcase');
 const opsUtil = require('ops-util-common');
 
 const RdsConnection = require('rds-common');
+const moment = require('moment');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const camelCaseKeys = (object) => Object.keys(object).reduce((obj, key) => ({ ...obj, [camelcase(key)]: object[key] }), {});
@@ -80,4 +81,47 @@ module.exports.deletePushToken = async ({ token, provider, userId }) => {
     }
 
     return { deleteCount };
+};
+
+
+module.exports.insertUserMsgPreference = async (userId, preferences) => {
+    const insertionObject = { systemWideUserId: userId, ...preferences };
+    const objectKeys = Object.keys(insertionObject);
+
+    const insertQuery = `insert into ${config.get('tables.msgPrefsTable')} (${opsUtil.extractQueryClause(objectKeys)}) values %L returning creation_time`;
+    
+    const resultOfInsertion = await rdsConnection.insertRecords(insertQuery, opsUtil.extractColumnTemplate(objectKeys), [insertionObject]);
+    const insertionRows = resultOfInsertion.rows;
+    return { insertionTime: moment(insertionRows[0]['creation_time']) };
+};
+
+module.exports.updateUserMsgPreference = async (userId, valuesToUpdate) => {
+    const updateDef = {
+        table: config.get('tables.msgPrefsTable'),
+        key: { systemWideUserId: userId },
+        value: valuesToUpdate,
+        returnClause: 'updated_time'
+    };
+
+    const resultOfUpdate = await rdsConnection.updateRecordObject(updateDef);
+    return { updatedTime: moment(resultOfUpdate[0]['updated_time']) };
+};
+
+module.exports.findNoPushUsers = async (userIds) => {
+    const query = `select system_wide_user_id from message_data.user_message_preference where ` +
+        `system_wide_user_id in (${opsUtil.extractArrayIndices(userIds)}) and halt_push_messages = true`;
+    const fetchedRows = await rdsConnection.selectQuery(query, userIds);
+
+    if (!Array.isArray(fetchedRows) || fetchedRows.length === 0) {
+        return [];
+    }
+
+    return fetchedRows.map((row) => row['system_wide_user_id']);
+};
+
+module.exports.fetchUserMsgPrefs = async (userId) => {
+    const query = `select * from ${config.get('tables.msgPrefsTable')} where system_wide_user_id = $1`;
+    const fetchedRow = await rdsConnection.selectQuery(query, [userId]);
+
+    return Array.isArray(fetchedRow) && fetchedRow.length > 0 ? camelCaseKeys(fetchedRow[0]) : null;
 };

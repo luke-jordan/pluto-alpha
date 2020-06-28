@@ -1,15 +1,16 @@
 'use strict';
 
-const config = require('config');
 const logger = require('debug')('jupiter:messaging:push');
+const config = require('config');
+const uuid = require('uuid');
 
 const publisher = require('publish-common');
-const opsUtil = require('ops-util-common');
+// const opsUtil = require('ops-util-common');
 
 const stringify = require('json-stable-stringify');
 const striptags = require('striptags');
 
-const rdsMainUtil = require('./persistence/rds.pushtokens');
+const rdsMainUtil = require('./persistence/rds.pushsettings');
 const rdsPickerUtil = require('./persistence/rds.usermessages');
 
 const msgUtil = require('./msg.util');
@@ -21,96 +22,43 @@ const expo = new Expo();
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-/**
- * This function inserts a push token object into RDS. It requires that the user calling this function also owns the token.
- * An evaluation of the requestContext is run prior to token manipulation. If request context evaluation fails access is forbidden.
- * Non standared propertied are ignored during the assembly of the persistable token object.
- * @param {object} event An object containing the users id, push token provider, and the push token. Details below.
- * @property {string} userId The push tokens owner.
- * @property {string} provider The push tokens provider.
- * @property {string} token The push token.
- */
-module.exports.managePushToken = async (event) => {
-    try {
-        const userDetails = msgUtil.extractUserDetails(event);
-        logger('User details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-
-        const params = msgUtil.extractEventBody(event);
-        logger('Got http method: ', event.httpMethod, 'and params: ', params);
-
-        if (event.httpMethod === 'DELETE') {
-            return exports.deletePushToken(event);
-        }
-
-        const pushToken = await rdsMainUtil.getPushTokens([userDetails.systemWideUserId], params.provider);
-        if (typeof pushToken === 'object' && Object.keys(pushToken).length > 0) {
-            const deletionResult = await rdsMainUtil.deletePushToken(params.provider, userDetails.systemWideUserId); // replace with new token?
-            logger('Push token deletion resulted in:', deletionResult);
-        }
-
-        const persistablePushToken = { 
-            userId: userDetails.systemWideUserId,
-            pushProvider: params.provider,
-            pushToken: params.token
-        };
-
-        logger('Sending to RDS: ', persistablePushToken);
-        const insertionResult = await rdsMainUtil.insertPushToken(persistablePushToken);
-        return { statusCode: 200, body: JSON.stringify(insertionResult[0]) }; // wrap response?
-
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return msgUtil.wrapHttpResponse(err.message, 500);
-    }
-};
-
-/**
- * This function accepts a token provider and its owners user id. It then searches for the associated persisted token object and deletes it from the 
- * database. As during insertion, only the tokens owner can execute this action. This is implemented through request context evaluation, where the userId
- * found within the requestContext object must much the value of the tokens owner user id.
- * @param {object} event An object containing the request context object and a body object. The body contains the users system wide id and the push tokens provider.
- * @property {string} userId The tokens owner user id.
- * @property {string} provider The tokens provider.
- */
-module.exports.deletePushToken = async (event) => {
-    try {
-        const userDetails = msgUtil.extractUserDetails(event);
-        logger('User details: ', userDetails);
-        if (!userDetails) {
-            return { statusCode: 403 };
-        }
-        const params = msgUtil.extractEventBody(event);
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'userId')) {
-            return { statusCode: 403 };
-        }
-        
-        const relevantUserId = params.userId || userDetails.systemWideUserId;
-        const deleteParams = Reflect.has(params, 'token') ? { token: params.token, userId: relevantUserId } 
-            : { provider: params.provider, userId: relevantUserId }; 
-        const deletionResult = await rdsMainUtil.deletePushToken(deleteParams);
-        logger('Push token deletion resulted in:', deletionResult);
-        
-        return {
-            statusCode: 200,
-            body: JSON.stringify({ result: 'SUCCESS', details: deletionResult })
-        };
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return msgUtil.wrapHttpResponse(err.message, 500);
-    }
-};
-
-// And this is the function that sends out all pending push notifications, it can either receive 
+// These are the functions that sends out all pending push notifications, it can either receive 
 // an instruction with a generic set of messages, or if it is run without parameters it will scan
 // the user message table and find all the notifications that are pending a send, assemble their
 // messages, and send them all out (meant to run once every minute). As usual, helper methods first
+
 const pickMessageBody = async (msg) => {
     const assembledMsg = await msgPicker.assembleMessage(msg);
     return { destinationUserId: msg.destinationUserId, ...assembledMsg };
 };
+
+const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, title, channel }) => (
+    publisher.publishUserEvent(destinationUserId, 'MESSAGE_SENT', { context: { title, instructionId, messageId, channel }})
+);
+
+const filterAndMarkMessagesToSend = async (channel, pendingMessages) => {
+    // since the preference is pulled from left join to table
+    const blockedMessageIds = pendingMessages.filter((msg) => msg.haltPushMessages).map((msg) => msg.messageId);
+    if (blockedMessageIds.length > 0) {
+        await rdsPickerUtil.bulkUpdateStatus(blockedMessageIds, 'BLOCKED');
+    }
+
+    const messagesToSend = pendingMessages.filter((msg) => !msg.haltPushMessages);
+    if (messagesToSend.length === 0) {
+        return messagesToSend;
+    }
+
+    const messageIds = messagesToSend.map((msg) => msg.messageId);
+    logger('Alright, processing messages, for channel: ', channel, ' with IDs:', messageIds);
+    const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
+    logger('State lock done? : ', stateLock);
+
+    return messagesToSend;
+};
+
+// /////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////// PN HANDLING /////////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////
 
 const chunkAndSendMessages = async (messages) => {
     const chunks = expo.chunkPushNotifications(messages);
@@ -138,26 +86,22 @@ const chunkAndSendMessages = async (messages) => {
     };
 };
 
-const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, title, channel }) => (
-    publisher.publishUserEvent(destinationUserId, 'MESSAGE_SENT', { context: { title, instructionId, messageId, channel }})
-);
-
 const sendPendingPushMsgs = async () => {
     const switchedOn = config.has('picker.push.running') && config.get('picker.push.running');
     if (!switchedOn) {
         return { channel: 'PUSH', result: 'TURNED_OFF' };
     }
 
-    const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('PUSH');
-    if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
+    const pendingMessages = await rdsPickerUtil.getPendingOutboundMessages('PUSH');
+    if (!Array.isArray(pendingMessages) || pendingMessages.length === 0) {
         return { channel: 'PUSH', result: 'NONE_PENDING', numberSent: 0 };
     }
 
-    const messageIds = messagesToSend.map((msg) => msg.messageId);
-    logger('Alright, processing messages: ', messageIds);
-    const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-    logger('State lock done? : ', stateLock);
-
+    const messagesToSend = await filterAndMarkMessagesToSend('PUSH', pendingMessages);
+    if (messagesToSend.length === 0) {
+        return { channel: 'PUSH', result: 'SUCCESS', numberSent: 0 };
+    }
+    
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
         const msgTokens = await rdsMainUtil.getPushTokens(destinationUserIds);
@@ -179,7 +123,7 @@ const sendPendingPushMsgs = async () => {
         // note: strictly speaking, we should only update messages that survived the filter, i.e., 
         // where the user had a valid token. but this will muddy things quite a lot later. so we are 
         // not going to do it for now ... we might, later
-        const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENT');
+        const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(messagesToSend.map(({ messageId }) => messageId), 'SENT');
         logger('Final update worked? : ', updateToProcessed);
 
         const userLogPromises = assembledMessages.map((msg) => publishMessageSentLog({ ...msg, channel: 'PUSH_NOTIFICATION' }));
@@ -196,6 +140,11 @@ const sendPendingPushMsgs = async () => {
     }
 };
 
+// ///////////////////////////////////////////////////////////////////////////////////////////
+// /////////////////////////// EMAIL HANDLER /////////////////////////////////////////////////
+// ///////////////////////////////////////////////////////////////////////////////////////////
+
+// note : as this can sometimes be changed, and quite sensitive, not using cache
 const fetchUserContactDetail = async (destinationUserId) => {
     const profileFetchLambdaInvoke = {
         FunctionName: config.get('lambdas.fetchProfile'),
@@ -280,15 +229,16 @@ const handleLogPublishing = async ({ sentMessages, rawMessages, emailResult }) =
 // This sms message is found in the message display property (backupSms in the template)
 const sendPendingEmailMsgs = async () => {
     const batchSize = config.get('email.batchSize');
-    const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL', batchSize);
-    if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
+
+    const pendingMessages = await rdsPickerUtil.getPendingOutboundMessages('EMAIL', batchSize);
+    if (!Array.isArray(pendingMessages) || pendingMessages.length === 0) {
         return { channel: 'EMAIL', result: 'NONE_PENDING', numberSent: 0 };
     }
 
-    const messageIds = messagesToSend.map((msg) => msg.messageId);
-    logger('Alright, processing emails and SMSs: ', messageIds);
-    const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-    logger('Email state lock done? : ', stateLock ? stateLock.rowCount : false);
+    const messagesToSend = await filterAndMarkMessagesToSend('EMAIL', pendingMessages);
+    if (messagesToSend.length === 0) {
+        return { channel: 'EMAIL', result: 'SUCCESS', numberSent: 0 };
+    }
     
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
@@ -348,15 +298,18 @@ const sendPendingEmailMsgs = async () => {
     }
 };
 
-const sendEmailsToSpecificUsers = async (params) => {
-    const destinationUserIds = params.systemWideUserIds;
+// ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////// SECTION: SEND TO SPECIFIED USERS ///////////////////////////////////////////////
+// //////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+const sendEmailsToSpecificUsers = async (destinationUserIds, params) => {
     const userContactDetails = await Promise.all(destinationUserIds.map((userId) => fetchUserContactDetail(userId)));
     logger('Got mapped contacts:', userContactDetails);
 
     const messages = userContactDetails.map((contact) => {
         if (contact.emailAddress) {
             return {
-                messageId: contact.destinationUserId,
+                messageId: params.messageId || uuid(),
                 to: contact.emailAddress,
                 from: config.get('email.fromAddress'),
                 subject: params.title,
@@ -392,12 +345,12 @@ const sendEmailsToSpecificUsers = async (params) => {
     return { channel: 'EMAIL', result: 'ERR', message: JSON.stringify(resultOfSend) };
 };
 
-const generateFromSpecificMsgs = async (params) => {
-    const destinationUserIds = params.systemWideUserIds;
+const generatePNsFromSpecificMsgs = async (destinationUserIds, params) => {
     const userTokenDict = await rdsMainUtil.getPushTokens(destinationUserIds, params.provider);
     logger('Sending message per token dict: ', userTokenDict);
 
-    const messages = destinationUserIds.filter((userId) => Reflect.has(userTokenDict, userId)).
+    const messages = destinationUserIds.
+        filter((userId) => Reflect.has(userTokenDict, userId)).
         map((userId) => ({
             to: userTokenDict[userId],
             title: params.title,
@@ -407,58 +360,22 @@ const generateFromSpecificMsgs = async (params) => {
     return chunkAndSendMessages(messages);
 };
 
-/**
- * This function is responsible for sending push notifications.
- * @param {object} params An optional object containing an array of system wide user ids.
- * @property {Array} systemWideUserIds An optional array of system wide user ids who will serve as reciepients of the push notifications.
- */
-module.exports.sendPushNotifications = async (params) => {
-    try {
-        const haveSpecificIds = typeof params === 'object' && Reflect.has(params, 'systemWideUserIds');
-        logger('Sending a notification to user IDs : ', haveSpecificIds ? params.systemWideUserIds : null);
-   
-        let result = {};
-        if (typeof params === 'object' && Reflect.has(params, 'systemWideUserIds')) {
-            logger('Specific IDs provided, including messages');
-            result = await generateFromSpecificMsgs(params);
-        } else {
-            logger('No specifics given, process and send whatever is pending');
-            result = await sendPendingPushMsgs();
-        }
+const handleSpecificMessages = async (params) => {
+    // sometimes other lambdas call this with specified IDs (e.g., event-based), so need to do check
+    logger('Handling once-off specific messages with params: ', params);
+    const { route, systemWideUserIds } = params;
+    const doNotSendUsers = await rdsMainUtil.getListOfNoPushUsers(systemWideUserIds);
+    const destinationUserIds = systemWideUserIds.filter((userId) => !doNotSendUsers.includes(userId));
 
-        logger('Completed sending messages, result: ', result);
-        return result;
-        
-    } catch (err) {
-        logger('FATAL_ERROR: ', err);
-        return { channel: 'PUSH', result: 'ERR', message: err.message };
+    if (route === 'PUSH') {
+        return generatePNsFromSpecificMsgs(destinationUserIds, params);
     }
-};
-
-/**
- * This function sends email messages.
- */
-module.exports.sendEmailMessages = async (params) => {
-    try {
-        const haveSpecificIds = typeof params === 'object' && Reflect.has(params, 'systemWideUserIds');
-        logger('Sending a email to user IDs : ', haveSpecificIds ? params.systemWideUserIds : null);
-   
-        let result = {};
-        if (typeof params === 'object' && Reflect.has(params, 'systemWideUserIds')) {
-            logger('Sending emails to provided specific users');
-            result = await sendEmailsToSpecificUsers(params);
-        } else {
-            logger('No specifics given, process any pending emails');
-            result = await sendPendingEmailMsgs();
-        }
-
-        logger('Completed sending email, result: ', result);
-        return result;
-
-    } catch (err) {
-        logger('FATAL_ERROR: ', err);
-        return { channel: 'EMAIL', result: 'ERR', message: err.message };
+    
+    if (route === 'EMAIL') {
+        return sendEmailsToSpecificUsers(destinationUserIds, params); 
     }
+
+    throw Error('No route or invalid route provided');
 };
 
 /**
@@ -468,9 +385,16 @@ module.exports.sendEmailMessages = async (params) => {
  */
 module.exports.sendOutboundMessages = async (params) => {
     try {
-        const result = await Promise.all([exports.sendPushNotifications(params), exports.sendEmailMessages(params)]);
-        logger('Result of outbound messages:', result);
+        let result = {};
+        
+        if (typeof params === 'object' && Reflect.has(params, 'systemWideUserIds')) {
+            result = await handleSpecificMessages(params);
+        } else {
+            // do-not-send users filtered within pull of pending messages via join
+            result = await Promise.all([sendPendingEmailMsgs(), sendPendingPushMsgs()]);
+        }
 
+        logger('Result of outbound messages:', result);
         return result;
 
     } catch (err) {

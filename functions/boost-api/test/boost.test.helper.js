@@ -23,6 +23,7 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
 });
 
 module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole) => ({
+    httpMethod: 'GET',
     queryStringParameters: requestBody,
     requestContext: {
         authorizer: {

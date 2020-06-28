@@ -302,4 +302,79 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const expectedQuery = `select * from boost_data.boost_log where account_id = $1 and log_type = $2 and boost_id in ($3)`;
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['account-1', 'GAME_OUTCOME', 'boost-1']);
     });
+
+    it('Fetches boost along with account IDs and user IDs properly', async () => {
+        const expectedBoostQuery = 'select * from boost_data.boost where boost_id = $1';
+        const expectedAccountQuery = 'select account_id from boost_data.boost_account_status where boost_id = $1';
+        
+        queryStub.onFirstCall().resolves([{
+            'boost_id': testBoostId, 'label': 'This is a boost', 'active': true, 'creating_user_id': 'do-not-return', 
+            'start_time': testStartTime.format(), 'end_time': testEndTime.format(),
+            'status_conditions': { REDEEMED: ['something'] }, 'reward_parameters': { rewardType: 'POOLED' },
+            'boost_amount': 100, 'boost_unit': 'WHOLE_CURRENCY', 'boost_currency': 'ZAR',
+            'flags': ['FRIEND_TOURNAMENT']
+        }]);
+
+        queryStub.onSecondCall().resolves([
+            { 'account_id': 'account-1' }, { 'account_id': 'account-2' }
+        ]);
+
+        const fetchedBoost = await rds.fetchBoostDetails(testBoostId, true);
+        expect(fetchedBoost).to.deep.equal({
+            boostId: testBoostId, label: 'This is a boost', 
+            active: true, startTime: moment(testStartTime.format()), endTime: moment(testEndTime.format()),
+            statusConditions: { REDEEMED: ['something'] }, rewardParameters: { rewardType: 'POOLED' },
+            boostAmount: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
+            flags: ['FRIEND_TOURNAMENT'],
+            accountIds: ['account-1', 'account-2']
+        });
+
+        expect(queryStub).to.have.been.calledTwice;
+        expect(queryStub).to.have.been.calledWithExactly(expectedBoostQuery, [testBoostId]);
+        expect(queryStub).to.have.been.calledWithExactly(expectedAccountQuery, [testBoostId]);
+    });
+
+    it('Does not fetch accounts if not asked', async () => {
+
+        queryStub.onFirstCall().resolves([{
+            'boost_id': testBoostId, 'label': 'This is a boost', 'active': true, 
+            'start_time': testStartTime.format(), 'end_time': testEndTime.format(),
+            'status_conditions': { REDEEMED: ['something'] },
+            'boost_amount': 100, 'boost_unit': 'WHOLE_CURRENCY', 'boost_currency': 'ZAR'
+        }]);
+
+        const fetchedBoost = await rds.fetchBoostDetails(testBoostId);
+        expect(fetchedBoost).to.deep.equal({
+            boostId: testBoostId, label: 'This is a boost', 
+            active: true, startTime: moment(testStartTime.format()), endTime: moment(testEndTime.format()),
+            statusConditions: { REDEEMED: ['something'] }, rewardParameters: {},
+            boostAmount: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
+            flags: []
+        });
+
+        expect(queryStub).to.have.been.calledOnce;
+        expect(queryStub).to.have.been.calledWithExactly('select * from boost_data.boost where boost_id = $1', [testBoostId]);
+    });
+
+    it('Fetches friend tournament logs appropriately', async () => {
+        const expectedQuery = `select boost_data.boost_log.log_context, account_data.core_account_ledger.owner_user_id from ` +
+            `boost_data.boost_log inner join account_data.core_account_ledger on ` +
+            `boost_data.boost_log.account_id = account_data.core_account_ledger.account_id where ` +
+            `boost_id = $1 and log_type = $2`;
+
+        const mockRow = (userId, percentDestroyed) => ({
+            'owner_user_id': userId,
+            'log_context': { percentDestroyed } 
+        });
+        queryStub.resolves([mockRow('user-1', 45), mockRow('user-2', 65), mockRow('user-3', 25)]);
+
+        const tournamentScores = await rds.fetchBoostScoreLogs(testBoostId);
+        expect(tournamentScores).to.deep.equal([
+            { userId: 'user-1', gameScore: 45 },
+            { userId: 'user-2', gameScore: 65 },
+            { userId: 'user-3', gameScore: 25}
+        ]);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testBoostId, 'GAME_RESPONSE']);
+    });
 });

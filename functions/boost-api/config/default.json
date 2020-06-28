@@ -9,6 +9,17 @@
         "password": "pwd_for_boost_worker",
         "port" :"5430"
     },
+    "cache": {
+        "config": {
+        },
+        "prefix": {
+            "accountId": "ACCOUNT_ID",
+            "profile": "FRIEND_PROFILE"
+        },
+        "ttl": {
+            "accountId": 3600
+        }
+    },
     "time": {
         "defaultEnd": {
             "number": "50",
