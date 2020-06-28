@@ -5,8 +5,19 @@ const moment = require('moment');
 
 const util = require('ops-util-common');
 
+// by far the most common and plentiful at present
+const SAVE_CONDITIONS = [
+    'save_event_greater_than',
+    'save_completed_by',
+    'first_save_by',
+    'first_save_above',
+    'save_tagged_with',
+    'balance_crossed_major_digit',
+    'balance_crossed_abs_target'
+];
+
 const EVENT_TYPE_CONDITION_MAP = {
-    'SAVING_PAYMENT_SUCCESSFUL': ['save_event_greater_than', 'save_completed_by', 'first_save_by', 'first_save_above', 'save_tagged_with', 'balance_crossed_major_digit'],
+    'SAVING_PAYMENT_SUCCESSFUL': SAVE_CONDITIONS,
     'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
     'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above'],
     'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N'],
@@ -50,6 +61,12 @@ const evaluateCrossedDigit = (parameterValue, eventContext) => {
 
     return postSaveBalance.amount >= preSaveLevelUp;
 };
+
+const evaluateCrossedTarget = (parameterValue, eventContext) => (
+    safeEvaluateAbove(eventContext, 'postSaveBalance', parameterValue) &&
+    typeof eventContext.preSaveBalance === 'string' &&
+    !safeEvaluateAbove(eventContext, 'preSaveBalance', parameterValue) 
+);
 
 const evaluateWithdrawal = (parameterValue, eventContext) => {
     const timeThreshold = moment(parseInt(parameterValue, 10));
@@ -163,6 +180,8 @@ module.exports.testCondition = (event, statusCondition) => {
             return safeEvaluateAbove(eventContext, 'withdrawalAmount', 0) && evaluateWithdrawal(parameterValue, event.eventContext);
         case 'balance_crossed_major_digit':
             return evaluateCrossedDigit(parameterValue, eventContext);
+        case 'balance_crossed_abs_target':
+            return evaluateCrossedTarget(parameterValue, eventContext);
         
         // game conditions
         case 'number_taps_greater_than':

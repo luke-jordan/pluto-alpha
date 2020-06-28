@@ -14,6 +14,7 @@ const sleep = require('util').promisify(setTimeout);
 const s3 = new AWS.S3();
 
 const SUCCESS_RESPONSES = [200, 201];
+const DO_NOT_RETRY_CODES = [400, 404, 500];
 
 const BANK_BRANCH_CODES = {
     'FNB': '250655',
@@ -60,9 +61,9 @@ const executeRequestWithRetry = async (options, retryStatus) => {
         logger('FinWorks response: ', response.toJSON());
         return response;
     } catch (err) {
-        // first we check if the error has a status code and that is 500, in which case we do not retry
-        if (!opsUtil.isObjectEmpty(err) && err.statusCode === 500) {
-            logger('500 error so do not retry, just propogate/alert');
+        // first we check if the error has a status code and that is 400 500, in which case we do not retry
+        if (!opsUtil.isObjectEmpty(err) && DO_NOT_RETRY_CODES.includes(err.statusCode)) {
+            logger('400 or 500 error so do not retry, just propogate/alert');
             throw err;
         }
 

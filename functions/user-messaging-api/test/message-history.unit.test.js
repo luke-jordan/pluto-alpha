@@ -27,6 +27,9 @@ const handler = proxyquire('../message-picking-handler', {
     './persistence/rds.usermessages': {
         'fetchUserHistoricalMessages': getUserMessagesStub
     },
+    'dynamo-common': {
+        '@noCallThru': true
+    },
     '@noCallThru': true
 });
 

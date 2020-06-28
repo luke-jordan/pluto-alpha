@@ -13,6 +13,8 @@ const persistence = require('./persistence/rds');
 const dynamodb = require('./persistence/dynamodb');
 
 const DecimalLight = require('decimal.js-light');
+
+const DEFAULT_UNIT = 'HUNDREDTH_CENT';
 const FIVE_YEARS = 5;
 
 const Redis = require('ioredis');
@@ -263,7 +265,7 @@ module.exports.setWithdrawalAmount = async (event) => {
 
         // do a check first, before proceeding onwards
         const { systemWideUserId } = authParams;
-        logger('Setting withdrawal amount for user: ', systemWideUserId);
+        logger('Setting withdrawal amount for user: ', systemWideUserId, ' with params: ', event.body);
 
         const bankVerificationStatus = await checkBankVerification(systemWideUserId);
         if (bankVerificationStatus.result === 'FAILED') {
@@ -290,8 +292,12 @@ module.exports.setWithdrawalAmount = async (event) => {
             return invalidRequestResponse('Error, trying to withdraw more than available');
         }
         
-        // make sure the amount is negative (as that makes the sums etc work)
-        withdrawalInformation.amount = -Math.abs(withdrawalInformation.amount);
+        // make sure the amount is negative (as that makes the sums etc work), and round for occasional floating point errors in here
+       const convertedAmount = opsUtil.convertToUnit(withdrawalInformation.amount, withdrawalInformation.unit, DEFAULT_UNIT);
+       
+        withdrawalInformation.amount = -Math.round(Math.abs(convertedAmount));
+        withdrawalInformation.unit = DEFAULT_UNIT;
+
         withdrawalInformation.transactionType = 'WITHDRAWAL';
         withdrawalInformation.settlementStatus = 'INITIATED';
         withdrawalInformation.initiationTime = moment();

@@ -224,6 +224,23 @@ module.exports.countTransactionsBySameAccount = async (transactionId) => {
     return parseInt(resultOfQuery[0]['count'], 10);
 };
 
+const assembleAccountLog = ({ adminUserId, accountId, logProperties }) => {
+    const logObject = {
+        logId: uuid(),
+        creatingUserId: adminUserId,
+        accountId: accountId,
+        ...logProperties
+    };
+
+    const objectKeys = Object.keys(logObject);
+    const columnNames = objectKeys.map((key) => decamelize(key)).join(', ');
+    const columnTemplate = objectKeys.map((key) => `\${${key}}`).join(', ');
+
+    const queryTemplate = `insert into ${config.get('tables.accountLogTable')} (${columnNames}) values %L returning creation_time`;
+
+    return { queryTemplate, columnTemplate, rows: [logObject] };
+};
+
 module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId, logType, logContext }) => {
     let relevantAccountId = accountId;
     if (!relevantAccountId) {
@@ -231,25 +248,19 @@ module.exports.insertAccountLog = async ({ transactionId, accountId, adminUserId
         relevantAccountId = txDetails.accountId;
     }
 
-    const logObject = {
-        logId: uuid(),
-        creatingUserId: adminUserId,
-        accountId: relevantAccountId,
+    const logProperties = {
         transactionId,
         logType,
         logContext
     };
 
-    const objectKeys = Object.keys(logObject);
-    const columnNames = objectKeys.map((key) => decamelize(key)).join(', ');
-    const columnTemplate = objectKeys.map((key) => `\${${key}}`).join(', ');
-
-    const insertQuery = `insert into ${config.get('tables.accountLogTable')} (${columnNames}) values %L returning creation_time`;
+    const { queryTemplate: insertQuery, columnTemplate, rows: logRows } = 
+        assembleAccountLog({ adminUserId, accountId: relevantAccountId, logProperties });
     
-    logger('Inserting log object: ', logObject);
+    logger('Inserting log object: ', logRows);
     logger('Sending in insertion query: ', insertQuery, ' with column template: ', columnTemplate);
     
-    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [logObject]);
+    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, logRows);
     logger('Result of insertion: ', resultOfInsert);
 
     return resultOfInsert;
@@ -334,4 +345,36 @@ module.exports.updateBsheetTag = async ({ accountId, tagPrefix, newIdentifier })
     logger('FATAL_ERROR: User admin balance sheet tag update failed');
 
     return null;
+};
+
+module.exports.getAccountWithFlags = async (systemWideUserId) => {
+    const query = `select account_id, flags, tags from ${config.get('tables.accountTable')} where owner_user_id = $1`;
+    const queryResult = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    if (!Array.isArray(queryResult) || queryResult.length !== 1) { // adjust when switch on multi-account
+        throw Error('User has no or multiple accounts');
+    }
+
+    return camelCaseKeys(queryResult[0]);
+};
+
+module.exports.updateAccountFlags = async ({ accountId, adminUserId, newFlags, oldFlags }) => {
+    const accountUpdateDef = {
+        table: config.get('tables.accountTable'),
+        key: { accountId },
+        value: { flags: newFlags },
+        returnClause: 'updated_time'
+    };
+    logger('Assembled update def: ', accountUpdateDef);
+
+    const logProperties = {
+        logType: 'ADMIN_UPDATED_FLAGS',
+        logContext: { newFlags, oldFlags }
+    };
+
+    const accountLogDef = assembleAccountLog({ adminUserId, accountId, logProperties });
+    logger('Assembled account log def, updating flags: ', accountLogDef);
+
+    const result = await rdsConnection.multiTableUpdateAndInsert([accountUpdateDef], [accountLogDef]);
+    
+    return moment(result[0][0]['updated_time']);
 };

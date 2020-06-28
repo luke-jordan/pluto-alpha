@@ -149,6 +149,15 @@ variable "events_email_receipients" {
     }
 }
 
+variable "support_email_recipients" {
+    description = "Recipient list for customer relevant emails eg pending"
+    type = "map"
+    default = {
+        "staging" = ["luke@jupitersave.com"]
+        "master" = ["avish@jupitersave.com"]
+    }
+}
+
 # todo : make client dependent
 variable "events_phone_reciepients" {
     description = "Recipient list for account opened SMSs"

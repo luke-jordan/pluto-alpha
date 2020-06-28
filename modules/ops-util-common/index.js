@@ -249,7 +249,7 @@ module.exports.extractPathAndParams = (event) => {
 };
 
 // //////////////////////////////////////////////////////////////////////////////////////
-// ////////////////////////// QUERY HELPERS ////////////////////////////////////////////
+// ////////////////////////// QUERY & MAPPING HELPERS //////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////
 
 module.exports.extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) => `$${index + startingIndex}`).join(', ');
@@ -259,3 +259,5 @@ module.exports.extractArrayIndices = (array, startingIndex = 1) => array.map((_,
 module.exports.extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
 module.exports.extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
+
+module.exports.convertRowsToMap = (rows, indexField) => rows.reduce((obj, row) => ({ ...obj, [row[indexField]]: row }), {});

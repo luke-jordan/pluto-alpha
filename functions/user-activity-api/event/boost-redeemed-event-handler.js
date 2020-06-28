@@ -5,6 +5,7 @@ const config = require('config');
 
 const util = require('ops-util-common');
 
+// todo : make this idempotent by tagging the transaction
 module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, lambda }) => {
     logger('Handling boost redeemed event: ', eventBody);
     const { accountId, boostAmount } = eventBody.context;

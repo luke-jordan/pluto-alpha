@@ -7,6 +7,7 @@
         "messageInstructionTable": "message_data.message_instruction",
         "userMessagesTable": "message_data.user_message",
         "pushTokenTable": "message_data.user_push_token",
+        "msgPrefsTable": "message_data.user_message_preference",
         "boostAccountTable": "boost_data.boost_account_status",
         "transactionLedger": "transaction_data.core_transaction_ledger",
         "audienceTable": "audience_data.audience",

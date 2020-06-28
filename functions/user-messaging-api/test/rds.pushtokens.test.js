@@ -27,7 +27,7 @@ class MockRdsConnection {
     }
 }
 
-const rdsUtil = proxyquire('../persistence/rds.pushtokens', {
+const rdsUtil = proxyquire('../persistence/rds.pushsettings', {
     'rds-common': MockRdsConnection,
     '@noCallThru': true
 });

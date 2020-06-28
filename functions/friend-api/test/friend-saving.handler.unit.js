@@ -59,6 +59,34 @@ describe('*** UNIT TEST COLLECTIVE SAVING, BASIC OPERATIONS, POSTS ***', () => {
 
     beforeEach(() => helper.resetStubs(extractFriendIdsStub, persistFriendSavingStub, updateSavingPoolStub, fetchSavingPoolStub, publishSingleEventStub, publishMultiEventStub));
 
+    it('Returns error on empty name', async () => {
+        const testBody = { 
+            name: ' ',
+            target: { amount: 10, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
+            friendships: []
+        };
+
+        const testEvent = helper.wrapParamsWithPath(testBody, 'create', testUserId);
+        const resultOfAttempt = await handler.writeSavingPool(testEvent);
+
+        const bodyMsg = JSON.stringify({ result: 'ERROR', message: 'Saving pool must have a non-empty name' });
+        expect(resultOfAttempt).to.deep.equal({ statusCode: 400, body: bodyMsg });
+    });
+
+    it('Returns error on zero target', async () => {
+        const testBody = {
+            name: 'Bad',
+            target: { amount: 0, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
+            friendships: []
+        };
+
+        const testEvent = helper.wrapParamsWithPath(testBody, 'create', testUserId);
+        const resultOfAttempt = await handler.writeSavingPool(testEvent);
+
+        const bodyMsg = JSON.stringify({ result: 'ERROR', message: 'Saving pool must have a non-zero target' });
+        expect(resultOfAttempt).to.deep.equal({ statusCode: 400, body: bodyMsg });
+    });
+
     it('Unit test creating a friend savings pot', async () => {
         const mockFriendships = ['relationship-1', 'relationship-2', 'relationship-3'];
         const mockUsers = ['user-1', 'user-2', 'user-3'];

@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:user-activity-withdrawal-test');
+const logger = require('debug')('jupiter:user-activity-withdrawal:test');
 const config = require('config');
 const uuid = require('uuid');
 const moment = require('moment');
@@ -443,7 +443,6 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         );
     });
 
-
     it('Sets withdrawal amount', async () => {
         const event = {
             requestContext: {
@@ -514,6 +513,48 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         const expectedBankRefParams = { bankRefStem: 'JUPSAVER31', priorSaveCount: 15 };
         expect(generateBankRefStub).to.have.been.calledOnceWithExactly(expectedBankRefParams);
         expect(fetchFloatVarsForBalanceCalcStub).to.have.been.calledOnceWithExactly(testClientId, testFloatId);
+        // expect(addTransactionToAccountStub).to.have.been.calledOnceWithExactly(getOwnerArgs);
+    });
+
+    it('Sets withdrawal amount, converting units and rounding appropriately', async () => {
+        const event = {
+            requestContext: {
+                authorizer: { role: 'ORDINARY_USER', systemWideUserId: testUserId }
+            },
+            body: JSON.stringify({ accountId: testAccountId, amount: -250100.00000000003, unit: 'HUNDREDTH_CENT', currency: 'USD' })
+        };
+
+        // const verificationPayload = { result: 'VERIFIED' };
+        const mockJobIdLambdaResponse = { StatusCode: 200, Payload: JSON.stringify({ result: 'VERIFIED' }) };
+
+        momentStub.returns({ add: () => testInitiationTime });
+        redisGetStub.resolves(JSON.stringify(testBankDetails));
+        lamdbaInvokeStub.returns({ promise: () => mockJobIdLambdaResponse });
+        
+        sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
+        fetchBankRefInfoStub.resolves(testBankRefInfo);
+        generateBankRefStub.resolves('JUPSAVER-16');
+        addTransactionToAccountStub.resolves({ transactionDetails: [{ accountTransactionId: testTransactionId }] });
+
+        // calcs are tested above, not point here
+        fetchFloatVarsForBalanceCalcStub.withArgs(testClientId, testFloatId).resolves({
+            accrualRateAnnualBps: 250,
+            bonusPoolShareOfAccrual: 0.1,
+            clientShareOfAccrual: 0.1,
+            prudentialFactor: 0.1
+        });
+
+        const resultOfSetting = await handler.setWithdrawalAmount(event);
+        logger('Result of setting:', resultOfSetting);
+
+        const resultBody = helper.standardOkayChecks(resultOfSetting);
+        expect(resultBody).to.have.property('transactionId', testTransactionId);
+
+        const addTransactionArgs = addTransactionToAccountStub.getCall(0).args;
+        // logger('Args: ', addTransactionArgs);
+        const transactionDetails = addTransactionArgs[0];
+        expect(transactionDetails.amount).to.equal(-250100);
         // expect(addTransactionToAccountStub).to.have.been.calledOnceWithExactly(getOwnerArgs);
     });
 
