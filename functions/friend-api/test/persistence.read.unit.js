@@ -108,7 +108,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
         expect(redisGetStub).to.have.been.called;
-        expect(redisSetStub).to.have.been.calledOnceWithExactly(`FRIENDS_PROFILE::${testSystemId}`, JSON.stringify(expectedUserProfile), 'EX', 25200);
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(`FRIEND_PROFILE::${testSystemId}`, JSON.stringify(expectedUserProfile), 'EX', 25200);
     });
 
     it('Fetches user profile from db, given account ids', async () => {
@@ -144,7 +144,7 @@ describe('*** UNIT TEST GET PROFILE FUNCTIONS ***', () => {
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal(expectedUserProfile);
         expect(redisGetStub).to.not.have.been.called;
-        expect(redisSetStub).to.have.been.calledOnceWithExactly(`FRIENDS_PROFILE::${testSystemId}`, JSON.stringify(expectedUserProfile), 'EX', 25200);
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(`FRIEND_PROFILE::${testSystemId}`, JSON.stringify(expectedUserProfile), 'EX', 25200);
     });
 
     it('Fetches user user from DB, given account id', async () => {

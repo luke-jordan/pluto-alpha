@@ -5,7 +5,7 @@ const logger = require('debug')('jupiter:messaging:prefs');
 
 const publisher = require('publish-common');
 
-const rdsMainUtil = require('./persistence/rds.pushtokens');
+const rdsMainUtil = require('./persistence/rds.pushsettings');
 
 const opsUtil = require('ops-util-common');
 const msgUtil = require('./msg.util');

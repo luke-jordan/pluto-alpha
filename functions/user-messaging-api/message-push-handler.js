@@ -1,7 +1,8 @@
 'use strict';
 
-const config = require('config');
 const logger = require('debug')('jupiter:messaging:push');
+const config = require('config');
+const uuid = require('uuid');
 
 const publisher = require('publish-common');
 // const opsUtil = require('ops-util-common');
@@ -9,7 +10,7 @@ const publisher = require('publish-common');
 const stringify = require('json-stable-stringify');
 const striptags = require('striptags');
 
-const rdsMainUtil = require('./persistence/rds.pushtokens');
+const rdsMainUtil = require('./persistence/rds.pushsettings');
 const rdsPickerUtil = require('./persistence/rds.usermessages');
 
 const msgUtil = require('./msg.util');
@@ -288,7 +289,7 @@ const sendEmailsToSpecificUsers = async (destinationUserIds, params) => {
     const messages = userContactDetails.map((contact) => {
         if (contact.emailAddress) {
             return {
-                messageId: contact.destinationUserId,
+                messageId: params.messageId || uuid(),
                 to: contact.emailAddress,
                 from: config.get('email.fromAddress'),
                 subject: params.title,
@@ -328,7 +329,8 @@ const generatePNsFromSpecificMsgs = async (destinationUserIds, params) => {
     const userTokenDict = await rdsMainUtil.getPushTokens(destinationUserIds, params.provider);
     logger('Sending message per token dict: ', userTokenDict);
 
-    const messages = destinationUserIds.filter((userId) => Reflect.has(userTokenDict, userId)).
+    const messages = destinationUserIds.
+        filter((userId) => Reflect.has(userTokenDict, userId)).
         map((userId) => ({
             to: userTokenDict[userId],
             title: params.title,
@@ -336,6 +338,24 @@ const generatePNsFromSpecificMsgs = async (destinationUserIds, params) => {
     }));
 
     return chunkAndSendMessages(messages);
+};
+
+const handleSpecificMessages = async (params) => {
+    // sometimes other lambdas call this with specified IDs (e.g., event-based), so need to do check
+    logger('Handling once-off specific messages with params: ', params);
+    const { route, systemWideUserIds } = params;
+    const doNotSendUsers = await rdsMainUtil.getListOfNoPushUsers(systemWideUserIds);
+    const destinationUserIds = systemWideUserIds.filter((userId) => !doNotSendUsers.includes(userId));
+
+    if (route === 'PUSH') {
+        return generatePNsFromSpecificMsgs(destinationUserIds, params);
+    }
+    
+    if (route === 'EMAIL') {
+        return sendEmailsToSpecificUsers(destinationUserIds, params); 
+    }
+
+    throw Error('No route or invalid route provided');
 };
 
 /**
@@ -348,12 +368,7 @@ module.exports.sendOutboundMessages = async (params) => {
         let result = {};
         
         if (typeof params === 'object' && Reflect.has(params, 'systemWideUserIds')) {
-            const doNotSendUsers = await rdsMainUtil.getListOfNoPushUsers();
-            const destinationUserIds = params.systemWideUserIds.filter((userId) => !doNotSendUsers.includes(userId));
-            result = await Promise.all([
-                sendEmailsToSpecificUsers(destinationUserIds, params), 
-                generatePNsFromSpecificMsgs(destinationUserIds, params)
-            ]);
+            result = await handleSpecificMessages(params);
         } else {
             // do-not-send users filtered within pull of pending messages via join
             result = await Promise.all([sendPendingEmailMsgs(), sendPendingPushMsgs()]);

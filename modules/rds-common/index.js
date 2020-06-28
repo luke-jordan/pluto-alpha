@@ -294,6 +294,7 @@ class RdsConnection {
      * format ${column_name}, e.g., '${name}, ${email}, ${account_id}'
      * @param {array} objectArray The array of objects, each having a key that maps to the names in column template. Example:
      * [ { name: 'Test1', id: 'X'}, { name: 'Test2', id: 'Y'}])
+     * @returns {object} Raw result of query (i.e., need to extract rows if want access to return object)
      */
     async insertRecords (queryTemplate, columnTemplate, objectArray) {
         
@@ -301,9 +302,9 @@ class RdsConnection {
         
         const nestedArray = RdsConnection.compileInsertQueryString(columnTemplate, objectArray);
         
-        logger('SINGLE: Nested array: ', nestedArray);
+        // logger('SINGLE: Nested array: ', nestedArray);
         const formattedQuery = format(queryTemplate, nestedArray);
-        logger('SINGLE: Formatted query: ', formattedQuery);
+        // logger('SINGLE: Formatted query: ', formattedQuery);
 
         // const safeSlice = Math.min(10, valuesString.length);
         // logger('About to run insertion, query string: %s, and values: %s', queryTemplate, valuesString.slice(0, safeSlice));
