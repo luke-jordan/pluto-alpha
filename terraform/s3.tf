@@ -53,7 +53,7 @@ resource "aws_s3_bucket" "user_record_bucket" {
     tags = {"environment"  = "${terraform.workspace}"}
 }
 
-resource "aws_s3_bucket_public_access_block" "float_record_block" {
+resource "aws_s3_bucket_public_access_block" "user_record_block" {
   bucket = aws_s3_bucket.float_record_bucket.id
 
   block_public_acls   = true

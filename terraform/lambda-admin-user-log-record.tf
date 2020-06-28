@@ -87,10 +87,10 @@ resource "aws_iam_role_policy_attachment" "admin_user_log_fetch_file_get" {
   policy_arn = aws_iam_policy.user_record_bucket_put.arn
 }
 
-resource "aws_iam_role_policy_attachment" "admin_user_log_fetch_read" {
-  role = aws_iam_role.admin_user_log_fetch_role.name
-  policy_arn = aws_iam_policy.fetch_user_log_full.arn
-}
+# resource "aws_iam_role_policy_attachment" "admin_user_log_fetch_read" {
+#   role = aws_iam_role.admin_user_log_fetch_role.name
+#   policy_arn = aws_iam_policy.fetch_user_log_full.arn
+# }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
