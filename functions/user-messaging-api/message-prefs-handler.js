@@ -1,6 +1,6 @@
 'use strict';
 
-const config = require('config');
+// const config = require('config');
 const logger = require('debug')('jupiter:messaging:prefs');
 
 const publisher = require('publish-common');
@@ -94,7 +94,7 @@ module.exports.deletePushToken = async (event) => {
 
 module.exports.setUserMessageBlock = async (event) => {
     try {
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId')) {
             return { statusCode: 403 };
         }
 
@@ -103,24 +103,25 @@ module.exports.setUserMessageBlock = async (event) => {
 
         const systemWideUserId = params.systemWideUserId || userDetails.systemWideUserId;
         
-        const existingBlock = await rdsMainUtil.fetchUserPushPreferences([systemWideUserId]);
+        const existingBlock = await rdsMainUtil.fetchUserPushPreferences(systemWideUserId);
         const { haltPushMessages } = params;
         
-        let logContext = {};
+        const logContext = {};
         let logEventType = '';
 
         if (existingBlock) {
             const resultOfUpdate = await rdsMainUtil.updateUserMsgPreference(systemWideUserId, { haltPushMessages });
             logger('Result of updating message block: ', resultOfUpdate);
-
             logEventType = 'MESSAGE_BLOCK_UPDATED';
-            logContext.priorPreferences = existingBlock;
+            
+            const { haltPushMessages: oldBlockSetting } = existingBlock;
+            logContext.priorPreferences = { haltPushMessages: oldBlockSetting };
             logContext.newPreferences = { haltPushMessages };
         } else {
             const resultOfInsert = await rdsMainUtil.insertUserMsgPreference(systemWideUserId, { haltPushMessages });
             logger('Result of message block insertion: ', resultOfInsert);
             
-            logEventType = 'MESSAGE_BLOCK_CREATED';
+            logEventType = 'MESSAGE_BLOCK_SET';
             logContext.newPreferences = { haltPushMessages };
         }
 
@@ -129,7 +130,8 @@ module.exports.setUserMessageBlock = async (event) => {
             context: logContext
         };
 
-        publisher.publishUserEvent(systemWideUserId, 'MESSAGE_BLOCK_SET', logOptions);
+        logger('Calling publisher, with options: ', logOptions);
+        await publisher.publishUserEvent(systemWideUserId, logEventType, logOptions);
 
         return msgUtil.wrapHttpResponse({ result: 'SUCCESS' });
     } catch (err) {

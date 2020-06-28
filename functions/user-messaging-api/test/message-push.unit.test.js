@@ -543,6 +543,68 @@ describe('*** UNIT TEST PUSH AND EMAIL SCHEDULED JOB ***', async () => {
         expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
     });
 
+    it('Marks as blocked, messages that would have gone to pref set users', async () => {
+        const mockBlockedPn = { ...mockUserMessage };
+        mockBlockedPn.messageId = 'pn-to-block';
+        mockBlockedPn.destinationUserId = 'user-with-msg-block';
+        mockBlockedPn.haltPushMessages = true;
+    
+        const mockBlockedEmail = { ...mockUserMessage };
+        mockBlockedEmail.messageId = 'email-to-block';
+        mockBlockedEmail.destinationUserId = 'user-with-msg-block';
+        mockBlockedEmail.haltPushMessages = true;
+
+        getPendingOutboundMessagesStub.withArgs('PUSH').resolves([mockUserMessage, mockBlockedPn]);
+        getPendingOutboundMessagesStub.withArgs('EMAIL', BATCH_SIZE).resolves([mockBlockedEmail]);
+
+        bulkUpdateStatusStub.resolves([{ updatedTime: testUpdateTime }]);
+
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse({ statusCode: 200, body: stringify(testUserProfile) }) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse({ result: 'SUCCESS', failedMessageIds: [] })});
+        
+        assembleMessageStub.resolves(mockMessageBase);
+        publishUserEventStub.resolves({ result: 'SUCCESS' });
+
+        getPushTokenStub.resolves({ [testUserId]: persistedToken });
+        chunkPushNotificationsStub.returns(['expoChunk1']);
+        sendPushNotificationsAsyncStub.resolves(['sentTicket']);
+
+        const expectedResult = [
+            { channel: 'EMAIL', result: 'SUCCESS', numberSent: 0 },
+            { channel: 'PUSH', result: 'SUCCESS', numberSent: 1 }
+        ];
+
+        const result = await handler.sendOutboundMessages();
+        logger('result of scheduled job:', result);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedResult);
+
+        expect(getPendingOutboundMessagesStub).have.been.calledTwice;
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('PUSH');
+        expect(getPendingOutboundMessagesStub).have.been.calledWith('EMAIL', BATCH_SIZE); // lower limit here
+
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENDING');
+        expect(bulkUpdateStatusStub).to.have.been.calledWith([testMessageId], 'SENT');
+        expect(bulkUpdateStatusStub).to.have.been.calledWith(['pn-to-block'], 'BLOCKED');
+        expect(bulkUpdateStatusStub).to.have.been.calledWith(['email-to-block'], 'BLOCKED');
+        expect(bulkUpdateStatusStub.callCount).to.equal(4);
+
+        expect(assembleMessageStub).to.have.been.calledOnceWithExactly(mockUserMessage);
+        
+        const pnLogContext = { ...mockMessageBase, channel: 'PUSH_NOTIFICATION' };
+        Reflect.deleteProperty(pnLogContext, 'body');
+
+        expect(publishUserEventStub).to.have.been.calledOnce;
+        expect(publishUserEventStub).to.have.been.calledWith(testUserId, 'MESSAGE_SENT', { context: pnLogContext });
+        
+        expect(getPushTokenStub).to.have.been.calledOnceWithExactly([testUserId]);
+        expect(chunkPushNotificationsStub).to.have.been.calledOnce;
+
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledOnce;
+        expect(sendPushNotificationsAsyncStub).to.have.been.calledWith('expoChunk1');
+    });
+
     it('Sends emails to specific users', async () => {
         const testEmailProfile = { ...testUserProfile };
         const testPhoneProfile = { ...testUserProfile };

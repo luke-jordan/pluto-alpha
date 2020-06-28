@@ -36,6 +36,26 @@ const publishMessageSentLog = ({ destinationUserId, messageId, instructionId, ti
     publisher.publishUserEvent(destinationUserId, 'MESSAGE_SENT', { context: { title, instructionId, messageId, channel }})
 );
 
+const filterAndMarkMessagesToSend = async (channel, pendingMessages) => {
+    // since the preference is pulled from left join to table
+    const blockedMessageIds = pendingMessages.filter((msg) => msg.haltPushMessages).map((msg) => msg.messageId);
+    if (blockedMessageIds.length > 0) {
+        await rdsPickerUtil.bulkUpdateStatus(blockedMessageIds, 'BLOCKED');
+    }
+
+    const messagesToSend = pendingMessages.filter((msg) => !msg.haltPushMessages);
+    if (messagesToSend.length === 0) {
+        return messagesToSend;
+    }
+
+    const messageIds = messagesToSend.map((msg) => msg.messageId);
+    logger('Alright, processing messages, for channel: ', channel, ' with IDs:', messageIds);
+    const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
+    logger('State lock done? : ', stateLock);
+
+    return messagesToSend;
+};
+
 // /////////////////////////////////////////////////////////////////////////////////////////
 // /////////////////////////// PN HANDLING /////////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////
@@ -72,16 +92,16 @@ const sendPendingPushMsgs = async () => {
         return { channel: 'PUSH', result: 'TURNED_OFF' };
     }
 
-    const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('PUSH');
-    if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
+    const pendingMessages = await rdsPickerUtil.getPendingOutboundMessages('PUSH');
+    if (!Array.isArray(pendingMessages) || pendingMessages.length === 0) {
         return { channel: 'PUSH', result: 'NONE_PENDING', numberSent: 0 };
     }
 
-    const messageIds = messagesToSend.map((msg) => msg.messageId);
-    logger('Alright, processing messages: ', messageIds);
-    const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-    logger('State lock done? : ', stateLock);
-
+    const messagesToSend = await filterAndMarkMessagesToSend('PUSH', pendingMessages);
+    if (messagesToSend.length === 0) {
+        return { channel: 'PUSH', result: 'SUCCESS', numberSent: 0 };
+    }
+    
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);
         const msgTokens = await rdsMainUtil.getPushTokens(destinationUserIds);
@@ -103,7 +123,7 @@ const sendPendingPushMsgs = async () => {
         // note: strictly speaking, we should only update messages that survived the filter, i.e., 
         // where the user had a valid token. but this will muddy things quite a lot later. so we are 
         // not going to do it for now ... we might, later
-        const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENT');
+        const updateToProcessed = await rdsPickerUtil.bulkUpdateStatus(messagesToSend.map(({ messageId }) => messageId), 'SENT');
         logger('Final update worked? : ', updateToProcessed);
 
         const userLogPromises = assembledMessages.map((msg) => publishMessageSentLog({ ...msg, channel: 'PUSH_NOTIFICATION' }));
@@ -210,15 +230,15 @@ const handleLogPublishing = async ({ sentMessages, rawMessages, emailResult }) =
 const sendPendingEmailMsgs = async () => {
     const batchSize = config.get('email.batchSize');
 
-    const messagesToSend = await rdsPickerUtil.getPendingOutboundMessages('EMAIL', batchSize);
-    if (!Array.isArray(messagesToSend) || messagesToSend.length === 0) {
+    const pendingMessages = await rdsPickerUtil.getPendingOutboundMessages('EMAIL', batchSize);
+    if (!Array.isArray(pendingMessages) || pendingMessages.length === 0) {
         return { channel: 'EMAIL', result: 'NONE_PENDING', numberSent: 0 };
     }
 
-    const messageIds = messagesToSend.map((msg) => msg.messageId);
-    logger('Alright, processing emails and SMSs: ', messageIds);
-    const stateLock = await rdsPickerUtil.bulkUpdateStatus(messageIds, 'SENDING');
-    logger('Email state lock done? : ', stateLock ? stateLock.rowCount : false);
+    const messagesToSend = await filterAndMarkMessagesToSend('EMAIL', pendingMessages);
+    if (messagesToSend.length === 0) {
+        return { channel: 'EMAIL', result: 'SUCCESS', numberSent: 0 };
+    }
     
     try {
         const destinationUserIds = messagesToSend.map((msg) => msg.destinationUserId);

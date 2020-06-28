@@ -63,7 +63,7 @@ const executeRequestWithRetry = async (options, retryStatus) => {
         return response;
     } catch (err) {
         // first we check if the error has a status code and that is 400 500, in which case we do not retry
-        if (!opsUtil.isObjectEmpty(err) && DO_NOT_RETRY_CODES.includes(statusCode)) {
+        if (!opsUtil.isObjectEmpty(err) && DO_NOT_RETRY_CODES.includes(err.statusCode)) {
             logger('400 or 500 error so do not retry, just propogate/alert');
             throw err;
         }
