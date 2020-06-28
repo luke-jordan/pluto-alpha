@@ -219,7 +219,8 @@ module.exports.getPendingOutboundMessages = async (messageType, batchSize = DEFA
     const query = `select * from ${userMessageTable} left join ${userMsgPrefsTable} ` +
         `on ${userMessageTable}.destination_user_id = ${userMsgPrefsTable}.system_wide_user_id ` + 
         `where processed_status = $1 and end_time > current_timestamp and ` +
-        `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2 order by updated_time limit $3`;
+        `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2 order by ` + 
+        `${userMessageTable}.updated_time limit $3`;
     const values = ['READY_FOR_SENDING', messageType, batchSize];
     const resultOfQuery = await rdsConnection.selectQuery(query, values);
     return resultOfQuery.map((msg) => transformMsg(msg));

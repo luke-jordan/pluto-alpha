@@ -14,6 +14,7 @@ const sleep = require('util').promisify(setTimeout);
 const s3 = new AWS.S3();
 
 const SUCCESS_RESPONSES = [200, 201];
+const DO_NOT_RETRY_CODES = [400, 404, 500];
 
 const BANK_BRANCH_CODES = {
     'FNB': '250655',
@@ -30,8 +31,6 @@ const FINWORKS_NAMES = {
     'NEDBANK': 'Nedbank',
     'CAPITEC': 'Capitec'
 };
-
-const DO_NOT_RETRY_CODES = [400, 500];
 
 const fetchAccessCreds = async () => {
     const bucket = config.get('finworks.s3.bucket');

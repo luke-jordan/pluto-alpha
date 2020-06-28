@@ -17,8 +17,9 @@ const redis = new Redis(config.get('cache.config'));
 const fetchUserDefaultAccount = async (systemWideUserId) => {
     const cacheKey = `${config.get('cache.prefix.accountId')}::${systemWideUserId}`;
 
-    const cachedId = redis.get(cacheKey);
-    if (cachedId) {
+    const cachedId = await redis.get(cacheKey);
+    logger('Cached ID: ', cachedId);
+    if (typeof cachedId === 'string' && cachedId.trim().length > 0) {
         return cachedId;
     }
 
