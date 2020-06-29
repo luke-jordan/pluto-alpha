@@ -428,6 +428,19 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         expect(requestStub).to.have.not.been.called;
     });
 
+    it('Reports pending if job is pending', async () => {
+        const testEvent = {
+            operation: 'statusCheck',
+            parameters: { jobId: testJobId }
+        };
+
+        requestStub.resolves({ 'Status': 'Pending', 'Results': 'Job still pending please check again later' });
+
+        const result = await handler.handle(testEvent);
+        expect(result).to.deep.equal({ result: 'PENDING' });
+        expect(requestStub).to.have.not.been.called;
+    });
+
     it('Reports failure if bank account ID number does not match', async () => {
         const expectedRequestArgs = {
             method: 'POST',
@@ -488,7 +501,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         expect(secondResult).to.deep.equal({ result: 'FAILED', cause: 'Account does not accept credits' });
     });
 
-    it('Fails on unexpected response from third party', async () => {
+    it('Returns error on unexpected response from third party', async () => {
         const expectedRequestArgs = {
             method: 'POST',
             url: expectedUrl,

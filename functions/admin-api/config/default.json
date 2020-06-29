@@ -84,7 +84,6 @@
             "daysBack": 7
         },
         "userHistory": {
-            "eventTypes": ["USER_LOGIN", "SAVING_PAYMENT_SUCCESSFUL", "WITHDRAWAL_EVENT_CONFIRMED", "WITHDRAWAL_COMPLETED", "PASSWORD_SET", "USER_REGISTERED", "STATUS_CHANGED", "FAILED_VERIFICATION", "VERIFIED_AS_PERSON", "BOOST_REDEEMED"],
             "daysInHistory": 90
         },
         "floatAlerts": {

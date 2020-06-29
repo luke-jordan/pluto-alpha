@@ -41,6 +41,16 @@ module.exports.expectNoCalls = (...stubs) => {
     stubs.forEach((stub) => expect(stub).to.not.have.been.called);
 };
 
+module.exports.wrapEvent = (requestBody, systemWideUserId, userRole = 'ORDINARY_USER') => ({
+    body: JSON.stringify(requestBody),
+    requestContext: {
+        authorizer: {
+            systemWideUserId,
+            role: userRole
+        }
+    }
+});
+
 module.exports.standardOkayChecks = (result) => {
     expect(result).to.exist;
     expect(result).to.have.property('statusCode', 200);
