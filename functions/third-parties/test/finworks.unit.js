@@ -127,7 +127,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         logger('Investment result from third party:', resultOfInvestement);
 
         expect(resultOfInvestement).to.exist;
-        expect(resultOfInvestement).to.deep.equal({ });
+        expect(resultOfInvestement).to.deep.equal({ result: 'SUCCESS', details: {} });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -145,7 +145,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         logger('Investment result from third party:', resultOfInvestement);
 
         expect(resultOfInvestement).to.exist;
-        expect(resultOfInvestement).to.deep.equal({ });
+        expect(resultOfInvestement).to.deep.equal({ result: 'SUCCESS', details: {} });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledTwice;
     });
@@ -328,7 +328,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         logger('Investment result from third party:', resultOfTransmission);
 
         expect(resultOfTransmission).to.exist;
-        expect(resultOfTransmission).to.deep.equal({ });
+        expect(resultOfTransmission).to.deep.equal({ result: 'SUCCESS', details: {} });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
@@ -420,7 +420,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const resultOfHandler = await handler.addTransaction(saveEvent);
         logger('Investment result from third party:', resultOfHandler);
 
-        expect(resultOfHandler).to.deep.equal({ });
+        expect(resultOfHandler).to.deep.equal({ result: 'SUCCESS', details: {} });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
         
@@ -453,7 +453,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const resultOfHandler = await handler.addTransaction(saveEvent);
         logger('Boost result from third party:', resultOfHandler);
 
-        expect(resultOfHandler).to.deep.equal({ });
+        expect(resultOfHandler).to.deep.equal({ result: 'SUCCESS', details: {} });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
         
@@ -508,7 +508,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         const resultOfHandler = await handler.addTransaction(withdrawEvent);
         logger('Investment result from third party:', resultOfHandler);
 
-        expect(resultOfHandler).to.deep.equal({ });
+        expect(resultOfHandler).to.deep.equal({ result: 'SUCCESS', details: {} });
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
