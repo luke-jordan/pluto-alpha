@@ -48,9 +48,9 @@ module.exports.createSnippet = async (event) => {
             body: params.text,
             countryCode: params.countryCode,
             active: typeof params.active === 'boolean' ? params.active : true,
-            snippetPriority: params.priority || 1,
-            snippetLanguage: params.language || 'en',
-            previewMode: typeof params.preview === 'boolean' ? params.preview : true
+            snippetPriority: params.snippetPriority || 1,
+            snippetLanguage: params.snippetLanguage || 'en',
+            previewMode: typeof params.previewMode === 'boolean' ? params.previewMode : true
         };
 
         const creationResult = await persistence.addSnippet(snippet);

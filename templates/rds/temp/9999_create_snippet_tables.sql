@@ -44,3 +44,15 @@ create table if not exists snippet_data.snippet_log (
     log_type varchar(50) not null,
     log_context jsonb default '{}'
 );
+
+
+create index if not exists idx_join_snippet_id on snippet_data.snippet_user_join_table (snippet_id);
+
+revoke all on schema snippet_data from public cascade;
+
+grant usage on schema snippet_data to snippet_worker;
+
+grant select, insert, update on snippet_data.snippet to snippet_worker;
+grant select, insert, update on snippet_data.snippet_user_join_table to snippet_worker;
+grant select, insert, update on snippet_data.preview_user_table to snippet_worker;
+grant select, insert, update on snippet_data.snippet_logs to snippet_worker;

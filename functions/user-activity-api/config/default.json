@@ -17,11 +17,7 @@
         "accountLog": "account_data.account_log",
         "boostMaster": "boost_data.boost",
         "boostJoin": "boost_data.boost_account_status",
-        "clientFloatVars": "ClientFloatTable",
-        "snippetTable": "snippet_data.snippet",
-        "snippetJoinTable": "snippet_data.snippet_user_join_table",
-        "previewUserTable": "snippet_data.preview_user_table",
-        "snippetLogTable": "snippet_data.snippet_log"
+        "clientFloatVars": "ClientFloatTable"
     },
     "db": {
         "user": "save_tx_api_worker",
@@ -76,8 +72,7 @@
         "userEvents": {
             "topicArn": "<<override here>>",
             "processingDlq": "<<insert_here>>",
-            "withdrawalTopic": "<<insert_here>>",
-            "snippetQueue": "<<insert_here>>"
+            "withdrawalTopic": "<<insert_here>>"
         },
         "processingLambdas": {
             "boosts": "boost_event_process",

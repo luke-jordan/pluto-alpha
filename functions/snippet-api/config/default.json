@@ -1,9 +1,9 @@
 {
     "db": {
-        "user": "save_tx_api_worker",
+        "user": "snippet_worker",
         "host": "localhost",
         "database": "jupiter",
-        "password": "pwd_for_transaction_api",
+        "password": "pwd_for_snippet_api",
         "port" :"5430"
     },
     "tables": {
