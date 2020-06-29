@@ -135,8 +135,12 @@ module.exports.initialize = async (event) => {
 };
 
 const doesResponseVerify = (response) => {
+    if (response.Status === 'Pending') {
+        return { result: 'PENDING' };
+    }
+
     if (response.Status !== 'Success') {
-        return { result: 'FAILED', cause: 'UNKNOWN' };
+        return { result: 'ERROR', cause: 'Failure by third party service' };
     }
 
     const responseDetails = response['Results'];
@@ -165,7 +169,7 @@ module.exports.checkStatus = async (event) => {
     try {
         const mockVerifyOn = config.has('mock.enabled') && typeof config.get('mock.enabled') === 'boolean' && config.get('mock.enabled');
         if (mockVerifyOn) {
-            const mockResult = Boolean(config.get('mock.result'));
+            const mockResult = config.get('mock.result');
             logger('Mock result in check status: ', mockResult);
             return { result: mockResult };
         }
@@ -185,7 +189,8 @@ module.exports.checkStatus = async (event) => {
 
         const response = await request(options);
         logger('Verification request result in:', response);
-        if (!response || typeof response !== 'object' || response.Status !== 'Success') {
+        if (!response || typeof response !== 'object' || typeof response.Status !== 'string') {
+            logger('FATAL_ERROR: Bank verification malformed response: ', response);
             return { status: 'ERROR', details: response };
         }
 
@@ -194,7 +199,7 @@ module.exports.checkStatus = async (event) => {
 
         return checkFields;
     } catch (err) {
-        logger('FATAL_ERROR:', err);
+        logger('FATAL_ERROR: ', err);
         return { status: 'ERROR', details: err.message };
     }
 };

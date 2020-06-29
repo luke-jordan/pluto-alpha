@@ -36,6 +36,7 @@ const handleError = (err) => {
 
 const collapseAmount = (amountDict) => `${amountDict.amount}::${amountDict.unit}::${amountDict.currency}`;
 
+// todo : use cache (note prefix though)
 const fetchUserProfile = async (systemWideUserId) => {
     const profileFetchLambdaInvoke = {
         FunctionName: config.get('lambdas.fetchProfile'),
@@ -48,6 +49,10 @@ const fetchUserProfile = async (systemWideUserId) => {
     return JSON.parse(JSON.parse(profileFetchResult['Payload']).body);
 };
 
+// ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////// BANK DETAILS & VERIFICATION HANDLING //////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////
+
 // note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
 const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails, verificationJobId) => {
     const accountTimeOut = config.get('cache.ttls.withdrawal');
@@ -56,7 +61,7 @@ const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails, ver
     logger('Done! Can move along');
 };
 
-const getBankVerificationJobId = async (bankDetails, userProfile) => {
+const initializeBankVerification = async (bankDetails, userProfile) => {
     const initials = userProfile.personalName.split(' ').map((name) => name[0]).join('');
     const parameters = {
         bankName: bankDetails.bankName,
@@ -83,28 +88,14 @@ const getBankVerificationJobId = async (bankDetails, userProfile) => {
 
     const resultPayload = JSON.parse(resultOfLambda['Payload']);
     if (resultPayload.status !== 'SUCCESS') {
-        throw new Error(JSON.stringify(resultPayload));
+        return 'MANUAL_JOB'; // event will be published below
     }
 
     return resultPayload.jobId;
 };
 
-const checkBankVerification = async (systemWideUserId) => {
-    const bankDetailsRaw = await redis.get(systemWideUserId);
-    logger('Bank details from Redis: ', bankDetailsRaw);
-    const bankDetails = JSON.parse(bankDetailsRaw);
-    
-    if (Reflect.has(bankDetails, 'verificationStatus')) {
-        const alreadyCached = true;
-        return bankDetails.verificationStatus ? { result: 'VERIFIED', alreadyCached } 
-            : { result: 'FAILED', cause: bankDetails.failureReason, alreadyCached };
-    }
-    
-    if (!bankDetails.verificationJobId) {
-        throw new Error('No job ID for bank verification');
-    }
-
-    const parameters = { jobId: bankDetails.verificationJobId };
+const checkBankVerification = async (verificationJobId) => {
+    const parameters = { jobId: verificationJobId };
     const lambdaInvocation = {
         FunctionName: config.get('lambdas.userBankVerify'),
         InvocationType: 'RequestResponse',
@@ -112,13 +103,19 @@ const checkBankVerification = async (systemWideUserId) => {
     };
 
     const resultOfLambda = await lambda.invoke(lambdaInvocation).promise();
+    logger('Raw result from verification lambda: ', resultOfLambda);
+
     if (resultOfLambda['StatusCode'] !== 200) {
-        throw new Error(resultOfLambda['Payload']);
+        // the 3rd party API is not always consistent or great in its error reporting, which can cause
+        // fails when something is just still processing, even though interface has error handling; hence
+        // instead of throwing or causing a general fail here, instead just return 'ERROR' and let it be marked pending
+        return { result: 'ERROR' };
     }
 
     const resultPayload = JSON.parse(resultOfLambda['Payload']);
     if (!Reflect.has(resultPayload, 'result')) {
-        throw new Error(JSON.stringify(resultPayload));
+        // as above
+        return { result: 'ERROR' };
     }
 
     return resultPayload;
@@ -131,8 +128,82 @@ const updateBankAccountVerificationStatus = async (systemWideUserId, verificatio
     if (failureReason) {
         cachedDetails.failureReason = failureReason;
     }
-    await redis.set(systemWideUserId, JSON.stringify({ cachedDetails }), 'EX', config.get('cache.detailsTTL'));
+    await redis.set(systemWideUserId, JSON.stringify(cachedDetails), 'EX', config.get('cache.detailsTTL'));
 };
+
+// bank verifier does not work for all banks, and sometimes is offline, so we just initiate a check -
+const checkAndLogBankVerification = async (systemWideUserId) => {
+    const cachedDetails = await redis.get(systemWideUserId);
+    logger('Bank details from Redis: ', cachedDetails);
+    const bankDetails = JSON.parse(cachedDetails);
+    
+    if (Reflect.has(bankDetails, 'verificationStatus') && bankDetails.verificationStatus !== 'PENDING') {
+        logger('Already done a check, no need to repeat, return');
+        return;
+    }
+
+    // if it comes back verified, we cache it and log it, if not, we tell admin they need to manually verify
+    const { verificationJobId } = bankDetails;
+    if (!verificationJobId) {
+        logger('No bank verification job!');
+        const logContext = { cause: 'No bank verification job ID' };
+        await Promise.all([
+            updateBankAccountVerificationStatus(systemWideUserId, 'MANUAL'),
+            publisher.publishUserEvent(systemWideUserId, 'BANK_VERIFICATION_MANUAL', { context: logContext })
+        ]);
+        return;
+    }
+
+    // if it's an unsupported bank or the verification system is off, or other reasons, do this
+    if (verificationJobId === 'MANUAL_JOB') {
+        const contextToLog = { cause: 'Unsupported bank, or otherwise requiring manual verification' };
+        await Promise.all([
+            updateBankAccountVerificationStatus(systemWideUserId, 'MANUAL'),
+            publisher.publishUserEvent(systemWideUserId, 'BANK_VERIFICATION_MANUAL', { context: contextToLog })
+        ]);
+        return;
+    }
+
+    const bankVerificationStatus = await checkBankVerification(verificationJobId);
+    logger('Result of verification call: ', bankVerificationStatus);
+
+    // this is distinguished from ERROR; it means the call succeded and the result was 'this is not the person's account'
+    if (bankVerificationStatus.result === 'FAILED') {
+        const contextToLog = { resultFromVerifier: bankVerificationStatus };
+        await Promise.all([
+            updateBankAccountVerificationStatus(systemWideUserId, 'FAILED', bankVerificationStatus.cause),
+            publisher.publishUserEvent(systemWideUserId, 'BANK_VERIFICATION_FAILED', { context: contextToLog })
+        ]);
+        return;
+    }
+
+    if (bankVerificationStatus.result === 'VERIFIED') {
+        const contextToLog = { resultFromVerifier: bankVerificationStatus };
+        await Promise.all([
+            updateBankAccountVerificationStatus(systemWideUserId, 'VERIFIED'),
+            publisher.publishUserEvent(systemWideUserId, 'BANK_VERIFICATION_SUCCEEDED', { context: contextToLog })
+        ]);
+        return;
+    }
+
+    // in this case, we leave the status pending as subsequent checks may succeed, but issue manual check needed alert
+    if (bankVerificationStatus.result === 'ERROR') {
+        const contextToLog = { cause: 'Error on third party bank verification service' };
+        await Promise.all([
+            updateBankAccountVerificationStatus(systemWideUserId, 'PENDING'),
+            publisher.publishUserEvent(systemWideUserId, 'BANK_VERIFICATION_MANUAL', { context: contextToLog })
+        ]);
+        return;
+    }
+
+    logger('Bank verification still pending, come back later, but cached for now');
+    await updateBankAccountVerificationStatus(systemWideUserId, 'PENDING');
+};
+
+
+// ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////// INTEREST PROJECTIONS ETC CHECKING /////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 const obtainClientFloatId = async (withdrawalInformation) => {
     if (withdrawalInformation.floatId && withdrawalInformation.clientId) {
@@ -166,6 +237,10 @@ const obtainWithdrawalCardMsg = (clientFloatVars) => {
     const valueForText = Math.floor((annualInterestRate.times(100)).toNumber());
     return `Every R100 kept in your Jupiter account earns you at least R${valueForText} after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you`;
 };
+
+// ///////////////////////////////////////////////////////////////////////////////////////////////////////////
+// ////////////////////////////////// AND NOW THE MAIN HANDLERS /////////////////////////////////////////////
+// /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 /**
  * Initiates a withdrawal by setting the bank account for it, which gets verified, and then we go from there
@@ -204,14 +279,13 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         // then, get the balance available, and check if the bank verification has completed, in time also the boost etc.
         logger('Most common currency: ', currency);
         const [bankVerifyJobId, availableBalance, messageBody] = await Promise.all([
-            getBankVerificationJobId(bankDetails, userProfile),
+            initializeBankVerification(bankDetails, userProfile),
             persistence.sumAccountBalance(accountId, currency),
             obtainWithdrawalCardMsg(floatVars)
         ]);
 
         await cacheBankAccountDetails(systemWideUserId, bankDetails, bankVerifyJobId);
         
-        // todo : actually calculate projection
         const responseObject = {
             availableBalance,
             cardTitle: 'Did you know?',
@@ -267,16 +341,6 @@ module.exports.setWithdrawalAmount = async (event) => {
         const { systemWideUserId } = authParams;
         logger('Setting withdrawal amount for user: ', systemWideUserId, ' with params: ', event.body);
 
-        const bankVerificationStatus = await checkBankVerification(systemWideUserId);
-        if (bankVerificationStatus.result === 'FAILED') {
-            await updateBankAccountVerificationStatus(systemWideUserId, false, bankVerificationStatus.cause);
-            return invalidRequestResponse({ result: 'BANK_ACCOUNT_INVALID' });
-        }
-
-        if (bankVerificationStatus.result === 'VERIFIED') {
-            await updateBankAccountVerificationStatus(systemWideUserId, true);
-        }
-
         const withdrawalInformation = JSON.parse(event.body);
         
         if (!withdrawalInformation.amount || !withdrawalInformation.unit || !withdrawalInformation.currency) {
@@ -305,7 +369,8 @@ module.exports.setWithdrawalAmount = async (event) => {
         // get client float for interest projections, and bank ref info, to assist in generating a tracker 
         const [clientFloatInfo, bankRefInfo] = await Promise.all([
             obtainClientFloatId(withdrawalInformation), 
-            persistence.fetchInfoForBankRef(accountId)
+            persistence.fetchInfoForBankRef(accountId),
+            checkAndLogBankVerification(systemWideUserId)
         ]);
 
         const { clientId, floatId } = clientFloatInfo;
@@ -333,9 +398,7 @@ module.exports.setWithdrawalAmount = async (event) => {
         logger('Result object on withdrawal amount, to send back: ', resultObject);
 
         // then, assemble and send back
-        return {
-            statusCode: 200, body: JSON.stringify(resultObject)
-        };
+        return { statusCode: 200, body: JSON.stringify(resultObject) };
     } catch (err) {
         return handleError(err);
     }
@@ -382,17 +445,7 @@ module.exports.confirmWithdrawal = async (event) => {
         }
         
         // in case it was pending before -- only do it after cancel else pointless
-        const bankVerificationStatus = await checkBankVerification(systemWideUserId);
-        if (bankVerificationStatus.result === 'FAILED') {
-            if (!bankVerificationStatus.alreadyCached) {
-                await updateBankAccountVerificationStatus(systemWideUserId, false, bankVerificationStatus.cause);
-            }
-            return invalidRequestResponse({ result: 'BANK_ACCOUNT_INVALID' });
-        }
-
-        if (bankVerificationStatus.result === 'VERIFIED' && !bankVerificationStatus.alreadyCached) {
-            await updateBankAccountVerificationStatus(systemWideUserId, true);
-        }
+        await checkAndLogBankVerification(systemWideUserId);
 
         // user wants to go through with it, so (1) send an email about it, (2) update the transaction to pending, (3) update 3rd-party
         const resultOfUpdate = await persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'PENDING' });
@@ -403,8 +456,6 @@ module.exports.confirmWithdrawal = async (event) => {
             throw new Error('Transaction update returned empty rows');
         }
 
-        const response = { balance: resultOfUpdate.newBalance };
-        
         // last, publish this (i.e., so instruction goes out)
         const txProperties = await persistence.fetchTransaction(transactionId);
         logger('Withdrawal TX properties: ', txProperties);
@@ -421,6 +472,8 @@ module.exports.confirmWithdrawal = async (event) => {
         
         await publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
 
+        const response = { balance: newBalance };
+        
         return { statusCode: 200, body: JSON.stringify(response) };
     } catch (err) {
         return handleError(err);

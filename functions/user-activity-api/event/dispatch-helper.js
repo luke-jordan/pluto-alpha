@@ -60,7 +60,7 @@ module.exports.addInvestmentToBSheet = async ({ operation, parameters, persisten
             throw new Error(`Error sending investment to third party: ${parsedResult}`);
         }
 
-        const txUpdateResult = await persistence.updateTxTags(transactionId, config.get('defaults.balanceSheet.txFlag'));
+        const txUpdateResult = await persistence.updateTxTags(transactionId, config.get('defaults.balanceSheet.txTagPrefix'));
         logger('Result of transaction update:', txUpdateResult);
     } catch (err) {
         logger('FATAL_ERROR: ', err);

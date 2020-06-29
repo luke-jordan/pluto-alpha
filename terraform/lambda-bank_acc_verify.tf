@@ -31,7 +31,7 @@ resource "aws_lambda_function" "bank_account_verify" {
                 "password": "${var.pbverify_password[terraform.workspace]}"
               },
               "mock": {
-                "enabled": true,
+                "enabled": terraform.workspace != "master",
                 "result": "VERIFIED"
               }
           }

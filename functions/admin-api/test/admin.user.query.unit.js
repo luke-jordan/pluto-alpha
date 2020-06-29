@@ -13,6 +13,7 @@ chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
 const helper = require('./test.helper');
+const { eventTypesForHistory } = require('../admin.util');
 
 const MAX_AMOUNT = 6000000;
 const MIN_AMOUNT = 5000000;
@@ -150,13 +151,13 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
     beforeEach(() => helper.resetStubs(lamdbaInvokeStub, findUserByRefStub, fetchBsheetTagStub, listUserAccountsStub));
 
-    it('Looks up user by national ID, ahppy path', async () => {
+    it('Looks up user by national ID, happy path', async () => {
         const testTime = moment();
         const mockBalance = JSON.parse(JSON.stringify(expectedBalance));
 
         const testHistoryEvent = {
             userId: testUserId,
-            eventTypes: config.get('defaults.userHistory.eventTypes'),
+            eventTypes: eventTypesForHistory,
             startDate: testTime.valueOf(),
             endDate: testTime.valueOf()
         };
