@@ -16,22 +16,7 @@ const lambda = new AWS.Lambda();
 
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
 
-const USER_EVENT_TYPES = [
-    'USER_LOGIN', 
-    'PASSWORD_SET', 
-    'USER_REGISTERED', 
-    'STATUS_CHANGED', 
-    'FAILED_VERIFICATION', 
-    'VERIFIED_AS_PERSON', 
-    
-    'SAVING_PAYMENT_SUCCESSFUL', 
-    'BOOST_REDEEMED',
-
-    'WITHDRAWAL_EVENT_CONFIRMED', 
-    'WITHDRAWAL_COMPLETED', 
-    'BANK_VERIFICATION_FAILED',
-    'BANK_VERIFICATION_SUCCEEDED'
-];
+const { eventTypesForHistory: USER_EVENT_TYPES } = adminUtil;
 
 /**
  * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default

@@ -13,6 +13,7 @@ chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
 const helper = require('./test.helper');
+const { eventTypesForHistory } = require('../admin.util');
 
 const MAX_AMOUNT = 6000000;
 const MIN_AMOUNT = 5000000;
@@ -156,7 +157,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
 
         const testHistoryEvent = {
             userId: testUserId,
-            eventTypes: sinon.match.array,
+            eventTypes: eventTypesForHistory,
             startDate: testTime.valueOf(),
             endDate: testTime.valueOf()
         };

@@ -438,7 +438,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
 
         const result = await handler.handle(testEvent);
         expect(result).to.deep.equal({ result: 'PENDING' });
-        expect(requestStub).to.have.not.been.called;
+        expect(requestStub).to.have.been.calledOnce;
     });
 
     it('Reports failure if bank account ID number does not match', async () => {
@@ -524,7 +524,7 @@ describe('*** UNIT TEST BANK ACC VERIFICATION STATUS CHECKER ***', () => {
         logger('Result of account verification check:', result);
 
         expect(result).to.exist;
-        expect(result).to.deep.equal({ status: 'ERROR', details: { Status: 'Failure' }});
+        expect(result).to.deep.equal({ result: 'ERROR', cause: 'Failure by third party service' });
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedRequestArgs);
     });
 

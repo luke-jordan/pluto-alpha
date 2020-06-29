@@ -139,8 +139,8 @@ const doesResponseVerify = (response) => {
         return { result: 'PENDING' };
     }
 
-    if (response.Status === 'Success') {
-        return { result: 'VERIFIED' };
+    if (response.Status !== 'Success') {
+        return { result: 'ERROR', cause: 'Failure by third party service' };
     }
 
     const responseDetails = response['Results'];
