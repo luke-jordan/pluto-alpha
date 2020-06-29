@@ -301,7 +301,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(redisSetStub).to.have.not.been.called;
     });
 
-    it('Returns error from unsuccessful job id retreival from third party', async () => {
+    it('Records need to do manual job on unsuccessful job id retrieval from third party', async () => {
         const event = helper.wrapEvent({
                 accountId: testAccountId,
                 bankDetails: testBankDetails,
@@ -338,11 +338,22 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
 
-        const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ status: 'FAILED', jobId: 'KSDF382' })) };
+        const expectedResult = {
+            statusCode: 200,
+            body: JSON.stringify({
+                availableBalance: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
+                cardTitle: 'Did you know?',
+                cardBody: 'Every R100 kept in your Jupiter account earns you at least R6 after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you'
+            })
+        };
 
         const resultOfSetting = await handler.setWithdrawalBankAccount(event);
-        logger('Result of setting:', resultOfSetting);
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify({
+            ...testBankDetails,
+            verificationJobId: 'MANUAL_JOB'
+        }), 'EX', 900);
 
+        // covered above but leave here to be sure
         expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
@@ -353,7 +364,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
         expect(getOwnerInfoForAccountStub).to.not.have.been.called;
-        expect(redisSetStub).to.have.not.been.called;
+        
     });
 
     it('Catches thrown errors', async () => {
@@ -666,9 +677,10 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         lamdbaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
         
-        updateTxSettlementStatusStub.resolves({ newBalance: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }});
+        const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
+        sumAccountBalanceStub.resolves(newSumAccount);
         fetchTransactionStub.resolves(testTransaction);
-        sumAccountBalanceStub.resolves({ amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null });
+        updateTxSettlementStatusStub.resolves({ updatedTime: moment() });
 
         const testPublishContext = {
             context: {
@@ -680,7 +692,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
             }
         };
 
-        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }}) };
+        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: newSumAccount }) };
 
         const confirmationResult = await handler.confirmWithdrawal(event);
         logger('Result of withdrawal confirmation:', confirmationResult);
@@ -732,11 +744,12 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         const cachedBankDetails = { verificationStatus: false, failureReason: 'User bank account verification failed' };
         redisGetStub.resolves(JSON.stringify(cachedBankDetails));
 
-        updateTxSettlementStatusStub.resolves({ newBalance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }});
+        const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
+        sumAccountBalanceStub.resolves(newSumAccount);
         fetchTransactionStub.resolves(testTransaction);
-        sumAccountBalanceStub.resolves({ amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null });
+        updateTxSettlementStatusStub.resolves({ updatedTime: moment() });
 
-        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }}) };
+        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: newSumAccount }) };
 
         const confirmationResult = await handler.confirmWithdrawal(event);
         logger('Result of withdrawal confirmation:', confirmationResult);
@@ -758,11 +771,12 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         const mockLambdaResponse = mockBankVerifyResponse('FAILED');
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
         
-        sumAccountBalanceStub.resolves({ amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null });
+        const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
+        sumAccountBalanceStub.resolves(newSumAccount);
         fetchTransactionStub.resolves(testTransaction);
-        updateTxSettlementStatusStub.resolves({ newBalance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }});
+        updateTxSettlementStatusStub.resolves({ updatedTime: moment() });
 
-        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }}) };
+        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: newSumAccount }) };
 
         const confirmationResult = await handler.confirmWithdrawal(event);
 
@@ -792,11 +806,12 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         redisGetStub.resolves(JSON.stringify(mockDetails));
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
 
-        sumAccountBalanceStub.resolves({ amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null });
+        const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
+        sumAccountBalanceStub.resolves(newSumAccount);
         fetchTransactionStub.resolves(testTransaction);
-        updateTxSettlementStatusStub.resolves({ newBalance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }});
+        updateTxSettlementStatusStub.resolves({ updatedTime: moment() });
 
-        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }}) };
+        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: newSumAccount }) };
 
         const confirmationResult = await handler.confirmWithdrawal(event);
         logger('Result of withdrawal confirmation:', confirmationResult);
@@ -820,11 +835,12 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         redisGetStub.resolves(JSON.stringify(invalidBankDetails));
 
-        sumAccountBalanceStub.resolves({ amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null });
+        const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
+        sumAccountBalanceStub.resolves(newSumAccount);
         fetchTransactionStub.resolves(testTransaction);
-        updateTxSettlementStatusStub.resolves({ newBalance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }});
+        updateTxSettlementStatusStub.resolves({ updatedTime: moment() });
 
-        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }}) };
+        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: newSumAccount }) };
 
         const confirmationResult = await handler.confirmWithdrawal(event);
         logger('Result of withdrawal confirmation:', confirmationResult);
@@ -851,11 +867,12 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
         const mockLambdaResponse = mockBankVerifyResponse('ERROR');
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
         
-        sumAccountBalanceStub.resolves({ amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null });
+        const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
+        sumAccountBalanceStub.resolves(newSumAccount);
         fetchTransactionStub.resolves(testTransaction);
-        updateTxSettlementStatusStub.resolves({ newBalance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }});
+        updateTxSettlementStatusStub.resolves({ updatedTime: moment() });
 
-        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: { amount: 0, unit: 'HUNDREDTH_CENT', currency: 'ZAR' }}) };
+        const expectedResult = { statusCode: 200, body: JSON.stringify({ balance: newSumAccount }) };
 
         const confirmationResult = await handler.confirmWithdrawal(event);
 

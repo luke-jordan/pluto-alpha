@@ -169,7 +169,7 @@ module.exports.checkStatus = async (event) => {
     try {
         const mockVerifyOn = config.has('mock.enabled') && typeof config.get('mock.enabled') === 'boolean' && config.get('mock.enabled');
         if (mockVerifyOn) {
-            const mockResult = Boolean(config.get('mock.result'));
+            const mockResult = config.get('mock.result');
             logger('Mock result in check status: ', mockResult);
             return { result: mockResult };
         }

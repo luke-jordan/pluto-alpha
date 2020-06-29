@@ -88,7 +88,7 @@ const initializeBankVerification = async (bankDetails, userProfile) => {
 
     const resultPayload = JSON.parse(resultOfLambda['Payload']);
     if (resultPayload.status !== 'SUCCESS') {
-        throw new Error(JSON.stringify(resultPayload));
+        return 'MANUAL_JOB'; // event will be published below
     }
 
     return resultPayload.jobId;
@@ -103,6 +103,8 @@ const checkBankVerification = async (verificationJobId) => {
     };
 
     const resultOfLambda = await lambda.invoke(lambdaInvocation).promise();
+    logger('Raw result from verification lambda: ', resultOfLambda);
+
     if (resultOfLambda['StatusCode'] !== 200) {
         // the 3rd party API is not always consistent or great in its error reporting, which can cause
         // fails when something is just still processing, even though interface has error handling; hence
@@ -454,8 +456,6 @@ module.exports.confirmWithdrawal = async (event) => {
             throw new Error('Transaction update returned empty rows');
         }
 
-        const response = { balance: resultOfUpdate.newBalance };
-        
         // last, publish this (i.e., so instruction goes out)
         const txProperties = await persistence.fetchTransaction(transactionId);
         logger('Withdrawal TX properties: ', txProperties);
@@ -472,6 +472,8 @@ module.exports.confirmWithdrawal = async (event) => {
         
         await publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CONFIRMED', { context });
 
+        const response = { balance: newBalance };
+        
         return { statusCode: 200, body: JSON.stringify(response) };
     } catch (err) {
         return handleError(err);
