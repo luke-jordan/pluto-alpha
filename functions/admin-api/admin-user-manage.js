@@ -5,9 +5,10 @@ const config = require('config');
 const moment = require('moment');
 
 const persistence = require('./persistence/rds.account');
+const publisher = require('publish-common');
+
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
-const publisher = require('publish-common');
 
 const stringify = require('json-stable-stringify');
 
@@ -350,7 +351,34 @@ const handlePwdUpdate = async (params, requestContext) => {
     return { result: 'ERROR', message: resultPayload };
 };
 
+// used for generic log records, especially ones involving files
+// note : file here is just the name and mime type, presumption is that it is already stored
+const handleLogRecord = async (params) => {
+    const { adminUserId, systemWideUserId, eventType, note, file } = params;
+
+    const context = { systemWideUserId, note, file };
+    await publishUserLog({ adminUserId, systemWideUserId, eventType, context });
+    
+    return { result: 'SUCCESS' };
+};
+
+// used to add a flag to user account, primarily in fraud/FIC system etc
+const handleFlagUpdate = async (params) => {
+    const { systemWideUserId, flags: newFlags, adminUserId, reasonToLog } = params;
+    const { accountId, flags: oldFlags } = await persistence.getAccountDetails(systemWideUserId);
+    logger('Updating account ID ', accountId, ' to have flags: ', newFlags, ' used to have: ', oldFlags);
+
+    const accountUpdateResult = await persistence.updateAccountFlags({ accountId, adminUserId, newFlags, oldFlags });
+    logger('Result of persistence update: ', accountUpdateResult);
+
+    const logContext = { accountId, oldFlags, newFlags, reasonToLog };
+    await publishUserLog({ adminUserId, systemWideUserId, eventType: 'ADMIN_CHANGED_ACCOUNT_FLAGS', context: logContext });
+
+    return { result: 'SUCCESS' };
+};
+
 /**
+ * todo : very much overdue a refactor (e.g., modernize to path/params model, split handler, etc)
  * @property {string} systemWideUserId The ID of the user to adjust
  * @property {string} fieldToUpdate One of: KYC, STATUS, TRANSACTION 
  */
@@ -408,6 +436,16 @@ module.exports.manageUser = async (event) => {
         if (params.fieldToUpdate === 'PWORD') {
             logger('Resetting the user password, trigger and send back');
             resultOfUpdate = await handlePwdUpdate(params, event.requestContext);
+        }
+
+        if (params.fieldToUpdate === 'FLAGS') {
+            logger('Update user flags');
+            resultOfUpdate = await handleFlagUpdate(params);
+        }
+
+        if (params.fieldToUpdate === 'RECORD_LOG') {
+            logger('Record a log for the user');
+            resultOfUpdate = await handleLogRecord(params);
         }
 
         if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {

@@ -14,6 +14,7 @@ module.exports.resetStubs = (...stubs) => {
 
 module.exports.wrapEvent = (requestBody, systemWideUserId, role) => ({
     body: JSON.stringify(requestBody),
+    httpMethod: 'POST',
     requestContext: {
         authorizer: {
             systemWideUserId,

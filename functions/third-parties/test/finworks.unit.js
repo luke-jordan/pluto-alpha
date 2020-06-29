@@ -166,6 +166,22 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(requestStub).to.have.been.calledOnce;
     });
 
+    it('Does not retry on a 400 error', async () => {
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+        requestStub.onFirstCall().rejects({ statusCode: 500, message: '400 - { bad request }' });
+
+        const testAccountNumber = 'FTS103';
+        const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');
+        const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
+
+        const resultOfInvestement = await handler.addCash(testEvent);
+
+        expect(resultOfInvestement).to.exist;
+        expect(resultOfInvestement).to.deep.equal({ result: 'ERROR', details: '400 - { bad request }'});
+        expect(getObjectStub).to.have.been.calledTwice; // for crt and pem
+        expect(requestStub).to.have.been.calledOnce;
+    });
+
     it('Cathes add cash error', async () => {
         const testAccountNumber = 'POL23';
         const [testAmount, testUnit, testCurrency] = '100::WHOLE_CURRENCY::USD'.split('::');

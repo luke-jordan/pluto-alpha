@@ -224,10 +224,14 @@ describe('*** UNIT TESTING MESSAGE PICKING RDS ****', () => {
     });
 
     it('Finds pending push messages', async () => {
+        const userMsgPrefsTable = config.get('tables.msgPrefsTable');
+
         const expectedQuery = [
-            `select * from ${userMessageTable} where processed_status = $1 and end_time > current_timestamp and ` +
+            `select * from ${userMessageTable} left join ${userMsgPrefsTable} ` + 
+                `on ${userMessageTable}.destination_user_id = ${userMsgPrefsTable}.system_wide_user_id ` +
+                `where processed_status = $1 and end_time > current_timestamp and ` +
                 `start_time < current_timestamp and deliveries_done < deliveries_max and display ->> 'type' = $2 ` + 
-                `order by updated_time limit $3`,
+                `order by ${userMessageTable}.updated_time limit $3`,
             ['READY_FOR_SENDING', 'PUSH', 50]
         ];
         selectQueryStub.resolves([msgRawFromRds, msgRawFromRds]);
@@ -401,8 +405,10 @@ describe('*** UNIT TEST BASIC INSTRUCTION OPERATIONS NEEDED BY USER MESSAGES ***
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(mockUpdateRecordArgs);
     });
 
+    // very inefficient but scheduled background job so not worth optimization right now
     it('Finds user ids that are not disqualified by recurrence parameters', async () => {
         const mockUnfilteredId = uuid();
+        
         const minIntervalSelectArgs = [
             `select distinct(destination_user_id) from ${config.get('tables.userMessagesTable')} where instruction_id = $1 and creation_time > $2`,
             [mockInstructionId, mockDurationClause.format()]
