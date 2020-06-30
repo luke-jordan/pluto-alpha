@@ -54,7 +54,7 @@ resource "aws_s3_bucket" "user_record_bucket" {
 }
 
 resource "aws_s3_bucket_public_access_block" "user_record_block" {
-  bucket = aws_s3_bucket.float_record_bucket.id
+  bucket = aws_s3_bucket.user_record_bucket.id
 
   block_public_acls   = true
   block_public_policy = true

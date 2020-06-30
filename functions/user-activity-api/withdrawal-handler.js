@@ -238,6 +238,21 @@ const obtainWithdrawalCardMsg = (clientFloatVars) => {
     return `Every R100 kept in your Jupiter account earns you at least R${valueForText} after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you`;
 };
 
+const calculateAvailableBalance = async (accountId, currency) => {
+    const [settledSum, pendingTx] = await Promise.all([
+        persistence.sumAccountBalance(accountId, currency),
+        persistence.fetchPendingTransactions(accountId)
+    ]);
+
+    logger('Calculating available balance for withdrawal, have pending: ', pendingTx);
+    const pendingWithdrawalsSum = pendingTx.filter((row) => row.transactionType === 'WITHDRAWAL' && row.currency === currency).
+        reduce((sum, row) => sum + opsUtil.convertToUnit(row.amount, row.unit, settledSum.balance), 0);
+
+    logger('Resulting amount to deduct: ', pendingWithdrawalsSum)
+    // withdrawals have a negative sign, so need to add
+    return { ...settledSum, amount: settledSum.amount + pendingWithdrawalsSum };
+};
+
 // ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ////////////////////////////////// AND NOW THE MAIN HANDLERS /////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -280,7 +295,7 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         logger('Most common currency: ', currency);
         const [bankVerifyJobId, availableBalance, messageBody] = await Promise.all([
             initializeBankVerification(bankDetails, userProfile),
-            persistence.sumAccountBalance(accountId, currency),
+            calculateAvailableBalance(accountId, currency),
             obtainWithdrawalCardMsg(floatVars)
         ]);
 
@@ -350,7 +365,7 @@ module.exports.setWithdrawalAmount = async (event) => {
 
         // then, check if amount is above balance
         const accountId = withdrawalInformation.accountId;
-        const availableBalance = await persistence.sumAccountBalance(accountId, withdrawalInformation.currency);
+        const availableBalance = calculateAvailableBalance(accountId, withdrawalInformation.currency);
 
         if (!checkSufficientBalance(withdrawalInformation, availableBalance)) {
             return invalidRequestResponse('Error, trying to withdraw more than available');

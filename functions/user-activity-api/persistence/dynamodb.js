@@ -2,12 +2,17 @@
 
 const config = require('config');
 const logger = require('debug')('pluto:activity:dynamo');
+const util = require('ops-util-common');
 
 const dynamoCommon = require('dynamo-common');
-const Redis = require('ioredis');
-const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.clientFloat');
 
-const relevantFloatColumns = ['accrualRateAnnualBps', 
+const Redis = require('ioredis');
+
+const CACHE_TTL_IN_SECONDS = config.get('cache.ttls.clientFloat');
+const HASH_ALGORITHM = config.get('bank.hash');
+
+const relevantFloatColumns = [
+    'accrualRateAnnualBps', 
     'bonusPoolShareOfAccrual', 
     'clientShareOfAccrual', 
     'prudentialFactor', 
@@ -91,6 +96,97 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
     }
 
     return fetchFloatVarsForBalanceCalcFromCacheOrDB(clientId, floatId);
+};
+
+/**
+ * These functions handle storing the fact that a set of bank account details have been verified (or not)
+ */
+
+const hashBankDetails = (bankDetails) => crypto.creatHash(HASH_ALGORITHM).update(JSON.stringify(bankDetails).digest('hex')); 
+
+const assembleUpdateParams = (itemKey, updateExpression, substitutionDict) => ({
+    tableName: config.get('tables.bankVerification'),
+    itemKey,
+    updateExpression,
+    substitutionDict,
+    returnOnlyUpdated: true
+});
+
+module.exports.fetchBankVerificationResult = async (systemWideUserId, bankDetails) => {
+    const accountHash = hashBankDetails(bankDetails);
+    const lookupTable = config.get('tables.bankVerification');
+    const lookupResult = await dynamoCommon.fetchSingleRow(lookupTable, { systemWideUserId, accountHash });
+    logger('Retrieved bank verification record: ', lookupResult);
+
+    if (util.isObjectEmpty(lookupResult)) {
+        return { verificationStatus: 'NO_RECORD' };
+    }
+
+    const lastAccessMoment = moment(lookupResult.lastAccessTime);
+    const thresholdMoment = moment().subtract(config.get('bank.threshold.amount'), config.get('bank.threshold.unit'));
+    logger('Comparing last access: ', lastAccessMoment, ' to threshold: ', thresholdMoment);
+
+    if (lastAccessMoment.isBefore(thresholdMoment)) {
+        logger('Verification is too old, remove it and return no record');
+        // note : we do not use TTLs because we may adjust this time period after rows written
+        const itemKey = { systemWideUserId, accountHash };
+        await dynamoCommon.deleteRow({ tableName: lookupTable, itemKey });
+        return { verificationStatus: 'NO_RECORD' };
+    }
+
+    return lookupResult.verificationStatus;
+};
+
+const updateExistingResultFull = async (itemKey, verificationStatus, verificationLog) => {
+    const accessTime = moment();
+    // then the utter nightmare of the AWS SDK, even refractored/softened
+    const updateClause = 'set verification_status = :vs, verification_log = :vl, last_access_time = :lt';
+    const updateObject = { ':vs': verificationStatus, ':vl': verificationLog, ':lt': accessTime.valueOf() };
+    const updateParams = assembleUpdateParams(itemKey, updateClause, updateObject);
+    logger('Updating with params: ', updateParams);
+    const updateResult = await dynamoCommon.updateRow(updateParams);
+    logger('Result of update: ', updateResult);
+    return updateResult;
+}
+
+module.exports.setBankVerificationResult = async ({ systemWideUserId, bankDetails, verificationStatus, verificationLog }) => {
+    const accountHash = hashBankDetails(bankDetails);
+    const lookupTable = config.get('tables.bankVerification');
+
+    const itemKey = { systemWideUserId, accountHash };
+    const existingItem = await dynamoCommon.fetchSingleRow(lookupTable, itemKey);
+    if (!util.isObjectEmpty(existingItem)) {
+        return updateExistingResultFull(itemKey, verificationStatus, verificationLog);
+    }
+
+    const persistedTime = moment();
+
+    const itemToInsert = {
+        systemWideUserId,
+        accountHash,
+        creationTime: persistedTime.valueOf(),
+        lastAccessTime: persistedTime.valueOf(),
+        verificationStatus: verificationStatus,
+        verificationLog: verificationLog
+    };
+
+    logger('Persisting in DynamoDB: ', itemToInsert);
+    const resultOfInsert = await dynamoCommon.insertNewRow(lookupTable, ['systemWideUserId', 'accountHash'], itemToInsert);
+    logger('Result of insertion: ', resultOfInsert);
+
+    return { ...resultOfInsert, persistedTime };
+};
+
+module.exports.updateLastVerificationUseTime = async (systemWideUserId, bankDetails, accessTime) => {
+
+    const itemKey = { systemWideUserId, accountHash: hashBankDetails(bankDetails) },    
+    const updateInstruction = assembleUpdateParams(itemKey, 'set last_access_time = :at', { ':at': accessTime.valueOf() });
+
+    logger('Sending update parameters to Dynamo: ', updateInstruction);
+    const resultOfUpdate = await dynamoCommon.updateRow(updateInstruction);
+    logger('Result from DDB: ', resultOfUpdate);
+
+    return resultOfUpdate;
 };
 
 module.exports.warmupCall = async () => {
