@@ -294,7 +294,6 @@ describe('Primary allocation of inbound accrual lambda', () => {
         const clientShare = responseEntity.entityAllocations['CLIENT_FEE']['amount'];
         expect(clientShare).to.be.lessThan(amountAccrued);
 
-        logger('New balance : ', responseEntity);
         expect(responseEntity.newBalance).to.be.at.least(amountAccrued);
         expect(responseEntity.entityAllocations['BONUS_FEE']['amount']).to.be.lessThan(amountAccrued - clientShare);
 

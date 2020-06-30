@@ -100,8 +100,8 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
 
     const poolAllocResult = [{ 'id': floatTxIds[0] }];
     const userAllocResult = {
-        floatTxIds: floatTxIds.slice(1).map((id) => ({ 'transaction_id': id})),
-        accountTxIds: accountTxIds.map((id) => ({ 'transaction_id': id }))
+        floatTxIds: floatTxIds.slice(1),
+        accountTxIds
     };
 
     const testTxResult = {
@@ -127,12 +127,15 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
 
     it('Happy path, pretty simple, for now', async () => {
         logger('Testing a basic transfer');
+        
         allocatePoolStub.resolves(poolAllocResult);
         allocateUserStub.resolves(userAllocResult);
+        
         redisGetStub.resolves(null);
         redisSetStub.resolves('OK');
 
         const resultOfTransfer = await handler.floatTransfer({ instructions: [testInstruction]});
+        // logger('Result in full: ', resultOfTransfer);
 
         expect(resultOfTransfer).to.exist;
         expect(resultOfTransfer).to.have.property('statusCode', 200);
@@ -152,8 +155,7 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         // eslint-disable-next-line
         this.timeout(15000);
         redisGetStub.onFirstCall().resolves('PENDING');
-        redisGetStub.onSecondCall().resolves('PENDING');
-        redisGetStub.onThirdCall().resolves(JSON.stringify(testTxResult));
+        redisGetStub.onSecondCall().resolves(JSON.stringify(testTxResult));
         
         const resultOfTransfer = await handler.floatTransfer({ instructions: [testInstruction]});
 
@@ -163,7 +165,7 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         const bodyOfResult = JSON.parse(resultOfTransfer.body);
         expect(bodyOfResult).to.deep.equal(expectedResult);
         expect(redisGetStub).to.have.been.calledWithExactly(testActiveTxId);
-        expect(redisGetStub).to.have.been.calledThrice;
+        expect(redisGetStub).to.have.been.calledTwice;
         expect(redisSetStub).to.have.not.been.called;
         expect(allocatePoolStub).to.have.not.been.called;
         expect(allocateUserStub).to.have.not.been.called;

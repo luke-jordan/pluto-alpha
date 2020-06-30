@@ -193,8 +193,8 @@ const handleInstruction = async (instruction) => {
         logger('Sending user allocations to persistence: ', userAllocRequests);
         const userAllocResult = await rds.allocateToUsers(instruction.clientId, instruction.floatId, userAllocRequests);
         logger('Result of user allocations: ', userAllocResult);
-        floatTxIds = floatTxIds.concat(userAllocResult.floatTxIds.map((row) => row['transaction_id']));
-        accountTxIds = accountTxIds.concat(userAllocResult.accountTxIds.map((row) => row['transaction_id']));
+        floatTxIds = floatTxIds.concat(userAllocResult.floatTxIds);
+        accountTxIds = accountTxIds.concat(userAllocResult.accountTxIds);
     }
 
     const finalResult = {
