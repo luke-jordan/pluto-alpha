@@ -37,14 +37,14 @@ const rds = proxyquire('../persistence/rds.snippets', {
 });
 
 describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
-    const testFactId = uuid();
+    const testSnippetId = uuid();
     const testSystemId = uuid();
 
     const testCreationTime = moment().format();
     const testUpdatedTime = moment().format();
 
     const mockSnippetFromRds = {
-        'snippet_id': testFactId,
+        'snippet_id': testSnippetId,
         'title': 'Jupiter Snippet #21',
         'body': 'Jupiter helps you save.',
         'snippet_priority': 2,
@@ -65,10 +65,10 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
             title: 'Jupiter Fun Fact #12',
             body: 'Jupiter helps you grow.',
             active: true,
-            snippetId: testFactId
+            snippetId: testSnippetId
         };
 
-        uuidStub.returns(testFactId);
+        uuidStub.returns(testSnippetId);
         insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
 
         const testSnippet = {
@@ -90,13 +90,13 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const expectedInsertObj = {
             userId: testSystemId,
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             snippetStatus: 'CREATED'
         };
 
         insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
 
-        const resultOfInsert = await rds.createSnippetUserJoin(testFactId, testSystemId);
+        const resultOfInsert = await rds.createSnippetUserJoin(testSnippetId, testSystemId);
 
         expect(resultOfInsert).to.exist;
         expect(resultOfInsert).to.deep.equal({ creationTime: testCreationTime });
@@ -106,7 +106,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
     it('Fetches user-snippet statuses from join table', async () => {
         const mockSnippetDetailsFromRds = {
             'user_id': testSystemId,
-            'snippet_id': testFactId,
+            'snippet_id': testSnippetId,
             'snippet_status': 'FETCHED',
             'view_count': 2,
             'fetch_count': 3,
@@ -116,7 +116,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const expectedSnippetStatus = {
             userId: testSystemId,
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             snippetStatus: 'FETCHED',
             viewCount: 2,
             fetchCount: 3,
@@ -128,18 +128,18 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         queryStub.resolves([mockSnippetDetailsFromRds, mockSnippetDetailsFromRds]);
 
-        const resultOfFetch = await rds.fetchSnippetUserStatuses([testFactId, testFactId], testSystemId);
+        const resultOfFetch = await rds.fetchSnippetUserStatuses([testSnippetId, testSnippetId], testSystemId);
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedSnippetStatus, expectedSnippetStatus]);
-        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, testFactId, testFactId]);
+        expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, testSnippetId, testSnippetId]);
     });
 
     it('Fetches uncreated snippets properly', async () => {
         const mockSnippetFromPersistence = { ...mockSnippetFromRds };
         mockSnippetFromPersistence['snippet_status'] = 'UNCREATED';
         const expectedSnippet = {
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
             text: 'Jupiter helps you save.',
             fetchCount: 0,
@@ -164,7 +164,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         const snippetFromRds = { ...mockSnippetFromRds };
         snippetFromRds['snippet_status'] = 'VIEWED';
         const expectedSnippet = {
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
             text: 'Jupiter helps you save.',
             fetchCount: 0,
@@ -184,9 +184,9 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledWithExactly(selectQuery, [testSystemId, true]);
     });
 
-    it('Fetches snippets in preview mode', async () => {
+    it('Fetches preview snippets', async () => {
         const expectedSnippet = {
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
             text: 'Jupiter helps you save.',
             fetchCount: 0,
@@ -207,43 +207,84 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
     });
 
     it('Asserts whether a user may preview snippets', async () => {
-        const selectQuery = 'select user_id from snippet_data.preview_user_table where user_id = $1';
+        const selectQuery = 'select user_id from snippet_data.preview_user_table where user_id = $1 and active = $2';
         queryStub.resolves([{ 'user_id': testSystemId }]);
         const resultOfFetch = await rds.isPreviewUser(testSystemId);
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.be.true;
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSystemId]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSystemId, true]);
+    });
+
+    it('Inserts a new preview user', async () => {
+        queryStub.resolves([]);
+        insertStub.resolves({ rows: [{ 'creation_time': testCreationTime }]});
+
+        const findQuery = 'select * from snippet_data.preview_user_table where user_id = $1';
+        const insertQuery = 'insert into snippet_data.preview_user_table (user_id) values %L returning creation_time';
+
+        const resultOfInsert = await rds.insertPreviewUser(testSystemId);
+
+        expect(resultOfInsert).to.exist;
+        expect(resultOfInsert).to.deep.equal({ creationTime: testCreationTime });
+        expect(queryStub).to.have.been.calledOnceWithExactly(findQuery, [testSystemId]);
+        expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, '${userId}', [{ userId: testSystemId}]);
+        expect(updateStub).to.have.not.been.called;
+    });
+
+    it('Reactivates a pre-existing preview user', async () => {
+        queryStub.resolves([{ 'user_id': testSystemId, 'active': false }]);
+        updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
+
+        const findQuery = 'select * from snippet_data.preview_user_table where user_id = $1';
+        const updateQuery = 'update snippet_data.preview_user_table set active = $1 where user_id = $2 returning updated_time';
+
+        const resultOfInsert = await rds.insertPreviewUser(testSystemId);
+
+        expect(resultOfInsert).to.exist;
+        expect(resultOfInsert).to.deep.equal({ updatedTime: testUpdatedTime });
+        expect(queryStub).to.have.been.calledOnceWithExactly(findQuery, [testSystemId]);
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [true, testSystemId]);
+        expect(insertStub).to.have.not.been.called;
+    });
+
+    it('Removes a preview user properly', async () => {
+        updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
+        const updateQuery = 'update snippet_data.preview_user_table set active = $1 where user_id = $2 returning updated_time';
+        const resultOfUpdate = await rds.removePreviewUser(testSystemId);
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal({ updatedTime: testUpdatedTime });
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [false, testSystemId]);
     });
 
     it('Increments a snippet view or fetch count', async () => {
-        const updateQuery = `UPDATE snippet_data.snippet_user_join_table SET view_count = view_count + 1 WHERE snippet_id = $1 ` +
+        const updateQuery = `update snippet_data.snippet_user_join_table set view_count = view_count + 1 where snippet_id = $1 ` +
             `and user_id = $2 returning view_count, updated_time`;
 
         updateStub.resolves({ rows: [{ 'view_count': 3, 'updated_time': testUpdatedTime }]});
 
-        const resultOfUpdate = await rds.incrementCount(testFactId, testSystemId, 'VIEWED');
+        const resultOfUpdate = await rds.incrementCount(testSnippetId, testSystemId, 'VIEWED');
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal({ viewCount: 3, updatedTime: testUpdatedTime });
-        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [testFactId, testSystemId]);
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [testSnippetId, testSystemId]);
     });
 
     it('Updates snippet status properly', async () => {
-        const updateQuery = `UPDATE snippet_data.snippet_user_join_table SET snippet_status = $1 WHERE snippet_id = $2 ` +
+        const updateQuery = `update snippet_data.snippet_user_join_table set snippet_status = $1 where snippet_id = $2 ` +
                 `and user_id = $3 returning updated_time`;
 
         updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
 
-        const resultOfUpdate = await rds.updateSnippetStatus(testFactId, testSystemId, 'FETCHED');
+        const resultOfUpdate = await rds.updateSnippetStatus(testSnippetId, testSystemId, 'FETCHED');
 
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal({ updatedTime: testUpdatedTime });
-        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['FETCHED', testFactId, testSystemId]);
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['FETCHED', testSnippetId, testSystemId]);
     });
 
     it('Updates snippet properly', async () => {
         const mockUpdateDef = { 
-            key: { snippetId: testFactId },
+            key: { snippetId: testSnippetId },
             value: { body: 'Jupiter rewards you for saving', active: true },
             table: config.get('tables.snippetTable'),
             returnClause: 'updated_time'
@@ -252,7 +293,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         updateRecordObjStub.resolves([{ 'updated_time': testUpdatedTime }]);
 
         const testUpdateParams = {
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             body: 'Jupiter rewards you for saving',
             active: true
         };
@@ -269,7 +310,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         const expectedLogRow = {
             logId: testLogId,
             userId: testSystemId,
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             logType: 'SNIPPET_VIEWED',
             logContext: { some: 'value' }
         };
@@ -282,7 +323,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const testLogObject = {
             userId: testSystemId,
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             logType: 'SNIPPET_VIEWED',
             logContext: { some: 'value' }
         };
@@ -293,4 +334,76 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         expect(resultOfLog).to.deep.equal(testLogId);
         expect(insertStub).to.have.been.calledOnceWithExactly(insertQuery, columnTemplate, [expectedLogRow]);
     });
+
+    it('Fetches all active snippets (admin)', async () => {
+        const expectedSnippet = {
+            snippetId: testSnippetId,
+            title: 'Jupiter Snippet #21',
+            body: 'Jupiter helps you save.',
+            snippetPriority: 2,
+            creationTime: testCreationTime,
+            updatedTime: testUpdatedTime,
+            countryCode: 'ZAF'
+        };
+
+        queryStub.resolves([mockSnippetFromRds, mockSnippetFromRds]);
+
+        const selectQuery = 'select * from snippet_data.snippet where active = $1';
+
+        const resultOfFetch = await rds.fetchAllSnippets();
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal([expectedSnippet, expectedSnippet]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [true]);
+    });
+
+    it('Fetches a snippet (admin)', async () => {
+        const expectedSnippet = {
+            snippetId: testSnippetId,
+            title: 'Jupiter Snippet #21',
+            body: 'Jupiter helps you save.',
+            snippetPriority: 2,
+            creationTime: testCreationTime,
+            updatedTime: testUpdatedTime,
+            countryCode: 'ZAF'
+        };
+
+        queryStub.resolves([mockSnippetFromRds]);
+
+        const selectQuery = 'select * from snippet_data.snippet where snippet_id = $1';
+
+        const resultOfFetch = await rds.fetchSnippetForAdmin(testSnippetId);
+
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(expectedSnippet);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
+    });
+
+    it('Counts the number of users a snippet has been created for', async () => {
+        queryStub.resolves([{ 'count': 100 }]);
+        const selectQuery = 'select count(distinct(user_id)) from snippet_data.snippet_user_join_table where snippet_id = $1';
+        const resultOfFetch = await rds.getSnippetUserCount(testSnippetId);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(100);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
+    });
+
+    it('Counts the total times a snippet has been viewed', async () => {
+        queryStub.resolves([{ 'view_count': 11 }, { 'view_count': 23 }]);
+        const selectQuery = 'select view_count from snippet_data.snippet_user_join_table where snippet_id = $1';
+        const resultOfFetch = await rds.getSnippetViewCount(testSnippetId);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(34);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
+    });
+
+    it('Counts the total number of times a snippet has been fetched', async () => {
+        queryStub.resolves([{ 'fetch_count': 58 }, { 'fetch_count': 13 }]);
+        const selectQuery = 'select fetch_count from snippet_data.snippet_user_join_table where snippet_id = $1';
+        const resultOfFetch = await rds.getSnippetFetchCount(testSnippetId);
+        expect(resultOfFetch).to.exist;
+        expect(resultOfFetch).to.deep.equal(71);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
+    });
+
 });

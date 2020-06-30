@@ -172,9 +172,10 @@ module.exports.fetchSnippetsForUser = async (event) => {
 
 /**
  * This function updates a snippets properties. The only property updates allowed by the this function are
- * the snippets text, the snippets active status, and the snippets priority.
+ * the snippets text, title, active status, and priority.
  * @param {object} event User or admin event.
- * @property {string} body The main snippet text.
+ * @property {string} title The value entered here will update the snippet's title.
+ * @property {string} body The value entered here will update the main snippet text.
  * @property {boolean} active Can be used to activate or deactivate a snippet.
  * @property {number} snippetPriority Used to update the snippets priority.
  */
@@ -184,12 +185,12 @@ module.exports.updateSnippet = async (event) => {
             return { statusCode: 403 };
         }
 
-        const { snippetId, body, active, priority } = opsUtil.extractParamsFromEvent(event);
-        if (!snippetId || (!body && !priority && typeof active !== 'boolean')) {
+        const { snippetId, title, body, active, priority } = opsUtil.extractParamsFromEvent(event);
+        if (!snippetId || (!title && !body && !priority && typeof active !== 'boolean')) {
             return { statusCode: 400, body: `Error! 'snippetId' and a snippet property to be updated are required` };
         }
         
-        const updateParameters = JSON.parse(JSON.stringify({ snippetId, body, active, priority })); // removes keys with undefined values
+        const updateParameters = JSON.parse(JSON.stringify({ snippetId, title, body, active, priority })); // removes keys with undefined values
         const resultOfUpdate = await persistence.updateSnippet(updateParameters);
         logger('Result of update:', resultOfUpdate);
 

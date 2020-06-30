@@ -49,7 +49,7 @@ const handler = proxyquire('../snippet-handler', {
 
 describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
     const testLogId = uuid();
-    const testFactId = uuid();
+    const testSnippetId = uuid();
     const testAdminId = uuid();
     const testSystemId = uuid();
 
@@ -143,7 +143,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
 
     it('Fetches and sorts unread snippets to display to user', async () => {
         const mockSnippet = (snippetStatus, snippetPriority, viewCount) => ({
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             title: 'Jupiter Snippet 1',
             body: 'Jupiter helps you save.',
             fetchCount: 3,
@@ -159,7 +159,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
 
         const expectedQueueArgs = [{
             queueName: config.get('publishing.userEvents.snippetQueue'),
-            payload: { snippetIds: [testFactId, testFactId], userId: testSystemId, status: 'FETCHED' }
+            payload: { snippetIds: [testSnippetId, testSnippetId], userId: testSystemId, status: 'FETCHED' }
         }];
 
         const expectedFirst = mockSnippet('FETCHED', 3, 0);
@@ -185,7 +185,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
 
     it('Fetches and sorts snippets for (admin) preview', async () => {
         const mockSnippet = (snippetStatus, snippetPriority, viewCount) => ({
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             title: 'Jupiter Snippet 2',
             body: 'Jupiter offers competetive interest rates.',
             fetchCount: 3,
@@ -219,7 +219,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
 
     it('If no unread snippets exist, fetches and sorts previously read snippets', async () => {
         const mockSnippet = (snippetStatus, snippetPriority, viewCount) => ({
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             title: 'Jupiter Snippet 3',
             body: 'Jupiter rewards you for saving.',
             fetchCount: 3,
@@ -253,7 +253,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
     it('Updates a snippet properly', async () => {
         const expectedResult = { result: 'SUCCESS', updatedTime: testUpdatedTime };
         const expectedUpdateParams = {
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             active: true,
             body: 'Jupiter gives you an annual interest rate of up to 5%.'
         };
@@ -261,7 +261,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         updateFactStub.resolves({ updatedTime: testUpdatedTime });
 
         const eventBody = {
-            snippetId: testFactId,
+            snippetId: testSnippetId,
             active: true,
             body: 'Jupiter gives you an annual interest rate of up to 5%.'
         };

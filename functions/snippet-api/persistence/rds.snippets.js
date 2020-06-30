@@ -34,6 +34,8 @@ const extractColumnDetails = (object) => {
     return [extractColumnNames(objectKeys), extractColumnTemplate(objectKeys)];
 };
 
+const sumValues = (values) => values.reduce((sum, value) => sum + value, 0);
+
 /**
  * This functions persists new snippets
  * @param {object} snippet A snippet object containing initial values passed in from the client.
@@ -84,7 +86,7 @@ module.exports.incrementCount = async (snippetId, userId, status) => {
     }
 
     const updateColumn = status === 'FETCHED' ? 'fetch_count' : 'view_count';
-    const updateQuery = `UPDATE ${snippetJoinTable} SET ${updateColumn} = ${updateColumn} + 1 WHERE snippet_id = $1 ` +
+    const updateQuery = `update ${snippetJoinTable} set ${updateColumn} = ${updateColumn} + 1 where snippet_id = $1 ` +
         `and user_id = $2 returning ${updateColumn}, updated_time`;
 
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [snippetId, userId]);
@@ -96,7 +98,7 @@ module.exports.incrementCount = async (snippetId, userId, status) => {
 
 // Updates a snippets status, typically to VIEWED.
 module.exports.updateSnippetStatus = async (snippetId, userId, status) => {
-    const updateQuery = `UPDATE ${snippetJoinTable} SET snippet_status = $1 WHERE snippet_id = $2 ` +
+    const updateQuery = `update ${snippetJoinTable} set snippet_status = $1 where snippet_id = $2 ` +
         `and user_id = $3 returning updated_time`;
 
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [status, snippetId, userId]);
@@ -142,10 +144,52 @@ module.exports.fetchPreviewSnippets = async () => {
  * @param {string} systemWideUserId The user identifier to be checked for in the preview users table.
  */
 module.exports.isPreviewUser = async (systemWideUserId) => {
-    const selectQuery = `select user_id from ${previewUserTable} where user_id = $1`;
-    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId]);
+    const selectQuery = `select user_id from ${previewUserTable} where user_id = $1 and active = $2`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId, true]);
     logger('Result of Fetch:', resultOfFetch);
     return Array.isArray(resultOfFetch) && resultOfFetch.length > 0;
+};
+
+/**
+ * Inserts a new preview user (a user who can view snippets in preview mode). 
+ * @param {string} systemWideUserId The user id of the new preview user.
+ */
+module.exports.insertPreviewUser = async (systemWideUserId) => {
+    const findQuery = `select * from ${previewUserTable} where user_id = $1`;
+    const findResult = await rdsConnection.selectQuery(findQuery, [systemWideUserId]);
+    logger('Searching for existing preview user resulted in:', findResult);
+
+    if (Array.isArray(findResult) && findResult.length > 0) {
+        const updateQuery = `update ${previewUserTable} set active = $1 where user_id = $2 returning updated_time`;
+        const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [true, systemWideUserId]);
+        logger('Result of preview user reactivation:', resultOfUpdate);
+        
+        return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
+            ? camelCaseKeys(resultOfUpdate.rows[0]) : [];
+    }
+
+    const previewUserObj = { userId: systemWideUserId };
+    const [columnNames, columnTemplate] = extractColumnDetails(previewUserObj);
+    const insertQuery = `insert into ${previewUserTable} (${columnNames}) values %L returning creation_time`;
+
+    const resultOfInsert = await rdsConnection.insertRecords(insertQuery, columnTemplate, [previewUserObj]);
+    logger('Result of preview user insert:', resultOfInsert);
+
+    return resultOfInsert.rows ? camelCaseKeys(resultOfInsert.rows[0]) : null;
+
+};
+
+/**
+ * Removes (deactivates) a preview user.
+ * @param {string} systemWideUserId The user id of the preview user to be removed.
+ */
+module.exports.removePreviewUser = async (systemWideUserId) => {
+    const updateQuery = `update ${previewUserTable} set active = $1 where user_id = $2 returning updated_time`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [false, systemWideUserId]);
+    logger('Result of preview user removal:', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
+        ? camelCaseKeys(resultOfUpdate.rows[0]) : [];
 };
 
 /**
@@ -193,4 +237,63 @@ module.exports.insertSnippetLog = async (logObject) => {
     logger('Result of inserting log: ', resultOfInsert);
 
     return resultOfInsert['rows'][0]['log_id'];
+};
+
+/**
+ * This function supports an admin operation the fetches all active snippets. The snippet format
+ * differs from that displayed to the user, so entire snippets are extracted and formatted
+ * by the caller.
+ */
+module.exports.fetchAllSnippets = async () => {
+    const selectQuery = `select * from ${snippetTable} where active = $1`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true]);
+    logger(`Found ${resultOfFetch.length || 0} snippets`);
+    return Array.isArray(resultOfFetch) && resultOfFetch.length > 0
+        ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
+};
+
+/**
+ * Fetches snippet for admin user. All snippet properties are returned.
+ * @param {string} snippetId The identifier of the snippet ot be retrieved.
+ */
+module.exports.fetchSnippetForAdmin = async (snippetId) => {
+    const selectQuery = `select * from ${snippetTable} where snippet_id = $1`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [snippetId]);
+    logger('Got snippet:', resultOfFetch);
+    return Array.isArray(resultOfFetch) && resultOfFetch.length > 0 ? camelCaseKeys(resultOfFetch[0]) : [];
+};
+
+/**
+ * Counts how many users a particular snippet has been created for.
+ * @param {string} snippetId The identifier of the snippet to which the count pertains.
+ */
+module.exports.getSnippetUserCount = async (snippetId) => {
+    const selectQuery = `select count(distinct(user_id)) from ${snippetJoinTable} where snippet_id = $1`;
+    const resultOfCount = await rdsConnection.selectQuery(selectQuery, [snippetId]);
+    logger('Result of snippet user count:', resultOfCount);
+    return Array.isArray(resultOfCount) && resultOfCount.length > 0 ? resultOfCount[0].count : null;
+};
+
+/**
+ * Counts how many times a snippet has been viewed (by all ordinary users).
+ * @param {string} snippetId The identifier of the snippet whose views are to be counted.
+ */
+module.exports.getSnippetViewCount = async (snippetId) => {
+    const selectQuery = `select view_count from ${snippetJoinTable} where snippet_id = $1`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [snippetId]);
+    logger('Got snippet view counts:', resultOfFetch);
+    return Array.isArray(resultOfFetch) && resultOfFetch.length > 0
+        ? sumValues(resultOfFetch.map((result) => Number(result['view_count']))) : null;
+};
+
+/**
+ * Counts how many times a snippet has been fetched (for all ordinary users).
+ * @param {string} snippetId The identifier of the snippet of fetches are to be counted.
+ */
+module.exports.getSnippetFetchCount = async (snippetId) => {
+    const selectQuery = `select fetch_count from ${snippetJoinTable} where snippet_id = $1`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [snippetId]);
+    logger('Got snippet fetch counts:', resultOfFetch);
+    return Array.isArray(resultOfFetch) && resultOfFetch.length > 0
+        ? sumValues(resultOfFetch.map((result) => Number(result['fetch_count']))) : null;
 };

@@ -19,7 +19,7 @@ create table if not exists snippet_data.snippet (
 
 create table if not exists snippet_data.snippet_user_join_table (
     user_id uuid not null primary key,
-    snippet_id uuid not null  references snippet_data.snippet (snippet_id),
+    snippet_id uuid not null references snippet_data.snippet (snippet_id),
     snippet_status varchar (100) not null,
     view_count int not null default 0,
     fetch_count int not null default 0,
@@ -29,6 +29,7 @@ create table if not exists snippet_data.snippet_user_join_table (
 
 create table if not exists snippet_data.preview_user_table (
     user_id uuid not null primary key,
+    active boolean not null default true,
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
     tags text[] default '{}',
