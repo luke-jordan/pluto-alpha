@@ -21,6 +21,7 @@ const publishEventStub = sinon.stub();
 
 const countSettledSavesStub = sinon.stub();
 const sumAccountBalanceStub = sinon.stub();
+const fetchPendingTxStub = sinon.stub();
 
 const getOwnerInfoForAccountStub = sinon.stub();
 const generateBankRefStub = sinon.stub();
@@ -47,6 +48,7 @@ const handler = proxyquire('../withdrawal-handler', {
         'sumAccountBalance': sumAccountBalanceStub,
         'getOwnerInfoForAccount': getOwnerInfoForAccountStub,
         'findMostCommonCurrency': findMostCommonCurrencyStub,
+        'fetchPendingTransactions': fetchPendingTxStub,
         '@noCallThru': true
     },
     './persistence/dynamodb': {
@@ -87,17 +89,11 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         clientId: testClientId,
         floatId: testFloatId,
         defaultCurrency: 'USD',
-        defaultTimezone: 'America/New_York',
         personalName: 'John',
         familyName: 'Doe',
-        phoneNumber: '278384748264',
-        emailAddress: 'user@email.com',
         countryCode: testCountryCode,
         nationalId: testNationalId,
-        userStatus: 'CREATED',
-        kycStatus: 'CONTACT_VERIFIED',
-        securedStatus: 'PASSWORD_SET',
-        updatedTimeEpochMillis: moment().valueOf()
+        kycStatus: 'CONTACT_VERIFIED'
     };
 
     const mockInterestVars = {
@@ -108,33 +104,21 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
     };
 
     const mockLambdaResponse = (body, statusCode = 200) => ({
-        Payload: JSON.stringify({
-            statusCode,
-            body: JSON.stringify(body)
-        })
+        Payload: JSON.stringify({ statusCode, body: JSON.stringify(body) })
     });
+
+    const mockInitiateBankResponse = (status, jobId) => ({ StatusCode: 200, Payload: JSON.stringify({ status, jobId })});
 
     beforeEach(() => {
         helper.resetStubs(
-            // publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, 
-            // updateTxSettlementStatusStub, fetchTransactionStub, countSettledSavesStub, findMostCommonCurrencyStub, 
-            // getOwnerInfoForAccountStub, fetchFloatVarsForBalanceCalcStub
+            publishEventStub, redisGetStub, redisSetStub, lamdbaInvokeStub, sumAccountBalanceStub, 
+            fetchPendingTxStub, countSettledSavesStub, findMostCommonCurrencyStub, 
+            getOwnerInfoForAccountStub, fetchFloatVarsForBalanceCalcStub, checkPriorBankVerificationStub
         );
     });
 
-    it('Sets withdrawal bank account', async () => {
-        const event = {
-            requestContext: {
-                authorizer: {
-                    role: 'ORDINARY_USER',
-                    systemWideUserId: testUserId
-                }
-            },
-            body: JSON.stringify({
-                accountId: testAccountId,
-                bankDetails: testBankDetails
-            })
-        };
+    it('Sets withdrawal bank account, no prior verification, happy path', async () => {
+        const event = helper.wrapEvent({ accountId: testAccountId, bankDetails: testBankDetails }, testUserId);
 
         const mockJobIdPayload = {
             operation: 'initialize',
@@ -149,13 +133,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             }
         };
 
-        const mockInitializeVerificationResponse = {
-            StatusCode: 200,
-            Payload: JSON.stringify({
-                status: 'SUCCESS',
-                jobId: 'KSDF382'
-            })
-        };
+        const mockInitializeVerificationResponse = mockInitiateBankResponse('SUCCESS', 'KSDF382');
 
         publishEventStub.resolves({ result: 'SUCCESS' });
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
@@ -167,6 +145,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
 
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([]);
+
         redisSetStub.resolves();
 
         const expectedResult = {
@@ -184,6 +164,8 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
+
+        expect(checkPriorBankVerificationStub).to.have.been.calledOnceWithExactly(testUserId, testBankDetails);
         
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
@@ -192,7 +174,56 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
-        expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify({ ...testBankDetails, verificationJobId: 'KSDF382' }), 'EX', config.get('cache.detailsTTL'));
+
+        const expectedCachedDetails = { ...testBankDetails, verificationStatus: 'PENDING', verificationJobId: 'KSDF382' };
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify(expectedCachedDetails), 'EX', config.get('cache.detailsTTL'));
+    });
+
+    it('Uses prior verification result if available, and deducts pending withdrawals from available', async () => {
+        const event = helper.wrapEvent({ accountId: testAccountId, bankDetails: testBankDetails }, testUserId);
+
+        publishEventStub.resolves({ result: 'SUCCESS' });
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
+        
+        countSettledSavesStub.resolves(5);
+        findMostCommonCurrencyStub.resolves('USD');
+        getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
+        fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
+
+        const mockVerificationStoreTime = moment().subtract(2, 'months');
+        checkPriorBankVerificationStub.resolves({ verificationStatus: 'VERIFIED', creationTime: mockVerificationStoreTime });
+
+        sumAccountBalanceStub.resolves({ amount: 10 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([{ transactionId: 'some-tx', transactionType: 'WITHDRAWAL', amount: -1, unit: 'WHOLE_CURRENCY', currency: 'USD' }]);
+
+        redisSetStub.resolves();
+
+        const expectedResult = {
+            statusCode: 200,
+            body: JSON.stringify({
+                availableBalance: { amount: 9 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
+                cardTitle: 'Did you know?',
+                cardBody: 'Every R100 kept in your Jupiter account earns you at least R6 after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you'
+            })
+        };
+
+        const resultOfSetting = await handler.setWithdrawalBankAccount(event);
+        logger('Result of setting:', resultOfSetting);
+
+        expect(resultOfSetting).to.deep.equal(expectedResult);
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
+
+        expect(checkPriorBankVerificationStub).to.have.been.calledOnceWithExactly(testUserId, testBankDetails);
+        
+        expect(lamdbaInvokeStub).to.have.been.calledOnce; // profile args tested above
+        
+        expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
+        expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
+        expect(fetchPendingTxStub).to.have.been.calledOnceWith(testAccountId);
+
+        const expectedCachedDetails = { ...testBankDetails, verificationStatus: 'VERIFIED', verificationTime: mockVerificationStoreTime.format('DD MMMM, YYYY') };
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify(expectedCachedDetails), 'EX', config.get('cache.detailsTTL'));
     });
 
     it('Fails where user has no savings', async () => {
@@ -203,13 +234,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
                 floatId: testFloatId
         }, testUserId);
 
-        const mockInitializeVerificationResponse = {
-            StatusCode: 200,
-            Payload: JSON.stringify({
-                status: 'SUCCESS',
-                jobId: 'KSDF382'
-            })
-        };
+        const mockInitializeVerificationResponse = mockInitiateBankResponse('SUCCESS', 'KSDF382');
 
         publishEventStub.resolves({ result: 'SUCCESS' });
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
@@ -272,7 +297,9 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         findMostCommonCurrencyStub.resolves('ZAR');
         getOwnerInfoForAccountStub.resolves({ clientId: testClientId, floatId: testFloatId });
         fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
+
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([]);
 
         const expectedResult = { statusCode: 500, body: JSON.stringify(JSON.stringify({ message: 'Internal error'})) };
 
@@ -287,6 +314,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
+        expect(fetchPendingTxStub).to.have.been.calledOnceWith(testAccountId);
         expect(redisSetStub).to.have.not.been.called;
     });
 
@@ -311,21 +339,17 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             }
         };
 
-        const mockInitializeVerificationResponse = {
-            StatusCode: 200,
-            Payload: JSON.stringify({
-                status: 'FAILED',
-                jobId: 'KSDF382'
-            })
-        };
+        const mockInitializeVerificationResponse = mockInitiateBankResponse('FAILED', 'KSDF382');
 
         publishEventStub.resolves({ result: 'SUCCESS' });
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => mockLambdaResponse(testUserProfile) });
         lamdbaInvokeStub.onSecondCall().returns({ promise: () => mockInitializeVerificationResponse });
+
         countSettledSavesStub.resolves(5);
         findMostCommonCurrencyStub.resolves('ZAR');
         fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([]);
 
         const expectedResult = {
             statusCode: 200,
@@ -338,20 +362,22 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
 
         const resultOfSetting = await handler.setWithdrawalBankAccount(event);
         expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify({
-            ...testBankDetails,
-            verificationJobId: 'MANUAL_JOB'
+            ...testBankDetails, verificationStatus: 'PENDING', verificationJobId: 'MANUAL_JOB'
         }), 'EX', 900);
 
         // covered above but leave here to be sure
         expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal(expectedResult);
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_INITIATED');
+        
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: testUserId }));
         expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, mockJobIdPayload));
+        
         expect(countSettledSavesStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(findMostCommonCurrencyStub).to.have.been.calledOnceWithExactly(testAccountId);
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'ZAR');
+        expect(fetchPendingTxStub).to.have.been.calledOnceWith(testAccountId);
         expect(getOwnerInfoForAccountStub).to.not.have.been.called;
         
     });

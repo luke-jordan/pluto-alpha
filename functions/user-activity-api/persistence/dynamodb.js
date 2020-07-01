@@ -1,7 +1,11 @@
 'use strict';
 
+const logger = require('debug')('jupiter:activity:dynamo');
+
+const crypto = require('crypto');
 const config = require('config');
-const logger = require('debug')('pluto:activity:dynamo');
+const moment = require('moment');
+
 const util = require('ops-util-common');
 
 const dynamoCommon = require('dynamo-common');
@@ -102,7 +106,7 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
  * These functions handle storing the fact that a set of bank account details have been verified (or not)
  */
 
-const hashBankDetails = (bankDetails) => crypto.creatHash(HASH_ALGORITHM).update(JSON.stringify(bankDetails).digest('hex')); 
+const hashBankDetails = (bankDetails) => crypto.createHash(HASH_ALGORITHM).update(JSON.stringify(bankDetails)).digest('hex');
 
 const assembleUpdateParams = (itemKey, updateExpression, substitutionDict) => ({
     tableName: config.get('tables.bankVerification'),
@@ -119,11 +123,11 @@ module.exports.fetchBankVerificationResult = async (systemWideUserId, bankDetail
     logger('Retrieved bank verification record: ', lookupResult);
 
     if (util.isObjectEmpty(lookupResult)) {
-        return { verificationStatus: 'NO_RECORD' };
+        return null;
     }
 
     const lastAccessMoment = moment(lookupResult.lastAccessTime);
-    const thresholdMoment = moment().subtract(config.get('bank.threshold.amount'), config.get('bank.threshold.unit'));
+    const thresholdMoment = moment().subtract(config.get('bank.validity.length'), config.get('bank.validity.unit'));
     logger('Comparing last access: ', lastAccessMoment, ' to threshold: ', thresholdMoment);
 
     if (lastAccessMoment.isBefore(thresholdMoment)) {
@@ -131,10 +135,15 @@ module.exports.fetchBankVerificationResult = async (systemWideUserId, bankDetail
         // note : we do not use TTLs because we may adjust this time period after rows written
         const itemKey = { systemWideUserId, accountHash };
         await dynamoCommon.deleteRow({ tableName: lookupTable, itemKey });
-        return { verificationStatus: 'NO_RECORD' };
+        return null;
     }
 
-    return lookupResult.verificationStatus;
+    return {
+        verificationStatus: lookupResult.verificationStatus,
+        verificationLog: lookupResult.verificationLog,
+        creationMoment: moment(lookupResult.creationTime),
+        lastAccessMoment
+    };
 };
 
 const updateExistingResultFull = async (itemKey, verificationStatus, verificationLog) => {
@@ -147,7 +156,7 @@ const updateExistingResultFull = async (itemKey, verificationStatus, verificatio
     const updateResult = await dynamoCommon.updateRow(updateParams);
     logger('Result of update: ', updateResult);
     return updateResult;
-}
+};
 
 module.exports.setBankVerificationResult = async ({ systemWideUserId, bankDetails, verificationStatus, verificationLog }) => {
     const accountHash = hashBankDetails(bankDetails);
@@ -166,9 +175,12 @@ module.exports.setBankVerificationResult = async ({ systemWideUserId, bankDetail
         accountHash,
         creationTime: persistedTime.valueOf(),
         lastAccessTime: persistedTime.valueOf(),
-        verificationStatus: verificationStatus,
-        verificationLog: verificationLog
+        verificationStatus: verificationStatus
     };
+
+    if (verificationLog) {
+        itemToInsert.verificationLog = verificationLog;
+    }
 
     logger('Persisting in DynamoDB: ', itemToInsert);
     const resultOfInsert = await dynamoCommon.insertNewRow(lookupTable, ['systemWideUserId', 'accountHash'], itemToInsert);
@@ -179,7 +191,7 @@ module.exports.setBankVerificationResult = async ({ systemWideUserId, bankDetail
 
 module.exports.updateLastVerificationUseTime = async (systemWideUserId, bankDetails, accessTime) => {
 
-    const itemKey = { systemWideUserId, accountHash: hashBankDetails(bankDetails) },    
+    const itemKey = { systemWideUserId, accountHash: hashBankDetails(bankDetails) }; 
     const updateInstruction = assembleUpdateParams(itemKey, 'set last_access_time = :at', { ':at': accessTime.valueOf() });
 
     logger('Sending update parameters to Dynamo: ', updateInstruction);

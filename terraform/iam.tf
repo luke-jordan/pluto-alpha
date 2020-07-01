@@ -911,6 +911,36 @@ resource "aws_iam_policy" "lambda_invoke_outbound_comms_send" {
 EOF
 }
 
+///// HASHING BANK DETAILS PERMISSIONS
+
+# no scanning
+resource "aws_iam_policy" "dynamo_bank_verification_access" {
+    name = "${terraform.workspace}_ddb_bank_status_access"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ReferralCodeWriteAccess",
+            "Effect": "Allow",
+            "Action": [
+                "dynamodb:Query",
+                "dynamodb:GetItem",
+                "dynamodb:PutItem",
+                "dynamodb:UpdateItem"
+            ],
+            "Resource": [
+                "${aws_dynamodb_table.bank_verification_hash.arn}",
+                "${aws_dynamodb_table.bank_verification_hash.arn}/index/*"
+            ]
+        }
+    ]
+}
+
+}
+
 ///// SOME QUEUE PERMISSIONS
 
 resource "aws_iam_policy" "sqs_message_event_queue_process" {

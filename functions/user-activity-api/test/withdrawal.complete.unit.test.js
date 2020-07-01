@@ -24,11 +24,13 @@ const sumAccountBalanceStub = sinon.stub();
 const getOwnerInfoForAccountStub = sinon.stub();
 const fetchBankRefInfoStub = sinon.stub();
 const generateBankRefStub = sinon.stub();
+const fetchPendingTxStub = sinon.stub();
 
 const addTransactionToAccountStub = sinon.stub();
 const updateTxSettlementStatusStub = sinon.stub();
 const fetchFloatVarsForBalanceCalcStub = sinon.stub();
 
+const checkPriorBankVerificationStub = sinon.stub();
 const storeBankVerificationStub = sinon.stub();
 
 const publishEventStub = sinon.stub();
@@ -52,10 +54,12 @@ const handler = proxyquire('../withdrawal-handler', {
         'addTransactionToAccount': addTransactionToAccountStub,
         'updateTxSettlementStatus': updateTxSettlementStatusStub,
         'fetchInfoForBankRef': fetchBankRefInfoStub,
+        'fetchPendingTransactions': fetchPendingTxStub,
         '@noCallThru': true
     },
     './persistence/dynamodb': {
         'fetchFloatVarsForBalanceCalc': fetchFloatVarsForBalanceCalcStub,
+        'fetchBankVerificationResult': checkPriorBankVerificationStub,
         'setBankVerificationResult': storeBankVerificationStub,
         '@noCallThru': true
     },
@@ -105,25 +109,26 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
     beforeEach(() => {
         helper.resetStubs(
             momentStub, publishEventStub, redisGetStub, redisSetStub, sumAccountBalanceStub, addTransactionToAccountStub, 
-            getOwnerInfoForAccountStub, lamdbaInvokeStub, fetchBankRefInfoStub, generateBankRefStub
+            getOwnerInfoForAccountStub, lamdbaInvokeStub, fetchBankRefInfoStub, generateBankRefStub, 
+            fetchPendingTxStub, checkPriorBankVerificationStub, storeBankVerificationStub
         );
     });
 
     it('Sets withdrawal amount', async () => {
         const event = helper.wrapEvent({ accountId: testAccountId, amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD' }, testUserId);
 
-        const mockInitializeVerificationResponse = {
-            StatusCode: 200,
-            Payload: JSON.stringify({
-                result: 'VERIFIED',
-                jobId: 'KSDF382'
-            })
-        };
+        const mockInitializeVerificationResponse = mockBankVerifyResponse('VERIFIED');
+        const mockVerifyStashTime = moment();
 
         redisGetStub.resolves(JSON.stringify(testBankDetails));
         lamdbaInvokeStub.returns({ promise: () => mockInitializeVerificationResponse });
+        // in _theory_, could use persisted time from verification details stashing, _but_ would mean sequential instead of parallel call,
+        // and in no plausible way is the extra few milliseconds of accuracy worth that
+        momentStub.returns(mockVerifyStashTime.clone()); 
         
         sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([]);
+        
         getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
         fetchBankRefInfoStub.resolves(testBankRefInfo);
         generateBankRefStub.resolves('JUPSAVER-16');
@@ -157,14 +162,13 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         };
 
         const resultOfSetting = await handler.setWithdrawalAmount(event);
-        logger('Result of setting:', resultOfSetting);
-
-        expect(resultOfSetting).to.exist;
         expect(resultOfSetting).to.deep.equal(expectedResult);
+
         expect(redisGetStub).to.have.been.calledTwice;
         expect(redisGetStub).to.have.been.calledWith(testUserId);
         
-        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, { operation: 'statusCheck', parameters: { jobId: 'KSDF382' }}));
+        const expectedBankInvoke = { operation: 'statusCheck', parameters: { jobId: 'KSDF382' } };
+        expect(lamdbaInvokeStub).to.have.been.calledWith(helper.wrapLambdaInvoc(config.get('lambdas.userBankVerify'), false, expectedBankInvoke));
         
         expect(sumAccountBalanceStub).to.have.been.calledOnceWithExactly(testAccountId, 'USD');
         expect(getOwnerInfoForAccountStub).to.have.been.calledOnceWithExactly(testAccountId);
@@ -180,16 +184,24 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
 
         const modifiedBankDetails = { ...testBankDetails };
         modifiedBankDetails.verificationStatus = 'VERIFIED';
+        modifiedBankDetails.verificationTime = mockVerifyStashTime.format('DD MMMM, YYYY');
         expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify(modifiedBankDetails), 'EX', 900);
+
+        // eslint-disable-next-line no-undefined
+        const expectedArgs = { systemWideUserId: testUserId, bankDetails: modifiedBankDetails, verificationStatus: 'VERIFIED', verificationLog: undefined };
+        expect(storeBankVerificationStub).to.have.been.calledOnceWithExactly(expectedArgs);
     });
 
-    it('Sets withdrawal amount, converting units and rounding appropriately', async () => {
+    it('Sets withdrawal amount, converting units and rounding appropriately, and ignores pending saves', async () => {
         const event = helper.wrapEvent({ accountId: testAccountId, amount: -250100.00000000003, unit: 'HUNDREDTH_CENT', currency: 'USD' }, testUserId);
 
         redisGetStub.resolves(JSON.stringify(testBankDetails));
         lamdbaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
+        momentStub.returns(moment());
         
         sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([{ amount: 100, unit: 'WHOLE_CURRENCY', currency: 'USD', transactionType: 'USER_SAVING_EVENT' }]);
+
         getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
         fetchBankRefInfoStub.resolves(testBankRefInfo);
         generateBankRefStub.resolves('JUPSAVER-16');
@@ -229,15 +241,55 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(addTransactionToAccountStub).to.have.not.been.called;
     });
 
+    it('Skips bank job checking if already exists in store, and flips cache recordingly', async () => {
+        const event = helper.wrapEvent({ accountId: testAccountId, amount: 10, unit: 'WHOLE_CURRENCY', currency: 'USD' }, testUserId);
+
+        const mockInitialDetails = { ...testBankDetails, verificationStatus: 'PENDING' };
+        redisGetStub.resolves(JSON.stringify(mockInitialDetails));
+
+        const mockVerificationTime = moment().subtract(3, 'months');
+        checkPriorBankVerificationStub.resolves({ verificationStatus: 'VERIFIED', creationTime: mockVerificationTime });
+        redisSetStub.resolves({});
+        
+        sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([]);
+
+        getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
+        fetchBankRefInfoStub.resolves(testBankRefInfo);
+        generateBankRefStub.resolves('JUPSAVER-16');
+        
+        addTransactionToAccountStub.resolves({ transactionDetails: [{ accountTransactionId: testTransactionId }] });
+
+        // calcs are tested above, not point here
+        fetchFloatVarsForBalanceCalcStub.withArgs(testClientId, testFloatId).resolves(mockFloatVars);
+
+        const resultOfSetting = await handler.setWithdrawalAmount(event);
+        logger('Result of setting:', resultOfSetting);
+
+        const resultBody = helper.standardOkayChecks(resultOfSetting);
+        expect(resultBody).to.have.property('transactionId', testTransactionId);
+
+        // other expectations are covered above
+        const mockVerificationFormatted = mockVerificationTime.format('DD MMMM, YYYY');
+        const modifiedBankDetails = { ...testBankDetails, verificationStatus: 'VERIFIED', verificationTime: mockVerificationFormatted };
+        expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify(modifiedBankDetails), 'EX', 900);    
+    });
+
     it('Logs result of bank account failure', async () => {
         const event = helper.wrapEvent({ accountId: testAccountId, amount: 10 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD' }, testUserId);
 
-        const mockVerifyResult = mockBankVerifyResponse('FAILED');
-
         redisGetStub.resolves(JSON.stringify(testBankDetails));
+        
+        const mockVerifyPayload = { result: 'FAILED', cause: 'ID number account mismatch' };
+        const mockVerifyResult = { StatusCode: 200, Payload: JSON.stringify(mockVerifyPayload) };
         lamdbaInvokeStub.returns({ promise: () => mockVerifyResult });
         
+        const mockMoment = moment(); // see notes above about doing this instead of using ddb result to allow parallel
+        momentStub.returns(mockMoment.clone());
+        
         sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([]);
+        
         getOwnerInfoForAccountStub.resolves({ floatId: testFloatId, clientId: testClientId });
         fetchBankRefInfoStub.resolves(testBankRefInfo);
         generateBankRefStub.resolves('JUPSAVER-16');
@@ -253,13 +305,19 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         expect(resultBody).to.have.property('transactionId', testTransactionId);
 
         // other expectations are covered above
-        const expectedLogOptions = { context: { resultFromVerifier: { jobId: 'KSDF382', result: 'FAILED' } } };
+        const expectedLogOptions = { context: { resultFromVerifier: { cause: 'ID number account mismatch', result: 'FAILED' } } };
         expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'BANK_VERIFICATION_FAILED', expectedLogOptions);
 
-        const modifiedBankDetails = { ...testBankDetails };
-        modifiedBankDetails.verificationStatus = 'FAILED';
+        const modifiedBankDetails = { 
+            ...testBankDetails, 
+            verificationStatus: 'FAILED', 
+            failureReason: 'ID number account mismatch',
+            verificationTime: mockMoment.format('DD MMMM, YYYY') 
+        };
         expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify(modifiedBankDetails), 'EX', 900);
 
+        const expectedArgs = { systemWideUserId: testUserId, bankDetails: modifiedBankDetails, verificationStatus: 'FAILED', verificationLog: 'ID number account mismatch' };
+        expect(storeBankVerificationStub).to.have.been.calledOnceWithExactly(expectedArgs);
     });
 
     it('Fails on invalid withdrawal parameters', async () => {
@@ -299,7 +357,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
     });
 
     it('Fails where withdrawal amount is greater than available balance', async () => {
-        const testBody = { accountId: testAccountId, amount: 11, unit: 'HUNDREDTH_CENT', currency: 'USD' };
+        const testBody = { accountId: testAccountId, amount: 110000, unit: 'HUNDREDTH_CENT', currency: 'USD' };
         const event = helper.wrapEvent(testBody, testUserId);
 
         const expectedResult = { statusCode: 400, body: 'Error, trying to withdraw more than available' };
@@ -307,7 +365,8 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         momentStub.returns({ add: () => testInitiationTime });
         redisGetStub.resolves(JSON.stringify(testBankDetails));
         lamdbaInvokeStub.returns({ promise: () => mockBankVerifyResponse('VERIFIED') });
-        sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        sumAccountBalanceStub.resolves({ amount: 120000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([{ amount: -2, unit: 'WHOLE_CURRENCY', currency: 'USD', transactionType: 'WITHDRAWAL' }]);
      
         const resultOfSetting = await handler.setWithdrawalAmount(event);
         logger('Result of setting:', resultOfSetting);
@@ -321,6 +380,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         const event = helper.wrapEvent({ accountId: testAccountId, amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD' }, testUserId);
 
         sumAccountBalanceStub.resolves({ amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
+        fetchPendingTxStub.resolves([]);
         redisGetStub.throws(new Error('Internal Error'));
 
         const expectedResult = { statusCode: 500, body: JSON.stringify('Internal Error') };
@@ -464,6 +524,8 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         const mockLambdaResponse = mockBankVerifyResponse('FAILED');
         lamdbaInvokeStub.returns({ promise: () => mockLambdaResponse });
+        const mockMoment = moment();
+        momentStub.returns(mockMoment.clone());
         
         const newSumAccount = { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'ZAR', lastTxTime: null }; // tx is not settled yet ...
         sumAccountBalanceStub.resolves(newSumAccount);
@@ -484,6 +546,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
 
         const modifiedBankDetails = { ...testBankDetails };
         modifiedBankDetails.verificationStatus = 'FAILED';
+        modifiedBankDetails.verificationTime = mockMoment.format('DD MMMM, YYYY');
         expect(redisSetStub).to.have.been.calledOnceWithExactly(testUserId, JSON.stringify(modifiedBankDetails), 'EX', 900);
     });
 

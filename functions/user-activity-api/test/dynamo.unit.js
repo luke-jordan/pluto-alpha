@@ -37,7 +37,7 @@ const dynamo = proxyquire('../persistence/dynamodb', {
         fetchSingleRow: fetchStub,
         insertNewRow: insertStub,
         deleteRow: deleteStub,
-        updateRow: updateStub,
+        updateRow: updateStub
     },
     'ioredis': MockRedis,
     'moment': momentStub,
@@ -92,11 +92,12 @@ describe('** UNIT TESTING DYNAMO FETCH **', () => {
 
 });
 
-describe.only('** UNIT TESTING BANK DETAILS HANDLING **', () => {
+describe('** UNIT TESTING BANK DETAILS HANDLING **', () => {
 
     beforeEach(() => {
         fetchStub.reset();
         insertStub.reset();
+        momentStub.reset();
     });
 
     const mockUserId = uuid();
@@ -107,19 +108,37 @@ describe.only('** UNIT TESTING BANK DETAILS HANDLING **', () => {
         accountType: 'SAVINGS'    
     };
 
-    const expectedHash = crypto.createHash('sha256').update(JSON.stringify(mockBankDetails)).digest('hex');
+    const expectedHash = crypto.createHash('sha512').update(JSON.stringify({
+        bankName: mockBankDetails.bankName,
+        accountNumber: mockBankDetails.accountNumber,
+        accountType: mockBankDetails.accountType
+    })).digest('hex');
 
     it('Hashes and fetches prior bank verification results correctly', async () => {
         const mockCreatedTime = moment().subtract(3, 'days');
         // const mockCutOffTime = moment().subtract(180, 'days');
 
-        fetchStub.resolves({ systemWideUserId: mockUserId, accountHash: expectedHash, verificationStatus: 'VERIFIED', creationTime: mockCreatedTime.valueOf() });
+        const mockRow = { 
+            systemWideUserId: mockUserId, 
+            accountHash: expectedHash, 
+            verificationStatus: 'VERIFIED', 
+            verificationLog: 'All good',
+            creationTime: mockCreatedTime.valueOf(),
+            lastAccessTime: mockCreatedTime.valueOf() 
+        };
+
+        fetchStub.resolves(mockRow);
 
         momentStub.withArgs().returns(moment());
         momentStub.withArgs(mockCreatedTime.valueOf()).returns(mockCreatedTime);
 
         const result = await dynamo.fetchBankVerificationResult(mockUserId, mockBankDetails);
-        expect(result).to.deep.equal({ verificationStatus: 'VERIFIED' });
+        expect(result).to.deep.equal({ 
+            verificationStatus: 'VERIFIED', 
+            verificationLog: 'All good', 
+            creationMoment: mockCreatedTime,
+            lastAccessMoment: mockCreatedTime 
+        });
 
         const expectedKey = { systemWideUserId: mockUserId, accountHash: expectedHash };
         expect(fetchStub).to.have.been.calledOnceWithExactly('BankVerificationTable', expectedKey);
@@ -129,7 +148,7 @@ describe.only('** UNIT TESTING BANK DETAILS HANDLING **', () => {
         fetchStub.resolves({});
 
         const result = await dynamo.fetchBankVerificationResult(mockUserId, mockBankDetails);
-        expect(result).to.deep.equal({ verificationStatus: 'NO_RECORD' });
+        expect(result).to.be.null;
 
         const expectedKey = { systemWideUserId: mockUserId, accountHash: expectedHash };
         expect(fetchStub).to.have.been.calledOnceWithExactly('BankVerificationTable', expectedKey);
@@ -141,12 +160,13 @@ describe.only('** UNIT TESTING BANK DETAILS HANDLING **', () => {
         momentStub.withArgs().returns(moment());
         momentStub.withArgs(mockCreatedTime.valueOf()).returns(mockCreatedTime);
         
-        fetchStub.resolves();
+        fetchStub.resolves({ lastAccessTime: mockCreatedTime.valueOf() });
         deleteStub.resolves({ result: 'DELETED' });
 
         const result = await dynamo.fetchBankVerificationResult(mockUserId, mockBankDetails);
-        expect(result).to.deep.equal({ verificationStatus: 'NO_RECORD' });
+        expect(result).to.be.null;
 
+        expect(fetchStub).to.have.been.calledOnce;
         expect(deleteStub).to.have.been.calledOnceWith({ 
             tableName: 'BankVerificationTable',
             itemKey: { systemWideUserId: mockUserId, accountHash: expectedHash }
@@ -157,14 +177,23 @@ describe.only('** UNIT TESTING BANK DETAILS HANDLING **', () => {
     it('Hashes and stores correctly when passed details', async () => {
         const mockPersistedTime = moment();
 
-        insertStub.resolves({ result: 'SUCCESS' });
-        const result = await dynamo.setBankVerificationResult(mockUserId, mockBankDetails, 'VERIFIED');
+        momentStub.returns(mockPersistedTime);
+        insertStub.resolves({ result: 'SUCCESS' }); // args checked below
+
+        const result = await dynamo.setBankVerificationResult({
+            systemWideUserId: mockUserId, 
+            bankDetails: mockBankDetails, 
+            verificationStatus: 'VERIFIED',
+            verificationLog: 'All good'
+        });
+
         expect(result).to.deep.equal({ result: 'SUCCESS', persistedTime: mockPersistedTime });
 
         const expectedItem = {
             systemWideUserId: mockUserId,
             accountHash: expectedHash,
             verificationStatus: 'VERIFIED',
+            verificationLog: 'All good',
             creationTime: mockPersistedTime.valueOf(),
             lastAccessTime: mockPersistedTime.valueOf()
         };
