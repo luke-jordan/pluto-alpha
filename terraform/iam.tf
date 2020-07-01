@@ -938,7 +938,7 @@ resource "aws_iam_policy" "dynamo_bank_verification_access" {
         }
     ]
 }
-
+EOF
 }
 
 ///// SOME QUEUE PERMISSIONS

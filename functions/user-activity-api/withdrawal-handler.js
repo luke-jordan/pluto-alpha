@@ -150,6 +150,8 @@ const updateBankAccountVerificationStatus = async (systemWideUserId, verificatio
     const promisesToExecute = [];
     if (verificationStatus === 'VERIFIED' || verificationStatus === 'FAILED') {
         // in these two cases we stash the result against a one-way hash of the account details so we do not repeat
+        // _note_ we could also move this to event handler and do it there, _but_ bank verifications are expensive, and this is a few
+        // millis longer, on a process where we do not mind a little extra friction, hence doing it here
         const stashVerificationArgs = { systemWideUserId, bankDetails: cachedDetails, verificationStatus, verificationLog: failureReason };
         cachedDetails.verificationTime = moment().format('DD MMMM, YYYY');
         promisesToExecute.push(dynamodb.setBankVerificationResult(stashVerificationArgs));
