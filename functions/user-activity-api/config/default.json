@@ -17,7 +17,8 @@
         "accountLog": "account_data.account_log",
         "boostMaster": "boost_data.boost",
         "boostJoin": "boost_data.boost_account_status",
-        "clientFloatVars": "ClientFloatTable"
+        "clientFloatVars": "ClientFloatTable",
+        "bankVerification": "BankVerificationTable"
     },
     "db": {
         "user": "save_tx_api_worker",
@@ -68,6 +69,13 @@
         "test": false,
         "dummy": "OFF"
     },
+    "bank": {
+        "hash": "sha512",
+        "validity": {
+            "length": 180,
+            "unit": "days"
+        }
+    },
     "publishing": {
         "userEvents": {
             "topicArn": "<<override here>>",
@@ -104,7 +112,7 @@
         "balanceSheet": {
             "enabled": true,
             "accountPrefix": "FINWORKS",
-            "txFlag": "FINWORKS_RECORDED"
+            "txTagPrefix": "FINWORKS_RECORDED"
         },
         "duplicate": {
             "minuteCutOff": 15

@@ -141,7 +141,7 @@ module.exports.addCash = async (event) => {
     try {
         const response = await assembleAddMoneyOptions(event, config.get('finworks.endpoints.addCash'));
         // logger('Response from generic method for add cash: ', response);
-        return response.body;
+        return { result: 'SUCCESS', details: response.body };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERROR', details: err.message };
@@ -152,7 +152,7 @@ module.exports.addBoost = async (event) => {
     try {
         const response = await assembleAddMoneyOptions(event, config.get('finworks.endpoints.addBoost'));
         // logger('Response from generic method for boost: ', response);
-        return response.body;
+        return { result: 'SUCCESS', details: response.body };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'ERROR', details: err.message };
@@ -189,7 +189,7 @@ module.exports.sendWithdrawal = async (event) => {
             throw new Error(JSON.stringify(response.body));
         }
 
-        return response.body;
+        return { result: 'SUCCESS', details: response.body };
 
     } catch (err) {
         logger('FATAL_ERROR:', err);

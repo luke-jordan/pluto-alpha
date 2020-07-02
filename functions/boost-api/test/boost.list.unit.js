@@ -267,7 +267,11 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
         const mockTournLogs = [mockLog(testUserId, 15), mockLog('user-1', 10), mockLog('user-2', 20)];
         fetchTournScoresStub.resolves(mockTournLogs);
 
-        cacheMultiGetStub.resolves([{ systemWideUserId: testUserId }, null, { systemWideUserId: 'user-2', personalName: 'Some', familyName: 'Person' }]);
+        cacheMultiGetStub.resolves([
+            JSON.stringify({ systemWideUserId: testUserId }), 
+            null, 
+            JSON.stringify({ systemWideUserId: 'user-2', personalName: 'Some', familyName: 'Person' })
+        ]);
 
         const resultOfListing = await handler.fetchBoostDetails(wrapEvent({ boostId: testBoostId }, testUserId));
 

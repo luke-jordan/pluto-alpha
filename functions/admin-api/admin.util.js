@@ -10,6 +10,25 @@ const corsHeaders = {
     'Access-Control-Allow-Origin': allowedCors
 };
 
+module.exports.eventTypesForHistory = [
+    'USER_LOGIN', 
+    'PASSWORD_SET', 
+    'USER_REGISTERED', 
+    'STATUS_CHANGED', 
+    'FAILED_VERIFICATION', 
+    'VERIFIED_AS_PERSON', 
+    
+    'SAVING_PAYMENT_SUCCESSFUL', 
+    'BOOST_REDEEMED',
+
+    'WITHDRAWAL_EVENT_CONFIRMED', 
+    'WITHDRAWAL_COMPLETED', 
+    
+    'BANK_VERIFICATION_FAILED',
+    'BANK_VERIFICATION_SUCCEEDED',
+    'BANK_VERIFICATION_MANUAL'
+];
+
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
 
 module.exports.isUserAuthorized = (event, requiredRole = 'SYSTEM_ADMIN') => {

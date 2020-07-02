@@ -1,12 +1,12 @@
-variable "boost_details_fetch_lambda_function_name" {
-  default = "boost_details_fetch"
+variable "boost_detail_fetch_lambda_function_name" {
+  default = "boost_detail_fetch"
   type = "string"
 }
 
-resource "aws_lambda_function" "boost_details_fetch" {
+resource "aws_lambda_function" "boost_detail_fetch" {
 
-  function_name                  = "${var.boost_details_fetch_lambda_function_name}"
-  role                           = "${aws_iam_role.boost_details_fetch_role.arn}"
+  function_name                  = "${var.boost_detail_fetch_lambda_function_name}"
+  role                           = "${aws_iam_role.boost_detail_fetch_role.arn}"
   handler                        = "boost-list-handler.fetchBoostDetails"
   memory_size                    = 256
   runtime                        = "nodejs10.x"
@@ -31,8 +31,10 @@ resource "aws_lambda_function" "boost_details_fetch" {
                 "port" :"${local.database_config.port}"
               },
               "cache": {
-                "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
-                "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+                "config": {
+                  "host": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.address}",
+                  "port": "${aws_elasticache_cluster.ops_redis_cache.cache_nodes.0.port}"
+                }
               },
               "secrets": {
                 "enabled": true,
@@ -50,11 +52,11 @@ resource "aws_lambda_function" "boost_details_fetch" {
       aws_security_group.sg_cache_6379_ingress.id, aws_security_group.sg_ops_cache_access.id, aws_security_group.sg_https_dns_egress.id]
   }
 
-  depends_on = [aws_cloudwatch_log_group.boost_details_fetch]
+  depends_on = [aws_cloudwatch_log_group.boost_detail_fetch]
 }
 
-resource "aws_iam_role" "boost_details_fetch_role" {
-  name = "${var.boost_details_fetch_lambda_function_name}_role_${terraform.workspace}"
+resource "aws_iam_role" "boost_detail_fetch_role" {
+  name = "${var.boost_detail_fetch_lambda_function_name}_role_${terraform.workspace}"
 
   assume_role_policy = <<EOF
 {
@@ -73,8 +75,8 @@ resource "aws_iam_role" "boost_details_fetch_role" {
 EOF
 }
 
-resource "aws_cloudwatch_log_group" "boost_details_fetch" {
-  name = "/aws/lambda/${var.boost_details_fetch_lambda_function_name}"
+resource "aws_cloudwatch_log_group" "boost_detail_fetch" {
+  name = "/aws/lambda/${var.boost_detail_fetch_lambda_function_name}"
   retention_in_days = 3
   
   tags = {
@@ -82,39 +84,39 @@ resource "aws_cloudwatch_log_group" "boost_details_fetch" {
   }
 }
 
-resource "aws_iam_role_policy_attachment" "boost_details_fetch_basic_execution_policy" {
-  role = "${aws_iam_role.boost_details_fetch_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_detail_fetch_basic_execution_policy" {
+  role = "${aws_iam_role.boost_detail_fetch_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_details_fetch_vpc_execution_policy" {
-  role = "${aws_iam_role.boost_details_fetch_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_detail_fetch_vpc_execution_policy" {
+  role = "${aws_iam_role.boost_detail_fetch_role.name}"
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
-resource "aws_iam_role_policy_attachment" "boost_details_fetch_secret_get" {
-  role = "${aws_iam_role.boost_details_fetch_role.name}"
+resource "aws_iam_role_policy_attachment" "boost_detail_fetch_secret_get" {
+  role = "${aws_iam_role.boost_detail_fetch_role.name}"
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
-resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_boost_details_fetch" {
-  log_group_name = "${aws_cloudwatch_log_group.boost_details_fetch.name}"
+resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_boost_detail_fetch" {
+  log_group_name = "${aws_cloudwatch_log_group.boost_detail_fetch.name}"
   metric_transformation {
-    name = "${var.boost_details_fetch_lambda_function_name}_fatal_api_alarm"
+    name = "${var.boost_detail_fetch_lambda_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.boost_details_fetch_lambda_function_name}_fatal_api_alarm"
+  name = "${var.boost_detail_fetch_lambda_function_name}_fatal_api_alarm"
   pattern = "FATAL_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_details_fetch" {
-  alarm_name = "${var.boost_details_fetch_lambda_function_name}_fatal_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_detail_fetch" {
+  alarm_name = "${var.boost_detail_fetch_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_boost_details_fetch.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_boost_detail_fetch.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0
@@ -122,22 +124,22 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_details_fetch" 
   alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
 }
 
-resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_boost_details_fetch" {
-  log_group_name = "${aws_cloudwatch_log_group.boost_details_fetch.name}"
+resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_boost_detail_fetch" {
+  log_group_name = "${aws_cloudwatch_log_group.boost_detail_fetch.name}"
   metric_transformation {
-    name = "${var.boost_details_fetch_lambda_function_name}_security_api_alarm"
+    name = "${var.boost_detail_fetch_lambda_function_name}_security_api_alarm"
     namespace = "lambda_errors"
     value = "1"
   }
-  name = "${var.boost_details_fetch_lambda_function_name}_security_api_alarm"
+  name = "${var.boost_detail_fetch_lambda_function_name}_security_api_alarm"
   pattern = "SECURITY_ERROR"
 }
 
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_boost_details_fetch" {
-  alarm_name = "${var.boost_details_fetch_lambda_function_name}_security_api_alarm"
+resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_boost_detail_fetch" {
+  alarm_name = "${var.boost_detail_fetch_lambda_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_boost_details_fetch.name}"
+  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_boost_detail_fetch.name}"
   namespace = "lambda_errors"
   period = 60
   threshold = 0

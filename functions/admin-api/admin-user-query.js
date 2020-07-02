@@ -16,6 +16,8 @@ const lambda = new AWS.Lambda();
 
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
 
+const { eventTypesForHistory: USER_EVENT_TYPES } = adminUtil;
+
 /**
  * Gets the user counts for the front page, usign a mix of parameters. Leaving out a parameter will invoke a default
  * @param {object} event An event containing the request context and the request body. The body's properties a decribed below.
@@ -56,11 +58,10 @@ const fetchUserProfile = async (systemWideUserId, includeContactMethod = true) =
 // fetches user events for the last 6 (?) months (... can extend when we have users long than that & have thought through data etc)
 const obtainUserHistory = async (systemWideUserId) => {
     const startDate = moment().subtract(config.get('defaults.userHistory.daysInHistory'), 'days').valueOf();
-    const eventTypes = config.get('defaults.userHistory.eventTypes');
-
+    
     const userHistoryEvent = {
         userId: systemWideUserId,
-        eventTypes,
+        eventTypes: USER_EVENT_TYPES,
         startDate,
         endDate: moment().valueOf()
     };

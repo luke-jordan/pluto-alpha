@@ -291,7 +291,7 @@ describe('Company and bonus share allocations', () => {
     it('Allocates them both at once correctly', async () => {
         insertStub.resolves({rows: [{'transaction_id': bonusTxId}, {'transaction_id': companyTxId}]});
         const insertResult = await rds.allocateFloat(common.testValidClientId, common.testValidFloatId, [testBonusAllocation, testCompanyAllocation]);
-        logger('Completed dual allocation');
+        logger('Completed dual allocation: ', insertResult);
         expect(insertResult).to.exist;
         expect(insertResult).to.eql([{'BONUS': bonusTxId}, {'COMPANY': companyTxId}]);
         expect(insertStub).to.have.been.calledOnceWithExactly(expectedAllocationQuery, expectedAllocationColumns, [expectedValuesBonus, expectedValuesCompany]);
@@ -397,6 +397,7 @@ describe('User account allocation', () => {
         multiTableStub.resolves([floatTxArray, accountTxArray]);
 
         const insertionResult = await rds.allocateToUsers(common.testValidClientId, common.testValidFloatId, allocRequests);
+        // logger('Correct insertion result: ', JSON.stringify(insertionResult));
         
         const extractedFloatIds = allocRequests.map((request) => request.floatTxId);
         const extractAccountTxIds = allocRequests.map((request) => request.accountTxId);

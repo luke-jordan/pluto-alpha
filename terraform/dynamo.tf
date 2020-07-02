@@ -172,3 +172,29 @@ resource "aws_dynamodb_table" "admin_log_table" {
     Environment = "${terraform.workspace}"
   }
 }
+
+// ////////////////// WE DO NOT STORE BANK DETAILS, BUT A HASH, WITH VERIFIED OR NOT //////////////////////
+
+resource "aws_dynamodb_table" "bank_verification_hash" {
+  name          = "UserBankVerificationStatus"
+  billing_mode = "PAY_PER_REQUEST"
+
+  hash_key = "system_wide_user_id"
+  range_key = "account_hash"
+
+  // at present losing a day's worth is not consequential, as will just repeat that day's verifications
+  point_in_time_recovery {
+    enabled = false
+  }
+
+  attribute {
+    name = "system_wide_user_id"
+    type = "S"
+  }
+
+  attribute {
+    name = "account_hash"
+    type = "S"
+  }
+  
+}
