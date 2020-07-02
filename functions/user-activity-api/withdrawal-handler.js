@@ -53,14 +53,6 @@ const fetchUserProfile = async (systemWideUserId) => {
 // ////////////////////////////////// BANK DETAILS & VERIFICATION HANDLING //////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-// note: for a lot of compliance reasons, we are not persisting the bank account, so rather cache it
-const cacheBankAccountDetails = async (systemWideUserId, bankAccountDetails, verificationJobId) => {
-    const accountTimeOut = config.get('cache.ttls.withdrawal');
-    logger('Logging, passed job ID: ', verificationJobId);
-    await redis.set(systemWideUserId, JSON.stringify({ ...bankAccountDetails, verificationJobId }), 'EX', accountTimeOut);
-    logger('Done! Can move along');
-};
-
 const initializeBankVerification = async (bankDetails, userProfile) => {
     const initials = userProfile.personalName.split(' ').map((name) => name[0]).join('');
     const parameters = {
@@ -94,6 +86,32 @@ const initializeBankVerification = async (bankDetails, userProfile) => {
     return resultPayload.jobId;
 };
 
+const cacheBankDetailsUsingPriorVerification = async (bankDetails, systemWideUserId, priorVerificationResult) => {
+    const { verificationStatus, verificationLog, creationMoment } = priorVerificationResult;
+    const verificationTime = creationMoment.format('DD MMMM, YYYY');
+    const detailsToCache = { ...bankDetails, verificationStatus, verificationLog, verificationTime };
+    await redis.set(systemWideUserId, JSON.stringify(detailsToCache), 'EX', config.get('cache.ttls.withdrawal'));
+    return detailsToCache;
+};
+
+const cacheBankDetailWithJobId = async (bankDetails, userProfile) => {
+    const verificationJobId = await initializeBankVerification(bankDetails, userProfile);
+    const detailsToCache = { ...bankDetails, verificationStatus: 'PENDING', verificationJobId };    
+    await redis.set(userProfile.systemWideUserId, JSON.stringify(detailsToCache), 'EX', config.get('cache.ttls.withdrawal'));
+    return detailsToCache;
+};
+
+// note: for a lot of compliance reasons, we are not persisting the bank account, so we rather cache it
+const initiateBankVerificationAndCache = async (bankDetails, userProfile) => {
+    const { systemWideUserId } = userProfile;
+    const alreadyVerified = await dynamodb.fetchBankVerificationResult(systemWideUserId, bankDetails);
+    logger('Result of prior bank verification check: ', alreadyVerified);
+    return alreadyVerified 
+        ? cacheBankDetailsUsingPriorVerification(bankDetails, systemWideUserId, alreadyVerified) 
+        : cacheBankDetailWithJobId(bankDetails, userProfile);  
+};
+
+// CHECK, IF NECESSARY, IF THE JOB ID EXISTS (AFTER FIRST DOING ONE MORE CHECK ON TABLE)
 const checkBankVerification = async (verificationJobId) => {
     const parameters = { jobId: verificationJobId };
     const lambdaInvocation = {
@@ -128,17 +146,35 @@ const updateBankAccountVerificationStatus = async (systemWideUserId, verificatio
     if (failureReason) {
         cachedDetails.failureReason = failureReason;
     }
-    await redis.set(systemWideUserId, JSON.stringify(cachedDetails), 'EX', config.get('cache.detailsTTL'));
+
+    const promisesToExecute = [];
+    if (verificationStatus === 'VERIFIED' || verificationStatus === 'FAILED') {
+        // in these two cases we stash the result against a one-way hash of the account details so we do not repeat
+        // _note_ we could also move this to event handler and do it there, _but_ bank verifications are expensive, and this is a few
+        // millis longer, on a process where we do not mind a little extra friction, hence doing it here
+        const stashVerificationArgs = { systemWideUserId, bankDetails: cachedDetails, verificationStatus, verificationLog: failureReason };
+        cachedDetails.verificationTime = moment().format('DD MMMM, YYYY');
+        promisesToExecute.push(dynamodb.setBankVerificationResult(stashVerificationArgs));
+    }
+
+    promisesToExecute.push(redis.set(systemWideUserId, JSON.stringify(cachedDetails), 'EX', config.get('cache.detailsTTL')));
+    await Promise.all(promisesToExecute);
 };
 
 // bank verifier does not work for all banks, and sometimes is offline, so we just initiate a check -
 const checkAndLogBankVerification = async (systemWideUserId) => {
     const cachedDetails = await redis.get(systemWideUserId);
-    logger('Bank details from Redis: ', cachedDetails);
     const bankDetails = JSON.parse(cachedDetails);
     
     if (Reflect.has(bankDetails, 'verificationStatus') && bankDetails.verificationStatus !== 'PENDING') {
         logger('Already done a check, no need to repeat, return');
+        return;
+    }
+
+    const existingVerification = await dynamodb.fetchBankVerificationResult(systemWideUserId, bankDetails);
+    if (existingVerification) {
+        logger('Have prior verification, utilizing and returning: ', existingVerification);
+        await cacheBankDetailsUsingPriorVerification(bankDetails, systemWideUserId, existingVerification);
         return;
     }
 
@@ -238,6 +274,21 @@ const obtainWithdrawalCardMsg = (clientFloatVars) => {
     return `Every R100 kept in your Jupiter account earns you at least R${valueForText} after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you`;
 };
 
+const calculateAvailableBalance = async (accountId, currency) => {
+    const [settledSum, pendingTx] = await Promise.all([
+        persistence.sumAccountBalance(accountId, currency),
+        persistence.fetchPendingTransactions(accountId)
+    ]);
+
+    logger('Calculating available balance for withdrawal, have pending: ', pendingTx);
+    const pendingWithdrawalsSum = pendingTx.filter((row) => row.transactionType === 'WITHDRAWAL' && row.currency === currency).
+        reduce((sum, row) => sum + opsUtil.convertToUnit(row.amount, row.unit, settledSum.unit), 0);
+
+    logger('Resulting amount to deduct: ', pendingWithdrawalsSum);
+    // withdrawals have a negative sign, so need to add
+    return { ...settledSum, amount: settledSum.amount + pendingWithdrawalsSum };
+};
+
 // ///////////////////////////////////////////////////////////////////////////////////////////////////////////
 // ////////////////////////////////// AND NOW THE MAIN HANDLERS /////////////////////////////////////////////
 // /////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -278,13 +329,13 @@ module.exports.setWithdrawalBankAccount = async (event) => {
 
         // then, get the balance available, and check if the bank verification has completed, in time also the boost etc.
         logger('Most common currency: ', currency);
-        const [bankVerifyJobId, availableBalance, messageBody] = await Promise.all([
-            initializeBankVerification(bankDetails, userProfile),
-            persistence.sumAccountBalance(accountId, currency),
-            obtainWithdrawalCardMsg(floatVars)
+        const [availableBalance, messageBody, bankCacheResult] = await Promise.all([
+            calculateAvailableBalance(accountId, currency),
+            obtainWithdrawalCardMsg(floatVars),
+            initiateBankVerificationAndCache(bankDetails, userProfile)
         ]);
 
-        await cacheBankAccountDetails(systemWideUserId, bankDetails, bankVerifyJobId);
+        logger('Result of bank verification check/initiation and cache: ', bankCacheResult);
         
         const responseObject = {
             availableBalance,
@@ -350,7 +401,7 @@ module.exports.setWithdrawalAmount = async (event) => {
 
         // then, check if amount is above balance
         const accountId = withdrawalInformation.accountId;
-        const availableBalance = await persistence.sumAccountBalance(accountId, withdrawalInformation.currency);
+        const availableBalance = await calculateAvailableBalance(accountId, withdrawalInformation.currency);
 
         if (!checkSufficientBalance(withdrawalInformation, availableBalance)) {
             return invalidRequestResponse('Error, trying to withdraw more than available');

@@ -171,12 +171,13 @@ module.exports.listChangedBoosts = async (event) => {
 const obtainUserNames = async (userIds, thisUserId) => {
     const cachedProfiles = await redis.mget(userIds.map((userId) => `${config.get('cache.prefix.profile')}::${userId}`));
     logger('Cached profiles: ', cachedProfiles);
-    const cachedNames = cachedProfiles.map((profile, index) => {
-        logger('At index: ', index, ' profile: ', profile);
-        if (!profile) {
+    const cachedNames = cachedProfiles.map((cachedProfile, index) => {
+        logger('At index: ', index, ' profile: ', cachedProfile);
+        if (!cachedProfile) {
             logger('No profile cached, return placeholder, for user ID: ', userIds[index]);
             return { userId: userIds[index], playerName: `Player ${index + 1}`};
         }
+        const profile = JSON.parse(cachedProfile);
         if (profile.systemWideUserId === thisUserId) {
             return { userId: thisUserId, playerName: 'SELF' };
         }

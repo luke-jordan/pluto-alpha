@@ -227,7 +227,7 @@ module.exports.sumAccountBalance = async (accountId, currency, time = moment()) 
     const lastTxTime = lastSettledTx ? moment(lastSettledTx) : null; 
     logger('Last settled TX: ', lastSettledTx);
 
-    return { 'amount': totalBalanceInDefaultUnit, 'unit': DEFAULT_UNIT, currency, lastTxTime };
+    return { amount: totalBalanceInDefaultUnit, unit: DEFAULT_UNIT, currency, lastTxTime };
 };
 
 module.exports.sumTotalAmountSaved = async (accountId, currency, unit = DEFAULT_UNIT) => {
