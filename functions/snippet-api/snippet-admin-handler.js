@@ -6,7 +6,8 @@ const persistence = require('./persistence/rds.snippets');
 const opsUtil = require('ops-util-common');
 
 /**
- * This function list all active snippets for an admin user.
+ * This function list all active snippets for an admin user (also includes how many times each
+ * snippet has been created for users).
  * @param {object} event An admin event.
  */
 module.exports.listSnippets = async (event) => {
@@ -15,7 +16,7 @@ module.exports.listSnippets = async (event) => {
             return { statusCode: 403 };
         }
 
-        const snippets = await persistence.fetchAllSnippets();
+        const snippets = await persistence.fetchSnippetsAndUserCount();
         logger('Got snippets:', snippets);
 
         const transformedSnippets = snippets.map((snippet) => ({
@@ -23,7 +24,8 @@ module.exports.listSnippets = async (event) => {
             title: snippet.title,
             body: snippet.body,
             snippetPriority: snippet.snippetPriority,
-            previewMode: snippet.previewMode
+            previewMode: snippet.previewMode,
+            userCount: snippet.userCount
         }));
 
         return opsUtil.wrapResponse(transformedSnippets);
@@ -34,7 +36,8 @@ module.exports.listSnippets = async (event) => {
 };
 
 /**
- * This function fetches all the properties of a defined snippet for an admin user.
+ * This function fetches major snippet details (sucj as title, text, the number of users it has been created for
+ * how many times the snippet has been fetched and viewed, etc) for a defined snippet for an admin user.
  * @param {object} event An admin event.
  * @property {string} snippetId The identifier of the snippet whose properties are to be retrieved.
  */
@@ -46,20 +49,21 @@ module.exports.viewSnippet = async (event) => {
 
         const { snippetId } = opsUtil.extractParamsFromEvent(event);
 
-        const [snippet, userCount, totalViewCount, totalFetchCount] = await Promise.all([
+        const [snippet, snippetEventCounts] = await Promise.all([
             persistence.fetchSnippetForAdmin(snippetId),
-            persistence.getSnippetUserCount(snippetId),
-            persistence.getSnippetViewCount(snippetId),
-            persistence.getSnippetFetchCount(snippetId)
+            persistence.countSnippetEvents(snippetId)
         ]);
+        logger('Got snippet', snippet, 'And event counts:', snippetEventCounts);
+
+        const { sumUsers, sumViews, sumFetches } = snippetEventCounts;
 
         const transformedSnippet = {
             snippetId: snippet.snippetId,
             title: snippet.title,
             body: snippet.body,
-            userCount,
-            totalViewCount,
-            totalFetchCount
+            userCount: sumUsers,
+            totalViewCount: sumViews,
+            totalFetchCount: sumFetches
         };
 
         logger('Returning transformed snippet:', transformedSnippet);
@@ -72,7 +76,8 @@ module.exports.viewSnippet = async (event) => {
 };
 
 /**
- * Adds a new user to the list of users who may view snippets in preview mode.
+ * Adds a new preview user, i.e a user who may preview snippets (to make snippets available for
+ * preview set the value of the snippets preview_mode property to true).
  * @param {object} event An admin event.
  * @property {string} systemWideUserId The user id of the new preview user.
  */
@@ -87,7 +92,9 @@ module.exports.addUserToPreviewList = async (event) => {
         const resultOfInsert = await persistence.insertPreviewUser(systemWideUserId);
         logger('Result of insert:', resultOfInsert);
 
-        // todo: result validation
+        if (!resultOfInsert || typeof resultOfInsert !== 'object') {
+            throw new Error('Error inserting new preview user');
+        }
 
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {
@@ -113,7 +120,9 @@ module.exports.removeUserFromPreviewList = async (event) => {
         const resultOfRemoval = await persistence.removePreviewUser(systemWideUserId);
         logger('Result of preview user removal:', resultOfRemoval);
 
-        // todo: result validation
+        if (!resultOfRemoval || typeof resultOfRemoval !== 'object') {
+            throw new Error('Error removing preview user');
+        }
 
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (err) {

@@ -1,22 +1,20 @@
 'use strict';
 
 const logger = require('debug')('jupiter:activity:calculations');
+
+const opsUtil = require('ops-util-common');
+
+const camelCaseKeys = require('camelcase-keys');
+const decamelize = require('decamelize');
 const config = require('config');
 const uuid = require('uuid/v4');
-
-const decamelize = require('decamelize');
-const camelCaseKeys = require('camelcase-keys');
-const opsUtil = require('ops-util-common');
 
 const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
-const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
-const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', ');
-
 const snippetTable = config.get('tables.snippetTable');
-const snippetJoinTable = config.get('tables.snippetJoinTable');
 const snippetLogTable = config.get('tables.snippetLogTable');
+const snippetJoinTable = config.get('tables.snippetJoinTable');
 const previewUserTable = config.get('tables.previewUserTable');
 
 const transformSnippet = (snippet) => ({
@@ -29,12 +27,27 @@ const transformSnippet = (snippet) => ({
     snippetPriority: snippet.snippetPriority
 });
 
+const transformSnippetsAndUserCount = (snippetArray) => snippetArray.map((snippet) => ({
+    snippetId: snippet.snippetDataSnippetSnippetId,
+    title: snippet.snippetDataSnippetTitle,
+    body: snippet.snippetDataSnippetBody,
+    active: snippet.snippetDataSnippetActive,
+    snippetPriority: snippet.snippetDataSnippetSnippetPriority,
+    previewMode: snippet.snippetDataSnippetPreviewMode,
+    countryCode: snippet.snippetDataSnippetCountryCode,
+    createdBy: snippet.snippetDataSnippetCreatedBy,
+    creationTime: snippet.snippetDataSnippetCreationTime,
+    updatedTime: snippet.snippetDataSnippetUpdatedTime,
+    userCount: snippet.count
+}));
+
+const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
+const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', ');
+
 const extractColumnDetails = (object) => {
     const objectKeys = Object.keys(object);
     return [extractColumnNames(objectKeys), extractColumnTemplate(objectKeys)];
 };
-
-const sumValues = (values) => values.reduce((sum, value) => sum + value, 0);
 
 /**
  * This functions persists new snippets
@@ -189,7 +202,7 @@ module.exports.removePreviewUser = async (systemWideUserId) => {
     logger('Result of preview user removal:', resultOfUpdate);
 
     return typeof resultOfUpdate === 'object' && Array.isArray(resultOfUpdate.rows) 
-        ? camelCaseKeys(resultOfUpdate.rows[0]) : [];
+        ? camelCaseKeys(resultOfUpdate.rows[0]) : null;
 };
 
 /**
@@ -240,20 +253,24 @@ module.exports.insertSnippetLog = async (logObject) => {
 };
 
 /**
- * This function supports an admin operation the fetches all active snippets. The snippet format
- * differs from that displayed to the user, so entire snippets are extracted and formatted
- * by the caller.
+ * Fetches all active snippets and the number of users each snippet has been created for.
  */
-module.exports.fetchAllSnippets = async () => {
-    const selectQuery = `select * from ${snippetTable} where active = $1`;
+module.exports.fetchSnippetsAndUserCount = async () => {
+    const selectQuery = `select ${snippetTable}.*, count(distinct(user_id)) from ${snippetTable} left join ${snippetJoinTable} on ` +
+        `${snippetTable}.snippet_id = ${snippetJoinTable}.snippet_id group by ${snippetTable}.snippet_id`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true]);
     logger(`Found ${resultOfFetch.length || 0} snippets`);
-    return Array.isArray(resultOfFetch) && resultOfFetch.length > 0
-        ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
+
+    if (Array.isArray(resultOfFetch) && resultOfFetch.length > 0) {
+        const camelizedResult = resultOfFetch.map((result) => camelCaseKeys(result));
+        return transformSnippetsAndUserCount(camelizedResult);
+    }
+
+    return [];
 };
 
 /**
- * Fetches snippet for admin user. All snippet properties are returned.
+ * Fetches a single snippet for admin user. All snippet properties are returned.
  * @param {string} snippetId The identifier of the snippet ot be retrieved.
  */
 module.exports.fetchSnippetForAdmin = async (snippetId) => {
@@ -264,36 +281,14 @@ module.exports.fetchSnippetForAdmin = async (snippetId) => {
 };
 
 /**
- * Counts how many users a particular snippet has been created for.
- * @param {string} snippetId The identifier of the snippet to which the count pertains.
- */
-module.exports.getSnippetUserCount = async (snippetId) => {
-    const selectQuery = `select count(distinct(user_id)) from ${snippetJoinTable} where snippet_id = $1`;
-    const resultOfCount = await rdsConnection.selectQuery(selectQuery, [snippetId]);
-    logger('Result of snippet user count:', resultOfCount);
-    return Array.isArray(resultOfCount) && resultOfCount.length > 0 ? resultOfCount[0].count : null;
-};
-
-/**
- * Counts how many times a snippet has been viewed (by all ordinary users).
+ * Counts how many times a snippet has been created, fetched, and viewed (by all ordinary users).
  * @param {string} snippetId The identifier of the snippet whose views are to be counted.
  */
-module.exports.getSnippetViewCount = async (snippetId) => {
-    const selectQuery = `select view_count from ${snippetJoinTable} where snippet_id = $1`;
+module.exports.countSnippetEvents = async (snippetId) => {
+    const selectQuery = `select count(distinct(user_id)) as sum_users, sum(view_count) as sum_views, sum(fetch_count) as sum_fetches from ${snippetJoinTable} ` +
+        `where snippet_id = $1 group by snippet_id`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [snippetId]);
     logger('Got snippet view counts:', resultOfFetch);
     return Array.isArray(resultOfFetch) && resultOfFetch.length > 0
-        ? sumValues(resultOfFetch.map((result) => Number(result['view_count']))) : null;
-};
-
-/**
- * Counts how many times a snippet has been fetched (for all ordinary users).
- * @param {string} snippetId The identifier of the snippet of fetches are to be counted.
- */
-module.exports.getSnippetFetchCount = async (snippetId) => {
-    const selectQuery = `select fetch_count from ${snippetJoinTable} where snippet_id = $1`;
-    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [snippetId]);
-    logger('Got snippet fetch counts:', resultOfFetch);
-    return Array.isArray(resultOfFetch) && resultOfFetch.length > 0
-        ? sumValues(resultOfFetch.map((result) => Number(result['fetch_count']))) : null;
+        ? camelCaseKeys(resultOfFetch[0]) : null;
 };

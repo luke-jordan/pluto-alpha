@@ -25,7 +25,7 @@ const snippetSorter = (snippetA, snippetB) => {
 const sortSnippets = (snippets) => snippets.sort(snippetSorter);
 
 /**
- * This function creates and persists a new snippet.
+ * This function creates a new snippet.
  * @param {object} event An admin event.
  * @property {string}  text The main snippet text.
  * @property {boolean} active Optional property that can be used to create inactive snippets. All new snippets are active by default.
@@ -63,13 +63,13 @@ module.exports.createSnippet = async (event) => {
     }
 };
 
-// The expected snippet status changes here are either FETCHED or VIEWED
 const handleSnippetUpdate = async (userId, snippetId, snippetStatus) => {
-    // fetch the reference to the snippet from the user-snippet join table
+    // if the snippet has been created for a user this operation returns an object containing details
+    // of the relationship between a snippet and a user, (e.g. fetch count, view count, etc)
     const snippetUserStatuses = await persistence.fetchSnippetUserStatuses([snippetId], userId);
     logger('Got snippet details:', snippetUserStatuses);
 
-    // if no reference is found in the join table create one
+    // if the snippet has not yet been created for a user do so now
     if (!snippetUserStatuses || snippetUserStatuses.length === 0) {
         const resultOfCreation = await persistence.createSnippetUserJoin(snippetId, userId);
         logger('Resultof creating user-snippet join table entry:', resultOfCreation);
@@ -95,7 +95,7 @@ const handleSnippetUpdate = async (userId, snippetId, snippetStatus) => {
 };
 
 /**
- * This function updates a snippets status, e.g changes status to FETCH. 
+ * Updates a snippets status to FETCHED or VIEWED. 
  * @param {object} event A user, admin, or direct invocation.
  * @property {array}  snippetIds An array of snippet ids.
  * @property {string} userId The identifier of the user associated with the above snippet ids.
@@ -118,7 +118,7 @@ module.exports.updateSnippetStateForUser = async (event) => {
     }
 };
 
-// Handles batch calls from SQS to updateSnippetStateForUser as SQS may pull multiple events from from multiple users.
+// Handles batch calls from SQS to updateSnippetStateForUser as SQS may pull multiple events from multiple users.
 module.exports.handleBatchSnippetUpdates = async (sqsEvent) => {
     const sqsEvents = opsUtil.extractSQSEvents(sqsEvent);
     logger('Got SQS events: ', sqsEvents);
@@ -126,7 +126,8 @@ module.exports.handleBatchSnippetUpdates = async (sqsEvent) => {
 };
 
 /**
- * This function fetches snippets to be displayed to a user. 
+ * This function fetches snippets to be displayed to a user. If there are snippets a user has not viewed
+ * those are returned first, if not then previously viewed snippets are returned.
  * @param {object} event A user or admin event.
  */
 module.exports.fetchSnippetsForUser = async (event) => {
@@ -174,6 +175,7 @@ module.exports.fetchSnippetsForUser = async (event) => {
  * This function updates a snippets properties. The only property updates allowed by the this function are
  * the snippets text, title, active status, and priority.
  * @param {object} event User or admin event.
+ * @property {string} snippetId The identifer of the snippet to be updated.
  * @property {string} title The value entered here will update the snippet's title.
  * @property {string} body The value entered here will update the main snippet text.
  * @property {boolean} active Can be used to activate or deactivate a snippet.

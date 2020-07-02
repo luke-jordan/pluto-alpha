@@ -39,6 +39,7 @@ const rds = proxyquire('../persistence/rds.snippets', {
 describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
     const testSnippetId = uuid();
     const testSystemId = uuid();
+    const testAdminId = uuid();
 
     const testCreationTime = moment().format();
     const testUpdatedTime = moment().format();
@@ -57,7 +58,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         helper.resetStubs(queryStub, insertStub, updateStub, updateRecordObjStub);
     });
 
-    it('Persists new snippets', async () => {
+    it('Persists snippets properly', async () => {
         const insertQuery = 'insert into snippet_data.snippet (title, body, active, snippet_id) values %L returning creation_time';
         const expectedColumns = '${title}, ${body}, ${active}, ${snippetId}';
 
@@ -336,21 +337,42 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
     });
 
     it('Fetches all active snippets (admin)', async () => {
+        const mockSnippetAndUserCountFromRds = {
+            'snippet_data.snippet.snippet_id': testSnippetId,
+            'snippet_data.snippet.title': 'Jupiter Snippet #21',
+            'snippet_data.snippet.body': 'Jupiter helps you save.',
+            'snippet_data.snippet.snippet_priority': 5,
+            'snippet_data.snippet.preview_mode': true,
+            'snippet_data.snippet.snippet_language': 'en',
+            'snippet_data.snippet.country_code': 'ZAF',
+            'snippet_data.snippet.active': true,
+            'snippet_data.snippet.created_by': testAdminId,
+            'snippet_data.snippet.creation_time': testCreationTime,
+            'snippet_data.snippet.updated_time': testUpdatedTime,
+            'count': 610
+        };
+
         const expectedSnippet = {
             snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
             body: 'Jupiter helps you save.',
-            snippetPriority: 2,
+            active: true,
+            snippetPriority: 5,
+            previewMode: true,
+            countryCode: 'ZAF',
+            createdBy: testAdminId,
             creationTime: testCreationTime,
             updatedTime: testUpdatedTime,
-            countryCode: 'ZAF'
+            userCount: 610
         };
 
-        queryStub.resolves([mockSnippetFromRds, mockSnippetFromRds]);
+        queryStub.resolves([mockSnippetAndUserCountFromRds, mockSnippetAndUserCountFromRds]);
 
-        const selectQuery = 'select * from snippet_data.snippet where active = $1';
+        const selectQuery = 'select snippet_data.snippet.*, count(distinct(user_id)) from snippet_data.snippet left join ' +
+            'snippet_data.snippet_user_join_table on snippet_data.snippet.snippet_id = snippet_data.snippet_user_join_table.snippet_id ' +
+            'group by snippet_data.snippet.snippet_id';
 
-        const resultOfFetch = await rds.fetchAllSnippets();
+        const resultOfFetch = await rds.fetchSnippetsAndUserCount();
 
         expect(resultOfFetch).to.exist;
         expect(resultOfFetch).to.deep.equal([expectedSnippet, expectedSnippet]);
@@ -379,30 +401,13 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
     });
 
-    it('Counts the number of users a snippet has been created for', async () => {
-        queryStub.resolves([{ 'count': 100 }]);
-        const selectQuery = 'select count(distinct(user_id)) from snippet_data.snippet_user_join_table where snippet_id = $1';
-        const resultOfFetch = await rds.getSnippetUserCount(testSnippetId);
+    it('Counts the total times a snippet has been created, fetched, and viewed', async () => {
+        queryStub.resolves([{ 'sum_users': 89, 'sum_views': 112, 'sum_fetches': 358 }]);
+        const selectQuery = 'select count(distinct(user_id)) as sum_users, sum(view_count) as sum_views, sum(fetch_count) as sum_fetches from ' +
+            'snippet_data.snippet_user_join_table where snippet_id = $1 group by snippet_id';
+        const resultOfFetch = await rds.countSnippetEvents(testSnippetId);
         expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal(100);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
-    });
-
-    it('Counts the total times a snippet has been viewed', async () => {
-        queryStub.resolves([{ 'view_count': 11 }, { 'view_count': 23 }]);
-        const selectQuery = 'select view_count from snippet_data.snippet_user_join_table where snippet_id = $1';
-        const resultOfFetch = await rds.getSnippetViewCount(testSnippetId);
-        expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal(34);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
-    });
-
-    it('Counts the total number of times a snippet has been fetched', async () => {
-        queryStub.resolves([{ 'fetch_count': 58 }, { 'fetch_count': 13 }]);
-        const selectQuery = 'select fetch_count from snippet_data.snippet_user_join_table where snippet_id = $1';
-        const resultOfFetch = await rds.getSnippetFetchCount(testSnippetId);
-        expect(resultOfFetch).to.exist;
-        expect(resultOfFetch).to.deep.equal(71);
+        expect(resultOfFetch).to.deep.equal({ sumUsers: 89, sumViews: 112, sumFetches: 358 });
         expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [testSnippetId]);
     });
 

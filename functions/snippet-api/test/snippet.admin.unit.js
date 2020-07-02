@@ -13,28 +13,24 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
-const fetchAllSnippetsStub = sinon.stub();
+const fetchSnippetUserCountStub = sinon.stub();
 const fetchSnippetStub = sinon.stub();
-const userCountStub = sinon.stub();
-const viewCountStub = sinon.stub();
-const fetchCountStub = sinon.stub();
+const countSnippetEventsStub = sinon.stub();
 const insertPreviewUserStub = sinon.stub();
 const removePreviewUserStub = sinon.stub();
 
 const handler = proxyquire('../snippet-admin-handler', {
     './persistence/rds.snippets': {
-        'fetchAllSnippets': fetchAllSnippetsStub,
+        'fetchSnippetsAndUserCount': fetchSnippetUserCountStub,
         'fetchSnippetForAdmin': fetchSnippetStub,
-        'getSnippetUserCount': userCountStub,
-        'getSnippetViewCount': viewCountStub,
-        'getSnippetFetchCount': fetchCountStub,
+        'countSnippetEvents': countSnippetEventsStub,
         'insertPreviewUser': insertPreviewUserStub,
         'removePreviewUser': removePreviewUserStub
     },
     '@noCallThru': true
 });
 
-describe('*** UNIT TEST ADMIT SNIPPET FUNCTIONS ***', () => {
+describe('*** UNIT TEST ADMIN SNIPPET FUNCTIONS ***', () => {
     const testSnippetId = uuid();
     const testAdminId = uuid();
     const testSystemId = uuid();
@@ -42,10 +38,7 @@ describe('*** UNIT TEST ADMIT SNIPPET FUNCTIONS ***', () => {
     const testCreationTime = moment().format();
     const testUpdatedTime = moment().format();
 
-    beforeEach(() => helper.resetStubs(
-        fetchAllSnippetsStub, fetchSnippetStub, userCountStub, viewCountStub, fetchCountStub,
-        insertPreviewUserStub, removePreviewUserStub
-    ));
+    beforeEach(() => helper.resetStubs(fetchSnippetUserCountStub, fetchSnippetStub, countSnippetEventsStub, insertPreviewUserStub, removePreviewUserStub));
 
     it('Lists all active snippets', async () => {
         const mockSnippet = (snippetId) => ({
@@ -57,7 +50,8 @@ describe('*** UNIT TEST ADMIT SNIPPET FUNCTIONS ***', () => {
             active: true,
             snippetPriority: 1,
             snippetLanguage: 'en',
-            previewMode: true
+            previewMode: true,
+            userCount: 144
         });
 
         const transformedSnippet = (snippetId) => ({
@@ -65,7 +59,8 @@ describe('*** UNIT TEST ADMIT SNIPPET FUNCTIONS ***', () => {
             title: 'Jupiter Snippet 1',
             body: 'Jupiter is the future of saving.',
             snippetPriority: 1,
-            previewMode: true
+            previewMode: true,
+            userCount: 144
         });
 
         const firstSnippet = mockSnippet('snippet-id-1');
@@ -74,14 +69,14 @@ describe('*** UNIT TEST ADMIT SNIPPET FUNCTIONS ***', () => {
         const expectedFirst = transformedSnippet('snippet-id-1');
         const expectedSecond = transformedSnippet('snippet-id-2');
 
-        fetchAllSnippetsStub.resolves([firstSnippet, secondSnippet]);
+        fetchSnippetUserCountStub.resolves([firstSnippet, secondSnippet]);
 
         const testEvent = helper.wrapEvent({}, testAdminId, 'SYSTEM_ADMIN');
         const resultOfListing = await handler.listSnippets(testEvent);
 
         const body = helper.standardOkayChecks(resultOfListing);
         expect(body).to.deep.equal([expectedFirst, expectedSecond]);
-        expect(fetchAllSnippetsStub).to.have.been.calledOnceWithExactly();
+        expect(fetchSnippetUserCountStub).to.have.been.calledOnceWithExactly();
     });
 
     it('Fetches snippet for admin', async () => {
@@ -101,15 +96,13 @@ describe('*** UNIT TEST ADMIT SNIPPET FUNCTIONS ***', () => {
             snippetId: testSnippetId,
             title: 'Jupiter Snippet 2',
             body: 'Jupiter positively reinforces saving for tomorrow.',
-            userCount: 27,
-            totalViewCount: 31,
-            totalFetchCount: 40
+            userCount: 377,
+            totalViewCount: 610,
+            totalFetchCount: 987
         };
 
         fetchSnippetStub.resolves(mockSnippet);
-        userCountStub.resolves(27);
-        viewCountStub.resolves(31);
-        fetchCountStub.resolves(40);
+        countSnippetEventsStub.resolves({ sumUsers: 377, sumViews: 610, sumFetches: 987 });
 
         const testEvent = helper.wrapEvent({ snippetId: testSnippetId }, testAdminId, 'SYSTEM_ADMIN');
 
@@ -117,7 +110,7 @@ describe('*** UNIT TEST ADMIT SNIPPET FUNCTIONS ***', () => {
 
         const body = helper.standardOkayChecks(resultOfFetch);
         expect(body).to.deep.equal(expectedResult);
-        [fetchSnippetStub, userCountStub, viewCountStub, fetchCountStub].map((stub) => expect(stub).to.have.been.calledOnceWithExactly(testSnippetId));
+        expect(countSnippetEventsStub).to.have.been.calledOnceWithExactly(testSnippetId);
     });
 
     it('Adds a user to preview list', async () => {
