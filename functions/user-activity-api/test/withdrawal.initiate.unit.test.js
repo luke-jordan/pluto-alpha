@@ -191,7 +191,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
         fetchFloatVarsForBalanceCalcStub.resolves(mockInterestVars);
 
         const mockVerificationStoreTime = moment().subtract(2, 'months');
-        checkPriorBankVerificationStub.resolves({ verificationStatus: 'VERIFIED', creationTime: mockVerificationStoreTime });
+        checkPriorBankVerificationStub.resolves({ verificationStatus: 'VERIFIED', creationMoment: mockVerificationStoreTime });
 
         sumAccountBalanceStub.resolves({ amount: 10 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
         fetchPendingTxStub.resolves([{ transactionId: 'some-tx', transactionType: 'WITHDRAWAL', amount: -1, unit: 'WHOLE_CURRENCY', currency: 'USD' }]);

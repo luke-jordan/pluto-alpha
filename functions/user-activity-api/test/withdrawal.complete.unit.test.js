@@ -248,7 +248,7 @@ describe('*** UNIT TEST WITHDRAWAL AMOUNT SETTING ***', () => {
         redisGetStub.resolves(JSON.stringify(mockInitialDetails));
 
         const mockVerificationTime = moment().subtract(3, 'months');
-        checkPriorBankVerificationStub.resolves({ verificationStatus: 'VERIFIED', creationTime: mockVerificationTime });
+        checkPriorBankVerificationStub.resolves({ verificationStatus: 'VERIFIED', creationMoment: mockVerificationTime });
         redisSetStub.resolves({});
         
         sumAccountBalanceStub.resolves({ amount: 100000000, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null });
