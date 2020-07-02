@@ -110,7 +110,7 @@ describe('*** UNIT TEST ADMIN SNIPPET FUNCTIONS ***', () => {
 
         const body = helper.standardOkayChecks(resultOfFetch);
         expect(body).to.deep.equal(expectedResult);
-        expect(countSnippetEventsStub).to.have.been.calledOnceWithExactly(testSnippetId);
+        [fetchSnippetStub, countSnippetEventsStub].map((stub) => expect(stub).to.have.been.calledOnceWithExactly(testSnippetId));
     });
 
     it('Adds a user to preview list', async () => {

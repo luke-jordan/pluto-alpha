@@ -64,8 +64,8 @@ module.exports.createSnippet = async (event) => {
 };
 
 const handleSnippetUpdate = async (userId, snippetId, snippetStatus) => {
-    // if the snippet has been created for a user this operation returns an object containing details
-    // of the relationship between a snippet and a user, (e.g. fetch count, view count, etc)
+    // if the snippet has been created for a user this operation returns an object containing the snippets status, i.e. the
+    // relationship between a snippet and a user, (e.g. whether the snippet has been fetched or viewed for/by the user before)
     const snippetUserStatuses = await persistence.fetchSnippetUserStatuses([snippetId], userId);
     logger('Got snippet details:', snippetUserStatuses);
 
