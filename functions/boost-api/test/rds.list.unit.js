@@ -308,10 +308,20 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const expectedAccountQuery = 'select account_id from boost_data.boost_account_status where boost_id = $1';
         
         queryStub.onFirstCall().resolves([{
-            'boost_id': testBoostId, 'label': 'This is a boost', 'active': true, 'creating_user_id': 'do-not-return', 
-            'start_time': testStartTime.format(), 'end_time': testEndTime.format(),
-            'status_conditions': { REDEEMED: ['something'] }, 'reward_parameters': { rewardType: 'POOLED' },
-            'boost_amount': 100, 'boost_unit': 'WHOLE_CURRENCY', 'boost_currency': 'ZAR',
+            'boost_id': testBoostId, 
+            'boost_type': 'GAME', 
+            'boost_category': 'DESTROY_IMAGE',
+            'label': 'This is a boost', 
+            'active': true, 
+            'creating_user_id': 'do-not-return', 
+            'start_time': testStartTime.format(), 
+            'end_time': testEndTime.format(),
+            'status_conditions': { REDEEMED: ['something'] }, 
+            'reward_parameters': { rewardType: 'POOLED' },
+            'boost_amount': 100, 
+            'boost_unit': 
+            'WHOLE_CURRENCY', 
+            'boost_currency': 'ZAR',
             'flags': ['FRIEND_TOURNAMENT']
         }]);
 
@@ -321,9 +331,15 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
 
         const fetchedBoost = await rds.fetchBoostDetails(testBoostId, true);
         expect(fetchedBoost).to.deep.equal({
-            boostId: testBoostId, label: 'This is a boost', 
-            active: true, startTime: moment(testStartTime.format()), endTime: moment(testEndTime.format()),
-            statusConditions: { REDEEMED: ['something'] }, rewardParameters: { rewardType: 'POOLED' },
+            boostId: testBoostId, 
+            boostType: 'GAME',
+            boostCategory: 'DESTROY_IMAGE',
+            label: 'This is a boost', 
+            active: true, 
+            startTime: moment(testStartTime.format()), 
+            endTime: moment(testEndTime.format()),
+            statusConditions: { REDEEMED: ['something'] }, 
+            rewardParameters: { rewardType: 'POOLED' },
             boostAmount: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
             flags: ['FRIEND_TOURNAMENT'],
             accountIds: ['account-1', 'account-2']
@@ -337,17 +353,30 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
     it('Does not fetch accounts if not asked', async () => {
 
         queryStub.onFirstCall().resolves([{
-            'boost_id': testBoostId, 'label': 'This is a boost', 'active': true, 
-            'start_time': testStartTime.format(), 'end_time': testEndTime.format(),
+            'boost_id': testBoostId,
+            'boost_type': 'SOCIAL',
+            'boost_category': 'FRIENDS_ADDED', 
+            'label': 'This is a boost', 
+            'active': true, 
+            'start_time': testStartTime.format(), 
+            'end_time': testEndTime.format(),
             'status_conditions': { REDEEMED: ['something'] },
-            'boost_amount': 100, 'boost_unit': 'WHOLE_CURRENCY', 'boost_currency': 'ZAR'
+            'boost_amount': 100, 
+            'boost_unit': 'WHOLE_CURRENCY', 
+            'boost_currency': 'ZAR'
         }]);
 
         const fetchedBoost = await rds.fetchBoostDetails(testBoostId);
         expect(fetchedBoost).to.deep.equal({
-            boostId: testBoostId, label: 'This is a boost', 
-            active: true, startTime: moment(testStartTime.format()), endTime: moment(testEndTime.format()),
-            statusConditions: { REDEEMED: ['something'] }, rewardParameters: {},
+            boostId: testBoostId, 
+            boostType: 'SOCIAL',
+            boostCategory: 'FRIENDS_ADDED',
+            label: 'This is a boost', 
+            active: true, 
+            startTime: moment(testStartTime.format()), 
+            endTime: moment(testEndTime.format()),
+            statusConditions: { REDEEMED: ['something'] }, 
+            rewardParameters: {},
             boostAmount: { amount: 100, unit: 'WHOLE_CURRENCY', currency: 'ZAR' },
             flags: []
         });

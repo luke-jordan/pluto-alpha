@@ -2,7 +2,8 @@
 
 const logger = require('debug')('jupiter:admin:user');
 const config = require('config');
-const moment = require('moment');
+
+const AWS = require('aws-sdk');
 
 const persistence = require('./persistence/rds.account');
 const publisher = require('publish-common');
@@ -10,23 +11,16 @@ const publisher = require('publish-common');
 const adminUtil = require('./admin.util');
 const opsCommonUtil = require('ops-util-common');
 
-const stringify = require('json-stable-stringify');
+// bringing over pattern from events handling; dependency injection would be nicer, but for now this holds, and 
+// brings some order to the sprawl this is becoming
 
-const AWS = require('aws-sdk');
+const statusHandler = require('./user/status-handler');
+const transactionHandler = require('./user/transaction-handler');
+
 AWS.config.update({ region: config.get('aws.region') });
-
 const lambda = new AWS.Lambda();
 
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-
-const validKycStatus = ['NO_INFO', 'CONTACT_VERIFIED', 'PENDING_VERIFICATION_AS_PERSON', 'VERIFIED_AS_PERSON', 
-    'FAILED_VERIFICATION', 'FLAGGED_FOR_REVIEW', 'PENDING_INFORMATION', 'REVIEW_CLEARED', 'REVIEW_FAILED'];
-
-const validUserStatus = ['CREATED', 'ACCOUNT_OPENED', 'USER_HAS_INITIATED_SAVE', 'USER_HAS_SAVED', 'USER_HAS_WITHDRAWN', 'SUSPENDED_FOR_KYC'];
-
-const validRegulatoryStatus = ['REQUIRES_AGREEMENT', 'HAS_GIVEN_AGREEMENT'];
-
-const validTxStatus = ['INITIATED', 'PENDING', 'SETTLED', 'EXPIRED', 'CANCELLED'];
 
 // duplicated from user-query but short and to the point and small price to pay
 const fetchUserProfile = async (systemWideUserId, includeContactMethod = true) => {
@@ -35,258 +29,23 @@ const fetchUserProfile = async (systemWideUserId, includeContactMethod = true) =
     return extractLambdaBody(profileFetchResult);
 };
 
-// checking for reason to log is across any update, hence here just check right field and valid type
-const validateStatusUpdate = ({ fieldToUpdate, newStatus }) => {
-    if (fieldToUpdate === 'KYC' && validKycStatus.indexOf(newStatus) >= 0) {
-        return true;
-    }
-
-    if (fieldToUpdate === 'STATUS' && validUserStatus.indexOf(newStatus) >= 0) {
-        return true;
-    }
-
-    if (fieldToUpdate === 'REGULATORY' && validRegulatoryStatus.indexOf(newStatus) >= 0) {
-        return true;
-    }
-
-    return false;
-};
-
-const handleStatusUpdate = async ({ adminUserId, systemWideUserId, fieldToUpdate, newStatus, reasonToLog }) => {
-    const statusPayload = { systemWideUserId, initiator: adminUserId };
-    
-    if (fieldToUpdate === 'KYC') {
-        statusPayload.updatedKycStatus = {
-            changeTo: newStatus,
-            reasonToLog
-        };
-    } 
-    
-    if (fieldToUpdate === 'STATUS') {
-        statusPayload.updatedUserStatus = {
-            changeTo: newStatus,
-            reasonToLog
-        };
-    }
-
-    if (fieldToUpdate === 'REGULATORY') {
-        statusPayload.updatedRegulatoryStatus = {
-            changeTo: newStatus,
-            reasonToLog
-        };
-    }
-
-    const updateInvoke = adminUtil.invokeLambda(config.get('lambdas.statusUpdate'), statusPayload);
-    const updateResult = await lambda.invoke(updateInvoke).promise();
-    logger('Result from status update Lambda: ', updateResult);
-    const updatePayload = JSON.parse(updateResult['Payload']);
-    
-    const returnResult = updatePayload.statusCode === 200
-        ? { result: 'SUCCESS', updateLog: JSON.parse(updatePayload.body) }
-        : { result: 'FAILURE', message: JSON.parse(updatePayload.body) };
-
-    logger('Returning result: ', returnResult);
-
-    // then these ones are special
-    const statusForUserLog = ['VERIFIED_AS_PERSON', 'FAILED_VERIFICATION', 'FLAGGED_FOR_REVIEW', 'REVIEW_CLEARED', 'REVIEW_FAILED'];
-    if (statusForUserLog.includes(newStatus)) {
-        const logOptions = { 
-            initiator: adminUserId,
-            context: { reasonToLog } 
-        };
-        logger('Status triggers user log, so fire off');
-        await publisher.publishUserEvent(systemWideUserId, newStatus, logOptions);
-    }
-
-    return returnResult;
-};
-
 const publishUserLog = async ({ adminUserId, systemWideUserId, eventType, context }) => {
     const logOptions = { initiator: adminUserId, context };
     logger('Dispatching user log of event type: ', eventType, ', with log options: ', logOptions);
     return publisher.publishUserEvent(systemWideUserId, eventType, logOptions);
 };
 
-const initiateTransaction = async (systemWideUserId, parameters, requestContext) => {
-    logger('Initiating a transaction with parameters: ', parameters);
+const handleBsheetAccUpdate = async ({ params }) => {
+    const { adminUserId, systemWideUserId, accountId, newIdentifier } = params;
 
-    const { accountId, amount, unit, currency } = parameters;
-    const lambdaRequestPayload = {
-        requestContext,
-        body: stringify({
-            accountId, amount, unit, currency, systemWideUserId
-        })
-    };
-
-    const lambdaInvocation = adminUtil.invokeLambda(config.get('lambdas.saveInitiate'), lambdaRequestPayload);
-    logger('Invoking relevant lambda with invocation: ', lambdaInvocation);
-    const lambdaResult = await lambda.invoke(lambdaInvocation).promise();
-    logger('Lambda result, raw : ', lambdaResult);
-
-    const lambdaResponsePayload = JSON.parse(lambdaResult['Payload']);
-    const saveBody = JSON.parse(lambdaResponsePayload.body);
-
-    return { result: 'SUCCESS', saveDetails: saveBody };
-};
-
-// settlement is recorded by here, so this save counts in the count (i.e., no need to increment it here)
-const publishSaveSettledLog = async ({ adminUserId, systemWideUserId, logContext, transactionId }) => {
-    const [txDetails, saveCount] = await Promise.all([
-        persistence.getTransactionDetails(transactionId), persistence.countTransactionsBySameAccount(transactionId)
-    ]);
-    
-    const context = {
-        transactionId,
-        accountId: txDetails.accountId,
-        timeInMillis: moment().valueOf(),
-        bankReference: txDetails.humanReference,
-        savedAmount: `${txDetails.amount}::${txDetails.unit}::${txDetails.currency}`,
-        firstSave: saveCount === 1,
-        saveCount,
-        transactionTags: txDetails.tags,
-        logContext
-    };
-
-    return publishUserLog({ adminUserId, systemWideUserId, eventType: 'SAVING_PAYMENT_SUCCESSFUL', context });
-};
-
-const settleUserTx = async ({ adminUserId, systemWideUserId, transactionId, reasonToLog }) => {
-    const settlePayload = { transactionId, paymentRef: reasonToLog, paymentProvider: 'ADMIN_OVERRIDE', settlingUserId: adminUserId };
-    logger('Invoking settle lambda, payload: ', settlePayload);
-    const settleResponse = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.directSettle'), settlePayload)).promise();
-    logger('Transaction settle, result: ', settleResponse);
-    
-    const resultPayload = JSON.parse(settleResponse['Payload']);
-    if (settleResponse['StatusCode'] === 200) {
-        const logContext = { settleInstruction: settlePayload, resultPayload };
-        const transactionType = resultPayload.transactionDetails[0].accountTransactionType;
-        const eventType = transactionType === 'USER_SAVING_EVENT' ? 'ADMIN_SETTLED_SAVE' : `ADMIN_SETTLED_${transactionType}`;
-        const loggingPromises = [
-            publishUserLog({ adminUserId, systemWideUserId, eventType, context: logContext }),
-            persistence.insertAccountLog({ transactionId, adminUserId, logType: eventType, logContext })
-        ];
-        if (transactionType === 'USER_SAVING_EVENT') {
-            loggingPromises.push(publishSaveSettledLog({ adminUserId, systemWideUserId, logContext, transactionId }));
-        }
-        await Promise.all(loggingPromises);
-        return { result: 'SUCCESS', updateLog: resultPayload };
-    } 
-    
-    return { result: 'ERROR', message: resultPayload };
-};
-
-const updateTxStatus = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog }) => {
-    const logContext = { performedBy: adminUserId, owningUserId: systemWideUserId, reason: reasonToLog, newStatus: newTxStatus };
-    const resultOfRdsUpdate = await persistence.adjustTxStatus({ transactionId, newTxStatus, logContext });
-    logger('Result of straight persistence adjustment: ', resultOfRdsUpdate);
-    await Promise.all([
-        publishUserLog({ adminUserId, systemWideUserId, eventType: 'ADMIN_UPDATED_TX', context: { ...logContext, transactionId }}),
-        persistence.insertAccountLog({ transactionId, adminUserId, logType: 'ADMIN_UPDATED_TX', logContext })
-    ]);
-    return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
-};
-
-const updateTxAmount = async ({ adminUserId, systemWideUserId, transactionId, newAmount, reasonToLog }) => {
-    const currentTx = await persistence.getTransactionDetails(transactionId);
-    
-    logger('Updating transaction, new amount: ', newAmount);
-    logger('And prior transaction details: ', currentTx);
-
-    if (!newAmount.currency || newAmount.currency !== currentTx.currency) {
-        throw Error('Currency switching is not allowed yet, and currency must be supplied');
+    logger('Updating the FinWorks (balance sheet management) identifier for the user');
+    if (!accountId) {
+        return opsCommonUtil.wrapResponse('Error, must pass in account ID', 400);
     }
-    if (!newAmount.unit || !newAmount.amount) {
-        throw Error('New amount must supply unit and amount');
-    }
-    const oldAmount = { amount: currentTx.amount, unit: currentTx.unit, currency: currentTx.currency };
-    const resultOfUpdate = await persistence.adjustTxAmount({ transactionId, newAmount });
-    logger('Result of amount adjustment: ', resultOfUpdate);
-    
-    const updatedTime = moment(resultOfUpdate.updatedTime);
-    
-    const userEventLogOptions = {
-        initiator: adminUserId,
-        timestamp: updatedTime.valueOf(),
-        context: {
-            transactionId,
-            accountId: currentTx.accountId,
-            transactionType: currentTx.transactionType,
-            transactionStatus: currentTx.settlementStatus,
-            humanReference: currentTx.humanReference,
-            timeInMillis: updatedTime.valueOf(),
-            newAmount,
-            oldAmount,
-            reason: reasonToLog
-        }
-    };
-
-    const accountLog = {
-        transactionId,
-        accountId: currentTx.accountId,
-        adminUserId,
-        logType: 'ADMIN_UPDATED_TX',
-        logContext: { reason: reasonToLog, oldAmount, newAmount }
-    };
-
-    await Promise.all([
-        publisher.publishUserEvent(systemWideUserId, 'ADMIN_UPDATED_TX', userEventLogOptions),
-        persistence.insertAccountLog(accountLog)
-    ]);
-    return { result: 'SUCCESS', updateLog: resultOfUpdate };
-};
-
-const validateTxUpdate = ({ transactionId, newTxStatus, newAmount }) => {
-    if (!transactionId) {
-        return opsCommonUtil.wrapResponse('Error, transaction ID required if not initiating transaction', 400);
+    if (!newIdentifier) {
+        return opsCommonUtil.wrapResponse('Error, must pass in newIdentifier', 400);
     }
 
-    if (!newTxStatus && !newAmount) {
-        return opsCommonUtil.wrapResponse('Must adjust update status or amount', 400);
-    }
-    
-    if (newTxStatus && validTxStatus.indexOf(newTxStatus) < 0) {
-        return opsCommonUtil.wrapResponse('Error, invalid transaction status', 400);
-    }
-
-    return false;
-};
-
-const validateTxInitiate = (parameters) => {
-    const requiredParams = ['accountId', 'amount', 'unit', 'currency', 'transactionType'];
-    const missingParams = requiredParams.filter((param) => !Object.keys(parameters).includes(param));
-    if (missingParams.length > 0) {
-        return opsCommonUtil.wrapResponse(`Error missing parameters: ${missingParams.join(', ')}`, 400);
-    }
-
-    return false;
-};
-
-// todo : clean this up to operation/parameters style
-const validateTxOperation = ({ operation, transactionId, newTxStatus, newAmount, parameters }) => {
-    if (operation === 'INITIATE' && parameters) {
-        return validateTxInitiate(parameters);
-    }
-    
-    return validateTxUpdate({ transactionId, newTxStatus, newAmount });
-};
-
-const handleTxUpdate = async ({ adminUserId, systemWideUserId, transactionId, newTxStatus, newAmount, reasonToLog }) => {
-    logger(`Updating transaction, for user ${systemWideUserId}, transaction ${transactionId}, new status ${newTxStatus}, should log: ${reasonToLog}`);
-
-    let resultBody = { };    
-    if (newTxStatus === 'SETTLED') {
-        resultBody = await settleUserTx({ adminUserId, systemWideUserId, transactionId, reasonToLog });
-    } else if (newTxStatus) {
-        resultBody = await updateTxStatus({ adminUserId, systemWideUserId, transactionId, newTxStatus, reasonToLog });
-    } else if (newAmount && newAmount.amount) {
-        resultBody = await updateTxAmount({ adminUserId, systemWideUserId, transactionId, newAmount, reasonToLog });
-    }
-
-    logger('Completed transaction update, result: ', resultBody);
-    return resultBody;
-};
-
-const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId, newIdentifier }) => {
     logger(`Updating balance sheet account for ${systemWideUserId}, setting it to ${newIdentifier}`);
     const bsheetPrefix = config.get('bsheet.prefix');
     // happens inside to prevent accidental duplication etc
@@ -306,9 +65,11 @@ const handleBsheetAccUpdate = async ({ adminUserId, systemWideUserId, accountId,
     return { result: 'SUCCESS', updateLog: resultOfRdsUpdate };
 };
 
-const handlePwdUpdate = async (params, requestContext) => {
+const handlePwdUpdate = async ({ params }) => {
     const { adminUserId, systemWideUserId } = params;
-    const updatePayload = { systemWideUserId, generateRandom: true, requestContext };
+
+    const authorizer = { systemWideUserId: adminUserId, role: 'SYSTEM_ADMIN' };
+    const updatePayload = { systemWideUserId, generateRandom: true, requestContext: { authorizer} };
     logger('Invoking password update lambda, payload: ', updatePayload);
     const updateResult = await lambda.invoke(adminUtil.invokeLambda(config.get('lambdas.passwordUpdate'), updatePayload)).promise();
     logger('Password update result: ', updateResult);
@@ -353,7 +114,8 @@ const handlePwdUpdate = async (params, requestContext) => {
 
 // used for generic log records, especially ones involving files
 // note : file here is just the name and mime type, presumption is that it is already stored
-const handleLogRecord = async (params) => {
+const handleLogRecord = async ({ params }) => {
+    logger('Record a log for the user');
     const { adminUserId, systemWideUserId, eventType, note, file } = params;
 
     const context = { systemWideUserId, note, file };
@@ -363,7 +125,8 @@ const handleLogRecord = async (params) => {
 };
 
 // used to add a flag to user account, primarily in fraud/FIC system etc
-const handleFlagUpdate = async (params) => {
+const handleFlagUpdate = async ({ params }) => {
+    logger('Update user flags');
     const { systemWideUserId, flags: newFlags, adminUserId, reasonToLog } = params;
     const { accountId, flags: oldFlags } = await persistence.getAccountDetails(systemWideUserId);
     logger('Updating account ID ', accountId, ' to have flags: ', newFlags, ' used to have: ', oldFlags);
@@ -377,8 +140,18 @@ const handleFlagUpdate = async (params) => {
     return { result: 'SUCCESS' };
 };
 
+const FIELD_DISPATCHER = {
+    TRANSACTION: transactionHandler.processTransaction,
+    KYC: statusHandler.processStatusUpdate,
+    STATUS: statusHandler.processStatusUpdate,
+    REGULATORY: statusHandler.processStatusUpdate,
+    BSHEET: handleBsheetAccUpdate,
+    PWORD: handlePwdUpdate,
+    FLAGS: handleFlagUpdate,
+    RECORDLOG: handleLogRecord 
+};
+
 /**
- * todo : very much overdue a refactor (e.g., modernize to path/params model, split handler, etc)
  * @property {string} systemWideUserId The ID of the user to adjust
  * @property {string} fieldToUpdate One of: KYC, STATUS, TRANSACTION 
  */
@@ -389,7 +162,6 @@ module.exports.manageUser = async (event) => {
         }
 
         const adminUserId = opsCommonUtil.extractUserDetails(event).systemWideUserId;
-
         const params = { ...opsCommonUtil.extractParamsFromEvent(event), adminUserId };
         logger('Params for user management: ', params);
 
@@ -398,58 +170,16 @@ module.exports.manageUser = async (event) => {
             return opsCommonUtil.wrapResponse(message, 400);
         }
 
-        let resultOfUpdate = { };
-        if (params.fieldToUpdate === 'TRANSACTION') {
-            logger('Updating or initiating a transaction');
-            const checkForError = validateTxOperation(params);
-            logger('Do we have an error ? : ', checkForError);
-            if (checkForError) {
-                return checkForError;
-            }
-
-
-            resultOfUpdate = await (params.transactionId 
-                ? handleTxUpdate(params) 
-                : initiateTransaction(params.systemWideUserId, params.parameters, event.requestContext)
-            );
-        }
-
-        if (params.fieldToUpdate === 'KYC' || params.fieldToUpdate === 'STATUS' || params.fieldToUpdate === 'REGULATORY') {
-            logger('Updating user status, validate types and return okay');
-            if (!validateStatusUpdate(params)) {
-                return opsCommonUtil.wrapResponse('Error, bad field or type for user update', 400);
-            }
-            resultOfUpdate = await handleStatusUpdate(params);
-        }
-        
-        if (params.fieldToUpdate === 'BSHEET') {
-            logger('Updating the FinWorks (balance sheet management) identifier for the user');
-            if (!params.accountId) {
-                return opsCommonUtil.wrapResponse('Error, must pass in account ID', 400);
-            }
-            if (!params.newIdentifier) {
-                return opsCommonUtil.wrapResponse('Error, must pass in newIdentifier', 400);
-            }
-            resultOfUpdate = await handleBsheetAccUpdate(params);
-        }
-
-        if (params.fieldToUpdate === 'PWORD') {
-            logger('Resetting the user password, trigger and send back');
-            resultOfUpdate = await handlePwdUpdate(params, event.requestContext);
-        }
-
-        if (params.fieldToUpdate === 'FLAGS') {
-            logger('Update user flags');
-            resultOfUpdate = await handleFlagUpdate(params);
-        }
-
-        if (params.fieldToUpdate === 'RECORD_LOG') {
-            logger('Record a log for the user');
-            resultOfUpdate = await handleLogRecord(params);
-        }
-
-        if (opsCommonUtil.isObjectEmpty(resultOfUpdate)) {
+        if (!Object.keys(FIELD_DISPATCHER).includes(params.fieldToUpdate)) {
             return opsCommonUtil.wrapResponse('Error! Non-standard operation passed', 400);
+        }
+
+        logger('Standard operation received, dispatching');
+        const resultOfUpdate = await FIELD_DISPATCHER[params.fieldToUpdate]({ params, lambda, publisher, persistence });
+        
+        // if a validation error etc., then will already have headers and relevant status code, etc.
+        if (Reflect.has(resultOfUpdate, 'headers')) {
+            return resultOfUpdate;
         }
 
         return opsCommonUtil.wrapResponse(resultOfUpdate);

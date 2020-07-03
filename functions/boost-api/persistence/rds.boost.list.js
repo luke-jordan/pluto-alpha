@@ -146,6 +146,9 @@ module.exports.fetchBoostDetails = async (boostId, includeAccounts) => {
     const rawBoost = queryResult[0];
     const transformedBoost = {
         boostId: rawBoost['boost_id'],
+        boostType: rawBoost['boost_type'],
+        boostCategory: rawBoost['boost_category'],
+
         label: rawBoost['label'],
         
         active: rawBoost['active'],

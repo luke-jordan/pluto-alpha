@@ -88,9 +88,6 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         fetchTxDetailsStub.resolves({ accountId: testAccountId, humanReference: 'JSAVE111', amount: 100000, unit: 'HUNDREDTH_CENT', currency: 'USD', tags: [] });
         countSettledTxStub.resolves(1);
 
-        const testLogTime = moment();
-        momentStub.returns(testLogTime);
-
         const expectedLogContext = {
             settleInstruction: {
                 transactionId: testTxId,
@@ -108,7 +105,7 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
             context: {
                 transactionId: testTxId,
                 accountId: testAccountId,
-                timeInMillis: testLogTime.valueOf(),
+                timeInMillis: sinon.match.number,
                 bankReference: 'JSAVE111',
                 savedAmount: '100000::HUNDREDTH_CENT::USD',
                 saveCount: 1,
@@ -227,14 +224,14 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
 
         const expectedUserEventLogOptions = {
             initiator: testAdminId,
-            timestamp: testLogTime.valueOf(),
+            timestamp: sinon.match.number, // else need to pass moment stub all the way through, for little gain (bring back when split tests)
             context: {
                 transactionId: testTxId,
                 accountId: testAccountId,
                 transactionType: 'USER_SAVING_EVENT',
                 transactionStatus: 'PENDING',
                 humanReference: 'JSAVE111',
-                timeInMillis: testLogTime.valueOf(),
+                timeInMillis: sinon.match.number,
                 oldAmount: { amount: 5000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
                 newAmount: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' },
                 reason: 'Saving event completed, at different EFT amount'
@@ -257,12 +254,12 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         expect(insertAccountLogStub).to.have.been.calledOnceWithExactly(expectedAccountLog);
     });
 
-    it('Initiates a transaction (via lambda)', async () => {
+    it('Initiates a save (via lambda)', async () => {
         const testRequestBody = {
             systemWideUserId: testUserId,
             fieldToUpdate: 'TRANSACTION',
             operation: 'INITIATE',
-            parameters: {
+            transactionParameters: {
                 accountId: testAccountId,
                 amount: 1000000,
                 unit: 'HUNDREDTH_CENT',
@@ -391,7 +388,6 @@ describe('*** UNIT TEST USER MANAGEMENT ***', () => {
         expect(publishEventStub).to.have.not.been.called;
         expect(insertAccountLogStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;
-
     });
 
 });
