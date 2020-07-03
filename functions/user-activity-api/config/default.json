@@ -65,6 +65,10 @@
         "calcSavingHeat": "user_save_heat_fetch",
         "connectFriendReferral": "friend_referral_connect"
     },
+    "queues": {
+        "boostProcess": "boost_process_queue",
+        "balanceSheetUpdate": "balance_sheet_update_queue"
+    },
     "payment": {
         "test": false,
         "dummy": "OFF"

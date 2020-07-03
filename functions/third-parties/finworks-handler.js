@@ -21,7 +21,8 @@ const BANK_BRANCH_CODES = {
     'ABSA': '632005',
     'STANDARD': '051001',
     'NEDBANK': '198765',
-    'CAPITEC': '470010'
+    'CAPITEC': '470010',
+    'TYME': '678910'
 };
 
 const FINWORKS_NAMES = {
@@ -29,7 +30,8 @@ const FINWORKS_NAMES = {
     'ABSA': 'ABSA',
     'STANDARD': 'Standard Bank',
     'NEDBANK': 'Nedbank',
-    'CAPITEC': 'Capitec'
+    'CAPITEC': 'Capitec',
+    'TYME': 'Tyme,'
 };
 
 const fetchAccessCreds = async () => {

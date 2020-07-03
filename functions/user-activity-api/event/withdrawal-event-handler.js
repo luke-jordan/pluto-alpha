@@ -92,8 +92,7 @@ module.exports.handleWithdrawalEvent = async ({ eventBody, userProfile, publishe
     await safeWithdrawalEmail({ eventBody, userProfile, bankAccountDetails, publisher, sns });
 
     const processingPromises = [];
-    const boostProcessInvocation = dispatchHelper.assembleBoostProcessInvocation(eventBody);
-    processingPromises.push(lambda.invoke(boostProcessInvocation).promise());
+    processingPromises.push(dispatchHelper.sendEventToBoostProcessing(eventBody, publisher));
 
     const accountId = eventBody.context.accountId;
     const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
@@ -129,6 +128,7 @@ module.exports.handleWithdrawalCancelled = async ({ eventBody, userProfile, pers
     
     if (newStatus !== 'CANCELLED' || transactionDetails.settlementStatus !== 'CANCELLED') {
         logger('Error! Event must have been published incorrectly');
+        return;
     }
 
     // i.e., was not just user cancelling before the end

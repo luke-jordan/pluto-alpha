@@ -105,6 +105,49 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     }
 };
 
+const obtainQueueUrl = async (queueName) => {
+    logger('Looking for SQS queue name: ', queueName);
+    const queueUrlResult = await sqs.getQueueUrl({ QueueName: queueName }).promise();
+    return queueUrlResult.QueueUrl;
+}
+
+const assembleQueueParams = async (payload, queueUrl) => {
+    const dataType = { DataType: 'String', StringValue: 'JSON' };
+    return {
+        MessageAttributes: { MessageBodyDataType: dataType },
+        MessageBody: JSON.stringify(payload),
+        QueueUrl: queueUrl
+    };
+};
+
+module.exports.sendToQueue = async (queueName, payloads) => {
+    try {
+        const queueUrl = await obtainQueueUrl(queueName);
+        const queueParameters = await payloads.map((payload) => assembleQueueParams(payload, queueUrl));
+        logger('Assembled queue parameters:', queueParameters);
+        
+        const sqsPromises = queueParameters.map((params) => sqs.sendMessage(params).promise());
+        const sqsResult = await Promise.all(sqsPromises);
+        logger('Queue result:', sqsResult);
+
+        const successCount = sqsResult.filter((result) => typeof result === 'object' && result.MessageId).length;
+        logger(`${successCount}/${events.length} events were queued successfully`);
+        return { successCount, failureCount: events.length - successCount };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { result: 'FAILURE' };
+    }
+};
+
+module.exports.addToDlq = async (dlqName, event, error) => {
+    const dlqUrl = await obtainQueueUrl(dlqName);
+    const payload = { originalEvent: event, error };
+    const sqsParameters = assembleQueueParams(payload, dlqUrl);
+    logger('DLQ send parameters: ', sqsParameters);
+    const sqsResult = await sqs.sendMessage(sqsParameters).promise();
+    logger('Result from SQS: ', sqsResult);
+}
+
 module.exports.sendSms = async ({ phoneNumber, message, sendSync }) => {
     try {    
         const invokeSync = sendSync || false;

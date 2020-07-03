@@ -90,7 +90,7 @@ const assembleStatusUpdateInvocation = (systemWideUserId, statusInstruction) => 
     return invokeParams;
 };
 
-const sendEnrichedSaveEventToBoostProcess = async ({ eventBody, persistence, lambda }) => {
+const sendEnrichedSaveEventToBoostProcess = async ({ eventBody, persistence, publisher }) => {
     const { context: saveContext } = eventBody;
     const { accountId, transactionId } = saveContext;
     
@@ -106,8 +106,7 @@ const sendEnrichedSaveEventToBoostProcess = async ({ eventBody, persistence, lam
 
     logger('Save context after enrichment: ', saveContext);
 
-    const boostProcessInvocation = dispatchHelper.assembleBoostProcessInvocation(eventBody);
-    lambda.invoke(boostProcessInvocation).promise();
+    await dispatchHelper.sendEventToBoostProcessing(eventBody, publisher);
 };
 
 // ///////////////////////// CORE DISPATCHERS //////////////////////////////////////////////////////////
@@ -143,7 +142,7 @@ module.exports.handleSavingEvent = async ({ eventBody, persistence, publisher, l
 
     const promisesToInvoke = [];
     
-    promisesToInvoke.push(sendEnrichedSaveEventToBoostProcess({ eventBody, persistence, lambda }));
+    promisesToInvoke.push(sendEnrichedSaveEventToBoostProcess({ eventBody, persistence, publisher }));
     
     if (emailSendingEnabled) {
         promisesToInvoke.push(sendSaveSucceededEmail(eventBody, publisher));

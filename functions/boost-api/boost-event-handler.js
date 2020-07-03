@@ -378,42 +378,48 @@ const handleExpiredBoost = async (boostId) => {
     return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
+const handleIndividualEvent = async (event) => {
+    if (event.eventType === 'BOOST_EXPIRED' && event.boostId) {
+        return handleExpiredBoost(event.boostId);        
+    }
+
+    // second, we check if there is a pending boost for this account, or user, if we only have that
+    if (!event.accountId && !event.userId) {
+        return { statusCode: statusCodes('Bad request'), body: 'Function requires at least a user ID or accountID' };
+    }
+
+    if (!event.accountId) {
+        // eslint-disable-next-line require-atomic-updates
+        event.accountId = await persistence.getAccountIdForUser(event.userId);
+        logger('Event account ID: ', event.accountId);
+    }
+
+    // third, find boosts that do not already have an entry for this user, and are created by this event
+    const creationResult = await createBoostsTriggeredByEvent(event);
+    logger('Result of boost-account creation creation:', creationResult);
+
+    return processEventForExistingBoosts(event);
+}
+
 /**
  * Generic handler for any boost relevant response (add cash, solve game, etc)
  * Note: at present, since we handle a relatively limited range of events, this gets directly invoked,
  * though in future we may put it onto the same SNS topic as message process and event handler
- * @param {object} event An event object containing the request context and request body.
+ * @param {object} event An event object containing the request context and request body. NOTE: this comes in via SQS.
  * @property {string} userId The users id.
  * @property {string} accountId The account id. Either the user id or the account id must be provided.
  */
-module.exports.processEvent = async (event) => {
+module.exports.processBatch = async (event) => {
     try {
-        logger('Processing boost event: ', event);
-
-        if (event.eventType === 'BOOST_EXPIRED' && event.boostId) {
-            return handleExpiredBoost(event.boostId);        
-        }
-
-        // second, we check if there is a pending boost for this account, or user, if we only have that
-        if (!event.accountId && !event.userId) {
-            return { statusCode: statusCodes('Bad request'), body: 'Function requires at least a user ID or accountID' };
-        }
-
-        if (!event.accountId) {
-            // eslint-disable-next-line require-atomic-updates
-            event.accountId = await persistence.getAccountIdForUser(event.userId);
-            logger('Event account ID: ', event.accountId);
-        }
-
-        // third, find boosts that do not already have an entry for this user, and are created by this event
-        const creationResult = await createBoostsTriggeredByEvent(event);
-        logger('Result of boost-account creation creation:', creationResult);
-
-        const resultToReturn = await processEventForExistingBoosts(event);
+        logger('Processing queue batch, exact format: ', JSON.stringify(event, null, 2));
+        
+        const extractedEvents = util.extractSQSEvents(event);
+        const resultOfProcessing = await Promise.all((extractedEvents.map((event) => handleIndividualEvent(event))));
+        logger('Result of processing: ', resultOfProcessing);
 
         return {
             statusCode: 200,
-            body: JSON.stringify(resultToReturn)
+            body: resultOfProcessing
         };
     } catch (error) {
         logger('FATAL_ERROR: ', error);

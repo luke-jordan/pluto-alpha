@@ -122,14 +122,7 @@ resource "aws_lambda_event_source_mapping" "message_event_process_lambda" {
   enabled = true
   function_name = aws_lambda_function.message_event_process.arn
   batch_size = 5
-}
-
-resource "aws_lambda_permission" "message_process_from_sns" {
-    statement_id = "EventProcessAllowExecutionFromSNS"
-    action = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.message_event_process.function_name
-    principal = "sns.amazonaws.com"
-    source_arn = var.user_event_topic_arn[terraform.workspace]
+  maximum_batching_window_in_seconds = 2 // to prevent over eagerness here
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

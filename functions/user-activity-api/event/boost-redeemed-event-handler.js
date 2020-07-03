@@ -6,7 +6,7 @@ const config = require('config');
 const util = require('ops-util-common');
 
 // todo : make this idempotent by tagging the transaction
-module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, lambda }) => {
+module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publisher }) => {
     logger('Handling boost redeemed event: ', JSON.stringify(eventBody));
     const { accountId, boostAmount, transferResults } = eventBody.context;
     if (!transferResults || !Array.isArray(transferResults.accountTxIds) || transferResults.accountTxIds.length === 0) {
@@ -52,26 +52,14 @@ module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, lambd
 
     const transactionDetails = { accountNumber: bSheetReference, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
     const lambdaPayload = { operation: 'BOOST', transactionDetails };
-
-    const investmentInvocation = {
-        FunctionName: config.get('lambdas.addTxToBalanceSheet'),
-        InvocationType: 'RequestResponse',
-        Payload: JSON.stringify(lambdaPayload)
-    };
     
     logger('Payload for balance sheet lambda: ', investmentInvocation);
-    const bSheetResult = await lambda.invoke(investmentInvocation).promise();
-    logger('Balance sheet result: ', bSheetResult);
+    const bSheetResult = await publisher.sendToQueue(config.get('queues.balanceSheetUpdate'), [lambdaPayload]);
+    logger('Result of queuing: ', bSheetResult);
     
-    const { result } = JSON.parse(bSheetResult['Payload']);
-    if (result === 'SUCCESS') {
-        logger('Balance sheet completed, tag transaction');
-        const updateResult = await persistence.updateTxTags(transactionId, `${bsheetTxTag}::${boostAmount}`);
-        logger('Result of tag persistence: ', updateResult);
-        return { result: 'SUCCESS' };        
-    }
+    // as far as this handler is concerned, its work is done and should not be repeated, errors in bsheet handler
+    // should go via its dlq etc and be picked up there
 
-    // would have thrown and logged in balance sheet update too; logging error raises further alarm, but no point
-    // throwing at this point (would just duplicate logs / cause spurious retries here but problem is in bsheet handler)
-    logger('FATAL_ERROR: Balance sheet update for boost failed: ', bSheetResult);
+    const updateResult = await persistence.updateTxTags(transactionId, `${bsheetTxTag}::${boostAmount}`);
+    logger('Result of tag persistence: ', updateResult);
 };

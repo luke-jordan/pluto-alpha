@@ -121,7 +121,15 @@ module.exports.handleUserEvent = async (snsEvent) => {
         return { statusCode: 200 };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        await publisher.addToDlq(config.get('publishing.userEvents.processingDlq'), snsEvent, err);
+        await publisher.addToDlq(config.get('queues.eventDlq'), snsEvent, err);
         return { statusCode: 500 };
     }
 };
+
+// failures happen inside individual event handling to avoid errors on one causing retries of all 
+module.exports.handleSqsEventBatch = async (sqsEvent) => {
+    const snsEvents = opsUtil.extractSQSEvents(sqsEvent);
+    logger('Extracted SNS events: ', snsEvents);
+    const userEvents = snsEvents.map((snsEvent) => opsUtil.extractSNSEvent(snsEvent));
+    return Promise.all(userEvents.map((event) => exports.handleUserEvent(event)));
+}

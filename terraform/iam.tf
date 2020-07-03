@@ -481,9 +481,7 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.boost_event_process.arn}",
                 "${aws_lambda_function.balance_sheet_acc_create.arn}",
-                "${aws_lambda_function.balance_sheet_acc_update.arn}",
                 "${aws_lambda_function.outbound_comms_send.arn}",
                 "${aws_lambda_function.friend_referral_connect.arn}"
             ]
@@ -500,13 +498,15 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             ]
         },
         {
-            "Sid": "AllowPublishDLQ",
+            "Sid": "AllowPublishQueues",
             "Effect": "Allow",
             "Action": [
                 "sqs:GetQueueUrl",
                 "sqs:SendMessage"
             ],
             "Resource": [
+                "${aws_sqs_queue.boost_process_queue.arn}",
+                "${aws_sqs_quque.balance_sheet_update_queue.arn}",
                 "${aws_sqs_queue.user_event_dlq.arn}"
             ]
         },
