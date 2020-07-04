@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_event_process" {
   role                           = "${aws_iam_role.boost_event_process_role.arn}"
   handler                        = "boost-event-handler.processBatch"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 10
   tags                           = {"environment"  = "${terraform.workspace}"}
   

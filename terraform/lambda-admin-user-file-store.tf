@@ -9,7 +9,7 @@ resource "aws_lambda_function" "admin_user_file_store" {
   role                           = "${aws_iam_role.admin_user_file_store_role.arn}"
   handler                        = "admin-user-logging.uploadLogBinary"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
   

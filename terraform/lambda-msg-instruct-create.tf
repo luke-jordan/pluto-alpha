@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_instruct_create" {
   role                           = "${aws_iam_role.message_instruct_create_role.arn}"
   handler                        = "msg-instruction-handler.insertMessageInstruction"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

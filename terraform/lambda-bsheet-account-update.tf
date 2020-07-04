@@ -9,7 +9,7 @@ resource "aws_lambda_function" "balance_sheet_acc_update" {
   role                           = "${aws_iam_role.balance_sheet_acc_update_role.arn}"
   handler                        = "finworks-handler.addTransaction"
   memory_size                    = 128
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

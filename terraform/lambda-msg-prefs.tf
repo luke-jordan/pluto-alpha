@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_preferences" {
   role                           = "${aws_iam_role.message_preferences_role.arn}"
   handler                        = "message-prefs-handler.manageUserPreferences"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

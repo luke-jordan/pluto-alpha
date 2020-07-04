@@ -9,7 +9,7 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
   role                           = "${aws_iam_role.ops_admin_scheduled_role.arn}"
   handler                        = "scheduled-job.runRegularJobs"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 90
   tags                           = {"environment"  = "${terraform.workspace}"}
   

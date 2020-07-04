@@ -9,7 +9,7 @@ resource "aws_lambda_function" "audience_selection" {
   role                = "${aws_iam_role.audience_selection_role.arn}"
   handler             = "audience-handler.handleInboundRequest"
   memory_size         = 256
-  runtime             = "nodejs10.x"
+  runtime             = "nodejs12.x"
   timeout             = 30
   tags                = {"environment"  = "${terraform.workspace}"}
   
