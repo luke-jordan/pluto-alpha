@@ -122,8 +122,7 @@ const handleMsgPreference = async ({ params }) => {
     logger('Result from lambda: ', updateResult);
     const responsePayload = JSON.parse(updateResult);
     return responsePayload; // should have headers etc embedded
-
-}
+};
 
 // used for generic log records, especially ones involving files
 // note : file here is just the name and mime type, presumption is that it is already stored
