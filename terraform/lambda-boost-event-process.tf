@@ -92,7 +92,7 @@ resource "aws_lambda_event_source_mapping" "boost_event_process_lambda" {
   enabled = true
   function_name = aws_lambda_function.boost_event_process.arn
   batch_size = 1 // for the moment
-  maximum_batching_window_in_seconds = 2 // to prevent over eagerness here
+  # maximum_batching_window_in_seconds = 2 // to prevent over eagerness here (but looks like not accepted yet on SQS)
 }
 
 /////////////////// IAM CONFIG //////////////////////////////////////////////////////////////////////////////////////
@@ -127,7 +127,10 @@ resource "aws_iam_role_policy_attachment" "boost_event_process_secret_get" {
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
 }
 
-
+resource "aws_iam_role_policy_attachment" "boost_process_queue_polling_policy" {
+  role = aws_iam_role.boost_event_process_role.name
+  policy_arn = aws_iam_policy.sqs_boost_process_queue_poll.arn
+}
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 

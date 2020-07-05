@@ -64,7 +64,8 @@ resource "aws_sqs_queue" "balance_sheet_update_queue" {
 }
 
 resource "aws_sqs_queue" "balance_sheet_update_dlq" {
-  name = "${terraform.workspace}_bsheet_update_queue_dlq"
+  name = "${terraform.workspace}_bsheet_update_queue_dlq.fifo"
+  fifo_queue = true
 
   tags = {
     environment = "${terraform.workspace}"
@@ -107,8 +108,10 @@ resource "aws_sqs_queue" "boost_process_queue" {
   }
 }
 
+// dlqs must be same type as their originator queues
 resource "aws_sqs_queue" "boost_process_dlq" {
-  name = "${terraform.workspace}_boost_process_dlq"
+  name = "${terraform.workspace}_boost_process_dlq.fifo"
+  fifo_queue = true
 
   tags = {
     environment = "${terraform.workspace}"

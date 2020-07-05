@@ -133,6 +133,11 @@ resource "aws_iam_role_policy_attachment" "user_event_process_secret_get" {
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
+resource "aws_iam_role_policy_attachment" "user_event_queue_polling_policy" {
+  role = aws_iam_role.user_event_process_role.name
+  policy_arn = aws_iam_policy.sqs_user_event_queue_poll.arn
+}
+
 ////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) ////////////////////////////////////////////////////////
 
 resource "aws_lambda_event_source_mapping" "user_event_process_lambda" {

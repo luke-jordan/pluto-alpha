@@ -82,6 +82,11 @@ resource "aws_iam_role_policy_attachment" "balance_sheet_acc_update_key_access" 
   policy_arn = aws_iam_policy.fworks_s3_access.arn
 }
 
+resource "aws_iam_role_policy_attachment" "balance_sheet_update_queue_polling_policy" {
+  role = aws_iam_role.balance_sheet_acc_update_role.name
+  policy_arn = aws_iam_policy.sqs_bsheet_update_queue_poll.arn
+}
+
 ////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) /////////////////////////////////////////////////////////////
 
 resource "aws_lambda_event_source_mapping" "bsheet_event_process_lambda" {
@@ -89,7 +94,7 @@ resource "aws_lambda_event_source_mapping" "bsheet_event_process_lambda" {
   enabled = true
   function_name = aws_lambda_function.balance_sheet_acc_update.arn
   batch_size = 1 // for the moment
-  maximum_batching_window_in_seconds = 2 // to prevent over eagerness here
+  # maximum_batching_window_in_seconds = 2 // to prevent over eagerness here (but looks like not accepted here yet)
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

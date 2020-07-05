@@ -941,7 +941,7 @@ resource "aws_iam_policy" "dynamo_bank_verification_access" {
 EOF
 }
 
-///// SOME QUEUE PERMISSIONS
+///// SOME QUEUE POLLING PERMISSIONS
 
 resource "aws_iam_policy" "sqs_message_event_queue_process" {
     name = "${terraform.workspace}_message_event_queue_process"
@@ -961,6 +961,114 @@ resource "aws_iam_policy" "sqs_message_event_queue_process" {
             ],
             "Resource": [
                 "${aws_sqs_queue.message_event_process_queue.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "sqs_user_event_queue_poll" {
+    name = "${terraform.workspace}_user_event_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.user_event_process_queue.arn}"
+            ]
+        },
+        {
+            "Sid": "SQSDlqPublish",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.user_event_dlq.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "sqs_boost_process_queue_poll" {
+    name = "${terraform.workspace}_boost_process_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.boost_process_queue.arn}"
+            ]
+        },
+        {
+            "Sid": "SQSDlqPublish",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.boost_process_dlq.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "sqs_bsheet_update_queue_poll" {
+    name = "${terraform.workspace}_bsheet_update_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.balance_sheet_update_queue.arn}"
+            ]
+        },
+        {
+            "Sid": "SQSDlqPublish",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.balance_sheet_update_dlq.arn}"
             ]
         }
     ]

@@ -123,7 +123,7 @@ const assembleQueueParams = async (payload, queueUrl) => {
 module.exports.sendToQueue = async (queueName, payloads) => {
     try {
         const queueUrl = await obtainQueueUrl(queueName);
-        const queueParameters = await payloads.map((payload) => assembleQueueParams(payload, queueUrl));
+        const queueParameters = await Promise.all(payloads.map((payload) => assembleQueueParams(payload, queueUrl)));
         logger('Assembled queue parameters:', queueParameters);
         
         const sqsPromises = queueParameters.map((params) => sqs.sendMessage(params).promise());
