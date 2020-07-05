@@ -12,6 +12,7 @@ const util = require('./boost.util');
 const conditionTester = require('./condition-tester');
 
 const publisher = require('publish-common');
+const opsUtil = require('ops-util-common');
 
 const GAME_RESPONSE = 'GAME_RESPONSE';
 
@@ -195,6 +196,7 @@ const processEventForExistingBoosts = async (event) => {
             redemptionCall.pooledContributionMap = await fetchAccountIdsForPooledRewards(boostsToRedeem);
         }
 
+        logger('REDEMPTION CALL: ', redemptionCall);
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
     }
 
@@ -399,28 +401,27 @@ const handleIndividualEvent = async (event) => {
     logger('Result of boost-account creation creation:', creationResult);
 
     return processEventForExistingBoosts(event);
-}
+};
 
 /**
  * Generic handler for any boost relevant response (add cash, solve game, etc)
  * Note: at present, since we handle a relatively limited range of events, this gets directly invoked,
  * though in future we may put it onto the same SNS topic as message process and event handler
- * @param {object} event An event object containing the request context and request body. NOTE: this comes in via SQS.
+ * @param {object} sqsBatch A batch of event objects containing the request context and request body. NOTE: this comes in via SQS.
  * @property {string} userId The users id.
  * @property {string} accountId The account id. Either the user id or the account id must be provided.
  */
-module.exports.processBatch = async (event) => {
+module.exports.handleBatchOfQueuedEvents = async (sqsBatch) => {
     try {
-        logger('Processing queue batch, exact format: ', JSON.stringify(event, null, 2));
+        logger('Processing queue batch, exact format: ', JSON.stringify(sqsBatch, null, 2));
         
-        const extractedEvents = util.extractSQSEvents(event);
+        const extractedEvents = opsUtil.extractSQSEvents(sqsBatch);
+
+        // note : these do not come from SNS originally, hence pass directly
         const resultOfProcessing = await Promise.all((extractedEvents.map((event) => handleIndividualEvent(event))));
         logger('Result of processing: ', resultOfProcessing);
 
-        return {
-            statusCode: 200,
-            body: resultOfProcessing
-        };
+        return resultOfProcessing;
     } catch (error) {
         logger('FATAL_ERROR: ', error);
         return { statusCode: 500 };

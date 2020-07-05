@@ -34,7 +34,7 @@ const expireBoosts = async () => {
         return { result: 'NO_BOOSTS' };
     }
 
-    const boostProcessPayloads = expireBoosts.map((boostId) => ({ boostId, eventType: 'BOOST_EXPIRED' }));
+    const boostProcessPayloads = expiredBoosts.map((boostId) => ({ boostId, eventType: 'BOOST_EXPIRED' }));
     const sendToProcessResult = await publisher.sendToQueue(config.get('queues.boostProcess'), boostProcessPayloads);
     logger('Boost expiry results: ', sendToProcessResult);
     return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };

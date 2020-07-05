@@ -506,7 +506,7 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             ],
             "Resource": [
                 "${aws_sqs_queue.boost_process_queue.arn}",
-                "${aws_sqs_quque.balance_sheet_update_queue.arn}",
+                "${aws_sqs_queue.balance_sheet_update_queue.arn}",
                 "${aws_sqs_queue.user_event_dlq.arn}"
             ]
         },

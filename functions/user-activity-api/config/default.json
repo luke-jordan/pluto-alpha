@@ -67,7 +67,8 @@
     },
     "queues": {
         "boostProcess": "boost_process_queue",
-        "balanceSheetUpdate": "balance_sheet_update_queue"
+        "balanceSheetUpdate": "balance_sheet_update_queue",
+        "eventDlq": "<<insert_here>>"
     },
     "payment": {
         "test": false,

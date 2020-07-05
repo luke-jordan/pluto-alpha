@@ -98,7 +98,7 @@ module.exports.handleWithdrawalEvent = async ({ eventBody, userProfile, publishe
     const [amount, unit, currency] = eventBody.context.withdrawalAmount.split('::');
 
     const bsheetParams = { accountId, amount: Math.abs(amount), unit, currency, bankDetails: bankAccountDetails, transactionId };
-    const bsheetPromise = dispatchHelper.addInvestmentToBSheet({ operation: 'WITHDRAW', parameters: bsheetParams, persistence, lambda });
+    const bsheetPromise = dispatchHelper.addInvestmentToBSheet({ operation: 'WITHDRAW', parameters: bsheetParams, persistence, publisher });
     processingPromises.push(bsheetPromise);
 
     const statusInstruction = { updatedUserStatus: { changeTo: 'USER_HAS_WITHDRAWN', reasonToLog: 'User withdrew funds' }};

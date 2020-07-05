@@ -51,14 +51,19 @@ module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publi
     const wholeCurrencyAmount = util.convertToUnit(amount, unit, 'WHOLE_CURRENCY');
 
     const transactionDetails = { accountNumber: bSheetReference, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
-    const lambdaPayload = { operation: 'BOOST', transactionDetails };
+    const queuePayload = { operation: 'BOOST', transactionDetails };
     
-    logger('Payload for balance sheet lambda: ', investmentInvocation);
-    const bSheetResult = await publisher.sendToQueue(config.get('queues.balanceSheetUpdate'), [lambdaPayload]);
+    logger('Payload for balance sheet queue: ', queuePayload);
+    const bSheetResult = await publisher.sendToQueue(config.get('queues.balanceSheetUpdate'), [queuePayload]);
     logger('Result of queuing: ', bSheetResult);
     
     // as far as this handler is concerned, its work is done and should not be repeated, errors in bsheet handler
-    // should go via its dlq etc and be picked up there
+    // should go via its dlq etc and be picked up there, _unless_ it was the very act of sending to the queue that failed
+
+    if (!bSheetResult || bSheetResult.result === 'FAILURE') {
+        logger('FATAL ERR: Error sending boost redemption to balance sheet queue: ', bSheetResult);
+        return;
+    }
 
     const updateResult = await persistence.updateTxTags(transactionId, `${bsheetTxTag}::${boostAmount}`);
     logger('Result of tag persistence: ', updateResult);

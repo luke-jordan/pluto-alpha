@@ -156,7 +156,7 @@ module.exports.handleSavingEvent = async ({ eventBody, persistence, publisher, l
     
     const [amount, unit, currency] = savedAmount.split('::');
     const bsheetParams = { accountId, transactionId, amount, unit, currency };
-    const bsheetPromise = dispatchHelper.addInvestmentToBSheet({ operation: 'INVEST', parameters: bsheetParams, persistence, lambda });
+    const bsheetPromise = dispatchHelper.addInvestmentToBSheet({ operation: 'INVEST', parameters: bsheetParams, persistence, publisher });
     promisesToInvoke.push(bsheetPromise);
 
     // removing this for now -- not sure allowing this to publish is wise, and have other/better ways to trigger

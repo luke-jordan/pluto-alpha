@@ -7,7 +7,7 @@ resource "aws_lambda_function" "boost_event_process" {
 
   function_name                  = "${var.boost_event_process_lambda_function_name}"
   role                           = "${aws_iam_role.boost_event_process_role.arn}"
-  handler                        = "boost-event-handler.processBatch"
+  handler                        = "boost-event-handler.handleBatchOfQueuedEvents"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 10
@@ -88,7 +88,7 @@ resource "aws_cloudwatch_log_group" "boost_event_process" {
 ////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) /////////////////////////////////////////////////////////////
 
 resource "aws_lambda_event_source_mapping" "boost_event_process_lambda" {
-  event_source_arn = aws_sqs_queue.boost_event_process_queue.arn
+  event_source_arn = aws_sqs_queue.boost_process_queue.arn
   enabled = true
   function_name = aws_lambda_function.boost_event_process.arn
   batch_size = 1 // for the moment

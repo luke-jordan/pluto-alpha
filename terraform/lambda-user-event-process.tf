@@ -7,7 +7,7 @@ resource "aws_lambda_function" "user_event_process" {
 
   function_name                  = "${var.user_event_process}"
   role                           = "${aws_iam_role.user_event_process_role.arn}"
-  handler                        = "event-handler.handleUserEvent"
+  handler                        = "event-handler.handleBatchOfQueuedEvents"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 180

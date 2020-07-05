@@ -15,17 +15,21 @@ const stringFormat = require('string-format');
 const opsUtil = require('ops-util-common');
 
 const listClientFloatsStub = sinon.stub();
+const expireBoostsStub = sinon.stub();
+const checkAllFloatsStub = sinon.stub();
+
+const sendSystemEmailStub = sinon.stub();
+const publishMultiUserEventStub = sinon.stub();
+const sendEventToQueueStub = sinon.stub();
+
+const fetchUserIdsForAccountsStub = sinon.stub();
 const getFloatBalanceAndFlowsStub = sinon.stub();
 const getLastFloatAccrualTimeStub = sinon.stub();
+const fetchPendingTransactionsForAllUsersStub = sinon.stub();
+const rdsExpireHangingTransactionsStub = sinon.stub();
+
 const lamdbaInvokeStub = sinon.stub();
 const momentStub = sinon.stub();
-const sendSystemEmailStub = sinon.stub();
-const rdsExpireHangingTransactionsStub = sinon.stub();
-const expireBoostsStub = sinon.stub();
-const publishMultiUserEventStub = sinon.stub();
-const checkAllFloatsStub = sinon.stub();
-const fetchUserIdsForAccountsStub = sinon.stub();
-const fetchPendingTransactionsForAllUsersStub = sinon.stub();
 
 const MILLIS_IN_DAY = 86400000;
 const DAYS_IN_A_YEAR = 365;
@@ -59,6 +63,7 @@ const handler = proxyquire('../scheduled-job', {
     'publish-common': {
         sendSystemEmail: sendSystemEmailStub,
         publishMultiUserEvent: publishMultiUserEventStub,
+        sendToQueue: sendEventToQueueStub,
         '@noCallThru': true
     },
     './admin-float-consistency': {
@@ -198,6 +203,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        expect(result).to.have.property('statusCode', 200);
        expect(result.body).to.deep.equal([{ result: 'NO_BOOSTS' }]);
        expect(expireBoostsStub).to.have.been.calledOnce;
+       expect(sendEventToQueueStub).to.not.have.been.called;
     });
 
     it('should run regular job - expire boosts successfully when boosts exist', async () => {
@@ -212,8 +218,8 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        
        expect(expireBoostsStub).to.have.been.calledOnce;
        
-       const expectedInvocation = helper.wrapLambdaInvoc('boost_event_process', true, { boostId: testBoostId, eventType: 'BOOST_EXPIRED' });
-       expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+       const expectedQueuePayload = { boostId: testBoostId, eventType: 'BOOST_EXPIRED' };
+       expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('boost_process_queue', [expectedQueuePayload]);
     });
 
     it('should run regular job - check floats successfully', async () => {

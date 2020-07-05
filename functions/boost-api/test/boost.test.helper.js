@@ -33,6 +33,10 @@ module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole) =
     }
 });
 
+module.exports.composeSqsBatch = (events) => ({
+    Records: events.map((event) => ({ body: JSON.stringify(event) }))
+});
+
 module.exports.expectedHeaders = {
     'Content-Type': 'application/json',
     'Access-Control-Allow-Origin': '*'
