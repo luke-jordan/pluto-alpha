@@ -219,7 +219,7 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        expect(expireBoostsStub).to.have.been.calledOnce;
        
        const expectedQueuePayload = { boostId: testBoostId, eventType: 'BOOST_EXPIRED' };
-       expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('boost_process_queue', [expectedQueuePayload]);
+       expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('boost_process_queue', [expectedQueuePayload], true);
     });
 
     it('should run regular job - check floats successfully', async () => {
