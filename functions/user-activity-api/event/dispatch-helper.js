@@ -13,7 +13,7 @@ module.exports.sendEventToBoostProcessing = async (eventBody, publisher) => {
         eventContext: eventBody.context
     };
 
-    const queueResult = await publisher.sendToQueue(config.get('queues.boostProcess'), [eventPayload]);
+    const queueResult = await publisher.sendToQueue(config.get('queues.boostProcess'), [eventPayload], true);
     logger('Result of queueing boost process: ', queueResult);
     return { result: 'QUEUED' };
 };
@@ -42,7 +42,7 @@ module.exports.addInvestmentToBSheet = async ({ operation, parameters, persisten
 
         const investmentInvocation = { operation, transactionDetails };
         logger('Queue payload:', investmentInvocation);
-        const investmentResult = await publisher.sendToQueue(config.get('queues.balanceSheetUpdate'), [investmentInvocation]);
+        const investmentResult = await publisher.sendToQueue(config.get('queues.balanceSheetUpdate'), [investmentInvocation], true);
         logger('Queue dispatch result:', investmentResult);
 
         // as in boost handler, if there is a failure, balance sheet system must take care of retrying, raising alert etc,

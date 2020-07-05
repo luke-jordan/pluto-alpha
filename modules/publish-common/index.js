@@ -111,19 +111,26 @@ const obtainQueueUrl = async (queueName) => {
     return queueUrlResult.QueueUrl;
 };
 
-const assembleQueueParams = async (payload, queueUrl) => {
+const assembleQueueParams = async (payload, queueUrl, isFifoQueue = false) => {
     const dataType = { DataType: 'String', StringValue: 'JSON' };
-    return {
+    
+    const params = {
         MessageAttributes: { MessageBodyDataType: dataType },
         MessageBody: JSON.stringify(payload),
         QueueUrl: queueUrl
     };
+    
+    if (isFifoQueue) {
+        params.MessageGroupId = uuid();
+    }
+
+    return params;
 };
 
-module.exports.sendToQueue = async (queueName, payloads) => {
+module.exports.sendToQueue = async (queueName, payloads, isFifoQueue = false) => {
     try {
         const queueUrl = await obtainQueueUrl(queueName);
-        const queueParameters = await Promise.all(payloads.map((payload) => assembleQueueParams(payload, queueUrl)));
+        const queueParameters = await Promise.all(payloads.map((payload) => assembleQueueParams(payload, queueUrl, isFifoQueue)));
         logger('Assembled queue parameters:', queueParameters);
         
         const sqsPromises = queueParameters.map((params) => sqs.sendMessage(params).promise());

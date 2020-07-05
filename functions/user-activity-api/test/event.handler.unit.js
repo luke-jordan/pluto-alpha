@@ -569,8 +569,8 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(statusUpdateInvoke);
 
         expect(sendEventToQueueStub).to.have.been.calledTwice;
-        expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload]);
-        expect(sendEventToQueueStub).to.have.been.calledWithExactly('balance_sheet_update_queue', [bsheetPayload]);
+        expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
+        expect(sendEventToQueueStub).to.have.been.calledWithExactly('balance_sheet_update_queue', [bsheetPayload], true);
     });
 
     it('Catches thrown errors, sends failed processes to DLQ', async () => {
