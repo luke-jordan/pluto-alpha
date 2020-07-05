@@ -109,7 +109,7 @@ const obtainQueueUrl = async (queueName) => {
     logger('Looking for SQS queue name: ', queueName);
     const queueUrlResult = await sqs.getQueueUrl({ QueueName: queueName }).promise();
     return queueUrlResult.QueueUrl;
-}
+};
 
 const assembleQueueParams = async (payload, queueUrl) => {
     const dataType = { DataType: 'String', StringValue: 'JSON' };
@@ -131,8 +131,8 @@ module.exports.sendToQueue = async (queueName, payloads) => {
         logger('Queue result:', sqsResult);
 
         const successCount = sqsResult.filter((result) => typeof result === 'object' && result.MessageId).length;
-        logger(`${successCount}/${events.length} events were queued successfully`);
-        return { successCount, failureCount: events.length - successCount };
+        logger(`${successCount}/${payloads.length} events were queued successfully`);
+        return { successCount, failureCount: payloads.length - successCount };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { result: 'FAILURE' };
@@ -146,7 +146,7 @@ module.exports.addToDlq = async (dlqName, event, error) => {
     logger('DLQ send parameters: ', sqsParameters);
     const sqsResult = await sqs.sendMessage(sqsParameters).promise();
     logger('Result from SQS: ', sqsResult);
-}
+};
 
 module.exports.sendSms = async ({ phoneNumber, message, sendSync }) => {
     try {    
