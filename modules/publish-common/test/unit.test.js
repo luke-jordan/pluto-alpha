@@ -141,7 +141,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
             QueueUrl: 'boost-process-queue-url',
             MessageBody: stringify(testEvent),
             MessageGroupId: testMsgGroupId,
-            MessageAttributes: { MessageBodyDataType: { DataType: 'String', StringValue: 'JSON' } },
+            MessageAttributes: { MessageBodyDataType: { DataType: 'String', StringValue: 'JSON' } }
         };
 
         const msgSendResult = await eventPublisher.sendToQueue('boost_process_queue', [testEvent], true);
@@ -149,7 +149,7 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
 
         expect(getQueueUrlStub).to.have.been.calledOnceWithExactly({ QueueName: 'boost_process_queue' });
         expect(sqsSendStub).to.have.been.calledOnceWithExactly(happyQueueSend);
-    })
+    });
 
     it('Sends system email, sync lambda call', async () => {
         const testMessageId = uuid();
