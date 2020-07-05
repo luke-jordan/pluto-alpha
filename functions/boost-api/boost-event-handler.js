@@ -382,7 +382,6 @@ const handleExpiredBoost = async (boostId) => {
 
 const handleIndividualEvent = async (event) => {
     logger('Handling individual event received: ', event);
-    
     if (event.eventType === 'BOOST_EXPIRED' && event.boostId) {
         return handleExpiredBoost(event.boostId);        
     }

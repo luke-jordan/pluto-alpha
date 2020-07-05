@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_preferences" {
 
   function_name                  = "${var.message_preferences}"
   role                           = "${aws_iam_role.message_preferences_role.arn}"
-  handler                        = "message-prefs-handler.manageUserPreferences"
+  handler                        = "message-prefs-handler.setUserMessageBlock"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 60

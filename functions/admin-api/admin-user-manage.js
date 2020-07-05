@@ -112,6 +112,19 @@ const handlePwdUpdate = async ({ params }) => {
     return { result: 'ERROR', message: resultPayload };
 };
 
+const handleMsgPreference = async ({ params }) => {
+    const { adminUserId, systemWideUserId } = params;
+    const authorizer = { systemWideUserId: adminUserId, role: 'SYSTEM_ADMIN' };
+    const payload = { systemWideUserId, haltPushMessages: true };
+    const invocation = adminUtil.invokeLambda(config.get('lambdas.msgPrefsSet'), { requestContext: { authorizer }, body: JSON.stringify(payload) }).promise();
+    logger('Invoking lambda with: ', invocation);
+    const updateResult = await lambda.invoke(invocation).promise();
+    logger('Result from lambda: ', updateResult);
+    const responsePayload = JSON.parse(updateResult);
+    return responsePayload; // should have headers etc embedded
+
+}
+
 // used for generic log records, especially ones involving files
 // note : file here is just the name and mime type, presumption is that it is already stored
 const handleLogRecord = async ({ params }) => {
@@ -148,7 +161,8 @@ const FIELD_DISPATCHER = {
     BSHEET: handleBsheetAccUpdate,
     PWORD: handlePwdUpdate,
     FLAGS: handleFlagUpdate,
-    RECORDLOG: handleLogRecord 
+    RECORDLOG: handleLogRecord,
+    MESSAGE_PREFERENCES: handleMsgPreference
 };
 
 /**

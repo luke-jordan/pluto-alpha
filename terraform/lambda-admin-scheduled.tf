@@ -39,6 +39,9 @@ resource "aws_lambda_function" "ops_admin_scheduled" {
               "lambdas": {
                 "sendOutboundMessages": "${aws_lambda_function.outbound_comms_send.function_name}"
               },
+              "queues": {
+                "boostProcess": aws_sqs_queue.boost_process_queue.name
+              },
               "email": {
                 "systemStats": {
                   "subject": "${terraform.workspace == "master" ? "Daily Jupiter summary statistics" : "(STAGING) Daily stats"}",

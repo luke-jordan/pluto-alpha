@@ -540,8 +540,7 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
             ],
             "Resource": [
                 "${aws_lambda_function.float_accrue.arn}",
-                "${aws_lambda_function.outbound_comms_send.arn}",
-                "${aws_lambda_function.boost_event_process.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}"
             ]
         },
         {
@@ -551,6 +550,17 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
                 "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        },
+        {
+            "Sid": "AllowPublishQueues",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.boost_process_queue.arn}"
+            ]
         }
     ]
 }
@@ -608,7 +618,8 @@ resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
             "Resource": [
                 "${aws_lambda_function.save_initiate.arn}",
                 "${aws_lambda_function.save_admin_settle.arn}",
-                "${aws_lambda_function.outbound_comms_send.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}",
+                "${aws_lambda_function.message_preferences.arn}"
             ]
         },
         {

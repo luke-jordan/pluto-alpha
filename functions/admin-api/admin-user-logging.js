@@ -97,6 +97,7 @@ module.exports.uploadLogBinary = async (event) => {
     }
        
     try {
+        logger('Received event as: ', JSON.stringify(event));
         const params = adminUtil.extractEventBody(event);
         logger('Received log binary: ', params);
 
@@ -124,6 +125,7 @@ module.exports.uploadLogBinary = async (event) => {
  */
 module.exports.storeBinary = async (event) => {
     try {
+        logger('Event looks like: ', event);
         const fileContent = event.content;
         const { userId, filename, mimeType } = opsCommonUtil.extractParamsFromEvent(event);
 
