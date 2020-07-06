@@ -20,7 +20,7 @@ const proxyquire = require('proxyquire');
 
 const handler = proxyquire('../message-prefs-handler', {
     './persistence/rds.pushsettings.js': {
-        'fetchUserPushPreferences': fetchPrefStub,
+        'fetchUserMsgPrefs': fetchPrefStub,
         'insertUserMsgPreference': insertPrefStub,
         'updateUserMsgPreference': updatePrefStub,
         '@noCallThru': true

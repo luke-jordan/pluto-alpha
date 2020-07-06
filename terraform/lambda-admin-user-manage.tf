@@ -32,6 +32,7 @@ resource "aws_lambda_function" "admin_user_manage" {
               },
               "lambdas": {
                 "passwordUpdate": "password_update",
+                "msgPrefsSet": aws_lambda_function.message_preferences.function_name
               }
               "secrets": {
                   "enabled": true,

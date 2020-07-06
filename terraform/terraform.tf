@@ -8,10 +8,10 @@ provider "aws" {
 
 terraform {
  backend "s3" {
- encrypt = true
- bucket = "pluto.terraform.state"
- dynamodb_table = "terraform-state-lock"
- region = "us-east-1"
- key = ".terraform/terraform.tfstate"
+  encrypt = true
+  bucket = "pluto.terraform.state"
+  dynamodb_table = "terraform-state-lock"
+  region = "us-east-1"
+  key = ".terraform/terraform.tfstate"
  }
 }

@@ -122,7 +122,7 @@ resource "aws_lambda_event_source_mapping" "message_event_process_lambda" {
   enabled = true
   function_name = aws_lambda_function.message_event_process.arn
   batch_size = 5
-  maximum_batching_window_in_seconds = 2 // to prevent over eagerness here
+  # maximum_batching_window_in_seconds = 2 // to prevent over eagerness here
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

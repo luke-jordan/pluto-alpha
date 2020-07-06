@@ -48,6 +48,7 @@ resource "aws_api_gateway_authorizer" "jwt_authorizer" {
   name = "api_gateway_jwt_authorizer_${terraform.workspace}"
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
   type = "TOKEN"
+  authorizer_result_ttl_in_seconds = 300
   authorizer_uri = "arn:aws:apigateway:${var.aws_default_region[terraform.workspace]}:lambda:path/2015-03-31/functions/${var.jwt_authorizer_arn[terraform.workspace]}/invocations"
 }
 

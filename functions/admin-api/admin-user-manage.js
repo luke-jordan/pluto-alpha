@@ -116,11 +116,13 @@ const handleMsgPreference = async ({ params }) => {
     const { adminUserId, systemWideUserId } = params;
     const authorizer = { systemWideUserId: adminUserId, role: 'SYSTEM_ADMIN' };
     const payload = { systemWideUserId, haltPushMessages: true };
-    const invocation = adminUtil.invokeLambda(config.get('lambdas.msgPrefsSet'), { requestContext: { authorizer }, body: JSON.stringify(payload) }).promise();
+    
+    const invocation = adminUtil.invokeLambda(config.get('lambdas.msgPrefsSet'), { requestContext: { authorizer }, body: JSON.stringify(payload) });
     logger('Invoking lambda with: ', invocation);
     const updateResult = await lambda.invoke(invocation).promise();
     logger('Result from lambda: ', updateResult);
-    const responsePayload = JSON.parse(updateResult);
+    
+    const responsePayload = JSON.parse(updateResult['Payload']);
     return responsePayload; // should have headers etc embedded
 };
 

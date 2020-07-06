@@ -54,7 +54,7 @@ module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publi
     const queuePayload = { operation: 'BOOST', transactionDetails };
     
     logger('Payload for balance sheet queue: ', queuePayload);
-    const bSheetResult = await publisher.sendToQueue(config.get('queues.balanceSheetUpdate'), [queuePayload]);
+    const bSheetResult = await publisher.sendToQueue(config.get('queues.balanceSheetUpdate'), [queuePayload], true);
     logger('Result of queuing: ', bSheetResult);
     
     // as far as this handler is concerned, its work is done and should not be repeated, errors in bsheet handler
