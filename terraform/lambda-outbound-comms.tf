@@ -9,7 +9,7 @@ resource "aws_lambda_function" "outbound_comms_send" {
   role                           = "${aws_iam_role.outbound_comms_send_role.arn}"
   handler                        = "outbound-message-handler.handleOutboundMessages"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 180
   tags                           = {"environment"  = "${terraform.workspace}"}
   

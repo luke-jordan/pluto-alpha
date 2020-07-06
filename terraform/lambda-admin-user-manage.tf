@@ -9,7 +9,7 @@ resource "aws_lambda_function" "admin_user_manage" {
   role                           = "${aws_iam_role.admin_user_manage_role.arn}"
   handler                        = "admin-user-manage.manageUser"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
   

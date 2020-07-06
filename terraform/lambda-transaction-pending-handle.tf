@@ -9,7 +9,7 @@ resource "aws_lambda_function" "transaction_pending_handle" {
   role                           = "${aws_iam_role.transaction_pending_handle_role.arn}"
   handler                        = "pending-handler.handlePendingTxEvent"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

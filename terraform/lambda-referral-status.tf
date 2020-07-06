@@ -9,7 +9,7 @@ resource "aws_lambda_function" "referral_status" {
   role                           = "${aws_iam_role.referral_status_role.arn}"
   handler                        = "referral-handler.status"
   memory_size                    = 128
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

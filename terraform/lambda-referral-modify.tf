@@ -9,7 +9,7 @@ resource "aws_lambda_function" "referral_modify" {
   role                           = "${aws_iam_role.referral_modify_role.arn}"
   handler                        = "referral-handler.modify"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

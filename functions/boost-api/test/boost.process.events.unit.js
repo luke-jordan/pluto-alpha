@@ -3,6 +3,8 @@
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
+const helper = require('./boost.test.helper');
+
 const { ACTIVE_BOOST_STATUS } = require('../boost.util');
 
 // testing more background events, like friendships, and so forth, and leaving boost.process.unit for user-driven
@@ -81,7 +83,7 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
 
         fetchUncreatedBoostStub.resolves([]); // as not tested here
 
-        const result = await handler.processEvent(testEvent);
+        const result = await handler.handleBatchOfQueuedEvents(helper.composeSqsBatch([testEvent]));
         expect(result).to.exist; 
 
         expect(getAccountIdStub).to.have.been.calledOnceWithExactly(mockUserId);
@@ -95,8 +97,11 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
             redemptionBoosts: [mockBoost], 
             revocationBoosts: [], 
             affectedAccountsDict: { [mockBoostId]: mockAccountMap }, 
-            event: testEvent
+            event: { ...testEvent, accountId: mockAccountId }
         };
+
+        expect(redemptionHandlerStub).to.have.been.calledOnce;
+        // helper.logNestedMatches(expectedRedemptionCall, redemptionHandlerStub.getCall(0).args[0]);
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
         
         const expectedBoostUpdate = {

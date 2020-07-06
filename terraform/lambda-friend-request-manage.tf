@@ -9,7 +9,7 @@ resource "aws_lambda_function" "friend_request_manage" {
   role                           = "${aws_iam_role.friend_request_manage_role.arn}"
   handler                        = "friend-request-handler.directRequestManagement"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

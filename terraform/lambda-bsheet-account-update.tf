@@ -8,9 +8,9 @@ resource "aws_lambda_function" "balance_sheet_acc_update" {
   function_name                  = "${var.balance_sheet_acc_update_lambda_function_name}"
   role                           = "${aws_iam_role.balance_sheet_acc_update_role.arn}"
   handler                        = "finworks-handler.addTransaction"
-  memory_size                    = 256
-  runtime                        = "nodejs10.x"
-  timeout                        = 180
+  memory_size                    = 128
+  runtime                        = "nodejs12.x"
+  timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
@@ -80,6 +80,21 @@ resource "aws_iam_role_policy_attachment" "balance_sheet_acc_update_basic_execut
 resource "aws_iam_role_policy_attachment" "balance_sheet_acc_update_key_access" {
   role = aws_iam_role.balance_sheet_acc_update_role.name
   policy_arn = aws_iam_policy.fworks_s3_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "balance_sheet_update_queue_polling_policy" {
+  role = aws_iam_role.balance_sheet_acc_update_role.name
+  policy_arn = aws_iam_policy.sqs_bsheet_update_queue_poll.arn
+}
+
+////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) /////////////////////////////////////////////////////////////
+
+resource "aws_lambda_event_source_mapping" "bsheet_event_process_lambda" {
+  event_source_arn = aws_sqs_queue.balance_sheet_update_queue.arn
+  enabled = true
+  function_name = aws_lambda_function.balance_sheet_acc_update.arn
+  batch_size = 1 // for the moment
+  # maximum_batching_window_in_seconds = 2 // to prevent over eagerness here (but looks like not accepted here yet)
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

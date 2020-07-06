@@ -9,7 +9,7 @@ resource "aws_lambda_function" "float_capitalize" {
   role                           = "${aws_iam_role.float_capitalize_role.arn}"
   handler                        = "capitalization-handler.handle"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

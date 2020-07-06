@@ -481,9 +481,7 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
                 "lambda:InvokeAsync"
             ],
             "Resource": [
-                "${aws_lambda_function.boost_event_process.arn}",
                 "${aws_lambda_function.balance_sheet_acc_create.arn}",
-                "${aws_lambda_function.balance_sheet_acc_update.arn}",
                 "${aws_lambda_function.outbound_comms_send.arn}",
                 "${aws_lambda_function.friend_referral_connect.arn}"
             ]
@@ -500,13 +498,15 @@ resource "aws_iam_policy" "lambda_invoke_user_event_processing" {
             ]
         },
         {
-            "Sid": "AllowPublishDLQ",
+            "Sid": "AllowPublishQueues",
             "Effect": "Allow",
             "Action": [
                 "sqs:GetQueueUrl",
                 "sqs:SendMessage"
             ],
             "Resource": [
+                "${aws_sqs_queue.boost_process_queue.arn}",
+                "${aws_sqs_queue.balance_sheet_update_queue.arn}",
                 "${aws_sqs_queue.user_event_dlq.arn}"
             ]
         },
@@ -540,8 +540,7 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
             ],
             "Resource": [
                 "${aws_lambda_function.float_accrue.arn}",
-                "${aws_lambda_function.outbound_comms_send.arn}",
-                "${aws_lambda_function.boost_event_process.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}"
             ]
         },
         {
@@ -551,6 +550,17 @@ resource "aws_iam_policy" "daily_job_lambda_policy" {
                 "s3:GetObject"
             ],
             "Resource": "arn:aws:s3:::${terraform.workspace}.jupiter.templates/*"
+        },
+        {
+            "Sid": "AllowPublishQueues",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.boost_process_queue.arn}"
+            ]
         }
     ]
 }
@@ -608,7 +618,8 @@ resource "aws_iam_policy" "admin_user_manage_lambda_policy" {
             "Resource": [
                 "${aws_lambda_function.save_initiate.arn}",
                 "${aws_lambda_function.save_admin_settle.arn}",
-                "${aws_lambda_function.outbound_comms_send.arn}"
+                "${aws_lambda_function.outbound_comms_send.arn}",
+                "${aws_lambda_function.message_preferences.arn}"
             ]
         },
         {
@@ -941,7 +952,7 @@ resource "aws_iam_policy" "dynamo_bank_verification_access" {
 EOF
 }
 
-///// SOME QUEUE PERMISSIONS
+///// SOME QUEUE POLLING PERMISSIONS
 
 resource "aws_iam_policy" "sqs_message_event_queue_process" {
     name = "${terraform.workspace}_message_event_queue_process"
@@ -961,6 +972,114 @@ resource "aws_iam_policy" "sqs_message_event_queue_process" {
             ],
             "Resource": [
                 "${aws_sqs_queue.message_event_process_queue.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "sqs_user_event_queue_poll" {
+    name = "${terraform.workspace}_user_event_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.user_event_process_queue.arn}"
+            ]
+        },
+        {
+            "Sid": "SQSDlqPublish",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.user_event_dlq.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "sqs_boost_process_queue_poll" {
+    name = "${terraform.workspace}_boost_process_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.boost_process_queue.arn}"
+            ]
+        },
+        {
+            "Sid": "SQSDlqPublish",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.boost_process_dlq.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
+resource "aws_iam_policy" "sqs_bsheet_update_queue_poll" {
+    name = "${terraform.workspace}_bsheet_update_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.balance_sheet_update_queue.arn}"
+            ]
+        },
+        {
+            "Sid": "SQSDlqPublish",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.balance_sheet_update_dlq.arn}"
             ]
         }
     ]

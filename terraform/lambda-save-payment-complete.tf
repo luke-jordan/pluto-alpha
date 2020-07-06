@@ -9,7 +9,7 @@ resource "aws_lambda_function" "save_payment_complete" {
   role                           = "${aws_iam_role.save_payment_complete_role.arn}"
   handler                        = "saving-handler.completeSavingPaymentFlow"
   memory_size                    = 512
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

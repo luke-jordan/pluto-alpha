@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_update" {
   role                           = "${aws_iam_role.boost_update_role.arn}"
   handler                        = "boost-create-handler.updateInstruction"
   memory_size                    = 512
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 900
   tags                           = {"environment"  = "${terraform.workspace}"}
   

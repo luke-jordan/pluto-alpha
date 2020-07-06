@@ -52,11 +52,19 @@ const ACTIVE_BOOST_STATUS = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING'];
 
 const testBoostId = uuid();
 
+// note: expiry event is not originally from SNS, hence only single-wrapper
+const wrapEventAsSqs = (event) => testHelper.composeSqsBatch([event]);
+
 describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
     beforeEach(() => (testHelper.resetStubs(
         fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub
     )));
+
+    const testEvent = wrapEventAsSqs({
+        eventType: 'BOOST_EXPIRED',
+        boostId: testBoostId
+    });
 
     const formAccountResponse = (accountUserMap) => [{ boostId: testBoostId, accountUserMap }];
     const mockTournamentBoost = (boostCategory, statusConditions) => ({
@@ -76,12 +84,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
     }), {});
 
     it('Happy path, awards boost to top two scorers, number taps', async () => {
-
-        const testEvent = {
-            eventType: 'BOOST_EXPIRED',
-            boostId: testBoostId
-        };
-
         const mockBoost = mockTournamentBoost('TAP_SCREEN', {
             UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
             PENDING: ['number_taps_greater_than #{0::10000}'],
@@ -113,8 +115,9 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             'account-id-4': { userId: 'some-user-id4', status: 'PENDING' }
         }));
 
-        const resultOfExpiry = await handler.processEvent(testEvent);
-        expect(resultOfExpiry).to.deep.equal({ statusCode: 200, boostsRedeemed: 2 });
+        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
+        expect(resultOfExpiry).to.exist;
+        expect(resultOfExpiry[0]).to.have.property('statusCode', 200);
 
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
         expect(findBoostLogsStub).to.have.been.calledOnceWithExactly(testBoostId, 'GAME_RESPONSE');
@@ -172,11 +175,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
     });
 
     it('Also works for percent destroyed tournament', async () => {
-        const testEvent = {
-            eventType: 'BOOST_EXPIRED',
-            boostId: testBoostId
-        };
-
         const mockBoost = mockTournamentBoost('DESTROY_IMAGE', {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 PENDING: ['percent_destroyed_above #{0::10000}'],
@@ -196,8 +194,9 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         findAccountsStub.onSecondCall().resolves(formAccountResponse(mockAccountUserMap([1, 2, 3, 4], 'PENDING'))); // all
         findAccountsStub.onThirdCall().resolves(formAccountResponse(mockAccountUserMap([3, 4], 'PENDING')));
 
-        const resultOfExpiry = await handler.processEvent(testEvent);
-        expect(resultOfExpiry).to.deep.equal({ statusCode: 200, boostsRedeemed: 2 });
+        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
+        expect(resultOfExpiry).to.exist;
+        expect(resultOfExpiry[0]).to.have.property('statusCode', 200);
 
         // just testing the most important things, rest covered above
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -253,10 +252,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
     // note : will also have to do this for random boosts
     it('Sets boost amount to prize, if a pooled reward', async () => {
-        const testEvent = {
-            eventType: 'BOOST_EXPIRED',
-            boostId: testBoostId
-        };
 
         const mockBoost = mockTournamentBoost('DESTROY_IMAGE', {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
@@ -293,8 +288,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const expectedRewardAmount = 3 * mockPoolContrib * mockPercentAward;
         calculateAmountStub.returns(expectedRewardAmount);
 
-        const resultOfExpiry = await handler.processEvent(testEvent);
-        expect(resultOfExpiry).to.deep.equal({ statusCode: 200, boostsRedeemed: 2 });
+        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
+        expect(resultOfExpiry).to.deep.equal([{ statusCode: 200, boostsRedeemed: 2 }]);
 
         // just testing the most important things, rest covered above
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -321,11 +316,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
     });
 
     it('Expires all accounts for non-game boost', async () => {
-        const testEvent = {
-            eventType: 'BOOST_EXPIRED',
-            boostId: testBoostId
-        };
-
         const mockBoost = {
             boostId: testBoostId,
             boostType: 'SIMPLE',
@@ -344,7 +334,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             }
         }]);
 
-        const resultOfExpiry = await handler.processEvent(testEvent);
+        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
         expect(resultOfExpiry).to.exist;
         
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -359,11 +349,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
     });
 
     it('And the same if no winner (no status conditions)', async () => {
-        const testEvent = {
-            eventType: 'BOOST_EXPIRED',
-            boostId: testBoostId
-        };
-
         const mockBoost = {
             boostId: testBoostId,
             boostType: 'GAME',
@@ -385,7 +370,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             }
         }]);
 
-        const resultOfExpiry = await handler.processEvent(testEvent);
+        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
         expect(resultOfExpiry).to.exist;
         
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -400,11 +385,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
     });
 
     it('Also if no one played', async () => {
-        const testEvent = {
-            eventType: 'BOOST_EXPIRED',
-            boostId: testBoostId
-        };
-
         const mockBoost = {
             boostId: testBoostId,
             boostType: 'GAME',
@@ -430,7 +410,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         }]);
 
 
-        const resultOfExpiry = await handler.processEvent(testEvent);
+        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
         expect(resultOfExpiry).to.exist;
         
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);

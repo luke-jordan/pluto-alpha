@@ -9,7 +9,7 @@ resource "aws_lambda_function" "referral_verify" {
   role                           = "${aws_iam_role.referral_verify_role.arn}"
   handler                        = "referral-handler.verify"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

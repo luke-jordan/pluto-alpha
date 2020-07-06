@@ -34,13 +34,9 @@ const expireBoosts = async () => {
         return { result: 'NO_BOOSTS' };
     }
 
-    const boostProcessInvocations = expiredBoosts.map((boostId) => ({
-        FunctionName: config.get('lambdas.boostProcessEvent'),
-        InvocationType: 'Event',
-        Payload: JSON.stringify({ boostId, eventType: 'BOOST_EXPIRED' })
-    })).map((invocation) => lambda.invoke(invocation).promise());
-    const expiryResults = await Promise.all(boostProcessInvocations);
-    logger('Boost expiry results: ', expiryResults);
+    const boostProcessPayloads = expiredBoosts.map((boostId) => ({ boostId, eventType: 'BOOST_EXPIRED' }));
+    const sendToProcessResult = await publisher.sendToQueue(config.get('queues.boostProcess'), boostProcessPayloads, true);
+    logger('Boost expiry results: ', sendToProcessResult);
     return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };
 };
 

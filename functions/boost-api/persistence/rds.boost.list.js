@@ -55,7 +55,7 @@ module.exports.listBoosts = async (excludedTypeCategories, excludeUserCounts = f
     logger('Assembled select query: ', selectBoostQuery);
     logger('Values for query: ', values);
     const boostsResult = await rdsConnection.selectQuery(selectBoostQuery, values);
-    logger('Retrieved boosts: ', boostsResult);
+    logger('Retrieved boosts of length: ', boostsResult.length);
     
     let boostList = boostsResult.map((boost) => camelizeKeys(boost));
 
@@ -146,6 +146,9 @@ module.exports.fetchBoostDetails = async (boostId, includeAccounts) => {
     const rawBoost = queryResult[0];
     const transformedBoost = {
         boostId: rawBoost['boost_id'],
+        boostType: rawBoost['boost_type'],
+        boostCategory: rawBoost['boost_category'],
+
         label: rawBoost['label'],
         
         active: rawBoost['active'],

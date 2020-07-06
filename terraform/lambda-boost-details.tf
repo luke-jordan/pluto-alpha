@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_detail_fetch" {
   role                           = "${aws_iam_role.boost_detail_fetch_role.arn}"
   handler                        = "boost-list-handler.fetchBoostDetails"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

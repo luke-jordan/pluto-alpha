@@ -105,6 +105,56 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     }
 };
 
+const obtainQueueUrl = async (queueName) => {
+    logger('Looking for SQS queue name: ', queueName);
+    const queueUrlResult = await sqs.getQueueUrl({ QueueName: queueName }).promise();
+    return queueUrlResult.QueueUrl;
+};
+
+const assembleQueueParams = async (payload, queueUrl, isFifoQueue = false) => {
+    const dataType = { DataType: 'String', StringValue: 'JSON' };
+    
+    const params = {
+        MessageAttributes: { MessageBodyDataType: dataType },
+        MessageBody: JSON.stringify(payload),
+        QueueUrl: queueUrl
+    };
+    
+    if (isFifoQueue) {
+        params.MessageGroupId = uuid();
+    }
+
+    return params;
+};
+
+module.exports.sendToQueue = async (queueName, payloads, isFifoQueue = false) => {
+    try {
+        const queueUrl = await obtainQueueUrl(queueName);
+        const queueParameters = await Promise.all(payloads.map((payload) => assembleQueueParams(payload, queueUrl, isFifoQueue)));
+        logger('Assembled queue parameters:', queueParameters);
+        
+        const sqsPromises = queueParameters.map((params) => sqs.sendMessage(params).promise());
+        const sqsResult = await Promise.all(sqsPromises);
+        logger('Queue result:', sqsResult);
+
+        const successCount = sqsResult.filter((result) => typeof result === 'object' && result.MessageId).length;
+        logger(`${successCount}/${payloads.length} events were queued successfully`);
+        return { successCount, failureCount: payloads.length - successCount };
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return { result: 'FAILURE' };
+    }
+};
+
+module.exports.addToDlq = async (dlqName, event, error) => {
+    const dlqUrl = await obtainQueueUrl(dlqName);
+    const payload = { originalEvent: event, error };
+    const sqsParameters = assembleQueueParams(payload, dlqUrl);
+    logger('DLQ send parameters: ', sqsParameters);
+    const sqsResult = await sqs.sendMessage(sqsParameters).promise();
+    logger('Result from SQS: ', sqsResult);
+};
+
 module.exports.sendSms = async ({ phoneNumber, message, sendSync }) => {
     try {    
         const invokeSync = sendSync || false;
