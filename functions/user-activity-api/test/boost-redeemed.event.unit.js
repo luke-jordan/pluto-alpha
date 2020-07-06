@@ -67,7 +67,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         };
 
         const expectedPayload = { operation: 'BOOST', transactionDetails: expectedTransactionDetails };
-        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('balance_sheet_update_queue', [expectedPayload]);
+        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('balance_sheet_update_queue', [expectedPayload], true);
 
         const expectedTag = `FINWORKS_RECORDED::${mockAmount}::HUNDREDTH_CENT::ZAR`;
         expect(updateTransactionTagStub).to.have.been.calledOnceWithExactly('transaction-1', expectedTag);
@@ -92,7 +92,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         };
 
         const expectedPayload = { operation: 'BOOST', transactionDetails: expectedTransactionDetails };
-        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('balance_sheet_update_queue', [expectedPayload]);
+        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('balance_sheet_update_queue', [expectedPayload], true);
 
         expect(updateTransactionTagStub).to.not.have.been.called;
     });
