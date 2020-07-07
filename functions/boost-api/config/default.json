@@ -56,5 +56,8 @@
     "seedrandom": {
         "active": true,
         "value": "JupiterSave"
+    },
+    "dataPipeline": {
+        "endpoint": "<insert here>"
     }
 }

@@ -339,7 +339,7 @@ module.exports.updateBoostAmount = async (boostId, boostAmount) => {
 // ///////////////////////////////////////////////////////////////
 
 // todo : turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
-const extractAccountIds = async (audienceId) => {
+module.exports.extractAccountIds = async (audienceId) => {
     const selectionQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
     
     logger('Audience selection query: ', selectionQuery);
@@ -357,7 +357,7 @@ const extractAccountIds = async (audienceId) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const accountIds = await (boostDetails.defaultStatus === 'UNCREATED' ? [] : extractAccountIds(boostDetails.audienceId));
+    const accountIds = await (boostDetails.defaultStatus === 'UNCREATED' ? [] : exports.extractAccountIds(boostDetails.audienceId));
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();
@@ -530,12 +530,15 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 // ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS ////////////
 // ///////////////////////////////////////////////////////////////
 
-module.exports.findUserIdsForAccounts = async (accountIds) => {
-    const query = `select distinct(owner_user_id) from ${config.get('tables.accountLedger')} where ` +
+module.exports.findUserIdsForAccounts = async (accountIds, returnMap = false) => {
+    const query = `select distinct(owner_user_id, account_id) from ${config.get('tables.accountLedger')} where ` +
         `account_id in (${extractArrayIndices(accountIds)})`;
     const result = await rdsConnection.selectQuery(query, accountIds);
+    
     if (Array.isArray(result) && result.length > 0) {
-        return result.map((row) => row['owner_user_id']);
+        return returnMap
+            ? result.reduce((obj, row) => ({ ...obj, [row['owner_user_id']]: row['account_id'] }), {})
+            : result.map((row) => row['owner_user_id']);
     }
 
     throw Error('Given non-existent or bad account IDs');
@@ -550,4 +553,12 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
     }
 
     throw Error('Given non-existent or bad relationship IDs');
+};
+
+module.exports.fetchActiveMlBoosts = async () => {
+    const boostMainTable = config.get('tables.boostTable');
+    const query = `select * from ${boostMainTable} where ml_pull_paramaters != null and active = true`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, []);
+    logger('Result of ML boost fetch:', resultOfQuery);
+    return Array.isArray(resultOfQuery) && resultOfQuery.length > 0 ? camelizeKeys(resultOfQuery[0]) : [];
 };

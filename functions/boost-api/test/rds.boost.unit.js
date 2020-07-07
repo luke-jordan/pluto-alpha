@@ -401,16 +401,19 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
     });
 
     it('Fetches user Ids for accounts', async () => {
-        const testAccountIds = testHelper.createUUIDArray(2);
-        const [firstUserId, secondUserId] = testHelper.createUUIDArray(2);
-        const selectQuery = `select distinct(owner_user_id) from ${config.get('tables.accountLedger')} where ` +
+        const [firstUserId, secondUserId] = ['user-id-1', 'user-id-2'];
+        const [firstAccountId, secondAccountId] = ['account-id-1', 'account-id-2'];
+        const selectQuery = `select distinct(owner_user_id, account_id) from ${config.get('tables.accountLedger')} where ` +
             `account_id in ($1, $2)`;
-        queryStub.resolves([{ 'owner_user_id': firstUserId }, { 'owner_user_id': secondUserId }]);
+        queryStub.resolves([
+            { 'owner_user_id': firstUserId, 'account_id': firstAccountId },
+            { 'owner_user_id': secondUserId, 'account_id': secondAccountId }
+        ]);
 
-        const result = await rds.findUserIdsForAccounts(testAccountIds);
+        const result = await rds.findUserIdsForAccounts([firstAccountId, secondAccountId]);
 
         expect(result).to.deep.equal([firstUserId, secondUserId]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, testAccountIds);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [firstAccountId, secondAccountId]);
     });
 
     it('Fetches friendship user ids', async () => {

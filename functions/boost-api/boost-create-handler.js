@@ -465,6 +465,11 @@ module.exports.createBoost = async (event) => {
         instructionToRds.flags = params.flags;
     }
 
+    if (params.mlPullParameters) {
+        logger('Boost has machine learning pull parameters');
+        instructionToRds.mlPullParameters = params.mlPullParameters;
+    }
+
     // logger('Sending to persistence: ', instructionToRds);
     const persistedBoost = await persistence.insertBoost(instructionToRds);
     logger('Result of RDS call: ', persistedBoost);
