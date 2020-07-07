@@ -20,7 +20,7 @@ const obtainFileForUser = async (systemWideUserId, filename) => {
     };
     const rawFile = await s3.getObject(params).promise();
     return rawFile.Body.toString('base64');
-}
+};
 
 /**
  * This file fetches a user log. If the s3 file path of a binary file is found the file is retrieved and
