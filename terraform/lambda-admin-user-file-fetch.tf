@@ -9,7 +9,7 @@ resource "aws_lambda_function" "admin_user_file_fetch" {
 
   function_name                  = "${var.admin_user_file_fetch_lambda_function_name}"
   role                           = "${aws_iam_role.admin_user_file_fetch_role.arn}"
-  handler                        = "admin-user-manage.fetchFileForUser"
+  handler                        = "admin-user-logging.fetchFileForUser"
   memory_size                    = 128
   runtime                        = "nodejs12.x"
   timeout                        = 30
@@ -48,7 +48,7 @@ resource "aws_lambda_function" "admin_user_file_fetch" {
 
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id, aws_security_group.sg_db_access_sg.id, aws_security_group.sg_https_dns_egress.id]
+    security_group_ids = [aws_security_group.sg_5432_egress.id]
   }
 
   depends_on = [aws_cloudwatch_log_group.admin_user_file_fetch]
