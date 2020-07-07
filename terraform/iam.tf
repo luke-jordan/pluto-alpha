@@ -163,6 +163,27 @@ resource "aws_iam_policy" "user_record_bucket_put" {
 EOF
 }
 
+resource "aws_iam_policy" "user_record_bucket_get" {
+    name      = "${terraform.workspace}_user_file_s3_get_access"
+    path      = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "PutObjectAccess",
+            "Effect": "Allow",
+            "Action": [
+                "s3:GetObject"
+            ],
+            "Resource": "${aws_s3_bucket.user_record_bucket.arn}/*"
+        }
+    ]
+}
+EOF
+}
+
 # OMNIBUS FOR WARMUP
 
 resource "aws_iam_policy" "lambda_invoke_ops_warmup_access" {

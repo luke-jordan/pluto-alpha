@@ -216,6 +216,8 @@ const handleTxUpdate = async ({ params, publisher, persistence, lambda }) => {
 module.exports.processTransaction = async ({ params, publisher, persistence, lambda }) => {
     logger('Updating or initiating a transaction');
     const checkForError = validateTxOperation(params);
+    logger('Error in transaction ? : ', checkForError);
+
     if (checkForError) {
         return checkForError;
     }

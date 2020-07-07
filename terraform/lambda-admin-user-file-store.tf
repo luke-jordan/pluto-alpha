@@ -7,8 +7,8 @@ resource "aws_lambda_function" "admin_user_file_store" {
 
   function_name                  = "${var.admin_user_file_store_lambda_function_name}"
   role                           = "${aws_iam_role.admin_user_file_store_role.arn}"
-  handler                        = "admin-user-logging.uploadLogBinary"
-  memory_size                    = 256
+  handler                        = "admin-user-logging.storeDocumentForUser"
+  memory_size                    = 128
   runtime                        = "nodejs12.x"
   timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
@@ -29,7 +29,7 @@ resource "aws_lambda_function" "admin_user_file_store" {
                 "s3": {
                   "bucket": "${aws_s3_bucket.user_record_bucket.bucket}"
                 }
-              }
+              },
               "publishing": {
                 "userEvents": {
                     "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
@@ -37,7 +37,7 @@ resource "aws_lambda_function" "admin_user_file_store" {
                 "hash": {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
-              },
+              }
           }
       )}"
     }

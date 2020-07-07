@@ -27,7 +27,9 @@ module.exports.eventTypesForHistory = [
     
     'BANK_VERIFICATION_FAILED',
     'BANK_VERIFICATION_SUCCEEDED',
-    'BANK_VERIFICATION_MANUAL'
+    'BANK_VERIFICATION_MANUAL',
+
+    'ADMIN_STORED_DOCUMENT'
 ];
 
 module.exports.extractEventBody = (event) => (event.body ? JSON.parse(event.body) : event);
