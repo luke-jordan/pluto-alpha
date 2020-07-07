@@ -248,6 +248,7 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     return { result: 'FAILURE' };
 };
 
+// todo : merge with addToDlq above
 module.exports.sendToDlq = async (dlqName, event, err) => {
     try {
         logger('Looking for DLQ name: ', dlqName);

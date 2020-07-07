@@ -2,7 +2,7 @@
 
 resource "aws_api_gateway_rest_api" "api_gateway" {
   name        = "${terraform.workspace}_rest_api"
-  
+  description = "API for admin functions"
 }
 
 resource "aws_api_gateway_deployment" "api_deployment" {
