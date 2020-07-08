@@ -275,6 +275,8 @@ const sortAndRankBestScores = (boostGameLogs, accountIds) => {
 
 const generateRedemptionAccountMap = async (boostId, winningAccounts) => {
     const findAccountParams = { boostIds: [boostId], accountIds: winningAccounts, status: util.ACTIVE_BOOST_STATUS };
+    logger('Generating redemption account map, submitting account parameters: ', findAccountParams);
+
     const accountInfo = await persistence.findAccountsForBoost(findAccountParams);
 
     return { [boostId]: accountInfo[0].accountUserMap };

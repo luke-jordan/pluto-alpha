@@ -48,7 +48,7 @@ resource "aws_lambda_function" "admin_user_file_fetch" {
 
   vpc_config {
     subnet_ids = [for subnet in aws_subnet.private : subnet.id]
-    security_group_ids = [aws_security_group.sg_5432_egress.id]
+    security_group_ids = [aws_security_group.sg_https_dns_egress.id]
   }
 
   depends_on = [aws_cloudwatch_log_group.admin_user_file_fetch]

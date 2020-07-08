@@ -608,17 +608,19 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         const testInitiatingUserId = 'some-user';
         const testAcceptingUserId = 'another-user';
 
-        const friendshipEventInitiated = { userId: testInitiatingUserId, eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED' };
-        const friendshipEventAccepting = { userId: testAcceptingUserId, eventType: 'FRIEND_REQUEST_TARGET_ACCEPTED' };
+        const mockTime = moment();
+
+        const friendshipEventInitiated = { userId: testInitiatingUserId, eventType: 'FRIEND_REQUEST_INITIATED_ACCEPTED', timestamp: mockTime.valueOf() };
+        const friendshipEventAccepting = { userId: testAcceptingUserId, eventType: 'FRIEND_REQUEST_TARGET_ACCEPTED', timestamp: mockTime.valueOf() };
 
         const mockConnectionTime = moment().subtract(3, 'seconds');
         const mockFriendship = { relationshipId: 'friends-id', creationTime: mockConnectionTime, initiatedUserId: testInitiatingUserId };
 
         const mockFriendshipList = (userId) => [{ relationshipId: 'friends-id', creationTimeMillis: mockConnectionTime.valueOf(), userInitiated: userId === testInitiatingUserId }];
-        const mockBoostEvent = ({ eventType, userId }) => ({ userId, eventType, eventContext: { friendshipList: mockFriendshipList(userId) } });
+        const mockBoostEvent = ({ eventType, userId }) => ({ userId, eventType, timeInMillis: mockTime.valueOf(), eventContext: { friendshipList: mockFriendshipList(userId) } });
 
         getFriendListStub.resolves([mockFriendship]);
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
+        sendEventToQueueStub.returns({ promise: () => ({ StatusCode: 202 })});
 
         const sqsEventRecord = (event) => ({ body: JSON.stringify({ Message: JSON.stringify(event) })});
         const sqsFriendshipBatch = {
@@ -633,11 +635,14 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         expect(getFriendListStub).to.have.been.calledWithExactly(testInitiatingUserId);
         expect(getFriendListStub).to.have.been.calledWithExactly(testAcceptingUserId);
 
-        expect(lamdbaInvokeStub).to.have.been.calledTwice;
-        const expectedInvokeAccepted = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventInitiated));
-        const expectedInvokeInitiated = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventAccepting));
-        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeAccepted);
-        expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeInitiated);
+        expect(sendEventToQueueStub).to.have.been.calledTwice;
+        expect(sendEventToQueueStub).to.have.been.calledWith('boost_process_queue', [mockBoostEvent(friendshipEventInitiated)], true);
+        expect(sendEventToQueueStub).to.have.been.calledWith('boost_process_queue', [mockBoostEvent(friendshipEventAccepting)], true);
+        
+        // const expectedInvokeAccepted = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventInitiated));
+        // const expectedInvokeInitiated = helper.wrapLambdaInvoc('boost_event_process', true, mockBoostEvent(friendshipEventAccepting));
+        // expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeAccepted);
+        // expect(lamdbaInvokeStub).to.have.been.calledWith(expectedInvokeInitiated);
     });
 
 });

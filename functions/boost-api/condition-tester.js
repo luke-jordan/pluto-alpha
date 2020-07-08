@@ -100,10 +100,10 @@ const evaluateGameTournament = (event, parameterValue, responseValueKey) => {
     
     const scoreSorter = (response1, response2) => response2.logContext[responseValueKey] - response1.logContext[responseValueKey];
     const sortedList = withinTimeList.sort(scoreSorter);
-    logger('Evaluating game tournament results, sorted list: ', sortedList);
+    // logger('Evaluating game tournament results, sorted list: ', sortedList);
 
     const topList = sortedList.slice(0, selectTop).map((response) => response.accountId);
-    logger('Tournament top accounts: ', topList, ' checked against: ', event.accountId);
+    // logger('Tournament top accounts: ', topList, ' checked against the account ID in this event: ', event.accountId);
     return topList.includes(event.accountId);
 };
 

@@ -18,7 +18,9 @@ const obtainFileForUser = async (systemWideUserId, filename) => {
         Bucket: config.get('binaries.s3.bucket'),
         Key: `${systemWideUserId}/${filename}`
     };
+    logger('Submitting to S3 params: ', params);
     const rawFile = await s3.getObject(params).promise();
+    logger('File fetched, encode and return');
     return rawFile.Body.toString('base64');
 };
 
