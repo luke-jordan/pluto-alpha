@@ -8,9 +8,9 @@ resource "aws_lambda_function" "boost_event_process" {
   function_name                  = "${var.boost_event_process_lambda_function_name}"
   role                           = "${aws_iam_role.boost_event_process_role.arn}"
   handler                        = "boost-event-handler.handleBatchOfQueuedEvents"
-  memory_size                    = 256
+  memory_size                    = 320
   runtime                        = "nodejs12.x"
-  timeout                        = 10
+  timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"

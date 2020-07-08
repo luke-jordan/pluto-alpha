@@ -146,8 +146,10 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     }
 
     const assembledQuery = `${queryBase} ${querySuffix} order by boost_id, account_id`;
+
+    logger('Selecting accounts relevant for boost, query assembled: ', assembledQuery);
     const resultOfQuery = await rdsConnection.selectQuery(assembledQuery, runningValues);
-    logger('Selecting accounts relevant for boost (boost-account-map), received : ', resultOfQuery);
+    logger('Selecting accounts relevant for boost (boost-account-map), received (first 5): ', resultOfQuery.slice(0, Math.min(resultOfQuery.length, 5)));
 
     if (resultOfQuery.length === 0) {
         throw new Error('Account id not found');
@@ -262,7 +264,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, s
             timesOfOperations.push(latestTime);
         });
     });
-    logger('And times of operations: ', resultOfOperations);
+    // logger('And times of operations: ', resultOfOperations);
 
     // this sorts in descending, so latest is in first position
     const sortedArray = timesOfOperations.sort((timeA, timeB) => timeB.valueOf() - timeA.valueOf());
