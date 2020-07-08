@@ -1,24 +1,24 @@
 'use strict';
 
-const logger = require('debug')('jupiter:boosts:test');
-
+// const logger = require('debug')('jupiter:boosts:test');
+const config = require('config');
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
-// const helper = require('./boost.test.helper');
+const helper = require('./boost.test.helper');
 
 const sinon = require('sinon');
 const chai = require('chai');
-// const expect = chai.expect;
+const expect = chai.expect;
 chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const proxyquire = require('proxyquire').noCallThru();
 
-const momentStub = sinon.stub();
 const tinyGetStub = sinon.stub();
 const findUserIdsStub = sinon.stub();
 const updateStatusStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
+const findBoostLogStub = sinon.stub();
 const fetchMlBoostsStub = sinon.stub();
 const fetchAudienceStub = sinon.stub();
 const accountStatusStub = sinon.stub();
@@ -32,12 +32,13 @@ class MockLambdaClient {
 
 const handler = proxyquire('../boost-ml-handler', {
     './persistence/rds.boost': {
-        'fetchActiveMlBoosts': fetchMlBoostsStub,
-        'fetchBoostAudience': fetchAudienceStub,
+        'fetchBoostAccountStatuses': accountStatusStub,
+        'updateBoostAccountStatus': updateStatusStub,
         'extractAccountIds': extractAccountIdsStub,
         'findUserIdsForAccounts': findUserIdsStub,
-        'fetchBoostAccountStatuses': accountStatusStub,
-        'updateBoostAccountStatus': updateStatusStub
+        'fetchActiveMlBoosts': fetchMlBoostsStub,
+        'findLastLogForBoost': findBoostLogStub,
+        'fetchBoostAudience': fetchAudienceStub
     },
     'aws-sdk': {
         'Lambda': MockLambdaClient  
@@ -46,30 +47,28 @@ const handler = proxyquire('../boost-ml-handler', {
         'get': tinyGetStub,
         '@noCallThru': true
     },
-    'moment': momentStub,
     '@noCallThru': true
 });
 
 describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
     const testStartTime = moment();
     const testEndTime = moment().add(3, 'months');
+
+    const testCreationTime = moment().subtract(31, 'days').format();
     const testUpdatedTime = moment().format();
 
+    const testLogId = uuid();
     const testBoostId = uuid();
     const testAudienceId = uuid();
   
     const testCreatingUserId = uuid();
-    const testReferringUser = uuid();
-    const testReferredUser = uuid();
-
-    const testReferringMsgId = uuid();
-    const testReferredMsgId = uuid();
 
     const mockMlBoostFromRds = {
+        boostId: testBoostId,
         creatingUserId: testCreatingUserId,
-        label: 'Referral::Luke::Avish',
-        boostType: 'REFERRAL',
-        boostCategory: 'USER_CODE_USED',
+        label: 'Midweek Catch Arrow',
+        boostType: 'GAME',
+        boostCategory: 'CHASE_ARROW',
         boostAmount: 100000,
         boostUnit: 'HUNDREDTH_CENT',
         boostCurrency: 'USD',
@@ -79,20 +78,11 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         forClientId: 'some_client_co',
         boostStartTime: testStartTime,
         boostEndTime: testEndTime,
-        statusConditions: { REDEEMED: [`save_completed_by #{${testReferredUser}}`, `first_save_by #{${testReferredUser}}`] },
-        boostAudienceType: 'INDIVIDUAL',
+        boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
-        defaultStatus: 'PENDING',
-        mlPullParameters: {
-            onlyOfferOnce: true,
-            minDaysBetweenBoosts: 30,
-            maxPortionOfAudience: 0.2
-        },
-        messageInstructionIds: [
-            { accountId: testReferringUser, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
-            { accountId: testReferredUser, msgInstructionId: testReferredMsgId, status: 'REDEEMED' }
-        ],
-        flags: ['REDEEM_ALL_AT_ONCE']
+        defaultStatus: 'CREATED',
+        messageInstructionIds: { },
+        mlParameters: { onlyOfferOnce: true, maxPortionOfAudience: 0.2 }
     };
 
     const mockBoostAccountStatus = (accountId, boostStatus) => ({
@@ -101,11 +91,35 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         boostStatus
     });
 
-    it('Handles once-off machined determined boost offerings', async () => {
+    beforeEach(() => helper.resetStubs(fetchMlBoostsStub, fetchAudienceStub, updateStatusStub, accountStatusStub, extractAccountIdsStub,
+        findUserIdsStub, tinyGetStub, findBoostLogStub, lamdbaInvokeStub));
+
+    it('Handles ml boost that are only offered once', async () => {
         const mockAccountIds = ['account-id-1', 'account-id-2'];
         
         const firstAccStatus = mockBoostAccountStatus('account-id-1', 'CREATED');
         const secondAccStatus = mockBoostAccountStatus('account-id-2', 'OFFERED');
+
+        const tinyOptions = {
+            url: config.get('dataPipeline.endpoint'),
+            data: { boost: mockMlBoostFromRds, userIds: ['user-id-1'] }
+        };
+
+        const audienceInvocation = {
+            FunctionName: 'audience_selection',
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({
+                operation: 'refresh',
+                params: { audienceId: testAudienceId }
+            })
+        };
+
+        const expectedStatusUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: ['account-id-1'],
+            newStatus: 'OFFERED',
+            logType: 'ML_BOOST_OFFERED'
+        };
 
         lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
             body: JSON.stringify({ result: 'Refreshed audience successfully, audience currently has 144 members' })
@@ -119,10 +133,77 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         tinyGetStub.resolves(['user-id-1']);
 
         const resultOfBoost = await handler.processMlBoosts({});
-        logger('Result:', resultOfBoost);
+
+        expect(resultOfBoost).to.exist;
+        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
+        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
+        expect(accountStatusStub).to.have.been.calledOnceWithExactly(testBoostId, ['account-id-1', 'account-id-2']);
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(audienceInvocation);
+        expect(tinyGetStub).to.have.been.calledOnceWithExactly(tinyOptions);
+        expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
+        expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
+        expect(findBoostLogStub).to.have.not.been.called;
     });
 
-    // it('Handles recurring machine determined boost offerings', async () => {
+    it('Handles recurring machine determined boost offerings', async () => {
+        const persistedMlBoost = { ...mockMlBoostFromRds };
+        persistedMlBoost.mlParameters.onlyOfferOnce = false;
+        persistedMlBoost.mlParameters.minIntervalBetweenRuns = { unit: 'days', value: 30 };
 
-    // });
+        const mockAccountIds = ['account-id-1', 'account-id-2'];
+
+        const tinyOptions = {
+            url: config.get('dataPipeline.endpoint'),
+            data: { boost: persistedMlBoost, userIds: ['user-id-1', 'user-id-2'] }
+        };
+
+        const expectedStatusUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: ['account-id-1'],
+            newStatus: 'OFFERED',
+            logType: 'ML_BOOST_OFFERED'
+        };
+
+        const audienceInvocation = {
+            FunctionName: 'audience_selection',
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({
+                operation: 'refresh',
+                params: { audienceId: testAudienceId }
+            })
+        };
+
+        const mockBoostLog = (accountId) => ({
+            logId: testLogId,
+            creationTime: testCreationTime,
+            boostId: testBoostId,
+            accountId,
+            logType: 'ML_BOOST_OFFERED'
+        });
+
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
+            body: JSON.stringify({ result: 'Refreshed audience successfully, audience currently has 144 members' })
+        })})});
+
+        updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
+        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2' });
+        fetchMlBoostsStub.resolves([mockMlBoostFromRds]);
+        extractAccountIdsStub.resolves(mockAccountIds);
+        findBoostLogStub.onFirstCall().resolves(mockBoostLog('account-id-1'));
+        findBoostLogStub.onSecondCall().resolves(mockBoostLog('account-id-2'));
+        tinyGetStub.resolves(['user-id-1']);
+
+        const resultOfBoost = await handler.processMlBoosts({});
+
+        expect(resultOfBoost).to.exist;
+        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
+        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(audienceInvocation);
+        expect(tinyGetStub).to.have.been.calledOnceWithExactly(tinyOptions);
+        expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
+        mockAccountIds.map((accountId) => expect(findBoostLogStub).to.have.been.calledWithExactly(testBoostId, accountId, 'ML_BOOST_OFFERED'));
+        expect(findBoostLogStub.callCount).to.equal(2);
+        expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
+        expect(accountStatusStub).to.have.not.been.called;
+    });
 });

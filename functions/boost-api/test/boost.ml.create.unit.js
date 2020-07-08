@@ -89,6 +89,7 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
         }
     };
 
+    // todo: cuse game boost instead
     const mockBoostToFromPersistence = {
         creatingUserId: testCreatingUserId,
         label: 'Referral::Luke::Avish',
@@ -107,7 +108,10 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
         boostAudienceType: 'INDIVIDUAL',
         audienceId: testAudienceId,
         defaultStatus: 'PENDING',
-        mlPullParameters: { maxPortionOfAudience: 0.2, minDaysBetweenBoosts: 30 },
+        mlParameters: {
+            maxPortionOfAudience: 0.2,
+            minIntervalBetweenRuns: { unit: "days", value: 30 }
+        },
         messageInstructionIds: [
             { accountId: testReferringUser, msgInstructionId: testReferringMsgId, status: 'REDEEMED' }, 
             { accountId: testReferredUser, msgInstructionId: testReferredMsgId, status: 'REDEEMED' }
@@ -169,7 +173,10 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
                 presentationType: 'MACHINE_DETERMINED',
                 template: messageTemplates.OFFERED
             }],
-            mlPullParameters: { maxPortionOfAudience: 0.20, minDaysBetweenBoosts: 30 },
+            mlParameters: {
+                maxPortionOfAudience: 0.20,
+                minIntervalBetweenRuns: { unit: 'days', value: 30 }
+            },
             messageInstructionFlags: {
                 'REDEEMED': [
                     { accountId: testReferringUser, msgInstructionFlag: 'REFERRAL::REDEEMED::REFERRER' }, 

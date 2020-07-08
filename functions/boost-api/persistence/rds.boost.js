@@ -185,6 +185,14 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
     return resultOfQuery.map((row) => camelizeKeys(row));
 };
 
+module.exports.findLastLogForBoost = async (boostId, accountId, logType) => {
+    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 ` +
+        `log_type = $3 order by creation_time desc limit 1`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId, logType]);
+    return Array.isArray(resultOfQuery) && resultOfQuery.length > 0
+        ? camelizeKeys(resultOfQuery[0]) : null;
+};
+
 module.exports.findAccountsForPooledReward = async (boostId, logType) => {
     const selectQuery = `select distinct(account_id) from ${boostLogTable} where log_type = $1 and boost_id = $2`;
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [logType, boostId]);
@@ -557,8 +565,8 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
 
 module.exports.fetchActiveMlBoosts = async () => {
     const boostMainTable = config.get('tables.boostTable');
-    const query = `select * from ${boostMainTable} where ml_pull_paramaters != null and active = true`;
+    const query = `select * from ${boostMainTable} where ml_parameters != null and active = true`;
     const resultOfQuery = await rdsConnection.selectQuery(query, []);
     logger('Result of ML boost fetch:', resultOfQuery);
-    return Array.isArray(resultOfQuery) && resultOfQuery.length > 0 ? camelizeKeys(resultOfQuery[0]) : [];
+    return resultOfQuery.map((row) => camelizeKeys(row));
 };

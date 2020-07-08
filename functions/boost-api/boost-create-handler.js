@@ -465,9 +465,9 @@ module.exports.createBoost = async (event) => {
         instructionToRds.flags = params.flags;
     }
 
-    if (params.mlPullParameters) {
+    if (params.mlParameters) {
         logger('Boost has machine learning pull parameters');
-        instructionToRds.mlPullParameters = params.mlPullParameters;
+        instructionToRds.mlParameters = params.mlParameters;
     }
 
     // logger('Sending to persistence: ', instructionToRds);

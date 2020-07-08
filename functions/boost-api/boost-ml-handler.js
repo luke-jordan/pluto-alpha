@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:ml');
-// const moment = require('moment');
+const moment = require('moment');
 const config = require('config');
 
 const persistence = require('./persistence/rds.boost');
@@ -10,19 +10,12 @@ const tiny = require('tiny-json-http');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds, newStatus: 'OFFERED', logType: 'ML_BOOST_OFFERED' });
-
-const hasValidMinInterval = (boost) => {
-    logger('Checking if booost', boost, 'passes the min interval test');
-    return true;
-};
-
 const triggerMsgInstructions = async (boost, accountIds) => {
     logger('Triggering message instruction for boost:', boost, 'And account ids:', accountIds);
     return boost;
 };
 
-const refreshAudience = async (audienceId) => {
+const sendRequestToRefreshAudience = async (audienceId) => {
     logger('Refreshing audience:', audienceId);
     const audiencePayload = { operation: 'refresh', params: { audienceId } };
 
@@ -46,24 +39,40 @@ const obtainUsersForOffering = async (boost, userIds) => {
     return result;
 };
 
+const hasValidMinInterval = (lastOfferedTime, minInterval) => {
+    const currentInterval = moment().diff(moment(lastOfferedTime), minInterval.unit);
+    logger(`Interval between last boost an now is: ${currentInterval} ${minInterval.unit}`);
+    if (!lastOfferedTime || currentInterval >= minInterval.value) {
+        return true;
+    }
+
+    return false;
+};
+
 const filterAccountIds = async (boost, accountIds) => {
-    if (boost.mlPullParameters.onlyOfferOnce) {
+    if (boost.mlParameters.onlyOfferOnce) {
         const boostAccountStatuses = await persistence.fetchBoostAccountStatuses(boost.boostId, accountIds);
         logger('Got boost account statuses:', boostAccountStatuses);
         const createdBoostStatuses = boostAccountStatuses.filter((accountStatus) => accountStatus.boostStatus === 'CREATED');
         return createdBoostStatuses.map((boostStatus) => boostStatus.accountId);
     }
 
-    return accountIds;
+    const { minIntervalBetweenRuns } = boost.mlParameters;
+
+    const boostLogPromises = accountIds.map((accountId) => persistence.findLastLogForBoost(boost.boostId, accountId, 'ML_BOOST_OFFERED'));
+    const boostLogs = await Promise.all(boostLogPromises);
+    logger('Got boost logs:', boostLogs);
+    const boostLogsWithValidIntervals = boostLogs.filter((boostLog) => hasValidMinInterval(boostLog.creationTime || null, minIntervalBetweenRuns));
+    return boostLogsWithValidIntervals.map((boostLog) => boostLog.accountId);
 };
 
 const selectUsersForBoostOffering = async (boost) => {
-    await refreshAudience(boost.audienceId);
+    await sendRequestToRefreshAudience(boost.audienceId);
 
     const audienceAccountIds = await persistence.extractAccountIds(boost.audienceId);
     logger('Got audience account ids:', audienceAccountIds);
     const filteredAccountIds = await filterAccountIds(boost, audienceAccountIds);
-    logger('Got account ids:', filteredAccountIds);
+    logger('Got filtered account ids:', filteredAccountIds);
 
     if (filteredAccountIds.length === 0) {
         return { message: 'No valid accounts found for ML boost' };
@@ -79,6 +88,8 @@ const selectUsersForBoostOffering = async (boost) => {
     return { boostId: boost.boostId, accountIds: accountIdsForOffering };
 };
 
+const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds, newStatus: 'OFFERED', logType: 'ML_BOOST_OFFERED' });
+
 /**
  * A scheduled job that pulls and processes active ML boosts.
  * @param {object} event 
@@ -90,12 +101,10 @@ module.exports.processMlBoosts = async (event) => {
         // todo: event validation
         const mlBoosts = await persistence.fetchActiveMlBoosts();
         logger('Got machine-determined boosts:', mlBoosts);
-        const filteredBoosts = mlBoosts.filter((boost) => hasValidMinInterval(boost));
-        logger('Boosts with valid min interval:', filteredBoosts);
 
-        // todo: filter out results where no accounts survive the filter (once-off boosts where all accounts have already offered)
-        const boostsAndRecipients = await Promise.all(filteredBoosts.map((boost) => selectUsersForBoostOffering(boost)));
-        logger('Result of boost offerings:', boostsAndRecipients);
+        // todo: filter out results where no accounts survive the filter (once-off boosts where all accounts have already been offered)
+        const boostsAndRecipients = await Promise.all(mlBoosts.map((boost) => selectUsersForBoostOffering(boost)));
+        logger('Got boosts and recipients:', boostsAndRecipients);
 
         const statusUpdateInstructions = boostsAndRecipients.map((boost) => createUpdateInstruction(boost.boostId, boost.accountIds));
         logger('Created boost status update instructions:', statusUpdateInstructions);

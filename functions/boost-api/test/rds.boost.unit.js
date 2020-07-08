@@ -1,5 +1,7 @@
 'use strict';
 
+const logger = require('debug')('jupiter:boosts:test');
+
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
@@ -453,6 +455,31 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(result).to.be.null;
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account']);
+    });
+
+    it('Fetches logs for boost, multiple', async () => {
+        const expectedQuery = `select * from boost_data.boost_log where boost_id = $1 and log_type = $2`;
+        queryStub.resolves([{ 'boost_id': 'some-id', 'account_id': 'some-account', 'log_type': 'some-type' }]);
+
+        const result = await rds.findLogsForBoost('some-id', 'some-type');
+        expect(result).to.deep.equal([{ boostId: 'some-id', accountId: 'some-account', logType: 'some-type' }]);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-type']);
+    });
+
+    it('Fetches last boost log of specified type, single', async () => {
+        const expectedQuery = `select * from boost_data.boost_log where boost_id = $1 and account_id = $2 ` +
+            `log_type = $3 order by creation_time desc limit 1`;
+        queryStub.resolves([{ 'boost_id': 'some-id', 'account_id': 'some-account', 'log_type': 'some-type' }]);
+
+        const result = await rds.findLastLogForBoost('some-id', 'some-account', 'some-type');
+        expect(result).to.deep.equal({ boostId: 'some-id', accountId: 'some-account', logType: 'some-type' });
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account', 'some-type']);
+    });
+
+    it('Fetches active machine-determined boosts', async () => {
+    
     });
 
 });
