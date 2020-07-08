@@ -29,7 +29,7 @@ const previewSnippetStub = sinon.stub();
 
 const handler = proxyquire('../snippet-handler', {
     'publish-common': {
-        'queueEvents': queueEventsStub
+        'sendToQueue': queueEventsStub
     },
     './persistence/rds.snippets': {
         'addSnippet': addFactStub,
@@ -157,10 +157,8 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             failureCount: 0
         };
 
-        const expectedQueueArgs = [{
-            queueName: config.get('publishing.userEvents.snippetQueue'),
-            payload: { snippetIds: [testSnippetId, testSnippetId], userId: testSystemId, status: 'FETCHED' }
-        }];
+        const testQueueName = config.get('publishing.userEvents.snippetQueue');
+        const testQueuePayload = { snippetIds: [testSnippetId, testSnippetId], userId: testSystemId, status: 'FETCHED' };
 
         const expectedFirst = mockSnippet('FETCHED', 3, 0);
         const expectedSecond = mockSnippet('VIEWED', 5, 1);
@@ -177,7 +175,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         const body = helper.standardOkayChecks(resultOfFetch);
         expect(body).to.deep.equal([expectedFirst, expectedSecond]);
         expect(fetchUncreatedSnippetsStub).to.have.been.calledOnceWithExactly(testSystemId);
-        expect(queueEventsStub).to.have.been.calledOnceWithExactly(expectedQueueArgs);
+        expect(queueEventsStub).to.have.been.calledOnceWithExactly(testQueueName, [testQueuePayload]);
         expect(fetchCreatedSnippetsStub).to.have.not.been.called;
         expect(isPreviewUserStub).to.have.not.been.called;
         expect(previewSnippetStub).to.have.not.been.called;

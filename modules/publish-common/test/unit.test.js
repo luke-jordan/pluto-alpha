@@ -18,13 +18,25 @@ const proxyquire = require('proxyquire');
 
 const uuidStub = sinon.stub();
 const momentStub = sinon.stub();
+
 const lamdbaInvokeStub = sinon.stub();
+
 const getObjectStub = sinon.stub();
-const sendEmailStub = sinon.stub();
 const snsPublishStub = sinon.stub();
+
+const getQueueUrlStub = sinon.stub();
+const sqsSendStub = sinon.stub();
+
 class MockSNS {
     constructor () {
         this.publish = snsPublishStub;
+    }
+}
+
+class MockSQS {
+    constructor () {
+        this.getQueueUrl = getQueueUrlStub;
+        this.sendMessage = sqsSendStub;
     }
 }
 
@@ -40,18 +52,12 @@ class MockLambdaClient {
     }
 }
 
-class MockSesClient {
-    constructor () { 
-        this.sendEmail = sendEmailStub; 
-    }
-}
-
 const eventPublisher = proxyquire('../index', {
     'moment': momentStub,
     'aws-sdk': {
         'Lambda': MockLambdaClient,
         'SNS': MockSNS,
-        'SES': MockSesClient,
+        'SQS': MockSQS,
         'S3': MockS3Client
     },
     'uuid/v4': uuidStub
@@ -62,8 +68,9 @@ const resetStubs = () => {
     momentStub.reset();
     snsPublishStub.reset();
     getObjectStub.reset();
-    sendEmailStub.reset();
     lamdbaInvokeStub.reset();
+    sqsSendStub.reset();
+    getQueueUrlStub.reset();
 };
 
 describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
@@ -120,6 +127,28 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
         expect(publishResult).to.exist;
         expect(publishResult).to.deep.equal({ result: 'SUCCESS' });
         expect(snsPublishStub).to.have.been.calledOnceWithExactly(happyPublish);
+    });
+
+    it('Does the same with an SQS call, FIFO queue', async () => {
+        const testEvent = { eventType: 'BOOST_REDEEMED' };
+        const testMsgGroupId = uuid();
+
+        getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'boost-process-queue-url' }) });
+        uuidStub.returns(testMsgGroupId);
+        sqsSendStub.returns({ promise: () => ({ StatusCode: 202, MessageId: uuid() }) });
+
+        const happyQueueSend = {
+            QueueUrl: 'boost-process-queue-url',
+            MessageBody: stringify(testEvent),
+            MessageGroupId: testMsgGroupId,
+            MessageAttributes: { MessageBodyDataType: { DataType: 'String', StringValue: 'JSON' } }
+        };
+
+        const msgSendResult = await eventPublisher.sendToQueue('boost_process_queue', [testEvent], true);
+        expect(msgSendResult).to.deep.equal({ successCount: 1, failureCount: 0 });
+
+        expect(getQueueUrlStub).to.have.been.calledOnceWithExactly({ QueueName: 'boost_process_queue' });
+        expect(sqsSendStub).to.have.been.calledOnceWithExactly(happyQueueSend);
     });
 
     it('Sends system email, sync lambda call', async () => {

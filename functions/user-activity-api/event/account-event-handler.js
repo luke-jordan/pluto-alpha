@@ -86,8 +86,7 @@ module.exports.handleAccountOpenedEvent = async ({ eventBody, userProfile, persi
     finalProcesses.push(findPendingFriendRequest(userProfile, lambda));
 
     const boostEvent = { ...eventBody, context: { accountId: accountInfo[0].accountId }};
-    const boostProcessInvocation = dispatchHelper.assembleBoostProcessInvocation(boostEvent);
-    finalProcesses.push(lambda.invoke(boostProcessInvocation).promise());
+    finalProcesses.push(dispatchHelper.sendEventToBoostProcessing(boostEvent, publisher));
 
     await Promise.all(finalProcesses);
 };

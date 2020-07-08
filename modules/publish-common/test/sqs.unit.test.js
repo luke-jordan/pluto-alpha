@@ -81,12 +81,10 @@ describe('*** UNIT TEST SQS EVENT QUEUEING ***', () => {
         getQueueUrlStub.returns({ promise: () => ({ QueueUrl: 'test/queue/url' })});
         sqsSendStub.returns({ promise: () => mockSQSResponse });
         
-        const testEvent = {
-            queueName: 'test-queue-name',
-            payload: { some: 'value' }
-        };
+        const queueName = 'test-queue-name';
+        const payload = { some: 'value' };
 
-        const resultOfQueue = await handler.queueEvents([testEvent]);
+        const resultOfQueue = await handler.sendToQueue(queueName, [payload]);
 
         expect(resultOfQueue).to.exist;
         expect(resultOfQueue).to.deep.equal({ successCount: 1, failureCount: 0 });

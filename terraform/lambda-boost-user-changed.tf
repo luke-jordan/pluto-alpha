@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_user_changed" {
   role                           = aws_iam_role.boost_user_changed_role.arn
   handler                        = "boost-list-handler.listChangedBoosts"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

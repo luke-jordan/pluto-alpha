@@ -12,7 +12,7 @@ const fetchAccountTagStub = sinon.stub();
 const fetchTransactionStub = sinon.stub();
 const updateTransactionTagStub = sinon.stub();
 
-const lambdaInvokeStub = sinon.stub();
+const sendEventToQueueStub = sinon.stub();
 
 const mockPersistence = { 
     fetchAccountTagByPrefix: fetchAccountTagStub,
@@ -20,24 +20,19 @@ const mockPersistence = {
     updateTxTags: updateTransactionTagStub
 };
 
-const mockLambda = { invoke: lambdaInvokeStub };
-
-const setMockLambdaResponse = (response) => {
-    const mockPayload = { Payload: JSON.stringify(response) };
-    lambdaInvokeStub.returns({ promise: () => mockPayload });
-};
+const mockPublisher = { sendToQueue: sendEventToQueueStub };
 
 const wrapMockEvent = (mockEventBody) => ({ 
     eventBody: mockEventBody, 
     persistence: mockPersistence,
-    lambda: mockLambda
+    publisher: mockPublisher
 });
 
 const handler = require('../event/boost-redeemed-event-handler.js');
 
 describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
 
-    beforeEach(() => helper.resetStubs(fetchAccountTagStub, lambdaInvokeStub, fetchTransactionStub, updateTransactionTagStub));
+    beforeEach(() => helper.resetStubs(fetchAccountTagStub, sendEventToQueueStub, fetchTransactionStub, updateTransactionTagStub));
 
     const mockAmount = 10 * 100 * 100;
     const mockEventBody = {
@@ -56,7 +51,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         fetchAccountTagStub.resolves('TESTPERSON1');
         fetchTransactionStub.resolves({ accountId: 'account-1', tags: ['PAYMENT_URL'], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
 
-        setMockLambdaResponse({ result: 'SUCCESS' }); // actually irrelevant, as long as doesn't throw error
+        sendEventToQueueStub.resolves({ result: 'SUCCESS' }); // actually irrelevant, as long as doesn't throw error
         updateTransactionTagStub.resolves({ updatedTime: 'some-time' });
 
         await handler.handleBoostRedeemedEvent(wrapMockEvent(mockEventBody));
@@ -72,21 +67,17 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         };
 
         const expectedPayload = { operation: 'BOOST', transactionDetails: expectedTransactionDetails };
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly({
-            FunctionName: 'balance_sheet_acc_update',
-            InvocationType: 'RequestResponse',
-            Payload: JSON.stringify(expectedPayload)
-        });
+        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('balance_sheet_update_queue', [expectedPayload], true);
 
         const expectedTag = `FINWORKS_RECORDED::${mockAmount}::HUNDREDTH_CENT::ZAR`;
         expect(updateTransactionTagStub).to.have.been.calledOnceWithExactly('transaction-1', expectedTag);
     });
 
-    it('Does not tag if error on transaction', async () => {
+    it('Does not tag if error dispatching to queue', async () => {
         fetchAccountTagStub.resolves('TESTPERSON1');
         fetchTransactionStub.resolves({ accountId: 'account-1', tags: ['PAYMENT_URL'], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
 
-        setMockLambdaResponse({ result: 'ERROR' });
+        sendEventToQueueStub.resolves({ result: 'FAILURE' });
 
         await handler.handleBoostRedeemedEvent(wrapMockEvent(mockEventBody));
 
@@ -101,11 +92,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         };
 
         const expectedPayload = { operation: 'BOOST', transactionDetails: expectedTransactionDetails };
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly({
-            FunctionName: 'balance_sheet_acc_update',
-            InvocationType: 'RequestResponse',
-            Payload: JSON.stringify(expectedPayload)
-        });
+        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('balance_sheet_update_queue', [expectedPayload], true);
 
         expect(updateTransactionTagStub).to.not.have.been.called;
     });
@@ -121,7 +108,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
 
-        expect(lambdaInvokeStub).to.not.have.been.called;
+        expect(sendEventToQueueStub).to.not.have.been.called;
         expect(updateTransactionTagStub).to.not.have.been.called;
     });
 
@@ -137,7 +124,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
 
-        expect(lambdaInvokeStub).to.not.have.been.called;
+        expect(sendEventToQueueStub).to.not.have.been.called;
         expect(updateTransactionTagStub).to.not.have.been.called;
     });
 
@@ -151,7 +138,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
 
-        expect(lambdaInvokeStub).to.not.have.been.called;
+        expect(sendEventToQueueStub).to.not.have.been.called;
         expect(updateTransactionTagStub).to.not.have.been.called;
     });
 
@@ -168,7 +155,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
 
         expect(fetchAccountTagStub).to.not.have.been.called;
         expect(fetchTransactionStub).to.not.have.been.called;
-        expect(lambdaInvokeStub).to.not.have.been.called;
+        expect(sendEventToQueueStub).to.not.have.been.called;
         expect(updateTransactionTagStub).to.not.have.been.called;            
     });
 
@@ -182,7 +169,7 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
 
-        expect(lambdaInvokeStub).to.not.have.been.called;
+        expect(sendEventToQueueStub).to.not.have.been.called;
         expect(updateTransactionTagStub).to.not.have.been.called;    
     });
 

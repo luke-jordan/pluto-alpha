@@ -24,6 +24,11 @@ const handler = proxyquire('../finworks-handler', {
     'request-promise': requestStub
 });
 
+// requests to balance sheet update come in over a FIFO queue
+const wrapEventAsSqs = (event) => ({
+    Records: [{ body: JSON.stringify(event) }]
+});
+
 const resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
@@ -393,7 +398,7 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
 
-    it('Directs save transaction correctly', async () => {
+    it('Directs save transaction from queue correctly', async () => {
         const testAccountNumber = 'POL23';
 
         const saveEndpoint = `https://fwtest.jupitersave.com/api/accounts/${testAccountNumber}/investments`;
@@ -417,10 +422,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
 
-        const resultOfHandler = await handler.addTransaction(saveEvent);
+        const resultOfHandler = await handler.addTransaction(wrapEventAsSqs(saveEvent));
         logger('Investment result from third party:', resultOfHandler);
 
-        expect(resultOfHandler).to.deep.equal({ result: 'SUCCESS', details: {} });
+        expect(resultOfHandler).to.deep.equal([{ result: 'SUCCESS', details: {} }]);
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
         
@@ -450,10 +455,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
 
-        const resultOfHandler = await handler.addTransaction(saveEvent);
+        const resultOfHandler = await handler.addTransaction(wrapEventAsSqs(saveEvent));
         logger('Boost result from third party:', resultOfHandler);
 
-        expect(resultOfHandler).to.deep.equal({ result: 'SUCCESS', details: {} });
+        expect(resultOfHandler).to.deep.equal([{ result: 'SUCCESS', details: {} }]);
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
         
@@ -505,10 +510,10 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
         requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
 
-        const resultOfHandler = await handler.addTransaction(withdrawEvent);
+        const resultOfHandler = await handler.addTransaction(wrapEventAsSqs(withdrawEvent));
         logger('Investment result from third party:', resultOfHandler);
 
-        expect(resultOfHandler).to.deep.equal({ result: 'SUCCESS', details: {} });
+        expect(resultOfHandler).to.deep.equal([{ result: 'SUCCESS', details: {} }]);
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });

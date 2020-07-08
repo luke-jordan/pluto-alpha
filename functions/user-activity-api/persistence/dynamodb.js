@@ -106,7 +106,11 @@ module.exports.fetchFloatVarsForBalanceCalc = async (clientId, floatId) => {
  * These functions handle storing the fact that a set of bank account details have been verified (or not)
  */
 
-const hashBankDetails = (bankDetails) => crypto.createHash(HASH_ALGORITHM).update(JSON.stringify(bankDetails)).digest('hex');
+const hashBankDetails = (bankDetails) => crypto.createHash(HASH_ALGORITHM).update(JSON.stringify({
+    bankName: bankDetails.bankName,
+    accountNumber: bankDetails.accountNumber,
+    accountType: bankDetails.accountType
+})).digest('hex');
 
 const assembleUpdateParams = (itemKey, updateExpression, substitutionDict) => ({
     tableName: config.get('tables.bankVerification'),
@@ -118,6 +122,8 @@ const assembleUpdateParams = (itemKey, updateExpression, substitutionDict) => ({
 
 module.exports.fetchBankVerificationResult = async (systemWideUserId, bankDetails) => {
     const accountHash = hashBankDetails(bankDetails);
+    logger('Fetching with Hash: ', accountHash, ' and user ID: ', systemWideUserId);
+
     const lookupTable = config.get('tables.bankVerification');
     const lookupResult = await dynamoCommon.fetchSingleRow(lookupTable, { systemWideUserId, accountHash });
     logger('Retrieved bank verification record: ', lookupResult);
@@ -163,6 +169,7 @@ module.exports.setBankVerificationResult = async ({ systemWideUserId, bankDetail
     const lookupTable = config.get('tables.bankVerification');
 
     const itemKey = { systemWideUserId, accountHash };
+    logger('Setting verification result, checking first for prior, with hash and userID: ', itemKey);
     const existingItem = await dynamoCommon.fetchSingleRow(lookupTable, itemKey);
     if (!util.isObjectEmpty(existingItem)) {
         return updateExistingResultFull(itemKey, verificationStatus, verificationLog);
@@ -190,7 +197,6 @@ module.exports.setBankVerificationResult = async ({ systemWideUserId, bankDetail
 };
 
 module.exports.updateLastVerificationUseTime = async (systemWideUserId, bankDetails, accessTime) => {
-
     const itemKey = { systemWideUserId, accountHash: hashBankDetails(bankDetails) }; 
     const updateInstruction = assembleUpdateParams(itemKey, 'set last_access_time = :at', { ':at': accessTime.valueOf() });
 

@@ -9,7 +9,7 @@ resource "aws_lambda_function" "balance_sheet_query" {
   role                           = "${aws_iam_role.balance_sheet_query_role.arn}"
   handler                        = "finworks-handler.getMarketValue"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

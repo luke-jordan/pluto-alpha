@@ -9,7 +9,7 @@ resource "aws_lambda_function" "withdraw_initiate" {
   role                           = "${aws_iam_role.withdraw_initiate_role.arn}"
   handler                        = "withdrawal-handler.setWithdrawalBankAccount"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

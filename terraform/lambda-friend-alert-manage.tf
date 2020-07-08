@@ -9,7 +9,7 @@ resource "aws_lambda_function" "friend_alert_manage" {
   role                           = "${aws_iam_role.friend_alert_manage_role.arn}"
   handler                        = "friend-alert-handler.directAlertRequest"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_user_history" {
   role                           = "${aws_iam_role.message_user_history_role.arn}"
   handler                        = "message-picking-handler.getUserHistoricalMessages"
   memory_size                    = 128
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

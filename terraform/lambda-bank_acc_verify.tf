@@ -9,7 +9,7 @@ resource "aws_lambda_function" "bank_account_verify" {
   role                           = "${aws_iam_role.bank_account_verify_role.arn}"
   handler                        = "bank-verify-handler.handle"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

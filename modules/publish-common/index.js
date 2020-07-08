@@ -105,34 +105,54 @@ module.exports.publishMultiUserEvent = async (userIds, eventType, options = {}) 
     }
 };
 
-const assembleQueueParams = async (payload, queueName) => {
+const obtainQueueUrl = async (queueName) => {
     logger('Looking for SQS queue name: ', queueName);
     const queueUrlResult = await sqs.getQueueUrl({ QueueName: queueName }).promise();
-    const queueUrl = queueUrlResult.QueueUrl;
+    return queueUrlResult.QueueUrl;
+};
 
+const assembleQueueParams = async (payload, queueUrl, isFifoQueue = false) => {
     const dataType = { DataType: 'String', StringValue: 'JSON' };
-
-    return {
+    
+    const params = {
         MessageAttributes: { MessageBodyDataType: dataType },
         MessageBody: JSON.stringify(payload),
         QueueUrl: queueUrl
     };
+    
+    if (isFifoQueue) {
+        params.MessageGroupId = uuid();
+    }
+
+    return params;
 };
 
-module.exports.queueEvents = async (events) => {
+module.exports.sendToQueue = async (queueName, payloads, isFifoQueue = false) => {
     try {
-        const queueParameters = await Promise.all(events.map((event) => assembleQueueParams(event.payload, event.queueName)));
+        const queueUrl = await obtainQueueUrl(queueName);
+        const queueParameters = await Promise.all(payloads.map((payload) => assembleQueueParams(payload, queueUrl, isFifoQueue)));
         logger('Assembled queue parameters:', queueParameters);
+        
         const sqsPromises = queueParameters.map((params) => sqs.sendMessage(params).promise());
         const sqsResult = await Promise.all(sqsPromises);
         logger('Queue result:', sqsResult);
+
         const successCount = sqsResult.filter((result) => typeof result === 'object' && result.MessageId).length;
-        logger(`${successCount}/${events.length} events were queued successfully`);
-        return { successCount, failureCount: events.length - successCount };
+        logger(`${successCount}/${payloads.length} events were queued successfully`);
+        return { successCount, failureCount: payloads.length - successCount };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return { result: 'FAILURE' };
     }
+};
+
+module.exports.addToDlq = async (dlqName, event, error) => {
+    const dlqUrl = await obtainQueueUrl(dlqName);
+    const payload = { originalEvent: event, error };
+    const sqsParameters = assembleQueueParams(payload, dlqUrl);
+    logger('DLQ send parameters: ', sqsParameters);
+    const sqsResult = await sqs.sendMessage(sqsParameters).promise();
+    logger('Result from SQS: ', sqsResult);
 };
 
 module.exports.sendSms = async ({ phoneNumber, message, sendSync }) => {
@@ -228,6 +248,7 @@ module.exports.sendSystemEmail = async ({ originAddress, subject, toList, bodyTe
     return { result: 'FAILURE' };
 };
 
+// todo : merge with addToDlq above
 module.exports.sendToDlq = async (dlqName, event, err) => {
     try {
         logger('Looking for DLQ name: ', dlqName);

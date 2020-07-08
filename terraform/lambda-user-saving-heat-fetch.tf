@@ -9,7 +9,7 @@ resource "aws_lambda_function" "user_save_heat_fetch" {
   role                           = "${aws_iam_role.user_save_heat_fetch_role.arn}"
   handler                        = "savings-heat-handler.calculateSavingHeat"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

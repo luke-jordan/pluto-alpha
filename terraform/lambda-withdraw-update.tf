@@ -9,7 +9,7 @@ resource "aws_lambda_function" "withdraw_update" {
   role                           = "${aws_iam_role.withdraw_update_role.arn}"
   handler                        = "withdrawal-handler.setWithdrawalAmount"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

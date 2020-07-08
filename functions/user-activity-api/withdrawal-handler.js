@@ -87,8 +87,8 @@ const initializeBankVerification = async (bankDetails, userProfile) => {
 };
 
 const cacheBankDetailsUsingPriorVerification = async (bankDetails, systemWideUserId, priorVerificationResult) => {
-    const { verificationStatus, verificationLog, creationTime } = priorVerificationResult;
-    const verificationTime = creationTime.format('DD MMMM, YYYY');
+    const { verificationStatus, verificationLog, creationMoment } = priorVerificationResult;
+    const verificationTime = creationMoment.format('DD MMMM, YYYY');
     const detailsToCache = { ...bankDetails, verificationStatus, verificationLog, verificationTime };
     await redis.set(systemWideUserId, JSON.stringify(detailsToCache), 'EX', config.get('cache.ttls.withdrawal'));
     return detailsToCache;

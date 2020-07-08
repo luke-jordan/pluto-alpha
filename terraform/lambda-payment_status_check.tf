@@ -9,7 +9,7 @@ resource "aws_lambda_function" "payment_status_check" {
   role                           = "${aws_iam_role.payment_status_check_role.arn}"
   handler                        = "payment-handler.statusCheck"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

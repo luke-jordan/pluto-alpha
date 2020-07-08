@@ -144,11 +144,10 @@ module.exports.fetchSnippetsForUser = async (event) => {
 
         if (Array.isArray(uncreatedSnippets) && uncreatedSnippets.length > 0) {
             const snippetIds = uncreatedSnippets.map((snippet) => snippet.snippetId);
-            const queueEvent = {
-                queueName: config.get('publishing.userEvents.snippetQueue'),
-                payload: { snippetIds, userId: systemWideUserId, status: 'FETCHED' }
-            };
-            await publisher.queueEvents([queueEvent]);
+            const queueName = config.get('publishing.userEvents.snippetQueue');
+            const payload = { snippetIds, userId: systemWideUserId, status: 'FETCHED' };
+            
+            await publisher.sendToQueue(queueName, [payload]);
             return opsUtil.wrapResponse(sortSnippets(uncreatedSnippets));
         }
 

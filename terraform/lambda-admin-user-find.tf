@@ -9,7 +9,7 @@ resource "aws_lambda_function" "admin_user_find" {
   role                           = "${aws_iam_role.admin_user_find_role.arn}"
   handler                        = "admin-user-query.findUsers"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

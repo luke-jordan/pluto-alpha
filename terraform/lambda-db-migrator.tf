@@ -9,7 +9,7 @@ resource "aws_lambda_function" "db_migration" {
   role                           = "${aws_iam_role.db_migration_role.arn}"
   handler                        = "handler.migrate"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

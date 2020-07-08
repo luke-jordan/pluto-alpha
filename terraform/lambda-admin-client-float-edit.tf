@@ -9,7 +9,7 @@ resource "aws_lambda_function" "admin_client_float_edit" {
   role                           = "${aws_iam_role.admin_client_float_edit_role.arn}"
   handler                        = "admin-float-handler.adjustClientFloat"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

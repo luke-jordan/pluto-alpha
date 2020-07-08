@@ -9,7 +9,7 @@ resource "aws_lambda_function" "friend_referral_connect" {
   role                           = "${aws_iam_role.friend_referral_connect_role.arn}"
   handler                        = "friend-request-handler.initiateRequestFromReferralCode"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   
