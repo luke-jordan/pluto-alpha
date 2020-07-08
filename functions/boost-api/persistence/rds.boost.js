@@ -149,7 +149,8 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
 
     logger('Selecting accounts relevant for boost, query assembled: ', assembledQuery);
     const resultOfQuery = await rdsConnection.selectQuery(assembledQuery, runningValues);
-    logger('Selecting accounts relevant for boost (boost-account-map), received (first 5): ', resultOfQuery.slice(0, Math.min(resultOfQuery.length, 5)));
+    // lots of complexity in here that we don't need for a log, so just removing for now
+    // logger('Selecting accounts relevant for boost (boost-account-map), received (first 5): ', resultOfQuery.slice(0, Math.min(resultOfQuery.length, 5)));
 
     if (resultOfQuery.length === 0) {
         throw new Error('Account id not found');
