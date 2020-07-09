@@ -235,7 +235,7 @@ const processNonRecurringInstruction = async (instructionInvocation) => {
  * @property {array} instructions An array of instruction identifier objects. Each instruction in the array may have the following properties:
  * @property {string} instructionId The instruction id assigned during instruction creation.
  * @property {string} destinationUserId Optional. This overrides the user ids indicated in the persisted message instruction's selectionInstruction property.
- * @property {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.tr 
+ * @property {object} parameters Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.
  */
 module.exports.createUserMessages = async (event) => {
     try {

@@ -10,9 +10,23 @@ const tiny = require('tiny-json-http');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const triggerMsgInstructions = async (boost, accountIds) => {
-    logger('Triggering message instruction for boost:', boost, 'And account ids:', accountIds);
-    return boost;
+const triggerMsgInstructions = async (boostsAndRecipients) => {
+    const instructions = boostsAndRecipients.map((boost) => ({
+        instructionId: boost.instructionId,
+        userIds: boost.userIds,
+        parameters: boost.parameters
+    }));
+
+    const msgInstructionInvocation = {
+        FunctionName: config.get('lambdas.messageSend'),
+        InvocationType: 'Event',
+        Payload: JSON.stringify({ instructions })
+    };
+
+    const resultOfInvocation = await lambda.invoke(msgInstructionInvocation).promise();
+    logger('Raw result of msg instruction invocation: ', resultOfInvocation);
+    const resultPayload = JSON.parse(resultOfInvocation['Payload']);
+    return JSON.parse(resultPayload.body);
 };
 
 const sendRequestToRefreshAudience = async (audienceId) => {
@@ -69,7 +83,8 @@ const filterAccountIds = async (boost, accountIds) => {
 const selectUsersForBoostOffering = async (boost) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
-    const audienceAccountIds = await persistence.extractAccountIds(boost.audienceId);
+    const { boostId, audienceId, messageInstructionIds } = boost;
+    const audienceAccountIds = await persistence.extractAccountIds(audienceId);
     logger('Got audience account ids:', audienceAccountIds);
     const filteredAccountIds = await filterAccountIds(boost, audienceAccountIds);
     logger('Got filtered account ids:', filteredAccountIds);
@@ -80,12 +95,19 @@ const selectUsersForBoostOffering = async (boost) => {
 
     const accountUserIdMap = await persistence.findUserIdsForAccounts(filteredAccountIds, true);
     logger('Got user ids for accounts:', accountUserIdMap);
+
     const userIds = Object.keys(accountUserIdMap);
     const userIdsForOffering = await obtainUsersForOffering(boost, userIds);
     logger('Got user ids selected for boost offering:', userIdsForOffering);
     const accountIdsForOffering = userIdsForOffering.map((userId) => accountUserIdMap[userId]);
 
-    return { boostId: boost.boostId, accountIds: accountIdsForOffering };
+    return {
+        boostId,
+        parameters: boost,
+        userIds: userIdsForOffering,
+        accountIds: accountIdsForOffering,
+        instructionId: messageInstructionIds.instructions[0].instructionId
+    };
 };
 
 const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds, newStatus: 'OFFERED', logType: 'ML_BOOST_OFFERED' });
@@ -110,8 +132,7 @@ module.exports.processMlBoosts = async (event) => {
         const resultOfUpdate = persistence.updateBoostAccountStatus(statusUpdateInstructions);
         logger('Result of boost account status update:', resultOfUpdate);
 
-        const msgInstructionPromises = boostsAndRecipients.map((boost) => triggerMsgInstructions(boost.boostId, boost.accountIds));
-        const resultOfMsgInstructions = await Promise.all(msgInstructionPromises);
+        const resultOfMsgInstructions = await triggerMsgInstructions(boostsAndRecipients);
         logger('triggering message instructions resulted in:', resultOfMsgInstructions);
 
         return { result: 'SUCCESS' };
