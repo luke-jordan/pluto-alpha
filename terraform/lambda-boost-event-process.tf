@@ -7,10 +7,10 @@ resource "aws_lambda_function" "boost_event_process" {
 
   function_name                  = "${var.boost_event_process_lambda_function_name}"
   role                           = "${aws_iam_role.boost_event_process_role.arn}"
-  handler                        = "boost-event-handler.processEvent"
-  memory_size                    = 512
-  runtime                        = "nodejs10.x"
-  timeout                        = 900
+  handler                        = "boost-event-handler.handleBatchOfQueuedEvents"
+  memory_size                    = 320
+  runtime                        = "nodejs12.x"
+  timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
@@ -78,11 +78,24 @@ EOF
 
 resource "aws_cloudwatch_log_group" "boost_event_process" {
   name = "/aws/lambda/${var.boost_event_process_lambda_function_name}"
+  retention_in_days = 7
 
   tags = {
     environment = "${terraform.workspace}"
   }
 }
+
+////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) /////////////////////////////////////////////////////////////
+
+resource "aws_lambda_event_source_mapping" "boost_event_process_lambda" {
+  event_source_arn = aws_sqs_queue.boost_process_queue.arn
+  enabled = true
+  function_name = aws_lambda_function.boost_event_process.arn
+  batch_size = 1 // for the moment
+  # maximum_batching_window_in_seconds = 2 // to prevent over eagerness here (but looks like not accepted yet on SQS)
+}
+
+/////////////////// IAM CONFIG //////////////////////////////////////////////////////////////////////////////////////
 
 resource "aws_iam_role_policy_attachment" "boost_event_process_basic_execution_policy" {
   role = "${aws_iam_role.boost_event_process_role.name}"
@@ -114,7 +127,10 @@ resource "aws_iam_role_policy_attachment" "boost_event_process_secret_get" {
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
 }
 
-
+resource "aws_iam_role_policy_attachment" "boost_process_queue_polling_policy" {
+  role = aws_iam_role.boost_event_process_role.name
+  policy_arn = aws_iam_policy.sqs_boost_process_queue_poll.arn
+}
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 

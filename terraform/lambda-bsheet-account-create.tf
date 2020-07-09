@@ -9,7 +9,7 @@ resource "aws_lambda_function" "balance_sheet_acc_create" {
   role                           = "${aws_iam_role.balance_sheet_acc_create_role.arn}"
   handler                        = "finworks-handler.createAccount"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 180
   tags                           = {"environment"  = "${terraform.workspace}"}
   

@@ -103,7 +103,7 @@ module.exports.setUserMessageBlock = async (event) => {
 
         const systemWideUserId = params.systemWideUserId || userDetails.systemWideUserId;
         
-        const existingBlock = await rdsMainUtil.fetchUserPushPreferences(systemWideUserId);
+        const existingBlock = await rdsMainUtil.fetchUserMsgPrefs(systemWideUserId);
         const { haltPushMessages } = params;
         
         const logContext = {};

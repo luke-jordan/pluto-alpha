@@ -9,7 +9,7 @@ resource "aws_lambda_function" "account_create" {
   role                           = "${aws_iam_role.account_create_role.arn}"
   handler                        = "account-handler.create"
   memory_size                    = 512
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
   

@@ -58,6 +58,9 @@ const handler = proxyquire('../boost-event-handler', {
     '@noCallThru': true
 });
 
+// note: these are not originally from SNS, hence only single-wrapper
+const wrapEventAsSqs = (event) => testHelper.composeSqsBatch([event]);
+
 const resetStubs = () => testHelper.resetStubs(
     insertBoostStub, findBoostStub, fetchBoostStub, findAccountsStub, 
     updateBoostAccountStub, alterBoostStub, publishStub, 
@@ -159,7 +162,7 @@ describe('*** UNIT TEST BOOST PROCESSING *** Individual or limited users', () =>
         // then we hand over to the boost redemption handler, which does a lot of stuff
         redemptionHandlerStub.resolves({ [testBoostId]: { result: 'SUCCESS' }});
 
-        const resultOfEventRecord = await handler.processEvent(testEvent);
+        const resultOfEventRecord = await handler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
         logger('Result of record: ', resultOfEventRecord);
 
         expect(resultOfEventRecord).to.exist;
@@ -272,7 +275,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         insertBoostLogStub.resolves([{ logId: testLogId, creationTime: mockPersistedTime }]);
 
         // then we will have to do a condition check, after which decide that the boost has been redeemed, and invoke the floa
-        const resultOfEventRecord = await handler.processEvent(testEvent);
+        const resultOfEventRecord = await handler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
         logger('Result of record: ', resultOfEventRecord);
 
         expect(resultOfEventRecord).to.exist;
@@ -330,8 +333,8 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const updateProcessedTime = moment();
         updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: updateProcessedTime }]);
 
-        const resultOfEventRecord = await handler.processEvent(testEvent);
-        logger('Result of record: ', resultOfEventRecord);
+        const resultOfEventRecord = await handler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
+        // logger('Result of record: ', resultOfEventRecord);
 
         expect(resultOfEventRecord).to.exist;
         
@@ -378,7 +381,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         fetchUncreatedBoostsStub.resolves([mockBoost]);
         findBoostStub.resolves([]);
 
-        const resultOfEventRecord = await handler.processEvent(testEvent);
+        const resultOfEventRecord = await handler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
         logger('Result of record: ', resultOfEventRecord);
 
         expect(insertBoostAccountsStub).to.not.have.been.called;
@@ -418,11 +421,9 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             }
         }]);
 
-        const resultOfEventRecord = await handler.processEvent(testEvent);
-        logger('Result of record: ', resultOfEventRecord);
+        const resultOfEventRecord = await handler.handleBatchOfQueuedEvents(wrapEventAsSqs(testEvent));
         expect(resultOfEventRecord).to.exist;
-
-        expect(resultOfEventRecord).to.deep.equal({ statusCode: 200, body: JSON.stringify({ boostsTriggered: 0 })});
+        expect(resultOfEventRecord).to.deep.equal([{ boostsTriggered: 0 }]);
         
         expect(publishStub).to.have.not.been.called;
     });

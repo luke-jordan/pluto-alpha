@@ -9,7 +9,7 @@ resource "aws_lambda_function" "boost_admin_list" {
   role                           = "${aws_iam_role.boost_admin_list_role.arn}"
   handler                        = "boost-admin-handler.listBoosts"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

@@ -9,7 +9,7 @@ resource "aws_lambda_function" "admin_referral_handle" {
   role                           = "${aws_iam_role.admin_referral_handle_role.arn}"
   handler                        = "admin-refs-handler.manageReferralCodes"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 30
   tags                           = {"environment"  = "${terraform.workspace}"}
   

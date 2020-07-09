@@ -9,7 +9,7 @@ resource "aws_lambda_function" "save_admin_settle" {
   role                           = "${aws_iam_role.save_admin_settle_role.arn}"
   handler                        = "saving-handler.settle"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

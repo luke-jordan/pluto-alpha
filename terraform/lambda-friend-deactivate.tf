@@ -9,7 +9,7 @@ resource "aws_lambda_function" "friend_deactivate" {
   role                           = "${aws_iam_role.friend_deactivate_role.arn}"
   handler                        = "friend-handler.deactivateFriendship"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

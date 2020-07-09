@@ -7,9 +7,9 @@ resource "aws_lambda_function" "user_event_process" {
 
   function_name                  = "${var.user_event_process}"
   role                           = "${aws_iam_role.user_event_process_role.arn}"
-  handler                        = "event-handler.handleUserEvent"
+  handler                        = "event-handler.handleBatchOfQueuedEvents"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 180
   tags                           = {"environment"  = "${terraform.workspace}"}
   
@@ -40,6 +40,10 @@ resource "aws_lambda_function" "user_event_process" {
                     "save_tx_api_worker": "${terraform.workspace}/ops/psql/transactions"
                 }
               },
+              "queues": {
+                "boostProcess": aws_sqs_queue.boost_process_queue.name,
+                "balanceSheetUpdate": aws_sqs_queue.balance_sheet_update_queue.name
+              },
               "publishing": {
                 "withdrawalEmailDestination": var.events_email_receipients[terraform.workspace],
                 "saveEmailDestination": var.events_email_receipients[terraform.workspace],
@@ -49,9 +53,6 @@ resource "aws_lambda_function" "user_event_process" {
                 },
                 "hash": {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
-                },
-                "processingLambdas": {
-                  "boosts": "${aws_lambda_function.boost_event_process.function_name}"
                 },
                 "eventsEmailAddress": "${var.events_source_email_address[terraform.workspace]}",
                 "adminSiteUrl": "${terraform.workspace == "master" ? "https://admin.jupitersave.com" : "https://staging-admin.jupitersave.com"}",
@@ -132,29 +133,18 @@ resource "aws_iam_role_policy_attachment" "user_event_process_secret_get" {
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_transaction_worker_read"
 }
 
-
-////////////////// SUBSCRIPTION TO TOPIC //////////////////////////////////////////////////////////////
-
-resource "aws_sns_topic_subscription" "user_event_process_lambda" {
-  topic_arn = var.user_event_topic_arn[terraform.workspace]
-  protocol = "lambda"
-  endpoint = aws_lambda_function.user_event_process.arn
-
-  filter_policy = "${jsonencode({
-    "eventType": [
-      {
-        "anything-but": ["USER_LOGIN", "MESSAGE_CREATED", "MESSAGE_FETCHED", "MESSAGE_PUSH_NOTIFICATION_SENT", "MESSAGE_SENT", "BOOST_CREATED_GAME", "BOOST_CREATED_SIMPLE", "BOOST_EXPIRED"]
-      }
-    ]
-  })}"
+resource "aws_iam_role_policy_attachment" "user_event_queue_polling_policy" {
+  role = aws_iam_role.user_event_process_role.name
+  policy_arn = aws_iam_policy.sqs_user_event_queue_poll.arn
 }
 
-resource "aws_lambda_permission" "with_sns" {
-    statement_id = "EventProcessAllowExecutionFromSNS"
-    action = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.user_event_process.function_name
-    principal = "sns.amazonaws.com"
-    source_arn = var.user_event_topic_arn[terraform.workspace]
+////////////////// SUBSCRIPTION TO TOPIC (VIA QUEUE) ////////////////////////////////////////////////////////
+
+resource "aws_lambda_event_source_mapping" "user_event_process_lambda" {
+  event_source_arn = aws_sqs_queue.user_event_process_queue.arn
+  enabled = true
+  function_name = aws_lambda_function.user_event_process.arn
+  batch_size = 5
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

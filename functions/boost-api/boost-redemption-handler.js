@@ -173,7 +173,8 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
         rewardParameters: boost.rewardParameters,
         poolContribution: poolContrib,
         transferResults: resultOfTransfer,
-        triggeringEventContext: event.eventContext
+        triggeringEventContext: event.eventContext,
+        logSource: 'boost_redemption_handler'
     };
 
     logger('Extracting userIds from affected account dict: ', affectedAccountDict);

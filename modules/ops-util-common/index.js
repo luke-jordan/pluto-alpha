@@ -139,7 +139,7 @@ module.exports.extractSNSEvent = (snsEvent) => JSON.parse(snsEvent.Message);
 // For handling various events
 module.exports.extractQueryParams = (event) => {
     const isEventEmpty = typeof event !== 'object' || Object.keys(event).length === 0;
-    logger('Is event empty ? : ', isEventEmpty);
+    // logger('Is event empty ? : ', isEventEmpty);
     if (isEventEmpty) {
         return {};
     }
@@ -153,7 +153,7 @@ module.exports.extractQueryParams = (event) => {
     logger('Event parameters type: ', typeof event.queryStringParameters);
     const nonEmptyQueryParams = typeof event.queryStringParameters === 'object' && event.queryStringParameters !== null && 
         Object.keys(event.queryStringParameters).length > 0;
-    logger('Are parameters empty ? : ', nonEmptyQueryParams);
+    // logger('Are parameters empty ? : ', nonEmptyQueryParams);
 
     if (nonEmptyQueryParams) {
         return event.queryStringParameters;

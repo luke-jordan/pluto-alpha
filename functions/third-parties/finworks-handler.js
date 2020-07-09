@@ -21,7 +21,8 @@ const BANK_BRANCH_CODES = {
     'ABSA': '632005',
     'STANDARD': '051001',
     'NEDBANK': '198765',
-    'CAPITEC': '470010'
+    'CAPITEC': '470010',
+    'TYME': '678910'
 };
 
 const FINWORKS_NAMES = {
@@ -29,7 +30,8 @@ const FINWORKS_NAMES = {
     'ABSA': 'ABSA',
     'STANDARD': 'Standard Bank',
     'NEDBANK': 'Nedbank',
-    'CAPITEC': 'Capitec'
+    'CAPITEC': 'Capitec',
+    'TYME': 'Tyme,'
 };
 
 const fetchAccessCreds = async () => {
@@ -197,7 +199,7 @@ module.exports.sendWithdrawal = async (event) => {
     }
 };
 
-module.exports.addTransaction = async (event) => {
+const directTransactionEvent = async (event) => {
     logger('Adding transaction to balance sheet, event: ', event);
     const { operation, transactionDetails } = event;
 
@@ -209,6 +211,17 @@ module.exports.addTransaction = async (event) => {
     const resultOfOperation = await dispatch[operation](transactionDetails);
     logger('Result of operation in dispatcher: ', resultOfOperation);
     return resultOfOperation;
+};
+
+/**
+ * Main entry point for regular operations
+ * @param {object} sqsEvent Standard SQS event with Records array, each entry has JSON stringified body
+ */
+module.exports.addTransaction = async (sqsEvent) => {
+    logger('Received: ', JSON.stringify(sqsEvent, null, 2));
+    const eventBodies = opsUtil.extractSQSEvents(sqsEvent);
+    const resultOfDispatch = await Promise.all(eventBodies.map((event) => directTransactionEvent(event)));
+    return resultOfDispatch;
 };
 
 module.exports.getMarketValue = async (event) => {

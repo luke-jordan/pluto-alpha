@@ -9,7 +9,7 @@ resource "aws_lambda_function" "user_history_aggregate" {
   role                           = "${aws_iam_role.user_history_aggregate_role.arn}"
   handler                        = "history-handler.calculateUserAmount"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

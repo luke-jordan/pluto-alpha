@@ -9,7 +9,7 @@ resource "aws_lambda_function" "save_payment_check" {
   role                           = "${aws_iam_role.save_payment_check_role.arn}"
   handler                        = "saving-handler.checkPendingPayment"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_token_manage" {
   role                           = "${aws_iam_role.message_token_manage_role.arn}"
   handler                        = "message-push-handler.managePushToken"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

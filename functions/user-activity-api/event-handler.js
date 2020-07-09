@@ -5,7 +5,7 @@
 
 const logger = require('debug')('jupiter:event-handling:main');
 const config = require('config');
-
+const opsUtil = require('ops-util-common');
 
 // primary dependencies for persistence and cache
 const persistence = require('./persistence/rds');
@@ -17,7 +17,6 @@ const publisher = require('publish-common');
 const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 
-const sqs = new AWS.SQS();
 const sns = new AWS.SNS();
 const lambda = new AWS.Lambda();
 
@@ -30,8 +29,8 @@ const withdrawEventHandler = require('./event/withdrawal-event-handler');
 
 // for unwrapping some AWS stuff
 const extractLambdaBody = (lambdaResult) => JSON.parse(JSON.parse(lambdaResult['Payload']).body);
-const extractSnsMessage = (snsEvent) => JSON.parse(snsEvent.Records[0].Sns.Message);
-const extractSnsMessageId = (snsEvent) => snsEvent.Records[0].Sns.MessageId;
+
+const extractSnsMessageId = (snsMessage) => snsMessage.MessageId;
 
 const invokeProfileLambda = async (systemWideUserId, includeContactMethod) => {
     const profileFetchLambdaInvoke = {
@@ -93,20 +92,16 @@ const EVENT_REQUIRES_CONTACT = {
 
 /**
  * This function handles successful account opening, saving, and withdrawal events. It is typically called by SNS. The following properties are expected in the SNS message:
- * @param {object} snsEvent An SNS event object containing our parameter(s) of interest in its Message property.
+ * @param {object} eventBody An event object containing our parameter(s) of interest
  * @property {string} eventType The type of event to be processed. Valid values are SAVING_PAYMENT_SUCCESSFUL, WITHDRAWAL_EVENT_CONFIRMED, and PASSWORD_SET (for opened accounts).
  */
-module.exports.handleUserEvent = async (snsEvent) => {
+module.exports.handleUserEvent = async (eventBody) => {
     try {
-        const eventBody = await extractSnsMessage(snsEvent);
         const { userId, eventType } = eventBody;
         if (!Reflect.has(EVENT_DISPATCHER, eventType)) {
             logger(`We don't handle ${eventType}, let it pass`);
             return { statusCode: 200 };
         }
-
-        // for tracing this slippery duplicate boost redemption event
-        logger(`SNS_EVENT_HANDLING:: Handling event with message ID: SNS_MESSAGE_ID::${extractSnsMessageId(snsEvent)}`);
 
         let userProfile = {};
         if (EVENT_REQUIRES_CONTACT[eventType].requiresProfile) {
@@ -116,12 +111,28 @@ module.exports.handleUserEvent = async (snsEvent) => {
         // as noted in the individual modules, singleton-injection will come at some point, and this is a little inelegant,
         // but it means a single Lambda container will only have one of each and will handle all events 
 
-        await EVENT_DISPATCHER[eventType]({ eventBody, userProfile, persistence, publisher, lambda, sqs, sns, redis });
+        await EVENT_DISPATCHER[eventType]({ eventBody, userProfile, persistence, publisher, lambda, sns, redis });
 
         return { statusCode: 200 };
     } catch (err) {
         logger('FATAL_ERROR: ', err);
-        await publisher.addToDlq(config.get('publishing.userEvents.processingDlq'), snsEvent, err);
+        await publisher.addToDlq(config.get('queues.eventDlq'), eventBody, err);
         return { statusCode: 500 };
     }
+};
+
+/**
+ * This function processes a batch of events from SQS
+ * @param {object} sqsEvent As usual for AWS, wrapped in half a dozen layers, but includes events of interest
+ */
+module.exports.handleBatchOfQueuedEvents = async (sqsEvent) => {
+    const snsEvents = opsUtil.extractSQSEvents(sqsEvent);
+    logger('Extracted SNS events: ', snsEvents);
+
+    // for tracing this slippery duplicate boost redemption event
+    snsEvents.forEach((snsEvent) => logger(`SNS_EVENT_HANDLING:: Handling event with message ID: SNS_MESSAGE_ID::${extractSnsMessageId(snsEvent)}`));
+
+    const userEvents = snsEvents.map((snsEvent) => opsUtil.extractSNSEvent(snsEvent));
+    // failures happen inside individual event handling to avoid errors on one causing retries of all 
+    return Promise.all(userEvents.map((event) => exports.handleUserEvent(event)));
 };

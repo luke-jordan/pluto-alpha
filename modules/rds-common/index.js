@@ -454,7 +454,7 @@ class RdsConnection {
         try {
             await client.query('BEGIN');
             await client.query('SET TRANSACTION READ WRITE');
-            logger('Update query defs: ', updateQueryDefs);
+            // logger('Update query defs: ', updateQueryDefs);
             const queries = updateQueryDefs.map((queryDef) => RdsConnection.compileUpdateQueryAndArray(queryDef)).
                 map((queryAndArray) => client.query(queryAndArray.query, queryAndArray.values));
             for (const insert of insertQueryDefs) {

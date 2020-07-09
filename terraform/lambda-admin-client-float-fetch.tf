@@ -9,7 +9,7 @@ resource "aws_lambda_function" "admin_client_float_fetch" {
   role                           = "${aws_iam_role.admin_client_float_fetch_role.arn}"
   handler                        = "admin-float-handler.fetchClientFloatDetails"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
   

@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_user_create_recurr" {
   role                           = "${aws_iam_role.message_user_create_recurr_role.arn}"
   handler                        = "message-creating-handler.createFromPendingInstructions"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

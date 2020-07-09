@@ -9,7 +9,7 @@ resource "aws_lambda_function" "message_instruct_update" {
   role                           = "${aws_iam_role.message_instruct_update_role.arn}"
   handler                        = "msg-instruction-handler.updateInstruction"
   memory_size                    = 256
-  runtime                        = "nodejs10.x"
+  runtime                        = "nodejs12.x"
   timeout                        = 60
   tags                           = {"environment"  = "${terraform.workspace}"}
   

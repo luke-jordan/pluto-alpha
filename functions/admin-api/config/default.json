@@ -40,6 +40,9 @@
         "sendOutboundMessages": "outbound_comms_send",
         "boostProcessEvent": "boost_event_process"
     },
+    "queues": {
+        "boostProcess": "boost_process_queue"
+    },
     "binaries": {
         "endpoint": "<binary-upload-endpoint>",
         "s3": {
