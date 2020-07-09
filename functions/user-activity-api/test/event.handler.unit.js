@@ -572,6 +572,14 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
         expect(sendEventToQueueStub).to.have.been.calledWithExactly('balance_sheet_update_queue', [bsheetPayload], true);
     });
+    
+    it('Dispatches admin settled withdrawal to boost processing', async () => {
+
+    });
+
+    it('Dispatches withdrawal cancelled to boost processing', async () => {
+
+    });
 
     it('Catches thrown errors, sends failed processes to DLQ', async () => {
         const testAccountId = uuid();

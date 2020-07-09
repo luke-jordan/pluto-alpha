@@ -8,6 +8,7 @@ const helper = require('./boost.test.helper');
 const { ACTIVE_BOOST_STATUS } = require('../boost.util');
 
 // testing more background events, like friendships, and so forth, and leaving boost.process.unit for user-driven
+// also, given importance, and trickiness of revocation etc., putting the withdrawal-based ones in own file
 const sinon = require('sinon');
 const chai = require('chai');
 const expect = chai.expect;

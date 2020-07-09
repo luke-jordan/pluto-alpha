@@ -83,25 +83,25 @@ describe('*** UNIT TEST BOOSTS *** General audience, via wrapper (simple admin c
     beforeEach(() => resetStubs());
 
     const testRedemptionMsgId = uuid();
-    
-    it('Happy path creating a time-limited simple, general boost', async () => {
-        const testAdminId = uuid();
-        const testStartTime = moment();
-        const testEndTime = moment().add(7, 'days');
-        const testAudienceId = uuid();
+    const testAdminId = uuid();
+    const testStartTime = moment();
+    const testEndTime = moment().add(7, 'days');
+    const testPersistedTime = moment();
 
+    const testAudienceId = uuid();
+    const testNumberOfUsersInAudience = 100000;
+
+    const mockPersistenceResult = {
+        boostId: uuid(),
+        persistedTimeMillis: testPersistedTime.valueOf(),
+        numberOfUsersEligible: testNumberOfUsersInAudience
+    };
+
+    it('Happy path creating a time-limited simple, general boost', async () => {
         momentStub.withArgs().returns(testStartTime);
         momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
 
-        const testNumberOfUsersInAudience = 100000;
-
-        const testPersistedTime = moment();
-        const persistenceResult = {
-            boostId: uuid(),
-            persistedTimeMillis: testPersistedTime.valueOf(),
-            numberOfUsersEligible: testNumberOfUsersInAudience
-        };
-        createBoostStub.resolves(persistenceResult);
+        createBoostStub.resolves(mockPersistenceResult);
 
         const testBodyOfEvent = {
             label: 'Monday Limited Time Boost',
@@ -123,7 +123,38 @@ describe('*** UNIT TEST BOOSTS *** General audience, via wrapper (simple admin c
         const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testAdminId, 'SYSTEM_ADMIN'));
 
         const bodyOfResult = helper.standardOkayChecks(resultOfInstruction);
-        expect(bodyOfResult).to.deep.equal(persistenceResult);
+        expect(bodyOfResult).to.deep.equal(mockPersistenceResult);
+
+        expect(createBoostStub).to.have.been.calledWithExactly({ ...testBodyOfEvent, creatingUserId: testAdminId });
+    });
+
+    it('Happy path creating a simple, absolute balance boost', async () => {
+        momentStub.withArgs().returns(testStartTime);
+        momentStub.withArgs(testEndTime.valueOf()).returns(testEndTime);
+
+        createBoostStub.resolves(mockPersistenceResult);
+
+        const testBodyOfEvent = {
+            label: 'Monday Limited Time Boost',
+            boostTypeCategory: 'SIMPLE::TARGET_BALANCE',
+            boostAmountOffered: '100000::HUNDREDTH_CENT::USD',
+            boostBudget: 10000000,
+            boostSource: {
+                bonusPoolId: 'primary_bonus_pool',
+                clientId: 'some_client_co',
+                floatId: 'primary_cash'
+            },
+            endTimeMillis: testEndTime.valueOf(),
+            statusConditions: { REDEEMED: ['balance_crossed_abs_target #{200000::HUNDREDTH_CENT::USD}'] },
+            boostAudienceType: 'GENERAL',
+            audienceId: testAudienceId,
+            redemptionMsgInstructions: [{ accountId: 'ALL', msgInstructionId: testRedemptionMsgId }]
+        };
+
+        const resultOfInstruction = await handler.createBoostWrapper(helper.wrapEvent(testBodyOfEvent, testAdminId, 'SYSTEM_ADMIN'));
+
+        const bodyOfResult = helper.standardOkayChecks(resultOfInstruction);
+        expect(bodyOfResult).to.deep.equal(mockPersistenceResult);
 
         expect(createBoostStub).to.have.been.calledWithExactly({ ...testBodyOfEvent, creatingUserId: testAdminId });
     });

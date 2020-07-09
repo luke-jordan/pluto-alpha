@@ -105,9 +105,9 @@ module.exports.findBoost = async (attributes) => {
 
 module.exports.fetchUncreatedActiveBoostsForAccount = async (accountId) => {
     const findBoostQuery = `select * from ${boostTable} where active = true and end_time > current_timestamp ` +
-        `and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
+        `and not ($2 = any(flags)) and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
 
-    const queryValues = [accountId];
+    const queryValues = [accountId, 'FRIEND_TOURNAMENT'];
 
     const boostsRetrieved = await rdsConnection.selectQuery(findBoostQuery, queryValues);
     logger('Retrieved uncreated boosts:', boostsRetrieved.map((row) => row['boost_id']));
@@ -352,6 +352,7 @@ const extractAccountIds = async (audienceId) => {
     return queryResult.map((row) => row['account_id']);
 };
 
+module.exports.
 
 // ///////////////////////////////////////////////////////////////
 // //////////// BOOST PERSISTENCE STARTS HERE ///////////////
@@ -449,7 +450,10 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
-module.exports.insertBoostAccount = async (boostIds, accountId, boostStatus) => {
+// note : performs a cross join, i.e., all boost IDs, all accountIDs. in practice
+// almost always called (as should be case) with either one boost and many accounts
+// or one account and many boosts
+module.exports.insertBoostAccount = async (boostIds, accountIds, boostStatus) => {
     const boostAccountJoins = boostIds.map((boostId) => ({ boostId, accountId, boostStatus }));
     const boostJoinQueryDef = {
         query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
