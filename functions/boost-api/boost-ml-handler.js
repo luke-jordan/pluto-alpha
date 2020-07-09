@@ -96,16 +96,14 @@ const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds,
  */
 module.exports.processMlBoosts = async (event) => {
     try {
-        logger('ML boost process recieved event', event);
-
-        // todo: event validation
-        const mlBoosts = await persistence.fetchActiveMlBoosts();
+        const boostId = event.boostId || null;
+        const mlBoosts = await persistence.fetchActiveMlBoosts(boostId);
         logger('Got machine-determined boosts:', mlBoosts);
 
-        // todo: filter out results where no accounts survive the filter (once-off boosts where all accounts have already been offered)
-        const boostsAndRecipients = await Promise.all(mlBoosts.map((boost) => selectUsersForBoostOffering(boost)));
-        logger('Got boosts and recipients:', boostsAndRecipients);
+        const resultOfSelection = await Promise.all(mlBoosts.map((boost) => selectUsersForBoostOffering(boost)));
+        logger('Got boosts and recipients:', resultOfSelection);
 
+        const boostsAndRecipients = resultOfSelection.filter((result) => result.boostId && result.accountIds);
         const statusUpdateInstructions = boostsAndRecipients.map((boost) => createUpdateInstruction(boost.boostId, boost.accountIds));
         logger('Created boost status update instructions:', statusUpdateInstructions);
 

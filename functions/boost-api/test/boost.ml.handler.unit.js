@@ -63,7 +63,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
   
     const testCreatingUserId = uuid();
 
-    const mockMlBoostFromRds = {
+    const mockMlBoostFromRds = (mlParameters) => ({
         boostId: testBoostId,
         creatingUserId: testCreatingUserId,
         label: 'Midweek Catch Arrow',
@@ -82,8 +82,8 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         audienceId: testAudienceId,
         defaultStatus: 'CREATED',
         messageInstructionIds: { },
-        mlParameters: { onlyOfferOnce: true, maxPortionOfAudience: 0.2 }
-    };
+        mlParameters
+    });
 
     const mockBoostAccountStatus = (accountId, boostStatus) => ({
         boostId: testBoostId,
@@ -100,9 +100,14 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const firstAccStatus = mockBoostAccountStatus('account-id-1', 'CREATED');
         const secondAccStatus = mockBoostAccountStatus('account-id-2', 'OFFERED');
 
+        const mlParameters = { onlyOfferOnce: true, maxPortionOfAudience: 0.2 };
+
         const tinyOptions = {
             url: config.get('dataPipeline.endpoint'),
-            data: { boost: mockMlBoostFromRds, userIds: ['user-id-1'] }
+            data: {
+                boost: mockMlBoostFromRds(mlParameters),
+                userIds: ['user-id-1']
+            }
         };
 
         const audienceInvocation = {
@@ -127,7 +132,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
         accountStatusStub.resolves([firstAccStatus, secondAccStatus]);
-        fetchMlBoostsStub.resolves([mockMlBoostFromRds]);
+        fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
         extractAccountIdsStub.resolves(mockAccountIds);
         findUserIdsStub.resolves({ 'user-id-1': 'account-id-1' });
         tinyGetStub.resolves(['user-id-1']);
@@ -136,7 +141,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         expect(resultOfBoost).to.exist;
         expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
-        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
+        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly(null);
         expect(accountStatusStub).to.have.been.calledOnceWithExactly(testBoostId, ['account-id-1', 'account-id-2']);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(audienceInvocation);
         expect(tinyGetStub).to.have.been.calledOnceWithExactly(tinyOptions);
@@ -146,15 +151,15 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
     });
 
     it('Handles recurring machine determined boost offerings', async () => {
-        const persistedMlBoost = { ...mockMlBoostFromRds };
-        persistedMlBoost.mlParameters.onlyOfferOnce = false;
-        persistedMlBoost.mlParameters.minIntervalBetweenRuns = { unit: 'days', value: 30 };
-
+        const mlParameters = { onlyOfferOnce: false, minIntervalBetweenRuns: { unit: 'days', value: 30 }};
         const mockAccountIds = ['account-id-1', 'account-id-2'];
 
         const tinyOptions = {
             url: config.get('dataPipeline.endpoint'),
-            data: { boost: persistedMlBoost, userIds: ['user-id-1', 'user-id-2'] }
+            data: {
+                boost: mockMlBoostFromRds(mlParameters),
+                userIds: ['user-id-1', 'user-id-2']
+            }
         };
 
         const expectedStatusUpdateInstruction = {
@@ -187,7 +192,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
         findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2' });
-        fetchMlBoostsStub.resolves([mockMlBoostFromRds]);
+        fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
         extractAccountIdsStub.resolves(mockAccountIds);
         findBoostLogStub.onFirstCall().resolves(mockBoostLog('account-id-1'));
         findBoostLogStub.onSecondCall().resolves(mockBoostLog('account-id-2'));
@@ -197,7 +202,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         expect(resultOfBoost).to.exist;
         expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
-        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
+        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly(null);
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(audienceInvocation);
         expect(tinyGetStub).to.have.been.calledOnceWithExactly(tinyOptions);
         expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
