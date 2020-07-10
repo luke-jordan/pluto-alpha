@@ -461,9 +461,10 @@ const cancelTransactionIncludingLogging = async ({ transactionId, systemWideUser
     const logContext = { oldStatus: settlementStatus, newStatus: 'CANCELLED' };
     const txLog = { accountId, systemWideUserId, logContext };
     const userLog = { transactionId, ...logContext };
+    // we use "ABORTED" here so boosts and other event processing can handle this differently
     await Promise.all([
         persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'CANCELLED', logToInsert: txLog }),
-        publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED', { context: userLog })
+        publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_ABORTED', { context: userLog })
     ]);
 };
 

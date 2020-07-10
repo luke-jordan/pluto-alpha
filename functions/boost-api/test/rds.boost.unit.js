@@ -366,7 +366,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(multiTableStub).to.have.been.calledOnceWithExactly([insertFirstDef]);
     });
 
-    it('Inserts boost-account', async () => {
+    it('Inserts boost-account joins', async () => {
         const testBoostStatus = 'CREATED';
         const testCreationTime = moment().format();
 
@@ -374,15 +374,15 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const columnTemplate = '${boostId}, ${accountId}, ${boostStatus}';
         const boostRow = { boostId: testBoostId, accountId: testAccountId, boostStatus: testBoostStatus };
     
-        const boostQueryDef = { query: insertBoostQuery, columnTemplate, rows: [boostRow, boostRow] };
+        const boostQueryDef = { query: insertBoostQuery, columnTemplate, rows: [boostRow, boostRow, boostRow, boostRow] };
 
         multiTableStub.resolves([
             [{ 'insertion_id': 100, 'creation_time': moment().format() }, { 'insertion_id': 101, 'creation_time': moment().format() }]
         ]);
 
-        const expectedResult = { boostIds: [testBoostId, testBoostId], accountId: testAccountId, persistedTimeMillis: moment(testCreationTime).valueOf() };
+        const expectedResult = { boostIds: [testBoostId, testBoostId], accountIds: [testAccountId, testAccountId], persistedTimeMillis: moment(testCreationTime).valueOf() };
 
-        const resultOfInsertion = await rds.insertBoostAccount([testBoostId, testBoostId], testAccountId, testBoostStatus);
+        const resultOfInsertion = await rds.insertBoostAccountJoins([testBoostId, testBoostId], [testAccountId, testAccountId], testBoostStatus);
 
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.deep.equal(expectedResult);

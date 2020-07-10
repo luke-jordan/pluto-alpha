@@ -1,6 +1,9 @@
 'use strict';
 
+const moment = require('moment');
 const helper = require('./boost.test.helper');
+
+const { ACTIVE_BOOST_STATUS } = require('../boost.util');
 
 const sinon = require('sinon');
 const chai = require('chai');
@@ -8,7 +11,6 @@ const expect = chai.expect;
 chai.use(require('sinon-chai'));
 
 const proxyquire = require('proxyquire');
-const { expect } = require('chai');
 
 const fetchActiveDynamicBoostStub = sinon.stub();
 const fetchActiveStandardBoostStub = sinon.stub();
@@ -19,13 +21,13 @@ const insertBoostAccountsStub = sinon.stub();
 const fetchAccountsStub = sinon.stub();
 const fetchUserIdsStub = sinon.stub();
 
-const redeemBoostStub = sinon.stub();
+const redemptionHandlerStub = sinon.stub();
 const updateBoostStatusStub = sinon.stub();
 const updateBoostRedeemedStub = sinon.stub();
 
 const lambdaInvokeStub = sinon.stub();
 
-const publishSingleEventStub = sinon.stub();
+// const publishSingleEventStub = sinon.stub();
 const publishMultiEventStub = sinon.stub();
 
 const handler = proxyquire('../boost-scheduled-handler', {
@@ -33,17 +35,20 @@ const handler = proxyquire('../boost-scheduled-handler', {
         'fetchBoostsWithDynamicAudiences': fetchActiveDynamicBoostStub,
         'fetchActiveStandardBoosts': fetchActiveStandardBoostStub,
         'fetchNewAudienceMembers': findNewAudienceMembersStub,
-        'insertBoostAccount': insertBoostAccountsStub,
+        'insertBoostAccountJoins': insertBoostAccountsStub,
         'findAccountsForBoost': fetchAccountsStub,
         'findUserIdsForAccounts': fetchUserIdsStub,
         'updateBoostAccountStatus': updateBoostStatusStub,
         'updateBoostAmountRedeemed': updateBoostRedeemedStub,
+        '@noCallThru': true
     },
     './boost-redemption-handler': {
-        'redeemOrRevokeBoosts': redemptionHandlerStub
+        'redeemOrRevokeBoosts': redemptionHandlerStub,
+        '@noCallThru': true
     },
     'publish-common': {
-        'publishUserEvent': publishSingleEventStub
+        'publishMultiUserEvent': publishMultiEventStub,
+        '@noCallThru': true
     },
     'aws-sdk': {
         'Lambda': class {
@@ -52,7 +57,10 @@ const handler = proxyquire('../boost-scheduled-handler', {
     }
 });
 
-const resetStubs = helper.resetStubs(fetchActiveDynamicBoostStub, findNewAudienceMembersStub, insertBoostAccountsStub, fetchUserIdsStub, lambdaInvokeStub);
+const resetStubs = () => helper.resetStubs(
+    fetchActiveDynamicBoostStub, fetchActiveStandardBoostStub, findNewAudienceMembersStub, insertBoostAccountsStub, 
+    fetchUserIdsStub, lambdaInvokeStub
+);
 
 describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
 
@@ -67,7 +75,7 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
     it('Do nothing if no active boosts with dynamic audiences', async () => {
         fetchActiveDynamicBoostStub.resolves([]);
         const resultOfProcess = await handler.refreshDynamicAudienceBoosts();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, result: 'NO_BOOSTS' });
+        expect(resultOfProcess).to.deep.equal({ result: 'NO_BOOSTS' });
         
         expect(fetchActiveDynamicBoostStub).to.have.been.calledOnceWithExactly();
         
@@ -85,10 +93,10 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
         lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })}); // we just need to know it's completed
 
         const resultOfProcess = await handler.refreshDynamicAudienceBoosts();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, result: 'BOOSTS_REFRESHED', boostsRefreshed: 1, newOffers: 0 });
+        expect(resultOfProcess).to.deep.equal({ result: 'BOOSTS_REFRESHED', boostsRefreshed: 1, newOffers: 0 });
 
         expect(fetchActiveDynamicBoostStub).to.have.been.calledOnceWithExactly();
-        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(refreshInvocation(audienceId));
+        expect(lambdaInvokeStub).to.have.been.calledOnceWithExactly(refreshInvocation('audience-id'));
         expect(findNewAudienceMembersStub).to.have.been.calledOnceWithExactly('boost-id', 'audience-id');
 
         helper.expectNoCalls(insertBoostAccountsStub, fetchUserIdsStub);
@@ -98,13 +106,19 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
         const mockBoost = {
             boostId: 'boost-id',
             creatingUserId: 'creator-id',
+            
             boostType: 'SOCIAL',
+            boostCategory: 'ADD_FRIEND',
 
             boostStartTime: moment(),
             boostEndTime: moment().add(6, 'months'),
 
+            boostAmount: 100000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+
             audienceId: 'audience-id',
-            initialStatus: 'OFFERED',
+            defaultStatus: 'OFFERED',
 
             statusConditions: {
                 REDEEMED: ['total_number_friends #{5::INITIATED}']
@@ -123,25 +137,25 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
         fetchUserIdsStub.resolves(['user-2']);
 
         const resultOfProcess = await handler.refreshDynamicAudienceBoosts();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, result: 'BOOSTS_REFRESHED', boostsRefreshed: 1, newOffers: 0 });
+        expect(resultOfProcess).to.deep.equal({ result: 'BOOSTS_REFRESHED', boostsRefreshed: 1, newOffers: 2 });
 
         expect(lambdaInvokeStub).to.have.been.calledTwice;
-        expect(lambdaInvokeStub).to.have.been.calledWithExactly(refreshInvocation(audienceId));
+        expect(lambdaInvokeStub).to.have.been.calledWithExactly(refreshInvocation('audience-id'));
 
-        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly();
+        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly(['boost-id'], ['account-1', 'account-2'], 'OFFERED');
 
         expect(fetchUserIdsStub).to.have.been.calledOnceWithExactly(['account-1', 'account-2']);
 
         const expectedMessageParameters = { boostAmount: '$10' };
 
-        const msgInstructionPayload = (instructionId, destinationUserId) = { 
+        const msgInstructionPayload = (instructionId, destinationUserId) => ({ 
             instructionId, 
             destinationUserId,
             parameters: expectedMessageParameters
-        };
+        });
 
         const msgInvocation = {
-            FunctionName: 'message_user_create',
+            FunctionName: 'message_user_create_once',
             InvocationType: 'Event', // make sure idempotent ...
             Payload: JSON.stringify({
                 instructions: [msgInstructionPayload('instruction-1', 'user-2'), msgInstructionPayload('instruction-2', 'user-2')]
@@ -156,8 +170,8 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
                 boostType: 'SOCIAL', 
                 boostCategory: 'ADD_FRIEND', 
                 boostId: 'boost-id',
-                boostAmount: 100,
-                boostUnit: 'WHOLE_CURRENCY',
+                boostAmount: 100000,
+                boostUnit: 'HUNDREDTH_CENT',
                 boostCurrency: 'USD',
                 boostStartTime: mockBoost.boostStartTime.valueOf(), 
                 boostEndTime: mockBoost.boostEndTime.valueOf(), 
@@ -167,6 +181,7 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
             }
         };
 
+        expect(publishMultiEventStub).to.have.been.calledOnce;
         expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(['user-2'], 'BOOST_CREATED_SOCIAL', expectedUserLogOptions);
     });
 
@@ -183,8 +198,9 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         REDEEMED: ['save_event_greater_than #{100::WHOLE_CURRENCY::EUR}']
     };
 
-    const mockBoost = (statusConditions) => ({
+    const mockBoost = (statusConditions, boostStartTime = moment().subtract(91, 'DAYS')) => ({
         boostId: 'boost-id',
+        boostStartTime,
         statusConditions        
     });
 
@@ -200,7 +216,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200, Payload: JSON.stringify(payload) })})
     };
 
-    const expectedUpdateInstruction = (newStatus, accountId, logContext) = [{
+    const expectedUpdateInstruction = (newStatus, accountId, logContext) => [{
         boostId: testBoostId,
         accountIds: [accountId],
         newStatus,
@@ -218,10 +234,23 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         fetchActiveStandardBoostStub.resolves([mockBoost(nonTimeBasedCondition)]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, boostsProcessed: 0 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 0 });
 
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
-        helper.expectNoCalls(fetchAccountsStub, updateBoostStatusStub, redeemBoostStub);
+        helper.expectNoCalls(fetchAccountsStub, updateBoostStatusStub, redemptionHandlerStub);
+    });
+
+    it('Does not execute if boost is too new for interval to have elapsed', async () => {
+        fetchActiveStandardBoostStub.resolves([mockBoost(testStatusConditions, moment().subtract(10, 'DAYS'))]);
+        fetchAccountsStub.resolves({ 'boost-id': {}}); // not really relevant
+
+        const resultOfProcess = await handler.processTimeBasedConditions();
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 0 });
+
+        expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostIds: ['boost-id'], status: ACTIVE_BOOST_STATUS });
+        helper.expectNoCalls(updateBoostStatusStub, redemptionHandlerStub);
+
     });
 
     it('Executes conditions accordingly if any such found, but no account matches conditions', async () => {
@@ -233,15 +262,15 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         setLambdaToReturn([]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, boostsProcessed: 1, boostsTriggered: 0 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 0 });
 
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
         expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
 
-        helper.expectNoCalls(updateBoostStatusStub, redeemBoostStub);
+        helper.expectNoCalls(updateBoostStatusStub, redemptionHandlerStub);
     });
 
-    it('Does nothing if one event is present but not expired or none other', async () => {
+    it.only('Does nothing if one event is present but not expired or none other', async () => {
         fetchActiveStandardBoostStub.resolves([mockBoost(testStatusConditions)]);
         fetchAccountsStub.resolves(['account-1']);
         fetchUserIdsStub.resolves(['user-1']);
@@ -255,12 +284,12 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         ]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 0 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 0 });
         
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
         expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
 
-        helper.expectNoCalls(updateBoostStatusStub, redeemBoostStub); 
+        helper.expectNoCalls(updateBoostStatusStub, redemptionHandlerStub); 
     });
 
     // note : this is all going to be quite expensive, so probably only run once a day
@@ -278,7 +307,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         ]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });
         
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
         expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
@@ -286,7 +315,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         const expectedUpdate = expectedUpdateInstruction('UNLOCKED', 'account-1', { newStatus: 'UNLOCKED' });
         expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedUpdate);
 
-        helper.expectNoCalls(redeemBoostStub);
+        helper.expectNoCalls(redemptionHandlerStub);
 
     });
 
@@ -309,7 +338,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         ]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });
         
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
         expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
@@ -317,7 +346,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         const expectedUpdate = expectedUpdateInstruction('FAILED', 'account-1', { newStatus: 'FAILED' });
         expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedUpdate);
 
-        helper.expectNoCalls(redeemBoostStub); 
+        helper.expectNoCalls(redemptionHandlerStub); 
     });
 
     it('Redeems the boost if condition passes', async () => {
@@ -343,7 +372,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         ]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200, boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });        
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });        
 
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
         expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
@@ -357,7 +386,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
             revocationBoosts: [],
             affectedAccountsDict: { ['boost-id']: { ...mockAccountDict }},
         };
-        expect(redeemBoostStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
+        expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
 
         expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly(['boost-id']);
     });
@@ -374,7 +403,14 @@ describe('*** UNIT TEST EXECUTES ALL ***', async () => {
         fetchActiveStandardBoostStub.resolves([]);
 
         const resultOfProcess = await handler.handleAllScheduledTasks();
-        expect(resultOfProcess).to.deep.equal({ statusCode: 200 });
+        const expectedResult = {
+            statusCode: 200,
+            resultOfProcessing: {
+                resultOfTimeProcessing: { boostsProcessed: 0 },
+                resultOfAudienceRefreshing: { result: 'NO_BOOSTS' }
+            }
+        }
+        expect(resultOfProcess).to.deep.equal(expectedResult);
 
         expect(fetchActiveDynamicBoostStub).to.have.been.calledOnceWithExactly();
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();

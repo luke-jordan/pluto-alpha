@@ -59,3 +59,20 @@ module.exports.errorResponse = (err) => ({
     body: JSON.stringify(err.message)
 });
 
+module.exports.constructBoostContext = (boost) => ({
+    boostId: boost.boostId,
+    boostType: boost.boostType,
+    boostCategory: boost.boostCategory,
+
+    boostStartTime: boost.boostStartTime.valueOf(),
+    boostEndTime: boost.boostEndTime.valueOf(),
+
+    // some extra context, to seed ML properly
+    statusConditions: boost.statusConditions,
+    rewardParameters: boost.rewardParameters,
+    gameParams: boost.gameParams,
+    
+    boostAmount: boost.boostAmount,
+    boostUnit: boost.boostUnit,
+    boostCurrency: boost.boostCurrency
+});

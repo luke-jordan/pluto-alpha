@@ -79,7 +79,7 @@ const createBoostsTriggeredByEvent = async (event) => {
         return 'NO_BOOSTS_CREATED';
     }
 
-    return persistence.insertBoostAccount(boostsToCreate, accountId, 'CREATED');
+    return persistence.insertBoostAccountJoins(boostsToCreate, [accountId], 'CREATED');
 };
 
 const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {

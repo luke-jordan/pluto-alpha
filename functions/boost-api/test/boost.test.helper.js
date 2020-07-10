@@ -12,6 +12,8 @@ module.exports.resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
+module.exports.expectNoCalls = (...stubs) => stubs.forEach((stub) => expect(stub).to.not.have.been.called);
+
 module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     body: JSON.stringify(requestBody),
     requestContext: {

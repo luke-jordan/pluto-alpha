@@ -16,6 +16,12 @@ const SAVE_CONDITIONS = [
     'balance_crossed_abs_target'
 ];
 
+const EVENT_BASED_CONDITIONS = [
+    'event_occurs',
+    'event_does_follow',
+    'event_does_not_follow'
+];
+
 const EVENT_TYPE_CONDITION_MAP = {
     'SAVING_PAYMENT_SUCCESSFUL': SAVE_CONDITIONS,
     'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
@@ -132,6 +138,44 @@ const checkBoostTagged = (parameterValue, boostTags, boostId) => {
     return boostTags.includes(soughtBoostId);
 };
 
+// todo : think through fully earliest/latest, combinations, etc. 
+// (e.g., if save twice in period and then withdraw at 61 days from first save but 10 from second save) - use tests
+const checkEventDoesNotFollow = (parameterValue, eventContext) => {
+    const [firstEventType, secondEventType, timeAmount, timeUnit] = parameterValue.split('::');
+    const { eventHistory } = eventContext.eventHistory.sort((eventA, eventB) => eventA.isBefore(eventB) ? 1 : -1);
+    const firstOccurenceOfFirstType = eventHistory.find((event) => event.eventType === firstEventType);
+    if (!firstOccurenceOfFirstType) {
+        return false; // because by definition has not passed
+    }
+
+    const thresholdTime = moment(firstOccurenceOfFirstType.timestamp).add(parseInt(timeAmount, 10), timeUnit);
+
+    const firstOccurenceOfSecondType = eventHistory.find((event) => event.evenType === secondEventType);    
+    if (!firstOccurenceOfSecondType) {
+        return moment().isAfter(thresholdTime);
+    }
+
+    return moment(firstOccurenceOfSecondType.timestamp).isAfter(thresholdTime);
+};
+
+const checkEventFollows = (parameterValue, eventContext) => {
+    const [firstEventType, secondEventType, timeAmount, timeUnit] = parameterValue.split('::');
+    const { eventHistory } = eventContext.eventHistory.sort((eventA, eventB) => eventA.isBefore(eventB) ? 1 : -1);
+    const firstOccurenceOfFirstType = eventHistory.find((event) => event.eventType === firstEventType);
+    if (!firstOccurenceOfFirstType) {
+        return false; // because by definition has not passed
+    }
+
+    const thresholdTime = moment(firstOccurenceOfFirstType.timestamp).add(parseInt(timeAmount, 10), timeUnit);
+
+    const firstOccurenceOfSecondType = eventHistory.find((event) => event.evenType === secondEventType);    
+    if (!firstOccurenceOfSecondType) {
+        return false; // by definition
+    }
+
+    return moment(firstOccurenceOfSecondType.timestamp).isBefore(thresholdTime);
+};
+
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
@@ -145,10 +189,11 @@ module.exports.testCondition = (event, statusCondition) => {
     const { eventType, eventContext, boostId } = event;
 
     // these two lines ensure we do not get caught in infinite loops because of boost/messages publishing, and that we only check the right events for the right conditions
-    const isEventTriggeredButForbidden = (conditionType === 'event_occurs' && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));
+    const isEventCondition = EVENT_BASED_CONDITIONS.includes(conditionType);
+    const isEventTriggeredButForbidden = (isEventCondition && (eventType.startsWith('BOOST') || eventType.startsWith('MESSAGE')));   
     
     const isConditionAndEventTypeForbidden = !EVENT_TYPE_CONDITION_MAP[eventType] || !EVENT_TYPE_CONDITION_MAP[eventType].includes(conditionType);
-    const isNonEventTriggeredButForbidden = conditionType !== 'event_occurs' && isConditionAndEventTypeForbidden;
+    const isNonEventTriggeredButForbidden = !isEventCondition && isConditionAndEventTypeForbidden;
     
     if (isEventTriggeredButForbidden || isNonEventTriggeredButForbidden) {
         return false;
@@ -208,6 +253,11 @@ module.exports.testCondition = (event, statusCondition) => {
         case 'event_occurs':
             logger('Checking if event type matches parameter: ', eventType === parameterValue);
             return eventType === parameterValue;
+        case 'event_does_not_follow':
+            return checkEventDoesNotFollow(parameterValue, eventContext);
+        case 'event_does_follow':
+            return checkEventFollows(parameterValue, eventContext);
+
         default:
             logger('Condition type not supported yet');
             return false;

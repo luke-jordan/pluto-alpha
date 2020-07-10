@@ -44,7 +44,7 @@ const handler = proxyquire('../boost-event-handler', {
         'alterBoost': alterBoostStub,
         'getAccountIdForUser': getAccountIdForUserStub,
         'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
-        'insertBoostAccount': insertBoostAccountsStub,
+        'insertBoostAccountJoins': insertBoostAccountsStub,
         'insertBoostAccountLogs': insertBoostLogStub,
         'findAccountsForPooledReward': findPooledAccountsStub
     },
@@ -257,7 +257,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
         fetchUncreatedBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
-        insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
+        insertBoostAccountsStub.resolves({ boostIds: [testBoostId], accountIds: [testAccountId], persistedTimeMillis: mockPersistedTime.valueOf() });
 
         redemptionHandlerStub.resolves([{ transferTransactionId: 'some-id' }]);
 
@@ -316,7 +316,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
 
         fetchUncreatedBoostsStub.resolves([boostCreatedByEvent]);
-        insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
+        insertBoostAccountsStub.resolves({ boostIds: [testBoostId], accountIds: [testAccountId], persistedTimeMillis: mockPersistedTime.valueOf() });
         
         const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
         findBoostStub.resolves([boostCreatedByEvent]);
@@ -339,7 +339,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(resultOfEventRecord).to.exist;
         
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId], testAccountId, 'CREATED');
+        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId], [testAccountId], 'CREATED');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
         
         expect(findBoostStub).to.have.been.calledOnceWithExactly(expectedKey);
