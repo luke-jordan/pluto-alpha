@@ -56,7 +56,7 @@ grant usage on schema snippet_data to snippet_worker;
 grant select, insert, update on snippet_data.snippet to snippet_worker;
 grant select, insert, update on snippet_data.snippet_user_join_table to snippet_worker;
 grant select, insert, update on snippet_data.preview_user_table to snippet_worker;
-grant select, insert, update on snippet_data.snippet_logs to snippet_worker;
+grant select, insert, update on snippet_data.snippet_log to snippet_worker;
 
 grant usage on schema snippet_data to admin_api_worker;
 
