@@ -97,6 +97,27 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         expect(updateTransactionTagStub).to.not.have.been.called;
     });
 
+    it('Does not handle if zero amount', async () => {
+        const mockZeroEvent = {
+            eventType: 'BOOST_REDEEMED',
+            context: {
+                accountId: 'account-1',
+                boostAmount: `0::HUNDREDTH_CENT::ZAR`,
+                transferResults: {
+                    result: 'SUCCESS',
+                    accountTxIds: ['transaction-1']
+                }
+            }
+        };
+        
+        await handler.handleBoostRedeemedEvent(wrapMockEvent(mockZeroEvent));
+
+        expect(fetchAccountTagStub).to.not.have.been.called;
+        expect(fetchTransactionStub).to.not.have.been.called;
+        expect(sendEventToQueueStub).to.not.have.been.called;
+        expect(updateTransactionTagStub).to.not.have.been.called;
+    });
+
     it('Does not handle if already tagged with this amount', async () => {
         const expectedTag = `FINWORKS_RECORDED::${mockAmount}::HUNDREDTH_CENT::ZAR`;
         

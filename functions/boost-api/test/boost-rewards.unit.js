@@ -16,6 +16,8 @@ const publishMultiStub = sinon.stub();
 
 const lamdbaInvokeStub = sinon.stub();
 
+const momentStub = sinon.stub();
+
 class MockLambdaClient {
     constructor () {
         this.invoke = lamdbaInvokeStub;
@@ -31,7 +33,8 @@ const handler = proxyquire('../boost-redemption-handler', {
     'publish-common': {
         'publishUserEvent': publishStub,
         'publishMultiUserEvent': publishMultiStub
-    }
+    },
+    'moment': momentStub
 });
 
 const testBoostId = uuid();
@@ -41,7 +44,7 @@ const testBonusPoolId = 'some-pool';
 
 describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
-    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishStub));
+    beforeEach(() => helper.resetStubs(lamdbaInvokeStub, publishStub, publishMultiStub));
 
     it('Handles random rewards', async () => {
         const testUserId = uuid();
@@ -76,7 +79,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         };
 
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
-
+        momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
@@ -179,6 +182,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         };
 
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
+        momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
@@ -226,6 +230,75 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         
         expect(publishStub).to.have.been.calledOnce;
         expect(publishMultiStub).to.have.been.calledOnce;
+    });
+
+    it('Handles pooled rewards if only one person (so, zero amount)', async () => {
+        const testUserId = uuid();
+
+        const testContribPerUserAmount = 25000;
+        const testPercentForPool = 0.05;
+                
+        const testRewardParams = {
+            rewardType: 'POOLED',
+            poolContributionPerUser: { amount: testContribPerUserAmount, unit: 'HUNDREDTH_CENT', currency: 'USD' },
+            percentPoolAsReward: testPercentForPool
+        };
+
+        const testPooledAccountIds = ['account-1'];
+        publishStub.resolves({ result: 'SUCCESS' });
+
+        const mockBoost = {
+            boostId: testBoostId,
+            boostAmount: 0, // because updated in primary
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            boostType: 'GAME',
+            boostCategory: 'TAP_SCREEN',
+            fromFloatId: testFloatId,
+            fromBonusPoolId: testBonusPoolId,
+            rewardParameters: testRewardParams,
+            messageInstructions: [],
+            flags: []    
+        };
+
+        const mockAccountMap = {
+            [testBoostId]: {
+                'account-1': { userId: testUserId, status: 'OFFERED' }
+            }
+        };
+
+        const mockEvent = { 
+            redemptionBoosts: [mockBoost], 
+            affectedAccountsDict: mockAccountMap, 
+            pooledContributionMap: { [testBoostId]: testPooledAccountIds },
+            event: { accountId: 'account-1' }
+        };
+
+        const mockUpdateTime = moment();
+        momentStub.returns(mockUpdateTime);
+
+        const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
+
+        expect(resultOfRedemption).to.exist;
+        expect(resultOfRedemption).to.deep.equal({});
+
+        const expectedLogContext = {
+            accountId: 'account-1',
+            boostId: testBoostId,
+            boostCategory: 'TAP_SCREEN',
+            boostAmount: '0::HUNDREDTH_CENT::USD',
+            boostType: 'GAME',
+            boostUpdateTimeMillis: mockUpdateTime.valueOf(),
+            transferResults: undefined,
+            triggeringEventContext: undefined
+        };
+
+        const expectedLogOptions = { context: expectedLogContext, initiator: testUserId };
+        // todo : also do coverage above
+        expect(publishStub).to.have.been.calledOnceWithExactly(testUserId, 'BOOST_REDEEMED', expectedLogOptions);
+
+        expect(lamdbaInvokeStub).to.not.have.been.called;
+        expect(publishMultiStub).to.not.have.been.called;
     });
 
 });

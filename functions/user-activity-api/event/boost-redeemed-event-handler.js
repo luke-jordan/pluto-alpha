@@ -9,6 +9,14 @@ const util = require('ops-util-common');
 module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publisher }) => {
     logger('Handling boost redeemed event: ', JSON.stringify(eventBody));
     const { accountId, boostAmount, transferResults } = eventBody.context;
+
+    const [unparsedAmount, unit, currency] = boostAmount.split('::');
+    const amount = parseInt(unparsedAmount, 10);
+    if (amount === 0) {
+        logger('FATAL_ERROR: Zero boost provided to boost redeemed'); // just to keep an eye for the moment
+        return;
+    }
+
     if (!transferResults || !Array.isArray(transferResults.accountTxIds) || transferResults.accountTxIds.length === 0) {
         throw Error('Error! Malformed event context, no transaction ID');
     }
@@ -29,9 +37,7 @@ module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publi
     const bsheetTxTag = config.get('defaults.balanceSheet.txTagPrefix');
     const bsheetTag = txDetails.tags.find((tag) => tag.startsWith(bsheetTxTag));
 
-    const [unparsedAmount, unit, currency] = boostAmount.split('::');
-    const amount = parseInt(unparsedAmount, 10);
-
+    
     // we want to know quickly if these mismatches occur, so check for them even if don't need to send to bsheet
     if (txDetails.currency !== currency || util.convertToUnit(txDetails.amount, txDetails.unit, unit) !== amount) {
         throw Error('Error! Mismatch between transaction as persisted and amount on boost redemption');
