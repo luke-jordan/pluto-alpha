@@ -42,7 +42,8 @@ resource "aws_lambda_function" "user_event_process" {
               },
               "queues": {
                 "boostProcess": aws_sqs_queue.boost_process_queue.name,
-                "balanceSheetUpdate": aws_sqs_queue.balance_sheet_update_queue.name
+                "balanceSheetUpdate": aws_sqs_queue.balance_sheet_update_queue.name,
+                "eventDlq": aws_sqs_queue.user_event_dlq.name
               },
               "publishing": {
                 "withdrawalEmailDestination": var.events_email_receipients[terraform.workspace],

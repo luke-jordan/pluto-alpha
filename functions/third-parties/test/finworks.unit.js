@@ -33,7 +33,7 @@ const resetStubs = (...stubs) => {
     stubs.forEach((stub) => stub.reset());
 };
 
-describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
+describe('*** UNIT TEST FINWORKS ENDPOINTS *** Add cash', () => {
 
     beforeEach(() => {
         resetStubs(requestStub, getObjectStub);
@@ -107,6 +107,14 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(parsedError).to.have.property('errors');
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+    });
+
+});
+
+describe('*** UNIT TEST FINWORKS ENDPOINTS *** Add cash', () => {
+
+    beforeEach(() => {
+        resetStubs(requestStub, getObjectStub);
     });
 
     it('Sends investment details', async () => {
@@ -227,6 +235,53 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
     });
 
+});
+
+describe('*** UNIT TEST FINWORKS ENDPOINTS *** Add boost', () => {
+
+    beforeEach(() => {
+        resetStubs(requestStub, getObjectStub);
+    });
+
+    it('Sends boost details to Finworks', async () => {
+        const testAccountNumber = 'POL8';
+        const testAmount = 100;
+        const testUnit = 'WHOLE_CURRENCY';
+        const testCurrency = 'USD';
+
+        const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.addBoost'), testAccountNumber)}`;
+
+        const expectedOptions = {
+            method: 'POST',
+            uri: testEndpoint,
+            agentOptions: { cert: 'access-key-or-crt', key: 'access-key-or-crt' },
+            resolveWithFullResponse: true,
+            json: true,
+            body: { amount: testAmount, unit: testUnit, currency: testCurrency }
+        };
+
+        getObjectStub.returns({ promise: () => ({ Body: { toString: () => 'access-key-or-crt' }})});
+        requestStub.resolves({ statusCode: 201, body: { }, toJSON: () => 'log-output' });
+
+        const testEvent = { accountNumber: testAccountNumber, amount: testAmount, unit: testUnit, currency: testCurrency };
+
+        const resultOfBoost = await handler.addBoost(testEvent);
+        logger('Result of sending boost details:', resultOfBoost);
+
+        expect(resultOfBoost).to.exist;
+        expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS', details: {} });
+        expect(getObjectStub).to.have.been.calledTwice;
+        expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+    });
+
+});
+
+describe('*** UNIT TEST FINWORKS ENDPOINTS *** Get market value', () => {
+
+    beforeEach(() => {
+        resetStubs(requestStub, getObjectStub);
+    });
+
     it('Fetches user market value', async () => {
         const testAccountNumber = 'POL122';
         const testEndpoint = `${config.get('finworks.endpoints.rootUrl')}/${util.format(config.get('finworks.endpoints.marketValue'), testAccountNumber)}`;
@@ -289,6 +344,14 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(parsedError).to.have.deep.equal({ errors: [{ description: 'Account is inactive', code: 'AccountInactiveError' }]});
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+    });
+
+});
+
+describe('*** UNIT TEST FINWORKS ENDPOINTS *** Send withdrawal', () => {
+
+    beforeEach(() => {
+        resetStubs(requestStub, getObjectStub);
     });
 
     it('Sends user withdrawal to third party', async () => {
@@ -396,6 +459,14 @@ describe('*** UNIT TEST FINWORKS ENDPOINTS ***', () => {
         expect(parsedError).to.have.deep.equal({ errors: [{ description: 'Account is inactive', code: 'AccountInactiveError' }]});
         expect(getObjectStub).to.have.been.calledTwice;
         expect(requestStub).to.have.been.calledOnceWithExactly(expectedOptions);
+    });
+
+});
+
+describe('*** UNIT TEST FINWORKS ENDPOINTS *** Add transaction', () => {
+
+    beforeEach(() => {
+        resetStubs(requestStub, getObjectStub);
     });
 
     it('Directs save transaction from queue correctly', async () => {

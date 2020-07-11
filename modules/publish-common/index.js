@@ -149,7 +149,7 @@ module.exports.sendToQueue = async (queueName, payloads, isFifoQueue = false) =>
 module.exports.addToDlq = async (dlqName, event, error) => {
     const dlqUrl = await obtainQueueUrl(dlqName);
     const payload = { originalEvent: event, error };
-    const sqsParameters = assembleQueueParams(payload, dlqUrl);
+    const sqsParameters = await assembleQueueParams(payload, dlqUrl);
     logger('DLQ send parameters: ', sqsParameters);
     const sqsResult = await sqs.sendMessage(sqsParameters).promise();
     logger('Result from SQS: ', sqsResult);

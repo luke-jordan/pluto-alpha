@@ -69,6 +69,7 @@ const calculateRandomBoostAmount = (boost) => {
 const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation, specifiedEventType }) => {
     const eventType = specifiedEventType || (isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED');
     logger('Affected accounts user dict: ', affectedAccountsUserDict);
+    
     const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
         const context = {
             accountId,
