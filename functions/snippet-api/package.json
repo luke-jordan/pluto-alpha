@@ -1,14 +1,14 @@
 {
-  "name": "save-transaction-api",
+  "name": "snippet-api",
   "version": "0.0.1",
-  "description": "API for adding savings to a user account",
+  "description": "API creating and fetching user snippets",
   "main": "handler.js",
   "scripts": {
     "test": "DEBUG=jupiter:*:test nyc mocha",
     "generate-coverage": "nyc report --reporter=text-lcov > coverage.lcov",
     "lint": "eslint ."
   },
-  "author": "Luke Jordan",
+  "author": "",
   "license": "ISC",
   "dependencies": {
     "aws-sdk": "^2.536.0",
@@ -16,21 +16,16 @@
     "config": "^3.1.0",
     "debug": "^4.1.1",
     "decamelize": "^4.0.0",
-    "decimal.js-light": "^2.5.0",
-    "ioredis": "^4.14.1",
-    "moment": "^2.24.0",
-    "moment-timezone": "^0.5.25",
-    "statuses": "^1.5.0",
     "uuid": "^3.3.2"
   },
   "devDependencies": {
-    "bignumber.js": "^9.0.0",
     "chai": "^4.2.0",
     "chai-as-promised": "^7.1.1",
     "chai-uuid": "^1.0.6",
     "eslint": "^6.0.1",
     "eslint-plugin-chai-friendly": "^0.4.1",
     "mocha": "^6.1.4",
+    "moment": "^2.27.0",
     "nyc": "^14.1.1",
     "proxyquire": "^2.1.0",
     "serverless-localstack": "^0.4.15",
