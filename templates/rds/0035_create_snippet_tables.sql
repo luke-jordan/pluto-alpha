@@ -39,7 +39,7 @@ create table if not exists snippet_data.preview_user_table (
 create table if not exists snippet_data.snippet_log (
     log_id uuid not null primary key,
     user_id uuid not null,
-    snippet_id varchar(255) not null,
+    snippet_id uuid not null references snipped_data.snipped (snippet_id),
     creation_time timestamp with time zone not null default current_timestamp,
     updated_time timestamp with time zone not null default current_timestamp,
     log_type varchar(50) not null,
@@ -55,5 +55,11 @@ grant usage on schema snippet_data to snippet_worker;
 
 grant select, insert, update on snippet_data.snippet to snippet_worker;
 grant select, insert, update on snippet_data.snippet_user_join_table to snippet_worker;
+grant select, insert, update on snippet_data.preview_user_table to snippet_worker;
+grant select, insert, update on snippet_data.snippet_logs to snippet_worker;
+
+grant usage on schema snippet_data to admin_api_worker;
+
+grant select, insert, update on snippet_data.snippet to snippet_worker;
 grant select, insert, update on snippet_data.preview_user_table to snippet_worker;
 grant select, insert, update on snippet_data.snippet_logs to snippet_worker;
