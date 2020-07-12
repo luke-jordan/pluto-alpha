@@ -384,7 +384,8 @@ const extractAccountIds = async (audienceId) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const accountIds = await (boostDetails.defaultStatus === 'UNCREATED' ? [] : extractAccountIds(boostDetails.audienceId));
+    const skipAccountInsertion = boostDetails.defaultStatus === 'UNCREATED' || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
+    const accountIds = await (skipAccountInsertion ? [] : extractAccountIds(boostDetails.audienceId));
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();

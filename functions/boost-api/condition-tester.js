@@ -138,11 +138,13 @@ const checkBoostTagged = (parameterValue, boostTags, boostId) => {
     return boostTags.includes(soughtBoostId);
 };
 
-// todo : think through fully earliest/latest, combinations, etc. 
+// todo : think through fully earliest/latest, combinations, etc. (e.g., will need boost-account creation time)
 // (e.g., if save twice in period and then withdraw at 61 days from first save but 10 from second save) - use tests
+const eventSorter = (eventA, eventB) => eventA.timestamp - eventB.timestamp; // since in millis
+
 const checkEventDoesNotFollow = (parameterValue, eventContext) => {
     const [firstEventType, secondEventType, timeAmount, timeUnit] = parameterValue.split('::');
-    const { eventHistory } = eventContext.eventHistory.sort((eventA, eventB) => eventA.isBefore(eventB) ? 1 : -1);
+    const eventHistory = eventContext.eventHistory.sort(eventSorter);
     const firstOccurenceOfFirstType = eventHistory.find((event) => event.eventType === firstEventType);
     if (!firstOccurenceOfFirstType) {
         return false; // because by definition has not passed
@@ -150,7 +152,7 @@ const checkEventDoesNotFollow = (parameterValue, eventContext) => {
 
     const thresholdTime = moment(firstOccurenceOfFirstType.timestamp).add(parseInt(timeAmount, 10), timeUnit);
 
-    const firstOccurenceOfSecondType = eventHistory.find((event) => event.evenType === secondEventType);    
+    const firstOccurenceOfSecondType = eventHistory.find((event) => event.eventType === secondEventType);    
     if (!firstOccurenceOfSecondType) {
         return moment().isAfter(thresholdTime);
     }
@@ -160,16 +162,21 @@ const checkEventDoesNotFollow = (parameterValue, eventContext) => {
 
 const checkEventFollows = (parameterValue, eventContext) => {
     const [firstEventType, secondEventType, timeAmount, timeUnit] = parameterValue.split('::');
-    const { eventHistory } = eventContext.eventHistory.sort((eventA, eventB) => eventA.isBefore(eventB) ? 1 : -1);
+    const eventHistory = eventContext.eventHistory.sort(eventSorter);
+    
     const firstOccurenceOfFirstType = eventHistory.find((event) => event.eventType === firstEventType);
+    logger('Checking for first occurrence of ', firstEventType, ' found: ', firstOccurenceOfFirstType);
     if (!firstOccurenceOfFirstType) {
+        logger('Initiating event not found, so exiting');
         return false; // because by definition has not passed
     }
 
     const thresholdTime = moment(firstOccurenceOfFirstType.timestamp).add(parseInt(timeAmount, 10), timeUnit);
 
-    const firstOccurenceOfSecondType = eventHistory.find((event) => event.evenType === secondEventType);    
+    const firstOccurenceOfSecondType = eventHistory.find((event) => event.eventType === secondEventType);    
+    logger('Now, second type, checking for first occurrence of ', secondEventType, ' found: ', firstOccurenceOfSecondType);
     if (!firstOccurenceOfSecondType) {
+        logger('Second event not found, so exiting');
         return false; // by definition
     }
 

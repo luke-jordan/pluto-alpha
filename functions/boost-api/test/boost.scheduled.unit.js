@@ -58,8 +58,9 @@ const handler = proxyquire('../boost-scheduled-handler', {
 });
 
 const resetStubs = () => helper.resetStubs(
-    fetchActiveDynamicBoostStub, fetchActiveStandardBoostStub, findNewAudienceMembersStub, insertBoostAccountsStub, 
-    fetchUserIdsStub, lambdaInvokeStub
+    fetchActiveDynamicBoostStub, fetchActiveStandardBoostStub, findNewAudienceMembersStub, 
+    insertBoostAccountsStub, updateBoostStatusStub, redemptionHandlerStub,
+    fetchAccountsStub, fetchUserIdsStub, lambdaInvokeStub
 );
 
 describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
@@ -189,6 +190,8 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
 
 describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
 
+    beforeEach(resetStubs);
+
     const testStatusConditions = { 
         UNLOCKED: ['event_does_not_follow #{SAVING_EVENT_SUCCESSFUL::ADMIN_SETTLED_WITHDRAWAL::90::DAYS}'],
         FAILED: ['event_does_follow #{SAVING_EVENT_SUCCESSFUL::ADMIN_SETTLED_WITHDRAWAL::90::DAYS}']
@@ -204,11 +207,20 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         statusConditions        
     });
 
-    // weird nesting a little code smell, to fix in auth later
-    const setLambdaToReturn = (userEvents) => {
+    // these next two (args + response) are a bit of a lesson in prematurely optimizing for significant parallelization, to detriment of readability
+    // (was born from designing to redeem a lot of boosts + accounts simultaneously, which now it's clear is very unlikely to happen)
+    const expectedFindAccountArgs = { boostIds: ['boost-id'], status: ACTIVE_BOOST_STATUS };
+    const mockAccountDict = {
+        boostId: 'boost-id', 
+        accountUserMap: {
+            'account-1': { userId: 'user-1', status: 'OFFERED' }
+        }
+    };
+
+    const setLambdaToReturn = (userEvents, userId = 'user-1') => {
         const payload = {
             result: 'SUCCESS',
-            userEvents: {
+            [userId]: {
                 totalCount: userEvents.length,
                 userEvents
             }
@@ -217,10 +229,11 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
     };
 
     const expectedUpdateInstruction = (newStatus, accountId, logContext) => [{
-        boostId: testBoostId,
+        boostId: 'boost-id',
         accountIds: [accountId],
         newStatus,
-        logType: 'STATUS_CHANGE'
+        logType: 'STATUS_CHANGE',
+        logContext: { newStatus, ...logContext }
     }];
 
     it('Scans active boost-account pairs for time based conditions expiring', async () => {
@@ -242,13 +255,13 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
 
     it('Does not execute if boost is too new for interval to have elapsed', async () => {
         fetchActiveStandardBoostStub.resolves([mockBoost(testStatusConditions, moment().subtract(10, 'DAYS'))]);
-        fetchAccountsStub.resolves({ 'boost-id': {}}); // not really relevant
+        fetchAccountsStub.resolves([{ 'boost-id': {}}]); // not really relevant
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 0 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 0, accountsUpdated: 0 });
 
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostIds: ['boost-id'], status: ACTIVE_BOOST_STATUS });
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(expectedFindAccountArgs);
         helper.expectNoCalls(updateBoostStatusStub, redemptionHandlerStub);
 
     });
@@ -256,24 +269,23 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
     it('Executes conditions accordingly if any such found, but no account matches conditions', async () => {
 
         fetchActiveStandardBoostStub.resolves([mockBoost(testStatusConditions)]);
-        fetchAccountsStub.resolves(['account-1']);
-        fetchUserIdsStub.resolves(['user-1']);
+        fetchAccountsStub.resolves([mockAccountDict]);
 
         setLambdaToReturn([]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 0 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 0, accountsUpdated: 0 });
 
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(expectedFindAccountArgs);
 
         helper.expectNoCalls(updateBoostStatusStub, redemptionHandlerStub);
     });
 
-    it.only('Does nothing if one event is present but not expired or none other', async () => {
+    it('Does nothing if one event is present but not expired or none other', async () => {
         fetchActiveStandardBoostStub.resolves([mockBoost(testStatusConditions)]);
-        fetchAccountsStub.resolves(['account-1']);
-        fetchUserIdsStub.resolves(['user-1']);
+        fetchAccountsStub.resolves([mockAccountDict]);
+        // fetchUserIdsStub.resolves(['user-1']);
 
         setLambdaToReturn([
             {
@@ -284,35 +296,35 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         ]);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
-        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 0 });
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 0, accountsUpdated: 0 });
         
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(expectedFindAccountArgs);
 
         helper.expectNoCalls(updateBoostStatusStub, redemptionHandlerStub); 
     });
 
-    // note : this is all going to be quite expensive, so probably only run once a day
+    // note : this is all going to be quite expensive, so probably only run once a day/hour
     it('Executes conditions and flips status up', async () => {
         fetchActiveStandardBoostStub.resolves([mockBoost(testStatusConditions)]);
-        fetchAccountsStub.resolves(['account-1']);
-        fetchUserIdsStub.resolves(['user-1']);
+        fetchAccountsStub.resolves([mockAccountDict]);
+        // fetchUserIdsStub.resolves(['user-1']);
 
-        setLambdaToReturn([
-            {
+        const mockEventHistory = [{
                 userId: 'user-1',
                 eventType: 'SAVING_EVENT_SUCCESSFUL',
                 timestamp: moment().subtract(91, 'days').valueOf()
-            }
-        ]);
+        }];
+
+        setLambdaToReturn(mockEventHistory);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
         expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });
         
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(expectedFindAccountArgs);
 
-        const expectedUpdate = expectedUpdateInstruction('UNLOCKED', 'account-1', { newStatus: 'UNLOCKED' });
+        const expectedUpdate = expectedUpdateInstruction('UNLOCKED', 'account-1', { oldStatus: 'OFFERED', eventHistory: mockEventHistory });
         expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedUpdate);
 
         helper.expectNoCalls(redemptionHandlerStub);
@@ -321,10 +333,9 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
 
     it('Flips to failed if first event found, but second is also present', async () => {
         fetchActiveStandardBoostStub.resolves([mockBoost(testStatusConditions)]);
-        fetchAccountsStub.resolves(['account-1']);
-        fetchUserIdsStub.resolves(['user-1']);
+        fetchAccountsStub.resolves([mockAccountDict]);
 
-        setLambdaToReturn([
+        const mockEventHistory = [
             {
                 userId: 'user-1',
                 eventType: 'SAVING_EVENT_SUCCESSFUL',
@@ -335,15 +346,16 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
                 eventType: 'ADMIN_SETTLED_WITHDRAWAL',
                 timestamp: moment().subtract(1, 'days').valueOf()
             }
-        ]);
+        ];
+        setLambdaToReturn(mockEventHistory);
 
         const resultOfProcess = await handler.processTimeBasedConditions();
         expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });
         
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(expectedFindAccountArgs);
 
-        const expectedUpdate = expectedUpdateInstruction('FAILED', 'account-1', { newStatus: 'FAILED' });
+        const expectedUpdate = expectedUpdateInstruction('FAILED', 'account-1', { oldStatus: 'OFFERED', eventHistory: mockEventHistory });
         expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedUpdate);
 
         helper.expectNoCalls(redemptionHandlerStub); 
@@ -353,38 +365,61 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
         const redemptionConditions = {
             REDEEMED: testStatusConditions.UNLOCKED
         };
-
-        // this thing is a bit of a lesson in prematurely optimizing for significant parallelization, to detriment of readability
-        // (was born from designing to redeem a lot of boosts + accounts simultaneously, which now it's clear is very unlikely to happen)
-        const mockAccountDict = {
-            'account-1': { userId: 'user-1', status: 'OFFERED' }
-        };
         
-        fetchActiveStandardBoostStub.resolves([mockBoost(redemptionConditions)]);
-        fetchAccountsStub.resolves(mockAccountDict);
+        const mockBoostToRedeem = mockBoost(redemptionConditions);
+        fetchActiveStandardBoostStub.resolves([mockBoostToRedeem]);
+        fetchAccountsStub.resolves([mockAccountDict]);
 
-        setLambdaToReturn([
+        const mockEventHistory = [
             {
                 userId: 'user-1',
                 eventType: 'SAVING_EVENT_SUCCESSFUL',
                 timestamp: moment().subtract(91, 'days').valueOf()
             }
-        ]);
+        ];
+        setLambdaToReturn(mockEventHistory);
+
+        redemptionHandlerStub.resolves({
+            'boost-id': {
+                result: 'SUCCESS',
+                boostAmount: 15000,
+                amountFromPool: 15000,
+                floatTxIds: ['some-float-tx-id'],
+                accountTxIds: ['some-account-tx-id']
+            }
+        });
 
         const resultOfProcess = await handler.processTimeBasedConditions();
         expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });        
 
         expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
-        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostId: ['boost-id'] });
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly(expectedFindAccountArgs);
 
-        const expectedLogContext = { newStatus: 'REDEEMED', boostAmount: 15000, transactionId: uuid() };
+        const expectedLogContext = { 
+            oldStatus: 'OFFERED', 
+            newStatus: 'REDEEMED',
+            boostAmount: 15000, 
+            amountFromPool: 15000,
+            floatTxIds: ['some-float-tx-id'],
+            accountTxIds: ['some-account-tx-id'],        
+            eventHistory: mockEventHistory
+        };
         const expectedUpdate = expectedUpdateInstruction('REDEEMED', 'account-1', expectedLogContext);
         expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedUpdate);
     
+        const expectedEventForRedemption = {
+            eventType: 'SEQUENCE_CHECK',
+            eventContext: { 
+                eventHistory: {
+                    'account-1': mockEventHistory 
+                }
+            }
+        };
+
         const expectedRedemptionCall = { 
-            redemptionBoosts: [mockBoost(redemptionConditions)], 
-            revocationBoosts: [],
-            affectedAccountsDict: { ['boost-id']: { ...mockAccountDict }},
+            redemptionBoosts: [mockBoostToRedeem], 
+            affectedAccountsDict: { ['boost-id']: { 'account-1': { userId: 'user-1', status: 'OFFERED' } } }, // not nice
+            event: expectedEventForRedemption
         };
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
 

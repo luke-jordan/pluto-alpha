@@ -118,7 +118,8 @@ const turnAllocationIntoPersistenceInstruction = (allocation, floatLogId) => ({
     allocState: 'SETTLED',
     settlementStatus: 'SETTLED', // for account table
     relatedEntityType: 'CAPITALIZATION_EVENT',
-    relatedEntityId: floatLogId
+    relatedEntityId: floatLogId,
+    logId: floatLogId
 });
 
 const assembleAllocationMap = async (params) => {

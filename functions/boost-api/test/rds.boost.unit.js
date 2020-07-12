@@ -364,6 +364,51 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(resultOfInsertion.accountIds).to.deep.equal([]);
 
         expect(multiTableStub).to.have.been.calledOnceWithExactly([insertFirstDef]);
+        expect(queryStub).to.not.have.been.called;
+    });
+
+    it('Same thing, but with event type and default status set to UNLOCKED', async () => {
+        // most of this is irrelevant, just checking the important
+        const mockCreateConditions = {
+            REDEEMED: ['number_taps_greater_than_N #{20:20000}']
+        };
+    
+        uuidStub.onFirstCall().returns(testBoostId);
+
+        // this is not great but Sinon matching is just the worst thing in the world and is failing abysmally on complex matches, hence
+        const insertionTime = moment();
+        multiTableStub.resolves([
+            [{ 'boost_id': testBoostId, 'creation_time': insertionTime.format() }]
+        ]);
+
+        const testInstruction = {
+            creatingUserId: 'admin-user-id',
+            label: 'Midweek arrow chase!',
+            boostType: 'GAME',
+            boostCategory: 'CHASE_THE_ARROW',
+            boostAudienceType: 'EVENT_DRIVEN',
+            boostAmount: 100000,
+            boostBudget: 200000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            forClientId: 'some_client_co',
+            fromFloatId: 'primary_float',
+            boostStartTime: moment(),
+            boostEndTime: moment().add(1, 'week'),
+            defaultStatus: 'UNLOCKED',
+            statusConditions: mockCreateConditions,
+            audienceId: testAudienceId,
+            redemptionMsgInstructions: testRedemptionMsgs,
+            messageInstructionIds: [],
+        };
+
+        const resultOfInsertion = await rds.insertBoost(testInstruction);
+        expect(resultOfInsertion.accountIds).to.deep.equal([]);
+
+        expect(multiTableStub).to.have.been.calledOnce;
+        expect(multiTableStub.getCall(0).args[0]).to.have.length(1);
+        expect(queryStub).to.not.have.been.called;
     });
 
     it('Inserts boost-account joins', async () => {

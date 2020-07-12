@@ -70,7 +70,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }]
         });
 
-        const expectedAllocationResult = {
+        const mockAllocationResult = {
             [testBoostId]: {
                 result: 'SUCCESS',
                 floatTxIds: [uuid(), uuid()],
@@ -78,7 +78,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
         momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -113,7 +113,15 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
 
         expect(resultOfRedemption).to.exist;
-        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
+
+        const expectedResult = { 
+            [testBoostId]: {
+                ...expectedAllocationResult[testBoostId], 
+                boostAmount: testCalculatedAmount, 
+                amountFromPool: testCalculatedAmount
+            } 
+        };
+        expect(resultOfRedemption).to.deep.equal(expectedResult);
 
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
         expect(publishStub).to.have.been.calledOnce;

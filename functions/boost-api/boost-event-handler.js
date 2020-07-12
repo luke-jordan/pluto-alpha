@@ -102,17 +102,43 @@ const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
     return pooledContributionMap;
 };
 
-const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
+// as we do not want to block anything just because of this, but until live for a while, not wholly confident re format of incoming
+// note : this is used for yield calculations later
+const safeExtractWholeCurrencyAmount = (savedAmount) => {
+    try {
+        const amountDict = opsUtil.convertAmountStringToDict(savedAmount);
+        return opsUtil.convertToUnit(amountDict.amount, amountDict.unit, 'WHOLE_CURRENCY');
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return 0;
+    }
+}
+
+const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, logContextBase = {}) => {
     logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
     return alteredBoosts.map((boost) => {
         const boostId = boost.boostId;
         const boostStatusSorted = boostStatusChangeDict[boostId].sort(util.statusSorter);
         const highestStatus = boostStatusSorted[0];
+        
         const isChangeRedemption = highestStatus === 'REDEEMED';
         const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
-        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount };
+        
+        const logContext = { newStatus: highestStatus, oldStatus: '', boostAmount: boost.boostAmount };
+        const { transactionId, savedAmount, transferResults } = logContextBase;
         if (transactionId) {
             logContext.transactionId = transactionId;
+        }
+
+        // next two so we can start to caculate boost yields much more easily
+        if (savedAmount) {
+            logContext.savedAmount = savedAmount;
+            logContext.savedWholeCurrency = safeExtractWholeCurrencyAmount(savedAmount);
+        }
+
+        if (transferResults && transferResults[boostId]) {
+            logContext.boostAmount = transferResults[boostId].boostAmount;
+            logContext.amountFromPool = transferResults[boostId].amountFromPool;
         }
 
         return {
@@ -177,10 +203,8 @@ const processEventForExistingBoosts = async (event) => {
     const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange);
     logger('Retrieved affected accounts and user IDs: ', affectedAccountsDict);
 
-    // then we update the statuses of the boosts to redeemed
-    const transactionId = event.eventContext ? event.eventContext.transactionId : null;
-    const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, transactionId);
-    logger('Sending these update instructions to persistence: ', updateInstructions);
+    // then we prepar to update the statuses of the boosts, and hook up appropriate logs
+    const logContextBase = event.eventContext;
 
     // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
     const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
@@ -198,9 +222,13 @@ const processEventForExistingBoosts = async (event) => {
 
         logger('REDEMPTION CALL: ', redemptionCall);
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
+        logContextBase.transferResults = resultOfTransfers;
     }
 
     // a little ugly with the repeat if statements, but we want to make sure if the redemption call fails, the user is not updated to redeemed spuriously 
+    const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, logContextBase);
+    logger('Sending these update instructions to persistence: ', updateInstructions);
+
     const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('Result of update operation: ', resultOfUpdates);
 
@@ -380,6 +408,7 @@ const handleExpiredBoost = async (boostId) => {
         logType: 'GAME_OUTCOME',
         logContext: sortedAndRankedAccounts[accountId]
     }));
+
     const resultOfLogInsertion = await persistence.insertBoostAccountLogs(resultLogs);
     logger('Finally, result of log insertion: ', resultOfLogInsertion);
 

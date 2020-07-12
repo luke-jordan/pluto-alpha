@@ -155,13 +155,18 @@ const obtainUserEventHistory = async (userIds, eventTypes, startTime) => {
     // we exclude context because it is not necessary, and with it we might hit lambda payload size limits too quickly
     const lambdaParams = lambdaParameters({ userIds, eventTypes, startDate: startTime.valueOf(), excludeContext: true }, 'userHistory', true);
     const lambdaResults = await lambda.invoke(lambdaParams).promise();
-    const resultPayload = JSON.parse(lambdaResults[index].Payload);
+    const resultPayload = JSON.parse(lambdaResults.Payload);
     logger('Event history lambda result: ', resultPayload);
-    return resultPayload.eventHistoryMap; // returns in format { [userId]: [listOfEvents] }
+    if (resultPayload.result !== 'SUCCESS') {
+        throw new Error('Error obtaining user history, result payload: ', resultPayload);
+    }
+    Reflect.deleteProperty(resultPayload, 'result'); // not needed anymore
+    return resultPayload; // returns in format { [userId]: [listOfEvents] }
 };
 
 const determineUsersMeetingConditions = async (boost, accountUserMap) => {
     const { statusConditions } = boost;
+    const accountIds = Object.keys(accountUserMap);
 
     const sequenceDependentStatusses = Object.keys(statusConditions).filter((status) => oneConditionTimeBased(statusConditions[status]));
     logger('Processing boost, sequence dependent statusses; ', sequenceDependentStatusses);
@@ -177,34 +182,56 @@ const determineUsersMeetingConditions = async (boost, accountUserMap) => {
 
     const eventHistoryMap = await obtainUserEventHistory(userIds, eventsToObtain, boost.boostStartTime);
 
-    const syntheticEventForUser = (accountId) => ({
+    // condition tester wants an 'event', so we package up the history into one, then construct a handy map of such events, using some helpers along the way
+    const syntheticEventForUser = (userId) => ({
         eventType: 'SEQUENCE_CHECK',
         eventContext: { 
-            userId: accountUserMap[accountId].userId, 
-            eventHistory: eventHistoryMap[accountUserMap[accountId].userId] 
+            userId, eventHistory: eventHistoryMap[userId].userEvents 
         }
     });
+    const syntheticEvents = accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: syntheticEventForUser(accountUserMap[accountId].userId) }), {});
+    logger('Generated synthetic events, for boost: ', boost.boostId, ', as: ', JSON.stringify(syntheticEvents, null, 2));
 
-    const statusMetForUser = (accountId) => conditionTester.extractStatusChangesMet(syntheticEventForUser(accountId), boost);
-    const accountsMeetingConditions = Object.keys(accountUserMap).map((accountId) => ({ accountId, statusMet: statusMetForUser(accountId) }));
+    // and finally we are in a position to check the statusses
+    const statusMetForUser = (accountId) => conditionTester.extractStatusChangesMet(syntheticEvents[accountId], boost);
+    const accountsMeetingConditions = accountIds.map((accountId) => ({ accountId, statusMet: statusMetForUser(accountId) }));
     logger('Extracted these users meeting status conditions now: ', accountsMeetingConditions);
+
+    // then we return the accounts that met a status condition, along with a normalized map of event history for logging, and return them
+    const eventHistoryByAccount = accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: eventHistoryMap[accountUserMap[accountId].userId].userEvents }), {})
 
     return { accountsMeetingConditions, eventHistoryByAccount };
 };
 
 const extractHighestStatus = (statusMet) => statusMet.sort(boostUtil.statusSorter)[0];
 
-const assembleUpdateInstruction = (accountStatusPair, eventHistoryByAccount, boost) => ({
-    boostId: boost.boostId,
-    accountIds: [accountStatusPair.accountId],
-    logType: 'STATUS_CHANGE',
-    newStatus: accountStatusPair.highestStatus,
-    logContext: { eventHistory: eventHistoryByAccount[accountStatusPair.accountId] }
-});
+const assembleLogContext = (accountWithStatus, eventHistoryByAccount) => ({
+    newStatus: accountWithStatus.newStatus,
+    oldStatus: accountWithStatus.oldStatus, 
+    eventHistory: eventHistoryByAccount[accountWithStatus.accountId]
+})
+
+const assembleUpdateInstruction = (accountWithStatus, eventHistoryByAccount, boostId, redemptionResult) => {
+    const logContext = assembleLogContext(accountWithStatus, eventHistoryByAccount);
+    if (redemptionResult && redemptionResult[boostId]) {
+        logContext.accountTxIds = redemptionResult[boostId].accountTxIds;
+        logContext.floatTxIds = redemptionResult[boostId].floatTxIds;
+        logContext.boostAmount = redemptionResult[boostId].boostAmount;
+        logContext.amountFromPool = redemptionResult[boostId].amountFromPool;
+    }
+
+    return {
+        boostId: boostId,
+        accountIds: [accountWithStatus.accountId],
+        logType: 'STATUS_CHANGE',
+        newStatus: accountWithStatus.newStatus,
+        logContext 
+    };
+}
 
 // see above on over-doing, or not, parallel processing
 const processBoostWithTimeSequenceCondition = async (boost, userAccountMap) => {
-    const { statusConditions, boostStartTime } = boost;
+    const { boostId, statusConditions, boostStartTime } = boost;
 
     // if all conditions require 30 days between two events, and boost is 15 days old, nothing could be triggered, so exit
     const enoughTimeElapsedCheckMoment = extractFirstEventLatestTime(statusConditions);
@@ -219,36 +246,48 @@ const processBoostWithTimeSequenceCondition = async (boost, userAccountMap) => {
 
     // then we process the highest status of those, and generate an update transaction
     const accountsChangingStatus = accountsMeetingConditions.filter(({ statusMet }) => statusMet.length > 0);
+    logger('These accounts will change status: ', accountsChangingStatus);
     if (accountsChangingStatus.length === 0) {
+        logger('No accounts changed status, so exiting');
         return { accountsUpdated: 0 };
     }
 
-    // then we extract the "highest", i.e., latest of those
-    const accountsWithHighestStatus = accountsChangingStatus.
-        map(({ accountId, statusMet }) => ({ accountId, highestStatus: extractHighestStatus(statusMet) }));
+    // then we extract the "highest", i.e., latest of those, as the new status, and retain the old for logging
+    const accountsWithNewStatus = accountsChangingStatus.
+        map(({ accountId, statusMet }) => ({ accountId, newStatus: extractHighestStatus(statusMet), oldStatus: userAccountMap[accountId].status }));
 
-    // check if any of them require a redemption
-    const accountsWithRedemptions = accountsWithHighestStatus.filter(({ highestStatus }) => highestStatus === 'REDEEMED');
+    // divide into those requiring a redemption and those without
+    const accountsWithRedemptions = accountsWithNewStatus.filter(({ newStatus }) => newStatus === 'REDEEMED');
+    const accountsWithoutRedemptions = accountsWithNewStatus.filter(({ newStatus }) => newStatus !== 'REDEEMED');
+
+    if (accountsWithoutRedemptions.length > 0) {
+        const nonRedeemedUpdates = accountsWithoutRedemptions.map((accountWithStatus) => (
+            assembleUpdateInstruction(accountWithStatus, eventHistoryByAccount, boostId))
+        );
+    
+        const resultOfNonRedeemUpdate = await persistence.updateBoostAccountStatus(nonRedeemedUpdates);
+        logger('Status update completed for non-redeemed but triggered: ', resultOfNonRedeemUpdate);    
+    }
 
     if (accountsWithRedemptions.length > 0) {
         const eventContext = { eventHistory: eventHistoryByAccount};
         const syntheticEvent = { eventType: 'SEQUENCE_CHECK', eventContext };
-        // redemption handler assumes everyone passed to it should be redeemed
-        const affectedAccountsDict = accountsWithRedemptions.reduce((obj, { accountId }) => ({ ...obj, [accountId]: userAccountMap[accountId] }), {});
+        
+        // redemption handler assumes everyone passed to it should be redeemed (should refactor at some point)
+        const accountMap = accountsWithRedemptions.reduce((obj, { accountId }) => ({ ...obj, [accountId]: userAccountMap[accountId] }), {});
+        const affectedAccountsDict = { [boostId]: accountMap }; // see not above about excess complexity to allow too-early parallelism
         const redemptionCall = { redemptionBoosts: [boost], affectedAccountsDict, event: syntheticEvent };
-        logger('Redeeming boosts with call: ', redemptionHandler);
+        logger('Redeeming boosts with call: ', redemptionCall);
         const redemptionResult = await redemptionHandler.redeemOrRevokeBoosts(redemptionCall);
         logger('Redemption result: ', redemptionResult);
+        const redeemUpdateInstructions = accountsWithRedemptions.map((accountWithStatus) => (
+            assembleUpdateInstruction(accountWithStatus, eventHistoryByAccount, boostId, redemptionResult))
+        );
+        await persistence.updateBoostAccountStatus(redeemUpdateInstructions); // leave in sequence, not parallel, with subsequent
+        await persistence.updateBoostAmountRedeemed([boost.boostId]);
     }
 
-    const updateInstructions = accountsWithHighestStatus.map((accountStatusPair) => (
-        assembleUpdateInstruction(accountStatusPair, eventHistoryByAccount, boost))
-    );
-
-    const resultOfUpdate = await persistence.updateBoostAccountStatus(updateInstructions);
-    logger('Status update completed: ', resultOfUpdate);
-
-    return { accountsUpdated: updateInstructions.length, redemptions: accountsWithRedemptions.length };
+    return { accountsUpdated: accountsWithNewStatus.length, redemptions: accountsWithRedemptions.length };
 };
 
 module.exports.processTimeBasedConditions = async () => {
@@ -271,14 +310,17 @@ module.exports.processTimeBasedConditions = async () => {
     // normalize so can do quick lookups
     const userIdAccountMap = stillOpenAccounts.reduce((obj, { boostId, accountUserMap }) => ({ ...obj, [boostId]: accountUserMap }), {});
 
-    const relevantBoosts = boostsWithSeqCondition.filter((boost) => Object.keys(userIdAccountMap[boost.boostId]).length > 0);
+    // retain only those boosts that have accounts in non-complete state 
+    const relevantBoosts = boostsWithSeqCondition.filter((boost) => !opsUtil.isObjectEmpty(userIdAccountMap[boost.boostId]));
+    logger('In processing time based conditions, after filtering, boosts left to process: ', relevantBoosts);
 
     const processPromises = relevantBoosts.map((boost) => processBoostWithTimeSequenceCondition(boost, userIdAccountMap[boost.boostId]));
     const resultOfProcess = await Promise.all(processPromises);
     
     const boostsTriggered = resultOfProcess.filter((result) => result.accountsUpdated > 0).length;
+    const accountsUpdated = resultOfProcess.reduce((sum, result) => sum + result.accountsUpdated, 0);
 
-    return { boostsProcessed: boostsWithSeqCondition.length, boostsTriggered };
+    return { boostsProcessed: boostsWithSeqCondition.length, boostsTriggered, accountsUpdated };
 };
 
 /**

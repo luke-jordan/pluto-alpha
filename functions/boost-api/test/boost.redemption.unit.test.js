@@ -41,6 +41,104 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
     beforeEach(() => testHelper.resetStubs(lamdbaInvokeStub, publishStub));
 
+    it('Redeem a simple boost, from user saving enough', async () => {
+        const testUserId = uuid();
+        const testAccountId = uuid();
+        const testAmount = 20 * 100 * 100;
+
+        const mockMoment = moment();
+
+        const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
+            instructions: [{
+                identifier: testBoostId,
+                floatId: testFloatId,
+                fromId: testBonusPoolId,
+                fromType: 'BONUS_POOL',
+                transactionType: 'BOOST_REDEMPTION',
+                relatedEntityType: 'BOOST_REDEMPTION',
+                currency: 'USD',
+                unit: 'HUNDREDTH_CENT',
+                settlementStatus: 'SETTLED',
+                allocType: 'BOOST_REDEMPTION',
+                allocState: 'SETTLED',
+                recipients: [
+                    { recipientId: testAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' }
+                ]
+            }]
+        });
+
+        const mockTransferResult = {
+            result: 'SUCCESS',
+            floatTxIds: [uuid(), uuid()],
+            accountTxIds: [uuid()]
+        };
+
+        const expectedAllocationResult = {
+            [testBoostId]: mockTransferResult
+        };
+
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
+        momentStub.returns(mockMoment);
+        publishStub.resolves({ result: 'SUCCESS' });
+
+        const mockBoost = {
+            boostId: testBoostId,
+            boostType: 'SIMPLE',
+            boostCategory: 'SIMPLE_SAVE',
+            boostAmount: testAmount,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromFloatId: testFloatId,
+            fromBonusPoolId: testBonusPoolId,
+            messageInstructions: [],
+            flags: []    
+        };
+
+        const mockAccountMap = {
+            [testBoostId]: {
+                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+            }
+        };
+
+        const mockEvent = { 
+            redemptionBoosts: [mockBoost], 
+            affectedAccountsDict: mockAccountMap, 
+            event: { accountId: testAccountId, eventType: 'SAVING_EVENT_COMPLETED', eventContext: 'PROVIDED_CONTEXT' }
+        };
+
+        const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
+
+        const expectedResult = {
+            [testBoostId]: {
+                ...mockTransferResult,
+                boostAmount: testAmount,
+                amountFromPool: testAmount
+            }
+        }
+
+        expect(resultOfRedemption).to.exist;
+        expect(resultOfRedemption).to.deep.equal(expectedResult);
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+        expect(publishStub).to.have.been.calledOnce;
+
+        const expectedPublishOptions = {
+            initiator: testUserId,
+            context: {
+                accountId: testAccountId,
+                boostAmount: `${testAmount}::HUNDREDTH_CENT::USD`,
+                boostId: testBoostId,
+                boostType: 'SIMPLE',
+                boostCategory: 'SIMPLE_SAVE',
+                boostUpdateTimeMillis: mockMoment.valueOf(),
+                transferResults: expectedAllocationResult[testBoostId],
+                triggeringEventContext: 'PROVIDED_CONTEXT'
+            }
+        };
+        
+        expect(publishStub).to.have.been.calledOnceWithExactly(testUserId, 'BOOST_REDEEMED', expectedPublishOptions);
+    });
+
     it('Redeem a referral boost', async () => {
         const mockMoment = moment();
 
@@ -76,12 +174,13 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }]
         });
 
+        const mockTransferResult = {
+            result: 'SUCCESS',
+            floatTxIds: [uuid(), uuid(), uuid()],
+            accountTxIds: [uuid(), uuid()]
+        };
         const expectedAllocationResult = {
-            [testBoostId]: {
-                result: 'SUCCESS',
-                floatTxIds: [uuid(), uuid(), uuid()],
-                accountTxIds: [uuid(), uuid()]
-            }
+            [testBoostId]: mockTransferResult
         };
 
         lamdbaInvokeStub.onFirstCall().returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
@@ -149,100 +248,20 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         };
         const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
 
+        const expectedResult = {
+            [testBoostId]: {
+                ...mockTransferResult,
+                boostAmount: testAmount,
+                amountFromPool: testAmount
+            }
+        }
+
         expect(resultOfRedemption).to.exist;
-        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
+        expect(resultOfRedemption).to.deep.equal(expectedResult);
 
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(lamdbaInvokeStub).to.have.been.calledWith(expectedAllocationInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWith(triggerMessagesInvocation);
-    });
-
-    it('Redeem a simple boost, from user saving enough', async () => {
-        const testUserId = uuid();
-        const testAccountId = uuid();
-        const testAmount = 20 * 100 * 100;
-
-        const mockMoment = moment();
-
-        const expectedAllocationInvocation = testHelper.wrapLambdaInvoc('float_transfer', false, {
-            instructions: [{
-                identifier: testBoostId,
-                floatId: testFloatId,
-                fromId: testBonusPoolId,
-                fromType: 'BONUS_POOL',
-                transactionType: 'BOOST_REDEMPTION',
-                relatedEntityType: 'BOOST_REDEMPTION',
-                currency: 'USD',
-                unit: 'HUNDREDTH_CENT',
-                settlementStatus: 'SETTLED',
-                allocType: 'BOOST_REDEMPTION',
-                allocState: 'SETTLED',
-                recipients: [
-                    { recipientId: testAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' }
-                ]
-            }]
-        });
-
-        const expectedAllocationResult = {
-            [testBoostId]: {
-                result: 'SUCCESS',
-                floatTxIds: [uuid(), uuid()],
-                accountTxIds: [uuid()]
-            }
-        };
-
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
-        momentStub.returns(mockMoment);
-        publishStub.resolves({ result: 'SUCCESS' });
-
-        const mockBoost = {
-            boostId: testBoostId,
-            boostType: 'SIMPLE',
-            boostCategory: 'SIMPLE_SAVE',
-            boostAmount: testAmount,
-            boostUnit: 'HUNDREDTH_CENT',
-            boostCurrency: 'USD',
-            fromFloatId: testFloatId,
-            fromBonusPoolId: testBonusPoolId,
-            messageInstructions: [],
-            flags: []    
-        };
-
-        const mockAccountMap = {
-            [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
-            }
-        };
-
-        const mockEvent = { 
-            redemptionBoosts: [mockBoost], 
-            affectedAccountsDict: mockAccountMap, 
-            event: { accountId: testAccountId, eventType: 'SAVING_EVENT_COMPLETED', eventContext: 'PROVIDED_CONTEXT' }
-        };
-
-        const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
-
-        expect(resultOfRedemption).to.exist;
-        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
-
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
-        expect(publishStub).to.have.been.calledOnce;
-
-        const expectedPublishOptions = {
-            initiator: testUserId,
-            context: {
-                accountId: testAccountId,
-                boostAmount: `${testAmount}::HUNDREDTH_CENT::USD`,
-                boostId: testBoostId,
-                boostType: 'SIMPLE',
-                boostCategory: 'SIMPLE_SAVE',
-                boostUpdateTimeMillis: mockMoment.valueOf(),
-                transferResults: expectedAllocationResult[testBoostId],
-                triggeringEventContext: 'PROVIDED_CONTEXT'
-            }
-        };
-        
-        expect(publishStub).to.have.been.calledOnceWithExactly(testUserId, 'BOOST_REDEEMED', expectedPublishOptions);
     });
 
     it('Handles revocation', async () => {

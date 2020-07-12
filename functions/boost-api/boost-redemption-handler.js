@@ -106,7 +106,6 @@ const triggerFloatTransfers = async (transferInstructions) => {
 
     const resultOfTransfer = JSON.parse(result.Payload);
     if (resultOfTransfer.statusCode !== 200) {
-        // todo : DLQ !!! very necessary
         logger('TRANSFER_ERROR: see above for lambda result, triggered by instruction: ', transferInstructions);
         throw new Error('Error completing float transfers');
     }
