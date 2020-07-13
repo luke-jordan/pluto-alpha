@@ -398,6 +398,7 @@ const generateRedemptionAccountMap = async (boostId, winningAccounts) => {
 
 const expireAccountsForBoost = async (boostId, specifiedAccountIds) => {
     const accountIds = specifiedAccountIds || null; // null makes it all of them
+    logger('Expiring boost, fetching account IDs to expire: ', accountIds);
     const accountsToExpire = await persistence.findAccountsForBoost({ boostIds: [boostId], status: util.ACTIVE_BOOST_STATUS, accountIds });
     const accountMap = accountsToExpire[0].accountUserMap;
     

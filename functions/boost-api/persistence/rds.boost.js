@@ -158,6 +158,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     let runningIndex = boostIds.length + 1;
     let runningValues = [].concat(boostIds);
     
+    const accountIdsSpecified = accountIds && accountIds.length > 0;
     if (accountIds && accountIds.length > 0) {
         querySuffix = `${querySuffix} and ${accountsTable}.account_id in (${extractArrayIndices(accountIds, runningIndex)})`;
         runningValues = runningValues.concat(accountIds);
@@ -177,7 +178,8 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
     // lots of complexity in here that we don't need for a log, so just removing for now
     // logger('Selecting accounts relevant for boost (boost-account-map), received (first 5): ', resultOfQuery.slice(0, Math.min(resultOfQuery.length, 5)));
 
-    if (resultOfQuery.length === 0) {
+    // if not specified, want to return an empty map
+    if (accountIdsSpecified && resultOfQuery.length === 0) {
         throw new Error('Account id not found');
     }
 
