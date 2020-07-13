@@ -65,7 +65,8 @@ const obtainUserHistory = async (systemWideUserId) => {
         logger('ERROR! Something went wrong fetching history');
     }
 
-    return JSON.parse(historyFetchResult['Payload']).userEvents;
+    const payload = JSON.parse(historyFetchResult['Payload']); 
+    return payload[systemWideUserId];
 };
 
 const formatAmountResult = (amountResult) => {

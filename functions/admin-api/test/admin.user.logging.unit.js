@@ -131,7 +131,7 @@ describe('*** UNIT TEST FETCH USER FILE ***', () => {
             StatusCode: 200,
             Payload: JSON.stringify({
                 result: 'success',
-                userEvents: {
+                [testSystemId]: {
                     totalCount: 1,
                     userEvents: [{
                         initiator: 'USER',
