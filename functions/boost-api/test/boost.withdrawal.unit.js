@@ -399,7 +399,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         helper.expectNoCalls(redeemBoostStub, updateBoostRedeemedStub);
     });
 
-    it.only('Makes boost pending by cancelling withdrawal', async () => {
+    it('Makes boost pending by cancelling withdrawal', async () => {
         const mockEventTimestamp = moment().valueOf(0);
         const testEvent = { userId: mockUserId, eventType: 'WITHDRAWAL_EVENT_CANCELLED', timeInMillis: mockEventTimestamp };
         

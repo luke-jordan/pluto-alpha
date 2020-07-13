@@ -142,12 +142,7 @@ module.exports.handleWithdrawalCancelled = async ({ eventBody, userProfile, pers
 };
 
 // FOR THE MOMENT, THESE ARE STRAIGHTFORWARD ROUTERS, THOUGH IN FUTURE THEY MAY GET MORE COMPLEX
-module.exports.handleWithdrawalAborted = async ({ eventBody, publisher }) => {
+module.exports.dispatchWithdrawalToBoostProcess = async ({ eventBody, publisher }) => {
     logger('Withdrawal aborted, send it to boosts');
-    await dispatchHelper.sendEventToBoostProcessing(eventBody, publisher);
-};
-
-module.exports.handleWithdrawalFinalized = async ({ eventBody, publisher }) => {
-    logger('Withdrawal confirmed by admin, send to boosts, event body: ', eventBody);
     await dispatchHelper.sendEventToBoostProcessing(eventBody, publisher);
 };

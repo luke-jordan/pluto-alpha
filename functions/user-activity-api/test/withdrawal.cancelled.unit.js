@@ -177,4 +177,31 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
         expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
     });
 
+    // not cancelled but other unit is getting very full
+
+    it('Dispatches withdrawal initiated to boost processing', async () => {
+        const timeNow = moment().valueOf();
+
+        const boostProcessPayload = {
+            userId: mockUserId,
+            eventType: 'WITHDRAWAL_EVENT_INITIATED',
+            timeInMillis: timeNow,
+            accountId: 'account-id',
+            eventContext: { accountId: 'account-id' }
+        };
+
+        const withdrawalEvent = {
+            userId: mockUserId,
+            eventType: 'WITHDRAWAL_EVENT_INITIATED',
+            timestamp: timeNow,
+            context: { accountId: 'account-id' }
+        };
+
+        const sqsBatch = wrapEventSqs(withdrawalEvent);
+        const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(sqsBatch);
+        expect(resultOfHandle).to.exist;
+
+        expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
+    });
+
 });

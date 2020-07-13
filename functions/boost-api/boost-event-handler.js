@@ -243,7 +243,7 @@ const obtainEventHistoryForBoosts = async (boosts, event) => {
 
 const processEventForExistingBoosts = async (event) => {
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
-    logger('Processing event for existing boosts, current pending or offered: ', JSON.stringify(offeredOrPendingBoosts, null, 2));
+    // logger('Processing event for existing boosts, current pending or offered: ', JSON.stringify(offeredOrPendingBoosts, null, 2));
 
     if (!offeredOrPendingBoosts || offeredOrPendingBoosts.length === 0) {
         logger('Well, nothing found, so just return');
