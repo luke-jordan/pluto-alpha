@@ -104,7 +104,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const mlParameters = { onlyOfferOnce: true, maxPortionOfAudience: 0.2 };
 
         const tinyOptions = {
-            url: config.get('dataPipeline.endpoint'),
+            url: config.get('mlSelection.endpoint'),
             data: {
                 boost: mockMlBoostFromRds(mlParameters),
                 userIds: ['user-id-1']
@@ -123,7 +123,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             Payload: JSON.stringify({
                 instructions: [{
                     instructionId: testInstructionId,
-                    userIds: ['user-id-1'],
+                    destinationUserId: 'user-id-1',
                     parameters: mockMlBoostFromRds(mlParameters)
                 }]
             })
@@ -170,7 +170,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const mockAccountIds = ['account-id-1', 'account-id-2'];
 
         const tinyOptions = {
-            url: config.get('dataPipeline.endpoint'),
+            url: config.get('mlSelection.endpoint'),
             data: {
                 boost: mockMlBoostFromRds(mlParameters),
                 userIds: ['user-id-1', 'user-id-2']
@@ -199,7 +199,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             Payload: JSON.stringify({
                 instructions: [{
                     instructionId: testInstructionId,
-                    userIds: ['user-id-1'],
+                    destinationUserId: 'user-id-1',
                     parameters: mockMlBoostFromRds(mlParameters)
                 }]
             })

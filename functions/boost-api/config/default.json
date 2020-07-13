@@ -57,7 +57,9 @@
         "active": true,
         "value": "JupiterSave"
     },
-    "dataPipeline": {
+    "mlSelection": {
+        "enabled": true,
         "endpoint": "<insert here>"
     }
+    
 }

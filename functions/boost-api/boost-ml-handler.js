@@ -3,19 +3,22 @@
 const logger = require('debug')('jupiter:boosts:ml');
 const moment = require('moment');
 const config = require('config');
+const tiny = require('tiny-json-http');
 
 const persistence = require('./persistence/rds.boost');
-const tiny = require('tiny-json-http');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+const assembleListOfMsgInstructions = ({ userIds, instructionIds, parameters }) => userIds.
+    map((destinationUserId) => instructionIds.
+    map((instructionId) => ({ instructionId, destinationUserId, parameters }))).
+    reduce((assembledInstructions, instruction) => [...assembledInstructions, ...instruction]);
+
 const triggerMsgInstructions = async (boostsAndRecipients) => {
-    const instructions = boostsAndRecipients.map((boost) => ({
-        instructionId: boost.instructionId,
-        userIds: boost.userIds,
-        parameters: boost.parameters
-    }));
+    logger('Assembling instructions from:', boostsAndRecipients);
+    const instructions = boostsAndRecipients.map((boostDetails) => assembleListOfMsgInstructions(boostDetails))[0];
+    logger('Assembled instructions:', instructions);
 
     const msgInstructionInvocation = {
         FunctionName: config.get('lambdas.messageSend'),
@@ -47,7 +50,7 @@ const sendRequestToRefreshAudience = async (audienceId) => {
 };
 
 const obtainUsersForOffering = async (boost, userIds) => {
-    const options = { url: config.get('dataPipeline.endpoint'), data: { boost, userIds } };
+    const options = { url: config.get('mlSelection.endpoint'), data: { boost, userIds } };
     const result = await tiny.get(options);
     logger('Result of ml boost user selection:', result);
     return result;
@@ -55,7 +58,7 @@ const obtainUsersForOffering = async (boost, userIds) => {
 
 const hasValidMinInterval = (lastOfferedTime, minInterval) => {
     const currentInterval = moment().diff(moment(lastOfferedTime), minInterval.unit);
-    logger(`Interval between last boost an now is: ${currentInterval} ${minInterval.unit}`);
+    logger(`Interval between last boost and now is: ${currentInterval} ${minInterval.unit}`);
     if (!lastOfferedTime || currentInterval >= minInterval.value) {
         return true;
     }
@@ -76,7 +79,7 @@ const filterAccountIds = async (boost, accountIds) => {
     const boostLogPromises = accountIds.map((accountId) => persistence.findLastLogForBoost(boost.boostId, accountId, 'ML_BOOST_OFFERED'));
     const boostLogs = await Promise.all(boostLogPromises);
     logger('Got boost logs:', boostLogs);
-    const boostLogsWithValidIntervals = boostLogs.filter((boostLog) => hasValidMinInterval(boostLog.creationTime || null, minIntervalBetweenRuns));
+    const boostLogsWithValidIntervals = boostLogs.filter((boostLog) => hasValidMinInterval(boostLog.creationTime, minIntervalBetweenRuns));
     return boostLogsWithValidIntervals.map((boostLog) => boostLog.accountId);
 };
 
@@ -95,18 +98,19 @@ const selectUsersForBoostOffering = async (boost) => {
 
     const accountUserIdMap = await persistence.findUserIdsForAccounts(filteredAccountIds, true);
     logger('Got user ids for accounts:', accountUserIdMap);
-
     const userIds = Object.keys(accountUserIdMap);
     const userIdsForOffering = await obtainUsersForOffering(boost, userIds);
     logger('Got user ids selected for boost offering:', userIdsForOffering);
+
     const accountIdsForOffering = userIdsForOffering.map((userId) => accountUserIdMap[userId]);
+    const instructionIds = messageInstructionIds.instructions.map((instruction) => instruction.instructionId);
 
     return {
         boostId,
         parameters: boost,
         userIds: userIdsForOffering,
         accountIds: accountIdsForOffering,
-        instructionId: messageInstructionIds.instructions[0].instructionId
+        instructionIds
     };
 };
 
@@ -118,6 +122,10 @@ const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds,
  */
 module.exports.processMlBoosts = async (event) => {
     try {
+        if (!config.get('mlSelection.enabled')) { // todo: create config var
+            return { result: 'NOT_ENABLED' };
+        }
+
         const boostId = event.boostId || null;
         const mlBoosts = await persistence.fetchActiveMlBoosts(boostId);
         logger('Got machine-determined boosts:', mlBoosts);
@@ -129,9 +137,10 @@ module.exports.processMlBoosts = async (event) => {
         const statusUpdateInstructions = boostsAndRecipients.map((boost) => createUpdateInstruction(boost.boostId, boost.accountIds));
         logger('Created boost status update instructions:', statusUpdateInstructions);
 
-        const resultOfUpdate = persistence.updateBoostAccountStatus(statusUpdateInstructions);
+        const resultOfUpdate = await persistence.updateBoostAccountStatus(statusUpdateInstructions);
         logger('Result of boost account status update:', resultOfUpdate);
 
+        // const msgInstructionPromises = boostsAndRecipients.map((boost) => triggerMsgInstructions(boost));
         const resultOfMsgInstructions = await triggerMsgInstructions(boostsAndRecipients);
         logger('triggering message instructions resulted in:', resultOfMsgInstructions);
 

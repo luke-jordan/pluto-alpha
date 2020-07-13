@@ -193,7 +193,7 @@ module.exports.findLastLogForBoost = async (boostId, accountId, logType) => {
         `log_type = $3 order by creation_time desc limit 1`;
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId, logType]);
     return Array.isArray(resultOfQuery) && resultOfQuery.length > 0
-        ? camelizeKeys(resultOfQuery[0]) : null;
+        ? camelizeKeys(resultOfQuery[0]) : { };
 };
 
 module.exports.findAccountsForPooledReward = async (boostId, logType) => {
@@ -576,8 +576,7 @@ module.exports.fetchActiveMlBoosts = async (boostId) => {
             `and end_time < current_timestamp`;
         values.push(boostId);
     } else {
-        query = `select * from ${boostMainTable} where ml_parameters != null ` +
-            `and active = true and end_time < current_timestamp`;
+        query = `select * from ${boostMainTable} where ml_parameters != null and active = true and end_time < current_timestamp`;
     }
 
     const resultOfQuery = await rdsConnection.selectQuery(query, values);
