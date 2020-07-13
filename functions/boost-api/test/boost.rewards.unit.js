@@ -66,11 +66,12 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 allocState: 'SETTLED',
                 recipients: [
                     { recipientId: testAccountId, amount: testCalculatedAmount, recipientType: 'END_USER_ACCOUNT' }
-                ]
+                ],
+                referenceAmounts: { amountFromBonus: testCalculatedAmount, boostAmount: testCalculatedAmount } 
             }]
         });
 
-        const expectedAllocationResult = {
+        const mockAllocationResult = {
             [testBoostId]: {
                 result: 'SUCCESS',
                 floatTxIds: [uuid(), uuid()],
@@ -78,7 +79,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
         momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -113,7 +114,15 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
 
         expect(resultOfRedemption).to.exist;
-        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
+
+        const expectedResult = { 
+            [testBoostId]: {
+                ...mockAllocationResult[testBoostId], 
+                boostAmount: testCalculatedAmount, 
+                amountFromBonus: testCalculatedAmount
+            }
+        };
+        expect(resultOfRedemption).to.deep.equal(expectedResult);
 
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
         expect(publishStub).to.have.been.calledOnce;
@@ -128,6 +137,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const testPercentForPool = 0.05;
         
         const testCalculatedAmount = testUserCount * testContribPerUserAmount * (0.06);
+        const testBonusPoolAmount = testUserCount * testContribPerUserAmount * 0.01; // i.e. proportion from client/bonus
         
         const timeSaveCompleted = moment();
         
@@ -143,13 +153,12 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             testPooledAccountIds.push(uuid());
         }
 
-        const assembleAllocationInvocation = (recipientIds, allocationAmount, transactionType) => {
+        const assembleAllocationInvocation = (recipientIds, allocationAmount, transactionType, referenceAmounts) => {
             const recipients = recipientIds.map((recipientId) => ({
                 recipientId, amount: allocationAmount, recipientType: 'END_USER_ACCOUNT'
             }));
 
-            return {
-                instructions: [{
+            const invokeBody = {
                     identifier: testBoostId,
                     floatId: testFloatId,
                     fromId: testBonusPoolId,
@@ -162,18 +171,24 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                     allocType: transactionType,
                     allocState: 'SETTLED',
                     recipients
-                }]
             };
+
+            if (referenceAmounts) {
+                invokeBody.referenceAmounts = referenceAmounts;
+            }
+
+            return { instructions: [invokeBody] };
         };
 
         const expectedPerPersonAmount = testContribPerUserAmount * testPercentForPool;
         const toBonusPoolPayload = assembleAllocationInvocation(testPooledAccountIds, -expectedPerPersonAmount, 'BOOST_POOL_FUNDING');
         const expectedTransferToBonusPoolInvocation = helper.wrapLambdaInvoc('float_transfer', false, toBonusPoolPayload);
 
-        const fromBonusPoolPayload = assembleAllocationInvocation([testAccountId], testCalculatedAmount, 'BOOST_REDEMPTION');
+        const expectedRefAmounts = { amountFromBonus: testBonusPoolAmount, boostAmount: testCalculatedAmount };
+        const fromBonusPoolPayload = assembleAllocationInvocation([testAccountId], testCalculatedAmount, 'BOOST_REDEMPTION', expectedRefAmounts);
         const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, fromBonusPoolPayload);
 
-        const expectedAllocationResult = {
+        const mockAllocationResult = {
             [testBoostId]: {
                 result: 'SUCCESS',
                 floatTxIds: [uuid(), uuid()],
@@ -181,7 +196,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(expectedAllocationResult) });
+        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
         momentStub.returns(moment());
         publishStub.resolves({ result: 'SUCCESS' });
 
@@ -221,12 +236,20 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
 
-        expect(resultOfRedemption).to.exist;
-        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
+        const expectedResult = {
+            [testBoostId]: {
+                ...mockAllocationResult[testBoostId],
+                amountFromBonus: testBonusPoolAmount,
+                boostAmount: testCalculatedAmount
+            }
+        };
 
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedAllocationInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedTransferToBonusPoolInvocation);
+        expect(resultOfRedemption).to.exist;
+        expect(resultOfRedemption).to.deep.equal(expectedResult);
+
         expect(lamdbaInvokeStub).to.have.been.calledTwice;
+        helper.testLambdaInvoke(lamdbaInvokeStub, expectedAllocationInvocation, 1);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedTransferToBonusPoolInvocation);
         
         expect(publishStub).to.have.been.calledOnce;
         expect(publishMultiStub).to.have.been.calledOnce;
@@ -282,20 +305,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal({});
 
-        const expectedLogContext = {
-            accountId: 'account-1',
-            boostId: testBoostId,
-            boostCategory: 'TAP_SCREEN',
-            boostAmount: '0::HUNDREDTH_CENT::USD',
-            boostType: 'GAME',
-            boostUpdateTimeMillis: mockUpdateTime.valueOf(),
-            transferResults: undefined,
-            triggeringEventContext: undefined
-        };
-
-        const expectedLogOptions = { context: expectedLogContext, initiator: testUserId };
-        // todo : also do coverage above
-        expect(publishStub).to.have.been.calledOnceWithExactly(testUserId, 'BOOST_REDEEMED', expectedLogOptions);
+        expect(publishStub).to.not.have.been.called;
 
         expect(lamdbaInvokeStub).to.not.have.been.called;
         expect(publishMultiStub).to.not.have.been.called;

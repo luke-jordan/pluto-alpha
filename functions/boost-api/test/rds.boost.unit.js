@@ -364,9 +364,54 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(resultOfInsertion.accountIds).to.deep.equal([]);
 
         expect(multiTableStub).to.have.been.calledOnceWithExactly([insertFirstDef]);
+        expect(queryStub).to.not.have.been.called;
     });
 
-    it('Inserts boost-account', async () => {
+    it('Same thing, but with event type and default status set to UNLOCKED', async () => {
+        // most of this is irrelevant, just checking the important
+        const mockCreateConditions = {
+            REDEEMED: ['number_taps_greater_than_N #{20:20000}']
+        };
+    
+        uuidStub.onFirstCall().returns(testBoostId);
+
+        // this is not great but Sinon matching is just the worst thing in the world and is failing abysmally on complex matches, hence
+        const insertionTime = moment();
+        multiTableStub.resolves([
+            [{ 'boost_id': testBoostId, 'creation_time': insertionTime.format() }]
+        ]);
+
+        const testInstruction = {
+            creatingUserId: 'admin-user-id',
+            label: 'Midweek arrow chase!',
+            boostType: 'GAME',
+            boostCategory: 'CHASE_THE_ARROW',
+            boostAudienceType: 'EVENT_DRIVEN',
+            boostAmount: 100000,
+            boostBudget: 200000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            forClientId: 'some_client_co',
+            fromFloatId: 'primary_float',
+            boostStartTime: moment(),
+            boostEndTime: moment().add(1, 'week'),
+            defaultStatus: 'UNLOCKED',
+            statusConditions: mockCreateConditions,
+            audienceId: testAudienceId,
+            redemptionMsgInstructions: testRedemptionMsgs,
+            messageInstructionIds: []
+        };
+
+        const resultOfInsertion = await rds.insertBoost(testInstruction);
+        expect(resultOfInsertion.accountIds).to.deep.equal([]);
+
+        expect(multiTableStub).to.have.been.calledOnce;
+        expect(multiTableStub.getCall(0).args[0]).to.have.length(1);
+        expect(queryStub).to.not.have.been.called;
+    });
+
+    it('Inserts boost-account joins', async () => {
         const testBoostStatus = 'CREATED';
         const testCreationTime = moment().format();
 
@@ -374,82 +419,19 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const columnTemplate = '${boostId}, ${accountId}, ${boostStatus}';
         const boostRow = { boostId: testBoostId, accountId: testAccountId, boostStatus: testBoostStatus };
     
-        const boostQueryDef = { query: insertBoostQuery, columnTemplate, rows: [boostRow, boostRow] };
+        const boostQueryDef = { query: insertBoostQuery, columnTemplate, rows: [boostRow, boostRow, boostRow, boostRow] };
 
         multiTableStub.resolves([
             [{ 'insertion_id': 100, 'creation_time': moment().format() }, { 'insertion_id': 101, 'creation_time': moment().format() }]
         ]);
 
-        const expectedResult = { boostIds: [testBoostId, testBoostId], accountId: testAccountId, persistedTimeMillis: moment(testCreationTime).valueOf() };
+        const expectedResult = { boostIds: [testBoostId, testBoostId], accountIds: [testAccountId, testAccountId], persistedTimeMillis: moment(testCreationTime).valueOf() };
 
-        const resultOfInsertion = await rds.insertBoostAccount([testBoostId, testBoostId], testAccountId, testBoostStatus);
+        const resultOfInsertion = await rds.insertBoostAccountJoins([testBoostId, testBoostId], [testAccountId, testAccountId], testBoostStatus);
 
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.deep.equal(expectedResult);
         expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
-    });
-
-    it('Fetches account ids for pooled rewards', async () => {
-        const logType = 'BOOST_POOL_CONTRIBUTION';
-        const selectQuery = `select distinct(account_id) from boost_data.boost_log where log_type = $1 and boost_id = $2`;
-        queryStub.resolves([{ 'account_id': 'account-1' }, { 'account_id': 'account-2' }]);
-
-        const result = await rds.findAccountsForPooledReward(testBoostId, logType);
-        expect(result).to.deep.equal({ boostId: testBoostId, accountIds: ['account-1', 'account-2'] });
-
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [logType, testBoostId]);
-    });
-
-    it('Fetches user Ids for accounts', async () => {
-        const testAccountIds = testHelper.createUUIDArray(2);
-        const [firstUserId, secondUserId] = testHelper.createUUIDArray(2);
-        const selectQuery = `select distinct(owner_user_id) from ${config.get('tables.accountLedger')} where ` +
-            `account_id in ($1, $2)`;
-        queryStub.resolves([{ 'owner_user_id': firstUserId }, { 'owner_user_id': secondUserId }]);
-
-        const result = await rds.findUserIdsForAccounts(testAccountIds);
-
-        expect(result).to.deep.equal([firstUserId, secondUserId]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, testAccountIds);
-    });
-
-    it('Fetches friendship user ids', async () => {
-        const testRelationshipIds = testHelper.createUUIDArray(2);
-        const [firstUserId, secondUserId, thirdUserId] = testHelper.createUUIDArray(3);
-        const selectQuery = `select initiated_user_id, accepted_user_id from ${config.get('tables.friendshipTable')} where ` +
-            `relationship_status = $1 and relationship_id in ($2, $3)`;
-        queryStub.resolves([
-            { 'initiated_user_id': firstUserId, 'accepted_user_id': secondUserId },
-            { 'initiated_user_id': thirdUserId, 'accepted_user_id': firstUserId }
-        ]);
-
-        const result = await rds.fetchUserIdsForRelationships(testRelationshipIds);
-
-        expect(result).to.deep.equal([
-            { initiatedUserId: firstUserId, acceptedUserId: secondUserId },
-            { initiatedUserId: thirdUserId, acceptedUserId: firstUserId }
-        ]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, ['ACTIVE', ...testRelationshipIds]);
-    });
-
-    it('Fetches boost account join, single', async () => {
-        const expectedQuery = `select * from boost_data.boost_account_status where boost_id = $1 and account_id = $2`;
-        queryStub.resolves([{ 'boost_id': 'some-id', 'boost_status': 'UNLOCKED' }]);
-
-        const result = await rds.fetchCurrentBoostStatus('some-id', 'some-account');
-        expect(result).to.deep.equal({ boostId: 'some-id', boostStatus: 'UNLOCKED' });
-
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account']);
-    });
-
-    it('Handles empty boost account join', async () => {
-        const expectedQuery = `select * from boost_data.boost_account_status where boost_id = $1 and account_id = $2`;
-        queryStub.resolves([]);
-
-        const result = await rds.fetchCurrentBoostStatus('some-id', 'some-account');
-        expect(result).to.be.null;
-
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account']);
     });
 
 });

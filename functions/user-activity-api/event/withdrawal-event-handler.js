@@ -125,14 +125,24 @@ module.exports.handleWithdrawalCancelled = async ({ eventBody, userProfile, pers
     }
    
     const transactionDetails = await persistence.fetchTransaction(transactionId);
+    logger('Retrieved transaction: ', transactionDetails);
     
     if (newStatus !== 'CANCELLED' || transactionDetails.settlementStatus !== 'CANCELLED') {
-        logger('Error! Event must have been published incorrectly');
+        logger('Error! Withdrawal status is not cancelled, event must have been published incorrectly');
         return;
     }
+
+    await dispatchHelper.sendEventToBoostProcessing(eventBody, publisher);
 
     // i.e., was not just user cancelling before the end
     if (oldStatus === 'PENDING') {
         await withdrawalCancelledEMail(userProfile, transactionDetails, publisher);
     }
+
+};
+
+// FOR THE MOMENT, THESE ARE STRAIGHTFORWARD ROUTERS, THOUGH IN FUTURE THEY MAY GET MORE COMPLEX
+module.exports.dispatchWithdrawalToBoostProcess = async ({ eventBody, publisher }) => {
+    logger('Withdrawal aborted, send it to boosts');
+    await dispatchHelper.sendEventToBoostProcessing(eventBody, publisher);
 };

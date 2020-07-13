@@ -150,9 +150,9 @@ describe('*** UNIT TEST BONUS TRANSFER ***', () => {
         expect(redisSetStub).to.have.been.calledTwice;
     });
 
-    // eslint-disable-next-line
+    // eslint-disable-next-line func-names
     it('Handles pending transactions', async function () {
-        // eslint-disable-next-line
+        // eslint-disable-next-line no-invalid-this
         this.timeout(15000);
         redisGetStub.onFirstCall().resolves('PENDING');
         redisGetStub.onSecondCall().resolves(JSON.stringify(testTxResult));

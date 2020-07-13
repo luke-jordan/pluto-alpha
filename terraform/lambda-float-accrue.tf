@@ -40,9 +40,9 @@ resource "aws_lambda_function" "float_accrue" {
                 }
             },
             "db": {
-              "host": "${local.database_config.host}",
-              "database": "${local.database_config.database}",
-              "port" :"${local.database_config.port}"
+              "host": local.database_config.host,
+              "database": local.database_config.database,
+              "port" : local.database_config.port
             },
             "records": {
               "bucket": "${aws_s3_bucket.float_record_bucket.bucket}"

@@ -366,7 +366,7 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
     const testNumberAccounts = 1;
     const mockFloatLogId = uuid();
 
-    const convertToExpectedUserAlloc = (account, allocationEntity) => ({
+    const convertToExpectedUserAlloc = (account, allocationEntity, logId) => ({
         accountId: account.accountId,
         amount: allocationEntity.amountToCredit,
         unit: 'HUNDREDTH_CENT',
@@ -375,7 +375,8 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         allocState: 'SETTLED',
         settlementStatus: 'SETTLED',
         relatedEntityType: 'CAPITALIZATION_EVENT',
-        relatedEntityId: mockFloatLogId
+        relatedEntityId: mockFloatLogId,
+        logId
     });
 
     beforeEach(() => helper.resetStubs(fetchLastLogStub, fetchAccrualsStub, addOrSubtractStub, allocateNonUserStub, allocateToUsersStub, fetchFloatConfigVarsStub));
@@ -433,7 +434,7 @@ describe('*** UNIT TEST CAPITALIZATION CONDUCT ***', () => {
         const bonusAlloc = { ...expectedEntityAllocBase, amount: bonusAmount, allocatedToId: bonusPoolId, allocatedToType: 'BONUS_POOL', label: 'BONUS' };
 
         const expectedUserAllocs = mockAccountsFromDb.map((account) => convertToExpectedUserAlloc(account, 
-                expectedDistributionMap.get(account.accountId)));
+                expectedDistributionMap.get(account.accountId), mockFloatLogId));
         const mockUserPerstResult = expectedUserAllocs.map((alloc) => ({ floatTxId: uuid(), accountTxId: uuid(), amount: alloc.amount }));
 
         fetchLastLogStub.resolves({ clientId: testClientId, floatId: testFloatId, referenceTime: testLastLogTime, logType: 'CAPITALIZATION_EVENT' });

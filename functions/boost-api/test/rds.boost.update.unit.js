@@ -186,19 +186,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         expect(sinon.match(expectedResult).test(findBoostResponse)).to.be.true;
     });
 
-    it('Finds boost created by event', async () => {
-        const findBoostQuery = `select * from ${boostTable} where active = true and end_time > current_timestamp ` +
-            `and boost_id not in (select boost_id from ${boostUserTable} where account_id = $1)`; 
-
-        queryStub.withArgs(findBoostQuery, [testAccountId]).resolves([boostFromPersistence]);
-
-        const findBoostResponse = await rds.fetchUncreatedActiveBoostsForAccount(testAccountId);
-
-        expect(findBoostResponse).to.exist;
-        expect(findBoostResponse).to.deep.equal([expectedBoostResult]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(findBoostQuery, [testAccountId]);
-    });
-
     // boosts only ever affect (1) all related accounts of a certain current status in relation to that boost, or (2) a specific account
     it('Finds account IDs and user IDs correctly for a boost, find all pending', async () => {
         const testAccountId2 = uuid();
