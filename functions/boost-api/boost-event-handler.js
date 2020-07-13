@@ -303,7 +303,6 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
 
     const redemptionEvent = { eventType: 'BOOST_TOURNAMENT_WON', boostId };
     const redemptionCall = { 
-        redemptionBoosts: [boost], 
         affectedAccountsDict: redemptionAccountDict, 
         event: redemptionEvent 
     };
@@ -314,10 +313,15 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
         // we actually start using random rewards (easy fix is pass this amount to boost redemption handler)
         const revisedBoostAmount = boostRedemptionHandler.calculateBoostAmount(boost, pooledContributionMap);
         logger('Updating boost amount to: ', revisedBoostAmount);
+        
+        boost.boostAmount = revisedBoostAmount; // so subsequent in-memory calls are correct
         await persistence.updateBoostAmount(boost.boostId, revisedBoostAmount);
+
         redemptionCall.pooledContributionMap = pooledContributionMap;
     }
-    
+
+    redemptionCall.redemptionBoosts = [boost]; // so it has the right amount in it for things like events etc
+        
     const resultOfRedemptions = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
     logger('Result of redemptions for winners: ', resultOfRedemptions);
 
