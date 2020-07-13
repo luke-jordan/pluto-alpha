@@ -286,7 +286,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         findPooledAccountsStub.resolves(mockPoolContribMap);
 
         const expectedRewardAmount = 3 * mockPoolContrib * mockPercentAward;
-        calculateAmountStub.returns(expectedRewardAmount);
+        calculateAmountStub.returns({ boostAmount: expectedRewardAmount });
 
         const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
         expect(resultOfExpiry).to.deep.equal([{ statusCode: 200, boostsRedeemed: 2 }]);

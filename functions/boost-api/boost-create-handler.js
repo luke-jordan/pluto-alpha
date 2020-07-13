@@ -24,9 +24,10 @@ const STANDARD_GAME_ACTIONS = {
 
 const STANDARD_BOOST_TYPES = {
     'GAME': ['CHASE_ARROW', 'TAP_SCREEN', 'DESTROY_IMAGE'],
-    'SIMPLE': ['SIMPLE_SAVE', 'ROUND_UP'],
+    'SIMPLE': ['SIMPLE_SAVE', 'ROUND_UP', 'TARGET_BALANCE'],
     'REFERRAL': ['USER_CODE_USED'],
-    'SOCIAL': ['FRIENDS_ADDED', 'NUMBER_FRIENDS']
+    'SOCIAL': ['FRIENDS_ADDED', 'NUMBER_FRIENDS'],
+    'WITHDRAWAL': ['ABORT_WITHDRAWAL', 'CANCEL_WITHDRAWAL']
 };
 
 const DEFAULT_BOOST_PRIORITY = 100;
@@ -472,23 +473,7 @@ module.exports.createBoost = async (event) => {
     const { boostId, accountIds } = persistedBoost;
 
     if (Array.isArray(accountIds) && accountIds.length > 0) {
-        const logParams = {
-            boostId,
-            boostType,
-            boostCategory,
-
-            boostStartTime: boostStartTime.valueOf(),
-            boostEndTime: boostEndTime.valueOf(),
-
-            // some extra context, to seed ML properly
-            statusConditions: instructionToRds.statusConditions,
-            rewardParameters: instructionToRds.rewardParameters,
-            gameParams: instructionToRds.gameParams,
-            
-            boostAmount: parseInt(boostAmountDetails[0], 10),
-            boostUnit: boostAmountDetails[1],
-            boostCurrency: boostAmountDetails[2]
-        };
+        const logParams = boostUtil.constructBoostContext({ boostId, ...instructionToRds });
         logger('Publishing user logs with params: ', logParams);
         await publishBoostUserLogs(params.creatingUserId, accountIds, logParams);
     }

@@ -1,7 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:handler');
-// const config = require('config');
+const config = require('config');
 
 const statusCodes = require('statuses');
 
@@ -13,6 +13,9 @@ const conditionTester = require('./condition-tester');
 
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
+
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const GAME_RESPONSE = 'GAME_RESPONSE';
 
@@ -66,20 +69,29 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
 // //////////////////////////// PRIMARY METHODS ///////////////////////////////////////////
 
 const createBoostsTriggeredByEvent = async (event) => {
-    const { accountId } = event;
+    const { userId, accountId } = event;
 
     // select all boosts that are active, but not present in the user-boost table for this user/account
     const boostFetchResult = await persistence.fetchUncreatedActiveBoostsForAccount(accountId);
     // logger('Found active boosts:', boostFetchResult);
 
     // Then check the status conditions until finding one that is triggered by this event
-    const boostsToCreate = boostFetchResult.filter((boost) => shouldCreateBoostForAccount(event, boost)).map((boost) => boost.boostId);
-    logger('Boosts to create:', boostsToCreate);
+    const boostsToCreate = boostFetchResult.filter((boost) => shouldCreateBoostForAccount(event, boost));
+    
+    const boostToCreateIds = boostsToCreate.map((boost) => boost.boostId);
+    logger('Boosts to create:', boostToCreateIds);
     if (boostsToCreate.length === 0) {
         return 'NO_BOOSTS_CREATED';
     }
 
-    return persistence.insertBoostAccount(boostsToCreate, accountId, 'CREATED');
+    const persistedResult = await persistence.insertBoostAccountJoins(boostToCreateIds, [accountId], 'CREATED');
+    const logPublication = boostsToCreate.map((boost) => {
+        const logContext = util.constructBoostContext(boost);
+        return publisher.publishUserEvent(userId, `BOOST_CREATED_${boost.boostType}`, { context: logContext });
+    });
+    await Promise.all(logPublication);
+
+    return persistedResult;
 };
 
 const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
@@ -102,22 +114,54 @@ const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
     return pooledContributionMap;
 };
 
-const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, transactionId) => {
+// as we do not want to block anything just because of this, but until live for a while, not wholly confident re format of incoming
+// note : this is used for yield calculations later
+const safeExtractWholeCurrencyAmount = (savedAmount) => {
+    try {
+        const amountDict = opsUtil.convertAmountStringToDict(savedAmount);
+        return opsUtil.convertToUnit(amountDict.amount, amountDict.unit, 'WHOLE_CURRENCY');
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return 0;
+    }
+};
+
+const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, logContextBase = {}) => {
     logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
     return alteredBoosts.map((boost) => {
         const boostId = boost.boostId;
         const boostStatusSorted = boostStatusChangeDict[boostId].sort(util.statusSorter);
+        
         const highestStatus = boostStatusSorted[0];
+        // see notes elsewhere about side-effects of premature over-parallelization, and its lingering effects;
+        // to straighten out and make more comprehensible as soon as time permits
+        const thisBoostAccountMap = affectedAccountsUsersDict[boostId];
+        const allPriorStatus = [...new Set(Object.values(thisBoostAccountMap).map(({ status }) => status))];
+        const priorStatus = allPriorStatus.length === 1 ? allPriorStatus[0] : 'MIXED';
+        
         const isChangeRedemption = highestStatus === 'REDEEMED';
         const appliesToAll = boost.flags && boost.flags.indexOf('REDEEM_ALL_AT_ONCE') >= 0;
-        const logContext = { newStatus: highestStatus, boostAmount: boost.boostAmount };
+
+        const logContext = { newStatus: highestStatus, oldStatus: priorStatus, boostAmount: boost.boostAmount };
+        const { transactionId, savedAmount, transferResults } = logContextBase;
         if (transactionId) {
             logContext.transactionId = transactionId;
         }
 
+        // next two so we can start to caculate boost yields much more easily
+        if (savedAmount) {
+            logContext.savedAmount = savedAmount;
+            logContext.savedWholeCurrency = safeExtractWholeCurrencyAmount(savedAmount);
+        }
+
+        if (transferResults && transferResults[boostId]) {
+            logContext.boostAmount = transferResults[boostId].boostAmount;
+            logContext.amountFromBonus = transferResults[boostId].amountFromBonus;
+        }
+
         return {
             boostId,
-            accountIds: Object.keys(affectedAccountsUsersDict[boostId]),
+            accountIds: Object.keys(thisBoostAccountMap),
             newStatus: highestStatus,
             stillActive: !(isChangeRedemption && appliesToAll),
             logType: 'STATUS_CHANGE',
@@ -143,13 +187,75 @@ const checkAndMarkSaveForPool = async (boostsForStatusChange, event) => {
     }
 };
 
+const publishWithdrawalLog = async (boost, newStatus, accountMap) => {
+    const eventType = `WITHDRAWAL_BOOST_${newStatus}`;
+    const userIds = Object.values(accountMap).map(({ userId }) => userId);
+    const logContext = util.constructBoostContext(boost);
+    logger('Publishing ', eventType, ' for: ', userIds);
+    await publisher.publishMultiUserEvent(userIds, eventType, { context: logContext });
+};
+
+const fetchHistoryFromLogs = async (startTime, eventsOfInterest, thisEvent) => {
+    const { eventType, userId, timeInMillis: timestamp } = thisEvent;
+    const historyPayload = { userId, eventTypes: eventsOfInterest, startDate: startTime.valueOf(), excludeContext: true };
+    logger('Fetching history with payload: ', historyPayload);
+
+    const historyResult = await lambda.invoke(util.lambdaParameters(historyPayload, 'userHistory', true)).promise();
+    const resultPayload = JSON.parse(historyResult.Payload);
+    logger('Obtained from history: ', resultPayload);
+
+    const loggedEvents = resultPayload[userId].userEvents;
+    // note : multiple queues working at once, so possible that this is running before user log has logged the event and made it available
+    // hence, we check for it and if it is not present, we insert it; condition tester will do obvious sort
+    if (!loggedEvents.some((event) => event.eventType === eventType && event.timestamp === timestamp)) {
+        loggedEvents.push({ eventType, userId, timestamp });
+    }
+
+    logger('After check, returning: ', JSON.stringify(loggedEvents));
+    return loggedEvents;
+};
+
+const boostHasSecondEventMatching = (boost, eventType) => {
+    const flattenedConditions = Object.values(boost.statusConditions).reduce((allList, thisList) => [...allList, ...thisList], []);
+    const secondEventsInSequenceConditions = flattenedConditions.filter(util.conditionIsTimeBased).
+        map(util.extractSequenceAndIntervalFromCondition).map(({ secondEvent }) => secondEvent);
+    logger('Second events: ', secondEventsInSequenceConditions, ' and this event type: ', eventType);
+    return secondEventsInSequenceConditions.some((secondEventType) => secondEventType === eventType);
+};
+
+// these are heavy calls so we only do them when the present event appears in second place in sequence, and then we 
+// retrieve only those events that are relevant
+const obtainEventHistoryForBoosts = async (boosts, event) => {
+    const relevantBoosts = boosts.filter((boost) => boostHasSecondEventMatching(boost, event.eventType));
+    logger('These boosts have second-slot events matching current: ', JSON.stringify(relevantBoosts, null, 2));
+    if (relevantBoosts.length === 0) {
+        return [];
+    }
+
+    // for those that do, we need all events, including the first ones, because condition tester needs the timestamps
+    const allSequenceEvents = relevantBoosts.map(util.extractEventsInSequenceConditions).
+        reduce((allList, thisList) => [...allList, ...thisList], []);
+    // note : keep an eye out for extreme corner case where we still have more than one boosts here and sequences might overlap
+    const earliestBoost = relevantBoosts.sort((boostA, boostB) => boostA.boostStartTime.valueOf() - boostB.boostStartTime.valueOf()); // earliest first
+    
+    return fetchHistoryFromLogs(earliestBoost[0].boostStartTime, allSequenceEvents, event);
+};
+
 const processEventForExistingBoosts = async (event) => {
     const offeredOrPendingBoosts = await persistence.findBoost(extractFindBoostKey(event));
-    logger('Found these open boosts: ', offeredOrPendingBoosts);
+    logger('Processing event for existing boosts, current pending or offered: ', JSON.stringify(offeredOrPendingBoosts, null, 2));
 
     if (!offeredOrPendingBoosts || offeredOrPendingBoosts.length === 0) {
-        logger('Well, nothing found');
+        logger('Well, nothing found, so just return');
         return { statusCode: statusCodes('Ok'), body: JSON.stringify({ boostsTriggered: 0 })};
+    }
+
+    const boostsWithIntervalOrSequenceConditions = offeredOrPendingBoosts.filter((boost) => util.hasTimeBasedConditions(boost));
+    logger('How many boosts have time based conditions: ', boostsWithIntervalOrSequenceConditions.length);
+    if (boostsWithIntervalOrSequenceConditions.length > 0) {
+        logger('Enriching event with user history, if applicable');
+        const eventHistory = await obtainEventHistoryForBoosts(boostsWithIntervalOrSequenceConditions, event);
+        event.eventContext = event.eventContext ? { ...event.eventContext, eventHistory } : { eventHistory };
     }
 
     // for each offered or pending boost, we check if the event triggers a status change, and hence compose an object
@@ -158,7 +264,7 @@ const processEventForExistingBoosts = async (event) => {
     offeredOrPendingBoosts.forEach((boost) => {
         boostStatusChangeDict[boost.boostId] = conditionTester.extractStatusChangesMet(event, boost);
     });
-    logger('Status change dict: ', boostStatusChangeDict);
+    logger('Map of status changes triggered: ', boostStatusChangeDict);
     
     const boostsForStatusChange = offeredOrPendingBoosts.filter((boost) => boostStatusChangeDict[boost.boostId].length !== 0);
     // logger('These boosts were triggered: ', boostsForStatusChange);
@@ -175,12 +281,10 @@ const processEventForExistingBoosts = async (event) => {
     logger('At least one boost was triggered. First step is to extract affected accounts, then tell the float to transfer from bonus pool');
     // note : this is in the form, top level keys: boostID, which gives a dict, whose own key is the account ID, and an object with userId and status
     const affectedAccountsDict = await extractPendingAccountsAndUserIds(event.accountId, boostsForStatusChange);
-    logger('Retrieved affected accounts and user IDs: ', affectedAccountsDict);
+    logger('Retrieved affected accounts and user IDs, with status: ', JSON.stringify(affectedAccountsDict));
 
-    // then we update the statuses of the boosts to redeemed
-    const transactionId = event.eventContext ? event.eventContext.transactionId : null;
-    const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, transactionId);
-    logger('Sending these update instructions to persistence: ', updateInstructions);
+    // then we prepar to update the statuses of the boosts, and hook up appropriate logs
+    const logContextBase = event.eventContext ? JSON.parse(JSON.stringify(event.eventContext)) : {}; // else we get weird mutability stuff, including in tests
 
     // first, do the float allocations. we do not parallel process this as if it goes wrong we should not proceed
     const boostsToRedeem = boostsForStatusChange.filter((boost) => boostStatusChangeDict[boost.boostId].indexOf('REDEEMED') >= 0);
@@ -198,16 +302,26 @@ const processEventForExistingBoosts = async (event) => {
 
         logger('REDEMPTION CALL: ', redemptionCall);
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
+        logContextBase.transferResults = resultOfTransfers;
     }
 
     // a little ugly with the repeat if statements, but we want to make sure if the redemption call fails, the user is not updated to redeemed spuriously 
+    const updateInstructions = generateUpdateInstructions(boostsForStatusChange, boostStatusChangeDict, affectedAccountsDict, logContextBase);
+    logger('Sending these update instructions to persistence: ', updateInstructions);
+
     const resultOfUpdates = await persistence.updateBoostAccountStatus(updateInstructions);
     logger('Result of update operation: ', resultOfUpdates);
 
+    // and finally, we do some updates in two special cases: (i) there were any redemptions, (ii) the boosts are withdrawal-related offers
     if (resultOfTransfers && Object.keys(resultOfTransfers).length > 0) {
         // could do this inside boost redemption handler, but then have to give it persistence connection, and not worth solving that now
         const boostsToUpdateRedemption = [...util.extractBoostIds(boostsToRedeem), ...util.extractBoostIds(boostsToRevoke)];
         persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);        
+    }
+
+    const withdrawalRelatedBoosts = boostsForStatusChange.filter((boost) => boost.flags && boost.flags.includes('WITHDRAWAL_RELATED'));
+    if (withdrawalRelatedBoosts.length > 0) {
+        await Promise.all(withdrawalRelatedBoosts.map((boost) => publishWithdrawalLog(boost, boostStatusChangeDict[boost.boostId][0], affectedAccountsDict[boost.boostId])));
     }
 
     return {
@@ -311,7 +425,7 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
         const pooledContributionMap = await fetchAccountIdsForPooledRewards([boost]);
         // todo this is going to cause trouble with random rewards but minus 20 on time and just too much to do now, so fix when 
         // we actually start using random rewards (easy fix is pass this amount to boost redemption handler)
-        const revisedBoostAmount = boostRedemptionHandler.calculateBoostAmount(boost, pooledContributionMap);
+        const { boostAmount: revisedBoostAmount } = boostRedemptionHandler.calculateBoostAmount(boost, pooledContributionMap);
         logger('Updating boost amount to: ', revisedBoostAmount);
         
         boost.boostAmount = revisedBoostAmount; // so subsequent in-memory calls are correct
@@ -380,6 +494,7 @@ const handleExpiredBoost = async (boostId) => {
         logType: 'GAME_OUTCOME',
         logContext: sortedAndRankedAccounts[accountId]
     }));
+
     const resultOfLogInsertion = await persistence.insertBoostAccountLogs(resultLogs);
     logger('Finally, result of log insertion: ', resultOfLogInsertion);
 

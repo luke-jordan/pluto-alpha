@@ -14,9 +14,13 @@ const proxyquire = require('proxyquire').noCallThru();
 const helper = require('./test.helper');
 
 const lamdbaInvokeStub = sinon.stub();
+
 const snsPublishStub = sinon.stub();
 const safeEmailStub = sinon.stub();
+const sendEventToQueueStub = sinon.stub();
+
 const fetchTransactionStub = sinon.stub();
+
 const redisGetStub = sinon.stub();
 const redisSetStub = sinon.stub();
 
@@ -53,6 +57,7 @@ const eventHandler = proxyquire('../event-handler', {
     },
     'publish-common': {
         'safeEmailSendPlain': safeEmailStub,
+        'sendToQueue': sendEventToQueueStub,
         '@noCallThru': true
     }
 });
@@ -61,7 +66,7 @@ const wrapEventSqs = (event) => ({
     Records: [{ body: JSON.stringify({ Message: JSON.stringify(event) }) }]
 });
 
-const resetStubs = () => helper.resetStubs(lamdbaInvokeStub, fetchTransactionStub, redisGetStub, redisSetStub, safeEmailStub);
+const resetStubs = () => helper.resetStubs(lamdbaInvokeStub, fetchTransactionStub, redisGetStub, redisSetStub, safeEmailStub, sendEventToQueueStub);
 
 describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
     const testTimestamp = moment().format();
@@ -108,6 +113,66 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(profileInvocation);
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly(testTxId);
         expect(safeEmailStub).to.have.been.calledOnceWithExactly(safeEmailParams);
+    });
+
+
+    it('Dispatches withdrawal cancelled to boost processing', async () => {
+        const timeNow = moment().valueOf();
+
+        const testProfile = { personalName: 'John', familyName: 'Nkomo', emailAddress: 'someone@jupitersave.com' };
+        redisGetStub.withArgs(`USER_PROFILE::${mockUserId}`).resolves(null);
+        const userProfileInvocation = helper.wrapLambdaInvoc(config.get('lambdas.fetchProfile'), false, { systemWideUserId: mockUserId, includeContactMethod: false });
+
+        const withdrawalEvent = {
+            userId: mockUserId,
+            eventType: 'WITHDRAWAL_EVENT_CANCELLED',
+            timestamp: timeNow,
+            // actually quite a lot more in here, but not relevant to this purpose
+            context: { accountId: 'account-id', transactionId: 'transaction-id', newStatus: 'CANCELLED' }
+        };
+
+        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ statusCode: 200, body: JSON.stringify(testProfile)})})});
+
+        fetchTransactionStub.resolves({ settlementStatus: 'CANCELLED' });
+
+        const sqsBatch = wrapEventSqs(withdrawalEvent);
+        const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(sqsBatch);
+        expect(resultOfHandle).to.exist;
+
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(userProfileInvocation);
+
+        const boostProcessPayload = {
+            eventType: 'WITHDRAWAL_EVENT_CANCELLED',
+            timeInMillis: timeNow,
+            accountId: 'account-id',
+            eventContext: { accountId: 'account-id', transactionId: 'transaction-id', newStatus: 'CANCELLED' } 
+        };
+        expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
+
+    });
+
+    it('Dispatches withdrawal aborted to boost processing', async () => {
+        const timeNow = moment().valueOf();
+
+        const boostProcessPayload = {
+            eventType: 'WITHDRAWAL_EVENT_ABORTED',
+            timeInMillis: timeNow,
+            accountId: 'account-id',
+            eventContext: { accountId: 'account-id' }
+        };
+
+        const withdrawalEvent = {
+            userId: mockUserId,
+            eventType: 'WITHDRAWAL_EVENT_ABORTED',
+            timestamp: timeNow,
+            context: { accountId: 'account-id' }
+        };
+
+        const sqsBatch = wrapEventSqs(withdrawalEvent);
+        const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(sqsBatch);
+        expect(resultOfHandle).to.exist;
+
+        expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
     });
 
 });

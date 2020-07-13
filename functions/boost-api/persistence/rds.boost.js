@@ -39,9 +39,25 @@ const transformBoostFromRds = (boost) => {
     return transformedBoost;
 };
 
+// Handful of methods to fetch boosts, and get ones with specific characteristics
 module.exports.fetchBoost = async (boostId) => {
     const rawResult = await rdsConnection.selectQuery(`select * from ${boostTable} where boost_id = $1`, [boostId]);
     return rawResult.length === 0 ? null : transformBoostFromRds(rawResult[0]);
+};
+
+module.exports.fetchActiveStandardBoosts = async () => {
+    const query = `select * from ${boostTable} where active = true and end_time > current_timestamp and ` +
+        `boost_type != $1 and not ($2 = any(flags))`;
+    const rawResult = await rdsConnection.selectQuery(query, ['REFERRAL', 'FRIEND_TOURNAMENT']);
+    return rawResult.map((rawBoost) => transformBoostFromRds(rawBoost));
+};
+
+module.exports.fetchBoostsWithDynamicAudiences = async () => {
+    const query = `select * from ${boostTable} where active = true and end_time > current_timestamp and ` +
+        `boost_type != $1 and not ($2 = any(flags)) ` +
+        `and audience_id in (select audience_id from ${config.get('tables.audienceTable')} where is_dynamic = true)`;
+    const rawResult = await rdsConnection.selectQuery(query, ['REFERRAL', 'FRIEND_TOURNAMENT']);
+    return rawResult.map((rawBoost) => transformBoostFromRds(rawBoost));
 };
 
 /**
@@ -103,16 +119,25 @@ module.exports.findBoost = async (attributes) => {
     return boostsRetrieved.map(transformBoostFromRds);
 };
 
+// FIND NEW BOOSTS FOR ACCOUNT, AND NEW ACCOUNTS FOR BOOST, RESPECTIVELY
+
 module.exports.fetchUncreatedActiveBoostsForAccount = async (accountId) => {
     const findBoostQuery = `select * from ${boostTable} where active = true and end_time > current_timestamp ` +
-        `and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
+        `and not ($2 = any(flags)) and boost_id not in (select boost_id from ${boostAccountJoinTable} where account_id = $1)`; 
 
-    const queryValues = [accountId];
+    const queryValues = [accountId, 'FRIEND_TOURNAMENT'];
 
     const boostsRetrieved = await rdsConnection.selectQuery(findBoostQuery, queryValues);
     logger('Retrieved uncreated boosts:', boostsRetrieved.map((row) => row['boost_id']));
 
     return boostsRetrieved.map(transformBoostFromRds);
+};
+
+module.exports.fetchNewAudienceMembers = async (boostId, audienceId) => {
+    const query = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = true and ` +
+        `account_id not in (select account_id from ${boostAccountJoinTable} where boost_id = $2)`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, [audienceId, boostId]);
+    return resultOfQuery.map((row) => row['account_id']);
 };
 
 /** 
@@ -352,7 +377,6 @@ const extractAccountIds = async (audienceId) => {
     return queryResult.map((row) => row['account_id']);
 };
 
-
 // ///////////////////////////////////////////////////////////////
 // //////////// BOOST PERSISTENCE STARTS HERE ///////////////
 // ///////////////////////////////////////////////////////////////
@@ -360,7 +384,8 @@ const extractAccountIds = async (audienceId) => {
 module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
-    const accountIds = await (boostDetails.defaultStatus === 'UNCREATED' ? [] : extractAccountIds(boostDetails.audienceId));
+    const skipAccountInsertion = boostDetails.defaultStatus === 'UNCREATED' || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
+    const accountIds = await (skipAccountInsertion ? [] : extractAccountIds(boostDetails.audienceId));
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();
@@ -449,8 +474,12 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
-module.exports.insertBoostAccount = async (boostIds, accountId, boostStatus) => {
-    const boostAccountJoins = boostIds.map((boostId) => ({ boostId, accountId, boostStatus }));
+// note : performs a cross join, i.e., all boost IDs, all accountIDs. in practice
+// almost always called (as should be case) with either one boost and many accounts
+// or one account and many boosts
+module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatus) => {
+    const boostAccountJoins = boostIds.map((boostId) => accountIds.map((accountId) => ({ boostId, accountId, boostStatus }))).
+        reduce((fullList, thisList) => [...fullList, ...thisList], []);
     const boostJoinQueryDef = {
         query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
         columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
@@ -464,7 +493,7 @@ module.exports.insertBoostAccount = async (boostIds, accountId, boostStatus) => 
 
     const resultObject = {
         persistedTimeMillis: persistedTime.valueOf(),
-        accountId,
+        accountIds,
         boostIds
     };
 

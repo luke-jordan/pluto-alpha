@@ -15,9 +15,10 @@ const DEFAULT_UNIT = 'HUNDREDTH_CENT';
 
 const calculatePooledBoostAmount = (boost, userCount) => {
     if (userCount <= 1) {
-        return 0;
+        return { boostAmount: 0, amountFromBonus: 0 };
     }
 
+    let amountFromBonus = 0;
     const { poolContributionPerUser, percentPoolAsReward, clientFloatContribution } = boost.rewardParameters;
     
     const contribAmount = opsUtil.convertToUnit(poolContributionPerUser.amount, poolContributionPerUser.unit, DEFAULT_UNIT);
@@ -27,14 +28,18 @@ const calculatePooledBoostAmount = (boost, userCount) => {
     
     const floatContributionAvailable = clientFloatContribution && userCount >= clientFloatContribution.requiredFriends;
     if (floatContributionAvailable && clientFloatContribution.type === 'PERCENT_OF_POOL') {
-        calculatedBoostAmount += totalPoolFromUsers * clientFloatContribution.value;
-    }
-    if (floatContributionAvailable && clientFloatContribution.type === 'ABS_AMOUNT') {
-        const { additionalBonusToPool } = clientFloatContribution;
-        calculatedBoostAmount += opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, DEFAULT_UNIT);    
+        amountFromBonus = totalPoolFromUsers * clientFloatContribution.value;
     }
 
-    return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
+    if (floatContributionAvailable && clientFloatContribution.type === 'ABS_AMOUNT') {
+        const { additionalBonusToPool } = clientFloatContribution;
+        amountFromBonus = opsUtil.convertToUnit(additionalBonusToPool.amount, additionalBonusToPool.unit, DEFAULT_UNIT);    
+    }
+
+    calculatedBoostAmount += amountFromBonus;
+    const boostAmount = opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
+
+    return { boostAmount, amountFromBonus };
 };
 
 const generateMultiplier = (distribution) => {
@@ -66,33 +71,6 @@ const calculateRandomBoostAmount = (boost) => {
     return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 
-const createPublishEventPromises = ({ boost, boostUpdateTime, affectedAccountsUserDict, transferResults, event, isRevocation, specifiedEventType }) => {
-    const eventType = specifiedEventType || (isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED');
-    logger('Affected accounts user dict: ', affectedAccountsUserDict);
-    
-    const publishPromises = Object.keys(affectedAccountsUserDict).map((accountId) => {
-        const context = {
-            accountId,
-            boostId: boost.boostId,
-            boostType: boost.boostType,
-            boostCategory: boost.boostCategory,
-            boostUpdateTimeMillis: boostUpdateTime.valueOf(),
-            boostAmount: `${isRevocation ? -boost.boostAmount : boost.boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
-            transferResults,
-            triggeringEventContext: event.eventContext
-        };
-        const options = { context };
-        if (event.accountId && affectedAccountsUserDict[event.accountId]) {
-            options.initiator = affectedAccountsUserDict[event.accountId]['userId'];
-        }
-        logger(`Publishing: ${affectedAccountsUserDict[accountId]['userId']}::${eventType}`);
-        return publisher.publishUserEvent(affectedAccountsUserDict[accountId]['userId'], eventType, options);
-    });
-
-    // logger('Publish result: ', publishPromises);
-    return publishPromises;
-};
-
 const triggerFloatTransfers = async (transferInstructions) => {
     const lambdaInvocation = {
         FunctionName: config.get('lambdas.floatTransfer'),
@@ -106,12 +84,19 @@ const triggerFloatTransfers = async (transferInstructions) => {
 
     const resultOfTransfer = JSON.parse(result.Payload);
     if (resultOfTransfer.statusCode !== 200) {
-        // todo : DLQ !!! very necessary
         logger('TRANSFER_ERROR: see above for lambda result, triggered by instruction: ', transferInstructions);
         throw new Error('Error completing float transfers');
     }
 
-    return JSON.parse(resultOfTransfer.body);
+    const transferResults = JSON.parse(resultOfTransfer.body);
+    
+    // what a code smell but things are just too rough right now, at some point there will be sleep and this will have to get cleaned up
+    const extractRefAmounts = (boostId) => transferInstructions.find((instruction) => instruction.identifier === boostId);
+    const mergeResultWithRef = (boostId) => ({ ...transferResults[boostId], ...extractRefAmounts(boostId).referenceAmounts });
+    const resultsWithReferenceAmounts = Object.keys(transferResults).reduce((obj, boostId) => 
+        ({ ...obj, [boostId]: mergeResultWithRef(boostId) }), {});
+
+    return resultsWithReferenceAmounts;
 };
 
 const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContributionMap, event) => {
@@ -201,17 +186,22 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
         logger('Result of initial transfer to bonus pool:', resultOfInitialTransfer);
     }
 
-    // let recipients = recipientAccounts.reduce((obj, recipientId) => ({ ...obj, [recipientId]: boost.boostAmount }), {});
-    const boostAmount = boost.rewardParameters ? exports.calculateBoostAmount(boost, pooledContributionMap) : boost.boostAmount;
+    const referenceAmounts = exports.calculateBoostAmount(boost, pooledContributionMap);
+    const { boostAmount } = referenceAmounts;
+    logger('Calculated amounts for boost: ', boostAmount);
+    
     if (boostAmount === 0) {
+        logger('No boost amount, so exit');
         return null;
     }
 
     const amount = revoke ? -boostAmount : boostAmount;
     const transactionType = revoke ? 'BOOST_REVERSAL' : 'BOOST_REDEMPTION';
+    
     const recipients = recipientAccounts.map((recipientId) => ({ 
         recipientId, amount, recipientType: 'END_USER_ACCOUNT'
     }));
+
     return {
         floatId: boost.fromFloatId,
         clientId: boost.forClientId,
@@ -225,6 +215,7 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
         allocState: 'SETTLED',
         transactionType, // for matching account records
         settlementStatus: 'SETTLED',
+        referenceAmounts,
         recipients
     };
 };
@@ -307,9 +298,45 @@ const generateMessageSendInvocation = (messageInstructions) => ({
     Payload: stringify({ instructions: messageInstructions })
 });
 
+const createPublishEventPromises = (parameters) => {
+    const { boost, affectedAccountsUserDict: affectedAccountMap, transferResults, transferInstructions, isRevocation, event } = parameters;
+    
+    const boostUpdateTimeMillis = parameters.boostUpdateTime ? parameters.boostUpdateTime.valueOf() : moment().valueOf();
+    const eventType = parameters.specifiedEventType || (isRevocation ? 'BOOST_REVOKED' : 'BOOST_REDEEMED');
+    
+    logger('Publishing redemption promises, with transfer results: ', transferResults);
+    
+    const publishPromises = Object.keys(affectedAccountMap).map((accountId) => {
+        const { referenceAmounts } = transferInstructions;
+        const boostAmount = isRevocation ? -referenceAmounts.boostAmount : referenceAmounts.boostAmount;
+        
+        const context = {
+            accountId,
+            boostId: boost.boostId,
+            boostType: boost.boostType,
+            boostCategory: boost.boostCategory,
+            boostUpdateTimeMillis,
+            boostAmount: `${boostAmount}::${boost.boostUnit}::${boost.boostCurrency}`,
+            amountFromBonus: `${referenceAmounts.amountFromBonus}::${boost.boostUnit}::${boost.boostCurrency}`,
+            transferResults,
+            triggeringEventContext: event.eventContext
+        };
+        const options = { context };
+        if (event.accountId && affectedAccountMap[event.accountId]) {
+            options.initiator = affectedAccountMap[event.accountId]['userId'];
+        }
+        logger(`Publishing: ${affectedAccountMap[accountId]['userId']}::${eventType}`);
+        return publisher.publishUserEvent(affectedAccountMap[accountId]['userId'], eventType, options);
+    });
+
+    // logger('Publish result: ', publishPromises);
+    return publishPromises;
+};
+
 /** Used also in expiry handler to set the boost amount once this is done, so exporting */
 module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
     const rewardType = boost.rewardParameters ? boost.rewardParameters.rewardType : 'STANDARD';
+
     if (rewardType === 'POOLED') {
         const accountIds = pooledContributionMap[boost.boostId];
         const userCount = accountIds.length;
@@ -317,10 +344,11 @@ module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
     }
 
     if (rewardType === 'RANDOM') {
-        return calculateRandomBoostAmount(boost);
+        const boostAmount = calculateRandomBoostAmount(boost);
+        return { boostAmount, amountFromBonus: boostAmount };
     }
 
-    return boost.boostAmount;
+    return { boostAmount: boost.boostAmount, amountFromBonus: boost.boostAmount };
 };
 
 /**
@@ -365,17 +393,19 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
         finalPromises.push(messagePromise);
     }
     
-    const mapBoostToEventPublish = (boost, isRevocation) => createPublishEventPromises({ 
-        boost,
-        boostUpdateTime: moment().valueOf(), // could pass it along etc., but not worth the precision at this point
-        affectedAccountsUserDict: affectedAccountsDict[boost.boostId],
-        transferResults: resultOfTransfers[boost.boostId],
-        event,
-        isRevocation
-    });
-
-    finalPromises = finalPromises.concat(boostsToRedeem.map((boost) => mapBoostToEventPublish(boost, false)));
-    finalPromises = finalPromises.concat(boostsToRevoke.map((boost) => mapBoostToEventPublish(boost, true)));
+    if (transferInstructions.length > 0) {
+        const mapBoostToEventPublish = (boost, isRevocation) => createPublishEventPromises({ 
+            boost,
+            affectedAccountsUserDict: affectedAccountsDict[boost.boostId],
+            transferResults: resultOfTransfers[boost.boostId],
+            transferInstructions: transferInstructions.find((instruction) => instruction.identifier === boost.boostId),
+            event,
+            isRevocation
+        });
+    
+        finalPromises = finalPromises.concat(boostsToRedeem.map((boost) => mapBoostToEventPublish(boost, false)));
+        finalPromises = finalPromises.concat(boostsToRevoke.map((boost) => mapBoostToEventPublish(boost, true)));    
+    }
 
     logger('Final promises, of length: ', finalPromises.length);
     // then: fire all of them off, and we are done
