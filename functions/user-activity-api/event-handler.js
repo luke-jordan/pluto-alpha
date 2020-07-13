@@ -73,6 +73,8 @@ const EVENT_DISPATCHER = {
     SAVING_PAYMENT_SUCCESSFUL: saveEventHandler.handleSavingEvent,
     WITHDRAWAL_EVENT_CONFIRMED: withdrawEventHandler.handleWithdrawalEvent,
     WITHDRAWAL_EVENT_CANCELLED: withdrawEventHandler.handleWithdrawalCancelled,
+    WITHDRAWAL_EVENT_ABORTED: withdrawEventHandler.handleWithdrawalAborted,
+    ADMIN_SETTLED_WITHDRAWAL: withdrawEventHandler.handleWithdrawalFinalized,
     BOOST_REDEEMED: boostEventHandler.handleBoostRedeemedEvent,
     FRIEND_REQUEST_TARGET_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent,
     FRIEND_REQUEST_INITIATED_ACCEPTED: friendEventHandler.handleFriendshipConnectedEvent
@@ -85,6 +87,8 @@ const EVENT_REQUIRES_CONTACT = {
     SAVING_PAYMENT_SUCCESSFUL: { requiresProfile: false },
     WITHDRAWAL_EVENT_CONFIRMED: { requiresProfile: true, requiresContact: true },
     WITHDRAWAL_EVENT_CANCELLED: { requiresProfile: true, requiresContact: false },
+    WITHDRAWAL_EVENT_ABORTED: { requiresProfile: false }, // just sends on to boosts
+    ADMIN_SETTLED_WITHDRAWAL: { requiresProfile: false },
     BOOST_REDEEMED: { requiresProfile: false },
     FRIEND_REQUEST_TARGET_ACCEPTED: { requiresProfile: false },
     FRIEND_REQUEST_INITIATED_ACCEPTED: { requiresProfile: false }

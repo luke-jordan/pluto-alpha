@@ -573,12 +573,29 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         expect(sendEventToQueueStub).to.have.been.calledWithExactly('balance_sheet_update_queue', [bsheetPayload], true);
     });
     
+    // bit of boilerplate in what follows, but pretty crucial that these get routed properly
     it('Dispatches admin settled withdrawal to boost processing', async () => {
+        const timeNow = moment().valueOf();
 
-    });
+        const boostProcessPayload = {
+            eventType: 'ADMIN_SETTLED_WITHDRAWAL',
+            timeInMillis: timeNow,
+            accountId: 'account-id',
+            eventContext: { accountId: 'account-id' } // actually quite a lot more in here, but not relevant to this purpose
+        };
 
-    it('Dispatches withdrawal cancelled to boost processing', async () => {
+        const withdrawalEvent = {
+            userId: mockUserId,
+            eventType: 'ADMIN_SETTLED_WITHDRAWAL',
+            timestamp: timeNow,
+            context: { accountId: 'account-id' }
+        };
 
+        const sqsBatch = wrapEventSqs(withdrawalEvent);
+        const resultOfHandle = await eventHandler.handleBatchOfQueuedEvents(sqsBatch);
+        expect(resultOfHandle).to.exist;
+
+        expect(sendEventToQueueStub).to.have.been.calledWithExactly('boost_process_queue', [boostProcessPayload], true);
     });
 
     it('Catches thrown errors, sends failed processes to DLQ', async () => {

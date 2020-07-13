@@ -366,7 +366,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 firstSave: false,
                 saveCount: 92,
                 savedAmount: '250000::HUNDREDTH_CENT::ZAR',
-                timeInMillis: '2020-05-08T07:21:13.000Z',
+                timeInMillis: moment().valueOf(),
                 transactionId: '013cc85e-1aa2-4654-9e67-2d43a337e8d3' 
             } 
         };

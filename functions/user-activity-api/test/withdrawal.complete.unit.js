@@ -484,7 +484,7 @@ describe('*** UNIT TEST WITHDRAWAL CONFIRMATION ***', () => {
             logToInsert: expectedTxLog 
         });
         const userLogContext = { newStatus: 'CANCELLED', oldStatus: 'PENDING', transactionId: testTransactionId };
-        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_CANCELLED', { context: userLogContext });
+        expect(publishEventStub).to.have.been.calledOnceWithExactly(testUserId, 'WITHDRAWAL_EVENT_ABORTED', { context: userLogContext });
 
         expect(redisGetStub).to.have.not.been.called;
         expect(lamdbaInvokeStub).to.have.not.been.called;

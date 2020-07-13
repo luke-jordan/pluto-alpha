@@ -369,7 +369,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
     });
 
     it('Boost is expired if no cancellation and admin goes ahead', async () => {
-        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL', timestamp: moment().valueOf() };
+        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL', timeInMillis: moment().valueOf() };
         getAccountIdStub.withArgs(mockUserId).resolves('account-1');
 
         fetchRelevantBoostStub.resolves([testPersistedBoost]);
@@ -401,7 +401,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
 
     it('Makes boost pending by cancelling withdrawal', async () => {
         const mockEventTimestamp = moment().valueOf(0);
-        const testEvent = { userId: mockUserId, eventType: 'WITHDRAWAL_EVENT_CANCELLED', timestamp: mockEventTimestamp };
+        const testEvent = { userId: mockUserId, eventType: 'WITHDRAWAL_EVENT_CANCELLED', timeInMillis: mockEventTimestamp };
         
         fetchRelevantBoostStub.resolves([testPersistedBoost]);
         fetchUncreatedBoostStub.resolves([]);
@@ -422,7 +422,8 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
 
     it('Boost fails by withdrawing within period', async () => {
         const mockEventTimestamp = moment().valueOf(0);
-        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL', timestamp: mockEventTimestamp };
+        // somewhat stupidly, used a different naming convention for timestamp in boost processor (hence timeInMillis)
+        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL', timeInMillis: mockEventTimestamp };
 
         fetchRelevantBoostStub.resolves([testPersistedBoost]);
         fetchUncreatedBoostStub.resolves([]);

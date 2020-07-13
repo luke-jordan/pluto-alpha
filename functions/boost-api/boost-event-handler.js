@@ -196,7 +196,7 @@ const publishWithdrawalLog = async (boost, newStatus, accountMap) => {
 };
 
 const fetchHistoryFromLogs = async (startTime, eventsOfInterest, thisEvent) => {
-    const { eventType, userId, timestamp } = thisEvent;
+    const { eventType, userId, timeInMillis: timestamp } = thisEvent;
     const historyPayload = { userId, eventTypes: eventsOfInterest, startDate: startTime.valueOf(), excludeContext: true };
     logger('Fetching history with payload: ', historyPayload);
 
