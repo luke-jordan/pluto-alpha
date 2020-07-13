@@ -201,7 +201,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         audienceId: 'some-audience',
         messageInstructionIds: { },
         statusConditions: testStatusConditions,
-        flags: ['WITHDRAWAL_RELATED']
+        flags: ['WITHDRAWAL_HALTING']
     };
 
     it('Unit test creating withdrawal-incentive boost, to abort _within_ (i.e., before confirming) boost', async () => {
@@ -235,7 +235,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
             },
             audienceId: 'some-audience',
             messagesToCreate: [],
-            flags: ['WITHDRAWAL_RELATED']
+            flags: ['WITHDRAWAL_HALTING']
         };
  
         momentStub.returns(testStartTime.clone());
@@ -269,7 +269,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
             audienceId: 'some-audience',
             
             messageInstructionIds: [],
-            flags: ['WITHDRAWAL_RELATED']
+            flags: ['WITHDRAWAL_HALTING']
         };
 
         expect(insertBoostStub).to.have.been.calledWith(expectedBoostRds);
@@ -314,7 +314,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
             boostAudienceType: 'EVENT_DRIVEN',
             audienceId: 'audience-id',
             messagesToCreate: [eventMessageBody],
-            flags: ['WITHDRAWAL_RELATED', 'NO_OTHER_WITHDRAWAL_RELATED']
+            flags: ['WITHDRAWAL_HALTING', 'NO_OTHER_WITHDRAWAL_HALTING']
         };
  
         momentStub.returns(testStartTime.clone());
@@ -399,7 +399,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         helper.expectNoCalls(redeemBoostStub, updateBoostRedeemedStub);
     });
 
-    it('Makes boost pending by cancelling withdrawal', async () => {
+    it.only('Makes boost pending by cancelling withdrawal', async () => {
         const mockEventTimestamp = moment().valueOf(0);
         const testEvent = { userId: mockUserId, eventType: 'WITHDRAWAL_EVENT_CANCELLED', timeInMillis: mockEventTimestamp };
         
@@ -569,14 +569,14 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         userListAccountStub.resolves(['account-1']);
         fetchUserBoostsStub.resolves([{ boostId: 'some-boost' }]);
 
-        const apiEvent = helper.wrapQueryParamEvent({ flag: 'WITHDRAWAL_RELATED', onlyActive: true }, mockUserId, 'ORDINARY_USER');
+        const apiEvent = helper.wrapQueryParamEvent({ flag: 'WITHDRAWAL_HALTING', onlyActive: true }, mockUserId, 'ORDINARY_USER');
         const resultOfListing = await listHandler.listUserBoosts(apiEvent);
         
         const bodyOfResult = helper.standardOkayChecks(resultOfListing);
         expect(bodyOfResult).to.deep.equal([{ boostId: 'some-boost'}]);
 
         expect(fetchUserBoostsStub).to.have.been.calledOnce;
-        expect(fetchUserBoostsStub).to.have.been.calledWith('account-1', { flags: ['WITHDRAWAL_RELATED'], excludedStatus });
+        expect(fetchUserBoostsStub).to.have.been.calledWith('account-1', { flags: ['WITHDRAWAL_HALTING'], excludedStatus });
 
     });
 

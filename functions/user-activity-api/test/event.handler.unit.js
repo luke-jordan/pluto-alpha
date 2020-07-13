@@ -173,7 +173,7 @@ describe('*** UNIT TESTING EVENT HANDLING HAPPY PATHS ***', () => {
         
         expect(lamdbaInvokeStub).to.have.been.calledOnceWith(friendReqInvocation);
 
-        const boostPayload = { eventType: 'USER_CREATED_ACCOUNT', accountId: 'some-id', eventContext: { accountId: 'some-id' }, timeInMillis: testMoment.valueOf() };
+        const boostPayload = { eventType: 'USER_CREATED_ACCOUNT', userId: testUserId, accountId: 'some-id', eventContext: { accountId: 'some-id' }, timeInMillis: testMoment.valueOf() };
         expect(sendEventToQueueStub).to.have.been.calledOnceWith('boost_process_queue', [boostPayload]);
 
         notificationContacts.forEach((contact) => {
@@ -523,6 +523,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         sendEmailStub.resolves({ result: 'SUCCESS' });
 
         const boostProcessPayload = {
+            userId: mockUserId,
             eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
             timeInMillis: timeNow,
             accountId: testAccountId,
@@ -578,6 +579,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
         const timeNow = moment().valueOf();
 
         const boostProcessPayload = {
+            userId: mockUserId,
             eventType: 'ADMIN_SETTLED_WITHDRAWAL',
             timeInMillis: timeNow,
             accountId: 'account-id',
@@ -588,6 +590,7 @@ describe('*** UNIT TEST WITHDRAWAL, FRIENDSHIP, BOOST EVENTS ***', () => {
             userId: mockUserId,
             eventType: 'ADMIN_SETTLED_WITHDRAWAL',
             timestamp: timeNow,
+            initiator: 'some-admin-id',
             context: { accountId: 'account-id' }
         };
 

@@ -142,6 +142,7 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(userProfileInvocation);
 
         const boostProcessPayload = {
+            userId: mockUserId,
             eventType: 'WITHDRAWAL_EVENT_CANCELLED',
             timeInMillis: timeNow,
             accountId: 'account-id',
@@ -155,6 +156,7 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
         const timeNow = moment().valueOf();
 
         const boostProcessPayload = {
+            userId: mockUserId,
             eventType: 'WITHDRAWAL_EVENT_ABORTED',
             timeInMillis: timeNow,
             accountId: 'account-id',

@@ -319,7 +319,7 @@ const processEventForExistingBoosts = async (event) => {
         persistence.updateBoostAmountRedeemed(boostsToUpdateRedemption);        
     }
 
-    const withdrawalRelatedBoosts = boostsForStatusChange.filter((boost) => boost.flags && boost.flags.includes('WITHDRAWAL_RELATED'));
+    const withdrawalRelatedBoosts = boostsForStatusChange.filter((boost) => boost.flags && boost.flags.includes('WITHDRAWAL_HALTING'));
     if (withdrawalRelatedBoosts.length > 0) {
         await Promise.all(withdrawalRelatedBoosts.map((boost) => publishWithdrawalLog(boost, boostStatusChangeDict[boost.boostId][0], affectedAccountsDict[boost.boostId])));
     }
