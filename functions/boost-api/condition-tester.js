@@ -143,6 +143,10 @@ const checkBoostTagged = (parameterValue, boostTags, boostId) => {
 const eventSorter = (eventA, eventB) => eventA.timestamp - eventB.timestamp; // since in millis
 
 const checkEventDoesNotFollow = (parameterValue, eventContext) => {
+    if (!eventContext || !eventContext.eventHistory) {
+        return false; // in case this gets called somewhere that isn't expecting to provide history
+    }
+
     const [firstEventType, secondEventType, timeAmount, timeUnit] = parameterValue.split('::');
     const eventHistory = eventContext.eventHistory.sort(eventSorter);
     const firstOccurenceOfFirstType = eventHistory.find((event) => event.eventType === firstEventType);
@@ -161,6 +165,10 @@ const checkEventDoesNotFollow = (parameterValue, eventContext) => {
 };
 
 const checkEventFollows = (parameterValue, eventContext) => {
+    if (!eventContext || !eventContext.eventHistory) {
+        return false; // as above
+    }
+
     const [firstEventType, secondEventType, timeAmount, timeUnit] = parameterValue.split('::');
     const eventHistory = eventContext.eventHistory.sort(eventSorter);
     
@@ -186,11 +194,10 @@ const checkEventFollows = (parameterValue, eventContext) => {
 // this one is always going to be complex -- in time maybe split out the switch block further
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
-    logger('Status condition: ', statusCondition);
+    logger('Testing status condition: ', statusCondition);
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
     const parameterMatch = statusCondition.match(/#{(.*)}/);
     const parameterValue = parameterMatch ? parameterMatch[1] : null;
-    logger('Parameter value: ', parameterValue);
     const eventHasContext = typeof event.eventContext === 'object';
     
     const { eventType, eventContext, boostId } = event;

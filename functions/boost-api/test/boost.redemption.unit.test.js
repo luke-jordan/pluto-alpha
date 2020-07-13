@@ -63,7 +63,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 allocState: 'SETTLED',
                 recipients: [
                     { recipientId: testAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' }
-                ]
+                ],
+                referenceAmounts: { boostAmount: testAmount, amountFromBonus: testAmount }
             }]
         });
 
@@ -112,9 +113,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockTransferResult,
                 boostAmount: testAmount,
-                amountFromPool: testAmount
+                amountFromBonus: testAmount
             }
-        }
+        };
 
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal(expectedResult);
@@ -126,12 +127,13 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             initiator: testUserId,
             context: {
                 accountId: testAccountId,
+                amountFromBonus: `${testAmount}::HUNDREDTH_CENT::USD`,
                 boostAmount: `${testAmount}::HUNDREDTH_CENT::USD`,
                 boostId: testBoostId,
                 boostType: 'SIMPLE',
                 boostCategory: 'SIMPLE_SAVE',
                 boostUpdateTimeMillis: mockMoment.valueOf(),
-                transferResults: expectedAllocationResult[testBoostId],
+                transferResults: { ...expectedAllocationResult[testBoostId], boostAmount: testAmount, amountFromBonus: testAmount },
                 triggeringEventContext: 'PROVIDED_CONTEXT'
             }
         };
@@ -170,7 +172,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 recipients: [
                     { recipientId: testReferredAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' },
                     { recipientId: testReferringAccountId, amount: testAmount, recipientType: 'END_USER_ACCOUNT' }
-                ]
+                ],
+                referenceAmounts: { boostAmount: testAmount, amountFromBonus: testAmount }
             }]
         });
 
@@ -252,9 +255,9 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             [testBoostId]: {
                 ...mockTransferResult,
                 boostAmount: testAmount,
-                amountFromPool: testAmount
+                amountFromBonus: testAmount
             }
-        }
+        };
 
         expect(resultOfRedemption).to.exist;
         expect(resultOfRedemption).to.deep.equal(expectedResult);
@@ -284,11 +287,12 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 allocState: 'SETTLED',
                 recipients: [
                     { recipientId: testAccountId, amount: -testAmount, recipientType: 'END_USER_ACCOUNT' }
-                ]
+                ],
+                referenceAmounts: { boostAmount: testAmount, amountFromBonus: testAmount }
             }]
         });
 
-        const expectedAllocationResult = {
+        const mockTransferResult = {
             [testBoostId]: {
                 result: 'SUCCESS',
                 floatTxIds: [uuid(), uuid()],
@@ -296,7 +300,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(expectedAllocationResult) });
+        lamdbaInvokeStub.returns({ promise: () => testHelper.mockLambdaResponse(mockTransferResult) });
 
         // then we do a user log, on each side (tested via the expect call underneath)
         const publishOptions = {
@@ -308,7 +312,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 boostType: 'SIMPLE',
                 boostCategory: 'SIMPLE_SAVE',
                 boostUpdateTimeMillis: moment().valueOf(),
-                transferResults: expectedAllocationResult[testBoostId],
+                transferResults: mockTransferResult[testBoostId],
                 triggeringEventContext: 'SAVING_EVENT_COMPLETED'
             }
         };
@@ -337,10 +341,19 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             event: { accountId: testAccountId, eventType: 'WITHDRAWAL_EVENT_COMPLETED' }
         };
 
+        momentStub.returns(moment());
         const resultOfRedemption = await handler.redeemOrRevokeBoosts(mockEvent);
 
+        const expectedResult = {
+            [testBoostId]: {
+                ...mockTransferResult[testBoostId],
+                boostAmount: testAmount,
+                amountFromBonus: testAmount
+            }
+        };
+
         expect(resultOfRedemption).to.exist;
-        expect(resultOfRedemption).to.deep.equal(expectedAllocationResult);
+        expect(resultOfRedemption).to.deep.equal(expectedResult);
 
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
 

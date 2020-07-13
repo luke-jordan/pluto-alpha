@@ -2,7 +2,6 @@
 
 const config = require('config');
 const moment = require('moment');
-const camelizeKeys = require('camelize-keys');
 
 const testHelper = require('./boost.test.helper');
 
@@ -176,4 +175,4 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account']);
     });
 
-})
+});

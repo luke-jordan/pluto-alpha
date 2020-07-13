@@ -16,12 +16,6 @@ const redemptionHandler = require('./boost-redemption-handler');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const lambdaParameters = (payload, nameKey, sync) => ({
-    FunctionName: config.get(`lambdas.${nameKey}`),
-    InvocationType: sync ? 'RequestResponse' : 'Event',
-    Payload: JSON.stringify(payload)
-});
-
 // may need to add more in future but for now should be enough
 const extractBoostMsgParameters = (boost) => ({
     boostAmount: opsUtil.formatAmountCurrency({ amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency })
@@ -40,7 +34,7 @@ const handleBoostWithDynamicAudience = async (boost) => {
     const { boostId, audienceId } = boost;
 
     const payload = { operation: 'refresh', params: { audienceId } };
-    const lambdaInvocation = lambdaParameters(payload, 'audienceHandle', true);
+    const lambdaInvocation = boostUtil.lambdaParameters(payload, 'audienceHandle', true);
     const resultOfRefresh = await lambda.invoke(lambdaInvocation).promise();
     if (resultOfRefresh['StatusCode'] !== 200) {
         throw new Error('Error refreshing audience');
@@ -49,7 +43,7 @@ const handleBoostWithDynamicAudience = async (boost) => {
     const newAccounts = await persistence.fetchNewAudienceMembers(boostId, audienceId);
     logger('Obtained new accounts for this boost: ', newAccounts);
     if (newAccounts.length === 0) {
-        return { newOffers: 0 }
+        return { newOffers: 0 };
     }
 
     const { boostType, defaultStatus } = boost;
@@ -66,7 +60,7 @@ const handleBoostWithDynamicAudience = async (boost) => {
         
         const instructions = assembleListOfMsgInstructions(newAccountUserIds, instructionsToTrigger, msgParameters);
         logger('Sending instruction-user pairs to msging : ', instructions);
-        const msgInvocation = lambdaParameters({ instructions }, 'messageSend', false);
+        const msgInvocation = boostUtil.lambdaParameters({ instructions }, 'messageSend', false);
         
         const resultOfMsgSend = await lambda.invoke(msgInvocation).promise();
         logger('Result of message dispatch: ', resultOfMsgSend);
@@ -106,54 +100,22 @@ module.exports.refreshDynamicAudienceBoosts = async () => {
 // several layers of nested lists in here, so this is going to be handy
 const flattenList = (allList, thisList) => [...allList, ...thisList];
 
-// these are time-based in the sense that they are triggered or not based on a sequence of events within a given time
-const timeBasedConditions = ['event_does_follow', 'event_does_not_follow'];
-    
-// two helper filters to try make this easier to maintain/follow
-const conditionIsTimeBased = (condition) => timeBasedConditions.some((timeBasedCondition) => condition.startsWith(timeBasedCondition));
-const oneConditionTimeBased = (conditions) => conditions.some((condition) => conditionIsTimeBased(condition))
-
-const hasTimeBasedConditions = (boost) => {
-    const { statusConditions } = boost;
-    return Object.values(statusConditions).some((conditions) => oneConditionTimeBased(conditions));
-};
-
-const extractSequenceAndIntervalFromCondition = (condition) => {
-    const parameterMatch = condition.match(/#{(.*)}/);
-    const [firstEvent, secondEvent, timeAmount, timeUnit] = parameterMatch[1].split('::');
-    const parameters = { firstEvent, secondEvent, timeAmount, timeUnit };
-    // logger('From parameter string: ', parameterMatch[1], ' extracted: ', parameters);
-    return parameters;
-}
-
 // no point checking anything if no condition has possibly been met, so we find the date on which the first event
 // would have had to happen for any of the conditions to be met
 const extractFirstEventLatestTime = (statusConditions) => {
-    const timeConditions = Object.values(statusConditions).reduce(flattenList, []).filter(conditionIsTimeBased);
+    const timeConditions = Object.values(statusConditions).reduce(flattenList, []).filter(boostUtil.conditionIsTimeBased);
     const currentMoment = moment();
-    const conditionMoments = timeConditions.map(extractSequenceAndIntervalFromCondition)
-        .map(({ timeAmount, timeUnit }) => currentMoment.clone().subtract(parseInt(timeAmount, 10), timeUnit));
+    const conditionMoments = timeConditions.map(boostUtil.extractSequenceAndIntervalFromCondition).
+        map(({ timeAmount, timeUnit }) => currentMoment.clone().subtract(parseInt(timeAmount, 10), timeUnit));
     logger('Condition moments: ', conditionMoments);
     return moment.max(conditionMoments);
-}
-
-const extractEvents = (condition) => {
-    const parameterMatch = condition.match(/#{(.*)}/);
-    if (!parameterMatch) {
-        return [];
-    }
-    // logger('Have values for parameter: ', parameterMatch);
-    const [firstEvent, secondEvent] = parameterMatch[1].split('::');
-    return [firstEvent, secondEvent];
 };
-
-const extractEventsFromConditions = (conditions) => conditions.filter(conditionIsTimeBased).map(extractEvents)
-    .reduce((allList, thisList) => [...allList, ...thisList], []);
 
 // the job of this method is to go fetch the relevant events for the users that it might be relevant for
 const obtainUserEventHistory = async (userIds, eventTypes, startTime) => {
     // we exclude context because it is not necessary, and with it we might hit lambda payload size limits too quickly
-    const lambdaParams = lambdaParameters({ userIds, eventTypes, startDate: startTime.valueOf(), excludeContext: true }, 'userHistory', true);
+    const historyPayload = { userIds, eventTypes, startDate: startTime.valueOf(), excludeContext: true };
+    const lambdaParams = boostUtil.lambdaParameters(historyPayload, 'userHistory', true);
     const lambdaResults = await lambda.invoke(lambdaParams).promise();
     const resultPayload = JSON.parse(lambdaResults.Payload);
     logger('Event history lambda result: ', resultPayload);
@@ -165,18 +127,10 @@ const obtainUserEventHistory = async (userIds, eventTypes, startTime) => {
 };
 
 const determineUsersMeetingConditions = async (boost, accountUserMap) => {
-    const { statusConditions } = boost;
     const accountIds = Object.keys(accountUserMap);
 
-    const sequenceDependentStatusses = Object.keys(statusConditions).filter((status) => oneConditionTimeBased(statusConditions[status]));
-    logger('Processing boost, sequence dependent statusses; ', sequenceDependentStatusses);
-
-    // as in general, three levels of lists to untangle here: statusses, then conditions, then events within condition
-    const eventsToObtainRaw = sequenceDependentStatusses.map((status) => extractEventsFromConditions(statusConditions[status]));
-    logger('Raw events to obtain: ', eventsToObtainRaw);
-    const eventsToObtain = [...new Set(eventsToObtainRaw.reduce((allList, thisList) => [...allList, ...thisList]))];
-    logger('Deduped: ', eventsToObtain);
-
+    const eventsToObtain = boostUtil.extractEventsInSequenceConditions(boost);
+    
     const userIds = Object.values(accountUserMap).map(({ userId }) => userId);
     logger('Fetching for user IDs: ', userIds);
 
@@ -198,7 +152,8 @@ const determineUsersMeetingConditions = async (boost, accountUserMap) => {
     logger('Extracted these users meeting status conditions now: ', accountsMeetingConditions);
 
     // then we return the accounts that met a status condition, along with a normalized map of event history for logging, and return them
-    const eventHistoryByAccount = accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: eventHistoryMap[accountUserMap[accountId].userId].userEvents }), {})
+    const eventHistoryByAccount = accountIds.
+        reduce((obj, accountId) => ({ ...obj, [accountId]: eventHistoryMap[accountUserMap[accountId].userId].userEvents }), {});
 
     return { accountsMeetingConditions, eventHistoryByAccount };
 };
@@ -209,7 +164,7 @@ const assembleLogContext = (accountWithStatus, eventHistoryByAccount) => ({
     newStatus: accountWithStatus.newStatus,
     oldStatus: accountWithStatus.oldStatus, 
     eventHistory: eventHistoryByAccount[accountWithStatus.accountId]
-})
+});
 
 const assembleUpdateInstruction = (accountWithStatus, eventHistoryByAccount, boostId, redemptionResult) => {
     const logContext = assembleLogContext(accountWithStatus, eventHistoryByAccount);
@@ -217,7 +172,7 @@ const assembleUpdateInstruction = (accountWithStatus, eventHistoryByAccount, boo
         logContext.accountTxIds = redemptionResult[boostId].accountTxIds;
         logContext.floatTxIds = redemptionResult[boostId].floatTxIds;
         logContext.boostAmount = redemptionResult[boostId].boostAmount;
-        logContext.amountFromPool = redemptionResult[boostId].amountFromPool;
+        logContext.amountFromBonus = redemptionResult[boostId].amountFromBonus;
     }
 
     return {
@@ -227,7 +182,7 @@ const assembleUpdateInstruction = (accountWithStatus, eventHistoryByAccount, boo
         newStatus: accountWithStatus.newStatus,
         logContext 
     };
-}
+};
 
 // see above on over-doing, or not, parallel processing
 const processBoostWithTimeSequenceCondition = async (boost, userAccountMap) => {
@@ -261,9 +216,8 @@ const processBoostWithTimeSequenceCondition = async (boost, userAccountMap) => {
     const accountsWithoutRedemptions = accountsWithNewStatus.filter(({ newStatus }) => newStatus !== 'REDEEMED');
 
     if (accountsWithoutRedemptions.length > 0) {
-        const nonRedeemedUpdates = accountsWithoutRedemptions.map((accountWithStatus) => (
-            assembleUpdateInstruction(accountWithStatus, eventHistoryByAccount, boostId))
-        );
+        const nonRedeemedUpdates = accountsWithoutRedemptions.map((accountWithStatus) => 
+            assembleUpdateInstruction(accountWithStatus, eventHistoryByAccount, boostId));
     
         const resultOfNonRedeemUpdate = await persistence.updateBoostAccountStatus(nonRedeemedUpdates);
         logger('Status update completed for non-redeemed but triggered: ', resultOfNonRedeemUpdate);    
@@ -280,9 +234,8 @@ const processBoostWithTimeSequenceCondition = async (boost, userAccountMap) => {
         logger('Redeeming boosts with call: ', redemptionCall);
         const redemptionResult = await redemptionHandler.redeemOrRevokeBoosts(redemptionCall);
         logger('Redemption result: ', redemptionResult);
-        const redeemUpdateInstructions = accountsWithRedemptions.map((accountWithStatus) => (
-            assembleUpdateInstruction(accountWithStatus, eventHistoryByAccount, boostId, redemptionResult))
-        );
+        const redeemUpdateInstructions = accountsWithRedemptions.map((accountWithStatus) => 
+            assembleUpdateInstruction(accountWithStatus, eventHistoryByAccount, boostId, redemptionResult));
         await persistence.updateBoostAccountStatus(redeemUpdateInstructions); // leave in sequence, not parallel, with subsequent
         await persistence.updateBoostAmountRedeemed([boost.boostId]);
     }
@@ -295,10 +248,10 @@ module.exports.processTimeBasedConditions = async () => {
     const activeStandardBoosts = await persistence.fetchActiveStandardBoosts();
     logger('Time based condition processing, retrieved boosts: ', activeStandardBoosts);
     if (activeStandardBoosts.length === 0) {
-        return { boostsProcessed: 0 }
+        return { boostsProcessed: 0 };
     }
 
-    const boostsWithSeqCondition = activeStandardBoosts.filter((boost) => hasTimeBasedConditions(boost));
+    const boostsWithSeqCondition = activeStandardBoosts.filter((boost) => boostUtil.hasTimeBasedConditions(boost));
     if (boostsWithSeqCondition.length === 0) {
         logger('No active standard boosts have time-based status triggers');
         return { boostsProcessed: 0 };
@@ -329,7 +282,7 @@ module.exports.processTimeBasedConditions = async () => {
  */
 module.exports.handleAllScheduledTasks = async (event) => {
     try {
-        logger('Initiating scheduled time-based boost jobs');
+        logger('Initiating scheduled time-based boost jobs, event received: ', JSON.stringify(event));
         const [resultOfTimeProcessing, resultOfAudienceRefreshing] = await Promise.all([
             exports.processTimeBasedConditions(),
             exports.refreshDynamicAudienceBoosts()

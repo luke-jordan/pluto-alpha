@@ -400,7 +400,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             statusConditions: mockCreateConditions,
             audienceId: testAudienceId,
             redemptionMsgInstructions: testRedemptionMsgs,
-            messageInstructionIds: [],
+            messageInstructionIds: []
         };
 
         const resultOfInsertion = await rds.insertBoost(testInstruction);

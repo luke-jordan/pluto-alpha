@@ -349,7 +349,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             newStatus: 'UNLOCKED',
             stillActive: true,
             logType: 'STATUS_CHANGE',
-            logContext: { boostAmount: boostCreatedByEvent.boostAmount, newStatus: 'UNLOCKED' }
+            logContext: { boostAmount: boostCreatedByEvent.boostAmount, newStatus: 'UNLOCKED', oldStatus: 'CREATED' }
         }]);
 
     });

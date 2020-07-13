@@ -14,7 +14,6 @@ const { ACTIVE_BOOST_STATUS } = require('../boost.util');
 
 const sinon = require('sinon');
 const chai = require('chai');
-const { stub } = require('sinon');
 const expect = chai.expect;
 chai.use(require('sinon-chai'));
 
@@ -27,9 +26,14 @@ const insertBoostAccountsStub = sinon.stub();
 
 const fetchActiveStandardBoostStub = sinon.stub();
 const fetchAccountsStub = sinon.stub();
+const getAccountIdStub = sinon.stub();
 const updateBoostStatusStub = sinon.stub();
+const updateBoostRedeemedStub = sinon.stub();
 
 const redeemBoostStub = sinon.stub();
+
+const fetchUserBoostsStub = sinon.stub();
+const userListAccountStub = sinon.stub();
 
 const publishEventStub = sinon.stub();
 const publishMultiStub = sinon.stub();
@@ -65,8 +69,19 @@ const createHandler = proxyquire('../boost-create-handler', {
 const eventHandler = proxyquire('../boost-event-handler', {
     './persistence/rds.boost': {
         'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostStub,
+        'findBoost': fetchRelevantBoostStub,
         'insertBoostAccountJoins': insertBoostAccountsStub,
-    }    
+        'getAccountIdForUser': getAccountIdStub,
+        'findAccountsForBoost': fetchAccountsStub,
+        'updateBoostAccountStatus': updateBoostStatusStub
+    },
+    'publish-common': {
+        'publishUserEvent': publishEventStub,
+        'publishMultiUserEvent': publishMultiStub
+    },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient
+    }
 });
 
 const scheduledHandler = proxyquire('../boost-scheduled-handler', {
@@ -74,6 +89,7 @@ const scheduledHandler = proxyquire('../boost-scheduled-handler', {
         'fetchActiveStandardBoosts': fetchActiveStandardBoostStub,
         'findAccountsForBoost': fetchAccountsStub,
         'updateBoostAccountStatus': updateBoostStatusStub,
+        'updateBoostAmountRedeemed': updateBoostRedeemedStub,
         '@noCallThru': true
     },
     './boost-redemption-handler': {
@@ -89,13 +105,21 @@ const scheduledHandler = proxyquire('../boost-scheduled-handler', {
     }
 });
 
-// const listHandler = proxyquire('../boost-list-handler', {
-    
-// });
+const listHandler = proxyquire('../boost-list-handler', {
+    './persistence/rds.boost.list': {
+        'fetchUserBoosts': fetchUserBoostsStub,
+        'findAccountsForUser': userListAccountStub,
+        '@noCallThru': true
+    },
+    'ioredis': class {
+        constructor () { 
+            this.get = sinon.stub();
+            this.set = sinon.stub();
+        }
+    }
+});
 
-const stubs = [fetchUncreatedBoostStub, fetchRelevantBoostStub, publishEventStub, publishMultiStub, lambdaInvokeStub];
-
-const resetStubs = () => helper.resetStubs(...stubs);
+// AND THEN SOME STANDARD IDS
 
 const testBoostId = uuid();
 
@@ -106,6 +130,43 @@ const testPersistedTime = moment();
 const mockAdminId = uuid();
 const mockUserId = uuid();
 
+// A COUPLE OF HELPERS
+
+const stubs = [
+    insertBoostStub, fetchUncreatedBoostStub, fetchRelevantBoostStub, 
+    fetchActiveStandardBoostStub, fetchAccountsStub, updateBoostStatusStub, updateBoostRedeemedStub, redeemBoostStub,
+    getAccountIdStub, publishEventStub, publishMultiStub, lambdaInvokeStub
+];
+
+const resetStubs = () => helper.resetStubs(...stubs);
+
+const mockAccountDict = (accountId, status) => ({
+    boostId: testBoostId, 
+    accountUserMap: {
+        [accountId]: { userId: mockUserId, status }
+    }
+});
+
+const setLambdaToReturnHistory = (userEvents, userId = mockUserId) => {
+    const payload = {
+        result: 'SUCCESS',
+        [userId]: {
+            totalCount: userEvents.length,
+            userEvents
+        }
+    };
+    lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200, Payload: JSON.stringify(payload) })});
+};
+
+const expectedStatusUpdate = (newStatus, accountId, logContext) => [{
+    boostId: testBoostId,
+    accountIds: [accountId],
+    newStatus,
+    stillActive: true,
+    logType: 'STATUS_CHANGE',
+    logContext: { newStatus, ...logContext }
+}];
+
 describe('UNIT TEST WITHDRAWAL BOOST', () => {
 
     beforeEach(resetStubs);
@@ -115,6 +176,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
     // NB : MAKE SURE TO EXCLUDE FAILURE/EXPIRY FROM CHECK FOR BOOST CREATE (SO, NOT EXCLUDED ACCIDENTALLY)
     const testStatusConditions = { 
         OFFERED: ['event_occurs #{WITHDRAWAL_EVENT_CONFIRMED}'],
+        EXPIRED: ['event_does_follow #{WITHDRAWAL_EVENT_CONFIRMED::ADMIN_SETTLED_WITHDRAWAL::30::DAYS}'],
         PENDING: ['event_occurs #{WITHDRAWAL_EVENT_CANCELLED}'],
         REDEEMED: ['event_does_not_follow #{WITHDRAWAL_EVENT_CANCELLED::ADMIN_SETTLED_WITHDRAWAL::30::DAYS}'],
         FAILED: ['event_does_follow #{WITHDRAWAL_EVENT_CANCELLED::ADMIN_SETTLED_WITHDRAWAL::30::DAYS}']
@@ -138,7 +200,8 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         boostAudienceType: 'EVENT_DRIVEN',
         audienceId: 'some-audience',
         messageInstructionIds: { },
-        statusConditions: testStatusConditions
+        statusConditions: testStatusConditions,
+        flags: ['WITHDRAWAL_RELATED']
     };
 
     it('Unit test creating withdrawal-incentive boost, to abort _within_ (i.e., before confirming) boost', async () => {
@@ -167,12 +230,12 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
             statusConditions: {
                 OFFERED: ['event_occurs #{WITHDRAWAL_EVENT_INITIATED}'],
                 PENDING: ['event_occurs #{WITHDRAWAL_EVENT_CANCELLED}'],
-                REDEEMED: ['event_does_not_follow #{WITHDRAWAL_EVENT_CANCELLED::ADMIN_SETTLED_WITHDRAWAL::30::DAYS}'],
+                REDEEMED: ['event_does_not_follow #{WITHDRAWAL_EVENT_CANCELLED::WITHDRAWAL_EVENT_CONFIRMED::30::DAYS}'],
                 FAILED: ['event_occurs #{WITHDRAWAL_EVENT_CONFIRMED}']        
             },
             audienceId: 'some-audience',
             messagesToCreate: [],
-            flags: ['WITHDRAWAL_STEMMING'],
+            flags: ['WITHDRAWAL_RELATED']
         };
  
         momentStub.returns(testStartTime.clone());
@@ -204,10 +267,9 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
 
             boostAudienceType: 'EVENT_DRIVEN',
             audienceId: 'some-audience',
-            statusConditions: testBodyOfEvent.statusConditions,
             
             messageInstructionIds: [],
-            flags: ['WITHDRAWAL_STEMMING']
+            flags: ['WITHDRAWAL_RELATED']
         };
 
         expect(insertBoostStub).to.have.been.calledWith(expectedBoostRds);
@@ -218,7 +280,7 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         // could also use messageInstructionIds, _but_ we really want this event in the data pipeline for later training,
         // and we may as well reuse msg trigger infrastructure right now (given constraints)
 
-        const mockMsgTrigger = { triggerEvent: ['BOOST_OFFERED_WITHDRAWAL'] }; 
+        const mockMsgTrigger = { triggerEvent: ['WITHDRAWAL_BOOST_OFFERED'] }; 
         const eventMessageBody = {
             boostStatus: 'ALL',
             isMessageSequence: false,
@@ -280,43 +342,241 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
     it('Boost created by withdrawal confirmed, and message triggered', async () => {
 
         const testEvent = { userId: mockUserId, eventType: 'WITHDRAWAL_EVENT_CONFIRMED' };
+        const mockPersistedTime = moment();
     
-        fetchUncreatedBoostStub.resolves([testPersistedBoost]);
-        const resultOfProcess = await eventHandler.handleBatchOfQueuedEvents(helper.composeSqsBatch([testEvent]));
+        getAccountIdStub.withArgs(mockUserId).resolves('account-1');
+        fetchUncreatedBoostStub.withArgs('account-1').resolves([testPersistedBoost]);
+        insertBoostAccountsStub.resolves({ boostIds: [testBoostId], accountIds: ['account-i1'], persistedTimeMillis: mockPersistedTime.valueOf() });
 
+        fetchRelevantBoostStub.resolves([testPersistedBoost]);
+        fetchAccountsStub.resolves([mockAccountDict('account-1', 'CREATED')]);
+        updateBoostStatusStub.resolves([{ boostId: testBoostId, updatedTime: moment() }]);
+
+        const resultOfProcess = await eventHandler.handleBatchOfQueuedEvents(helper.composeSqsBatch([testEvent]));
+        expect(resultOfProcess).to.exist;
+
+        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId], ['account-1'], 'CREATED');
+        
+        const expectedLogContext = { boostAmount: testPersistedBoost.boostAmount, oldStatus: 'CREATED', newStatus: 'OFFERED' };
+        expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedStatusUpdate('OFFERED', 'account-1', expectedLogContext));
+
+        expect(publishEventStub).to.have.been.calledOnce;
+        expect(publishEventStub).to.have.been.calledWith(mockUserId, 'BOOST_CREATED_WITHDRAWAL');
+
+        expect(publishMultiStub).to.have.been.calledOnce;
+        expect(publishMultiStub).to.have.been.calledWith([mockUserId], 'WITHDRAWAL_BOOST_OFFERED');
+        expect(lambdaInvokeStub).to.not.have.been.called;
     });
 
     it('Boost is expired if no cancellation and admin goes ahead', async () => {
-        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL' };
+        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL', timestamp: moment().valueOf() };
+        getAccountIdStub.withArgs(mockUserId).resolves('account-1');
 
-        // find boost and then process
         fetchRelevantBoostStub.resolves([testPersistedBoost]);
+        fetchUncreatedBoostStub.resolves([]);
+        fetchAccountsStub.resolves([mockAccountDict('account-1', 'OFFERED')]);
+        updateBoostStatusStub.resolves([{ boostId: testBoostId, updatedTime: moment() }]);
+
+        const mockEventHistory = [
+            {
+                userId: mockUserId,
+                eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
+                timestamp: moment().subtract(1, 'days').valueOf()
+            }
+        ];
+
+        setLambdaToReturnHistory(mockEventHistory);
+
+        const resultOfProcess = await eventHandler.handleBatchOfQueuedEvents(helper.composeSqsBatch([testEvent]));
+        expect(resultOfProcess).to.exist;
+
+        const expectedLogContext = { boostAmount: testPersistedBoost.boostAmount, oldStatus: 'OFFERED', newStatus: 'EXPIRED' };
+        expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedStatusUpdate('EXPIRED', 'account-1', expectedLogContext));
+
+        // log context is covered in other places and not core to logic here
+        expect(publishMultiStub).to.have.been.calledOnceWith([mockUserId], 'WITHDRAWAL_BOOST_EXPIRED');
+
+        helper.expectNoCalls(redeemBoostStub, updateBoostRedeemedStub);
     });
 
     it('Makes boost pending by cancelling withdrawal', async () => {
-        const testEvent = { userId: mockUserId, eventType: 'WITHDRAWAL_EVENT_CANCELLED' };
+        const mockEventTimestamp = moment().valueOf(0);
+        const testEvent = { userId: mockUserId, eventType: 'WITHDRAWAL_EVENT_CANCELLED', timestamp: mockEventTimestamp };
         
         fetchRelevantBoostStub.resolves([testPersistedBoost]);
+        fetchUncreatedBoostStub.resolves([]);
+        fetchAccountsStub.resolves([mockAccountDict('account-1', 'OFFERED')]);
+        updateBoostStatusStub.resolves([{ boostId: testBoostId, updatedTime: moment() }]);
 
-        const resultOfProcess = await eventHandler.handleBatchOfQueuedEvents(helper.composeSqsBatch(testEvent));
+        const resultOfProcess = await eventHandler.handleBatchOfQueuedEvents(helper.composeSqsBatch([testEvent]));
 
+        expect(resultOfProcess).to.exist;
+
+        const expectedLogContext = { boostAmount: testPersistedBoost.boostAmount, oldStatus: 'OFFERED', newStatus: 'PENDING' };
+        expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedStatusUpdate('PENDING', 'account-1', expectedLogContext));
+
+        expect(publishMultiStub).to.have.been.calledOnceWith([mockUserId], 'WITHDRAWAL_BOOST_PENDING');
+
+        helper.expectNoCalls(lambdaInvokeStub, redeemBoostStub, updateBoostRedeemedStub);
     });
 
     it('Boost fails by withdrawing within period', async () => {
-        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL' };
+        const mockEventTimestamp = moment().valueOf(0);
+        const testEvent = { userId: mockUserId, eventType: 'ADMIN_SETTLED_WITHDRAWAL', timestamp: mockEventTimestamp };
 
-        const resultOfProcess = await eventHandler.handleBatchOfQueuedEvents(helper.composeSqsBatch(testEvent));
+        fetchRelevantBoostStub.resolves([testPersistedBoost]);
+        fetchUncreatedBoostStub.resolves([]);
+        fetchAccountsStub.resolves([mockAccountDict('account-1', 'PENDING')]);
+        updateBoostStatusStub.resolves([{ boostId: testBoostId, updatedTime: moment() }]);
+
+        const mockEventHistory = [
+            {
+                userId: mockUserId,
+                eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
+                timestamp: moment().subtract(10, 'days').valueOf()
+            },
+            {
+                userId: mockUserId,
+                eventType: 'WITHDRAWAL_EVENT_CANCELLED',
+                timestamp: moment().subtract(5, 'days').valueOf()
+            },
+            {
+                userId: mockUserId,
+                eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
+                timestamp: moment().subtract(1, 'days').valueOf()
+            },
+            {
+                userId: mockUserId,
+                eventType: 'ADMIN_SETTLED_WITHDRAWAL',
+                timestamp: mockEventTimestamp
+            }
+        ];
+
+        setLambdaToReturnHistory(mockEventHistory);
+
+        const resultOfProcess = await eventHandler.handleBatchOfQueuedEvents(helper.composeSqsBatch([testEvent]));
+        expect(resultOfProcess).to.exist;
+
+        const expectedLogContext = { boostAmount: testPersistedBoost.boostAmount, oldStatus: 'PENDING', newStatus: 'FAILED' };
+        expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedStatusUpdate('FAILED', 'account-1', expectedLogContext));
+
+        const expectedEventTypes = ['WITHDRAWAL_EVENT_CONFIRMED', 'ADMIN_SETTLED_WITHDRAWAL', 'WITHDRAWAL_EVENT_CANCELLED'];
+        helper.testLambdaInvoke(lambdaInvokeStub, {
+            FunctionName: 'user_log_reader',
+            InvocationType: 'RequestResponse',
+            Payload: JSON.stringify({ userId: mockUserId, eventTypes: expectedEventTypes, excludeContext: true, startDate: testStartTime.valueOf() })
+        });
+
+        // log context is covered in other places and not core to logic here
+        expect(publishMultiStub).to.have.been.calledOnceWith([mockUserId], 'WITHDRAWAL_BOOST_FAILED');
+
+        helper.expectNoCalls(redeemBoostStub, updateBoostRedeemedStub);
+
     });
 
+    // most of this is tested in boost.scheduled, so just taking care of special bits here
     it('Redeems boost when crosses time threshold', async () => {
+        const withdrawalAbortConditions = {
+            OFFERED: ['event_occurs #{WITHDRAWAL_EVENT_INITIATED}'],
+            PENDING: ['event_occurs #{WITHDRAWAL_EVENT_CANCELLED}'],
+            REDEEMED: ['event_does_not_follow #{WITHDRAWAL_EVENT_CANCELLED::WITHDRAWAL_EVENT_CONFIRMED::30::DAYS}'],
+            FAILED: ['event_occurs #{WITHDRAWAL_EVENT_CONFIRMED}']        
+        };
+        
+        const mockBoostToRedeem = { 
+            ...testPersistedBoost, 
+            statusConditions: withdrawalAbortConditions,
+            boostStartTime: moment().subtract(120, 'days')
+        };
+
+        fetchActiveStandardBoostStub.resolves([mockBoostToRedeem]);
+        fetchAccountsStub.resolves([mockAccountDict('account-1', 'OFFERED')]);
+
+        // note : in future will want to come back and tighten this up to make sure doesn't count old events
+        const mockEventHistory = [
+            // {
+            //     userId: 'user-1',
+            //     eventType: 'WITHDRAWAL_EVENT_CANCELLED',
+            //     timestamp: moment().subtract(50, 'days').valueOf()
+            // },
+            // {
+            //     userId: 'user-1',
+            //     eventType: 'WITHDRAWAL_EVENT_CONFIRMED',
+            //     timestamp: moment().subtract(45, 'days').valueOf()
+            // },
+            {
+                userId: mockUserId,
+                eventType: 'WITHDRAWAL_EVENT_CANCELLED',
+                timestamp: moment().subtract(31, 'days').valueOf()
+            }
+        ];
+        
+        setLambdaToReturnHistory(mockEventHistory);
+
+        redeemBoostStub.resolves({
+            [testBoostId]: {
+                result: 'SUCCESS',
+                boostAmount: 15000,
+                amountFromBonus: 15000,
+                floatTxIds: ['some-float-tx-id'],
+                accountTxIds: ['some-account-tx-id']
+            }
+        });
 
         const resultOfProcess = await scheduledHandler.processTimeBasedConditions();
+        expect(resultOfProcess).to.deep.equal({ boostsProcessed: 1, boostsTriggered: 1, accountsUpdated: 1 });        
+
+        expect(fetchActiveStandardBoostStub).to.have.been.calledOnceWithExactly();
+        expect(fetchAccountsStub).to.have.been.calledOnceWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS });
+
+        const expectedLogContext = { 
+            oldStatus: 'OFFERED', 
+            newStatus: 'REDEEMED',
+            boostAmount: 15000, 
+            amountFromBonus: 15000,
+            floatTxIds: ['some-float-tx-id'],
+            accountTxIds: ['some-account-tx-id'],        
+            eventHistory: mockEventHistory
+        };
+
+        const expectedUpdate = expectedStatusUpdate('REDEEMED', 'account-1', expectedLogContext);
+        Reflect.deleteProperty(expectedUpdate[0], 'stillActive'); // not relevant here
+        expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedUpdate);
+    
+        const expectedEventForRedemption = {
+            eventType: 'SEQUENCE_CHECK',
+            eventContext: { 
+                eventHistory: {
+                    'account-1': mockEventHistory 
+                }
+            }
+        };
+
+        const expectedRedemptionCall = { 
+            redemptionBoosts: [mockBoostToRedeem], 
+            affectedAccountsDict: { [testBoostId]: { 'account-1': { userId: mockUserId, status: 'OFFERED' } } },
+            event: expectedEventForRedemption
+        };
+        expect(redeemBoostStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
+
+        expect(updateBoostRedeemedStub).to.have.been.calledOnceWithExactly([testBoostId]);
 
     });
 
     it('Finds pending withdrawal boosts for user, to warn, and/or display', async () => {
+        const excludedStatus = ['REDEEMED', 'REVOKED', 'FAILED', 'EXPIRED']; // starting to grandfather in FAILED
+        userListAccountStub.resolves(['account-1']);
+        fetchUserBoostsStub.resolves([{ boostId: 'some-boost' }]);
 
-        const withdrawalList = await listHandler.listEventLinkedBoosts('ADMIN_SETTLED_WITHDRAWAL');
+        const apiEvent = helper.wrapQueryParamEvent({ flag: 'WITHDRAWAL_RELATED', onlyActive: true }, mockUserId, 'ORDINARY_USER');
+        const resultOfListing = await listHandler.listUserBoosts(apiEvent);
+        
+        const bodyOfResult = helper.standardOkayChecks(resultOfListing);
+        expect(bodyOfResult).to.deep.equal([{ boostId: 'some-boost'}]);
+
+        expect(fetchUserBoostsStub).to.have.been.calledOnce;
+        expect(fetchUserBoostsStub).to.have.been.calledWith('account-1', { flags: ['WITHDRAWAL_RELATED'], excludedStatus });
+
     });
 
     // need to figure this out : need a way to record "do not offer these both at same time"

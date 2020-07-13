@@ -58,7 +58,7 @@ module.exports.fetchBoostsWithDynamicAudiences = async () => {
         `and audience_id in (select audience_id from ${config.get('tables.audienceTable')} where is_dynamic = true)`;
     const rawResult = await rdsConnection.selectQuery(query, ['REFERRAL', 'FRIEND_TOURNAMENT']);
     return rawResult.map((rawBoost) => transformBoostFromRds(rawBoost));
-}
+};
 
 /**
  * Method that finds boost that may be relevant to a given account, filtering by whether the account is in a certain state related to the boost.
@@ -478,8 +478,8 @@ module.exports.insertBoost = async (boostDetails) => {
 // almost always called (as should be case) with either one boost and many accounts
 // or one account and many boosts
 module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatus) => {
-    const boostAccountJoins = boostIds.map((boostId) => accountIds.map((accountId) => ({ boostId, accountId, boostStatus })))
-        .reduce((fullList, thisList) => [...fullList, ...thisList], []);
+    const boostAccountJoins = boostIds.map((boostId) => accountIds.map((accountId) => ({ boostId, accountId, boostStatus }))).
+        reduce((fullList, thisList) => [...fullList, ...thisList], []);
     const boostJoinQueryDef = {
         query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
         columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',

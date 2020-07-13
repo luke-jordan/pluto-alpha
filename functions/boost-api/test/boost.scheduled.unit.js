@@ -52,7 +52,8 @@ const handler = proxyquire('../boost-scheduled-handler', {
     },
     'aws-sdk': {
         'Lambda': class {
-            constructor() { this.invoke = lambdaInvokeStub }
+            // eslint-disable-next-line brace-style
+            constructor () { this.invoke = lambdaInvokeStub; }
         }
     }
 });
@@ -178,7 +179,7 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
                 boostEndTime: mockBoost.boostEndTime.valueOf(), 
                 statusConditions: mockBoost.statusConditions,
                 gameParams: undefined,
-                rewardParameters: undefined,
+                rewardParameters: undefined
             }
         };
 
@@ -224,8 +225,8 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
                 totalCount: userEvents.length,
                 userEvents
             }
-        }
-        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200, Payload: JSON.stringify(payload) })})
+        };
+        lambdaInvokeStub.returns({ promise: () => ({ StatusCode: 200, Payload: JSON.stringify(payload) })});
     };
 
     const expectedUpdateInstruction = (newStatus, accountId, logContext) => [{
@@ -383,7 +384,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
             'boost-id': {
                 result: 'SUCCESS',
                 boostAmount: 15000,
-                amountFromPool: 15000,
+                amountFromBonus: 15000,
                 floatTxIds: ['some-float-tx-id'],
                 accountTxIds: ['some-account-tx-id']
             }
@@ -399,7 +400,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
             oldStatus: 'OFFERED', 
             newStatus: 'REDEEMED',
             boostAmount: 15000, 
-            amountFromPool: 15000,
+            amountFromBonus: 15000,
             floatTxIds: ['some-float-tx-id'],
             accountTxIds: ['some-account-tx-id'],        
             eventHistory: mockEventHistory
@@ -418,7 +419,7 @@ describe('*** UNIT TEST CHECKING FOR TIME-BASED CONDITIONS ***', async () => {
 
         const expectedRedemptionCall = { 
             redemptionBoosts: [mockBoostToRedeem], 
-            affectedAccountsDict: { ['boost-id']: { 'account-1': { userId: 'user-1', status: 'OFFERED' } } }, // not nice
+            affectedAccountsDict: { 'boost-id': { 'account-1': { userId: 'user-1', status: 'OFFERED' } } }, // not nice
             event: expectedEventForRedemption
         };
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
@@ -444,7 +445,7 @@ describe('*** UNIT TEST EXECUTES ALL ***', async () => {
                 resultOfTimeProcessing: { boostsProcessed: 0 },
                 resultOfAudienceRefreshing: { result: 'NO_BOOSTS' }
             }
-        }
+        };
         expect(resultOfProcess).to.deep.equal(expectedResult);
 
         expect(fetchActiveDynamicBoostStub).to.have.been.calledOnceWithExactly();

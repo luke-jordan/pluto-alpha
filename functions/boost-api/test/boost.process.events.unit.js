@@ -63,6 +63,7 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
     it('Processes a friend number boost correctly', async () => {
         const mockUserId = uuid();
         const mockAccountId = uuid();
+        const mockBoostAmount = 100000; // $10
 
         const mockFriend = (createdDaysAgo) => ({ relationshipId: uuid(), creationTimeMillis: moment().subtract(createdDaysAgo, 'days').valueOf() });
 
@@ -79,7 +80,7 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
             boostId: mockBoostId,
             accountUserMap: mockAccountMap
         }]);
-        redemptionHandlerStub.resolves({ [mockBoostId]: { result: 'SUCCESS' }});
+        redemptionHandlerStub.resolves({ [mockBoostId]: { result: 'SUCCESS', boostAmount: mockBoostAmount, amountFromBonus: mockBoostAmount }});
         updateBoostAccountStub.resolves([{ boostId: mockBoostId, updatedTime: moment() }]);
 
         fetchUncreatedBoostStub.resolves([]); // as not tested here
@@ -102,7 +103,7 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
         };
 
         expect(redemptionHandlerStub).to.have.been.calledOnce;
-        // helper.logNestedMatches(expectedRedemptionCall, redemptionHandlerStub.getCall(0).args[0]);
+        // helper.logNestedMatches(redemptionHandlerStub.getCall(0).args[0], expectedRedemptionCall);
         expect(redemptionHandlerStub).to.have.been.calledOnceWithExactly(expectedRedemptionCall);
         
         const expectedBoostUpdate = {
@@ -111,7 +112,7 @@ describe('*** UNIT TEST FRIEND BOOST ***', () => {
             newStatus: 'REDEEMED',
             stillActive: true,
             logType: 'STATUS_CHANGE',
-            logContext: { newStatus: 'REDEEMED', boostAmount: 100000 }
+            logContext: { newStatus: 'REDEEMED', oldStatus: 'OFFERED', boostAmount: mockBoostAmount, amountFromBonus: mockBoostAmount }
         };
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedBoostUpdate]);
         expect(updateBoostRedemptionStub).to.have.been.calledOnce; // also sufficiently covered elsewhere

@@ -84,3 +84,14 @@ module.exports.createUUIDArray = (arraySize) => {
     }
     return uuidArray;
 };
+
+module.exports.testLambdaInvoke = (lambdaStub, requiredInvocation, callNumber = 0) => {
+    const lambdaArgs = lambdaStub.getCall(callNumber).args;
+    expect(lambdaArgs.length).to.equal(1);
+    const lambdaInvocation = lambdaArgs[0];
+    expect(lambdaInvocation).to.have.property('FunctionName', requiredInvocation['FunctionName']);
+    expect(lambdaInvocation).to.have.property('InvocationType', requiredInvocation['InvocationType']);
+    const expectedPayload = JSON.parse(requiredInvocation['Payload']);
+    const argumentPayload = JSON.parse(lambdaInvocation['Payload']);
+    expect(argumentPayload).to.deep.equal(expectedPayload);
+};
