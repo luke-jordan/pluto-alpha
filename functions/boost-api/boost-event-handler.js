@@ -17,6 +17,7 @@ const opsUtil = require('ops-util-common');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+
 const GAME_RESPONSE = 'GAME_RESPONSE';
 
 // //////////////////////////// HELPER METHODS ///////////////////////////////////////////
@@ -26,7 +27,7 @@ const GAME_RESPONSE = 'GAME_RESPONSE';
 const extractFindBoostKey = (event) => {
     const persistenceKey = event.accountId ? { accountId: [event.accountId] } : { userId: [event.userId] };
     persistenceKey.boostStatus = util.ACTIVE_BOOST_STATUS;
-    persistenceKey.active = true;
+    persistenceKey.active = true; // because we want to be able to halt creating boost for new users but let prior proceed through statuses
     persistenceKey.underBudgetOnly = true;
     return persistenceKey;
 };
