@@ -11,13 +11,13 @@ const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const invokeLambda = async (functionName, payload, async = false) => {
-    const msgInstructionInvocation = {
+    const invocation = {
         FunctionName: functionName,
         InvocationType: async ? 'Event' : 'RequestResponse',
         Payload: JSON.stringify(payload)
     };
 
-    const resultOfInvocation = await lambda.invoke(msgInstructionInvocation).promise();
+    const resultOfInvocation = await lambda.invoke(invocation).promise();
     logger(`Raw result of ${functionName} invocation: `, resultOfInvocation);
     const resultPayload = JSON.parse(resultOfInvocation['Payload']);
     return JSON.parse(resultPayload.body);
@@ -79,17 +79,19 @@ const selectUsersForBoostOffering = async (boost) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
     const { boostId, audienceId, messageInstructionIds } = boost;
+
     const audienceAccountIds = await persistence.extractAccountIds(audienceId);
     logger('Got audience account ids:', audienceAccountIds);
     const filteredAccountIds = await filterAccountIds(boost, audienceAccountIds);
     logger('Got filtered account ids:', filteredAccountIds);
 
     if (filteredAccountIds.length === 0) {
-        return { message: 'No valid accounts found for ML boost' };
+        return { message: `No valid accounts found for ML boost: ${boostId}` };
     }
 
     const accountUserIdMap = await persistence.findUserIdsForAccounts(filteredAccountIds, true);
     logger('Got user ids for accounts:', accountUserIdMap);
+    
     const userIds = Object.keys(accountUserIdMap);
     const userIdsForOffering = await obtainUsersForOffering(boost, userIds);
     logger('Got user ids selected for boost offering:', userIdsForOffering);
@@ -99,10 +101,10 @@ const selectUsersForBoostOffering = async (boost) => {
 
     return {
         boostId,
-        parameters: boost,
-        userIds: userIdsForOffering,
         accountIds: accountIdsForOffering,
-        instructionIds
+        userIds: userIdsForOffering,
+        instructionIds,
+        parameters: boost
     };
 };
 
@@ -114,7 +116,7 @@ const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds,
  */
 module.exports.processMlBoosts = async (event) => {
     try {
-        if (!config.get('mlSelection.enabled')) { // todo: create config var
+        if (!config.get('mlSelection.enabled')) {
             return { result: 'NOT_ENABLED' };
         }
 
@@ -132,7 +134,6 @@ module.exports.processMlBoosts = async (event) => {
         const resultOfUpdate = await persistence.updateBoostAccountStatus(statusUpdateInstructions);
         logger('Result of boost account status update:', resultOfUpdate);
 
-        // const msgInstructionPromises = boostsAndRecipients.map((boost) => triggerMsgInstructions(boost));
         const resultOfMsgInstructions = await triggerMsgInstructions(boostsAndRecipients);
         logger('triggering message instructions resulted in:', resultOfMsgInstructions);
 
