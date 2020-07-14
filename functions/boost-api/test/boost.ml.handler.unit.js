@@ -113,13 +113,13 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         const audienceInvocation = {
             FunctionName: 'audience_selection',
-            InvocationType: 'RequestResponse',
+            InvocationType: 'Event',
             Payload: JSON.stringify({ operation: 'refresh', params: { audienceId: testAudienceId }})
         };
 
         const messageInvocation = {
             FunctionName: 'message_user_create_once',
-            InvocationType: 'Event',
+            InvocationType: 'RequestResponse',
             Payload: JSON.stringify({
                 instructions: [{
                     instructionId: testInstructionId,
@@ -186,7 +186,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         const audienceInvocation = {
             FunctionName: 'audience_selection',
-            InvocationType: 'RequestResponse',
+            InvocationType: 'Event',
             Payload: JSON.stringify({
                 operation: 'refresh',
                 params: { audienceId: testAudienceId }
@@ -195,7 +195,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         const messageInvocation = {
             FunctionName: 'message_user_create_once',
-            InvocationType: 'Event',
+            InvocationType: 'RequestResponse',
             Payload: JSON.stringify({
                 instructions: [{
                     instructionId: testInstructionId,

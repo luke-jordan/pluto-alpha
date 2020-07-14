@@ -10,6 +10,19 @@ const persistence = require('./persistence/rds.boost');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+const invokeLambda = async (functionName, payload, async = false) => {
+    const msgInstructionInvocation = {
+        FunctionName: functionName,
+        InvocationType: async ? 'Event' : 'RequestResponse',
+        Payload: JSON.stringify(payload)
+    };
+
+    const resultOfInvocation = await lambda.invoke(msgInstructionInvocation).promise();
+    logger(`Raw result of ${functionName} invocation: `, resultOfInvocation);
+    const resultPayload = JSON.parse(resultOfInvocation['Payload']);
+    return JSON.parse(resultPayload.body);
+};
+
 const assembleListOfMsgInstructions = ({ userIds, instructionIds, parameters }) => userIds.
     map((destinationUserId) => instructionIds.
     map((instructionId) => ({ instructionId, destinationUserId, parameters }))).
@@ -19,34 +32,13 @@ const triggerMsgInstructions = async (boostsAndRecipients) => {
     logger('Assembling instructions from:', boostsAndRecipients);
     const instructions = boostsAndRecipients.map((boostDetails) => assembleListOfMsgInstructions(boostDetails))[0];
     logger('Assembled instructions:', instructions);
-
-    const msgInstructionInvocation = {
-        FunctionName: config.get('lambdas.messageSend'),
-        InvocationType: 'Event',
-        Payload: JSON.stringify({ instructions })
-    };
-
-    const resultOfInvocation = await lambda.invoke(msgInstructionInvocation).promise();
-    logger('Raw result of msg instruction invocation: ', resultOfInvocation);
-    const resultPayload = JSON.parse(resultOfInvocation['Payload']);
-    return JSON.parse(resultPayload.body);
+    return invokeLambda(config.get('lambdas.messageSend'), { instructions });
 };
 
 const sendRequestToRefreshAudience = async (audienceId) => {
     logger('Refreshing audience:', audienceId);
     const audiencePayload = { operation: 'refresh', params: { audienceId } };
-
-    const audienceInvocation = {
-        FunctionName: config.get('lambdas.audienceHandle'),
-        InvocationType: 'RequestResponse',
-        Payload: JSON.stringify(audiencePayload)
-    };
-
-    const resultOfRefresh = await lambda.invoke(audienceInvocation).promise();
-    logger('Raw result of audience refresh: ', resultOfRefresh);
-    const resultPayload = JSON.parse(resultOfRefresh['Payload']);
-    const resultBody = JSON.parse(resultPayload.body);
-    logger('Result body for audience refresh: ', resultBody);
+    return invokeLambda(config.get('lambdas.audienceHandle'), audiencePayload, true);
 };
 
 const obtainUsersForOffering = async (boost, userIds) => {
