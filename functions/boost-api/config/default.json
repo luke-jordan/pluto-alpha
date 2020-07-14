@@ -51,7 +51,8 @@
         "floatTransfer": "float_transfer",
         "messageSend": "message_user_create_once",
         "messageInstruct": "message_instruct_create",
-        "audienceHandle": "audience_selection"
+        "audienceHandle": "audience_selection",
+        "userHistory": "user_log_reader"
     },
     "seedrandom": {
         "active": true,

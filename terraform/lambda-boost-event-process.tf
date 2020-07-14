@@ -5,8 +5,8 @@ variable "boost_event_process_lambda_function_name" {
 
 resource "aws_lambda_function" "boost_event_process" {
 
-  function_name                  = "${var.boost_event_process_lambda_function_name}"
-  role                           = "${aws_iam_role.boost_event_process_role.arn}"
+  function_name                  = var.boost_event_process_lambda_function_name
+  role                           = aws_iam_role.boost_event_process_role.arn
   handler                        = "boost-event-handler.handleBatchOfQueuedEvents"
   memory_size                    = 320
   runtime                        = "nodejs12.x"
@@ -23,12 +23,12 @@ resource "aws_lambda_function" "boost_event_process" {
         jsonencode(
           {
               "aws": {
-                "region": "${var.aws_default_region[terraform.workspace]}"
+                "region": var.aws_default_region[terraform.workspace]
               },
               "db": {
-                "host": "${local.database_config.host}",
-                "database": "${local.database_config.database}",
-                "port" :"${local.database_config.port}"
+                "host": local.database_config.host,
+                "database": local.database_config.database,
+                "port" : local.database_config.port
               },
               "secrets": {
                 "enabled": true,
@@ -38,10 +38,10 @@ resource "aws_lambda_function" "boost_event_process" {
               },
               "publishing": {
                 "userEvents": {
-                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                    "topicArn": var.user_event_topic_arn[terraform.workspace]
                 },
                 "hash": {
-                  "key": "${var.log_hashing_secret[terraform.workspace]}"
+                  "key": var.log_hashing_secret[terraform.workspace]
                 }
               }
           }
@@ -81,7 +81,7 @@ resource "aws_cloudwatch_log_group" "boost_event_process" {
   retention_in_days = 7
 
   tags = {
-    environment = "${terraform.workspace}"
+    environment = terraform.workspace
   }
 }
 
@@ -98,32 +98,37 @@ resource "aws_lambda_event_source_mapping" "boost_event_process_lambda" {
 /////////////////// IAM CONFIG //////////////////////////////////////////////////////////////////////////////////////
 
 resource "aws_iam_role_policy_attachment" "boost_event_process_basic_execution_policy" {
-  role = "${aws_iam_role.boost_event_process_role.name}"
+  role = aws_iam_role.boost_event_process_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "boost_event_process_vpc_execution_policy" {
-  role = "${aws_iam_role.boost_event_process_role.name}"
+  role = aws_iam_role.boost_event_process_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "boost_event_process_invoke_transfer_policy" {
-  role = "${aws_iam_role.boost_event_process_role.name}"
-  policy_arn = "${aws_iam_policy.lambda_invoke_float_transfer_access.arn}"
+  role = aws_iam_role.boost_event_process_role.name
+  policy_arn = aws_iam_policy.lambda_invoke_float_transfer_access.arn
 }
 
 resource "aws_iam_role_policy_attachment" "boost_event_process_invoke_message_create_policy" {
-  role = "${aws_iam_role.boost_event_process_role.name}"
-  policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
+  role = aws_iam_role.boost_event_process_role.name
+  policy_arn = aws_iam_policy.lambda_invoke_message_create_access.arn
+}
+
+resource "aws_iam_role_policy_attachment" "boost_event_process_invoke_user_history_policy" {
+  role = aws_iam_role.boost_event_process_role.name
+  policy_arn = "${var.user_profile_history_invoke_policy_arn[terraform.workspace]}"
 }
 
 resource "aws_iam_role_policy_attachment" "boost_event_process_user_event_publish_policy" {
-  role = "${aws_iam_role.boost_event_process_role.name}"
-  policy_arn = "${aws_iam_policy.ops_sns_user_event_publish.arn}"
+  role = aws_iam_role.boost_event_process_role.name
+  policy_arn = aws_iam_policy.ops_sns_user_event_publish.arn
 }
 
 resource "aws_iam_role_policy_attachment" "boost_event_process_secret_get" {
-  role = "${aws_iam_role.boost_event_process_role.name}"
+  role = aws_iam_role.boost_event_process_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
 }
 
@@ -135,7 +140,7 @@ resource "aws_iam_role_policy_attachment" "boost_process_queue_polling_policy" {
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////
 
 resource "aws_cloudwatch_log_metric_filter" "fatal_metric_filter_boost_event_process" {
-  log_group_name = "${aws_cloudwatch_log_group.boost_event_process.name}"
+  log_group_name = aws_cloudwatch_log_group.boost_event_process.name
   metric_transformation {
     name = "${var.boost_event_process_lambda_function_name}_fatal_api_alarm"
     namespace = "lambda_errors"
@@ -149,16 +154,16 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_event_process" 
   alarm_name = "${var.boost_event_process_lambda_function_name}_fatal_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.fatal_metric_filter_boost_event_process.name}"
+  metric_name = aws_cloudwatch_log_metric_filter.fatal_metric_filter_boost_event_process.name
   namespace = "lambda_errors"
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.fatal_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.fatal_errors_topic.arn]
 }
 
 resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_boost_event_process" {
-  log_group_name = "${aws_cloudwatch_log_group.boost_event_process.name}"
+  log_group_name = aws_cloudwatch_log_group.boost_event_process.name
   metric_transformation {
     name = "${var.boost_event_process_lambda_function_name}_security_api_alarm"
     namespace = "lambda_errors"
@@ -172,10 +177,10 @@ resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_boost_event_proces
   alarm_name = "${var.boost_event_process_lambda_function_name}_security_api_alarm"
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods = 1
-  metric_name = "${aws_cloudwatch_log_metric_filter.security_metric_filter_boost_event_process.name}"
+  metric_name = aws_cloudwatch_log_metric_filter.security_metric_filter_boost_event_process.name
   namespace = "lambda_errors"
   period = 60
   threshold = 0
   statistic = "Sum"
-  alarm_actions = ["${aws_sns_topic.security_errors_topic.arn}"]
+  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }

@@ -283,7 +283,6 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
 
         expect(result).to.deep.equal([camelizeKeys(boostFromPersistence)]);
         expect(queryStub).to.have.been.calledOnceWithExactly(selectBoostQuery, expectedValues);
-
     });
 
     it('Finds user accounts', async () => {

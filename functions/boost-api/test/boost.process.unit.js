@@ -44,7 +44,7 @@ const handler = proxyquire('../boost-event-handler', {
         'alterBoost': alterBoostStub,
         'getAccountIdForUser': getAccountIdForUserStub,
         'fetchUncreatedActiveBoostsForAccount': fetchUncreatedBoostsStub,
-        'insertBoostAccount': insertBoostAccountsStub,
+        'insertBoostAccountJoins': insertBoostAccountsStub,
         'insertBoostAccountLogs': insertBoostLogStub,
         'findAccountsForPooledReward': findPooledAccountsStub
     },
@@ -257,7 +257,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
         fetchUncreatedBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
-        insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
+        insertBoostAccountsStub.resolves({ boostIds: [testBoostId], accountIds: [testAccountId], persistedTimeMillis: mockPersistedTime.valueOf() });
 
         redemptionHandlerStub.resolves([{ transferTransactionId: 'some-id' }]);
 
@@ -316,7 +316,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         getAccountIdForUserStub.withArgs(testUserId).resolves(testAccountId);
 
         fetchUncreatedBoostsStub.resolves([boostCreatedByEvent]);
-        insertBoostAccountsStub.resolves({ boostId: testBoostId, accountId: testAccountId, persistedTimeMillis: mockPersistedTime.valueOf() });
+        insertBoostAccountsStub.resolves({ boostIds: [testBoostId], accountIds: [testAccountId], persistedTimeMillis: mockPersistedTime.valueOf() });
         
         const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
         findBoostStub.resolves([boostCreatedByEvent]);
@@ -339,7 +339,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(resultOfEventRecord).to.exist;
         
         expect(fetchUncreatedBoostsStub).to.have.been.calledOnceWithExactly(testAccountId);
-        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId], testAccountId, 'CREATED');
+        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly([testBoostId], [testAccountId], 'CREATED');
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
         
         expect(findBoostStub).to.have.been.calledOnceWithExactly(expectedKey);
@@ -349,7 +349,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             newStatus: 'UNLOCKED',
             stillActive: true,
             logType: 'STATUS_CHANGE',
-            logContext: { boostAmount: boostCreatedByEvent.boostAmount, newStatus: 'UNLOCKED' }
+            logContext: { boostAmount: boostCreatedByEvent.boostAmount, newStatus: 'UNLOCKED', oldStatus: 'CREATED' }
         }]);
 
     });
@@ -366,7 +366,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
                 firstSave: false,
                 saveCount: 92,
                 savedAmount: '250000::HUNDREDTH_CENT::ZAR',
-                timeInMillis: '2020-05-08T07:21:13.000Z',
+                timeInMillis: moment().valueOf(),
                 transactionId: '013cc85e-1aa2-4654-9e67-2d43a337e8d3' 
             } 
         };

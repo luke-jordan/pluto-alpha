@@ -138,7 +138,7 @@ describe('*** UNIT TEST HISTORY LIST FETCHING ***', () => {
         StatusCode: 200,
         Payload: JSON.stringify({
             result: 'success',
-            userEvents: {
+            [testUserId]: {
                 totalCount: 12,
                 userEvents: [{
                     timestamp: moment().subtract(5, 'days').valueOf(),

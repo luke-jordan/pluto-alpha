@@ -118,8 +118,8 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
     const expectedHistory = {
         StatusCode: 200,
         Payload: JSON.stringify({
-            result: 'success',
-            userEvents: {
+            result: 'SUCCESS',
+            [testUserId]: {
                 totalCount: 12,
                 userEvents: [{
                     initiator: 'SYSTEM',
@@ -199,7 +199,7 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
             ...expectedProfile,
             userBalance: { ...mockBalance, bsheetIdentifier: 'TUSER1234' },
             pendingTransactions: expectedTxResponse,
-            userHistory: JSON.parse(expectedHistory.Payload).userEvents
+            userHistory: JSON.parse(expectedHistory.Payload)[testUserId]
         };
 
         const testEvent = {
@@ -216,7 +216,6 @@ describe('*** UNIT TEST ADMIN USER HANDLER ***', () => {
         };
 
         const result = await handler.findUsers(testEvent);
-        logger('Result of user look up:', result);
 
         const resultBody = helper.standardOkayChecks(result, true);
         expect(resultBody).to.deep.equal(expectedResult);

@@ -222,6 +222,7 @@ module.exports.allocateFloat = async (clientId, floatId, allocationRequests = [{
  * @param {string} allocState The status of the allocation (also recorded in the accounts table under settlement status)
  * @param {string} relatedEntityType A related entity type (e.g., if recording based on an external accrual tx)
  * @param {string} relatedEntityId The id of the related entity type (if present)
+ * @param {string} logId The related float log ID (optional)
  */
 module.exports.allocateToUsers = async (clientId = 'someSavingCo', floatId = 'cashFloat', rawAllocationRequests = [{
     accountId: 'uid-of-account',

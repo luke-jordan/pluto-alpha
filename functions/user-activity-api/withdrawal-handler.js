@@ -455,15 +455,16 @@ module.exports.setWithdrawalAmount = async (event) => {
     }
 };
 
-const cancelTransactionIncludingLogging = async ({ transactionId, systemWideUserId }) => {
+const abortTransactionIncludingLogging = async ({ transactionId, systemWideUserId }) => {
     // in time, process the do-not-withdraw boost, and tell the user, then update the transaction
     const { accountId, settlementStatus } = await persistence.fetchTransaction(transactionId);
     const logContext = { oldStatus: settlementStatus, newStatus: 'CANCELLED' };
     const txLog = { accountId, systemWideUserId, logContext };
     const userLog = { transactionId, ...logContext };
+    // we use "ABORTED" here so boosts and other event processing can handle this differently
     await Promise.all([
         persistence.updateTxSettlementStatus({ transactionId, settlementStatus: 'CANCELLED', logToInsert: txLog }),
-        publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_CANCELLED', { context: userLog })
+        publisher.publishUserEvent(systemWideUserId, 'WITHDRAWAL_EVENT_ABORTED', { context: userLog })
     ]);
 };
 
@@ -491,7 +492,7 @@ module.exports.confirmWithdrawal = async (event) => {
 
         const transactionId = withdrawalInformation.transactionId;
         if (withdrawalInformation.userDecision === 'CANCEL') {
-            await cancelTransactionIncludingLogging({ transactionId, systemWideUserId });
+            await abortTransactionIncludingLogging({ transactionId, systemWideUserId });
             return { statusCode: 200 };
         }
         

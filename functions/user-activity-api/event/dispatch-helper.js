@@ -7,6 +7,7 @@ const util = require('ops-util-common');
 
 module.exports.sendEventToBoostProcessing = async (eventBody, publisher) => {
     const eventPayload = {
+        userId: eventBody.userId,
         eventType: eventBody.eventType,
         timeInMillis: eventBody.timestamp,
         accountId: eventBody.context.accountId,
