@@ -46,7 +46,7 @@ resource "aws_api_gateway_deployment" "admin_api_deployment" {
 
 resource "aws_api_gateway_authorizer" "admin_jwt_authorizer" {
   name = "admin_api_gateway_jwt_authorizer_${terraform.workspace}"
-  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
   
   type = "TOKEN"
   authorizer_result_ttl_in_seconds = 300
@@ -73,8 +73,8 @@ resource "aws_api_gateway_gateway_response" "admin_unauthorized_cors" {
 
 // note : also reusing a bunch from ops
 resource "aws_api_gateway_method_settings" "api_admin_settings" {
-  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
-  stage_name  = "${aws_api_gateway_deployment.admin_api_deployment.stage_name}"
+  rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
+  stage_name  = aws_api_gateway_deployment.admin_api_deployment.stage_name
   method_path = "*/*"
 
   settings {
@@ -103,15 +103,15 @@ resource "aws_route53_record" "admin_api_route" {
 
   alias {
     evaluate_target_health = true
-    name                   = "${aws_api_gateway_domain_name.admin_custom_domain_name.cloudfront_domain_name}"
-    zone_id                = "${aws_api_gateway_domain_name.admin_custom_domain_name.cloudfront_zone_id}"
+    name                   = aws_api_gateway_domain_name.admin_custom_domain_name.cloudfront_domain_name
+    zone_id                = aws_api_gateway_domain_name.admin_custom_domain_name.cloudfront_zone_id
   }
 }
 
 resource "aws_api_gateway_base_path_mapping" "admin_api_resource_mapping" {
-  api_id      = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
-  stage_name  = "${aws_api_gateway_deployment.admin_api_deployment.stage_name}"
-  domain_name = "${aws_api_gateway_domain_name.admin_custom_domain_name.domain_name}"
+  api_id      = aws_api_gateway_rest_api.admin_api_gateway.id
+  stage_name  = aws_api_gateway_deployment.admin_api_deployment.stage_name
+  domain_name = aws_api_gateway_domain_name.admin_custom_domain_name.domain_name
 }
 
 //////////////////////// LAMBDA MAPPINGS NOW START ////////////////////////////////////////////////////
@@ -879,4 +879,49 @@ module "referral_handler_cors" {
   source = "./modules/cors"
   api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
   api_resource_id = "${aws_api_gateway_resource.referral_handle.id}"
+}
+
+/////////////////////// SNIPPETS /////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "admin_snippet_path_root" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  parent_id   = "${aws_api_gateway_rest_api.admin_api_gateway.root_resource_id}"
+  path_part   = "snippet"
+}
+
+resource "aws_api_gateway_resource" "snippet_create" {
+  rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
+  parent_id   = aws_api_gateway_resource.admin_snippet_path_root.id
+  path_part   = "create"
+}
+
+resource "aws_api_gateway_method" "snippet_create" {
+  rest_api_id   = aws_api_gateway_rest_api.admin_api_gateway.id
+  resource_id   = aws_api_gateway_resource.snippet_create.id
+  http_method   = "POST"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.admin_jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "snippet_create" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.snippet_create.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.admin_api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "snippet_create" {
+  rest_api_id   = aws_api_gateway_rest_api.admin_api_gateway.id
+  resource_id   = aws_api_gateway_method.snippet_create.resource_id
+  http_method   = aws_api_gateway_method.snippet_create.http_method
+  
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.snippet_create.invoke_arn
+}
+
+module "snippet_create_cors" {
+  source = "./modules/cors"
+  api_id          = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  api_resource_id = "${aws_api_gateway_resource.snippet_create.id}"
 }

@@ -334,10 +334,10 @@ module.exports.updateBoostAmountRedeemed = async (boostIds) => {
     const values = ['REDEEMED', ...boostIds];    
     logger('With values: ', values);
     
-    const resultOfCounts = await rdsConnection.selectQuery(sumQuery, values);
-    logger('Result of counts: ', resultOfCounts);
+    const resultOfSums = await rdsConnection.selectQuery(sumQuery, values);
+    logger('Result of counts: ', resultOfSums);
 
-    const countMap = resultOfCounts.reduce((obj, row) => ({...obj, [row['boost_id']]: row['sum']}), {});
+    const countMap = resultOfSums.reduce((obj, row) => ({...obj, [row['boost_id']]: row['sum']}), {});
     logger('Reduced to count map: ', countMap);
 
     const updateDefBase = { table: boostTable, returnClause: 'updated_time' };

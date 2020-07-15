@@ -153,7 +153,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             statusCode: 200,
             body: JSON.stringify({
                 availableBalance: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
-                cardTitle: 'Did you know?',
+                cardTitle: 'Are you sure?',
                 cardBody: 'Every R100 kept in your Jupiter account earns you at least R6 after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you'
             })
         };
@@ -202,7 +202,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             statusCode: 200,
             body: JSON.stringify({
                 availableBalance: { amount: 9 * 100 * 100, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
-                cardTitle: 'Did you know?',
+                cardTitle: 'Are you sure?',
                 cardBody: 'Every R100 kept in your Jupiter account earns you at least R6 after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you'
             })
         };
@@ -355,7 +355,7 @@ describe('*** UNIT TEST WITHDRAWAL BANK SETTING ***', () => {
             statusCode: 200,
             body: JSON.stringify({
                 availableBalance: { amount: 10, unit: 'HUNDREDTH_CENT', currency: 'USD', lastTxTime: null },
-                cardTitle: 'Did you know?',
+                cardTitle: 'Are you sure?',
                 cardBody: 'Every R100 kept in your Jupiter account earns you at least R6 after a year - hard at work earning for you! If possible, delay or reduce your withdrawal and keep your money earning for you'
             })
         };
