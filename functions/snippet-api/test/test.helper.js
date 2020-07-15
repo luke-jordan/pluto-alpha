@@ -16,9 +16,9 @@ module.exports.expectNoCalls = (...stubs) => {
     stubs.forEach((stub) => expect(stub).to.not.have.been.called);
 };
 
-module.exports.standardOkayChecks = (result) => {
+module.exports.standardOkayChecks = (result, statusCode = 200) => {
     expect(result).to.exist;
-    expect(result).to.have.property('statusCode', 200);
+    expect(result).to.have.property('statusCode', statusCode);
     expect(result).to.have.property('body');
 
     if (result.headers) {

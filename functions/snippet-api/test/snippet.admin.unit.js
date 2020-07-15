@@ -113,6 +113,28 @@ describe('*** UNIT TEST ADMIN SNIPPET FUNCTIONS ***', () => {
         [fetchSnippetStub, countSnippetEventsStub].map((stub) => expect(stub).to.have.been.calledOnceWithExactly(testSnippetId));
     });
 
+    it('Routes a read properly', async () => {
+        const testEvent = (path) => ({
+            httpMethod: 'GET',
+            requestContext: {
+                authorizer: { systemWideUserId: testAdminId, role: 'SYSTEM_ADMIN' }
+            },
+            pathParameters: {
+                proxy: path
+            }
+        });
+
+        fetchSnippetUserCountStub.resolves([]);
+        const resultOfFetch = await handler.readSnippets(testEvent('list'));
+
+        const body = helper.standardOkayChecks(resultOfFetch);
+        expect(body).to.deep.equal([]);
+
+        const badEvent = await handler.readSnippets(testEvent('bad'));
+        expect(badEvent.statusCode).to.equal(400);
+        expect(badEvent.headers).to.deep.equal(helper.expectedHeaders);
+    });
+
     it('Adds a user to preview list', async () => {
         insertPreviewUserStub.resolves({ creationTime: testCreationTime });
         const testEvent = helper.wrapEvent({ systemWideUserId: testSystemId }, testAdminId, 'SYSTEM_ADMIN');

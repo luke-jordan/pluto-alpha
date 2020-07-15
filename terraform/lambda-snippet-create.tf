@@ -8,7 +8,7 @@ resource "aws_lambda_function" "snippet_create" {
   function_name                  = var.snippet_create_lambda_function_name
   role                           = aws_iam_role.snippet_create_role.arn
   handler                        = "snippet-handler.createSnippet"
-  memory_size                    = 128
+  memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 15
   tags                           = {"environment"  = "${terraform.workspace}"}
