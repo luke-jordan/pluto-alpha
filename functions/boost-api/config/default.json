@@ -57,5 +57,10 @@
     "seedrandom": {
         "active": true,
         "value": "JupiterSave"
+    },
+    "mlSelection": {
+        "enabled": true,
+        "endpoint": "<insert here>"
     }
+    
 }
