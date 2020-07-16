@@ -3,7 +3,9 @@
 const logger = require('debug')('jupiter:boosts:ml');
 const moment = require('moment');
 const config = require('config');
+
 const tiny = require('tiny-json-http');
+const util = require('ops-util-common');
 
 const persistence = require('./persistence/rds.boost');
 
@@ -42,10 +44,20 @@ const sendRequestToRefreshAudience = async (audienceId) => {
 };
 
 const obtainUsersForOffering = async (boost, userIds) => {
-    const options = { url: config.get('mlSelection.endpoint'), data: { boost, userIds } };
-    const result = await tiny.get(options);
+    const data = {
+        'candidate_users': userIds,
+        'boost_parameters': {
+            'boost_type_category': `${boost.boostType}::${boost.boostCategory}`,
+            'boost_amount_whole_currency': util.convertToUnit(boost.boostAmount, boost.boostUnit, 'WHOLE_CURRENCY')
+        }
+    }
+    // need authentication too
+    const options = { url: config.get('mlSelection.endpoint'), data };
+    const result = await tiny.post(options);
     logger('Result of ml boost user selection:', result);
-    return result;
+    const userIdsToOffer = result.filter((decision) => decision['should_offer']).map((decision) => decision['user_id']);
+    logger('Extracted IDs to offer: ', userIdsToOffer);
+    return userIdsToOffer;
 };
 
 const hasValidMinInterval = (lastOfferedTime, minInterval) => {
@@ -75,7 +87,7 @@ const filterAccountIds = async (boost, accountIds) => {
     return boostLogsWithValidIntervals.map((boostLog) => boostLog.accountId);
 };
 
-const selectUsersForBoostOffering = async (boost) => {
+const selectUsersForBoostOffering = async (boost, persistence) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
     const { boostId, audienceId, messageInstructionIds } = boost;
@@ -112,10 +124,15 @@ const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds,
 
 /**
  * A scheduled job that pulls and processes active ML boosts.
- * @param {object} event 
+ * @param {object} boostId Optional, restricts processing to this boost
  */
-module.exports.processMlBoosts = async (event) => {
+module.exports.processMlBoosts = async (event, persistence) => {
     try {
+        // for the moment, just allow via scheduled or manual -- in time, will allow from button on admin panel
+        if (util.isApiCall()) {
+            return { statusCode: 403 }
+        }
+
         if (!config.get('mlSelection.enabled')) {
             return { result: 'NOT_ENABLED' };
         }

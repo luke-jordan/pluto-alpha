@@ -598,18 +598,9 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
 };
 
 module.exports.fetchActiveMlBoosts = async (boostId) => {
-    const boostMainTable = config.get('tables.boostTable');
-    let query = '';
-    const values = [];
-
-    if (boostId) {
-        query = `select * from ${boostMainTable} where boost_id = $1 and ml_parameters != null and active = true ` +
-            `and end_time < current_timestamp`;
-        values.push(boostId);
-    } else {
-        query = `select * from ${boostMainTable} where ml_parameters != null and active = true and end_time < current_timestamp`;
-    }
-
+    const querySuffix = boostId ? ` and boost_id = $1` : '';
+    const query = `select * from ${boostTable} where ml_parameters != null and active = true and end_time < current_timestamp ${querySuffix}`;
+    const values = boostId ? [boostId] : [];
     const resultOfQuery = await rdsConnection.selectQuery(query, values);
     return resultOfQuery.map((row) => camelizeKeys(row));
 };

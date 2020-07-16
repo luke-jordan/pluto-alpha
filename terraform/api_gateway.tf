@@ -1059,6 +1059,13 @@ resource "aws_api_gateway_integration" "boost_detail_fetch" {
   uri                     = "${aws_lambda_function.boost_detail_fetch.invoke_arn}"
 }
 
+/////////////// SNIPPET LAMBDAS //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "snippet_path_root" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = aws_api_gateway_rest_api.api_gateway.root_resource_id
+  path_part   = "snippet"
+}
 
 /////////////// WITHDRAW API LAMBDA (INITIATE, ADD AMOUNT, FINISH) ///////////////////////////////////////////////////////////////
 
