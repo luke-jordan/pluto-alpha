@@ -209,14 +209,4 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, []);
     });
 
-    it('Fetches specific ML boost', async () => {
-        const expectedQuery = 'select * from boost_data.boost where boost_id = $1 and ml_parameters != null ' +
-            'and active = true and end_time < current_timestamp';
-        queryStub.resolves([{ 'boost_id': 'some-id', 'ml_parameters': { onlyOfferOnce: true }}]);
-
-        const result = await rds.fetchActiveMlBoosts(testBoostId);
-        expect(result).to.deep.equal([{ boostId: 'some-id', mlParameters: { onlyOfferOnce: true }}]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testBoostId]);
-    });
-
 });

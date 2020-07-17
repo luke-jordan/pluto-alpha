@@ -6,23 +6,17 @@ const config = require('config');
 
 const tiny = require('tiny-json-http');
 const util = require('ops-util-common');
+const boostUtil = require('./boost.util');
 
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
-const invokeLambda = async (functionName, payload, async = false) => {
-    const invocation = {
-        FunctionName: functionName,
-        InvocationType: async ? 'Event' : 'RequestResponse',
-        Payload: JSON.stringify(payload)
-    };
-
+const invokeLambda = async (payload, functionKey, sync = false) => {
+    const invocation = boostUtil.lambdaParameters(payload, functionKey, sync);
     const resultOfInvocation = await lambda.invoke(invocation).promise();
-    logger(`Raw result of ${functionName} invocation: `, resultOfInvocation);
-    const resultPayload = JSON.parse(resultOfInvocation['Payload']);
-    return JSON.parse(resultPayload.body);
+    logger(`Raw result of ${functionKey} invocation: `, resultOfInvocation);
 };
 
 const assembleListOfMsgInstructions = ({ userIds, instructionIds, parameters }) => userIds.
@@ -34,13 +28,13 @@ const triggerMsgInstructions = async (boostsAndRecipients) => {
     logger('Assembling instructions from:', boostsAndRecipients);
     const instructions = boostsAndRecipients.map((boostDetails) => assembleListOfMsgInstructions(boostDetails))[0];
     logger('Assembled instructions:', instructions);
-    return invokeLambda(config.get('lambdas.messageSend'), { instructions });
+    return invokeLambda({ instructions }, 'messageSend');
 };
 
 const sendRequestToRefreshAudience = async (audienceId) => {
     logger('Refreshing audience:', audienceId);
     const audiencePayload = { operation: 'refresh', params: { audienceId } };
-    return invokeLambda(config.get('lambdas.audienceHandle'), audiencePayload, true);
+    return invokeLambda(audiencePayload, 'audienceHandle', true);
 };
 
 const obtainUsersForOffering = async (boost, userIds) => {
@@ -87,7 +81,7 @@ const filterAccountIds = async (boost, accountIds) => {
     return boostLogsWithValidIntervals.map((boostLog) => boostLog.accountId);
 };
 
-const selectUsersForBoostOffering = async (boost, persistence) => {
+const selectUsersForBoostOffering = async (boost) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
     const { boostId, audienceId, messageInstructionIds } = boost;
@@ -126,10 +120,10 @@ const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds,
  * A scheduled job that pulls and processes active ML boosts.
  * @param {object} boostId Optional, restricts processing to this boost
  */
-module.exports.processMlBoosts = async (event, persistence) => {
+module.exports.processMlBoosts = async (event) => {
     try {
         // for the moment, just allow via scheduled or manual -- in time, will allow from button on admin panel
-        if (util.isApiCall()) {
+        if (util.isApiCall(event)) {
             return { statusCode: 403 };
         }
 
@@ -138,7 +132,7 @@ module.exports.processMlBoosts = async (event, persistence) => {
         }
 
         const boostId = event.boostId || null;
-        const mlBoosts = await persistence.fetchActiveMlBoosts(boostId);
+        const mlBoosts = await (boostId ? [persistence.fetchBoost(boostId)] : persistence.fetchActiveMlBoosts());
         logger('Got machine-determined boosts:', mlBoosts);
 
         const resultOfSelection = await Promise.all(mlBoosts.map((boost) => selectUsersForBoostOffering(boost)));

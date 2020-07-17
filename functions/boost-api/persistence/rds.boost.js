@@ -634,10 +634,8 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
     throw Error('Given non-existent or bad relationship IDs');
 };
 
-module.exports.fetchActiveMlBoosts = async (boostId) => {
-    const querySuffix = boostId ? ` and boost_id = $1` : '';
-    const query = `select * from ${boostTable} where ml_parameters != null and active = true and end_time < current_timestamp ${querySuffix}`;
-    const values = boostId ? [boostId] : [];
-    const resultOfQuery = await rdsConnection.selectQuery(query, values);
+module.exports.fetchActiveMlBoosts = async () => {
+    const query = `select * from ${boostTable} where ml_parameters != null and active = true and end_time < current_timestamp`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, []);
     return resultOfQuery.map((row) => camelizeKeys(row));
 };
