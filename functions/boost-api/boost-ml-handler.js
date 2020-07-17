@@ -50,7 +50,7 @@ const obtainUsersForOffering = async (boost, userIds) => {
             'boost_type_category': `${boost.boostType}::${boost.boostCategory}`,
             'boost_amount_whole_currency': util.convertToUnit(boost.boostAmount, boost.boostUnit, 'WHOLE_CURRENCY')
         }
-    }
+    };
     // need authentication too
     const options = { url: config.get('mlSelection.endpoint'), data };
     const result = await tiny.post(options);
@@ -130,7 +130,7 @@ module.exports.processMlBoosts = async (event, persistence) => {
     try {
         // for the moment, just allow via scheduled or manual -- in time, will allow from button on admin panel
         if (util.isApiCall()) {
-            return { statusCode: 403 }
+            return { statusCode: 403 };
         }
 
         if (!config.get('mlSelection.enabled')) {
