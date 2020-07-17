@@ -52,7 +52,8 @@
         "messageSend": "message_user_create_once",
         "messageInstruct": "message_instruct_create",
         "audienceHandle": "audience_selection",
-        "userHistory": "user_log_reader"
+        "userHistory": "user_log_reader",
+        "tournamentExpiry": "boost_expiry"
     },
     "seedrandom": {
         "active": true,

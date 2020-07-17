@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:handler');
+const config = require('config');
 const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
@@ -9,8 +10,24 @@ const persistence = require('./persistence/rds.boost');
 const util = require('./boost.util');
 const conditionTester = require('./condition-tester');
 
+const AWS = require('aws-sdk');
+
+AWS.config.update({ region: config.get('aws.region') });
+const lambda = new AWS.Lambda();
+
 const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusConditions.REDEEMED && 
     boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N') || condition.startsWith('percent_destroyed_in_first_N'));
+
+const expireTournamentIfFinished = async (boostId) => {
+    const expiryInvocation = util.lambdaParameters({ boostId }, 'tournamentExpiry', false);
+    const resultOfInvocation = await lambda.invoke(expiryInvocation).promise();
+    logger('Result of invocation: ', resultOfInvocation);
+
+    const resultPayload = JSON.parse(resultOfInvocation['Payload']);
+    const resultBody = JSON.parse(resultPayload.body);
+
+    return resultBody;
+};
 
 const recordGameResult = async (params, boost, accountId) => {
     const gameLogContext = { 
@@ -94,8 +111,11 @@ module.exports.processUserBoostResponse = async (event) => {
         }
         
         if (statusResult.length === 0) {
-            const returnResult = isBoostTournament(boost) ? { result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() } : { result: 'NO_CHANGE' };
-            return { statusCode: 200, body: JSON.stringify(returnResult)};
+            if (isBoostTournament(boost)) {
+                await expireTournamentIfFinished(boost.boostId);
+                return { statusCode: 200, body: JSON.stringify({ result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() }) };
+            }
+            return { statusCode: 200, body: JSON.stringify({ result: 'NO_CHANGE' })};
         }
 
         const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};

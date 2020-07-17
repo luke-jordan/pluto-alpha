@@ -16,6 +16,7 @@ chai.use(require('chai-as-promised'));
 const proxyquire = require('proxyquire').noCallThru();
 
 const queryStub = sinon.stub();
+const updateStub = sinon.stub();
 const multiTableStub = sinon.stub();
 
 const uuidStub = sinon.stub();
@@ -23,6 +24,7 @@ const uuidStub = sinon.stub();
 class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
+        this.updateRecord = updateStub;
         this.largeMultiTableInsert = multiTableStub;
     }
 }
@@ -434,4 +436,34 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
     });
 
+    it('Ends finished tournaments', async () => {
+        const findQuery = `select boost_id from boost_data.boost where active = true and end_time > current_timestamp ` +
+            `and ($1 = any(flags))`;
+        const selectQuery = `select * from boost_data.boost_account_status where boost_id = $1 and boost_status = $2`;
+        const updateQuery = `update boost_data.boost set active = false where boost_id in ($1) returning updated_time`;
+
+        const testUpdatedTime = moment().format();
+
+        const mockTournamentFromRds = (boostId) => ({
+            'boost_id': boostId,
+            'active': true,
+            'flags': ['FRIEND_TOURNAMENT']
+        });
+
+        const firstTournament = mockTournamentFromRds('boost-id-1');
+        const secondTournament = mockTournamentFromRds('boost-id-2');
+
+        queryStub.withArgs(findQuery, ['FRIEND_TOURNAMENT']).resolves([firstTournament, secondTournament]);
+        queryStub.withArgs(selectQuery, ['boost-id-1', 'PENDING']).resolves([{ 'boost_id': 'boost-id-1', 'boost_status': 'PENDING' }]);
+        queryStub.withArgs(selectQuery, ['boost-id-2', 'PENDING']).resolves([]);
+        updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
+
+        const resultOfOperations = await rds.endFinishedTournaments();
+
+        expect(resultOfOperations).to.exist;
+        expect(resultOfOperations).to.deep.equal({ updatedTime: moment(testUpdatedTime) });
+        expect(queryStub).to.have.been.calledWithExactly(findQuery, ['FRIEND_TOURNAMENT']);
+        ['boost-id-1', 'boost-id-2'].map((boostId) => expect(queryStub).to.have.been.calledWithExactly(selectQuery, [boostId, 'PENDING']));
+        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['boost-id-2']);
+    });
 });

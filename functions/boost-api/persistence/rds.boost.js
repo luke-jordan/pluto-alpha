@@ -543,6 +543,43 @@ module.exports.getAccountIdForUser = async (systemWideUserId) => {
     return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
 };
 
+const isTournamentFinished = async (boostId) => {
+    const selectQuery = `select * from ${boostAccountJoinTable} where boost_id = $1 and boost_status = $2`;
+    const finishedTourments = await rdsConnection.selectQuery(selectQuery, [boostId, 'PENDING']);
+    logger('Got pending tournaments:', finishedTourments);
+    const isFinished = Array.isArray(finishedTourments) && finishedTourments.length === 0;
+    return { [boostId]: isFinished };
+};
+
+module.exports.endFinishedTournaments = async (boostId = null) => {
+    const finishedTourmentIds = boostId ? [boostId] : [];
+
+    if (!boostId) {
+        const findQuery = `select boost_id from ${boostTable} where active = true and end_time > current_timestamp ` +
+        `and ($1 = any(flags))`;
+
+        const boostTournaments = await rdsConnection.selectQuery(findQuery, ['FRIEND_TOURNAMENT']);
+        logger('Got tournaments:', boostTournaments);
+        if (!boostTournaments || boostTournaments.length === 0) {
+            return 'NO_ACTIVE_TOURNAMENTS_FOUND';
+        }
+
+        const tournamentIds = boostTournaments.map((tournament) => tournament['boost_id']);
+        const tournamentDetails = await Promise.all(tournamentIds.map((tournamentId) => isTournamentFinished(tournamentId)));
+        logger('Got tournament details:', tournamentDetails);
+        const tournamentStatusMap = tournamentDetails.reduce((obj, value) => ({ ...obj, ...value }), {});
+        finishedTourmentIds.push(...tournamentIds.filter((tournamentId) => tournamentStatusMap[tournamentId] === true));
+    }
+
+    logger('Got finished tournament ids:', finishedTourmentIds);
+    const updateQuery = `update ${boostTable} set active = false where boost_id in (${extractArrayIndices(finishedTourmentIds)}) returning updated_time`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [...finishedTourmentIds]);
+    logger('Result of deactivating finished tournaments:', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && resultOfUpdate.rows
+        ? { updatedTime: moment(resultOfUpdate.rows[0]['updated_time']) } : {};
+};
+
 // ///////////////////////////////////////////////////////////////
 // ////// SIMPLE AUX METHOD TO FIND MSG INSTRUCTION IDS //////////
 // ///////////////////////////////////////////////////////////////
