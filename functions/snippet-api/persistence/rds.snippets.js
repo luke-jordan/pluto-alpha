@@ -262,7 +262,8 @@ module.exports.fetchSnippetsAndUserCount = async () => {
         `where active = $1 ` + 
         `group by ${snippetTable}.snippet_id`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true]);
-    logger(`Found ${resultOfFetch.length || 0} snippets`);
+    logger('Exact result of fetch: ', resultOfFetch);
+    // logger(`Found ${resultOfFetch.length || 0} snippets`);
 
     if (Array.isArray(resultOfFetch) && resultOfFetch.length > 0) {
         const camelizedResult = resultOfFetch.map((result) => camelCaseKeys(result));

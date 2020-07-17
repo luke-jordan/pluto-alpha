@@ -370,7 +370,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = 'select snippet_data.snippet.*, count(distinct(user_id)) from snippet_data.snippet left join ' +
             'snippet_data.snippet_user_join_table on snippet_data.snippet.snippet_id = snippet_data.snippet_user_join_table.snippet_id ' +
-            'group by snippet_data.snippet.snippet_id';
+            'where active = $1 group by snippet_data.snippet.snippet_id';
 
         const resultOfFetch = await rds.fetchSnippetsAndUserCount();
 
