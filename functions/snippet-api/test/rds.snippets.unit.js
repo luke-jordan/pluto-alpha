@@ -149,7 +149,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
             snippetPriority: 2
         };
 
-        const selectQuery = `select * from snippet_data.snippet where active = $1 snippet_id not in ` +
+        const selectQuery = `select * from snippet_data.snippet where active = $1 and snippet_id not in ` +
             `(select snippet_id from snippet_data.snippet_user_join_table where user_id = $2 and snippet_status = $3)`;
 
         queryStub.resolves([mockSnippetFromPersistence, mockSnippetFromPersistence]);
@@ -338,18 +338,18 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
     it('Fetches all active snippets (admin)', async () => {
         const mockSnippetAndUserCountFromRds = {
-            'snippet_data.snippet.snippet_id': testSnippetId,
-            'snippet_data.snippet.title': 'Jupiter Snippet #21',
-            'snippet_data.snippet.body': 'Jupiter helps you save.',
-            'snippet_data.snippet.snippet_priority': 5,
-            'snippet_data.snippet.preview_mode': true,
-            'snippet_data.snippet.snippet_language': 'en',
-            'snippet_data.snippet.country_code': 'ZAF',
-            'snippet_data.snippet.active': true,
-            'snippet_data.snippet.created_by': testAdminId,
-            'snippet_data.snippet.creation_time': testCreationTime,
-            'snippet_data.snippet.updated_time': testUpdatedTime,
-            'count': 610
+            'snippet_id': testSnippetId,
+            'title': 'Jupiter Snippet #21',
+            'body': 'Jupiter helps you save.',
+            'snippet_priority': 5,
+            'preview_mode': true,
+            'snippet_language': 'en',
+            'country_code': 'ZAF',
+            'active': true,
+            'created_by': testAdminId,
+            'creation_time': testCreationTime,
+            'updated_time': testUpdatedTime,
+            'user_count': 610
         };
 
         const expectedSnippet = {
@@ -358,6 +358,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
             body: 'Jupiter helps you save.',
             active: true,
             snippetPriority: 5,
+            snippetLanguage: 'en',
             previewMode: true,
             countryCode: 'ZAF',
             createdBy: testAdminId,
@@ -368,7 +369,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         queryStub.resolves([mockSnippetAndUserCountFromRds, mockSnippetAndUserCountFromRds]);
 
-        const selectQuery = 'select snippet_data.snippet.*, count(distinct(user_id)) from snippet_data.snippet left join ' +
+        const selectQuery = 'select snippet_data.snippet.*, count(distinct(user_id)) as user_count from snippet_data.snippet left join ' +
             'snippet_data.snippet_user_join_table on snippet_data.snippet.snippet_id = snippet_data.snippet_user_join_table.snippet_id ' +
             'where active = $1 group by snippet_data.snippet.snippet_id';
 
