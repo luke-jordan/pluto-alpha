@@ -27,20 +27,6 @@ const transformSnippet = (snippet) => ({
     snippetPriority: snippet.snippetPriority
 });
 
-const transformSnippetsAndUserCount = (snippetArray) => snippetArray.map((snippet) => ({
-    snippetId: snippet.snippetDataSnippetSnippetId,
-    title: snippet.snippetDataSnippetTitle,
-    body: snippet.snippetDataSnippetBody,
-    active: snippet.snippetDataSnippetActive,
-    snippetPriority: snippet.snippetDataSnippetSnippetPriority,
-    previewMode: snippet.snippetDataSnippetPreviewMode,
-    countryCode: snippet.snippetDataSnippetCountryCode,
-    createdBy: snippet.snippetDataSnippetCreatedBy,
-    creationTime: snippet.snippetDataSnippetCreationTime,
-    updatedTime: snippet.snippetDataSnippetUpdatedTime,
-    userCount: snippet.count
-}));
-
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
