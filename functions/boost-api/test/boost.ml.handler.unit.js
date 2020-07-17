@@ -14,7 +14,7 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const proxyquire = require('proxyquire').noCallThru();
 
-const tinyGetStub = sinon.stub();
+const tinyPostStub = sinon.stub();
 const findUserIdsStub = sinon.stub();
 const updateStatusStub = sinon.stub();
 const lamdbaInvokeStub = sinon.stub();
@@ -44,7 +44,7 @@ const handler = proxyquire('../boost-ml-handler', {
         'Lambda': MockLambdaClient  
     },
     'tiny-json-http': {
-        'get': tinyGetStub,
+        'post': tinyPostStub,
         '@noCallThru': true
     },
     '@noCallThru': true
@@ -93,7 +93,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
     });
 
     beforeEach(() => helper.resetStubs(fetchMlBoostsStub, fetchAudienceStub, updateStatusStub, accountStatusStub, extractAccountIdsStub,
-        findUserIdsStub, tinyGetStub, findBoostLogStub, lamdbaInvokeStub));
+        findUserIdsStub, tinyPostStub, findBoostLogStub, lamdbaInvokeStub));
 
     it('Handles ml boost that are only offered once', async () => {
         const mockAccountIds = ['account-id-1', 'account-id-2'];
@@ -106,28 +106,16 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const tinyOptions = {
             url: config.get('mlSelection.endpoint'),
             data: {
-                boost: mockMlBoostFromRds(mlParameters),
-                userIds: ['user-id-1']
+                'boost_parameters': { 'boost_amount_whole_currency': 10, 'boost_type_category': 'GAME::CHASE_ARROW' },
+                'candidate_users': ['user-id-1']
             }
         };
 
-        const audienceInvocation = {
-            FunctionName: 'audience_selection',
-            InvocationType: 'Event',
-            Payload: JSON.stringify({ operation: 'refresh', params: { audienceId: testAudienceId }})
-        };
+        const audiencePayload = { operation: 'refresh', params: { audienceId: testAudienceId }};
+        const audienceInvocation = helper.wrapLambdaInvoc('audience_selection', false, audiencePayload);
 
-        const messageInvocation = {
-            FunctionName: 'message_user_create_once',
-            InvocationType: 'RequestResponse',
-            Payload: JSON.stringify({
-                instructions: [{
-                    instructionId: testInstructionId,
-                    destinationUserId: 'user-id-1',
-                    parameters: mockMlBoostFromRds(mlParameters)
-                }]
-            })
-        };
+        const msgInstruction = { destinationUserId: 'user-id-1', instructionId: testInstructionId, parameters: mockMlBoostFromRds(mlParameters) };
+        const msgInvocation = helper.wrapLambdaInvoc('message_user_create_once', true, { instructions: [msgInstruction] });
 
         const expectedStatusUpdateInstruction = {
             boostId: testBoostId,
@@ -136,30 +124,30 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             logType: 'ML_BOOST_OFFERED'
         };
 
-        lamdbaInvokeStub.withArgs(audienceInvocation).returns({ promise: () => ({ Payload: JSON.stringify({ 
-            body: JSON.stringify({ result: 'Refreshed audience successfully, audience currently has 144 members' })
-        })})});
-
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
-            body: JSON.stringify({ instructionId: testInstructionId, insertionResponse: { updatedTime: testUpdatedTime }})
-        })})});
-
-        updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
-        accountStatusStub.resolves([firstAccStatus, secondAccStatus]);
         fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
         extractAccountIdsStub.resolves(mockAccountIds);
+        accountStatusStub.resolves([firstAccStatus, secondAccStatus]);
         findUserIdsStub.resolves({ 'user-id-1': 'account-id-1' });
-        tinyGetStub.resolves(['user-id-1']);
 
+        tinyPostStub.resolves([{ 'user_id': 'user-id-1', 'should_offer': true }]);
+
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
+
+        updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
+        
         const resultOfBoost = await handler.processMlBoosts({});
 
         expect(resultOfBoost).to.exist;
         expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
-        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly(null);
+        
+        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
         expect(accountStatusStub).to.have.been.calledOnceWithExactly(testBoostId, ['account-id-1', 'account-id-2']);
+        
+        expect(tinyPostStub).to.have.been.calledOnceWithExactly(tinyOptions);
+        
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(messageInvocation);
-        expect(tinyGetStub).to.have.been.calledOnceWithExactly(tinyOptions);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
+        
         expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
         expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
         expect(findBoostLogStub).to.have.not.been.called;
@@ -172,8 +160,8 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const tinyOptions = {
             url: config.get('mlSelection.endpoint'),
             data: {
-                boost: mockMlBoostFromRds(mlParameters),
-                userIds: ['user-id-1', 'user-id-2']
+                'boost_parameters': { 'boost_amount_whole_currency': 10, 'boost_type_category': 'GAME::CHASE_ARROW' },
+                'candidate_users': ['user-id-1', 'user-id-2']
             }
         };
 
@@ -184,26 +172,11 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             logType: 'ML_BOOST_OFFERED'
         };
 
-        const audienceInvocation = {
-            FunctionName: 'audience_selection',
-            InvocationType: 'Event',
-            Payload: JSON.stringify({
-                operation: 'refresh',
-                params: { audienceId: testAudienceId }
-            })
-        };
+        const audiencePayload = { operation: 'refresh', params: { audienceId: testAudienceId }};
+        const audienceInvocation = helper.wrapLambdaInvoc('audience_selection', false, audiencePayload);
 
-        const messageInvocation = {
-            FunctionName: 'message_user_create_once',
-            InvocationType: 'RequestResponse',
-            Payload: JSON.stringify({
-                instructions: [{
-                    instructionId: testInstructionId,
-                    destinationUserId: 'user-id-1',
-                    parameters: mockMlBoostFromRds(mlParameters)
-                }]
-            })
-        };
+        const msgInstruction = { destinationUserId: 'user-id-1', instructionId: testInstructionId, parameters: mockMlBoostFromRds(mlParameters) };
+        const msgInvocation = helper.wrapLambdaInvoc('message_user_create_once', true, { instructions: [msgInstruction] });
 
         const mockBoostLog = (accountId) => ({
             logId: testLogId,
@@ -213,30 +186,36 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             logType: 'ML_BOOST_OFFERED'
         });
 
-        lamdbaInvokeStub.returns({ promise: () => ({ Payload: JSON.stringify({ 
-            body: JSON.stringify({ result: 'Refreshed audience successfully, audience currently has 144 members' })
-        })})});
-
-        updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
-        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2' });
         fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
         extractAccountIdsStub.resolves(mockAccountIds);
+        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2' });
+        
+        tinyPostStub.resolves([{ 'user_id': 'user-id-1', 'should_offer': true }, { 'user_id': 'user-id-2', 'should_offer': false }]);
+
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
+
+        updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
         findBoostLogStub.onFirstCall().resolves(mockBoostLog('account-id-1'));
         findBoostLogStub.onSecondCall().resolves(mockBoostLog('account-id-2'));
-        tinyGetStub.resolves(['user-id-1']);
 
         const resultOfBoost = await handler.processMlBoosts({});
 
         expect(resultOfBoost).to.exist;
         expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
-        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly(null);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
-        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(messageInvocation);
-        expect(tinyGetStub).to.have.been.calledOnceWithExactly(tinyOptions);
+
+
+        expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
         expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
-        mockAccountIds.map((accountId) => expect(findBoostLogStub).to.have.been.calledWithExactly(testBoostId, accountId, 'ML_BOOST_OFFERED'));
-        expect(findBoostLogStub.callCount).to.equal(2);
-        expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
+        
         expect(accountStatusStub).to.have.not.been.called;
+        expect(findBoostLogStub.callCount).to.equal(2);
+        mockAccountIds.map((accountId) => expect(findBoostLogStub).to.have.been.calledWithExactly(testBoostId, accountId, 'ML_BOOST_OFFERED'));
+        
+        expect(tinyPostStub).to.have.been.calledOnceWithExactly(tinyOptions);
+        
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
+        
+        expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
     });
 });

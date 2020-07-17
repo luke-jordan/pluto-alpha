@@ -156,13 +156,9 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
             parameters: expectedMessageParameters
         });
 
-        const msgInvocation = {
-            FunctionName: 'message_user_create_once',
-            InvocationType: 'Event', // make sure idempotent ...
-            Payload: JSON.stringify({
-                instructions: [msgInstructionPayload('instruction-1', 'user-2'), msgInstructionPayload('instruction-2', 'user-2')]
-            })
-        };
+        const msgInstructions = [msgInstructionPayload('instruction-1', 'user-2'), msgInstructionPayload('instruction-2', 'user-2')];
+        // going to use lambda events -- make sure idempotent
+        const msgInvocation = helper.wrapLambdaInvoc('message_user_create_once', true, { instructions: msgInstructions });
 
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
 
