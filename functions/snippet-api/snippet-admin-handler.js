@@ -75,6 +75,21 @@ module.exports.viewSnippet = async (event) => {
     }
 };
 
+/** Generic handler to reduce need for lambda proliferation */
+module.exports.readSnippets = async (event) => {
+    const { operation } = opsUtil.extractPathAndParams(event);
+    
+    if (operation === 'list') {
+        return exports.listSnippets(event);
+    }
+
+    if (operation === 'view') {
+        return exports.viewSnippet(event);
+    }
+
+    return opsUtil.wrapResponse({}, 400);
+};
+
 /**
  * Adds a new preview user, i.e a user who may preview snippets (to make snippets available for
  * preview set the value of the snippets preview_mode property to true).

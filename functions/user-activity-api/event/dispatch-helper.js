@@ -10,9 +10,12 @@ module.exports.sendEventToBoostProcessing = async (eventBody, publisher) => {
         userId: eventBody.userId,
         eventType: eventBody.eventType,
         timeInMillis: eventBody.timestamp,
-        accountId: eventBody.context.accountId,
         eventContext: eventBody.context
     };
+
+    if (eventBody.context) {
+        eventPayload.accountId = eventBody.context.accountId;
+    }
 
     const queueResult = await publisher.sendToQueue(config.get('queues.boostProcess'), [eventPayload], true);
     logger('Result of queueing boost process: ', queueResult);

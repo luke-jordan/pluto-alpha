@@ -186,15 +186,15 @@ describe('*** UNIT TEST WITHDRAWAL CANCELLED ***', () => {
             userId: mockUserId,
             eventType: 'WITHDRAWAL_EVENT_INITIATED',
             timeInMillis: timeNow,
-            accountId: 'account-id',
-            eventContext: { accountId: 'account-id' }
+            // eslint-disable-next-line no-undefined
+            eventContext: undefined
         };
 
+        // we could put account ID in here, but adds a step, and boost process can find it fine, so for now, leaving out
         const withdrawalEvent = {
             userId: mockUserId,
             eventType: 'WITHDRAWAL_EVENT_INITIATED',
-            timestamp: timeNow,
-            context: { accountId: 'account-id' }
+            timestamp: timeNow
         };
 
         const sqsBatch = wrapEventSqs(withdrawalEvent);

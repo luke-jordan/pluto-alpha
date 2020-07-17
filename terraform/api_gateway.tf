@@ -7,7 +7,7 @@ resource "aws_api_gateway_rest_api" "api_gateway" {
 
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  stage_name  = "${terraform.workspace}"
+  stage_name  = terraform.workspace
 
   depends_on = [
   aws_api_gateway_integration.referral_verify,
@@ -34,7 +34,7 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   ]
 
   variables = {
-    commit_sha1 = "${var.deploy_code_commit_hash}"
+    commit_sha1 = var.deploy_code_commit_hash
   }
 
   lifecycle {
@@ -75,7 +75,7 @@ EOF
 
 resource "aws_iam_role_policy" "invocation_policy" {
   name = "default"
-  role = "${aws_iam_role.auth_invocation_role.id}"
+  role = aws_iam_role.auth_invocation_role.id
 
   policy = <<EOF
 {
@@ -93,7 +93,7 @@ EOF
 
 /////////////////////// API GW LOGGING ///////////////////////////////////////////////////////////////
 resource "aws_api_gateway_account" "api_gateway" {
-  cloudwatch_role_arn = "${aws_iam_role.api_gateway_cloudwatch.arn}"
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch.arn
 
   depends_on = [aws_iam_role.api_gateway_cloudwatch]
 }
@@ -120,7 +120,7 @@ EOF
 
 resource "aws_iam_role_policy" "api_gateway_cloudwatch" {
   name = "default"
-  role = "${aws_iam_role.api_gateway_cloudwatch.id}"
+  role = aws_iam_role.api_gateway_cloudwatch.id
 
   policy = <<EOF
 {
@@ -146,7 +146,7 @@ EOF
 
 resource "aws_api_gateway_method_settings" "general_settings" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  stage_name  = "${aws_api_gateway_deployment.api_deployment.stage_name}"
+  stage_name  = aws_api_gateway_deployment.api_deployment.stage_name
   method_path = "*/*"
 
   settings {
@@ -169,7 +169,7 @@ resource "aws_api_gateway_domain_name" "custom_doname_name" {
 }
 
 resource "aws_route53_record" "route" {
-  name    = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+  name    = aws_api_gateway_domain_name.custom_doname_name.domain_name
   type    = "A"
   zone_id = "Z32F5PRK3A4ONK"
 
@@ -182,8 +182,8 @@ resource "aws_route53_record" "route" {
 
 resource "aws_api_gateway_base_path_mapping" "custom_resourse_mapping" {
   api_id      = aws_api_gateway_rest_api.api_gateway.id
-  stage_name  = "${aws_api_gateway_deployment.api_deployment.stage_name}"
-  domain_name = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+  stage_name  = aws_api_gateway_deployment.api_deployment.stage_name
+  domain_name = aws_api_gateway_domain_name.custom_doname_name.domain_name
 }
 
 /////////////// REFERRAL CODE VERIFICATION, STATUS //////////////////////////////////////////////////////////////////////////
@@ -1059,6 +1059,13 @@ resource "aws_api_gateway_integration" "boost_detail_fetch" {
   uri                     = "${aws_lambda_function.boost_detail_fetch.invoke_arn}"
 }
 
+/////////////// SNIPPET LAMBDAS //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "snippet_path_root" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = aws_api_gateway_rest_api.api_gateway.root_resource_id
+  path_part   = "snippet"
+}
 
 /////////////// WITHDRAW API LAMBDA (INITIATE, ADD AMOUNT, FINISH) ///////////////////////////////////////////////////////////////
 

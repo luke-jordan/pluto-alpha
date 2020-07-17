@@ -1,5 +1,7 @@
 'use strict';
 
+// const logger = require('debug')('jupiter:boosts:test');
+
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');

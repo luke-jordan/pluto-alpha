@@ -256,8 +256,11 @@ module.exports.insertSnippetLog = async (logObject) => {
  * Fetches all active snippets and the number of users each snippet has been created for.
  */
 module.exports.fetchSnippetsAndUserCount = async () => {
-    const selectQuery = `select ${snippetTable}.*, count(distinct(user_id)) from ${snippetTable} left join ${snippetJoinTable} on ` +
-        `${snippetTable}.snippet_id = ${snippetJoinTable}.snippet_id group by ${snippetTable}.snippet_id`;
+    const selectQuery = `select ${snippetTable}.*, count(distinct(user_id)) from ` + 
+        `${snippetTable} left join ${snippetJoinTable} on ` +
+        `${snippetTable}.snippet_id = ${snippetJoinTable}.snippet_id ` +
+        `where active = $1 ` + 
+        `group by ${snippetTable}.snippet_id`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true]);
     logger(`Found ${resultOfFetch.length || 0} snippets`);
 
