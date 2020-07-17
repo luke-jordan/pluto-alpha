@@ -203,14 +203,14 @@ module.exports.handleExpiredBoost = async (boostId) => {
 
 module.exports.checkForBoostsToExpire = async (event) => {
     try {
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId', false)) {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId')) {
             return opsUtil.wrapResponse({ }, statusCodes('forbidden'));
         }
 
         const { boostId } = opsUtil.extractParamsFromEvent(event);
 
         const resultOfExpire = await persistence.endFinishedTournaments(boostId);
-        logger('Result of tournament ending:', resultOfExpire);
+        logger('Result of ending tournament(s):', resultOfExpire);
         if (resultOfExpire.updatedTime || resultOfExpire === 'NO_ACTIVE_TOURNAMENTS_FOUND') {
             return opsUtil.wrapResponse({ result: 'SUCCESS' });
         }

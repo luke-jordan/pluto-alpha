@@ -564,7 +564,7 @@ module.exports.endFinishedTournaments = async (boostId = null) => {
 
     if (!boostId) {
         const findQuery = `select boost_id from ${boostTable} where active = true and end_time > current_timestamp ` +
-        `and ($1 = any(flags))`;
+            `and ($1 = any(flags))`;
 
         const boostTournaments = await rdsConnection.selectQuery(findQuery, ['FRIEND_TOURNAMENT']);
         logger('Got tournaments:', boostTournaments);
