@@ -205,6 +205,20 @@ module.exports.handleExpiredBoost = async (boostId) => {
     return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
+const accountSorter = (accountA, accountB) => Object.values(accountB)[0] - Object.values(accountA)[0];
+
+const handleRandomReward = async (boost) => {
+    const statusCondition = boost.statusConditions.REDEEMED.filter((condition) => condition.startsWith('randomly_chosen_first_N'));
+    const numberOfRecipients = statusCondition[0].match(/#{(.*)}/)[1];
+    const pendingParticipants = await persistence.findAccountsForBoost({ boostId: boost.boostId, status: 'PENDING' });
+    logger('Got pending participants:', pendingParticipants);
+    const accountIds = Object.keys(pendingParticipants[0].accountUserMap);
+    const scoredAccounts = accountIds.map((accountId) => ({ [accountId]: Math.random() })).sort(accountSorter);
+    logger('Randomly scored accounts:', scoredAccounts);
+    const accountsWithHighestScore = scoredAccounts.slice(0, numberOfRecipients);
+    logger('Got reward recipients:', accountsWithHighestScore);
+};
+
 /**
  * Expires all finished tournaments if no boost id is specified. If a boost id is specified then only that boost is expired.
  * @param {object} event
@@ -221,9 +235,14 @@ module.exports.checkForBoostsToExpire = async (event) => {
         if (boostId) {
             const boost = await persistence.fetchBoost(boostId);
             logger('Got boost for expiry:', boost);
+            if (util.isRandomReward(boost)) {
+                return handleRandomReward(boost);
+            }
+
             if (!util.isBoostTournament(boost)) {
                 return opsUtil.wrapResponse({ result: 'INVALID_TOURNAMENT' });
             }
+
             const isTournamentFinished = await persistence.isTournamentFinished(boostId);
             logger('Is tournament finished:', isTournamentFinished[boostId]);
             if (!isTournamentFinished[boostId]) {

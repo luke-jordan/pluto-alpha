@@ -1,6 +1,6 @@
 'use strict';
 
-// const logger = require('debug')('jupiter:boosts:test');
+const logger = require('debug')('jupiter:boosts:test');
 
 const moment = require('moment');
 const uuid = require('uuid/v4');
@@ -472,6 +472,27 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
         const expectedInvocation = testHelper.wrapLambdaInvoc('ops_admin_scheduled', false, { specificOperations: ['EXPIRE_BOOSTS'] });
         expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+    });
+
+    it('Handles random reward user selection', async () => {
+        const mockBoost = mockTournamentBoost('TAP_SCREEN', {
+            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+            PENDING: ['number_taps_greater_than #{0::10000}'],
+            REDEEMED: ['randomly_chosen_first_N #{3}']
+        });
+
+        fetchBoostStub.resolves(mockBoost);
+        findAccountsStub.resolves(formAccountResponse({
+            'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
+            'account-id-2': { userId: 'user-id-2', status: 'PENDING' },
+            'account-id-3': { userId: 'user-id-3', status: 'PENDING' },
+            'account-id-4': { userId: 'user-id-4', status: 'PENDING' },
+            'account-id-5': { userId: 'user-id-5', status: 'PENDING' },
+            'account-id-6': { userId: 'user-id-6', status: 'PENDING' }
+        }));
+
+        const resultOfSelection = await handler.checkForBoostsToExpire({ boostId: testBoostId });
+        logger('Res:', resultOfSelection);
     });
 
 });
