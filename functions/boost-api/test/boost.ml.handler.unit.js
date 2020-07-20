@@ -32,7 +32,7 @@ class MockLambdaClient {
 
 const handler = proxyquire('../boost-ml-handler', {
     './persistence/rds.boost': {
-        'fetchBoostAccountStatuses': accountStatusStub,
+        'findAccountsForBoost': accountStatusStub,
         'updateBoostAccountStatus': updateStatusStub,
         'extractAccountIds': extractAccountIdsStub,
         'findUserIdsForAccounts': findUserIdsStub,
@@ -86,20 +86,16 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         mlParameters
     });
 
-    const mockBoostAccountStatus = (accountId, boostStatus) => ({
-        boostId: testBoostId,
-        accountId,
-        boostStatus
-    });
-
     beforeEach(() => helper.resetStubs(fetchMlBoostsStub, fetchAudienceStub, updateStatusStub, accountStatusStub, extractAccountIdsStub,
         findUserIdsStub, tinyPostStub, findBoostLogStub, lamdbaInvokeStub));
 
     it('Handles ml boost that are only offered once', async () => {
         const mockAccountIds = ['account-id-1', 'account-id-2'];
         
-        const firstAccStatus = mockBoostAccountStatus('account-id-1', 'CREATED');
-        const secondAccStatus = mockBoostAccountStatus('account-id-2', 'OFFERED');
+        const mockAccountUserMap = {
+            'account-id-1': { status: 'CREATED', userId: 'user-id-1' },
+            'account-id-2': { status: 'OFFERED', userId: 'user-id-2' }
+        };
 
         const mlParameters = { onlyOfferOnce: true, maxPortionOfAudience: 0.2 };
 
@@ -126,7 +122,8 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
         extractAccountIdsStub.resolves(mockAccountIds);
-        accountStatusStub.resolves([firstAccStatus, secondAccStatus]);
+        
+        accountStatusStub.resolves([{ boostId: testBoostId, accountUserMap: mockAccountUserMap }]);
         findUserIdsStub.resolves({ 'user-id-1': 'account-id-1' });
 
         tinyPostStub.resolves([{ 'user_id': 'user-id-1', 'should_offer': true }]);
@@ -141,7 +138,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         expect(resultOfBoost).to.deep.equal({ result: 'SUCCESS' });
         
         expect(fetchMlBoostsStub).to.have.been.calledOnceWithExactly();
-        expect(accountStatusStub).to.have.been.calledOnceWithExactly(testBoostId, ['account-id-1', 'account-id-2']);
+        expect(accountStatusStub).to.have.been.calledOnceWithExactly({ boostIds: [testBoostId], accountIds: mockAccountIds });
         
         expect(tinyPostStub).to.have.been.calledOnceWithExactly(tinyOptions);
         

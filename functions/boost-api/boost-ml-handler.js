@@ -46,6 +46,7 @@ const obtainUsersForOffering = async (boost, userIds) => {
         }
     };
     // need authentication too
+    logger('Dispatching options to ML selection service: ', JSON.stringify(data, null, 2));
     const options = { url: config.get('mlSelection.endpoint'), data };
     const result = await tiny.post(options);
     logger('Result of ml boost user selection:', result);
@@ -64,17 +65,17 @@ const hasValidMinInterval = (lastOfferedTime, minInterval) => {
     return false;
 };
 
-const filterAccountIds = async (boost, accountIds) => {
-    if (boost.mlParameters.onlyOfferOnce) {
-        const boostAccountStatuses = await persistence.fetchBoostAccountStatuses(boost.boostId, accountIds);
-        logger('Got boost account statuses:', boostAccountStatuses);
-        const createdBoostStatuses = boostAccountStatuses.filter((accountStatus) => accountStatus.boostStatus === 'CREATED');
-        return createdBoostStatuses.map((boostStatus) => boostStatus.accountId);
+const filterAccountIds = async (boostId, mlParameters, accountIds) => {
+    const { onlyOfferOnce, minIntervalBetweenRuns } = mlParameters;
+
+    if (onlyOfferOnce) {
+        const accountStatusMap = await persistence.findAccountsForBoost({ boostIds: [boostId], accountIds });
+        const boostAccountStatuses = accountStatusMap[0].accountUserMap; // as usual with this function, built for too much parallelism
+        logger('Got boost account statuses: ', JSON.stringify(boostAccountStatuses));
+        return Object.keys(boostAccountStatuses).filter((accountId) => boostAccountStatuses[accountId].status === 'CREATED');
     }
 
-    const { minIntervalBetweenRuns } = boost.mlParameters;
-
-    const boostLogPromises = accountIds.map((accountId) => persistence.findLastLogForBoost(boost.boostId, accountId, 'ML_BOOST_OFFERED'));
+    const boostLogPromises = accountIds.map((accountId) => persistence.findLastLogForBoost(boostId, accountId, 'ML_BOOST_OFFERED'));
     const boostLogs = await Promise.all(boostLogPromises);
     logger('Got boost logs:', boostLogs);
     const boostLogsWithValidIntervals = boostLogs.filter((boostLog) => hasValidMinInterval(boostLog.creationTime, minIntervalBetweenRuns));
@@ -84,11 +85,12 @@ const filterAccountIds = async (boost, accountIds) => {
 const selectUsersForBoostOffering = async (boost) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
-    const { boostId, audienceId, messageInstructionIds } = boost;
+    const { boostId, audienceId, messageInstructionIds, mlParameters } = boost;
 
     const audienceAccountIds = await persistence.extractAccountIds(audienceId);
     logger('Got audience account ids:', audienceAccountIds);
-    const filteredAccountIds = await filterAccountIds(boost, audienceAccountIds);
+
+    const filteredAccountIds = await filterAccountIds(boostId, mlParameters, audienceAccountIds);
     logger('Got filtered account ids:', filteredAccountIds);
 
     if (filteredAccountIds.length === 0) {
@@ -134,6 +136,10 @@ module.exports.processMlBoosts = async (event) => {
         const boostId = event.boostId || null;
         const mlBoosts = await (boostId ? [persistence.fetchBoost(boostId)] : persistence.fetchActiveMlBoosts());
         logger('Got machine-determined boosts:', mlBoosts);
+
+        if (!mlBoosts || mlBoosts.length === 0) {
+            return { result: 'NO_ML_BOOSTS' };
+        }
 
         const resultOfSelection = await Promise.all(mlBoosts.map((boost) => selectUsersForBoostOffering(boost)));
         logger('Got boosts and recipients:', resultOfSelection);

@@ -126,7 +126,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     it('Fetches user Ids for accounts', async () => {
         const [firstUserId, secondUserId] = ['user-id-1', 'user-id-2'];
         const [firstAccountId, secondAccountId] = ['account-id-1', 'account-id-2'];
-        const selectQuery = `select distinct(owner_user_id, account_id) from ${config.get('tables.accountLedger')} where ` +
+        const selectQuery = `select owner_user_id, account_id from ${config.get('tables.accountLedger')} where ` +
             `account_id in ($1, $2)`;
         queryStub.resolves([
             { 'owner_user_id': firstUserId, 'account_id': firstAccountId },
@@ -200,8 +200,8 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     });
 
     it('Fetches active machine-determined boosts', async () => {
-        const expectedQuery = 'select * from boost_data.boost where ml_parameters != null ' +
-            'and active = true and end_time < current_timestamp';
+        const expectedQuery = 'select * from boost_data.boost where ml_parameters is not null ' +
+            'and active = true and end_time > current_timestamp';
         queryStub.resolves([{ 'boost_id': 'some-id', 'ml_parameters': { some: 'params' }}]);
 
         const result = await rds.fetchActiveMlBoosts();

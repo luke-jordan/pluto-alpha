@@ -7,11 +7,11 @@ resource "aws_lambda_function" "boost_machine_invoke" {
 
   function_name                  = var.boost_machine_invoke_lambda_function_name
   role                           = aws_iam_role.boost_machine_invoke_role.arn
-  handler                        = "boost-scheduled-handler.handleAllScheduledTasks"
+  handler                        = "boost-ml-handler.processMlBoosts"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
-  timeout                        = 15
-  tags                           = {"environment"  = "${terraform.workspace}"}
+  timeout                        = 120
+  tags                           = {"environment"  = terraform.workspace}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "boost_api/${var.deploy_code_commit_hash}.zip"
@@ -37,7 +37,7 @@ resource "aws_lambda_function" "boost_machine_invoke" {
                 }
               },
               "mlSelection": {
-                "endpoint": "insert_here"
+                "endpoint": var.boost_induce_endpoint[terraform.workspace]
               },
               "publishing": {
                 "userEvents": {

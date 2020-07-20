@@ -189,10 +189,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
         const accountUserMap = { };
         while (rowIndex < resultOfQuery.length && resultOfQuery[rowIndex]['boost_id'] === boostId) {
             const currentRow = resultOfQuery[rowIndex];
-            accountUserMap[currentRow['account_id']] = { 
-                userId: currentRow['owner_user_id'],
-                status: currentRow['boost_status']
-            };
+            accountUserMap[currentRow['account_id']] = { userId: currentRow['owner_user_id'], status: currentRow['boost_status'] };
             rowIndex += 1;
         }
         return ({ boostId, accountUserMap });
@@ -479,7 +476,7 @@ module.exports.insertBoost = async (boostDetails) => {
         resultObject.numberOfUsersEligible = resultOfInsertion[1].length;
     }
 
-    logger('Returning: ', resultObject);
+    // logger('Returning: ', resultObject);
     return resultObject;
 
 };
@@ -573,9 +570,10 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds, returnMap = false) => {
-    const query = `select distinct(owner_user_id, account_id) from ${config.get('tables.accountLedger')} where ` +
+    const query = `select owner_user_id, account_id from ${config.get('tables.accountLedger')} where ` +
         `account_id in (${extractArrayIndices(accountIds)})`;
     const result = await rdsConnection.selectQuery(query, accountIds);
+    logger('Result of query: ', result);
     
     if (Array.isArray(result) && result.length > 0) {
         return returnMap
@@ -598,7 +596,7 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
 };
 
 module.exports.fetchActiveMlBoosts = async () => {
-    const query = `select * from ${boostTable} where ml_parameters != null and active = true and end_time < current_timestamp`;
+    const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
     const resultOfQuery = await rdsConnection.selectQuery(query, []);
     return resultOfQuery.map((row) => camelizeKeys(row));
 };
