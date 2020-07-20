@@ -439,10 +439,10 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
     });
 
     it('Ends finished tournaments', async () => {
-        const findQuery = `select boost_id from boost_data.boost where active = true and end_time > current_timestamp ` +
+        const findQuery = `select * from boost_data.boost where active = true and end_time > current_timestamp ` +
             `and ($1 = any(flags))`;
-        const selectQuery = `select * from boost_data.boost_account_status where boost_id = $1 and boost_status = $2`;
-        const updateQuery = `update boost_data.boost set active = false where boost_id in ($1) returning updated_time`;
+        const selectQuery = `select boost_status, count(*) from boost_data.boost_account_status where boost_id = $1`;
+        const updateQuery = `update boost_data.boost set end_time = current_timestamp where boost_id in ($1) returning updated_time`;
 
         const testUpdatedTime = moment().format();
 
@@ -456,8 +456,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const secondTournament = mockTournamentFromRds('boost-id-2');
 
         queryStub.withArgs(findQuery, ['FRIEND_TOURNAMENT']).resolves([firstTournament, secondTournament]);
-        queryStub.withArgs(selectQuery, ['boost-id-1', 'PENDING']).resolves([{ 'boost_id': 'boost-id-1', 'boost_status': 'PENDING' }]);
-        queryStub.withArgs(selectQuery, ['boost-id-2', 'PENDING']).resolves([]);
+        queryStub.withArgs(selectQuery, ['boost-id-1']).resolves([{ 'boost_status': 'PENDING', 'count': 8 }, { 'boost_status': 'REDEEMED', 'count': 8 }]);
+        queryStub.withArgs(selectQuery, ['boost-id-2']).resolves([{ 'boost_status': 'REDEEMED', 'count': 55 }, { 'boost_status': 'REDEEMED', 'count': 55 }]);
         updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
 
         const resultOfOperations = await rds.endFinishedTournaments();
@@ -465,7 +465,8 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(resultOfOperations).to.exist;
         expect(resultOfOperations).to.deep.equal({ updatedTime: moment(testUpdatedTime) });
         expect(queryStub).to.have.been.calledWithExactly(findQuery, ['FRIEND_TOURNAMENT']);
-        ['boost-id-1', 'boost-id-2'].map((boostId) => expect(queryStub).to.have.been.calledWithExactly(selectQuery, [boostId, 'PENDING']));
+        ['boost-id-1', 'boost-id-2'].map((boostId) => expect(queryStub).to.have.been.calledWithExactly(selectQuery, [boostId]));
         expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['boost-id-2']);
     });
+
 });

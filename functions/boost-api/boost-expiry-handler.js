@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:boosts:handler');
 const statusCodes = require('statuses');
+const config = require('config');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
 const persistence = require('./persistence/rds.boost');
@@ -11,6 +12,9 @@ const conditionTester = require('./condition-tester');
 
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
+
+const AWS = require('aws-sdk');
+const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const GAME_RESPONSE = 'GAME_RESPONSE';
 
@@ -201,6 +205,11 @@ module.exports.handleExpiredBoost = async (boostId) => {
     return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
+/**
+ * Expires all finished tournaments if no boost id is specified. If a boost id is specified then only that boost is expired.
+ * @param {object} event
+ * @property {string} boostId An optional boost id can be passed in to expire and end only this specific boost. 
+ */
 module.exports.checkForBoostsToExpire = async (event) => {
     try {
         if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId')) {
@@ -209,13 +218,28 @@ module.exports.checkForBoostsToExpire = async (event) => {
 
         const { boostId } = opsUtil.extractParamsFromEvent(event);
 
-        const resultOfExpire = await persistence.endFinishedTournaments(boostId);
-        logger('Result of ending tournament(s):', resultOfExpire);
-        if (resultOfExpire.updatedTime || resultOfExpire === 'NO_ACTIVE_TOURNAMENTS_FOUND') {
-            return opsUtil.wrapResponse({ result: 'SUCCESS' });
+        if (boostId) {
+            const boost = await persistence.fetchBoost(boostId);
+            logger('Got boost for expiry:', boost);
+            if (!util.isBoostTournament(boost)) {
+                return opsUtil.wrapResponse({ result: 'INVALID_TOURNAMENT' });
+            }
+            const isTournamentFinished = await persistence.isTournamentFinished(boostId);
+            logger('Is tournament finished:', isTournamentFinished[boostId]);
+            if (!isTournamentFinished[boostId]) {
+                return opsUtil.wrapResponse({ result: 'TOURNAMENT_IN_PROGRESS' });
+            }
         }
 
-        return opsUtil.wrapResponse({ result: 'FAILURE' });
+        const resultOfExpire = await persistence.endFinishedTournaments(boostId);
+        logger('Result of expiring tournament(s):', resultOfExpire);
+        if (resultOfExpire.updatedTime) {
+            const scheduledCleanupInvocation = util.lambdaParameters({ specificOperations: ['EXPIRE_BOOSTS'] }, 'adminScheduled');
+            const resultOfInvocation = await lambda.invoke(scheduledCleanupInvocation).promise();
+            logger('Result of boost expiry invocation:', resultOfInvocation);
+        }
+
+        return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (error) {
         logger('FATAL_ERROR:', error);
         return opsUtil.wrapResponse({ result: 'FAILURE' });

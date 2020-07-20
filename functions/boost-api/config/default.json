@@ -53,7 +53,8 @@
         "messageInstruct": "message_instruct_create",
         "audienceHandle": "audience_selection",
         "userHistory": "user_log_reader",
-        "tournamentExpiry": "boost_expiry"
+        "tournamentExpiry": "boost_expiry",
+        "adminScheduled": "ops_admin_scheduled"
     },
     "seedrandom": {
         "active": true,

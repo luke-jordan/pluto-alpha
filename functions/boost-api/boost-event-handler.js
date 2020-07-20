@@ -6,7 +6,6 @@ const config = require('config');
 const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
-const boostExpiryHandler = require('./boost-expiry-handler');
 const persistence = require('./persistence/rds.boost');
 
 const util = require('./boost.util');
@@ -333,11 +332,7 @@ const processEventForExistingBoosts = async (event) => {
 
 const handleIndividualEvent = async (event) => {
     logger('Handling individual event received: ', event);
-    if (event.eventType === 'BOOST_EXPIRED' && event.boostId) {
-        return boostExpiryHandler.handleExpiredBoost(event.boostId);
-    }
-
-    // second, we check if there is a pending boost for this account, or user, if we only have that
+    // first, we check if there is a pending boost for this account, or user, if we only have that
     if (!event.accountId && !event.userId) {
         return { statusCode: statusCodes('Bad request'), body: 'Function requires at least a user ID or accountID' };
     }
@@ -348,7 +343,7 @@ const handleIndividualEvent = async (event) => {
         logger('Event account ID: ', event.accountId);
     }
 
-    // third, find boosts that do not already have an entry for this user, and are created by this event
+    // second, find boosts that do not already have an entry for this user, and are created by this event
     const creationResult = await createBoostsTriggeredByEvent(event);
     logger('Result of boost-account creation creation:', creationResult);
 

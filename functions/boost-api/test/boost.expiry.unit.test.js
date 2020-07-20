@@ -1,5 +1,7 @@
 'use strict';
 
+// const logger = require('debug')('jupiter:boosts:test');
+
 const moment = require('moment');
 const uuid = require('uuid/v4');
 
@@ -22,9 +24,18 @@ const updateBoostAmountStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 const calculateAmountStub = sinon.stub();
+
+const isTournamentFinishedStub = sinon.stub();
 const endTournamentStub = sinon.stub();
 
 const publishMultiUserStub = sinon.stub();
+const lamdbaInvokeStub = sinon.stub();
+
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
+    }
+}
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -38,7 +49,8 @@ const handler = proxyquire('../boost-expiry-handler', {
         'insertBoostAccountLogs': insertBoostLogStub,
         'updateBoostAmount': updateBoostAmountStub,
         'findAccountsForPooledReward': findPooledAccountsStub,
-        'endFinishedTournaments': endTournamentStub
+        'endFinishedTournaments': endTournamentStub,
+        'isTournamentFinished': isTournamentFinishedStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub,
@@ -46,6 +58,9 @@ const handler = proxyquire('../boost-expiry-handler', {
     },
     'publish-common': {
         'publishMultiUserEvent': publishMultiUserStub
+    },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient  
     },
     '@noCallThru': true
 });
@@ -57,7 +72,8 @@ const testBoostId = uuid();
 describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
     beforeEach(() => (testHelper.resetStubs(
-        fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub
+        fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub,
+        lamdbaInvokeStub, isTournamentFinishedStub, endTournamentStub
     )));
 
     const formAccountResponse = (accountUserMap) => [{ boostId: testBoostId, accountUserMap }];
@@ -418,12 +434,44 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
     });
 
-    it('Ends finished tournaments', async () => {
+    it('Ends all finished tournaments', async () => {
         endTournamentStub.resolves({ updatedTime: moment() });
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
+
         const resultOfExpiry = await handler.checkForBoostsToExpire({});
         const resultBody = testHelper.standardOkayChecks(resultOfExpiry, true);
+
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
         expect(endTournamentStub).to.have.been.calledOnceWithExactly(undefined);
+
+        const expectedInvocation = testHelper.wrapLambdaInvoc('ops_admin_scheduled', false, { specificOperations: ['EXPIRE_BOOSTS'] });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
+    });
+
+    it('Expires a specified tournament', async () => {
+        const mockBoost = mockTournamentBoost('TAP_SCREEN', {
+            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+            PENDING: ['number_taps_greater_than #{0::10000}'],
+            REDEEMED: ['number_taps_in_first_N #{2::10000}']
+        });
+
+        fetchBoostStub.resolves(mockBoost);
+        isTournamentFinishedStub.resolves({ [testBoostId]: true });
+
+        endTournamentStub.resolves({ updatedTime: moment() });
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
+
+        const resultOfExpiry = await handler.checkForBoostsToExpire({ boostId: testBoostId });
+        const resultBody = testHelper.standardOkayChecks(resultOfExpiry, true);
+
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
+        expect(endTournamentStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+        expect(isTournamentFinishedStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        const expectedInvocation = testHelper.wrapLambdaInvoc('ops_admin_scheduled', false, { specificOperations: ['EXPIRE_BOOSTS'] });
+        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
     });
 
 });
