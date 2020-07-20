@@ -55,15 +55,16 @@ const generateMultiplier = (distribution) => {
 };
 
 const calculateRandomBoostAmount = (boost) => {
-    const { distribution, realizedRewardModuloZeroTarget } = boost.rewardParameters;
+    const { distribution, realizedRewardModuloZeroTarget, minRewardAmountPerUser } = boost.rewardParameters;
+    const minBoostAmount = minRewardAmountPerUser ? opsUtil.convertToUnit(minRewardAmountPerUser.amount, minRewardAmountPerUser.unit, DEFAULT_UNIT) : 0;
     const multiplier = generateMultiplier(distribution);
     let calculatedBoostAmount = multiplier * opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
     while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
         calculatedBoostAmount += 1000;
     }
 
-    // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount
-    if (calculatedBoostAmount > boost.boostAmount) {
+    // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount or less than min amount
+    if (calculatedBoostAmount > boost.boostAmount || calculatedBoostAmount < minBoostAmount) {
         return calculateRandomBoostAmount(boost);
     }
 

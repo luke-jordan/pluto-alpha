@@ -54,7 +54,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const testRewardParameters = {
             rewardType: 'RANDOM',
             distribution: 'UNIFORM',
-            realizedRewardModuloZeroTarget: 5000 // HUNDREDTH_CENT (matches boostUnit)
+            realizedRewardModuloZeroTarget: 5000, // HUNDREDTH_CENT (matches boostUnit)
+            minRewardAmountPerUser: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' } 
         };
 
         const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, {
@@ -161,18 +162,18 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }));
 
             const invokeBody = {
-                    identifier: testBoostId,
-                    floatId: testFloatId,
-                    fromId: testBonusPoolId,
-                    fromType: 'BONUS_POOL',
-                    transactionType,
-                    relatedEntityType: transactionType,
-                    currency: 'USD',
-                    unit: 'HUNDREDTH_CENT',
-                    settlementStatus: 'SETTLED',
-                    allocType: transactionType,
-                    allocState: 'SETTLED',
-                    recipients
+                identifier: testBoostId,
+                floatId: testFloatId,
+                fromId: testBonusPoolId,
+                fromType: 'BONUS_POOL',
+                transactionType,
+                relatedEntityType: transactionType,
+                currency: 'USD',
+                unit: 'HUNDREDTH_CENT',
+                settlementStatus: 'SETTLED',
+                allocType: transactionType,
+                allocState: 'SETTLED',
+                recipients
             };
 
             if (referenceAmounts) {
