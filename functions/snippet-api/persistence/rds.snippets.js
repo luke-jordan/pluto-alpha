@@ -27,20 +27,6 @@ const transformSnippet = (snippet) => ({
     snippetPriority: snippet.snippetPriority
 });
 
-const transformSnippetsAndUserCount = (snippetArray) => snippetArray.map((snippet) => ({
-    snippetId: snippet.snippetDataSnippetSnippetId,
-    title: snippet.snippetDataSnippetTitle,
-    body: snippet.snippetDataSnippetBody,
-    active: snippet.snippetDataSnippetActive,
-    snippetPriority: snippet.snippetDataSnippetSnippetPriority,
-    previewMode: snippet.snippetDataSnippetPreviewMode,
-    countryCode: snippet.snippetDataSnippetCountryCode,
-    createdBy: snippet.snippetDataSnippetCreatedBy,
-    creationTime: snippet.snippetDataSnippetCreationTime,
-    updatedTime: snippet.snippetDataSnippetUpdatedTime,
-    userCount: snippet.count
-}));
-
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractColumnNames = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
@@ -126,10 +112,11 @@ module.exports.updateSnippetStatus = async (snippetId, userId, status) => {
  * @param {string} systemWideUserId The user for whom the snippets are sought.
  */
 module.exports.fetchUncreatedSnippets = async (systemWideUserId) => {
-    const selectQuery = `select * from ${snippetTable} where active = $1 snippet_id not in ` +
+    const selectQuery = `select * from ${snippetTable} where active = $1 and snippet_id not in ` +
         `(select snippet_id from ${snippetJoinTable} where user_id = $2 and snippet_status = $3)`;
     logger('Fetching unread snippets with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true, systemWideUserId, 'VIEWED']);
+    logger('Raw result of fetch: ', resultOfFetch);
     return resultOfFetch.length > 0 ? resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result))) : [];
 };
 
@@ -256,17 +243,16 @@ module.exports.insertSnippetLog = async (logObject) => {
  * Fetches all active snippets and the number of users each snippet has been created for.
  */
 module.exports.fetchSnippetsAndUserCount = async () => {
-    const selectQuery = `select ${snippetTable}.*, count(distinct(user_id)) from ${snippetTable} left join ${snippetJoinTable} on ` +
-        `${snippetTable}.snippet_id = ${snippetJoinTable}.snippet_id group by ${snippetTable}.snippet_id`;
+    const selectQuery = `select ${snippetTable}.*, count(distinct(user_id)) as user_count from ` + 
+        `${snippetTable} left join ${snippetJoinTable} on ` +
+        `${snippetTable}.snippet_id = ${snippetJoinTable}.snippet_id ` +
+        `where active = $1 ` + 
+        `group by ${snippetTable}.snippet_id`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true]);
-    logger(`Found ${resultOfFetch.length || 0} snippets`);
-
-    if (Array.isArray(resultOfFetch) && resultOfFetch.length > 0) {
-        const camelizedResult = resultOfFetch.map((result) => camelCaseKeys(result));
-        return transformSnippetsAndUserCount(camelizedResult);
-    }
-
-    return [];
+    logger('Exact result of fetch: ', resultOfFetch);
+    // logger(`Found ${resultOfFetch.length || 0} snippets`);
+    
+    return resultOfFetch.map(camelCaseKeys);
 };
 
 /**

@@ -124,16 +124,19 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     });
 
     it('Fetches user Ids for accounts', async () => {
-        const testAccountIds = testHelper.createUUIDArray(2);
-        const [firstUserId, secondUserId] = testHelper.createUUIDArray(2);
-        const selectQuery = `select distinct(owner_user_id) from ${config.get('tables.accountLedger')} where ` +
+        const [firstUserId, secondUserId] = ['user-id-1', 'user-id-2'];
+        const [firstAccountId, secondAccountId] = ['account-id-1', 'account-id-2'];
+        const selectQuery = `select owner_user_id, account_id from ${config.get('tables.accountLedger')} where ` +
             `account_id in ($1, $2)`;
-        queryStub.resolves([{ 'owner_user_id': firstUserId }, { 'owner_user_id': secondUserId }]);
+        queryStub.resolves([
+            { 'owner_user_id': firstUserId, 'account_id': firstAccountId },
+            { 'owner_user_id': secondUserId, 'account_id': secondAccountId }
+        ]);
 
-        const result = await rds.findUserIdsForAccounts(testAccountIds);
+        const result = await rds.findUserIdsForAccounts([firstAccountId, secondAccountId]);
 
         expect(result).to.deep.equal([firstUserId, secondUserId]);
-        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, testAccountIds);
+        expect(queryStub).to.have.been.calledOnceWithExactly(selectQuery, [firstAccountId, secondAccountId]);
     });
 
     it('Fetches friendship user ids', async () => {
@@ -173,6 +176,37 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         expect(result).to.be.null;
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account']);
+    });
+
+    it('Fetches logs for boost, multiple', async () => {
+        const expectedQuery = `select * from boost_data.boost_log where boost_id = $1 and log_type = $2`;
+        queryStub.resolves([{ 'boost_id': 'some-id', 'account_id': 'some-account', 'log_type': 'some-type' }]);
+
+        const result = await rds.findLogsForBoost('some-id', 'some-type');
+        expect(result).to.deep.equal([{ boostId: 'some-id', accountId: 'some-account', logType: 'some-type' }]);
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-type']);
+    });
+
+    it('Fetches last boost log of specified type, single', async () => {
+        const expectedQuery = `select * from boost_data.boost_log where boost_id = $1 and account_id = $2 ` +
+            `log_type = $3 order by creation_time desc limit 1`;
+        queryStub.resolves([{ 'boost_id': 'some-id', 'account_id': 'some-account', 'log_type': 'some-type' }]);
+
+        const result = await rds.findLastLogForBoost('some-id', 'some-account', 'some-type');
+        expect(result).to.deep.equal({ boostId: 'some-id', accountId: 'some-account', logType: 'some-type' });
+
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, ['some-id', 'some-account', 'some-type']);
+    });
+
+    it('Fetches active machine-determined boosts', async () => {
+        const expectedQuery = 'select * from boost_data.boost where ml_parameters is not null ' +
+            'and active = true and end_time > current_timestamp';
+        queryStub.resolves([{ 'boost_id': 'some-id', 'ml_parameters': { some: 'params' }}]);
+
+        const result = await rds.fetchActiveMlBoosts();
+        expect(result).to.deep.equal([{ boostId: 'some-id', mlParameters: { some: 'params' }}]);
+        expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, []);
     });
 
 });

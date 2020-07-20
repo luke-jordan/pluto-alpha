@@ -254,7 +254,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         };
         
         // first, see if this account has offered or pending boosts against it
-        const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
+        const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
         fetchUncreatedBoostsStub.resolves([boostCreatedByEvent, boostCreatedByEvent]);
         insertBoostAccountsStub.resolves({ boostIds: [testBoostId], accountIds: [testAccountId], persistedTimeMillis: mockPersistedTime.valueOf() });
@@ -318,7 +318,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         fetchUncreatedBoostsStub.resolves([boostCreatedByEvent]);
         insertBoostAccountsStub.resolves({ boostIds: [testBoostId], accountIds: [testAccountId], persistedTimeMillis: mockPersistedTime.valueOf() });
         
-        const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
+        const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, underBudgetOnly: true };
         findBoostStub.resolves([boostCreatedByEvent]);
         
         const findAccountArgs = { boostIds: [testBoostId], accountIds: [testAccountId], status: expectedStatusCheck };
@@ -409,7 +409,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         boostFromPersistence.boostId = testBoostId;
         
         // first, see if this account has offered or pending boosts against it
-        const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, active: true, underBudgetOnly: true };
+        const expectedKey = { accountId: [testAccountId], boostStatus: expectedStatusCheck, underBudgetOnly: true };
         findBoostStub.withArgs(expectedKey).resolves([boostFromPersistence]);
         fetchUncreatedBoostsStub.resolves([]);
         

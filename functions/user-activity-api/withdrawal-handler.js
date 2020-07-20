@@ -339,7 +339,7 @@ module.exports.setWithdrawalBankAccount = async (event) => {
         
         const responseObject = {
             availableBalance,
-            cardTitle: 'Did you know?',
+            cardTitle: 'Are you sure?',
             cardBody: messageBody
         };
 

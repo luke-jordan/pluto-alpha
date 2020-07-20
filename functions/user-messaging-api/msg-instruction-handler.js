@@ -246,7 +246,7 @@ module.exports.insertMessageInstruction = async (event) => {
         const instructionEvalResult = exports.validateMessageInstruction(params);
         logger('Message instruction evaluation result:', instructionEvalResult);
         const persistableObject = createPersistableObject(params, creatingUserId);
-        logger('Created persistable object:', persistableObject);
+        logger('Created persistable object:', JSON.stringify(persistableObject, null, 2));
         const databaseResponse = await rdsUtil.insertMessageInstruction(persistableObject);
         logger('Message instruction insertion result:', databaseResponse);
         const message = databaseResponse[0];

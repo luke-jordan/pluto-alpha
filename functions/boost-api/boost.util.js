@@ -5,6 +5,7 @@
 
 const config = require('config');
 const logger = require('debug')('jupiter:boost:util');
+const stringify = require('json-stable-stringify');
 
 const allowedCors = config.has('headers.CORS') ? config.get('headers.CORS') : '*';
 const corsHeaders = {
@@ -93,10 +94,10 @@ module.exports.hasConditionType = (statusConditions, status, conditionType) => A
     statusConditions[status].some((condition) => condition.startsWith(conditionType));
 
 // this is a slightly clearer version of ops util one
-module.exports.lambdaParameters = (payload, nameKey, sync) => ({
+module.exports.lambdaParameters = (payload, nameKey, sync = true) => ({
     FunctionName: config.get(`lambdas.${nameKey}`),
     InvocationType: sync ? 'RequestResponse' : 'Event',
-    Payload: JSON.stringify(payload)
+    Payload: stringify(payload)
 });
 
 module.exports.extractQueryParams = (event) => {

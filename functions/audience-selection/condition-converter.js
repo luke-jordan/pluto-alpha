@@ -67,7 +67,7 @@ module.exports.stdProperties = {
     },
     boostNotRedeemed: {
         type: 'match',
-        description: 'Has not redeemed boost',
+        description: 'Offered boost, not redeemed',
         expects: 'entity',
         table: 'boostTable',
         skipClient: true,

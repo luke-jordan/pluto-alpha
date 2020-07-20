@@ -51,7 +51,8 @@ const handleBoostWithDynamicAudience = async (boost) => {
     logger('Audience refresh, result of join insertion: ', insertJoinResult);
 
     const { messageInstructionIds } = boost;
-    const newAccountUserIds = await persistence.findUserIdsForAccounts(newAccounts); 
+    const newAccountUserIds = await persistence.findUserIdsForAccounts(newAccounts);
+    logger('Extracted user Ids for new accounts: ', newAccountUserIds);
     
     // todo : make sure not double triggering with message push/refresh
     if (messageInstructionIds && Object.keys(messageInstructionIds).includes(defaultStatus)) {

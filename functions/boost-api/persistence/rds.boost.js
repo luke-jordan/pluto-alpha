@@ -189,10 +189,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
         const accountUserMap = { };
         while (rowIndex < resultOfQuery.length && resultOfQuery[rowIndex]['boost_id'] === boostId) {
             const currentRow = resultOfQuery[rowIndex];
-            accountUserMap[currentRow['account_id']] = { 
-                userId: currentRow['owner_user_id'],
-                status: currentRow['boost_status']
-            };
+            accountUserMap[currentRow['account_id']] = { userId: currentRow['owner_user_id'], status: currentRow['boost_status'] };
             rowIndex += 1;
         }
         return ({ boostId, accountUserMap });
@@ -213,6 +210,14 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
     const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and log_type = $2`;
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, logType]);
     return resultOfQuery.map((row) => camelizeKeys(row));
+};
+
+module.exports.findLastLogForBoost = async (boostId, accountId, logType) => {
+    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 ` +
+        `log_type = $3 order by creation_time desc limit 1`;
+    const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId, logType]);
+    return Array.isArray(resultOfQuery) && resultOfQuery.length > 0
+        ? camelizeKeys(resultOfQuery[0]) : { };
 };
 
 module.exports.findAccountsForPooledReward = async (boostId, logType) => {
@@ -334,10 +339,10 @@ module.exports.updateBoostAmountRedeemed = async (boostIds) => {
     const values = ['REDEEMED', ...boostIds];    
     logger('With values: ', values);
     
-    const resultOfCounts = await rdsConnection.selectQuery(sumQuery, values);
-    logger('Result of counts: ', resultOfCounts);
+    const resultOfSums = await rdsConnection.selectQuery(sumQuery, values);
+    logger('Result of counts: ', resultOfSums);
 
-    const countMap = resultOfCounts.reduce((obj, row) => ({...obj, [row['boost_id']]: row['sum']}), {});
+    const countMap = resultOfSums.reduce((obj, row) => ({...obj, [row['boost_id']]: row['sum']}), {});
     logger('Reduced to count map: ', countMap);
 
     const updateDefBase = { table: boostTable, returnClause: 'updated_time' };
@@ -369,7 +374,7 @@ module.exports.updateBoostAmount = async (boostId, boostAmount) => {
 // ///////////////////////////////////////////////////////////////
 
 // todo : turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
-const extractAccountIds = async (audienceId) => {
+module.exports.extractAccountIds = async (audienceId) => {
     const selectionQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
     
     logger('Audience selection query: ', selectionQuery);
@@ -387,7 +392,7 @@ module.exports.insertBoost = async (boostDetails) => {
     logger('Instruction received to insert boost: ', boostDetails);
     
     const skipAccountInsertion = boostDetails.defaultStatus === 'UNCREATED' || boostDetails.boostAudienceType === 'EVENT_DRIVEN';
-    const accountIds = await (skipAccountInsertion ? [] : extractAccountIds(boostDetails.audienceId));
+    const accountIds = await (skipAccountInsertion ? [] : exports.extractAccountIds(boostDetails.audienceId));
     logger('Extracted account IDs for boost: ', accountIds);
 
     const boostId = uuid();
@@ -471,7 +476,7 @@ module.exports.insertBoost = async (boostDetails) => {
         resultObject.numberOfUsersEligible = resultOfInsertion[1].length;
     }
 
-    logger('Returning: ', resultObject);
+    // logger('Returning: ', resultObject);
     return resultObject;
 
 };
@@ -564,12 +569,16 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 // ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS ////////////
 // ///////////////////////////////////////////////////////////////
 
-module.exports.findUserIdsForAccounts = async (accountIds) => {
-    const query = `select distinct(owner_user_id) from ${config.get('tables.accountLedger')} where ` +
+module.exports.findUserIdsForAccounts = async (accountIds, returnMap = false) => {
+    const query = `select owner_user_id, account_id from ${config.get('tables.accountLedger')} where ` +
         `account_id in (${extractArrayIndices(accountIds)})`;
     const result = await rdsConnection.selectQuery(query, accountIds);
+    logger('Result of query: ', result);
+    
     if (Array.isArray(result) && result.length > 0) {
-        return result.map((row) => row['owner_user_id']);
+        return returnMap
+            ? result.reduce((obj, row) => ({ ...obj, [row['owner_user_id']]: row['account_id'] }), {})
+            : result.map((row) => row['owner_user_id']);
     }
 
     throw Error('Given non-existent or bad account IDs');
@@ -584,4 +593,10 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
     }
 
     throw Error('Given non-existent or bad relationship IDs');
+};
+
+module.exports.fetchActiveMlBoosts = async () => {
+    const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, []);
+    return resultOfQuery.map((row) => camelizeKeys(row));
 };

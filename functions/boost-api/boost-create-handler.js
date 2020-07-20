@@ -194,6 +194,10 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
     if (messageDefinition.presentationType === 'EVENT_DRIVEN') {
         msgPayload.triggerParameters = messageDefinition.triggerParameters;
     }
+
+    if (messageDefinition.presentationType === 'ML_DETERMINED') {
+        msgPayload.holdFire = true; // i.e., do not send right now
+    }
         
     // then, if the message defines a sequence, assemble those templates together
     if (messageDefinition.isMessageSequence) {
@@ -341,7 +345,7 @@ const publishBoostUserLogs = async (initiator, accountIds, boostContext) => {
     const eventType = `BOOST_CREATED_${boostContext.boostType}`;    
     const options = { initiator, context: boostContext };
     const userIds = await persistence.findUserIdsForAccounts(accountIds);
-    logger('Triggering user logs for boost ...');
+    logger('Triggering user logs for boost ... : ', userIds);
     const resultOfLogPublish = await publisher.publishMultiUserEvent(userIds, eventType, options);
     logger('Result of log publishing: ', resultOfLogPublish);
 };
@@ -382,6 +386,7 @@ const publishBoostUserLogs = async (initiator, accountIds, boostContext) => {
  * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} rewardParameters An optional object with reward details. expected properties are rewardType (valid values: 'SIMPLE', 'RANDOM', 'POOLED'). See Note (3) above.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
+ * @property {object} mlParameters Parameters that goven how the ML system will be invoked (if/when it is used)
  */
 module.exports.createBoost = async (event) => {
     if (!event || Object.keys(event).length === 0) {
@@ -464,6 +469,11 @@ module.exports.createBoost = async (event) => {
     if (Array.isArray(params.flags) && params.flags.length > 0) {
         logger('This boost is flagged, with: ', params.flags);
         instructionToRds.flags = params.flags;
+    }
+
+    if (params.mlParameters) {
+        logger('Boost has machine learning pull parameters');
+        instructionToRds.mlParameters = params.mlParameters;
     }
 
     // logger('Sending to persistence: ', instructionToRds);

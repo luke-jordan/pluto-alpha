@@ -21,22 +21,18 @@ module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publi
         throw Error('Error! Malformed event context, no transaction ID');
     }
 
-    const [transactionId] = transferResults.accountTxIds;
-
-    const [txDetails, bSheetReference] = await Promise.all([
-        persistence.fetchTransaction(transactionId),
-        persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'))
-    ]);
-
-    logger('Retrieved transaction matching to this boost redemption: ', txDetails);
-
-    if (txDetails.accountId !== accountId) {
-        throw Error('Error! Transaction and account do not match');
+    // if this is a tournament we need to find the transaction that belongs to this account
+    // note : could do a bulk query but (1) usually this will be 3-4 transactions max, and happen once a day, and on background thread
+    const txFetchResults = await Promise.all(transferResults.accountTxIds.map((transactionId) => persistence.fetchTransaction(transactionId)));
+    const txDetails = txFetchResults.find((txResult) => txResult.accountId === accountId);
+    if (!txDetails) {
+        throw Error('Error! Account does not match any transaction in the transfer');
     }
 
+    logger('Retrieved transaction matching to this boost redemption: ', txDetails);
+    
     const bsheetTxTag = config.get('defaults.balanceSheet.txTagPrefix');
     const bsheetTag = txDetails.tags.find((tag) => tag.startsWith(bsheetTxTag));
-
     
     // we want to know quickly if these mismatches occur, so check for them even if don't need to send to bsheet
     if (txDetails.currency !== currency || util.convertToUnit(txDetails.amount, txDetails.unit, unit) !== amount) {
@@ -56,6 +52,7 @@ module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publi
 
     const wholeCurrencyAmount = util.convertToUnit(amount, unit, 'WHOLE_CURRENCY');
 
+    const bSheetReference = await persistence.fetchAccountTagByPrefix(accountId, config.get('defaults.balanceSheet.accountPrefix'));
     const transactionDetails = { accountNumber: bSheetReference, amount: wholeCurrencyAmount, unit: 'WHOLE_CURRENCY', currency };
     const queuePayload = { operation: 'BOOST', transactionDetails };
     
@@ -71,6 +68,6 @@ module.exports.handleBoostRedeemedEvent = async ({ eventBody, persistence, publi
         return;
     }
 
-    const updateResult = await persistence.updateTxTags(transactionId, `${bsheetTxTag}::${boostAmount}`);
+    const updateResult = await persistence.updateTxTags(txDetails.transactionId, `${bsheetTxTag}::${boostAmount}`);
     logger('Result of tag persistence: ', updateResult);
 };

@@ -459,39 +459,6 @@ describe('Converts standard properties into column conditions', () => {
         expect(selectionJson.sample).to.deep.equal({ random: 50 });
     });
 
-    it('Throws error where other conditions are included with human reference', async () => {
-        const mockStart = moment().subtract(30, 'days');
-
-        const mockSelectionJSON = {
-            clientId: mockClientId,
-            isDynamic: true,
-            conditions: [
-                { op: 'and', children: [
-                        { op: 'greater_than', prop: 'humanReference', type: 'match', value: 'TESTREF123' },
-                        { op: 'greater_than', prop: 'saveCount', type: 'aggregate', value: 3, startTime: mockStart.valueOf() }
-                    ]}
-            ]
-        };
-
-        const authorizedRequest = {
-            httpMethod: 'POST',
-            pathParameters: { proxy: 'preview' },
-            requestContext: { authorizer: { systemWideUserId: mockUserId, role: 'SYSTEM_ADMIN' } },
-            body: JSON.stringify(mockSelectionJSON)
-        };
-
-        const mockAudienceId = uuid();
-
-        executeConditionsStub.resolves({ audienceId: mockAudienceId, audienceCount: 10000 });
-
-        const errorResult = await audienceHandler.handleInboundRequest(authorizedRequest);
-
-        expect(errorResult).to.have.property('statusCode', 500);
-        expect(errorResult).to.have.property('message', `Invalid selection, spans tables. Not supported yet`);
-
-        expect(executeConditionsStub).to.have.not.been.called;
-    });
-
     it('Handles refresh audience request successfully when there is NO need for a refresh', async () => {
         const mockAudienceId = uuid();
         const testPropertyConditions = [

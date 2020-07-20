@@ -60,8 +60,13 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
 
         expect(executeConditionsStub).to.have.been.calledOnce;
         helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams, expectedSelection);
-
     });
+
+    // it('Combines not in boost with number of saves', async () => {
+        
+    // });
+
+    // it('Combines boost account and ')
 
 
     // going to be a bit more complex because of the issues with the friend counting, so come back to it

@@ -498,7 +498,7 @@ class RdsConnection {
             await client.query('SET TRANSACTION READ WRITE');
             // must do these in sequence, hence for in loop
             for (const query of queries) {
-                logger('Executing query: ', query);
+                // logger('Executing query: ', query);
                 const result = await client.query(query.template, query.values);
                 results.push(result);
             }

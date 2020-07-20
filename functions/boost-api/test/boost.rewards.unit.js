@@ -51,6 +51,12 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const testAccountId = uuid();
         const testCalculatedAmount = 75000;
 
+        const testRewardParameters = {
+            rewardType: 'RANDOM',
+            distribution: 'UNIFORM',
+            realizedRewardModuloZeroTarget: 5000 // HUNDREDTH_CENT (matches boostUnit)
+        };
+
         const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, {
             instructions: [{
                 identifier: testBoostId,
@@ -90,11 +96,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             boostCurrency: 'USD',
             fromFloatId: testFloatId,
             fromBonusPoolId: testBonusPoolId,
-            rewardParameters: {
-                rewardType: 'RANDOM',
-                distribution: 'UNIFORM',
-                realizedRewardModuloZeroTarget: 5000 // HUNDREDTH_CENT
-            },
+            rewardParameters: testRewardParameters,
             messageInstructions: [],
             flags: []    
         };

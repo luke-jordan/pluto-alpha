@@ -7,7 +7,7 @@ resource "aws_api_gateway_rest_api" "api_gateway" {
 
 resource "aws_api_gateway_deployment" "api_deployment" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  stage_name  = "${terraform.workspace}"
+  stage_name  = terraform.workspace
 
   depends_on = [
   aws_api_gateway_integration.referral_verify,
@@ -30,11 +30,14 @@ resource "aws_api_gateway_deployment" "api_deployment" {
   aws_api_gateway_integration.friend_request_manage,
   aws_api_gateway_integration.friend_alert_manage,
   aws_api_gateway_integration.friend_pool_read,
-  aws_api_gateway_integration.friend_pool_write
+  aws_api_gateway_integration.friend_pool_write,
+
+  aws_api_gateway_integration.snippet_user_fetch
+
   ]
 
   variables = {
-    commit_sha1 = "${var.deploy_code_commit_hash}"
+    commit_sha1 = var.deploy_code_commit_hash
   }
 
   lifecycle {
@@ -75,7 +78,7 @@ EOF
 
 resource "aws_iam_role_policy" "invocation_policy" {
   name = "default"
-  role = "${aws_iam_role.auth_invocation_role.id}"
+  role = aws_iam_role.auth_invocation_role.id
 
   policy = <<EOF
 {
@@ -93,7 +96,7 @@ EOF
 
 /////////////////////// API GW LOGGING ///////////////////////////////////////////////////////////////
 resource "aws_api_gateway_account" "api_gateway" {
-  cloudwatch_role_arn = "${aws_iam_role.api_gateway_cloudwatch.arn}"
+  cloudwatch_role_arn = aws_iam_role.api_gateway_cloudwatch.arn
 
   depends_on = [aws_iam_role.api_gateway_cloudwatch]
 }
@@ -120,7 +123,7 @@ EOF
 
 resource "aws_iam_role_policy" "api_gateway_cloudwatch" {
   name = "default"
-  role = "${aws_iam_role.api_gateway_cloudwatch.id}"
+  role = aws_iam_role.api_gateway_cloudwatch.id
 
   policy = <<EOF
 {
@@ -146,7 +149,7 @@ EOF
 
 resource "aws_api_gateway_method_settings" "general_settings" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  stage_name  = "${aws_api_gateway_deployment.api_deployment.stage_name}"
+  stage_name  = aws_api_gateway_deployment.api_deployment.stage_name
   method_path = "*/*"
 
   settings {
@@ -169,7 +172,7 @@ resource "aws_api_gateway_domain_name" "custom_doname_name" {
 }
 
 resource "aws_route53_record" "route" {
-  name    = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+  name    = aws_api_gateway_domain_name.custom_doname_name.domain_name
   type    = "A"
   zone_id = "Z32F5PRK3A4ONK"
 
@@ -182,8 +185,8 @@ resource "aws_route53_record" "route" {
 
 resource "aws_api_gateway_base_path_mapping" "custom_resourse_mapping" {
   api_id      = aws_api_gateway_rest_api.api_gateway.id
-  stage_name  = "${aws_api_gateway_deployment.api_deployment.stage_name}"
-  domain_name = "${aws_api_gateway_domain_name.custom_doname_name.domain_name}"
+  stage_name  = aws_api_gateway_deployment.api_deployment.stage_name
+  domain_name = aws_api_gateway_domain_name.custom_doname_name.domain_name
 }
 
 /////////////// REFERRAL CODE VERIFICATION, STATUS //////////////////////////////////////////////////////////////////////////
@@ -811,19 +814,19 @@ resource "aws_api_gateway_method" "message_process" {
 
 resource "aws_lambda_permission" "message_process" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.message_user_process.function_name}"
+  function_name = aws_lambda_function.message_user_process.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
 resource "aws_api_gateway_integration" "message_process" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  resource_id = "${aws_api_gateway_method.message_process.resource_id}"
-  http_method = "${aws_api_gateway_method.message_process.http_method}"
+  resource_id = aws_api_gateway_method.message_process.resource_id
+  http_method = aws_api_gateway_method.message_process.http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.message_user_process.invoke_arn}"
+  uri                     = aws_lambda_function.message_user_process.invoke_arn
 }
 
 // FETCH USER MESSAGE HISTORY
@@ -931,13 +934,13 @@ resource "aws_api_gateway_resource" "boost_path_root" {
 
 resource "aws_api_gateway_resource" "boost_user_process" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  parent_id   = "${aws_api_gateway_resource.boost_path_root.id}"
+  parent_id   = aws_api_gateway_resource.boost_path_root.id
   path_part   = "respond"
 }
 
 resource "aws_api_gateway_method" "boost_user_process" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  resource_id   = "${aws_api_gateway_resource.boost_user_process.id}"
+  resource_id   = aws_api_gateway_resource.boost_user_process.id
   http_method   = "POST"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
@@ -945,19 +948,19 @@ resource "aws_api_gateway_method" "boost_user_process" {
 
 resource "aws_lambda_permission" "boost_user_process" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.boost_user_process.function_name}"
+  function_name = aws_lambda_function.boost_user_process.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
 resource "aws_api_gateway_integration" "boost_user_process" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  resource_id = "${aws_api_gateway_method.boost_user_process.resource_id}"
-  http_method = "${aws_api_gateway_method.boost_user_process.http_method}"
+  resource_id = aws_api_gateway_method.boost_user_process.resource_id
+  http_method = aws_api_gateway_method.boost_user_process.http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.boost_user_process.invoke_arn}"
+  uri                     = aws_lambda_function.boost_user_process.invoke_arn
 }
 
 /// BOOST LIST
@@ -1018,12 +1021,12 @@ resource "aws_lambda_permission" "boost_user_changed" {
 
 resource "aws_api_gateway_integration" "boost_user_changed" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  resource_id = "${aws_api_gateway_method.boost_user_changed.resource_id}"
-  http_method = "${aws_api_gateway_method.boost_user_changed.http_method}"
+  resource_id = aws_api_gateway_method.boost_user_changed.resource_id
+  http_method = aws_api_gateway_method.boost_user_changed.http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.boost_user_changed.invoke_arn}"
+  uri                     = aws_lambda_function.boost_user_changed.invoke_arn
 }
 
 // GET DETAIL ON A BOOST (MOSTLY FOR FRIEND TOURNAMENTS)
@@ -1059,6 +1062,46 @@ resource "aws_api_gateway_integration" "boost_detail_fetch" {
   uri                     = "${aws_lambda_function.boost_detail_fetch.invoke_arn}"
 }
 
+/////////////// SNIPPET LAMBDAS //////////////////////////////////////////////////////////////////////////
+
+resource "aws_api_gateway_resource" "snippet_path_root" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = aws_api_gateway_rest_api.api_gateway.root_resource_id
+  path_part   = "snippet"
+}
+
+// FETCH ORDERED LIST OF SNIPPETS TO SHOW USER
+
+resource "aws_api_gateway_resource" "snippet_user_fetch" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  parent_id   = aws_api_gateway_resource.snippet_path_root.id
+  path_part   = "detail"
+}
+
+resource "aws_api_gateway_method" "snippet_user_fetch" {
+  rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
+  resource_id   = aws_api_gateway_resource.snippet_user_fetch.id
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
+}
+
+resource "aws_lambda_permission" "snippet_user_fetch" {
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.snippet_user_fetch.function_name
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "snippet_user_fetch" {
+  rest_api_id = aws_api_gateway_rest_api.api_gateway.id
+  resource_id = aws_api_gateway_method.snippet_user_fetch.resource_id
+  http_method = aws_api_gateway_method.snippet_user_fetch.http_method
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = aws_lambda_function.snippet_user_fetch.invoke_arn
+}
 
 /////////////// WITHDRAW API LAMBDA (INITIATE, ADD AMOUNT, FINISH) ///////////////////////////////////////////////////////////////
 
@@ -1071,13 +1114,13 @@ resource "aws_api_gateway_resource" "withdraw_path_root" {
 // first step -- initiate, check bank account
 resource "aws_api_gateway_resource" "withdraw_initiate" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  parent_id   = "${aws_api_gateway_resource.withdraw_path_root.id}"
+  parent_id   = aws_api_gateway_resource.withdraw_path_root.id
   path_part   = "initiate"
 }
 
 resource "aws_api_gateway_method" "withdraw_initiate" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
-  resource_id   = "${aws_api_gateway_resource.withdraw_initiate.id}"
+  resource_id   = aws_api_gateway_resource.withdraw_initiate.id
   http_method   = "POST"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
@@ -1085,19 +1128,19 @@ resource "aws_api_gateway_method" "withdraw_initiate" {
 
 resource "aws_lambda_permission" "withdraw_initiate" {
   action        = "lambda:InvokeFunction"
-  function_name = "${aws_lambda_function.withdraw_initiate.function_name}"
+  function_name = aws_lambda_function.withdraw_initiate.function_name
   principal     = "apigateway.amazonaws.com"
   source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.api_gateway.id}/*/*/*"
 }
 
 resource "aws_api_gateway_integration" "withdraw_initiate" {
   rest_api_id = aws_api_gateway_rest_api.api_gateway.id
-  resource_id = "${aws_api_gateway_method.withdraw_initiate.resource_id}"
-  http_method = "${aws_api_gateway_method.withdraw_initiate.http_method}"
+  resource_id = aws_api_gateway_method.withdraw_initiate.resource_id
+  http_method = aws_api_gateway_method.withdraw_initiate.http_method
 
   integration_http_method = "POST"
   type                    = "AWS_PROXY"
-  uri                     = "${aws_lambda_function.withdraw_initiate.invoke_arn}"
+  uri                     = aws_lambda_function.withdraw_initiate.invoke_arn
 }
 
 // second step -- add an amount, decide on boost to avoid or not
