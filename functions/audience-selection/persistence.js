@@ -11,6 +11,7 @@ const RdsConnection = require('rds-common');
 const rdsConnection = new RdsConnection(config.get('db'));
 
 const defaultTable = config.get('tables.transactionTable');
+
 const accountTable = config.get('tables.accountTable');
 const boostTable = config.get('tables.boostTable');
 const dummyTableForTests = 'transactions';

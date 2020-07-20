@@ -163,4 +163,44 @@ describe('*** TEST BALANCE SELECTION ***', () => {
         helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('PRIMARY'), expectedWrapperSelection, 2);
     });
 
+    it('Combines number of saves and account open date', async () => {
+        const testMoment = moment();
+        const testCondition = {
+            clientId: 'test-client-id',
+            isDynamic: false,
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'greater_than', value: '10', prop: 'saveCount', type: 'aggregate' },
+                    { op: 'less_than', value: testMoment.valueOf(), prop: 'accountOpenTime', type: 'match' }
+                    ]
+                }
+            ]
+        };
+
+        executeConditionsStub.onFirstCall().resolves({ audienceId: 'intermediate-audience-1', audienceCount: 145 });
+        executeConditionsStub.onSecondCall().resolves({ audienceId: 'intermediate-audience-2', audienceCount: 125 });
+        executeConditionsStub.onThirdCall().resolves({ audienceId: 'primary-audience', audienceCount: 20 });
+
+        const authorizedRequest = helper.wrapAuthorizedRequest(testCondition, mockUserId);
+        const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
+
+        helper.standardOkayChecks(wrappedResult, { audienceId: 'primary-audience', audienceCount: 20 });
+
+        // the condition specific checks are done elsewhere, here we check the combination
+        const expectedWrapperSelection = {
+            table: 'transaction_data.core_transaction_ledger',
+            creatingUserId: mockUserId,
+            conditions: [
+                { op: 'and', children: [
+                    { prop: 'account_id', op: 'in', value: `select account_id from audience_data.audience_account_join where audience_id = 'intermediate-audience-1' and active = true`},
+                    { prop: 'account_id', op: 'in', value: `select account_id from audience_data.audience_account_join where audience_id = 'intermediate-audience-2' and active = true`},
+                    { prop: 'client_id', op: 'is', value: 'test-client-id' }
+                ]}
+            ]
+        };
+
+        const finalCallArgs = executeConditionsStub.getCall(2).args;
+        expect(finalCallArgs[0]).to.deep.equal(expectedWrapperSelection);
+    });
+
 });
