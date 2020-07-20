@@ -267,10 +267,9 @@ const constructFullQuery = (selectionJSON, parsedValues) => {
 };
 
 module.exports.extractSQLQueryFromJSON = (passedJSON) => {
-    logger('extracting sql query from passed JSON: ', passedJSON);
+    logger('Extracting sql query from passed JSON: ', JSON.stringify(passedJSON));
 
     const selectionJSON = addDefaultColumnSpecifications(passedJSON);
-    logger('Added default columns etc, now: ', passedJSON);
 
     const columns = extractColumns(selectionJSON);
     const columnsToCount = extractColumnsToCount(selectionJSON);
@@ -280,13 +279,13 @@ module.exports.extractSQLQueryFromJSON = (passedJSON) => {
     const groupByFilters = extractGroupBy(selectionJSON);
     const havingFilters = extractHavingFilter(selectionJSON);
 
-    logger('parsed columns:', columns);
-    logger('parsed table:', table);
-    logger('where filters:', whereFilters);
-    logger('parsed columns to count:', columnsToCount);
-    logger('parsed columns to sum:', columnsToSum);
-    logger('groupBy filters:', groupByFilters);
-    logger('having filters:', havingFilters);
+    // logger('parsed columns:', columns);
+    // logger('parsed table:', table);
+    // logger('where filters:', whereFilters);
+    // logger('parsed columns to count:', columnsToCount);
+    // logger('parsed columns to sum:', columnsToSum);
+    // logger('groupBy filters:', groupByFilters);
+    // logger('having filters:', havingFilters);
 
     const parsedValues = {
         columns,
@@ -299,7 +298,7 @@ module.exports.extractSQLQueryFromJSON = (passedJSON) => {
     };
 
     const fullQuery = constructFullQuery(selectionJSON, parsedValues);
-    logger('full sql query:', fullQuery);
+    logger('====> Now have Full sql query:', fullQuery);
 
     return fullQuery;
 };
@@ -330,7 +329,7 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
     const createAudienceTemplate = `insert into ${audienceTable} (${audienceColumns}) values (${columnIndices}) returning audience_id`;
     
     const createAudienceQuery = { template: createAudienceTemplate, values: columnValues };
-    logger('Create audience query: ', createAudienceQuery);
+    logger('Create audience query: ', JSON.stringify(createAudienceQuery));
 
     // rely on query construction engine to do the insertion query as we need it
     const insertionJSON = { ...selectionJSON };
@@ -342,10 +341,10 @@ const insertQuery = async (selectionJSON, persistenceParams) => {
         replace(`'${audienceId}'`, `'${audienceId}'::uuid`);
     
     const joinInsertionQuery = { template: crossInsertionTemplate, values: [] };
-    logger('Compiled query: ', joinInsertionQuery);
+    logger('*** ======= Compiled query: ', joinInsertionQuery);
 
     const joinResult = await rdsConnection.freeFormInsert([createAudienceQuery, joinInsertionQuery]);
-    logger('Join result: ', joinResult);
+    // logger('Join result: ', joinResult);
 
     const audienceCount = joinResult[1]['rowCount'];
 

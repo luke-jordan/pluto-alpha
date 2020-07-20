@@ -8,7 +8,7 @@ const sinon = require('sinon');
 chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 
 const selectQueryStub = sinon.stub();
 const updateRecordStub = sinon.stub();

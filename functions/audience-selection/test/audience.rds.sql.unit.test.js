@@ -7,9 +7,9 @@ chai.use(require('sinon-chai'));
 const expect = chai.expect;
 
 // just to prevent call throughs
-const proxyquire = require('proxyquire');
+const proxyquire = require('proxyquire').noCallThru();
 const audienceSelection = proxyquire('../persistence.js', {
-    // 'rds-common': MockRdsConnection,
+    'rds-common': class { }, // to prevent call throughs here
     '@noCallThru': true
 });
 

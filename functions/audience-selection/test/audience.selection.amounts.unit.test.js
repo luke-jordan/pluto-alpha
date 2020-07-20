@@ -37,6 +37,13 @@ describe('*** TEST BALANCE SELECTION ***', () => {
         END
     )`.replace(/\s\s+/g, ' ');
 
+    const expectedPersistenceParams = (audienceType, conditions) => ({
+        audienceType,
+        clientId: 'test-client-id',
+        creatingUserId: mockUserId,
+        isDynamic: false,
+        propertyConditions: conditions
+    });
 
     it('Handles conversion into balance, with units, properly', async () => {
         const mockSelectionJSON = {
@@ -73,15 +80,6 @@ describe('*** TEST BALANCE SELECTION ***', () => {
                 ]}
             ]
         };
-
-        const expectedPersistenceParams = (audienceType) => ({
-            audienceType,
-            clientId: 'test-client-id',
-            creatingUserId: mockUserId,
-            isDynamic: false,
-            propertyConditions: mockSelectionJSON.conditions
-        });
-
         
         const mockAudienceId = 'created-audience-id';
         executeConditionsStub.onFirstCall().resolves({ audienceId: mockAudienceId, audienceCount: 145 });
@@ -91,9 +89,11 @@ describe('*** TEST BALANCE SELECTION ***', () => {
         const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
         helper.standardOkayChecks(wrappedResult, { audienceId: 'primary-audience', audienceCount: 145 });
 
+        const { conditions } = mockSelectionJSON;
+
         expect(executeConditionsStub).to.have.been.calledTwice;
-        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('INTERMEDIATE'), expectedInitialSelection);
-        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('PRIMARY'), expectedWrapperSelection, 1);
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('INTERMEDIATE', conditions), expectedInitialSelection);
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('PRIMARY', conditions), expectedWrapperSelection, 1);
     });
 
     it('Handles saving this month', async () => {
@@ -136,14 +136,6 @@ describe('*** TEST BALANCE SELECTION ***', () => {
                 ]}
             ]
         };
-
-        const expectedPersistenceParams = (audienceType) => ({
-            audienceType,
-            clientId: 'test-client-id',
-            creatingUserId: mockUserId,
-            isDynamic: false,
-            propertyConditions: mockSelectionJSON.conditions
-        });
         
         executeConditionsStub.onFirstCall().resolves({ audienceId: 'intermediate-audience-1', audienceCount: 145 });
         executeConditionsStub.onSecondCall().resolves({ audienceId: 'intermediate-audience-2', audienceCount: 125 });
@@ -158,9 +150,10 @@ describe('*** TEST BALANCE SELECTION ***', () => {
         const expectedFirstSelection = expectedAmountSelection('greater_than', 20 * 100 * 100);
         const expectedSecondSelection = expectedAmountSelection('less_than', 50 * 100 * 100);
 
-        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('INTERMEDIATE'), expectedFirstSelection, 0);
-        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('INTERMEDIATE'), expectedSecondSelection, 1);
-        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('PRIMARY'), expectedWrapperSelection, 2);
+        const { conditions } = mockSelectionJSON;
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('INTERMEDIATE', conditions), expectedFirstSelection, 0);
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('INTERMEDIATE', conditions), expectedSecondSelection, 1);
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('PRIMARY', conditions), expectedWrapperSelection, 2);
     });
 
     it('Combines number of saves and account open date', async () => {
@@ -186,7 +179,19 @@ describe('*** TEST BALANCE SELECTION ***', () => {
 
         helper.standardOkayChecks(wrappedResult, { audienceId: 'primary-audience', audienceCount: 20 });
 
-        // the condition specific checks are done elsewhere, here we check the combination
+        const { conditions } = testCondition;
+        const expectedAccountCondition = {
+            table: 'account_data.core_account_ledger',
+            creatingUserId: mockUserId,
+            conditions: [
+                { op: 'and', children: [
+                    { prop: 'responsible_client_id', op: 'is', value: 'test-client-id' },
+                    { prop: 'creation_time', op: 'less_than', value: testMoment.format() }
+                ]}
+            ]
+        };
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('INTERMEDIATE', conditions), expectedAccountCondition, 1);
+
         const expectedWrapperSelection = {
             table: 'transaction_data.core_transaction_ledger',
             creatingUserId: mockUserId,
@@ -199,8 +204,7 @@ describe('*** TEST BALANCE SELECTION ***', () => {
             ]
         };
 
-        const finalCallArgs = executeConditionsStub.getCall(2).args;
-        expect(finalCallArgs[0]).to.deep.equal(expectedWrapperSelection);
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams('PRIMARY', conditions), expectedWrapperSelection, 2);
     });
 
 });

@@ -115,11 +115,16 @@ const addTableAndClientId = (selection, clientId, tableKey) => {
 };
 
 const convertAggregateIntoEntity = async (aggregateCondition, persistenceParams) => {
+    logger('Converting specific aggregate condition: ', JSON.stringify(aggregateCondition));
     const propConverter = columnConverters[aggregateCondition.prop];
     const columnSelection = { creatingUserId: persistenceParams.creatingUserId, ...propConverter(aggregateCondition) };
-    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId, DEFAULT_TABLE);
+
+    const relevantTable = converter.stdProperties[aggregateCondition.prop].table || DEFAULT_TABLE;
+    logger('Obtained relevant table key: ', relevantTable);
     
-    logger('Transforming aggregate condition: ', clientRestricted);
+    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId, relevantTable);
+    
+    logger('Transformed into column condition: ', JSON.stringify(clientRestricted, null, 2));
     const copiedParams = { ...persistenceParams };
     copiedParams.audienceType = 'INTERMEDIATE';
     const subAudienceResult = await persistence.executeColumnConditions(clientRestricted, true, copiedParams);
@@ -145,7 +150,7 @@ const hasNonDefaultTable = (conditions) => {
 // requires client ID for restriction of sub-audience creation (possibly redundant, but otherwise could lead to massive inefficiency 
 // & possible leaks later down the line)
 const convertPropertyCondition = async (propertyCondition, persistenceParams, isInMultiTableBranch) => {
-    logger('Passed property condition: ', propertyCondition);
+    logger('Inside convert property condition, passed: ', propertyCondition);
     // first check if this combinatorial, if so, do recursion
     if (propertyCondition.op === 'or' || propertyCondition.op === 'and') {
         const childConditions = propertyCondition.children;
@@ -160,8 +165,9 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams, is
     // now we are in a leaf :: if it is aggregate, at present just straight convert into matched via an insert operation;
     // obviously a lot of scope to make more efficient by eg detecting if this is necessary by checking if all nodes are 'ands' or not
     if (propertyCondition.type === 'aggregate' || isInMultiTableBranch) {
+        logger('Aggregate condition, or in multi table branch, handle accordingly');
         const matchCondition = await convertAggregateIntoEntity(propertyCondition, persistenceParams);
-        logger('Matched condition: ', matchCondition);
+        logger('Converted into audience-match condition: ', JSON.stringify(matchCondition));
         return matchCondition;
     }
     
@@ -171,7 +177,7 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams, is
         return propertyCondition;
     }
 
-    logger('Converting from property: ', propertyCondition.prop);
+    logger('Not an aggregate-in-itself, and not inside multi-table branch, converting from property: ', propertyCondition.prop);
     const columnConverter = columnConverters[propertyCondition.prop];
     const columnCondition = columnConverter(propertyCondition);
     logger('Column condition: ', JSON.stringify(columnCondition, null, 2));
@@ -179,12 +185,12 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams, is
 };
 
 const extractTableArrayFromCondition = (condition) => {
-    logger('Extracting table from condition: ', condition);
     if (!condition) {
         return [];
     }
 
     if (['and', 'or'].includes(condition.op)) {
+        logger('Extracting table from sub-conditions: ', condition);
         return condition.children.map((subCondition) => extractTableArrayFromCondition(subCondition)).
             reduce((list, cum) => [...list, ...cum], []);
     }
