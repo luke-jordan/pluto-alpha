@@ -126,7 +126,9 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         accountStatusStub.resolves([{ boostId: testBoostId, accountUserMap: mockAccountUserMap }]);
         findUserIdsStub.resolves({ 'user-id-1': 'account-id-1' });
 
-        tinyPostStub.resolves([{ 'user_id': 'user-id-1', 'should_offer': true }]);
+        tinyPostStub.resolves({
+            body: JSON.stringify([{ 'user_id': 'user-id-1', 'should_offer': true }])
+        });
 
         lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
 
@@ -187,7 +189,9 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         extractAccountIdsStub.resolves(mockAccountIds);
         findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2' });
         
-        tinyPostStub.resolves([{ 'user_id': 'user-id-1', 'should_offer': true }, { 'user_id': 'user-id-2', 'should_offer': false }]);
+        tinyPostStub.resolves({
+            body: JSON.stringify([{ 'user_id': 'user-id-1', 'should_offer': true }, { 'user_id': 'user-id-2', 'should_offer': false }])
+        });
 
         lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
 

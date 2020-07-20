@@ -50,7 +50,8 @@ const obtainUsersForOffering = async (boost, userIds) => {
     const options = { url: config.get('mlSelection.endpoint'), data };
     const result = await tiny.post(options);
     logger('Result of ml boost user selection:', result);
-    const userIdsToOffer = result.filter((decision) => decision['should_offer']).map((decision) => decision['user_id']);
+    const parsedResult = JSON.parse(result.body);
+    const userIdsToOffer = parsedResult.filter((decision) => decision['should_offer']).map((decision) => decision['user_id']);
     logger('Extracted IDs to offer: ', userIdsToOffer);
     return userIdsToOffer;
 };
