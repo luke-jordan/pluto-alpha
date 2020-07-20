@@ -210,7 +210,7 @@ const accountSorter = (accountA, accountB) => Object.values(accountB)[0] - Objec
 const handleRandomReward = async (boost) => {
     const statusCondition = boost.statusConditions.REDEEMED.filter((condition) => condition.startsWith('randomly_chosen_first_N'));
     const numberOfRecipients = statusCondition[0].match(/#{(.*)}/)[1];
-    const pendingParticipants = await persistence.findAccountsForBoost({ boostId: boost.boostId, status: 'PENDING' });
+    const pendingParticipants = await persistence.findAccountsForBoost({ boostIds: [boost.boostId], status: ['PENDING'] });
     logger('Got pending participants:', pendingParticipants);
     const accountIds = Object.keys(pendingParticipants[0].accountUserMap);
     const scoredAccounts = accountIds.map((accountId) => ({ [accountId]: Math.random() })).sort(accountSorter);
