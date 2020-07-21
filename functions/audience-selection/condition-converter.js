@@ -38,6 +38,12 @@ module.exports.stdProperties = {
         expects: 'epochMillis',
         table: 'accountTable'
     },
+    accountOpenDays: {
+        type: 'match',
+        description: 'Account opened X days ago',
+        expects: 'number',
+        table: 'accountTable'
+    },
     lastCapitalization: {
         type: 'match',
         description: 'Last capitalization',
@@ -72,6 +78,21 @@ module.exports.stdProperties = {
         table: 'boostTable',
         skipClient: true,
         entity: 'boost'
+    },
+    boostCount: {
+        type: 'aggregate',
+        description: 'Number offered boosts',
+        expects: 'number',
+        table: 'boostTable'
+    },
+    boostOffered: {
+        type: 'aggregate', // because we allow inversions, we classify as aggregate, though it is actually match
+        description: 'Part of boost (all from offer onwards)',
+        expects: 'entity',
+        entity: 'boost',
+        table: 'boostTable',
+        skipClient: true,
+        canInvert: true,
     },
     systemWideUserId: {
         type: 'match',
@@ -191,6 +212,36 @@ module.exports.convertBoostCreatedOffered = (condition) => ({
     ]}]
 });
 
+module.exports.convertBoostAllButCreated = (condition) => {
+    // since exclusion happens at level of persisted intermediate audience, here we actually flip it to positive
+    const boostIdOp = condition.op === 'exclude' ? 'is' : condition.op;
+    return {
+        conditions: [{ op: 'and', children: [
+            { prop: 'boost_id', op: boostIdOp, value: condition.value },
+            { prop: 'boost_status', op: 'not', value: 'CREATED' }
+        ]}
+    ]};
+};
+
+module.exports.convertBoostNumber = (condition) => {
+    const startTime = condition.startTime ? moment(condition.startTime) : moment(0);
+    const endTime = condition.endTime ? moment(condition.endTime) : moment();
+
+    const conditions = [{ op: 'and', children: [
+        { op: 'not', prop: 'boost_account_status', value: 'CREATED' }, // at present, exclude not-offered event driven or ML
+        { op: 'greater_than', prop: 'creation_time', value: startTime.format() },
+        { op: 'less_than', prop: 'creation_time', value: endTime.format() }
+    ]}];
+
+    return { 
+        conditions,
+        groupBy: ['account_id'],
+        postConditions: [
+            { op: condition.op, prop: 'count(boost_id)', value: parseInt(condition.value, 10), valueType: 'int' }
+        ]
+    };
+};
+
 module.exports.convertNumberFriends = (condition) => {
     const countSubQuery = `(select count(*) from ${config.get('tables.friendTable')} where (initiated_user_id = owner_user_id or accepted_user_id = owner_user_id) and ` +
         `relationship_status = 'ACTIVE')`;
@@ -203,7 +254,7 @@ module.exports.convertNumberFriends = (condition) => {
 };
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// //////////////////////////////////// UTILITY / AUX CONDITIONS ///////////////////////////////////////////////////////////
+// //////////////////////////////////// ACCOUNT & TIME CONDITIONS //////////////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 module.exports.humanRefInValueConversion = (value) => (Array.isArray(value) 
@@ -223,4 +274,20 @@ module.exports.convertDateCondition = (condition, propToUse) => {
         { op: 'greater_than_or_equal_to', prop: propToUse, value: moment(value).startOf('day').format() },
         { op: 'less_than_or_equal_to', prop: propToUse, value: moment(value).endOf('day').format() }
     ]};
+};
+
+module.exports.convertCreationDaysToTime = (condition) => {
+    const currentMoment = moment(); // avoid weirdness over midnight (sometimes refreshes etc happen then)
+    // const clonedCondition = JSON.parse(JSON.stringify(condition)); // need to avoid mutability issues, hence deep clone not spread
+    
+    const convertedValue = currentMoment.subtract(condition.value, 'days').startOf('day').valueOf();
+    let convertedOp = condition.op; 
+    
+    if (condition.op === 'less_than' || condition.op === 'less_than_or_equal_to') {
+        convertedOp = 'greater_than_or_equal_to'; // because "less than 5 days" = "after 5 days ago"
+    } else if (condition.op === 'greater_than' || condition.op === 'greater_than_or_equal_to') {
+        convertedOp = 'less_than_or_equal_to';
+    }
+    
+    return { value: convertedValue, op: convertedOp, prop: condition.prop };
 };
