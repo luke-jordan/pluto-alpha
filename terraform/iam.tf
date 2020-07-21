@@ -1107,3 +1107,54 @@ resource "aws_iam_policy" "sqs_bsheet_update_queue_poll" {
 }
 EOF
 }
+
+// SOME SNIPPET PERMISSIONS
+
+resource "aws_iam_policy" "sqs_snippet_update_queue_publish" {
+    name = "${terraform.workspace}_snippet_update_queue_publish"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SnippetQueuePublish",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:GetQueueUrl",
+                "sqs:SendMessage"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.snippet_update_queue.arn}"
+            ]
+        }
+    ]    
+}
+EOF
+}
+
+resource "aws_iam_policy" "sqs_snippet_update_queue_poll" {
+    name = "${terraform.workspace}_snippet_update_queue_poll"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "SQSQueueAllow",
+            "Effect": "Allow",
+            "Action": [
+                "sqs:ReceiveMessage",
+                "sqs:DeleteMessage",
+                "sqs:GetQueueAttributes"
+            ],
+            "Resource": [
+                "${aws_sqs_queue.snippet_update_queue.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
