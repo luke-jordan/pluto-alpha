@@ -16,6 +16,12 @@ const opsUtil = require('ops-util-common');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+if (config.get('seedrandom.active')) {
+    // eslint-disable-next-line global-require
+    const seedrandom = require('seedrandom');
+    seedrandom(config.get('seedrandom.value'), { global: true });
+}
+
 const GAME_RESPONSE = 'GAME_RESPONSE';
 
 const fetchAccountIdsForPooledRewards = async (redemptionBoosts) => {
@@ -213,10 +219,24 @@ const handleRandomReward = async (boost) => {
     const pendingParticipants = await persistence.findAccountsForBoost({ boostIds: [boost.boostId], status: ['PENDING'] });
     logger('Got pending participants:', pendingParticipants);
     const accountIds = Object.keys(pendingParticipants[0].accountUserMap);
+
     const scoredAccounts = accountIds.map((accountId) => ({ [accountId]: Math.random() })).sort(accountSorter);
-    logger('Randomly scored accounts:', scoredAccounts);
+    logger('Scored accounts:', scoredAccounts);
     const accountsWithHighestScore = scoredAccounts.slice(0, numberOfRecipients);
     logger('Got reward recipients:', accountsWithHighestScore);
+    const winningAccounts = accountsWithHighestScore.map((accountScore) => Object.keys(accountScore)[0]);
+
+    if (accountsWithHighestScore.length > 0) {
+        logger('Awarding boost to accounts:', winningAccounts);
+        await handleTournamentWinners(boost, winningAccounts);
+    }
+
+    const remainingAccounts = accountIds.filter((accountId) => !winningAccounts.includes(accountId));
+    logger('Expiring accounts that did not win: ', remainingAccounts);
+    const resultOfUpdate = await expireAccountsForBoost(boost.boostId, remainingAccounts);
+    logger('Result of expiry: ', resultOfUpdate);
+    
+    return opsUtil.wrapResponse({ result: 'SUCCESS' });
 };
 
 /**

@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:boosts:test');
+// const logger = require('debug')('jupiter:boosts:test');
 
 const moment = require('moment');
 const uuid = require('uuid/v4');
@@ -482,7 +482,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         });
 
         fetchBoostStub.resolves(mockBoost);
-        findAccountsStub.resolves(formAccountResponse({
+        findAccountsStub.onFirstCall().resolves(formAccountResponse({ // all
             'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
             'account-id-2': { userId: 'user-id-2', status: 'PENDING' },
             'account-id-3': { userId: 'user-id-3', status: 'PENDING' },
@@ -491,8 +491,47 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             'account-id-6': { userId: 'user-id-6', status: 'PENDING' }
         }));
 
+        findAccountsStub.onSecondCall().resolves(formAccountResponse({ // winners
+            'account-id-5': { userId: 'user-id-5', status: 'PENDING' },
+            'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
+            'account-id-3': { userId: 'user-id-3', status: 'PENDING' }
+        }));
+
+        findAccountsStub.onThirdCall().resolves(formAccountResponse({ // losers
+            'account-id-2': { userId: 'user-id-2', status: 'PENDING' },
+            'account-id-4': { userId: 'user-id-4', status: 'PENDING' },
+            'account-id-6': { userId: 'user-id-6', status: 'PENDING' }
+        }));
+
         const resultOfSelection = await handler.checkForBoostsToExpire({ boostId: testBoostId });
-        logger('Res:', resultOfSelection);
+        const resultBody = testHelper.standardOkayChecks(resultOfSelection, true);
+
+        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+
+        const winningAccounts = ['account-id-5', 'account-id-1', 'account-id-3'];
+        const remainingAccounts = ['account-id-2', 'account-id-4', 'account-id-6'];
+        expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ['PENDING'] });
+        expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: winningAccounts });
+        expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: remainingAccounts });
+
+        const expectedRedemptionUpdate = {
+            boostId: testBoostId,
+            accountIds: winningAccounts,
+            newStatus: 'REDEEMED',
+            logType: 'STATUS_CHANGE'
+        };
+
+        const expectedExpiredUpdate = {
+            boostId: testBoostId,
+            accountIds: remainingAccounts,
+            newStatus: 'EXPIRED',
+            logType: 'STATUS_CHANGE'
+        };
+
+        expect(updateBoostAccountStub).to.have.been.calledTwice;
+        expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedRedemptionUpdate]);
+        expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedExpiredUpdate]);
     });
 
 });
