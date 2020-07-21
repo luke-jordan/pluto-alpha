@@ -92,7 +92,7 @@ module.exports.stdProperties = {
         entity: 'boost',
         table: 'boostTable',
         skipClient: true,
-        canInvert: true,
+        canInvert: true
     },
     systemWideUserId: {
         type: 'match',

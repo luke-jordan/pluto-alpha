@@ -83,7 +83,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
 
         const eventBody = {
             title: 'Jupiter Snippet 51',
-            text: 'Jupiter helps you save.',
+            body: 'Jupiter helps you save.',
             countryCode: 'ZAF'
         };
 

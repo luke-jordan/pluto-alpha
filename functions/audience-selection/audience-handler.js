@@ -163,6 +163,21 @@ const hasNonDefaultTable = (conditions) => {
     });
 };
 
+const extractTableArrayFromCondition = (condition) => {
+    if (!condition) {
+        return [];
+    }
+
+    if (['and', 'or'].includes(condition.op)) {
+        logger('Extracting table from sub-conditions: ', condition);
+        return condition.children.map((subCondition) => extractTableArrayFromCondition(subCondition)).
+            reduce((list, cum) => [...list, ...cum], []);
+    }
+
+    const propTable = converter.stdProperties[condition.prop].table;
+    return propTable ? [propTable] : [DEFAULT_TABLE];
+};
+
 // requires client ID for restriction of sub-audience creation (possibly redundant, but otherwise could lead to massive inefficiency 
 // & possible leaks later down the line)
 const convertPropertyCondition = async (propertyCondition, persistenceParams, isInMultiTableBranch) => {
@@ -198,21 +213,6 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams, is
     const columnCondition = columnConverter(propertyCondition);
     logger('Column condition: ', JSON.stringify(columnCondition, null, 2));
     return columnCondition.conditions[0];
-};
-
-const extractTableArrayFromCondition = (condition) => {
-    if (!condition) {
-        return [];
-    }
-
-    if (['and', 'or'].includes(condition.op)) {
-        logger('Extracting table from sub-conditions: ', condition);
-        return condition.children.map((subCondition) => extractTableArrayFromCondition(subCondition)).
-            reduce((list, cum) => [...list, ...cum], []);
-    }
-
-    const propTable = converter.stdProperties[condition.prop].table;
-    return propTable ? [propTable] : [DEFAULT_TABLE];
 };
 
 const extractColumnConditionsTable = (conditions) => {

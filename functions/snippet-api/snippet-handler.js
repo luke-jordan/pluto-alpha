@@ -27,7 +27,8 @@ const sortSnippets = (snippets) => snippets.sort(snippetSorter);
 /**
  * This function creates a new snippet.
  * @param {object} event An admin event.
- * @property {string}  text The main snippet text.
+ * @property {string}  title The snippet title
+ * @property {string}  body The main snippet text.
  * @property {boolean} active Optional property that can be used to create inactive snippets. All new snippets are active by default.
  * @property {object}  responseOptions An object containing the possible response options to be displayed with the snippet.
  */
@@ -45,7 +46,7 @@ module.exports.createSnippet = async (event) => {
         const snippet = {
             createdBy: systemWideUserId,
             title: params.title,
-            body: params.text,
+            body: params.body,
             countryCode: params.countryCode,
             active: typeof params.active === 'boolean' ? params.active : true,
             snippetPriority: params.snippetPriority || 1,
