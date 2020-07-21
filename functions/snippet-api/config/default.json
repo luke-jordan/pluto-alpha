@@ -13,8 +13,6 @@
         "snippetLogTable": "snippet_data.snippet_log"
     },
     "publishing": {
-        "userEvents": {
-            "snippetQueue": "<<insert_here>>"
-        }
+        "snippetQueue": "<<insert_here>>"
     }
 }

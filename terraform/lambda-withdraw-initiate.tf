@@ -93,12 +93,12 @@ resource "aws_cloudwatch_log_group" "withdraw_initiate" {
 }
 
 resource "aws_iam_role_policy_attachment" "withdraw_initiate_basic_execution_policy" {
-  role = "${aws_iam_role.withdraw_initiate_role.name}"
+  role = aws_iam_role.withdraw_initiate_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
 resource "aws_iam_role_policy_attachment" "withdraw_initiate_vpc_execution_policy" {
-  role = "${aws_iam_role.withdraw_initiate_role.name}"
+  role = aws_iam_role.withdraw_initiate_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 

@@ -157,7 +157,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             failureCount: 0
         };
 
-        const testQueueName = config.get('publishing.userEvents.snippetQueue');
+        const testQueueName = config.get('publishing.snippetQueue');
         const testQueuePayload = { snippetIds: [testSnippetId, testSnippetId], userId: testSystemId, status: 'FETCHED' };
 
         const expectedFirst = mockSnippet('FETCHED', 3, 0);

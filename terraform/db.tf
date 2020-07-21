@@ -24,7 +24,7 @@ resource "aws_db_subnet_group" "rds_subnet_group" {
   subnet_ids  = [for subnet in aws_subnet.private : subnet.id]
 
   depends_on = [
-    "aws_subnet.private"
+    aws_subnet.private
   ]
 }
 
@@ -53,9 +53,9 @@ resource "aws_rds_cluster" "pg_rds" {
   engine_version          = "10.7"
   engine_mode             = "serverless"
   
-  database_name           = "${var.db_name}"
-  master_username         = "${var.db_user}"
-  master_password         = "${var.db_password}"
+  database_name           = var.db_name
+  master_username         = var.db_user
+  master_password         = var.db_password
   
   backup_retention_period = 5
   preferred_backup_window = "07:00-09:00"
@@ -63,11 +63,11 @@ resource "aws_rds_cluster" "pg_rds" {
   skip_final_snapshot     = terraform.workspace == "staging" ? true : false
   final_snapshot_identifier = "final-${var.deploy_code_commit_hash}"
   
-  db_subnet_group_name   = "${aws_db_subnet_group.rds_subnet_group.id}"
-  vpc_security_group_ids = ["${aws_security_group.sg_db_5432_ingress.id}"]
+  db_subnet_group_name   = aws_db_subnet_group.rds_subnet_group.id
+  vpc_security_group_ids = [aws_security_group.sg_db_5432_ingress.id]
   storage_encrypted       = true
 
-  tags                    = {"environment"  = "${terraform.workspace}"}
+  tags                    = {"environment"  = terraform.workspace}
 
   # until we are going live, have it pause
   scaling_configuration {

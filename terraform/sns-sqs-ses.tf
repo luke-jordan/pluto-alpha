@@ -239,3 +239,12 @@ resource "aws_sns_topic_subscription" "user_event_process_queue" {
     ]
   })}"
 }
+
+///////////////// SIMPLE WORKER QUEUE FOR SNIPPET HANDLING ////////
+resource "aws_sqs_queue" "snippet_update_queue" {
+  name = "${terraform.workspace}_snippet_update_queue"
+  visibility_timeout_seconds = 4500
+  tags = {
+    environment = "${terraform.workspace}"
+  }
+}

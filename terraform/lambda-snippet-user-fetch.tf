@@ -35,6 +35,9 @@ resource "aws_lambda_function" "snippet_user_fetch" {
                 "names": {
                     "snippet_worker": "${terraform.workspace}/ops/psql/snippet"
                 }
+              },
+              "publishing": {
+                "snippetQueue": aws_sqs_queue.snippet_update_queue.name
               }
           }
       )}"
@@ -87,6 +90,11 @@ resource "aws_iam_role_policy_attachment" "snippet_user_fetch_basic_execution_po
 resource "aws_iam_role_policy_attachment" "snippet_user_fetch_vpc_execution_policy" {
   role = aws_iam_role.snippet_user_fetch_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
+resource "aws_iam_role_policy_attachment" "snippet_user_fetch_queue_publish_policy" {
+  role = aws_iam_role.snippet_user_fetch_role.name
+  policy_arn = aws_iam_policy.sqs_snippet_update_queue_publish.arn
 }
 
 resource "aws_iam_role_policy_attachment" "snippet_user_fetch_secret_get" {

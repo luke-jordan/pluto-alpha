@@ -145,7 +145,7 @@ module.exports.fetchSnippetsForUser = async (event) => {
 
         if (Array.isArray(uncreatedSnippets) && uncreatedSnippets.length > 0) {
             const snippetIds = uncreatedSnippets.map((snippet) => snippet.snippetId);
-            const queueName = config.get('publishing.userEvents.snippetQueue');
+            const queueName = config.get('publishing.snippetQueue');
             const payload = { snippetIds, userId: systemWideUserId, status: 'FETCHED' };
             
             await publisher.sendToQueue(queueName, [payload]);
