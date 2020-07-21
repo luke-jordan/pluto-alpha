@@ -71,7 +71,7 @@ const baseCaseQueryBuilder = (unit, operatorTranslated) => {
         return `${unit.prop}${operatorTranslated}${unit.value}`;
     }
 
-    if (operatorTranslated === 'in') {
+    if (operatorTranslated === 'in' || operatorTranslated === 'not in') {
         return `${unit.prop} ${operatorTranslated} (${handleInValue(unit.value, unit.valueType)})`;
     }
 
@@ -82,6 +82,10 @@ const conditionsFilterBuilder = (unit) => {
     // base cases
     if (unit.op === 'is') {
         return baseCaseQueryBuilder(unit, '=');
+    }
+
+    if (unit.op === 'not') {
+        return baseCaseQueryBuilder(unit, ' != '); // just so ! has some breathing space
     }
 
     if (unit.op === 'greater_than') {
@@ -102,6 +106,10 @@ const conditionsFilterBuilder = (unit) => {
 
     if (unit.op === 'in') {
         return baseCaseQueryBuilder(unit, 'in');
+    }
+
+    if (unit.op === 'not_in') {
+        return baseCaseQueryBuilder(unit, 'not in');
     }
 
     // end of base cases

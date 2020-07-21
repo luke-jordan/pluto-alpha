@@ -33,6 +33,19 @@ describe('Core SQL query construction from spec JSON', () => {
         expect(result).to.deep.equal(expectedQuery);
     });
 
+    it(`should handle 'not' operator`, async () => {
+        const mockSelectionJSON = { ...rootJSON, conditions: [
+            { 'op': 'not', 'prop': 'transaction_type', 'value': 'USER_SAVING_EVENT' }
+        ]};
+
+        const expectedQuery = `select account_id from transactions where transaction_type != 'USER_SAVING_EVENT' group by account_id`;
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionJSON);
+
+        expect(result).to.exist;
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+
     it(`should handle 'greater_than' operator`, async () => {
         const mockSelectionJSON = Object.assign({}, rootJSON, {
             'conditions': [
@@ -104,6 +117,20 @@ describe('Core SQL query construction from spec JSON', () => {
         };
 
         const expectedQuery = `select account_id from account_data.core_account_ledger where account_id in (${mockAccountId1}, ${mockAccountId2})`;
+        const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionObject);
+        expect(result).to.deep.equal(expectedQuery);
+    });
+
+    it('should handle not in operator, string version', async () => {
+        const mockSelectionObject = { 
+            table: 'account_data.core_account_ledger',
+            columns: ['account_id'],
+            conditions: [{
+                'op': 'not_in', 'prop': 'account_id', 'value': `select from other audience`
+            }]
+        };
+
+        const expectedQuery = `select account_id from account_data.core_account_ledger where account_id not in (select from other audience)`;
         const result = await audienceSelection.extractSQLQueryFromJSON(mockSelectionObject);
         expect(result).to.deep.equal(expectedQuery);
     });

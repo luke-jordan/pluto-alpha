@@ -14,9 +14,16 @@ const proxyquire = require('proxyquire').noCallThru();
 const helper = require('./test.helper');
 
 const executeConditionsStub = sinon.stub();
+const upsertAudienceAccountsStub = sinon.stub();
+const fetchAudienceStub = sinon.stub();
+const deactivateAudienceAccountsStub = sinon.stub();
+
 const audienceHandler = proxyquire('../audience-handler', {
     './persistence': {
         'executeColumnConditions': executeConditionsStub,
+        'upsertAudienceAccounts': upsertAudienceAccountsStub,
+        'fetchAudience': fetchAudienceStub,
+        'deactivateAudienceAccounts': deactivateAudienceAccountsStub,
         '@noCallThru': true
     }
 });
@@ -126,6 +133,109 @@ describe('Audience selection - date based properties', () => {
         expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
     });
 
+    it('Should convert account open X days ago to specific date', async () => {
+        const mockInbound = {
+            clientId: mockClientId,
+            isDynamic: true,
+            conditions: [
+                { prop: 'accountOpenDays', op: 'is', value: 5, type: 'match' }
+            ]
+        };
+
+        const refMoment = moment().subtract(5, 'days'); // _just_ in case run the test over midnight
+        const expectedStart = refMoment.clone().startOf('day').format();
+        const expectedEnd = refMoment.clone().endOf('day').format();
+
+        const expectedSelection = {
+            creatingUserId: mockUserId,
+            table: 'account_data.core_account_ledger',
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'greater_than_or_equal_to', prop: 'creation_time', value: expectedStart },
+                    { op: 'less_than_or_equal_to', prop: 'creation_time', value: expectedEnd },
+                    { op: 'is', prop: 'responsible_client_id', value: mockClientId }
+                ]}
+            ]
+        };
+
+        executeConditionsStub.resolves({ audienceId: 'audience-id', audienceCount: 500 });
+
+        const request = helper.wrapAuthorizedRequest(mockInbound, mockUserId);
+        const result = await audienceHandler.handleInboundRequest(request);
+        helper.standardOkayChecks(result, { audienceId: 'audience-id', audienceCount: 500 });
+
+        const expectedPersistenceParams = {
+            audienceType: 'PRIMARY',
+            clientId: 'test-client-id',
+            creatingUserId: mockUserId,
+            isDynamic: true,
+            propertyConditions: mockInbound.conditions
+        };
+
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersistenceParams, expectedSelection);
+    });
+
+    it('Should properly refresh account open X days ago, and convert ranges, including flip', async () => {
+        const mockAudienceId = 'some-audience-id';
+
+        const testPropertyConditions = [
+            { op: 'and', children: [
+                { prop: 'accountOpenDays', op: 'less_than', value: 5, type: 'match' },
+                { prop: 'accountOpenDays', op: 'greater_than', value: 3, type: 'match' }
+            ]}
+        ];
+        
+        const mockAudience = {
+            clientId: mockClientId,
+            creationTime: moment().subtract(2, 'months').format(),
+            creatingUserId: mockUserId,
+            isDynamic: true,
+            propertyConditions: { conditions: testPropertyConditions }
+        };
+        
+        const invocation = {
+            operation: 'refresh',
+            params: { audienceId: mockAudienceId }
+        };
+
+        const testAudienceAccountIdsList = ['test-account-1', 'test-account-2'];
+
+        fetchAudienceStub.withArgs(mockAudienceId).resolves(mockAudience);
+        deactivateAudienceAccountsStub.withArgs(mockAudienceId).resolves(['test-account-1']);
+
+        // effect of with args is covered by expectations below, which provided better paths for fixing
+        executeConditionsStub.resolves(testAudienceAccountIdsList);
+        upsertAudienceAccountsStub.resolves(testAudienceAccountIdsList);
+
+        const wrappedResult = await audienceHandler.handleInboundRequest(invocation);
+        helper.standardOkayChecks(wrappedResult, { result: `Refreshed audience successfully, audience currently has 2 members` });
+        
+        // note that "greater than 5 days old" actually means "less than the timestamp 3 days ago"
+        const refMoment = moment();
+        const expectedStart = refMoment.clone().subtract(5, 'days').startOf('day').format();
+        // the following makes code cleanest, though may be a little  counter-intuitive (means "less than X days" = "less than or equal to X days")
+        const expectedEnd = refMoment.clone().subtract(3, 'days').startOf('day').format(); 
+
+        const expectedSelection = {
+            creatingUserId: mockUserId,
+            table: 'account_data.core_account_ledger',
+            conditions: [
+                { op: 'and', children: [
+                    { op: 'greater_than_or_equal_to', prop: 'creation_time', value: expectedStart },
+                    { op: 'less_than_or_equal_to', prop: 'creation_time', value: expectedEnd },
+                    { op: 'is', prop: 'responsible_client_id', value: mockClientId }
+                ]}
+            ]
+        };
+        
+        expect(executeConditionsStub).to.have.been.calledOnce;
+        // expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, false); // as upsert does the persisting  
+        
+        const executedArgs = executeConditionsStub.getCall(0).args;
+        expect(executedArgs[0]).to.deep.equal(expectedSelection);
+        expect(executedArgs[1]).to.be.false;
+    });
+
     it('Should make capitalization day interval work time', async () => {
         const testCapitalizationTime = moment();
 
@@ -177,12 +287,6 @@ describe('Audience selection - date based properties', () => {
         const authorizedRequest = helper.wrapAuthorizedRequest(mockSelectionJSON, mockUserId);
         const wrappedResult = await audienceHandler.handleInboundRequest(authorizedRequest);
         helper.standardOkayChecks(wrappedResult, { audienceId: mockAudienceId, audienceCount: 10000 });
-
-        // handy for debugging, if necessary
-        // const passedSelection = executeConditionsStub.getCall(0).args[0];
-        // logger('Passed selection: ', JSON.stringify(passedSelection.conditions, null, 2));
-        // logger('Expected: ', JSON.stringify(expectedSelection.conditions, null, 2))
-        // expect(passedSelection).to.deep.equal(expectedSelection);
 
         expect(executeConditionsStub).to.have.been.calledOnceWithExactly(expectedSelection, true, expectedPersistenceParams);
     });
