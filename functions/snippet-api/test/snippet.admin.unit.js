@@ -113,6 +113,40 @@ describe('*** UNIT TEST ADMIN SNIPPET FUNCTIONS ***', () => {
         [fetchSnippetStub, countSnippetEventsStub].map((stub) => expect(stub).to.have.been.calledOnceWithExactly(testSnippetId));
     });
 
+    it('Handles null on counts (if no events yet)', async () => {
+        const mockSnippet = {
+            snippetId: testSnippetId,
+            createdBy: testAdminId,
+            title: 'Jupiter Snippet 2',
+            body: 'Jupiter positively reinforces saving for tomorrow.',
+            countryCode: 'ZAF',
+            active: true,
+            snippetPriority: 1,
+            snippetLanguage: 'en',
+            previewMode: true
+        };
+
+        const expectedResult = {
+            snippetId: testSnippetId,
+            title: 'Jupiter Snippet 2',
+            body: 'Jupiter positively reinforces saving for tomorrow.',
+            userCount: 0,
+            totalViewCount: 0,
+            totalFetchCount: 0
+        };
+
+        fetchSnippetStub.resolves(mockSnippet);
+        countSnippetEventsStub.resolves(null);
+
+        const testEvent = helper.wrapEvent({ snippetId: testSnippetId }, testAdminId, 'SYSTEM_ADMIN');
+
+        const resultOfFetch = await handler.viewSnippet(testEvent);
+
+        const body = helper.standardOkayChecks(resultOfFetch);
+        expect(body).to.deep.equal(expectedResult);
+        [fetchSnippetStub, countSnippetEventsStub].forEach((stub) => expect(stub).to.have.been.calledOnceWithExactly(testSnippetId));
+    });
+
     it('Routes a read properly', async () => {
         const testEvent = (path) => ({
             httpMethod: 'GET',

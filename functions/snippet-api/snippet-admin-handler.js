@@ -55,7 +55,7 @@ module.exports.viewSnippet = async (event) => {
         ]);
         logger('Got snippet', snippet, 'And event counts:', snippetEventCounts);
 
-        const { sumUsers, sumViews, sumFetches } = snippetEventCounts;
+        const { sumUsers, sumViews, sumFetches } = snippetEventCounts || { sumUsers: 0, sumViews: 0, sumFetches: 0 };
 
         const transformedSnippet = {
             snippetId: snippet.snippetId,
