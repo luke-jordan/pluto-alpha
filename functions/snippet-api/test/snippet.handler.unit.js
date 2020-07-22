@@ -14,8 +14,6 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
-const addFactStub = sinon.stub();
-const updateFactStub = sinon.stub();
 const createSnippetJoinStub = sinon.stub();
 const fetchUncreatedSnippetsStub = sinon.stub();
 const fetchCreatedSnippetsStub = sinon.stub();
@@ -32,12 +30,10 @@ const handler = proxyquire('../snippet-handler', {
         'sendToQueue': queueEventsStub
     },
     './persistence/rds.snippets': {
-        'addSnippet': addFactStub,
         'fetchSnippetUserStatuses': fetchSnippetStatusesStub,
         'incrementCount': incrementStub,
         'updateSnippetStatus': updateSnippetStatusStub,
         'createSnippetUserJoin': createSnippetJoinStub,
-        'updateSnippet': updateFactStub,
         'fetchUncreatedSnippets': fetchUncreatedSnippetsStub,
         'fetchCreatedSnippets': fetchCreatedSnippetsStub,
         'insertSnippetLog': insertLogStub,
@@ -50,7 +46,6 @@ const handler = proxyquire('../snippet-handler', {
 describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
     const testLogId = uuid();
     const testSnippetId = uuid();
-    const testAdminId = uuid();
     const testSystemId = uuid();
 
     const testCreationTime = moment().format();
@@ -61,41 +56,53 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
     });
 
     beforeEach(() => helper.resetStubs(
-        addFactStub, fetchSnippetStatusesStub, incrementStub, updateSnippetStatusStub,
-        createSnippetJoinStub, updateFactStub, fetchUncreatedSnippetsStub, fetchCreatedSnippetsStub, queueEventsStub,
+        fetchSnippetStatusesStub, incrementStub, updateSnippetStatusStub, insertLogStub,
+        createSnippetJoinStub, fetchUncreatedSnippetsStub, fetchCreatedSnippetsStub, queueEventsStub,
         isPreviewUserStub, previewSnippetStub
     ));
 
-    it('Creates a new snippet', async () => {
-        const expectedResult = { result: 'SUCCESS', creationTime: testCreationTime };
-        const expectedSnippet = {
-            createdBy: testAdminId,
-            title: 'Jupiter Snippet 51',
-            body: 'Jupiter helps you save.',
-            countryCode: 'ZAF',
-            active: true,
-            snippetPriority: 1,
-            snippetLanguage: 'en',
-            previewMode: true
+    it('Updates a snippets status properly, API call', async () => {      
+        const mockUserSnippetJoin = {
+            userId: testSystemId,
+            snippetId: 'snippet-id-1',
+            snippetStatus: 'FETCHED',
+            viewCount: 0,
+            fetchCount: 1
         };
 
-        addFactStub.resolves({ creationTime: testCreationTime });
-
-        const eventBody = {
-            title: 'Jupiter Snippet 51',
-            body: 'Jupiter helps you save.',
-            countryCode: 'ZAF'
+        const mockLog = {
+            userId: testSystemId,
+            snippetId: 'snippet-id-1',
+            logType: 'SNIPPET_VIEWED',
+            logContext: {}
         };
 
-        const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
-        const creationResult = await handler.createSnippet(testEvent);
+        fetchSnippetStatusesStub.onFirstCall().resolves(mockUserSnippetJoin);
 
-        const body = helper.standardOkayChecks(creationResult);
-        expect(body).to.deep.equal(expectedResult);
-        expect(addFactStub).to.have.been.calledOnceWithExactly(expectedSnippet);
+        incrementStub.resolves({ viewCount: 1, updatedTime: testUpdatedTime });
+        updateSnippetStatusStub.resolves({ updatedTime: testUpdatedTime });
+        insertLogStub.resolves(testLogId);
+
+        const testEvent = {
+            httpMethod: 'POST',
+            requestContext: { authorizer: { systemWideUserId: testSystemId }},
+            body: JSON.stringify({ snippetId: 'snippet-id-1', status: 'VIEWED' })
+        };
+
+        const resultOfUpdates = await handler.handleSnippetStatusUpdates(testEvent);
+
+        expect(resultOfUpdates).to.deep.equal({
+            statusCode: 200,
+            body: JSON.stringify({ viewCount: 1 })
+        });
+
+        expect(fetchSnippetStatusesStub).to.have.been.calledOnceWithExactly(['snippet-id-1'], testSystemId);
+        expect(incrementStub).to.have.been.calledOnceWithExactly('snippet-id-1', testSystemId, 'VIEWED');
+        expect(updateSnippetStatusStub).to.have.been.calledOnceWithExactly('snippet-id-1', testSystemId, 'VIEWED');
+        expect(insertLogStub).to.have.been.calledWithExactly(mockLog);
     });
 
-    it('Updates a snippets status properly', async () => {      
+    it('Updates a snippets status properly, SQS batch', async () => {      
         const mockUserSnippetJoinRow = (snippetId, initialStatus) => [{
             userId: testSystemId,
             snippetId,
@@ -125,7 +132,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             status: 'VIEWED'
         });
 
-        const resultOfUpdates = await handler.handleBatchSnippetUpdates(testEventBatch);
+        const resultOfUpdates = await handler.handleSnippetStatusUpdates(testEventBatch);
 
         resultOfUpdates.map((result) => expect(result).to.deep.equal({
             result: 'SUCCESS',
@@ -147,6 +154,7 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
             title: 'Jupiter Snippet 1',
             body: 'Jupiter helps you save.',
             fetchCount: 3,
+            active: true,
             viewCount,
             snippetStatus,
             snippetPriority
@@ -248,27 +256,4 @@ describe('*** UNIT TEST SNIPPET HANDLER FUNCTIONS ***', () => {
         expect(queueEventsStub).to.have.not.been.called;
     });
 
-    it('Updates a snippet properly', async () => {
-        const expectedResult = { result: 'SUCCESS', updatedTime: testUpdatedTime };
-        const expectedUpdateParams = {
-            snippetId: testSnippetId,
-            active: true,
-            body: 'Jupiter gives you an annual interest rate of up to 5%.'
-        };
-
-        updateFactStub.resolves({ updatedTime: testUpdatedTime });
-
-        const eventBody = {
-            snippetId: testSnippetId,
-            active: true,
-            body: 'Jupiter gives you an annual interest rate of up to 5%.'
-        };
-
-        const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
-        const resultOfUpdate = await handler.updateSnippet(testEvent);
-
-        const body = helper.standardOkayChecks(resultOfUpdate);
-        expect(body).to.deep.equal(expectedResult);
-        expect(updateFactStub).to.have.been.calledOnceWithExactly(expectedUpdateParams);
-    });
 });

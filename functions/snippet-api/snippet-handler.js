@@ -24,46 +24,6 @@ const snippetSorter = (snippetA, snippetB) => {
 
 const sortSnippets = (snippets) => snippets.sort(snippetSorter);
 
-/**
- * This function creates a new snippet.
- * @param {object} event An admin event.
- * @property {string}  title The snippet title
- * @property {string}  body The main snippet text.
- * @property {boolean} active Optional property that can be used to create inactive snippets. All new snippets are active by default.
- * @property {object}  responseOptions An object containing the possible response options to be displayed with the snippet.
- */
-module.exports.createSnippet = async (event) => {
-    try {
-        const userDetails = opsUtil.extractUserDetails(event);
-        if (userDetails.role !== 'SYSTEM_ADMIN') {
-            return { statusCode: 403 };
-        }
-
-        const systemWideUserId = userDetails.systemWideUserId;
-        const params = opsUtil.extractParamsFromEvent(event);
-        logger('Got params:', params);
-        
-        const snippet = {
-            createdBy: systemWideUserId,
-            title: params.title,
-            body: params.body,
-            countryCode: params.countryCode,
-            active: typeof params.active === 'boolean' ? params.active : true,
-            snippetPriority: params.snippetPriority || 1,
-            snippetLanguage: params.snippetLanguage || 'en',
-            previewMode: typeof params.previewMode === 'boolean' ? params.previewMode : true
-        };
-
-        const creationResult = await persistence.addSnippet(snippet);
-        logger('Result of snippet creation:', creationResult);
-        
-        return opsUtil.wrapResponse({ result: 'SUCCESS', creationTime: creationResult.creationTime });
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse({ error: err.message }, 500);
-    }
-};
-
 const handleSnippetUpdate = async (userId, snippetId, snippetStatus) => {
     // if the snippet has been created for a user this operation returns an object containing the snippets status, i.e. the
     // relationship between a snippet and a user, (e.g. whether the snippet has been fetched or viewed for/by the user before)
@@ -102,12 +62,8 @@ const handleSnippetUpdate = async (userId, snippetId, snippetStatus) => {
  * @property {string} userId The identifier of the user associated with the above snippet ids.
  * @property {string} status The new status. Valid values are FETCHED and VIEWED. 
  */
-module.exports.updateSnippetStateForUser = async (event) => {
+const updateMultipleSnippetsForUser = async (event) => {
     try {
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
-            return { statusCode: 403 };
-        }
-
         const { snippetIds, userId, status } = event;
         const updatePromises = snippetIds.map((snippetId) => handleSnippetUpdate(userId, snippetId, status));
         const resultOfUpdate = await Promise.all(updatePromises);
@@ -119,11 +75,39 @@ module.exports.updateSnippetStateForUser = async (event) => {
     }
 };
 
-// Handles batch calls from SQS to updateSnippetStateForUser as SQS may pull multiple events from multiple users.
-module.exports.handleBatchSnippetUpdates = async (sqsEvent) => {
+const handleSqsEvent = async (sqsEvent) => {
     const sqsEvents = opsUtil.extractSQSEvents(sqsEvent);
-    logger('Got SQS events: ', sqsEvents);
-    return Promise.all(sqsEvents.map((event) => exports.updateSnippetStateForUser(event)));
+    logger('Received SQS events: ', sqsEvents);
+    return Promise.all(sqsEvents.map((event) => updateMultipleSnippetsForUser(event)));
+};
+
+const handleApiEvent = async (event) => {
+    try {
+        logger('Updating snippet user status, with body: ', event.body);
+        const { snippetId, status } = JSON.parse(event.body);
+        const { systemWideUserId: userId } = opsUtil.extractUserDetails(event);
+        const resultOfUpdate = await handleSnippetUpdate(userId, snippetId, status);
+        return { statusCode: 200, body: JSON.stringify(resultOfUpdate) };
+    } catch (err) {
+        return { statusCode: 500, body: JSON.stringify(err) };
+    }
+};
+
+/**
+ * At the moment this can be called by SQS or by API GW. In time we will make API GW just dump into SQS, but later.
+ * @param {event} sqsEvent 
+ */
+module.exports.handleSnippetStatusUpdates = async (event) => {
+    if (Reflect.has(event, 'httpMethod') && event.httpMethod === 'POST') {
+        return handleApiEvent(event);
+    }
+
+    if (event.Records && event.Records.length > 0) {
+        return handleSqsEvent(event);
+    }
+
+    logger('FATAL_ERROR: Unknown event source for handle snippet status updates');
+    return { statusCode: 500 };
 };
 
 /**
@@ -170,36 +154,3 @@ module.exports.fetchSnippetsForUser = async (event) => {
         return opsUtil.wrapResponse({ error: err.message }, 500);
     }
 };
-
-/**
- * This function updates a snippets properties. The only property updates allowed by the this function are
- * the snippets text, title, active status, and priority.
- * @param {object} event User or admin event.
- * @property {string} snippetId The identifer of the snippet to be updated.
- * @property {string} title The value entered here will update the snippet's title.
- * @property {string} body The value entered here will update the main snippet text.
- * @property {boolean} active Can be used to activate or deactivate a snippet.
- * @property {number} snippetPriority Used to update the snippets priority.
- */
-module.exports.updateSnippet = async (event) => {
-    try {
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event)) {
-            return { statusCode: 403 };
-        }
-
-        const { snippetId, title, body, active, priority } = opsUtil.extractParamsFromEvent(event);
-        if (!snippetId || (!title && !body && !priority && typeof active !== 'boolean')) {
-            return { statusCode: 400, body: `Error! 'snippetId' and a snippet property to be updated are required` };
-        }
-        
-        const updateParameters = JSON.parse(JSON.stringify({ snippetId, title, body, active, priority })); // removes keys with undefined values
-        const resultOfUpdate = await persistence.updateSnippet(updateParameters);
-        logger('Result of update:', resultOfUpdate);
-
-        return opsUtil.wrapResponse({ result: 'SUCCESS', updatedTime: resultOfUpdate.updatedTime });
-    } catch (err) {
-        logger('FATAL_ERROR:', err);
-        return opsUtil.wrapResponse({ error: err.message }, 500);
-    }
-};
-
