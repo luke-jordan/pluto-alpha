@@ -108,6 +108,8 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
         helper.itemizedSelectionCheck(executeConditionsStub, expectedPersParams(conditions, 'PRIMARY'), expectedFinalSelection, 1);
     });
 
+    // this one is quite tricky because we have to 'cross' it with 1+ transactions and then invert, so that we end up selecting
+    // people who have 0 offered boosts in the period (good old selecting negative problem)
     it('Handles number of boosts in period', async () => {
         const startTime = moment().subtract(1, 'week');
         const endTime = moment();
@@ -116,40 +118,72 @@ describe('*** TEST BOOST AND FRIEND SELECTION ***', () => {
             clientId: mockClientId,
             isDynamic: false,
             conditions: [{ op: 'and', children: [
-                { prop: 'boostCount', op: 'less_than', value: 2, startTime: startTime.valueOf(), endTime: endTime.valueOf(), type: 'aggregate' }
+                { prop: 'boostCount', op: 'less_than', value: 2, startTime: startTime.valueOf(), endTime: endTime.valueOf(), type: 'match' }
             ]}]
         };
 
-        // note : with multi-clients, may need ot add a sub-clause here to select boosts only with that cleitn
+        // leaving this here for if we come back and end up implementing a proper inverted-intermediate logic
+        // NB : note the operation has flipped from less than to greater than, because we are going to invert this audience
+        // const expectedBoostCountSelection = {
+        //     table: 'boost_data.boost_account_status',
+        //     creatingUserId: mockUserId,
+        //     conditions: [
+        //         { op: 'and', children: [
+        //             { op: 'not', prop: 'boost_status', value: 'CREATED' }, // at present, exclude not-offered event driven or ML
+        //             { op: 'greater_than', prop: 'creation_time', value: startTime.format() },
+        //             { op: 'less_than', prop: 'creation_time', value: endTime.format() }
+        //         ]}
+        //     ],
+        //     groupBy: [
+        //         'account_id'
+        //     ],
+        //     postConditions: [
+        //         { op: 'greater_than_or_equal_to', prop: 'count(boost_id)', value: 2, valueType: 'int' }
+        //     ]
+        // };
+
+        // executeConditionsStub.onFirstCall().resolves({ audienceId: 'inverted-audience-id', audienceCount: 25 });
+
+        // const intermQuery = `select account_id from audience_data.audience_account_join where audience_id = 'inverted-audience-id' and active = true`;
+        // // then in here we are going to do an exclusion on the aggregate
+        // const expectedFlippedSelection = {
+        //     table: 'transaction_data.core_transaction_ledger',
+        //     creatingUserId: mockUserId,
+        //     conditions: [
+        //         { op: 'and', children: [
+        //             { prop: 'account_id', op: 'not_in', value: intermQuery },
+        //             { prop: 'client_id', op: 'is', value: mockClientId }
+        //         ]}
+        //     ]
+        // };
+
+        // this is a hacky way to do this but is simplest at present, without implementing whole intermediate-flip logic (come back to)
+        // note : avoid this becoming a pattern, or will lead to a lot of nasty fragile subqueries; if need again, implement intermediate-flip
+        // note : still need to flip the operator because this will enter under 'not in'
+        const expectedSubQuery = `select account_id from boost_data.boost_account_status where boost_status != 'CREATED' and ` + 
+            `creation_time between '${startTime.format()}' and '${endTime.format()}' group by account_id having count(boost_id) >= 2`;
+        
         const expectedBoostCountSelection = {
-            table: 'boost_data.boost_account_status',
+            table: 'transaction_data.core_transaction_ledger',
             creatingUserId: mockUserId,
             conditions: [
                 { op: 'and', children: [
-                    { op: 'not', prop: 'boost_account_status', value: 'CREATED' }, // at present, exclude not-offered event driven or ML
-                    { op: 'greater_than', prop: 'creation_time', value: startTime.format() },
-                    { op: 'less_than', prop: 'creation_time', value: endTime.format() }
+                    { prop: 'account_id', op: 'not_in', value: expectedSubQuery },
+                    { prop: 'client_id', op: 'is', value: mockClientId }
                 ]}
-            ],
-            groupBy: [
-                'account_id'
-            ],
-            postConditions: [
-                { op: 'less_than', prop: 'count(boost_id)', value: 2, valueType: 'int' }
             ]
         };
 
-        executeConditionsStub.onFirstCall().resolves({ audienceId: 'audience-id', audienceCount: 25 });
-        executeConditionsStub.onSecondCall().resolves({ audienceId: 'final-audience', audienceCount: 25 });
+        executeConditionsStub.resolves({ audienceId: 'final-audience', audienceCount: 100 });
 
         const request = helper.wrapAuthorizedRequest(mockInbound, mockUserId);
         const result = await audienceHandler.handleInboundRequest(request);
         
-        helper.standardOkayChecks(result, { audienceId: 'final-audience', audienceCount: 25 });
+        helper.standardOkayChecks(result, { audienceId: 'final-audience', audienceCount: 100 });
         
         const { conditions } = mockInbound;
-        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersParams(conditions, 'INTERMEDIATE'), expectedBoostCountSelection);
-        // final primary call covered a lot elsewhere (and handily places a client restriction on)
+        expect(executeConditionsStub).to.have.been.calledOnce;
+        helper.itemizedSelectionCheck(executeConditionsStub, expectedPersParams(conditions, 'PRIMARY'), expectedBoostCountSelection);
     });
 
     // going to be a bit more complex because of the issues with the friend counting, so come back to it
