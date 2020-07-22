@@ -80,10 +80,10 @@ module.exports.stdProperties = {
         entity: 'boost'
     },
     boostCount: {
-        type: 'aggregate',
+        type: 'match', // see below for reasons (we use a subquery to deal with non-existence, though if used again becomes an anti-pattern)
         description: 'Number offered boosts',
         expects: 'number',
-        table: 'boostTable'
+        table: 'transactionTable' // see below for need to select non-existent in boost table etc.
     },
     boostOffered: {
         type: 'aggregate', // because we allow inversions, we classify as aggregate, though it is actually match
@@ -223,23 +223,26 @@ module.exports.convertBoostAllButCreated = (condition) => {
     ]};
 };
 
+// bit of a monster because we need to pick up the non-existent in the boost table (i.e., count = 0), if this is less than
+// hence we, this once, use a subquery directly in a primary convertor, but if needed again, instead implement a flag for
+// inverted combinations, i.e., this is an aggregate and then do a not-in on intermediate audience
 module.exports.convertBoostNumber = (condition) => {
     const startTime = condition.startTime ? moment(condition.startTime) : moment(0);
     const endTime = condition.endTime ? moment(condition.endTime) : moment();
 
-    const conditions = [{ op: 'and', children: [
-        { op: 'not', prop: 'boost_account_status', value: 'CREATED' }, // at present, exclude not-offered event driven or ML
-        { op: 'greater_than', prop: 'creation_time', value: startTime.format() },
-        { op: 'less_than', prop: 'creation_time', value: endTime.format() }
-    ]}];
+    // note on status: at present we do not count status CREATED because that might pick up accounts not-yet-offered but
+    // part of an ML-determined or event-driven boost that has not triggered for them yet
+    
+    const { op: passedOp } = condition;
+    // eslint-disable-next-line no-nested-ternary
+    const invertedOp = passedOp === 'is' ? '!=' : (passedOp === 'greater_than' ? '<=' : '>=');
+    const subQuery = `select account_id from ${config.get('tables.boostTable')} where boost_status != 'CREATED' and ` + 
+        `creation_time between '${startTime.format()}' and '${endTime.format()}' group by account_id ` +
+        `having count(boost_id) ${invertedOp} ${parseInt(condition.value, 10)}`;
 
-    return { 
-        conditions,
-        groupBy: ['account_id'],
-        postConditions: [
-            { op: condition.op, prop: 'count(boost_id)', value: parseInt(condition.value, 10), valueType: 'int' }
-        ]
-    };
+    const conditions = [{ op: 'not_in', prop: 'account_id', value: subQuery }];
+
+    return { conditions };
 };
 
 module.exports.convertNumberFriends = (condition) => {
