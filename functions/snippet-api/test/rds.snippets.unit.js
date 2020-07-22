@@ -48,6 +48,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         'snippet_id': testSnippetId,
         'title': 'Jupiter Snippet #21',
         'body': 'Jupiter helps you save.',
+        'active': true,
         'snippet_priority': 2,
         'creation_time': testCreationTime,
         'updated_time': testUpdatedTime,
@@ -105,7 +106,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
     });
 
     it('Fetches user-snippet statuses from join table', async () => {
-        const mockSnippetDetailsFromRds = {
+        const mockSnippetJoinRaw = {
             'user_id': testSystemId,
             'snippet_id': testSnippetId,
             'snippet_status': 'FETCHED',
@@ -127,7 +128,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
 
         const selectQuery = `select * from snippet_data.snippet_user_join_table where user_id = $1 and snippet_id in ($2, $3)`;
 
-        queryStub.resolves([mockSnippetDetailsFromRds, mockSnippetDetailsFromRds]);
+        queryStub.resolves([mockSnippetJoinRaw, mockSnippetJoinRaw]);
 
         const resultOfFetch = await rds.fetchSnippetUserStatuses([testSnippetId, testSnippetId], testSystemId);
 
@@ -142,7 +143,8 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         const expectedSnippet = {
             snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
-            text: 'Jupiter helps you save.',
+            body: 'Jupiter helps you save.',
+            active: true,
             fetchCount: 0,
             viewCount: 0,
             snippetStatus: 'UNCREATED',
@@ -167,7 +169,8 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         const expectedSnippet = {
             snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
-            text: 'Jupiter helps you save.',
+            body: 'Jupiter helps you save.',
+            active: true,
             fetchCount: 0,
             viewCount: 0,
             snippetStatus: 'VIEWED',
@@ -189,7 +192,8 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         const expectedSnippet = {
             snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
-            text: 'Jupiter helps you save.',
+            body: 'Jupiter helps you save.',
+            active: true,
             fetchCount: 0,
             viewCount: 0,
             snippetStatus: 'UNCREATED',
@@ -385,6 +389,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
             snippetId: testSnippetId,
             title: 'Jupiter Snippet #21',
             body: 'Jupiter helps you save.',
+            active: true,
             snippetPriority: 2,
             creationTime: testCreationTime,
             updatedTime: testUpdatedTime,

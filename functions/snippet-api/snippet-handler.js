@@ -131,9 +131,9 @@ module.exports.fetchSnippetsForUser = async (event) => {
             const snippetIds = uncreatedSnippets.map((snippet) => snippet.snippetId);
             const queueName = config.get('publishing.snippetQueue');
             const payload = { snippetIds, userId: systemWideUserId, status: 'FETCHED' };
-            
             await publisher.sendToQueue(queueName, [payload]);
-            return opsUtil.wrapResponse(sortSnippets(uncreatedSnippets));
+
+            return opsUtil.wrapResponse({ type: 'UNSEEN', snippets: sortSnippets(uncreatedSnippets) });
         }
 
         const isPreviewUser = await persistence.isPreviewUser(systemWideUserId);
@@ -142,13 +142,13 @@ module.exports.fetchSnippetsForUser = async (event) => {
         if (isPreviewUser) {
             const previewSnippets = await persistence.fetchPreviewSnippets();
             logger('Found preview snippets:', previewSnippets);
-            return opsUtil.wrapResponse(sortSnippets(previewSnippets));
+            return opsUtil.wrapResponse({ type: 'ALL', snippets: sortSnippets(previewSnippets) });
         }
      
         const createdSnippets = await persistence.fetchCreatedSnippets(systemWideUserId);
         logger('Found created snippets:', createdSnippets);
 
-        return opsUtil.wrapResponse(sortSnippets(createdSnippets));
+        return opsUtil.wrapResponse({ type: 'ALL', snippets: sortSnippets(createdSnippets) });
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return opsUtil.wrapResponse({ error: err.message }, 500);

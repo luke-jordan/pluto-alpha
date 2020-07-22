@@ -20,7 +20,8 @@ const previewUserTable = config.get('tables.previewUserTable');
 const transformSnippet = (snippet) => ({
     snippetId: snippet.snippetId || snippet.snippetDataSnippetSnippetId,
     title: snippet.title,
-    text: snippet.body,
+    body: snippet.body,
+    active: snippet.active,
     fetchCount: snippet.fetchCount || 0,
     viewCount: snippet.viewCount || 0,
     snippetStatus: snippet.snippetStatus || 'UNCREATED',
