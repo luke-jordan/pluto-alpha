@@ -89,7 +89,8 @@ const handleApiEvent = async (event) => {
         const resultOfUpdate = await handleSnippetUpdate(userId, snippetId, status);
         return { statusCode: 200, body: JSON.stringify(resultOfUpdate) };
     } catch (err) {
-        return { statusCode: 500, body: JSON.stringify(err) };
+        logger('FATAL_ERROR: ', err);
+        return { statusCode: 500, body: JSON.stringify(err.message) };
     }
 };
 

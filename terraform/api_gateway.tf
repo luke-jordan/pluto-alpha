@@ -1114,7 +1114,7 @@ resource "aws_api_gateway_resource" "snippet_user_update" {
 resource "aws_api_gateway_method" "snippet_user_update" {
   rest_api_id   = aws_api_gateway_rest_api.api_gateway.id
   resource_id   = aws_api_gateway_resource.snippet_user_update.id
-  http_method   = "GET"
+  http_method   = "POST"
   authorization = "CUSTOM"
   authorizer_id = aws_api_gateway_authorizer.jwt_authorizer.id
 }

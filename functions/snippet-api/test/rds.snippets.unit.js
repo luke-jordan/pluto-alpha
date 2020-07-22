@@ -177,7 +177,9 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
             snippetPriority: 2
         };
 
-        const selectQuery = `select * from snippet_data.snippet_user_join_table inner join snippet_data.snippet where user_id = $1 and active = $2`;           
+        const selectQuery = `select * from snippet_data.snippet_user_join_table inner join snippet_data.snippet ` +
+            `on snippet_data.snippet_user_join_table.snippet_id = snippet_data.snippet.snippet_id ` +
+            `where user_id = $1 and active = $2`;           
         
         queryStub.resolves([snippetFromRds, snippetFromRds]);
 

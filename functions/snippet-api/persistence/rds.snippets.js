@@ -74,8 +74,10 @@ module.exports.createSnippetUserJoin = async (snippetId, userId) => {
 // Fetches a snippet reference from the user-snippet join table created above.
 module.exports.fetchSnippetUserStatuses = async (snippetIds, userId) => {
     const selectQuery = `select * from ${snippetJoinTable} where user_id = $1 and snippet_id in (${opsUtil.extractArrayIndices(snippetIds, 2)})`;
-    logger('Fetching snippets with query:', selectQuery);
-    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [userId, ...snippetIds]);
+    const queryValues = [userId, ...snippetIds];
+    logger('Fetching snippets with query:', selectQuery, ' and values: ', queryValues);
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, queryValues);
+    logger('Retrieved: ', resultOfFetch);
     return resultOfFetch.length > 0 ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
 };
 
@@ -126,7 +128,9 @@ module.exports.fetchUncreatedSnippets = async (systemWideUserId) => {
  * @param {string} systemWideUserId The user for whom the snippets are sought.
  */
 module.exports.fetchCreatedSnippets = async (systemWideUserId) => {
-    const selectQuery = `select * from ${snippetJoinTable} inner join ${snippetTable} where user_id = $1 and active = $2`;
+    const selectQuery = `select * from ${snippetJoinTable} inner join ${snippetTable} ` + 
+        `on ${snippetJoinTable}.snippet_id = ${snippetTable}.snippet_id ` +
+        `where user_id = $1 and active = $2`;
     logger('Fetching unread snippets with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId, true]);
     return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result)));
