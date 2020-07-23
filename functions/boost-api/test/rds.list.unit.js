@@ -193,6 +193,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
 
     const testStartTime = moment();
     const testEndTime = moment();
+    const testStatusUpdatedTime = moment();
     
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
 
@@ -210,6 +211,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         'for_client_id': 'some_client_co',
         'start_time': testStartTime.format(),
         'end_time': testEndTime.format(),
+        'updated_time': testStatusUpdatedTime.format(),
         'status_conditions': testStatusCondition,
         'initial_status': 'PENDING'
     };
@@ -222,8 +224,8 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         queryStub.resolves([boostFromPersistence, boostFromPersistence]);
 
         const expectedColumns = [
-            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
-            'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'boost_data.boost_account_status.updated_time', 
+            'active', 'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
         ];
     
@@ -244,7 +246,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const dummyTime = moment().subtract(2, 'minutes');
 
         const expectedColumns = [
-            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'boost_data.boost_account_status.updated_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
         ];
@@ -266,7 +268,7 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         queryStub.resolves([boostFromPersistence]);
 
         const expectedColumns = [
-            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'boost_data.boost_account_status.updated_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
         ];
