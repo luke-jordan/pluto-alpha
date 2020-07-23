@@ -241,15 +241,15 @@ const calculateYield = (boostAmountDetails) => {
 };
 
 /**
- * This function calculates how much boost generates how much saved amount.
+ * This function calculates boost yields, i.e how much boost generates how much saved amount.
  */
 module.exports.calculateBoostYields = async (event) => {
     try {
         const { boostIds } = opsUtil.extractParamsFromEvent(event);
 
-        const boostAndSavedAmount = await persistence.sumBoostAndSavedAmounts(boostIds);
-        logger('Got boost amounts and amounts from bonus pool:', boostAndSavedAmount);
-        const boostYields = boostAndSavedAmount.map((boostAmountDetails) => calculateYield(boostAmountDetails));
+        const boostAndSavedAmounts = await persistence.sumBoostAndSavedAmounts(boostIds);
+        logger('Got boost amounts and amounts from bonus pool:', boostAndSavedAmounts);
+        const boostYields = boostAndSavedAmounts.map((boostAmountDetails) => calculateYield(boostAmountDetails));
 
         return util.wrapHttpResponse({ boostYields });
     } catch (err) {
