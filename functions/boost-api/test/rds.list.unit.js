@@ -405,4 +405,29 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
 
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, [testBoostId, 'GAME_RESPONSE']);
     });
+
+    it('Sums boost and saved amounts', async () => {
+        const sumQuery = `select boost_id, sum(cast(log_context->>'boostAmount' as bigint)) as boost_amount, ` +
+            `sum(cast(log_context->>'savedWholeCurrency' as bigint)) as saved_whole_currency from ` +
+            `boost_data.boost_log where log_context ->> 'newStatus' = $1 and ` + 
+            `log_context ->> 'boostAmount' ~ E'^\\\\d+$' and log_context ->> 'savedWholeCurrency' ~ E'^\\\\d+$'` + 
+            `boost_id in ($2, $3) group by boost_id`;
+            
+        queryStub.resolves([
+            { 'boost_id': 'boost-id-1', 'boost_amount': 10000, 'saved_whole_currency': 100 },
+            { 'boost_id': 'boost-id-2', 'boost_amount': 20000, 'saved_whole_currency': 200 }
+        ]);
+
+        const testBoostIds = ['boost-id-1', 'boost-id-2'];
+
+        const resultOfSum = await rds.sumBoostAndSavedAmounts(testBoostIds);
+        expect(resultOfSum).to.exist;
+
+        const expectedResult = [
+            { boostId: 'boost-id-1', boostAmount: 10000, savedWholeCurrency: 100 },
+            { boostId: 'boost-id-2', boostAmount: 20000, savedWholeCurrency: 200 }
+        ];
+        expect(resultOfSum).to.deep.equal(expectedResult);
+        expect(queryStub).to.have.been.calledOnceWithExactly(sumQuery, ['REDEEMED', 'boost-id-1', 'boost-id-2']);
+    });
 });

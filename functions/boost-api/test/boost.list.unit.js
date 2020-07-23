@@ -14,6 +14,7 @@ const helper = require('./boost.test.helper');
 const fetchMultiBoostsStub = sinon.stub();
 const findAccountsStub = sinon.stub();
 const fetchBoostLogsStub = sinon.stub();
+const sumAmountsStub = sinon.stub();
 
 const fetchBoostDetailsStub = sinon.stub();
 const fetchTournScoresStub = sinon.stub();
@@ -28,7 +29,7 @@ const handler = proxyquire('../boost-list-handler', {
         'fetchUserBoosts': fetchMultiBoostsStub,
         'findAccountsForUser': findAccountsStub,
         'fetchUserBoostLogs': fetchBoostLogsStub,
-
+        'sumBoostAndSavedAmounts': sumAmountsStub,
         'fetchBoostDetails': fetchBoostDetailsStub,
         'fetchBoostScoreLogs': fetchTournScoresStub,
         
@@ -335,6 +336,30 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
         expect(fetchTournScoresStub).to.not.have.been.called;
         expect(cacheMultiGetStub).to.not.have.been.called;    
 
+    });
+
+    it('Calculates boost yields', async () => {
+        sumAmountsStub.resolves([
+            { boostId: 'boost-id-1', boostAmount: 100000, savedWholeCurrency: 500 },
+            { boostId: 'boost-id-1', boostAmount: 200000, savedWholeCurrency: 1000 },
+            { boostId: 'boost-id-1', boostAmount: 500000, savedWholeCurrency: 1500 }
+        ]);
+
+        const boostIds = ['boost-id-1', 'boost-id-2', 'boost-id-3'];
+
+        const resultOfCalc = await handler.calculateBoostYields(wrapEvent({ boostIds }));
+        logger('Result of boost yield calculations:', resultOfCalc);
+
+        const resultBody = helper.standardOkayChecks(resultOfCalc, true);
+
+        const expectedResult = { boostYields: [
+            { boostId: 'boost-id-1', boostYield: 0.02 },
+            { boostId: 'boost-id-1', boostYield: 0.02 },
+            { boostId: 'boost-id-1', boostYield: 0.03333333333333333 }
+        ]};
+
+        expect(resultBody).to.deep.equal(expectedResult);
+        expect(sumAmountsStub).to.have.been.calledOnceWithExactly(boostIds);
     });
     
 });

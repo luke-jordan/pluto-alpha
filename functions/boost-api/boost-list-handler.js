@@ -232,3 +232,28 @@ module.exports.fetchBoostDetails = async (event) => {
         return util.wrapHttpResponse({ error: err.message }, 500);
     }
 };
+
+const calculateYield = (boostAmountDetails) => {
+    const { boostId, boostAmount, savedWholeCurrency } = boostAmountDetails;
+    const savedAmount = opsUtil.convertToUnit(savedWholeCurrency, 'WHOLE_CURRENCY', 'HUNDREDTH_CENT');
+    const boostYield = boostAmount / savedAmount;
+    return { boostId, boostYield };
+};
+
+/**
+ * This function calculates how much boost generates how much saved amount.
+ */
+module.exports.calculateBoostYields = async (event) => {
+    try {
+        const { boostIds } = opsUtil.extractParamsFromEvent(event);
+
+        const boostAndSavedAmount = await persistence.sumBoostAndSavedAmounts(boostIds);
+        logger('Got boost amounts and amounts from bonus pool:', boostAndSavedAmount);
+        const boostYields = boostAndSavedAmount.map((boostAmountDetails) => calculateYield(boostAmountDetails));
+
+        return util.wrapHttpResponse({ boostYields });
+    } catch (err) {
+        logger('FATAL_ERROR: ', err);
+        return util.wrapHttpResponse({ error: err.message }, 500);
+    }
+};
