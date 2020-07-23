@@ -88,7 +88,7 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
     
     const columns = [
-        `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'active',
+        `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', `${boostAccountJoinTable}.updated_time`, 'active',
         'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
         'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', `${boostMainTable}.flags`
     ];

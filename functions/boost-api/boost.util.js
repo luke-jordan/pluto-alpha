@@ -31,11 +31,13 @@ module.exports.statusSorter = (status1, status2) => exports.ALL_BOOST_STATUS_SOR
 const timeBasedConditions = ['event_does_follow', 'event_does_not_follow'];
     
 // two helper filters to try make this easier to maintain/follow
-module.exports.conditionIsTimeBased = (condition) => timeBasedConditions.some((timeBasedCondition) => condition.startsWith(timeBasedCondition));
+module.exports.conditionIsTimeBased = (condition) => timeBasedConditions.
+    some((timeBasedCondition) => typeof condition === 'string' && condition.startsWith(timeBasedCondition));
 module.exports.oneConditionTimeBased = (conditions) => conditions.some((condition) => exports.conditionIsTimeBased(condition));
 
 module.exports.hasTimeBasedConditions = (boost) => {
     const { statusConditions } = boost;
+    logger('*** STATUS CONDITIONS: ', statusConditions);
     return Object.values(statusConditions).some((conditions) => exports.oneConditionTimeBased(conditions));
 };
 
