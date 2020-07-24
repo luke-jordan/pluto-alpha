@@ -277,8 +277,6 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
             JSON.stringify({ systemWideUserId: 'user-2', personalName: 'Some', familyName: 'Person' })
         ]);
 
-        sumAmountsStub.resolves([{ boostId: testBoostId, boostAmount: 100000, savedWholeCurrency: 1000 }]);
-
         const resultOfListing = await handler.fetchBoostDetails(wrapEvent({ boostId: testBoostId }, testUserId));
 
         const bodyOfResult = helper.standardOkayChecks(resultOfListing);
@@ -381,7 +379,7 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
 
         expect(cacheGetStub).to.have.been.calledOnceWithExactly(`ACCOUNT_ID::admin-id`);
         const cacheMultiGetArgs = ['FRIEND_PROFILE::user-id-1', 'FRIEND_PROFILE::user-id-2', 'FRIEND_PROFILE::user-id-3'];
-        
+
         expect(cacheMultiGetStub).to.have.been.calledOnceWithExactly(cacheMultiGetArgs);
         expect(findAccountsStub).to.have.been.calledOnceWithExactly('admin-id');
         expect(fetchBoostDetailsStub).to.have.been.calledOnceWithExactly('boost-id-1', true);
