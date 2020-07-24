@@ -200,6 +200,20 @@ const fetchScoreLogsForBoost = async (boostId, systemWideUserId) => {
     return transformedLogs;
 };
 
+const calculateYield = (boostAmountDetails) => {
+    const { boostId, boostAmount, savedWholeCurrency } = boostAmountDetails;
+    const savedAmount = opsUtil.convertToUnit(savedWholeCurrency, 'WHOLE_CURRENCY', 'HUNDREDTH_CENT');
+    const boostYield = boostAmount / savedAmount;
+    return { boostId, boostYield };
+};
+
+// Calculates boost yields, i.e how much boost generates how much saved amount.
+const calculateBoostYield = async (boostId) => {
+    const boostAndSavedAmount = await persistence.sumBoostAndSavedAmounts([boostId]);
+    logger('Got boost amounts and saved amounts:', boostAndSavedAmount);
+    return boostAndSavedAmount.map((boostAmountDetails) => calculateYield(boostAmountDetails));
+};
+
 /**
  * This method provides the details of a boost, including (if a friend tournament), the score logs
  */
@@ -222,36 +236,12 @@ module.exports.fetchBoostDetails = async (event) => {
 
         if (role === 'SYSTEM_ADMIN' || boost.flags.includes('FRIEND_TOURNAMENT')) {
             boost.tournamentScores = await fetchScoreLogsForBoost(boostId, systemWideUserId);
+            boost.boostYields = await calculateBoostYield(boostId);
         }
 
         logger('Returning assembled boost: ', boost);
         return util.wrapHttpResponse(boost);
 
-    } catch (err) {
-        logger('FATAL_ERROR: ', err);
-        return util.wrapHttpResponse({ error: err.message }, 500);
-    }
-};
-
-const calculateYield = (boostAmountDetails) => {
-    const { boostId, boostAmount, savedWholeCurrency } = boostAmountDetails;
-    const savedAmount = opsUtil.convertToUnit(savedWholeCurrency, 'WHOLE_CURRENCY', 'HUNDREDTH_CENT');
-    const boostYield = boostAmount / savedAmount;
-    return { boostId, boostYield };
-};
-
-/**
- * This function calculates boost yields, i.e how much boost generates how much saved amount.
- */
-module.exports.calculateBoostYields = async (event) => {
-    try {
-        const { boostIds } = opsUtil.extractParamsFromEvent(event);
-
-        const boostAndSavedAmounts = await persistence.sumBoostAndSavedAmounts(boostIds);
-        logger('Got boost amounts and amounts from bonus pool:', boostAndSavedAmounts);
-        const boostYields = boostAndSavedAmounts.map((boostAmountDetails) => calculateYield(boostAmountDetails));
-
-        return util.wrapHttpResponse({ boostYields });
     } catch (err) {
         logger('FATAL_ERROR: ', err);
         return util.wrapHttpResponse({ error: err.message }, 500);
