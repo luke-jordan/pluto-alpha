@@ -169,6 +169,11 @@ module.exports.listChangedBoosts = async (event) => {
 // route to list friend tournament for user means tournament details are first; if not (i.e., admin call), then name not essential
 // NOTE: this also means we use the FRIEND_PROFILE namespace (as in default config), because that caches a restricted set vs own-user cache
 const obtainUserNames = async (userIds, thisUserId) => {
+    if (!userIds || userIds.length === 0) {
+        // seems to have happened once or twice
+        return {};
+    }
+
     const cachedProfiles = await redis.mget(userIds.map((userId) => `${config.get('cache.prefix.profile')}::${userId}`));
     logger('Cached profiles: ', cachedProfiles);
     const cachedNames = cachedProfiles.map((cachedProfile, index) => {

@@ -59,8 +59,9 @@ const testAccountId = uuid();
 describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
     const testStatusCondition = { REDEEMED: [`save_completed_by #{${uuid()}}`, `first_save_by #{${uuid()}}`] };
 
-    const testStartTime = moment();
+    const testStartTime = moment().subtract(1, 'week');
     const testEndTime = moment().add(1, 'week');
+    const testUpdatedTime = moment().subtract(1, 'day');
 
     const mockBoostFromRds = {
         boostId: testBoostId,
@@ -77,6 +78,7 @@ describe('*** UNIT TEST USER BOOST LIST HANDLER ***', () => {
         forClientId: 'some_client_co',
         startTime: testStartTime.format(),
         endTime: testEndTime.format(),
+        updatedTime: testUpdatedTime.format(),
         statusConditions: testStatusCondition,
         boostStatus: 'OFFERED'
     };
