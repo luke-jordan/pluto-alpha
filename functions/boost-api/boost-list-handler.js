@@ -206,9 +206,9 @@ const fetchScoreLogsForBoost = async (boostId, systemWideUserId) => {
 };
 
 const calculateYield = (boostAmountDetails) => {
-    const { boostId, boostAmount, savedWholeCurrency } = boostAmountDetails;
-    const savedAmount = opsUtil.convertToUnit(savedWholeCurrency, 'WHOLE_CURRENCY', 'HUNDREDTH_CENT');
-    const boostYield = boostAmount / savedAmount;
+    const { boostId, sumOfBoostAmount, sumOfSaved } = boostAmountDetails;
+    const sumOfSavedAmount = opsUtil.convertToUnit(sumOfSaved, 'WHOLE_CURRENCY', 'HUNDREDTH_CENT');
+    const boostYield = sumOfBoostAmount / sumOfSavedAmount;
     return { boostId, boostYield };
 };
 

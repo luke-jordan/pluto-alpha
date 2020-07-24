@@ -357,17 +357,18 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
         ];
         fetchTournScoresStub.resolves(mockTournLogs);
 
-        cacheMultiGetStub.resolves([null, null, null]);
-        sumAmountsStub.resolves([{ boostId: 'boost-id-1', boostAmount: 100000, savedWholeCurrency: 500 }]);
+        cacheMultiGetStub.resolves([null, null, JSON.stringify({ systemWideUserId: 'user-id-3', personalName: 'Some', familyName: 'Person' })]);
+        sumAmountsStub.resolves([{ boostId: 'boost-id-1', sumOfBoostAmount: 100000, sumOfSaved: 500 }]);
 
         const resultOfCalc = await handler.fetchBoostDetails(wrapEvent({ boostId: 'boost-id-1' }, 'admin-id', 'SYSTEM_ADMIN'));
         const resultBody = helper.standardOkayChecks(resultOfCalc, true);
 
         const expectedYields = { boostYields: [{ boostId: 'boost-id-1', boostYield: 0.02 }]};
+
         const expectedTournScores = { tournamentScores: [
             { playerName: 'Player 1', playerScore: 13 },
             { playerName: 'Player 2', playerScore: 21 },
-            { playerName: 'Player 3', playerScore: 34 }
+            { playerName: 'Some Person', playerScore: 34 }
         ]};
 
         const expectedResult = { ...mockFriendTournBoost, ...expectedTournScores, ...expectedYields };
@@ -376,11 +377,11 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
         expect(sumAmountsStub).to.have.been.calledOnceWithExactly(['boost-id-1']);
 
         expect(fetchTournScoresStub).to.have.been.calledOnceWithExactly('boost-id-1');
-
         expect(cacheGetStub).to.have.been.calledOnceWithExactly(`ACCOUNT_ID::admin-id`);
-        const cacheMultiGetArgs = ['FRIEND_PROFILE::user-id-1', 'FRIEND_PROFILE::user-id-2', 'FRIEND_PROFILE::user-id-3'];
 
+        const cacheMultiGetArgs = ['FRIEND_PROFILE::user-id-1', 'FRIEND_PROFILE::user-id-2', 'FRIEND_PROFILE::user-id-3'];
         expect(cacheMultiGetStub).to.have.been.calledOnceWithExactly(cacheMultiGetArgs);
+
         expect(findAccountsStub).to.have.been.calledOnceWithExactly('admin-id');
         expect(fetchBoostDetailsStub).to.have.been.calledOnceWithExactly('boost-id-1', true);
     });

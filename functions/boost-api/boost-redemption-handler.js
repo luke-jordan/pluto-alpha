@@ -63,8 +63,10 @@ const calculateRandomBoostAmount = (boost) => {
     const multiplier = generateMultiplier(distribution);
     // eslint-disable-next-line no-mixed-operators
     let calculatedBoostAmount = multiplier * (boostAmount - minBoostAmount) + minBoostAmount;
-    while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
-        calculatedBoostAmount += 10;
+    if (realizedRewardModuloZeroTarget) {
+        while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
+            calculatedBoostAmount += 10;
+        }
     }
 
     // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount or less than min amount
