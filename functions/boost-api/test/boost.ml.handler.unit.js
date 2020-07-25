@@ -82,7 +82,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
         defaultStatus: 'CREATED',
-        messageInstructions: [{ instructionId: testInstructionId, status: 'OFFERED', accountId: 'ALL' }],
+        messageInstructions: [{ msgInstructionId: testInstructionId, status: 'OFFERED', accountId: 'ALL' }],
         mlParameters
     });
 
@@ -174,7 +174,11 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const audiencePayload = { operation: 'refresh', params: { audienceId: testAudienceId }};
         const audienceInvocation = helper.wrapLambdaInvoc('audience_selection', false, audiencePayload);
 
-        const msgInstruction = { destinationUserId: 'user-id-1', instructionId: testInstructionId, parameters: mockMlBoostFromRds(mlParameters) };
+        const msgInstruction = { 
+            destinationUserId: 'user-id-1', 
+            instructionId: testInstructionId, 
+            parameters: mockMlBoostFromRds(mlParameters) 
+        };
         const msgInvocation = helper.wrapLambdaInvoc('message_user_create_once', true, { instructions: [msgInstruction] });
 
         const mockBoostLog = (accountId) => ({
