@@ -23,8 +23,7 @@ const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) =
 
 const transformBoostFromRds = (boost) => {
     const transformedBoost = camelizeKeys(boost);
-    // logger('Working? : ', transformedBoost);
-    transformedBoost.messageInstructions = transformedBoost.messageInstructionIds.instructions;
+    transformedBoost.messageInstructions = transformedBoost.messageInstructionIds ? transformedBoost.messageInstructionIds.instructions : [];
     // transformedBoost.statusConditions = JSON.parse(transformedBoost.statusConditions);
     transformedBoost.boostStartTime = moment(transformedBoost.startTime);
     transformedBoost.boostEndTime = moment(transformedBoost.endTime);
@@ -213,7 +212,7 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
 };
 
 module.exports.findLastLogForBoost = async (boostId, accountId, logType) => {
-    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 ` +
+    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 and ` +
         `log_type = $3 order by creation_time desc limit 1`;
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId, logType]);
     return Array.isArray(resultOfQuery) && resultOfQuery.length > 0
@@ -598,5 +597,5 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
 module.exports.fetchActiveMlBoosts = async () => {
     const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
     const resultOfQuery = await rdsConnection.selectQuery(query, []);
-    return resultOfQuery.map((row) => camelizeKeys(row));
+    return resultOfQuery.map(transformBoostFromRds);
 };

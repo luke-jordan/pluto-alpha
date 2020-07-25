@@ -21,7 +21,7 @@ const invokeLambda = async (payload, functionKey, sync = false) => {
 
 const assembleListOfMsgInstructions = ({ userIds, instructionIds, parameters }) => userIds.
     map((destinationUserId) => instructionIds.
-    map((instructionId) => ({ instructionId, destinationUserId, parameters }))).
+        map((instructionId) => ({ instructionId, destinationUserId, parameters }))).
     reduce((assembledInstructions, instruction) => [...assembledInstructions, ...instruction]);
 
 const triggerMsgInstructions = async (boostsAndRecipients) => {
@@ -49,7 +49,7 @@ const obtainUsersForOffering = async (boost, userIds) => {
     logger('Dispatching options to ML selection service: ', JSON.stringify(data, null, 2));
     const options = { url: config.get('mlSelection.endpoint'), data };
     const result = await tiny.post(options);
-    logger('Result of ml boost user selection:', result);
+    logger('Result of ml boost user selection:', JSON.stringify(result));
     const parsedResult = JSON.parse(result.body);
     const userIdsToOffer = parsedResult.filter((decision) => decision['should_offer']).map((decision) => decision['user_id']);
     logger('Extracted IDs to offer: ', userIdsToOffer);
@@ -69,6 +69,10 @@ const hasValidMinInterval = (lastOfferedTime, minInterval) => {
 const filterAccountIds = async (boostId, mlParameters, accountIds) => {
     const { onlyOfferOnce, minIntervalBetweenRuns } = mlParameters;
 
+    if (!onlyOfferOnce && !minIntervalBetweenRuns) {
+        return accountIds;
+    }
+
     if (onlyOfferOnce) {
         const accountStatusMap = await persistence.findAccountsForBoost({ boostIds: [boostId], accountIds });
         const boostAccountStatuses = accountStatusMap[0].accountUserMap; // as usual with this function, built for too much parallelism
@@ -86,7 +90,7 @@ const filterAccountIds = async (boostId, mlParameters, accountIds) => {
 const selectUsersForBoostOffering = async (boost) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
-    const { boostId, audienceId, messageInstructionIds, mlParameters } = boost;
+    const { boostId, audienceId, messageInstructions, mlParameters } = boost;
 
     const audienceAccountIds = await persistence.extractAccountIds(audienceId);
     logger('Got audience account ids:', audienceAccountIds);
@@ -103,10 +107,12 @@ const selectUsersForBoostOffering = async (boost) => {
     
     const userIds = Object.keys(accountUserIdMap);
     const userIdsForOffering = await obtainUsersForOffering(boost, userIds);
-    logger('Got user ids selected for boost offering:', userIdsForOffering);
-
+    
     const accountIdsForOffering = userIdsForOffering.map((userId) => accountUserIdMap[userId]);
-    const instructionIds = messageInstructionIds.instructions.map((instruction) => instruction.instructionId);
+    
+    logger('Now extracting instruction IDs from: ', messageInstructions);
+    const instructionIds = messageInstructions 
+        ? messageInstructions.filter(({ status }) => status === 'OFFERED').map(({ msgInstructionId }) => msgInstructionId) : [];
 
     return {
         boostId,
@@ -136,7 +142,7 @@ module.exports.processMlBoosts = async (event) => {
 
         const boostId = event.boostId || null;
         const mlBoosts = await (boostId ? [persistence.fetchBoost(boostId)] : persistence.fetchActiveMlBoosts());
-        logger('Got machine-determined boosts:', mlBoosts);
+        logger('Got machine-determined boosts:', JSON.stringify(mlBoosts, null, 2));
 
         if (!mlBoosts || mlBoosts.length === 0) {
             return { result: 'NO_ML_BOOSTS' };

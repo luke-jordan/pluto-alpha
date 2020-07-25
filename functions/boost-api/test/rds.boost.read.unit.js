@@ -46,7 +46,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         'start_time': mockStartTime.format(),
         'end_time': mockEndTime.format(),
         'initial_status': 'CREATED',
-        'message_instruction_ids': { instructions: [] }
+        'message_instruction_ids': { instructions: [{ status: 'OFFERED', accountId: 'ALL', instructionId: 'some-id' }] }
     };
 
     const expectedBoostResult = { 
@@ -56,7 +56,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         boostStartTime: moment(mockStartTime.format()),
         boostEndTime: moment(mockEndTime.format()),
         defaultStatus: 'CREATED',
-        messageInstructions: [] 
+        messageInstructions: [{ status: 'OFFERED', accountId: 'ALL', instructionId: 'some-id' }] 
     };
 
     it('Fetches boosts with dynamic audiences', async () => {
@@ -190,7 +190,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
 
     it('Fetches last boost log of specified type, single', async () => {
         const expectedQuery = `select * from boost_data.boost_log where boost_id = $1 and account_id = $2 ` +
-            `log_type = $3 order by creation_time desc limit 1`;
+            `and log_type = $3 order by creation_time desc limit 1`;
         queryStub.resolves([{ 'boost_id': 'some-id', 'account_id': 'some-account', 'log_type': 'some-type' }]);
 
         const result = await rds.findLastLogForBoost('some-id', 'some-account', 'some-type');
@@ -202,10 +202,12 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     it('Fetches active machine-determined boosts', async () => {
         const expectedQuery = 'select * from boost_data.boost where ml_parameters is not null ' +
             'and active = true and end_time > current_timestamp';
-        queryStub.resolves([{ 'boost_id': 'some-id', 'ml_parameters': { some: 'params' }}]);
+
+        queryStub.resolves([{ ...boostFromPersistence, 'ml_parameters': { some: 'params' } }]);
 
         const result = await rds.fetchActiveMlBoosts();
-        expect(result).to.deep.equal([{ boostId: 'some-id', mlParameters: { some: 'params' }}]);
+
+        expect(result).to.deep.equal([{ ...expectedBoostResult, mlParameters: { some: 'params' }}]);
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, []);
     });
 

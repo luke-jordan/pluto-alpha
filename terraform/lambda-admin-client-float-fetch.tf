@@ -1,12 +1,12 @@
 variable "admin_client_float_fetch_lambda_function_name" {
   default = "admin_client_float_fetch"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "admin_client_float_fetch" {
 
-  function_name                  = "${var.admin_client_float_fetch_lambda_function_name}"
-  role                           = "${aws_iam_role.admin_client_float_fetch_role.arn}"
+  function_name                  = var.admin_client_float_fetch_lambda_function_name
+  role                           = aws_iam_role.admin_client_float_fetch_role.arn
   handler                        = "admin-float-handler.fetchClientFloatDetails"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
@@ -26,9 +26,9 @@ resource "aws_lambda_function" "admin_client_float_fetch" {
                   "region": "${var.aws_default_region[terraform.workspace]}"
               },
               "db": {
-                "host": "${local.database_config.host}",
-                "database": "${local.database_config.database}",
-                "port" :"${local.database_config.port}"
+                "host": local.database_config.host,
+                "database": local.database_config.database,
+                "port": local.database_config.port
               },
               "secrets": {
                   "enabled": true,
@@ -73,7 +73,7 @@ resource "aws_cloudwatch_log_group" "admin_client_float_fetch" {
   name = "/aws/lambda/${var.admin_client_float_fetch_lambda_function_name}"
 
   tags = {
-    environment = "${terraform.workspace}"
+    environment = terraform.workspace
   }
 }
 
