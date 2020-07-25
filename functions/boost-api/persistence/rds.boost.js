@@ -213,7 +213,7 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
 };
 
 module.exports.findLastLogForBoost = async (boostId, accountId, logType) => {
-    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 ` +
+    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 and ` +
         `log_type = $3 order by creation_time desc limit 1`;
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId, logType]);
     return Array.isArray(resultOfQuery) && resultOfQuery.length > 0

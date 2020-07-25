@@ -82,7 +82,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
         defaultStatus: 'CREATED',
-        messageInstructionIds: { instructions: [{ instructionId: testInstructionId }]},
+        messageInstructions: [{ instructionId: testInstructionId, status: 'OFFERED', accountId: 'ALL' }],
         mlParameters
     });
 

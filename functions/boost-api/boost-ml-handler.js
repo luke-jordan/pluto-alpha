@@ -69,6 +69,10 @@ const hasValidMinInterval = (lastOfferedTime, minInterval) => {
 const filterAccountIds = async (boostId, mlParameters, accountIds) => {
     const { onlyOfferOnce, minIntervalBetweenRuns } = mlParameters;
 
+    if (!onlyOfferOnce && !minIntervalBetweenRuns) {
+        return accountIds;
+    }
+
     if (onlyOfferOnce) {
         const accountStatusMap = await persistence.findAccountsForBoost({ boostIds: [boostId], accountIds });
         const boostAccountStatuses = accountStatusMap[0].accountUserMap; // as usual with this function, built for too much parallelism
@@ -86,7 +90,7 @@ const filterAccountIds = async (boostId, mlParameters, accountIds) => {
 const selectUsersForBoostOffering = async (boost) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
-    const { boostId, audienceId, messageInstructionIds, mlParameters } = boost;
+    const { boostId, audienceId, messageInstructions, mlParameters } = boost;
 
     const audienceAccountIds = await persistence.extractAccountIds(audienceId);
     logger('Got audience account ids:', audienceAccountIds);
@@ -106,7 +110,7 @@ const selectUsersForBoostOffering = async (boost) => {
     logger('Got user ids selected for boost offering:', userIdsForOffering);
 
     const accountIdsForOffering = userIdsForOffering.map((userId) => accountUserIdMap[userId]);
-    const instructionIds = messageInstructionIds.instructions.map((instruction) => instruction.instructionId);
+    const instructionIds = messageInstructions.filter(({ status }) => status === 'OFFERED').map(({ instructionId }) => instructionId);
 
     return {
         boostId,
