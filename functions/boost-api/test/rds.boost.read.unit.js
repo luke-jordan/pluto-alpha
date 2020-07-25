@@ -202,10 +202,12 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     it('Fetches active machine-determined boosts', async () => {
         const expectedQuery = 'select * from boost_data.boost where ml_parameters is not null ' +
             'and active = true and end_time > current_timestamp';
-        queryStub.resolves([{ 'boost_id': 'some-id', 'ml_parameters': { some: 'params' }}]);
+
+        queryStub.resolves([{ ...boostFromPersistence, 'ml_parameters': { some: 'params' } }]);
 
         const result = await rds.fetchActiveMlBoosts();
-        expect(result).to.deep.equal([{ boostId: 'some-id', mlParameters: { some: 'params' }}]);
+
+        expect(result).to.deep.equal([{ ...expectedBoostResult, mlParameters: { some: 'params' }}]);
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, []);
     });
 

@@ -110,7 +110,8 @@ const selectUsersForBoostOffering = async (boost) => {
     logger('Got user ids selected for boost offering:', userIdsForOffering);
 
     const accountIdsForOffering = userIdsForOffering.map((userId) => accountUserIdMap[userId]);
-    const instructionIds = messageInstructions.filter(({ status }) => status === 'OFFERED').map(({ instructionId }) => instructionId);
+    const instructionIds = messageInstructions 
+        ? messageInstructions.filter(({ status }) => status === 'OFFERED').map(({ instructionId }) => instructionId) : [];
 
     return {
         boostId,
