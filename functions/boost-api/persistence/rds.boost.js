@@ -417,6 +417,7 @@ module.exports.insertBoost = async (boostDetails) => {
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };
 
+    // some optionals here, for more complex boosts (note: conditionValues appears to be legacy and candidate for removal)
     if (boostDetails.conditionValues) {
         logger('This boost has conditions: ', boostDetails);
         boostObject.conditionValues = boostDetails.conditionClause;
@@ -428,6 +429,10 @@ module.exports.insertBoost = async (boostDetails) => {
 
     if (boostDetails.rewardParameters) {
         boostObject.rewardParameters = boostDetails.rewardParameters;
+    }
+
+    if (boostDetails.mlParameters) {
+        boostObject.mlParameters = boostDetails.mlParameters;
     }
 
     // be careful here, array handling is a little more sensitive than most types in node-pg

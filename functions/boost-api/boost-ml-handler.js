@@ -80,6 +80,7 @@ const filterAccountIds = async (boostId, mlParameters, accountIds) => {
         return Object.keys(boostAccountStatuses).filter((accountId) => boostAccountStatuses[accountId].status === 'CREATED');
     }
 
+    // todo : handle zero promises; also, skip if 'offered' or 'pending'
     const boostLogPromises = accountIds.map((accountId) => persistence.findLastLogForBoost(boostId, accountId, 'ML_BOOST_OFFERED'));
     const boostLogs = await Promise.all(boostLogPromises);
     logger('Got boost logs:', boostLogs);
