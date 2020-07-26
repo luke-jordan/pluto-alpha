@@ -26,7 +26,7 @@ const handleError = (err) => {
 
 const isValidFriendTournament = (event) => {
     const params = boostUtil.extractEventBody(event);
-    logger('Checking if friend tournament, after being passed params: ', params);
+    logger('Checking if friend tournament ... ');
     if (params.boostAudienceSelection) {
         logger('Have an audience selection, canont be friend based');
         return false;

@@ -154,19 +154,19 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
     it('Handles recurring machine determined boost offerings', async () => {
         const mlParameters = { onlyOfferOnce: false, minIntervalBetweenRuns: { unit: 'days', value: 30 }};
-        const mockAccountIds = ['account-id-1', 'account-id-2'];
+        const mockAccountIds = ['account-id-1', 'account-id-2', 'account-id-3', 'account-id-4'];
 
         const tinyOptions = {
             url: config.get('mlSelection.endpoint'),
             data: {
                 'boost_parameters': { 'boost_amount_whole_currency': 10, 'boost_type_category': 'GAME::CHASE_ARROW' },
-                'candidate_users': ['user-id-1', 'user-id-2']
+                'candidate_users': ['user-id-1', 'user-id-2', 'user-id-3']
             }
         };
 
         const expectedStatusUpdateInstruction = {
             boostId: testBoostId,
-            accountIds: ['account-id-1'],
+            accountIds: ['account-id-1', 'account-id-3'],
             newStatus: 'OFFERED',
             logType: 'ML_BOOST_OFFERED'
         };
@@ -174,12 +174,14 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const audiencePayload = { operation: 'refresh', params: { audienceId: testAudienceId }};
         const audienceInvocation = helper.wrapLambdaInvoc('audience_selection', false, audiencePayload);
 
-        const msgInstruction = { 
-            destinationUserId: 'user-id-1', 
+        const createMsgInstruction = (userId) => ({ 
+            destinationUserId: userId, 
             instructionId: testInstructionId, 
             parameters: mockMlBoostFromRds(mlParameters) 
-        };
-        const msgInvocation = helper.wrapLambdaInvoc('message_user_create_once', true, { instructions: [msgInstruction] });
+        });
+
+        const msgInstructions = [createMsgInstruction('user-id-1'), createMsgInstruction('user-id-3')];
+        const msgInvocation = helper.wrapLambdaInvoc('message_user_create_once', true, { instructions: msgInstructions });
 
         const mockBoostLog = (accountId) => ({
             logId: testLogId,
@@ -191,17 +193,24 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
         extractAccountIdsStub.resolves(mockAccountIds);
-        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2' });
+
+        findBoostLogStub.onFirstCall().resolves(mockBoostLog('account-id-1'));
+        findBoostLogStub.onSecondCall().resolves(mockBoostLog('account-id-2'));
+        findBoostLogStub.onThirdCall().resolves({}); // i.e., not called before
+
+        const tooSoonLog = { ...mockBoostLog('account-id-4'), creationTime: moment().subtract(3, 'days') };
+        findBoostLogStub.onCall(3).resolves(tooSoonLog);
+
+        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2', 'user-id-3': 'account-id-3' });
         
+        const offerDecision = (userId, shouldOffer) => ({ 'user_id': userId, 'should_offer': shouldOffer });
         tinyPostStub.resolves({
-            body: JSON.stringify([{ 'user_id': 'user-id-1', 'should_offer': true }, { 'user_id': 'user-id-2', 'should_offer': false }])
+            body: JSON.stringify([offerDecision('user-id-1', true), offerDecision('user-id-2', false), offerDecision('user-id-3', true)])
         });
 
         lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 }) });
 
         updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
-        findBoostLogStub.onFirstCall().resolves(mockBoostLog('account-id-1'));
-        findBoostLogStub.onSecondCall().resolves(mockBoostLog('account-id-2'));
 
         const resultOfBoost = await handler.processMlBoosts({});
 
@@ -213,9 +222,10 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
         
         expect(accountStatusStub).to.have.not.been.called;
-        expect(findBoostLogStub.callCount).to.equal(2);
+        expect(findBoostLogStub.callCount).to.equal(4);
         mockAccountIds.map((accountId) => expect(findBoostLogStub).to.have.been.calledWithExactly(testBoostId, accountId, 'ML_BOOST_OFFERED'));
         
+        expect(findUserIdsStub).to.have.been.calledWithExactly(['account-id-1', 'account-id-2', 'account-id-3'], true);
         expect(tinyPostStub).to.have.been.calledOnceWithExactly(tinyOptions);
         
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
