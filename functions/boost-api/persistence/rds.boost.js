@@ -401,28 +401,29 @@ module.exports.insertBoost = async (boostDetails) => {
         label: boostDetails.label,
         startTime: boostDetails.boostStartTime.format(),
         endTime: boostDetails.boostEndTime.format(),
+
         boostType: boostDetails.boostType,
         boostCategory: boostDetails.boostCategory,
+        
         boostAmount: boostDetails.boostAmount,
         boostBudget: boostDetails.boostBudget,
         boostRedeemed: boostDetails.alreadyRedeemed || 0,
         boostUnit: boostDetails.boostUnit,
         boostCurrency: boostDetails.boostCurrency,
+        
         fromBonusPoolId: boostDetails.fromBonusPoolId,
         fromFloatId: boostDetails.fromFloatId,
         forClientId: boostDetails.forClientId,
+        
         boostAudienceType: boostDetails.boostAudienceType,
         audienceId: boostDetails.audienceId,
+
+        initialStatus: boostDetails.defaultStatus || 'CREATED',
         statusConditions: boostDetails.statusConditions,
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };
 
-    // some optionals here, for more complex boosts (note: conditionValues appears to be legacy and candidate for removal)
-    if (boostDetails.conditionValues) {
-        logger('This boost has conditions: ', boostDetails);
-        boostObject.conditionValues = boostDetails.conditionClause;
-    }
-
+    // some optionals here, for more complex boosts
     if (boostDetails.gameParams) {
         boostObject.gameParams = boostDetails.gameParams;
     }
@@ -536,8 +537,7 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
 
     if (setAccountsToOffered) {
         const updateQuery = `update ${boostAccountJoinTable} set boost_status = $1 where boost_id = $2`;
-        const resultOfStatusUpdate = await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
-        logger('Result of raw update: ', resultOfStatusUpdate);
+        await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
         // strictly speaking we should also insert the boost logs, but this is only called during creation, so somewhat redundant (and could be expensive)
     }
 

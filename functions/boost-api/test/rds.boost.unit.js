@@ -52,7 +52,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
     const standardBoostKeys = ['boostId', 'creatingUserId', 'label', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
         'boostBudget', 'boostRedeemed', 'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 
-        'boostAudienceType', 'audienceId', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
+        'boostAudienceType', 'audienceId', 'initialStatus', 'statusConditions', 'messageInstructionIds', 'flags'];
     const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
@@ -94,9 +94,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             forClientId: 'some_client_co',
             boostAudienceType: 'INDIVIDUAL',
             audienceId: testAudienceId,
+            initialStatus: 'PENDING',
             statusConditions: testStatusCondition,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
-            conditionValues: ['TEST_VALUE'],
             flags: ['TEST_FLAG']
         };
         const insertFirstDef = { query: expectedFirstQuery, columnTemplate: extractColumnTemplate(standardBoostKeys), rows: [expectedFirstRow]};
@@ -137,8 +137,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             redemptionMsgInstructions: testRedemptionMsgs,
             messageInstructionIds: [testInstructionId, testInstructionId],
             defaultStatus: 'PENDING',
-            conditionValues: true,
-            conditionClause: ['TEST_VALUE'],
             flags: ['TEST_FLAG']
         };
 
@@ -206,6 +204,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             forClientId: 'some_client_co',
             boostAudienceType: 'GENERAL',
             audienceId: testAudienceId,
+            initialStatus: 'OFFERED',
             statusConditions: testStatusCondition,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
             gameParams: testGameParams
@@ -315,6 +314,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             forClientId: 'some_client_co',
             boostAudienceType: 'GENERAL',
             audienceId: testAudienceId,
+            initialStatus: 'UNCREATED',
             statusConditions: mockCreateConditions,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
             gameParams: testGameParams
