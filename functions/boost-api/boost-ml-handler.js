@@ -66,6 +66,12 @@ const hasValidMinInterval = (lastOfferedTime, minInterval) => {
     return false;
 };
 
+const extractAccountsMeetingInterval = (accountIds, logMap, minIntervalBetweenRuns) => {
+    const hasBeenOffered = (accountId) => logMap[accountId] && logMap[accountId].creationTime;
+    const hasMinInterval = (accountId) => hasValidMinInterval(logMap[accountId].creationTime, minIntervalBetweenRuns);
+    return accountIds.filter((accountId) => !hasBeenOffered(accountId) || hasMinInterval(accountId));
+};
+
 const filterAccountIds = async (boostId, mlParameters, accountIds) => {
     const { onlyOfferOnce, minIntervalBetweenRuns } = mlParameters;
 
@@ -83,8 +89,8 @@ const filterAccountIds = async (boostId, mlParameters, accountIds) => {
     const boostLogPromises = accountIds.map((accountId) => persistence.findLastLogForBoost(boostId, accountId, 'ML_BOOST_OFFERED'));
     const boostLogs = await Promise.all(boostLogPromises);
     logger('Got boost logs:', boostLogs);
-    const boostLogsWithValidIntervals = boostLogs.filter((boostLog) => hasValidMinInterval(boostLog.creationTime, minIntervalBetweenRuns));
-    return boostLogsWithValidIntervals.map((boostLog) => boostLog.accountId);
+    const logMap = accountIds.reduce((obj, accountId, index) => ({ ...obj, [accountId]: boostLogs[index] }), {});
+    return extractAccountsMeetingInterval(accountIds, logMap, minIntervalBetweenRuns);
 };
 
 const selectUsersForBoostOffering = async (boost) => {

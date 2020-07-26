@@ -401,33 +401,39 @@ module.exports.insertBoost = async (boostDetails) => {
         label: boostDetails.label,
         startTime: boostDetails.boostStartTime.format(),
         endTime: boostDetails.boostEndTime.format(),
+
         boostType: boostDetails.boostType,
         boostCategory: boostDetails.boostCategory,
+        
         boostAmount: boostDetails.boostAmount,
         boostBudget: boostDetails.boostBudget,
         boostRedeemed: boostDetails.alreadyRedeemed || 0,
         boostUnit: boostDetails.boostUnit,
         boostCurrency: boostDetails.boostCurrency,
+        
         fromBonusPoolId: boostDetails.fromBonusPoolId,
         fromFloatId: boostDetails.fromFloatId,
         forClientId: boostDetails.forClientId,
+        
         boostAudienceType: boostDetails.boostAudienceType,
         audienceId: boostDetails.audienceId,
+
+        initialStatus: boostDetails.defaultStatus || 'CREATED',
         statusConditions: boostDetails.statusConditions,
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };
 
-    if (boostDetails.conditionValues) {
-        logger('This boost has conditions: ', boostDetails);
-        boostObject.conditionValues = boostDetails.conditionClause;
-    }
-
+    // some optionals here, for more complex boosts
     if (boostDetails.gameParams) {
         boostObject.gameParams = boostDetails.gameParams;
     }
 
     if (boostDetails.rewardParameters) {
         boostObject.rewardParameters = boostDetails.rewardParameters;
+    }
+
+    if (boostDetails.mlParameters) {
+        boostObject.mlParameters = boostDetails.mlParameters;
     }
 
     // be careful here, array handling is a little more sensitive than most types in node-pg
@@ -531,8 +537,7 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
 
     if (setAccountsToOffered) {
         const updateQuery = `update ${boostAccountJoinTable} set boost_status = $1 where boost_id = $2`;
-        const resultOfStatusUpdate = await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
-        logger('Result of raw update: ', resultOfStatusUpdate);
+        await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
         // strictly speaking we should also insert the boost logs, but this is only called during creation, so somewhat redundant (and could be expensive)
     }
 
