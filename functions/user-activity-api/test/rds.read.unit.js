@@ -53,16 +53,17 @@ describe('*** USER ACTIVITY *** UNIT TEST RDS *** : Fetch floats and find transa
     
     beforeEach(resetStubs);
 
-    it('Obtain a default float id and client id', async () => {
-        const queryString = 'select owner_user_id, default_float_id, responsible_client_id from account_data.core_account_ledger where account_id = $1';
+    it('Obtain basic info on user account', async () => {
+        const queryString = 'select owner_user_id, default_float_id, responsible_client_id, frozen from account_data.core_account_ledger where account_id = $1';
         queryStub.withArgs(queryString, sinon.match([testAccountId])).resolves([{ 
             'default_float_id': testFloatId,
             'responsible_client_id': testClientId,
-            'owner_user_id': testUserId
+            'owner_user_id': testUserId,
+            'frozen': false
         }]);
         const floatResult = await rds.getOwnerInfoForAccount(testAccountId);
         expect(floatResult).to.exist;
-        expect(floatResult).to.deep.equal({ clientId: testClientId, floatId: testFloatId, systemWideUserId: testUserId });
+        expect(floatResult).to.deep.equal({ clientId: testClientId, floatId: testFloatId, systemWideUserId: testUserId, frozen: false });
         expect(queryStub).to.have.been.calledOnceWithExactly(queryString, sinon.match([testAccountId]));
         expectNoCalls([insertStub, multiTableStub]);
     });

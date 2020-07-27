@@ -67,14 +67,15 @@ module.exports.fetchInfoForBankRef = async (accountId) => {
 };
 
 module.exports.getOwnerInfoForAccount = async (accountId = 'some-account-uid') => {
-    const searchQuery = `select owner_user_id, default_float_id, responsible_client_id from ${config.get('tables.accountLedger')} ` +
+    const searchQuery = `select owner_user_id, default_float_id, responsible_client_id, frozen from ${config.get('tables.accountLedger')} ` +
         `where account_id = $1`;
-    logger('Search query: ', searchQuery);
+    logger('Fetching owner info for account, via: ', searchQuery);
     const resultOfQuery = await rdsConnection.selectQuery(searchQuery, [accountId]);
     return resultOfQuery.length === 0 ? null : {
         systemWideUserId: resultOfQuery[0]['owner_user_id'],
         floatId: resultOfQuery[0]['default_float_id'],
-        clientId: resultOfQuery[0]['responsible_client_id']
+        clientId: resultOfQuery[0]['responsible_client_id'],
+        frozen: resultOfQuery[0]['frozen'] || false // false positives (via truthiness) here will be bad
     };
 };
 
