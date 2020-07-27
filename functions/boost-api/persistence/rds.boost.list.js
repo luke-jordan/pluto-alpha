@@ -199,9 +199,9 @@ module.exports.fetchBoostScoreLogs = async (boostId) => {
 module.exports.sumBoostAndSavedAmounts = async (boostIds) => {
     const sumQuery = `select boost_id, sum(cast(log_context->>'boostAmount' as bigint)) as sum_of_boost_amount, ` +
         `sum(cast(log_context->>'savedWholeCurrency' as bigint)) as sum_of_saved from ` +
-        `boost_data.boost_log where log_context ->> 'newStatus' = $1 and ` + 
-        `log_context ->> 'boostAmount' ~ E'^\\\\d+$' and log_context ->> 'savedWholeCurrency' ~ E'^\\\\d+$'` + 
-        `boost_id in (${extractArrayIndices(boostIds, 2)}) group by boost_id`;
+        `boost_data.boost_log where log_context ->> 'newStatus' = $1 ` + 
+        `and log_context ->> 'boostAmount' ~ E'^\\\\d+$' and log_context ->> 'savedWholeCurrency' ~ E'^\\\\d+$' ` + 
+        `and boost_id in (${extractArrayIndices(boostIds, 2)}) group by boost_id`;
     
     const resultOfSums = await rdsConnection.selectQuery(sumQuery, ['REDEEMED', ...boostIds]);
     logger('Result of sums:', resultOfSums);

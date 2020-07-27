@@ -17,6 +17,9 @@ module.exports.eventTypesForHistory = [
     'STATUS_CHANGED', 
     'FAILED_VERIFICATION', 
     'VERIFIED_AS_PERSON', 
+
+    'USER_STATUS_UPDATED',
+    'USER_PROFILE_UPDATED',
     
     'SAVING_PAYMENT_SUCCESSFUL', 
     'BOOST_REDEEMED',
