@@ -48,3 +48,12 @@ module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole, h
         }
     }
 });
+
+module.exports.wrapResponse = (body, statusCode = 200) => ({
+    statusCode,
+    headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*'
+    },
+    body: JSON.stringify(body)
+});

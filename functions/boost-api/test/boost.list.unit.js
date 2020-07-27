@@ -14,6 +14,7 @@ const helper = require('./boost.test.helper');
 const fetchMultiBoostsStub = sinon.stub();
 const findAccountsStub = sinon.stub();
 const fetchBoostLogsStub = sinon.stub();
+const sumAmountsStub = sinon.stub();
 
 const fetchBoostDetailsStub = sinon.stub();
 const fetchTournScoresStub = sinon.stub();
@@ -28,7 +29,7 @@ const handler = proxyquire('../boost-list-handler', {
         'fetchUserBoosts': fetchMultiBoostsStub,
         'findAccountsForUser': findAccountsStub,
         'fetchUserBoostLogs': fetchBoostLogsStub,
-
+        'sumBoostAndSavedAmounts': sumAmountsStub,
         'fetchBoostDetails': fetchBoostDetailsStub,
         'fetchBoostScoreLogs': fetchTournScoresStub,
         
@@ -47,7 +48,8 @@ const handler = proxyquire('../boost-list-handler', {
 const wrapEvent = helper.wrapQueryParamEvent; // just for shorthand
 const resetStubs = () => helper.resetStubs(
     fetchMultiBoostsStub, findAccountsStub, fetchTournScoresStub, fetchBoostLogsStub, 
-    fetchBoostDetailsStub, fetchTournScoresStub, cacheGetStub, cacheMultiGetStub, cacheSetStub
+    fetchBoostDetailsStub, fetchTournScoresStub, cacheGetStub, cacheMultiGetStub, cacheSetStub,
+    sumAmountsStub
 ); 
 
 const testBoostId = uuid();
@@ -337,6 +339,51 @@ describe('*** UNIT TEST BOOST DETAILS (CHANGED AND SPECIFIED) ***', () => {
         expect(fetchTournScoresStub).to.not.have.been.called;
         expect(cacheMultiGetStub).to.not.have.been.called;    
 
+    });
+
+    it('Calculates boost yields', async () => {
+        const mockFriendTournBoost = { ...mockBoost };
+        mockFriendTournBoost.flags = ['FRIEND_TOURNAMENT'];
+        mockFriendTournBoost.accountIds = ['account-id-1', 'account-id-2'];
+
+        cacheGetStub.resolves();
+        findAccountsStub.resolves(['account-id-1']);
+        fetchBoostDetailsStub.resolves(mockFriendTournBoost);
+
+        const mockTournLogs = [
+            { userId: 'user-id-1', gameScore: 13 },
+            { userId: 'user-id-2', gameScore: 21 },
+            { userId: 'user-id-3', gameScore: 34 }
+        ];
+        fetchTournScoresStub.resolves(mockTournLogs);
+
+        cacheMultiGetStub.resolves([null, null, JSON.stringify({ systemWideUserId: 'user-id-3', personalName: 'Some', familyName: 'Person' })]);
+        sumAmountsStub.resolves([{ boostId: 'boost-id-1', sumOfBoostAmount: 100000, sumOfSaved: 500 }]);
+
+        const resultOfCalc = await handler.fetchBoostDetails(wrapEvent({ boostId: 'boost-id-1' }, 'admin-id', 'SYSTEM_ADMIN'));
+        const resultBody = helper.standardOkayChecks(resultOfCalc, true);
+
+        const expectedYields = { boostYields: [{ boostId: 'boost-id-1', boostYield: 0.02 }]};
+
+        const expectedTournScores = { tournamentScores: [
+            { playerName: 'Player 1', playerScore: 13 },
+            { playerName: 'Player 2', playerScore: 21 },
+            { playerName: 'Some Person', playerScore: 34 }
+        ]};
+
+        const expectedResult = { ...mockFriendTournBoost, ...expectedTournScores, ...expectedYields };
+
+        expect(resultBody).to.deep.equal(expectedResult);
+        expect(sumAmountsStub).to.have.been.calledOnceWithExactly(['boost-id-1']);
+
+        expect(fetchTournScoresStub).to.have.been.calledOnceWithExactly('boost-id-1');
+        expect(cacheGetStub).to.have.been.calledOnceWithExactly(`ACCOUNT_ID::admin-id`);
+
+        const cacheMultiGetArgs = ['FRIEND_PROFILE::user-id-1', 'FRIEND_PROFILE::user-id-2', 'FRIEND_PROFILE::user-id-3'];
+        expect(cacheMultiGetStub).to.have.been.calledOnceWithExactly(cacheMultiGetArgs);
+
+        expect(findAccountsStub).to.have.been.calledOnceWithExactly('admin-id');
+        expect(fetchBoostDetailsStub).to.have.been.calledOnceWithExactly('boost-id-1', true);
     });
     
 });
