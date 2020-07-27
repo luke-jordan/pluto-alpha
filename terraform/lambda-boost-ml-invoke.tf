@@ -1,17 +1,17 @@
 variable "boost_machine_invoke_lambda_function_name" {
   default = "boost_machine_invoke"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "boost_machine_invoke" {
 
   function_name                  = var.boost_machine_invoke_lambda_function_name
   role                           = aws_iam_role.boost_machine_invoke_role.arn
-  handler                        = "boost-scheduled-handler.handleAllScheduledTasks"
+  handler                        = "boost-ml-handler.processMlBoosts"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
-  timeout                        = 15
-  tags                           = {"environment"  = "${terraform.workspace}"}
+  timeout                        = 120
+  tags                           = {"environment"  = terraform.workspace}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "boost_api/${var.deploy_code_commit_hash}.zip"
@@ -37,7 +37,7 @@ resource "aws_lambda_function" "boost_machine_invoke" {
                 }
               },
               "mlSelection": {
-                "endpoint": "insert_here"
+                "endpoint": var.boost_induce_endpoint[terraform.workspace]
               },
               "publishing": {
                 "userEvents": {
@@ -118,6 +118,24 @@ resource "aws_iam_role_policy_attachment" "boost_machine_invoke_user_event_publi
 resource "aws_iam_role_policy_attachment" "boost_machine_invoke_secret_get" {
   role = aws_iam_role.boost_machine_invoke_role.name
   policy_arn = "arn:aws:iam::455943420663:policy/${terraform.workspace}_secrets_boost_worker_read"
+}
+
+/////////////////// CLOUD WATCH FOR EVENT SOURCE, DAILY ///////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_boost_ml_invoke_every_day" {
+    rule = aws_cloudwatch_event_rule.daily_boost_triggers.name
+    target_id = aws_lambda_function.boost_machine_invoke.id
+    arn = aws_lambda_function.boost_machine_invoke.arn
+
+    input = jsonencode({})
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_to_call_boost_ml_invoke" {
+    statement_id = "AllowDailyAdminExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.boost_machine_invoke.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.daily_boost_triggers.arn
 }
 
 ////////////////// CLOUD WATCH ///////////////////////////////////////////////////////////////////////

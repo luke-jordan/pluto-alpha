@@ -1,6 +1,6 @@
 variable "admin_client_float_edit_lambda_function_name" {
   default = "admin_client_float_edit"
-  type = "string"
+  type = string
 }
 
 resource "aws_lambda_function" "admin_client_float_edit" {

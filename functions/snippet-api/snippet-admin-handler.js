@@ -55,7 +55,7 @@ module.exports.viewSnippet = async (event) => {
         ]);
         logger('Got snippet', snippet, 'And event counts:', snippetEventCounts);
 
-        const { sumUsers, sumViews, sumFetches } = snippetEventCounts;
+        const { sumUsers, sumViews, sumFetches } = snippetEventCounts || { sumUsers: 0, sumViews: 0, sumFetches: 0 };
 
         const transformedSnippet = {
             snippetId: snippet.snippetId,
@@ -88,6 +88,78 @@ module.exports.readSnippets = async (event) => {
     }
 
     return opsUtil.wrapResponse({}, 400);
+};
+
+/**
+ * This function creates a new snippet.
+ * @param {object} event An admin event.
+ * @property {string}  title The snippet title
+ * @property {string}  body The main snippet text.
+ * @property {boolean} active Optional property that can be used to create inactive snippets. All new snippets are active by default.
+ * @property {object}  responseOptions An object containing the possible response options to be displayed with the snippet.
+ */
+module.exports.createSnippet = async (event) => {
+    try {
+        const userDetails = opsUtil.extractUserDetails(event);
+        if (userDetails.role !== 'SYSTEM_ADMIN') {
+            return { statusCode: 403 };
+        }
+
+        const systemWideUserId = userDetails.systemWideUserId;
+        const params = opsUtil.extractParamsFromEvent(event);
+        logger('Got params:', params);
+        
+        const snippet = {
+            createdBy: systemWideUserId,
+            title: params.title,
+            body: params.body,
+            countryCode: params.countryCode,
+            active: typeof params.active === 'boolean' ? params.active : true,
+            snippetPriority: params.snippetPriority || 1,
+            snippetLanguage: params.snippetLanguage || 'en',
+            previewMode: typeof params.previewMode === 'boolean' ? params.previewMode : true
+        };
+
+        const creationResult = await persistence.addSnippet(snippet);
+        logger('Result of snippet creation:', creationResult);
+        
+        return opsUtil.wrapResponse({ result: 'SUCCESS', creationTime: creationResult.creationTime });
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ error: err.message }, 500);
+    }
+};
+
+/**
+ * This function updates a snippets properties. The only property updates allowed by the this function are
+ * the snippets text, title, active status, and priority.
+ * @param {object} event User or admin event.
+ * @property {string} snippetId The identifer of the snippet to be updated.
+ * @property {string} title The value entered here will update the snippet's title.
+ * @property {string} body The value entered here will update the main snippet text.
+ * @property {boolean} active Can be used to activate or deactivate a snippet.
+ * @property {number} snippetPriority Used to update the snippets priority.
+ */
+module.exports.updateSnippet = async (event) => {
+    try {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId', true)) {
+            return { statusCode: 403 };
+        }
+
+        const { snippetId, title, body, active, priority } = opsUtil.extractParamsFromEvent(event);
+        if (!snippetId || (!title && !body && !priority && typeof active !== 'boolean')) {
+            return { statusCode: 400, body: `Error! 'snippetId' and a snippet property to be updated are required` };
+        }
+        
+        const updateParameters = JSON.parse(JSON.stringify({ snippetId, title, body, active, priority })); // removes keys with undefined values
+        const resultOfUpdate = await persistence.updateSnippet(updateParameters);
+        logger('Result of update:', resultOfUpdate);
+
+        return opsUtil.wrapResponse({ result: 'SUCCESS', updatedTime: resultOfUpdate.updatedTime });
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return opsUtil.wrapResponse({ error: err.message }, 500);
+    }
 };
 
 /**

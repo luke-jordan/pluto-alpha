@@ -207,6 +207,10 @@ const checkEventFollows = (parameterValue, eventContext) => {
 // eslint-disable-next-line complexity
 module.exports.testCondition = (event, statusCondition) => {
     logger('Testing status condition: ', statusCondition);
+    if (typeof statusCondition !== 'string') {
+        return false;
+    }
+    
     const conditionType = statusCondition.substring(0, statusCondition.indexOf(' '));
     const parameterMatch = statusCondition.match(/#{(.*)}/);
     const parameterValue = parameterMatch ? parameterMatch[1] : null;

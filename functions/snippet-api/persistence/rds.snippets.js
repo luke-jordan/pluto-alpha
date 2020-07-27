@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:activity:calculations');
+const logger = require('debug')('jupiter:snippet:rds');
 
 const opsUtil = require('ops-util-common');
 
@@ -20,7 +20,8 @@ const previewUserTable = config.get('tables.previewUserTable');
 const transformSnippet = (snippet) => ({
     snippetId: snippet.snippetId || snippet.snippetDataSnippetSnippetId,
     title: snippet.title,
-    text: snippet.body,
+    body: snippet.body,
+    active: snippet.active,
     fetchCount: snippet.fetchCount || 0,
     viewCount: snippet.viewCount || 0,
     snippetStatus: snippet.snippetStatus || 'UNCREATED',
@@ -73,8 +74,10 @@ module.exports.createSnippetUserJoin = async (snippetId, userId) => {
 // Fetches a snippet reference from the user-snippet join table created above.
 module.exports.fetchSnippetUserStatuses = async (snippetIds, userId) => {
     const selectQuery = `select * from ${snippetJoinTable} where user_id = $1 and snippet_id in (${opsUtil.extractArrayIndices(snippetIds, 2)})`;
-    logger('Fetching snippets with query:', selectQuery);
-    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [userId, ...snippetIds]);
+    const queryValues = [userId, ...snippetIds];
+    logger('Fetching snippets with query:', selectQuery, ' and values: ', queryValues);
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, queryValues);
+    logger('Retrieved: ', resultOfFetch);
     return resultOfFetch.length > 0 ? resultOfFetch.map((result) => camelCaseKeys(result)) : [];
 };
 
@@ -116,7 +119,8 @@ module.exports.fetchUncreatedSnippets = async (systemWideUserId) => {
         `(select snippet_id from ${snippetJoinTable} where user_id = $2 and snippet_status = $3)`;
     logger('Fetching unread snippets with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [true, systemWideUserId, 'VIEWED']);
-    return resultOfFetch.length > 0 ? resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result))) : [];
+    // logger('Raw result of fetch: ', resultOfFetch);
+    return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result)));
 };
 
 /**
@@ -124,10 +128,12 @@ module.exports.fetchUncreatedSnippets = async (systemWideUserId) => {
  * @param {string} systemWideUserId The user for whom the snippets are sought.
  */
 module.exports.fetchCreatedSnippets = async (systemWideUserId) => {
-    const selectQuery = `select * from ${snippetJoinTable} inner join ${snippetTable} where user_id = $1 and active = $2`;
+    const selectQuery = `select * from ${snippetJoinTable} inner join ${snippetTable} ` + 
+        `on ${snippetJoinTable}.snippet_id = ${snippetTable}.snippet_id ` +
+        `where user_id = $1 and active = $2`;
     logger('Fetching unread snippets with query:', selectQuery);
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [systemWideUserId, true]);
-    return resultOfFetch.length > 0 ? resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result))) : [];
+    return resultOfFetch.map((result) => transformSnippet(camelCaseKeys(result)));
 };
 
 // Fetches all snippets where preview mode is set to 'true'.

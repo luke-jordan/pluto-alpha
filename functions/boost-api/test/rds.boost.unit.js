@@ -54,7 +54,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
     const standardBoostKeys = ['boostId', 'creatingUserId', 'label', 'startTime', 'endTime', 'boostType', 'boostCategory', 'boostAmount', 
         'boostBudget', 'boostRedeemed', 'boostUnit', 'boostCurrency', 'fromBonusPoolId', 'fromFloatId', 'forClientId', 
-        'boostAudienceType', 'audienceId', 'statusConditions', 'messageInstructionIds', 'conditionValues', 'flags'];
+        'boostAudienceType', 'audienceId', 'initialStatus', 'statusConditions', 'messageInstructionIds', 'flags'];
     const boostUserKeys = ['boostId', 'accountId', 'boostStatus'];
     
     beforeEach(() => (resetStubs()));
@@ -96,9 +96,9 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             forClientId: 'some_client_co',
             boostAudienceType: 'INDIVIDUAL',
             audienceId: testAudienceId,
+            initialStatus: 'PENDING',
             statusConditions: testStatusCondition,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
-            conditionValues: ['TEST_VALUE'],
             flags: ['TEST_FLAG']
         };
         const insertFirstDef = { query: expectedFirstQuery, columnTemplate: extractColumnTemplate(standardBoostKeys), rows: [expectedFirstRow]};
@@ -139,8 +139,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             redemptionMsgInstructions: testRedemptionMsgs,
             messageInstructionIds: [testInstructionId, testInstructionId],
             defaultStatus: 'PENDING',
-            conditionValues: true,
-            conditionClause: ['TEST_VALUE'],
             flags: ['TEST_FLAG']
         };
 
@@ -208,6 +206,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             forClientId: 'some_client_co',
             boostAudienceType: 'GENERAL',
             audienceId: testAudienceId,
+            initialStatus: 'OFFERED',
             statusConditions: testStatusCondition,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
             gameParams: testGameParams
@@ -317,6 +316,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             forClientId: 'some_client_co',
             boostAudienceType: 'GENERAL',
             audienceId: testAudienceId,
+            initialStatus: 'UNCREATED',
             statusConditions: mockCreateConditions,
             messageInstructionIds: { instructions: [testInstructionId, testInstructionId] },
             gameParams: testGameParams
@@ -412,6 +412,57 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
         expect(multiTableStub).to.have.been.calledOnce;
         expect(multiTableStub.getCall(0).args[0]).to.have.length(1);
+        expect(queryStub).to.not.have.been.called;
+    });
+
+    it('Inserts ML parameters properly', async () => {
+        
+        uuidStub.onFirstCall().returns(testBoostId);
+
+        // as per note above
+        const insertionTime = moment();
+        multiTableStub.resolves([
+            [{ 'boost_id': testBoostId, 'creation_time': insertionTime.format() }]
+        ]);
+
+        const mockMlParameters = {
+            onlyOfferOnce: false, minIntervalBetweenRuns: { value: 7, unit: 'days' }
+        };
+
+        const testInstruction = {
+            creatingUserId: 'admin-user-id',
+            label: 'Midweek arrow chase!',
+            boostType: 'GAME',
+            boostCategory: 'CHASE_THE_ARROW',
+            boostAudienceType: 'EVENT_DRIVEN',
+            boostAmount: 100000,
+            boostBudget: 200000,
+            boostUnit: 'HUNDREDTH_CENT',
+            boostCurrency: 'USD',
+            fromBonusPoolId: 'primary_bonus_pool',
+            forClientId: 'some_client_co',
+            fromFloatId: 'primary_float',
+            boostStartTime: moment(),
+            boostEndTime: moment().add(1, 'week'),
+            defaultStatus: 'CREATED',
+            statusConditions: { REDEEMED: ['number_taps_greater_than_N #{20:20000}'] },
+            audienceId: testAudienceId,
+            redemptionMsgInstructions: testRedemptionMsgs,
+            mlParameters: mockMlParameters,
+            messageInstructionIds: []
+        };
+
+        const resultOfInsertion = await rds.insertBoost(testInstruction);
+        expect(resultOfInsertion.accountIds).to.deep.equal([]);
+
+        expect(multiTableStub).to.have.been.calledOnce;
+        expect(multiTableStub.getCall(0).args[0]).to.have.length(1);
+        
+        const persistedBoostQueryDef = multiTableStub.getCall(0).args[0][0];
+
+        const persistedBoost = persistedBoostQueryDef.rows[0];
+        expect(persistedBoost).to.have.property('mlParameters', mockMlParameters);
+
         expect(queryStub).to.not.have.been.called;
     });
 

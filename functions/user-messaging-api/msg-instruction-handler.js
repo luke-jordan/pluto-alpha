@@ -107,6 +107,8 @@ module.exports.validateMessageInstruction = (instruction) => {
             throw new Error('Audience ID required on indivdual notification.');
         case instruction.audienceType === 'GROUP' && !instruction.audienceId:
             throw new Error('Audience ID required on group notification.');
+        case instruction.audienceType === 'ML_DETERMINED' && !instruction.audienceId:
+            throw new Error('Audience ID required for ML selcetion (to determine universe)');
         case instruction.presentationType === 'EVENT_DRIVEN' && !instruction.eventTypeCategory && !hasTriggerEvent:
             throw new Error('Instructions for event driven must specify the event type');
         default:
@@ -217,11 +219,11 @@ const triggerTestOrProcess = async (instructionId, creatingUserId, params) => {
  * @property {object} requestContext  An object containing the callers id, role, and permissions. The event will not be processed without a valid request context.
  * The properties listed below belong to the events body.
  * @property {string} instructionId The instructions unique id, useful in persistence operations.
- * @property {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF and EVENT_DRIVEN.
+ * @property {string} presentationType Required. How the message should be presented. Valid values are RECURRING, ONCE_OFF, EVENT_DRIVEN and ML_DETERMINED.
  * @property {boolean} active Indicates whether the message is active or not.
  * @property {string} audienceType Required. Defines the target audience. Valid values are INDIVIDUAL, GROUP, and ALL_USERS.
  * @property {string} template Provides message templates, as described above
- * @property {string} audienceId Required when audience type is either INDIVIDUAL or GROUP. 
+ * @property {string} audienceId Required when audience type is INDIVIDUAL, GROUP or ML_DETERMINED (since that selects _within_ an audience). 
  * @property {object} recurrenceParameters Required when presentation type is RECURRING. Describes details like recurrence frequency, etc.
  * @property {string} responseAction Valid values include VIEW_HISTORY and INITIATE_GAME.
  * @property {object} responseContext An object that includes details such as the boost ID.

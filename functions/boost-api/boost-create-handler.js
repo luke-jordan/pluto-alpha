@@ -1,6 +1,6 @@
 'use strict';
 
-const logger = require('debug')('jupiter:boosts:create');
+const logger = require('debug')('jupiter:boosts:create-core');
 const config = require('config');
 const moment = require('moment');
 const stringify = require('json-stable-stringify');
@@ -194,6 +194,10 @@ const createMsgInstructionFromDefinition = (messageDefinition, boostParams, game
     if (messageDefinition.presentationType === 'EVENT_DRIVEN') {
         msgPayload.triggerParameters = messageDefinition.triggerParameters;
     }
+
+    if (messageDefinition.presentationType === 'ML_DETERMINED') {
+        msgPayload.holdFire = true; // i.e., do not send right now
+    }
         
     // then, if the message defines a sequence, assemble those templates together
     if (messageDefinition.isMessageSequence) {
@@ -341,9 +345,28 @@ const publishBoostUserLogs = async (initiator, accountIds, boostContext) => {
     const eventType = `BOOST_CREATED_${boostContext.boostType}`;    
     const options = { initiator, context: boostContext };
     const userIds = await persistence.findUserIdsForAccounts(accountIds);
-    logger('Triggering user logs for boost ...');
+    logger('Triggering user logs for boost ... : ', userIds);
     const resultOfLogPublish = await publisher.publishMultiUserEvent(userIds, eventType, options);
     logger('Result of log publishing: ', resultOfLogPublish);
+};
+
+const storeMessageInstructions = async (eventParams, boostParams) => {
+    const messagePayloads = eventParams.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, eventParams.gameParams));
+    logger('Assembled message payloads: ', messagePayloads);
+
+    const messageInvocations = messagePayloads.map((payload) => assembleMsgLamdbaInvocation(payload));
+    logger(`About to fire off ${messageInvocations.length} invocations ...`);
+    
+    // todo : handle errors
+    const messageInstructionResults = await Promise.all(messageInvocations);
+    logger('Result of message instruct invocation: ', messageInstructionResults);
+    
+    const shouldOfferBoost = !['EVENT_DRIVEN', 'ML_DETERMINED'].includes(boostParams.boostAudienceType);
+    const boostHasAccounts = boostParams.accountIds.length > 0; 
+    const updatedBoost = await persistence.setBoostMessages(boostParams.boostId, messageInstructionResults, shouldOfferBoost && boostHasAccounts);
+    logger('And result of update: ', updatedBoost);
+
+    return messageInstructionResults;
 };
 
 /**
@@ -382,6 +405,7 @@ const publishBoostUserLogs = async (initiator, accountIds, boostContext) => {
  * @property {array}  redemptionMsgInstructions An optional array containing message instruction objects. Each instruction object typically contains the accountId and the msgInstructionId.
  * @property {object} rewardParameters An optional object with reward details. expected properties are rewardType (valid values: 'SIMPLE', 'RANDOM', 'POOLED'). See Note (3) above.
  * @property {object} messageInstructionFlags An optional object with details on how to extract default message instructions for the boost being created.
+ * @property {object} mlParameters Parameters that goven how the ML system will be invoked (if/when it is used)
  */
 module.exports.createBoost = async (event) => {
     if (!event || Object.keys(event).length === 0) {
@@ -390,6 +414,7 @@ module.exports.createBoost = async (event) => {
     }
 
     const params = event;
+    logger('Creating boost with parameters: ', JSON.stringify(params, null, 2));
 
     const { label, boostType, boostCategory } = splitBasicParams(params);
     const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
@@ -486,7 +511,8 @@ module.exports.createBoost = async (event) => {
     // logger('Do we have messages ? :', params.messagesToCreate);
     if (Array.isArray(params.messagesToCreate) && params.messagesToCreate.length > 0) {
         const boostParams = {
-            boostId: persistedBoost.boostId,
+            boostId,
+            accountIds,
             creatingUserId: instructionToRds.creatingUserId, 
             boostAudienceType,
             audienceId: params.audienceId,
@@ -495,19 +521,7 @@ module.exports.createBoost = async (event) => {
 
         logger('Passing boost params to message create: ', boostParams);
 
-        const messagePayloads = params.messagesToCreate.map((msg) => createMsgInstructionFromDefinition(msg, boostParams, params.gameParams));
-        logger('Assembled message payloads: ', messagePayloads);
-
-        const messageInvocations = messagePayloads.map((payload) => assembleMsgLamdbaInvocation(payload));
-        logger(`About to fire off ${messageInvocations.length} invocations ...`);
-        
-        // todo : handle errors
-        const messageInstructionResults = await Promise.all(messageInvocations);
-        logger('Result of message instruct invocation: ', messageInstructionResults);
-                
-        const updatedBoost = await persistence.setBoostMessages(persistedBoost.boostId, messageInstructionResults, accountIds.length > 0);
-        logger('And result of update: ', updatedBoost);
-        persistedBoost.messageInstructions = messageInstructionResults;
+        persistedBoost.messageInstructions = await storeMessageInstructions(params, boostParams);
     }
 
     return persistedBoost;

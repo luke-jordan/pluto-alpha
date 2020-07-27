@@ -23,8 +23,7 @@ const extractArrayIndices = (array, startingIndex = 1) => array.map((_, index) =
 
 const transformBoostFromRds = (boost) => {
     const transformedBoost = camelizeKeys(boost);
-    // logger('Working? : ', transformedBoost);
-    transformedBoost.messageInstructions = transformedBoost.messageInstructionIds.instructions;
+    transformedBoost.messageInstructions = transformedBoost.messageInstructionIds ? transformedBoost.messageInstructionIds.instructions : [];
     // transformedBoost.statusConditions = JSON.parse(transformedBoost.statusConditions);
     transformedBoost.boostStartTime = moment(transformedBoost.startTime);
     transformedBoost.boostEndTime = moment(transformedBoost.endTime);
@@ -189,10 +188,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
         const accountUserMap = { };
         while (rowIndex < resultOfQuery.length && resultOfQuery[rowIndex]['boost_id'] === boostId) {
             const currentRow = resultOfQuery[rowIndex];
-            accountUserMap[currentRow['account_id']] = { 
-                userId: currentRow['owner_user_id'],
-                status: currentRow['boost_status']
-            };
+            accountUserMap[currentRow['account_id']] = { userId: currentRow['owner_user_id'], status: currentRow['boost_status'] };
             rowIndex += 1;
         }
         return ({ boostId, accountUserMap });
@@ -216,7 +212,7 @@ module.exports.findLogsForBoost = async (boostId, logType) => {
 };
 
 module.exports.findLastLogForBoost = async (boostId, accountId, logType) => {
-    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 ` +
+    const selectQuery = `select * from ${boostLogTable} where boost_id = $1 and account_id = $2 and ` +
         `log_type = $3 order by creation_time desc limit 1`;
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId, logType]);
     return Array.isArray(resultOfQuery) && resultOfQuery.length > 0
@@ -421,33 +417,39 @@ module.exports.insertBoost = async (boostDetails) => {
         label: boostDetails.label,
         startTime: boostDetails.boostStartTime.format(),
         endTime: boostDetails.boostEndTime.format(),
+
         boostType: boostDetails.boostType,
         boostCategory: boostDetails.boostCategory,
+        
         boostAmount: boostDetails.boostAmount,
         boostBudget: boostDetails.boostBudget,
         boostRedeemed: boostDetails.alreadyRedeemed || 0,
         boostUnit: boostDetails.boostUnit,
         boostCurrency: boostDetails.boostCurrency,
+        
         fromBonusPoolId: boostDetails.fromBonusPoolId,
         fromFloatId: boostDetails.fromFloatId,
         forClientId: boostDetails.forClientId,
+        
         boostAudienceType: boostDetails.boostAudienceType,
         audienceId: boostDetails.audienceId,
+
+        initialStatus: boostDetails.defaultStatus || 'CREATED',
         statusConditions: boostDetails.statusConditions,
         messageInstructionIds: { instructions: boostDetails.messageInstructionIds }
     };
 
-    if (boostDetails.conditionValues) {
-        logger('This boost has conditions: ', boostDetails);
-        boostObject.conditionValues = boostDetails.conditionClause;
-    }
-
+    // some optionals here, for more complex boosts
     if (boostDetails.gameParams) {
         boostObject.gameParams = boostDetails.gameParams;
     }
 
     if (boostDetails.rewardParameters) {
         boostObject.rewardParameters = boostDetails.rewardParameters;
+    }
+
+    if (boostDetails.mlParameters) {
+        boostObject.mlParameters = boostDetails.mlParameters;
     }
 
     // be careful here, array handling is a little more sensitive than most types in node-pg
@@ -495,7 +497,7 @@ module.exports.insertBoost = async (boostDetails) => {
         resultObject.numberOfUsersEligible = resultOfInsertion[1].length;
     }
 
-    logger('Returning: ', resultObject);
+    // logger('Returning: ', resultObject);
     return resultObject;
 
 };
@@ -551,8 +553,7 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
 
     if (setAccountsToOffered) {
         const updateQuery = `update ${boostAccountJoinTable} set boost_status = $1 where boost_id = $2`;
-        const resultOfStatusUpdate = await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
-        logger('Result of raw update: ', resultOfStatusUpdate);
+        await rdsConnection.updateRecord(updateQuery, ['OFFERED', boostId]);
         // strictly speaking we should also insert the boost logs, but this is only called during creation, so somewhat redundant (and could be expensive)
     }
 
@@ -628,9 +629,10 @@ module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds, returnMap = false) => {
-    const query = `select distinct(owner_user_id, account_id) from ${config.get('tables.accountLedger')} where ` +
+    const query = `select owner_user_id, account_id from ${config.get('tables.accountLedger')} where ` +
         `account_id in (${extractArrayIndices(accountIds)})`;
     const result = await rdsConnection.selectQuery(query, accountIds);
+    logger('Result of query: ', result);
     
     if (Array.isArray(result) && result.length > 0) {
         return returnMap
@@ -653,7 +655,7 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
 };
 
 module.exports.fetchActiveMlBoosts = async () => {
-    const query = `select * from ${boostTable} where ml_parameters != null and active = true and end_time < current_timestamp`;
+    const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
     const resultOfQuery = await rdsConnection.selectQuery(query, []);
-    return resultOfQuery.map((row) => camelizeKeys(row));
+    return resultOfQuery.map(transformBoostFromRds);
 };

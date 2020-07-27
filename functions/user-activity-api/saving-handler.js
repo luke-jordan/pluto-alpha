@@ -102,8 +102,18 @@ module.exports.initiatePendingSave = async (event) => {
       return invalidRequestResponse('Error! No unit specified for the saving event');
     }
 
-    // todo : also use cache to check for duplicate requests
-    const duplicateSave = await persistence.checkForDuplicateSave(saveInformation);
+    // todo : also use cache for these checks
+    const [duplicateSave, ownerInfo] = await Promise.all([
+      persistence.checkForDuplicateSave(saveInformation),
+      persistence.getOwnerInfoForAccount(saveInformation.accountId)
+    ]);
+
+    logger('Initiating save, account owner info: ', ownerInfo);
+    if (ownerInfo.frozen) {
+      // this only happens in extreme cases (fraud/AML/etc), so we _want_ the "user" not logged out, and not seeing why
+      return { statusCode: 403 };
+    }
+
     if (duplicateSave) {
       logger('Duplicate transaction found, was created at: ', duplicateSave.creationTime, 'full details: ', duplicateSave);
       const returnResult = {
@@ -120,9 +130,8 @@ module.exports.initiatePendingSave = async (event) => {
     saveInformation.settlementStatus = 'PENDING'; // we go straight to pending here, as next step is completed when payment received
 
     if (!saveInformation.floatId && !saveInformation.clientId) {
-      const floatAndClient = await persistence.getOwnerInfoForAccount(saveInformation.accountId);
-      saveInformation.floatId = saveInformation.floatId || floatAndClient.floatId;
-      saveInformation.clientId = saveInformation.clientId || floatAndClient.clientId;
+      saveInformation.floatId = saveInformation.floatId || ownerInfo.floatId;
+      saveInformation.clientId = saveInformation.clientId || ownerInfo.clientId;
     }
 
     // todo : verify user account ownership

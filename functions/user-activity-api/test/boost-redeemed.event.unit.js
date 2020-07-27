@@ -49,7 +49,14 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
 
     it('Test happy path', async () => {
         fetchAccountTagStub.resolves('TESTPERSON1');
-        fetchTransactionStub.resolves({ accountId: 'account-1', tags: ['PAYMENT_URL'], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
+        fetchTransactionStub.resolves({ 
+            transactionId: 'transaction-1',
+            accountId: 'account-1', 
+            tags: ['PAYMENT_URL'], 
+            amount: mockAmount, 
+            unit: 'HUNDREDTH_CENT', 
+            currency: 'ZAR'
+        });
 
         sendEventToQueueStub.resolves({ result: 'SUCCESS' }); // actually irrelevant, as long as doesn't throw error
         updateTransactionTagStub.resolves({ updatedTime: 'some-time' });
@@ -73,9 +80,47 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         expect(updateTransactionTagStub).to.have.been.calledOnceWithExactly('transaction-1', expectedTag);
     });
 
+    it('Handles tournaments (so, multiple transactions)', async () => {
+        fetchTransactionStub.withArgs('other-transaction').resolves({ accountId: 'other-account' });
+        
+        fetchAccountTagStub.resolves('TESTPERSON1');
+        fetchTransactionStub.withArgs('transaction-1').resolves({ 
+            transactionId: 'transaction-1',
+            accountId: 'account-1', 
+            tags: ['PAYMENT_URL'], 
+            amount: mockAmount, 
+            unit: 'HUNDREDTH_CENT', 
+            currency: 'ZAR'
+        });
+
+        sendEventToQueueStub.resolves({ result: 'SUCCESS' }); // actually irrelevant, as long as doesn't throw error
+        updateTransactionTagStub.resolves({ updatedTime: 'some-time' });
+
+        const tournEvent = JSON.parse(JSON.stringify(mockEventBody)); // need clone to be deep
+        tournEvent.context.transferResults.accountTxIds = ['other-transaction', 'transaction-1'];
+
+        await handler.handleBoostRedeemedEvent(wrapMockEvent(tournEvent));
+
+        expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
+        expect(fetchTransactionStub).to.have.been.calledTwice;
+        
+        const expectedTransactionDetails = {
+            accountNumber: 'TESTPERSON1',
+            amount: 10,
+            unit: 'WHOLE_CURRENCY',
+            currency: 'ZAR'
+        };
+
+        const expectedPayload = { operation: 'BOOST', transactionDetails: expectedTransactionDetails };
+        expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('balance_sheet_update_queue', [expectedPayload], true);
+
+        const expectedTag = `FINWORKS_RECORDED::${mockAmount}::HUNDREDTH_CENT::ZAR`;
+        expect(updateTransactionTagStub).to.have.been.calledOnceWithExactly('transaction-1', expectedTag);
+    });
+
     it('Does not tag if error dispatching to queue', async () => {
         fetchAccountTagStub.resolves('TESTPERSON1');
-        fetchTransactionStub.resolves({ accountId: 'account-1', tags: ['PAYMENT_URL'], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
+        fetchTransactionStub.resolves({ transactionId: 'transaction-1', accountId: 'account-1', tags: ['PAYMENT_URL'], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
 
         sendEventToQueueStub.resolves({ result: 'FAILURE' });
 
@@ -122,13 +167,12 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         const expectedTag = `FINWORKS_RECORDED::${mockAmount}::HUNDREDTH_CENT::ZAR`;
         
         fetchAccountTagStub.resolves('TESTPERSON1');
-        fetchTransactionStub.resolves({ accountId: 'account-1', tags: [expectedTag], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
+        fetchTransactionStub.resolves({ transactionId: 'transaction-1', accountId: 'account-1', tags: [expectedTag], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
 
         await handler.handleBoostRedeemedEvent(wrapMockEvent(mockEventBody));
 
-        expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
-
+        
         expect(sendEventToQueueStub).to.not.have.been.called;
         expect(updateTransactionTagStub).to.not.have.been.called;
     });
@@ -142,7 +186,6 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         await expect(handler.handleBoostRedeemedEvent(wrapMockEvent(mockEventBody))).to.be.
             rejectedWith('Error! Mismatched transaction and prior balance sheet operation');
 
-        expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
 
         expect(sendEventToQueueStub).to.not.have.been.called;
@@ -156,7 +199,6 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         await expect(handler.handleBoostRedeemedEvent(wrapMockEvent(mockEventBody))).to.be.
             rejectedWith('Error! Mismatch between transaction as persisted and amount on boost redemption');
 
-        expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
 
         expect(sendEventToQueueStub).to.not.have.been.called;
@@ -185,9 +227,8 @@ describe('*** UNIT TESTING EVENT HANDLER FOR BOOST REDEEMED ***', () => {
         fetchTransactionStub.resolves({ accountId: 'account-2', tags: [], amount: mockAmount, unit: 'HUNDREDTH_CENT', currency: 'ZAR' });
 
         await expect(handler.handleBoostRedeemedEvent(wrapMockEvent(mockEventBody))).to.be.
-            rejectedWith('Error! Transaction and account do not match');
+            rejectedWith('Error! Account does not match any transaction in the transfer');
 
-        expect(fetchAccountTagStub).to.have.been.calledOnceWithExactly('account-1', 'FINWORKS');
         expect(fetchTransactionStub).to.have.been.calledOnceWithExactly('transaction-1');
 
         expect(sendEventToQueueStub).to.not.have.been.called;

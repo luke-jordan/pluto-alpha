@@ -13,14 +13,20 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
+const addFactStub = sinon.stub();
+const updateFactStub = sinon.stub();
+
 const fetchSnippetUserCountStub = sinon.stub();
 const fetchSnippetStub = sinon.stub();
+
 const countSnippetEventsStub = sinon.stub();
 const insertPreviewUserStub = sinon.stub();
 const removePreviewUserStub = sinon.stub();
 
 const handler = proxyquire('../snippet-admin-handler', {
     './persistence/rds.snippets': {
+        'addSnippet': addFactStub,
+        'updateSnippet': updateFactStub,
         'fetchSnippetsAndUserCount': fetchSnippetUserCountStub,
         'fetchSnippetForAdmin': fetchSnippetStub,
         'countSnippetEvents': countSnippetEventsStub,
@@ -30,7 +36,73 @@ const handler = proxyquire('../snippet-admin-handler', {
     '@noCallThru': true
 });
 
-describe('*** UNIT TEST ADMIN SNIPPET FUNCTIONS ***', () => {
+describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
+    
+    const testAdminId = 'admin-usr-id';
+    const testSnippetId = 'snippet-id';
+
+    beforeEach(() => helper.resetStubs(addFactStub, updateFactStub));
+
+    it('Creates a new snippet', async () => {
+        const testCreationTime = moment();
+
+        const expectedResult = { result: 'SUCCESS', creationTime: testCreationTime.format() };
+        const expectedSnippet = {
+            createdBy: testAdminId,
+            title: 'Jupiter Snippet 51',
+            body: 'Jupiter helps you save.',
+            countryCode: 'ZAF',
+            active: true,
+            snippetPriority: 1,
+            snippetLanguage: 'en',
+            previewMode: true
+        };
+
+        addFactStub.resolves({ creationTime: testCreationTime.format() });
+
+        const eventBody = {
+            title: 'Jupiter Snippet 51',
+            body: 'Jupiter helps you save.',
+            countryCode: 'ZAF'
+        };
+
+        const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
+        const creationResult = await handler.createSnippet(testEvent);
+
+        const body = helper.standardOkayChecks(creationResult);
+        expect(body).to.deep.equal(expectedResult);
+        expect(addFactStub).to.have.been.calledOnceWithExactly(expectedSnippet);
+    });
+
+    it('Updates a snippet properly', async () => {
+        const testUpdatedTime = moment();
+
+        const expectedResult = { result: 'SUCCESS', updatedTime: testUpdatedTime.format() };
+        const expectedUpdateParams = {
+            snippetId: testSnippetId,
+            active: true,
+            body: 'Jupiter gives you an annual interest rate of up to 5%.'
+        };
+
+        updateFactStub.resolves({ updatedTime: testUpdatedTime.format() });
+
+        const eventBody = {
+            snippetId: testSnippetId,
+            active: true,
+            body: 'Jupiter gives you an annual interest rate of up to 5%.'
+        };
+
+        const testEvent = helper.wrapEvent(eventBody, testAdminId, 'SYSTEM_ADMIN');
+        const resultOfUpdate = await handler.updateSnippet(testEvent);
+
+        const body = helper.standardOkayChecks(resultOfUpdate);
+        expect(body).to.deep.equal(expectedResult);
+        expect(updateFactStub).to.have.been.calledOnceWithExactly(expectedUpdateParams);
+    });
+
+});
+
+describe('*** UNIT TEST ADMIN SNIPPET READ FUNCTIONS ***', () => {
     const testSnippetId = uuid();
     const testAdminId = uuid();
     const testSystemId = uuid();
@@ -111,6 +183,40 @@ describe('*** UNIT TEST ADMIN SNIPPET FUNCTIONS ***', () => {
         const body = helper.standardOkayChecks(resultOfFetch);
         expect(body).to.deep.equal(expectedResult);
         [fetchSnippetStub, countSnippetEventsStub].map((stub) => expect(stub).to.have.been.calledOnceWithExactly(testSnippetId));
+    });
+
+    it('Handles null on counts (if no events yet)', async () => {
+        const mockSnippet = {
+            snippetId: testSnippetId,
+            createdBy: testAdminId,
+            title: 'Jupiter Snippet 2',
+            body: 'Jupiter positively reinforces saving for tomorrow.',
+            countryCode: 'ZAF',
+            active: true,
+            snippetPriority: 1,
+            snippetLanguage: 'en',
+            previewMode: true
+        };
+
+        const expectedResult = {
+            snippetId: testSnippetId,
+            title: 'Jupiter Snippet 2',
+            body: 'Jupiter positively reinforces saving for tomorrow.',
+            userCount: 0,
+            totalViewCount: 0,
+            totalFetchCount: 0
+        };
+
+        fetchSnippetStub.resolves(mockSnippet);
+        countSnippetEventsStub.resolves(null);
+
+        const testEvent = helper.wrapEvent({ snippetId: testSnippetId }, testAdminId, 'SYSTEM_ADMIN');
+
+        const resultOfFetch = await handler.viewSnippet(testEvent);
+
+        const body = helper.standardOkayChecks(resultOfFetch);
+        expect(body).to.deep.equal(expectedResult);
+        [fetchSnippetStub, countSnippetEventsStub].forEach((stub) => expect(stub).to.have.been.calledOnceWithExactly(testSnippetId));
     });
 
     it('Routes a read properly', async () => {

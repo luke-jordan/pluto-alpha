@@ -38,6 +38,12 @@ module.exports.stdProperties = {
         expects: 'epochMillis',
         table: 'accountTable'
     },
+    accountOpenDays: {
+        type: 'match',
+        description: 'Account opened X days ago',
+        expects: 'number',
+        table: 'accountTable'
+    },
     lastCapitalization: {
         type: 'match',
         description: 'Last capitalization',
@@ -67,11 +73,26 @@ module.exports.stdProperties = {
     },
     boostNotRedeemed: {
         type: 'match',
-        description: 'Has not redeemed boost',
+        description: 'Offered boost, not redeemed',
         expects: 'entity',
         table: 'boostTable',
         skipClient: true,
         entity: 'boost'
+    },
+    boostCount: {
+        type: 'match', // see below for reasons (we use a subquery to deal with non-existence, though if used again becomes an anti-pattern)
+        description: 'Number offered boosts',
+        expects: 'number',
+        table: 'transactionTable' // see below for need to select non-existent in boost table etc.
+    },
+    boostOffered: {
+        type: 'aggregate', // because we allow inversions, we classify as aggregate, though it is actually match
+        description: 'Part of boost (all from offer onwards)',
+        expects: 'entity',
+        entity: 'boost',
+        table: 'boostTable',
+        skipClient: true,
+        canInvert: true
     },
     systemWideUserId: {
         type: 'match',
@@ -191,6 +212,39 @@ module.exports.convertBoostCreatedOffered = (condition) => ({
     ]}]
 });
 
+module.exports.convertBoostAllButCreated = (condition) => {
+    // since exclusion happens at level of persisted intermediate audience, here we actually flip it to positive
+    const boostIdOp = condition.op === 'exclude' ? 'is' : condition.op;
+    return {
+        conditions: [{ op: 'and', children: [
+            { prop: 'boost_id', op: boostIdOp, value: condition.value },
+            { prop: 'boost_status', op: 'not', value: 'CREATED' }
+        ]}
+    ]};
+};
+
+// bit of a monster because we need to pick up the non-existent in the boost table (i.e., count = 0), if this is less than
+// hence we, this once, use a subquery directly in a primary convertor, but if needed again, instead implement a flag for
+// inverted combinations, i.e., this is an aggregate and then do a not-in on intermediate audience
+module.exports.convertBoostNumber = (condition) => {
+    const startTime = condition.startTime ? moment(condition.startTime) : moment(0);
+    const endTime = condition.endTime ? moment(condition.endTime) : moment();
+
+    // note on status: at present we do not count status CREATED because that might pick up accounts not-yet-offered but
+    // part of an ML-determined or event-driven boost that has not triggered for them yet
+    
+    const { op: passedOp } = condition;
+    // eslint-disable-next-line no-nested-ternary
+    const invertedOp = passedOp === 'is' ? '!=' : (passedOp === 'greater_than' ? '<=' : '>=');
+    const subQuery = `select account_id from ${config.get('tables.boostTable')} where boost_status != 'CREATED' and ` + 
+        `creation_time between '${startTime.format()}' and '${endTime.format()}' group by account_id ` +
+        `having count(boost_id) ${invertedOp} ${parseInt(condition.value, 10)}`;
+
+    const conditions = [{ op: 'not_in', prop: 'account_id', value: subQuery }];
+
+    return { conditions };
+};
+
 module.exports.convertNumberFriends = (condition) => {
     const countSubQuery = `(select count(*) from ${config.get('tables.friendTable')} where (initiated_user_id = owner_user_id or accepted_user_id = owner_user_id) and ` +
         `relationship_status = 'ACTIVE')`;
@@ -203,7 +257,7 @@ module.exports.convertNumberFriends = (condition) => {
 };
 
 // //////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// //////////////////////////////////// UTILITY / AUX CONDITIONS ///////////////////////////////////////////////////////////
+// //////////////////////////////////// ACCOUNT & TIME CONDITIONS //////////////////////////////////////////////////////////
 // ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 module.exports.humanRefInValueConversion = (value) => (Array.isArray(value) 
@@ -223,4 +277,20 @@ module.exports.convertDateCondition = (condition, propToUse) => {
         { op: 'greater_than_or_equal_to', prop: propToUse, value: moment(value).startOf('day').format() },
         { op: 'less_than_or_equal_to', prop: propToUse, value: moment(value).endOf('day').format() }
     ]};
+};
+
+module.exports.convertCreationDaysToTime = (condition) => {
+    const currentMoment = moment(); // avoid weirdness over midnight (sometimes refreshes etc happen then)
+    // const clonedCondition = JSON.parse(JSON.stringify(condition)); // need to avoid mutability issues, hence deep clone not spread
+    
+    const convertedValue = currentMoment.subtract(condition.value, 'days').startOf('day').valueOf();
+    let convertedOp = condition.op; 
+    
+    if (condition.op === 'less_than' || condition.op === 'less_than_or_equal_to') {
+        convertedOp = 'greater_than_or_equal_to'; // because "less than 5 days" = "after 5 days ago"
+    } else if (condition.op === 'greater_than' || condition.op === 'greater_than_or_equal_to') {
+        convertedOp = 'less_than_or_equal_to';
+    }
+    
+    return { value: convertedValue, op: convertedOp, prop: condition.prop };
 };

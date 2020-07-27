@@ -57,6 +57,11 @@ const columnConverters = {
     accountOpenTime: (condition) => ({
         conditions: [converter.convertDateCondition(condition, 'creation_time')]
     }),
+
+    accountOpenDays: (condition) => ({
+        conditions: [converter.convertDateCondition(converter.convertCreationDaysToTime(condition), 'creation_time')]  
+    }),
+
     humanReference: (condition) => ({
         conditions: [
             { op: condition.op, prop: 'human_ref', value: condition.op === 'is' ? condition.value.trim().toUpperCase() : converter.humanRefInValueConversion(condition.value) }
@@ -64,6 +69,9 @@ const columnConverters = {
     }),
 
     boostNotRedeemed: (condition) => converter.convertBoostCreatedOffered(condition),
+    boostOffered: (condition) => converter.convertBoostAllButCreated(condition),
+    boostCount: (condition) => converter.convertBoostNumber(condition),
+
     numberFriends: (condition) => converter.convertNumberFriends(condition),
     
     systemWideUserId: (condition) => ({
@@ -73,15 +81,23 @@ const columnConverters = {
     })
 };
 
+/**
+ * This takes a selection object and does a final top to it, i.e., adds a client ID and a table name
+ * Note : some tables do not have client IDs so need to not add (i.e., boost)
+ * Note : in some cases we have converted to aggregate entities, which means we need to adjust this
+ * @param {object} selection Final selection object to which table and client ID will be added
+ * @param {string} clientId The client ID to be added
+ * @param {string} tableKey The key for looking up the specific table to add
+ */
 const addTableAndClientId = (selection, clientId, tableKey) => {
     const tableName = config.get(`tables.${tableKey}`);
     const { conditions: selectionConditions } = selection;
     
     const existingTopLevel = { ...selectionConditions[0] };
 
-    logger('*** Table Key? : ', tableKey);
+    logger('Adding table and client, passed table key : ', tableKey);
     const clientColumn = tableClientIdColumns[tableKey];
-    if (!clientColumn) {
+    if (!clientColumn) { // then alll we need to do is stick this table key in and exit
         selection.table = tableName;
         return selection;
     }
@@ -114,37 +130,75 @@ const addTableAndClientId = (selection, clientId, tableKey) => {
 };
 
 const convertAggregateIntoEntity = async (aggregateCondition, persistenceParams) => {
+    logger('Converting specific aggregate condition: ', JSON.stringify(aggregateCondition));
     const propConverter = columnConverters[aggregateCondition.prop];
     const columnSelection = { creatingUserId: persistenceParams.creatingUserId, ...propConverter(aggregateCondition) };
-    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId, DEFAULT_TABLE);
+
+    const relevantTable = converter.stdProperties[aggregateCondition.prop].table || DEFAULT_TABLE;
+    logger('Obtained relevant table key: ', relevantTable);
     
-    logger('Transforming aggregate condition: ', clientRestricted);
+    const clientRestricted = addTableAndClientId(columnSelection, persistenceParams.clientId, relevantTable);
+    
+    logger('Transformed into column condition: ', JSON.stringify(clientRestricted, null, 2));
     const copiedParams = { ...persistenceParams };
     copiedParams.audienceType = 'INTERMEDIATE';
     const subAudienceResult = await persistence.executeColumnConditions(clientRestricted, true, copiedParams);
     const subAudienceId = subAudienceResult.audienceId;
 
     const subAudienceQuery = `select account_id from ${audienceJoinTable} where audience_id = '${subAudienceId}' and active = true`;
-    return { op: 'in', prop: 'account_id', value: subAudienceQuery };
+    const op = aggregateCondition.op === 'exclude' ? 'not_in' : 'in';
+    return { op, prop: 'account_id', value: subAudienceQuery };
+};
+
+const hasNonDefaultTable = (conditions) => {
+    if (conditions.length === 0) {
+        return false;
+    }
+
+    return conditions.some((condition) => {
+        if (['and', 'or'].includes(condition.op)) {
+            return hasNonDefaultTable(condition.children);
+        }
+        return Reflect.has(converter.stdProperties[condition.prop], 'table');
+    });
+};
+
+const extractTableArrayFromCondition = (condition) => {
+    if (!condition) {
+        return [];
+    }
+
+    if (['and', 'or'].includes(condition.op)) {
+        logger('Extracting table from sub-conditions: ', condition);
+        return condition.children.map((subCondition) => extractTableArrayFromCondition(subCondition)).
+            reduce((list, cum) => [...list, ...cum], []);
+    }
+
+    const propTable = converter.stdProperties[condition.prop].table;
+    return propTable ? [propTable] : [DEFAULT_TABLE];
 };
 
 // requires client ID for restriction of sub-audience creation (possibly redundant, but otherwise could lead to massive inefficiency 
 // & possible leaks later down the line)
-const convertPropertyCondition = async (propertyCondition, persistenceParams) => {
-    logger('Passed property condition: ', propertyCondition);
+const convertPropertyCondition = async (propertyCondition, persistenceParams, isInMultiTableBranch) => {
+    logger('Inside convert property condition, passed: ', propertyCondition);
     // first check if this combinatorial, if so, do recursion
     if (propertyCondition.op === 'or' || propertyCondition.op === 'and') {
         const childConditions = propertyCondition.children;
-        const convertedChildren = await Promise.all(childConditions.map((condition) => convertPropertyCondition(condition, persistenceParams)));
+        // sometimes frontend sends us of the form "and" with just one child
+        const childTables = [...new Set(extractTableArrayFromCondition(propertyCondition))];
+        const conversions = childConditions.map((condition) => convertPropertyCondition(condition, persistenceParams, childTables.length > 1));
+        const convertedChildren = await Promise.all(conversions);
         const convertedCondition = { op: propertyCondition.op, children: convertedChildren };
         return convertedCondition;
     }
 
     // now we are in a leaf :: if it is aggregate, at present just straight convert into matched via an insert operation;
     // obviously a lot of scope to make more efficient by eg detecting if this is necessary by checking if all nodes are 'ands' or not
-    if (propertyCondition.type === 'aggregate') {
+    if (propertyCondition.type === 'aggregate' || isInMultiTableBranch) {
+        logger('Aggregate condition, or in multi table branch, handle accordingly');
         const matchCondition = await convertAggregateIntoEntity(propertyCondition, persistenceParams);
-        logger('Matched condition: ', matchCondition);
+        logger('Converted into audience-match condition: ', JSON.stringify(matchCondition));
         return matchCondition;
     }
     
@@ -154,46 +208,11 @@ const convertPropertyCondition = async (propertyCondition, persistenceParams) =>
         return propertyCondition;
     }
 
-    logger('Converting from property: ', propertyCondition.prop);
+    logger('Not an aggregate-in-itself, and not inside multi-table branch, converting from property: ', propertyCondition.prop);
     const columnConverter = columnConverters[propertyCondition.prop];
     const columnCondition = columnConverter(propertyCondition);
     logger('Column condition: ', JSON.stringify(columnCondition, null, 2));
     return columnCondition.conditions[0];
-};
-
-// restore as part of this general tune-up
-const validateColumnConditions = (conditions) => {
-    if (conditions.length === 0) {
-        return true;
-    }
-};
-
-const hasAccountTableProperty = (conditions) => {
-    if (conditions.length === 0) {
-        return false;
-    }
-
-    return conditions.some((condition) => {
-        if (['and', 'or'].includes(condition.op)) {
-            return hasAccountTableProperty(condition.children);
-        }
-        return Reflect.has(converter.stdProperties[condition.prop], 'table');
-    });
-};
-
-const extractTableArrayFromCondition = (condition) => {
-    logger('Extracting table from condition: ', condition);
-    if (!condition) {
-        return [];
-    }
-
-    if (['and', 'or'].includes(condition.op)) {
-        return condition.children.map((subCondition) => extractTableArrayFromCondition(subCondition)).
-            reduce((list, cum) => [...list, ...cum], []);
-    }
-
-    const propTable = converter.stdProperties[condition.prop].table;
-    return propTable ? [propTable] : [DEFAULT_TABLE];
 };
 
 const extractColumnConditionsTable = (conditions) => {
@@ -206,16 +225,12 @@ const extractColumnConditionsTable = (conditions) => {
 
     const tables = [...new Set(tableDoubleArray.reduce((cum, list) => [...cum, ...list], []))];
 
-    
-    if (tables.length > 1) {
-        throw new Error('Invalid selection, spans tables. Not supported yet');
+    if (tables.length === 1) {
+        return tables[0];
     }
 
-    if (tables.length === 0) {
-        return DEFAULT_TABLE;
-    }
-
-    return tables[0];
+    // if no table specified, we use default; if multiple, each will be converted to an aggregate, and final query will be default
+    return DEFAULT_TABLE;
 };
 
 const logParams = (params) => {
@@ -225,12 +240,20 @@ const logParams = (params) => {
     }
 };
 
+const hasAggregateCondition = (condition) => {
+    if (condition.op === 'and' || condition.op === 'or') {
+        return condition.children.some((child) => hasAggregateCondition(child));
+    }
+
+    return condition.type === 'aggregate';
+};
+
 const constructColumnConditions = async (params) => {
     logParams(params);
 
     const passedPropertyConditions = params.conditions;
 
-    const hasTableSpecified = hasAccountTableProperty(passedPropertyConditions);
+    const hasTableSpecified = hasNonDefaultTable(passedPropertyConditions);
     logger('Has table specified:', hasTableSpecified);
 
     const conditionTable = hasTableSpecified ? extractColumnConditionsTable(passedPropertyConditions) : DEFAULT_TABLE;
@@ -247,23 +270,22 @@ const constructColumnConditions = async (params) => {
     const columnConversions = passedPropertyConditions.map((condition) => convertPropertyCondition(condition, persistenceParams));
     const columnConditions = await Promise.all(columnConversions);
     
-    const selectionObject = {
-        conditions: columnConditions, creatingUserId
-    };
-    logger('Selection object here: ', JSON.stringify(selectionObject));
+    const selectionObject = { conditions: columnConditions, creatingUserId };
+    logger('Completed all constructions, object here: ', JSON.stringify(selectionObject));
     
     if (sample) {
         selectionObject.sample = sample;
     }
 
-    const withClientId = addTableAndClientId(selectionObject, clientId, conditionTable);
+    // if we are now combining only aggregates, we override any skip client tests along the way, and execute
+    const finalTable = passedPropertyConditions.some((condition) => hasAggregateCondition(condition)) ? DEFAULT_TABLE : conditionTable;
+    const withClientId = addTableAndClientId(selectionObject, clientId, finalTable);
     
     logger('Reassembled conditions: ', JSON.stringify(withClientId, null, 2));
     return { columnConditions: withClientId, persistenceParams };
 };
 
 module.exports.createAudience = async (params) => {
-    validateColumnConditions(params.conditions);
     const { columnConditions, persistenceParams } = await constructColumnConditions(params);
     persistenceParams.audienceType = 'PRIMARY';
     

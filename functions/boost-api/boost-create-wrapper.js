@@ -26,7 +26,7 @@ const handleError = (err) => {
 
 const isValidFriendTournament = (event) => {
     const params = boostUtil.extractEventBody(event);
-    logger('Checking if friend tournament, after being passed params: ', params);
+    logger('Checking if friend tournament ... ');
     if (params.boostAudienceSelection) {
         logger('Have an audience selection, canont be friend based');
         return false;
@@ -230,7 +230,7 @@ module.exports.createBoostWrapper = async (event) => {
     try {
         const userDetails = opsUtil.extractUserDetails(event);
 
-        logger('Boost create, user details: ', userDetails);
+        logger('Boost create wrapper, user details: ', userDetails);
         if (!userDetails) {
             return { statusCode: status('Forbidden') };
         }
@@ -243,7 +243,7 @@ module.exports.createBoostWrapper = async (event) => {
         }
 
         const params = boostUtil.extractEventBody(event);
-        logger('Boost create, received params: ', params);
+        logger('Received parameters: ', JSON.stringify(params, null, 2));
         params.creatingUserId = userDetails.systemWideUserId;
 
         if (isUserGeneratedTournament) {
