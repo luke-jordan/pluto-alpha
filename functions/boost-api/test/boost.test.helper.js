@@ -24,13 +24,13 @@ module.exports.wrapEvent = (requestBody, systemWideUserId, userRole) => ({
     }
 });
 
-module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, userRole) => ({
+module.exports.wrapQueryParamEvent = (requestBody, systemWideUserId, role) => ({
     httpMethod: 'GET',
     queryStringParameters: requestBody,
     requestContext: {
         authorizer: {
             systemWideUserId,
-            userRole
+            role
         }
     }
 });

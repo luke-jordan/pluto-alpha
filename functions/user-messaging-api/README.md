@@ -57,9 +57,9 @@ note: this is only called for once off or event driven messages )i.e., invokes t
 | destinationUserId | <code>string</code> | Optional. This overrides the user ids indicated in the persisted message instruction's selectionInstruction property. |
 | parameters | <code>object</code> | Required when assembling boost message. Contains details such as boostAmount, which is inserted into the boost template.tr |
 
-<a name="createFromPendingInstructions"></a>
+<a name="createFromRecurringInstructions"></a>
 
-## createFromPendingInstructions()
+## createFromRecurringInstructions()
 This runs on a scheduled job. It processes any once off and recurring instructions that have not been processed yet.
 
 **Kind**: global function  

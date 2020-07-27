@@ -55,22 +55,26 @@ const generateMultiplier = (distribution) => {
 };
 
 const calculateRandomBoostAmount = (boost) => {
-    const { distribution, realizedRewardModuloZeroTarget } = boost.rewardParameters;
-    const multiplier = generateMultiplier(distribution);
-    let calculatedBoostAmount = multiplier * opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
+    const { distribution, realizedRewardModuloZeroTarget, minBoostAmountPerUser } = boost.rewardParameters;
     
+    const boostAmount = opsUtil.convertToUnit(boost.boostAmount, boost.boostUnit, DEFAULT_UNIT);
+    const minBoostAmount = minBoostAmountPerUser ? opsUtil.convertToUnit(minBoostAmountPerUser.amount, minBoostAmountPerUser.unit, DEFAULT_UNIT) : 0;
+
+    const multiplier = generateMultiplier(distribution);
+    // eslint-disable-next-line no-mixed-operators
+    let calculatedBoostAmount = multiplier * (boostAmount - minBoostAmount) + minBoostAmount;
     if (realizedRewardModuloZeroTarget) {
         while (calculatedBoostAmount % realizedRewardModuloZeroTarget > 0) {
-            calculatedBoostAmount += 1000;
-        }    
+            calculatedBoostAmount += 10;
+        }
     }
 
-    // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount
+    // Try again if the calculatedBoostAmount is rounded to a value greater than the boost amount or less than min amount
     if (calculatedBoostAmount > boost.boostAmount) {
         return calculateRandomBoostAmount(boost);
     }
 
-    logger('Returning boost amt:', calculatedBoostAmount);
+    logger('Calculated boost amount:', calculatedBoostAmount);
     return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 

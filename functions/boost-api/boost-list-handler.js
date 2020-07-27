@@ -205,6 +205,20 @@ const fetchScoreLogsForBoost = async (boostId, systemWideUserId) => {
     return transformedLogs;
 };
 
+const calculateYield = (boostAmountDetails) => {
+    const { boostId, sumOfBoostAmount, sumOfSaved } = boostAmountDetails;
+    const sumOfSavedAmount = opsUtil.convertToUnit(sumOfSaved, 'WHOLE_CURRENCY', 'HUNDREDTH_CENT');
+    const boostYield = sumOfBoostAmount / sumOfSavedAmount;
+    return { boostId, boostYield };
+};
+
+// Calculates boost yields, i.e how much boost generates how much saved amount.
+const calculateBoostYield = async (boostId) => {
+    const boostAndSavedAmount = await persistence.sumBoostAndSavedAmounts([boostId]);
+    logger('Got boost amount and saved amount:', boostAndSavedAmount);
+    return boostAndSavedAmount.map((boostAmountDetails) => calculateYield(boostAmountDetails));
+};
+
 /**
  * This method provides the details of a boost, including (if a friend tournament), the score logs
  */
@@ -212,7 +226,7 @@ module.exports.fetchBoostDetails = async (event) => {
     try {
         const { systemWideUserId, role } = opsUtil.extractUserDetails(event);
         const { boostId } = opsUtil.extractQueryParams(event);
-
+    
         const [userAccountId, boost] = await Promise.all([
             fetchUserDefaultAccount(systemWideUserId),
             persistence.fetchBoostDetails(boostId, true)
@@ -227,6 +241,10 @@ module.exports.fetchBoostDetails = async (event) => {
 
         if (role === 'SYSTEM_ADMIN' || boost.flags.includes('FRIEND_TOURNAMENT')) {
             boost.tournamentScores = await fetchScoreLogsForBoost(boostId, systemWideUserId);
+        }
+
+        if (role === 'SYSTEM_ADMIN') {
+            boost.boostYields = await calculateBoostYield(boostId);
         }
 
         logger('Returning assembled boost: ', boost);

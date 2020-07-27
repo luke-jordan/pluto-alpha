@@ -274,6 +274,7 @@ describe('*** UNIT TEST SNIPPET RDS FUNCTIONS ***', () => {
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal({ viewCount: 3, updatedTime: testUpdatedTime });
         expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, [testSnippetId, testSystemId]);
+        await expect(rds.incrementCount(testSnippetId, testSystemId, 'BAD_STATUS')).to.eventually.be.rejectedWith('Invalid status: BAD_STATUS');
     });
 
     it('Updates snippet status properly', async () => {
