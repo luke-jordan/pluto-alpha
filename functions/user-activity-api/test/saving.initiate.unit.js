@@ -192,6 +192,22 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, ...expectedPaymentParams });
     });
 
+    it('Blocks if account is frozen', async () => {
+        const saveEventToWrapper = testSavePendingBase();
+        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
+        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
+
+        findFloatOrIdStub.withArgs(testAccountId).resolves({ frozen: true });
+        
+        const apiGwMock = { body: JSON.stringify(saveEventToWrapper), requestContext: testAuthContext };
+        const resultOfWrapperCall = await handler.initiatePendingSave(apiGwMock);
+        expect(resultOfWrapperCall).to.deep.equal({ statusCode: 403 });
+
+        expect(findFloatOrIdStub).to.have.been.calledOnceWithExactly(testAccountId);
+
+        testHelper.expectNoCalls(fetchInfoForBankRefStub, getPaymentUrlStub, addPaymentInfoRdsStub, addSavingsRdsStub);
+    });
+
     it('Happy path again, including tag (in this case, social saving pot)', async () => {
         const saveEventToWrapper = testSavePendingBase();
         
@@ -331,6 +347,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         badRdsRequest.amount = badEvent.amount;
         badRdsRequest.initiationTime = testHelper.momentMatcher(testTimeInitiated);
         
+        findFloatOrIdStub.resolves({ frozen: false }); // just to simulate what is next
         addSavingsRdsStub.withArgs(badRdsRequest).rejects(new Error('Error! Bad account ID'));
         
         const expectedError2 = await handler.initiatePendingSave({ body: JSON.stringify(badEvent), requestContext: testAuthContext });
@@ -442,7 +459,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         expect(saveBody).to.deep.equal(expectedResponseBody);
         expect(addSavingsRdsStub).to.have.been.calledOnceWithExactly(wellFormedMinimalPendingRequestToRds);
         expect(getPaymentUrlStub).to.have.been.calledOnceWithExactly(expectedPaymentInfoTest);
-        expect(findFloatOrIdStub).to.not.have.been.called;
         expect(findMatchingTxStub).to.have.not.been.called;
     });
 
