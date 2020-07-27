@@ -1,6 +1,6 @@
 'use strict';
 
-// const logger = require('debug')('jupiter:boosts:test');
+const logger = require('debug')('jupiter:boosts:test');
 
 const config = require('config');
 const uuid = require('uuid/v4');
@@ -37,7 +37,7 @@ const rds = proxyquire('../persistence/rds.boost', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(queryStub, multiTableStub, uuidStub);
+const resetStubs = () => testHelper.resetStubs(queryStub, updateStub, multiTableStub, uuidStub);
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
@@ -467,6 +467,37 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(queryStub).to.have.been.calledWithExactly(findQuery, ['FRIEND_TOURNAMENT']);
         ['boost-id-1', 'boost-id-2'].map((boostId) => expect(queryStub).to.have.been.calledWithExactly(selectQuery, [boostId]));
         expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['boost-id-2']);
+    });
+
+    it('Expires boosts', async () => {
+        const firstUpdateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
+
+        updateStub.onFirstCall().resolves({
+            'rows': [
+                { 'boost_id': 'boost-1' },
+                { 'boost_id': 'boost-2' },
+                { 'boost_id': 'boost-3' }
+            ],
+            rowCount: 3
+        });
+
+        const resultOfUpdate = await rds.expireBoosts();
+        
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal(['boost-1', 'boost-2', 'boost-3']);
+        expect(updateStub).to.have.been.calledOnceWithExactly(firstUpdateQuery, [false]);
+    });
+
+    it('Boost culling exits where no boost found for update', async () => {
+        const updateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
+        updateStub.onFirstCall().resolves({ rows: [], rowCount: 0 });
+
+        const resultOfUpdate = await rds.expireBoosts();
+        logger('Result of boost cull:', resultOfUpdate);
+       
+        expect(resultOfUpdate).to.exist;
+        expect(resultOfUpdate).to.deep.equal([]);
+        expect(updateStub).to.to.have.been.calledOnceWithExactly(updateQuery, [false]);
     });
 
 });

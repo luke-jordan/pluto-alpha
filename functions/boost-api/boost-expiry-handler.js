@@ -1,7 +1,6 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:handler');
-const statusCodes = require('statuses');
 const config = require('config');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
@@ -12,9 +11,6 @@ const conditionTester = require('./condition-tester');
 
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
-
-const AWS = require('aws-sdk');
-const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 if (config.get('seedrandom.active')) {
     // eslint-disable-next-line global-require
@@ -53,8 +49,8 @@ const generateRedemptionAccountMap = async (boostId, winningAccounts) => {
     return { [boostId]: accountInfo[0].accountUserMap };
 };
 
-const checkIfAccountWinsTournament = (accountId, redemptionConditions, boostLogs) => {
-    const eventContext = { accountScoreList: boostLogs };
+const checkIfAccountWinsTournament = (accountId, redemptionConditions, accountScoreList) => {
+    const eventContext = { accountScoreList };
     // logger('Created event context: ', eventContext);
     const event = { eventType: 'BOOST_EXPIRED', accountId, eventContext };
     // logger('Checking for tournament win, sending in event: ', event);
@@ -157,11 +153,29 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
     await publisher.publishMultiUserEvent(winningUserIds, 'BOOST_TOURNAMENT_WON', { context: { boostId }});
 };
 
+const handleRandomReward = async (boost) => {
+    const pendingParticipants = await persistence.findAccountsForBoost({ boostIds: [boost.boostId], status: ['PENDING'] });
+    logger('Got pending participants:', pendingParticipants);
+    const accountIds = Object.keys(pendingParticipants[0].accountUserMap);
+
+    const scoredAccounts = accountIds.map((accountId) => ({ [accountId]: Math.random() }));
+    logger('Scored accounts:', scoredAccounts);
+    const winningAccounts = accountIds.filter((accountId) => checkIfAccountWinsTournament(accountId, boost.statusConditions.REDEEMED, scoredAccounts));
+
+    if (winningAccounts.length > 0) {
+        logger('Awarding boost to accounts:', winningAccounts);
+        await handleTournamentWinners(boost, winningAccounts);
+    }
+    
+    return { result: 'SUCCESS' };
+};
+
 module.exports.handleExpiredBoost = async (boostId) => {
     const [boost, boostGameLogs] = await Promise.all([persistence.fetchBoost(boostId), persistence.findLogsForBoost(boostId, GAME_RESPONSE)]);
     logger('Processing boost for expiry: ', boost);
 
-    if (boost.boostType !== 'GAME' || !boostGameLogs || boostGameLogs.length === 0) {
+    const isBoostGame = boost.boostType === 'GAME' && boostGameLogs && boostGameLogs.length > 0;
+    if (!isBoostGame && !util.isRandomAward(boost)) {
         // just expire the boosts and be done
         logger('No game logs found, expiring all');
         await expireAccountsForBoost(boostId);
@@ -173,6 +187,11 @@ module.exports.handleExpiredBoost = async (boostId) => {
         logger('No redemption conditions, exiting');
         await expireAccountsForBoost(boostId);
         return { resultCode: 200, body: 'No redemption condition' };
+    }
+
+    if (util.isRandomAward(boost)) {
+        logger('Boost is random award, awarding accordingly');
+        return handleRandomReward(boost);
     }
     
     const accountIdsThatResponded = [...new Set(boostGameLogs.map((log) => log.accountId))];
@@ -211,73 +230,21 @@ module.exports.handleExpiredBoost = async (boostId) => {
     return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
-const accountSorter = (accountA, accountB) => Object.values(accountB)[0] - Object.values(accountA)[0];
-
-const handleRandomReward = async (boost) => {
-    const statusCondition = boost.statusConditions.REDEEMED.filter((condition) => condition.startsWith('randomly_chosen_first_N'));
-    const numberOfRecipients = statusCondition[0].match(/#{(.*)}/)[1];
-    const pendingParticipants = await persistence.findAccountsForBoost({ boostIds: [boost.boostId], status: ['PENDING'] });
-    logger('Got pending participants:', pendingParticipants);
-    const accountIds = Object.keys(pendingParticipants[0].accountUserMap);
-
-    const scoredAccounts = accountIds.map((accountId) => ({ [accountId]: Math.random() })).sort(accountSorter);
-    logger('Scored accounts:', scoredAccounts);
-    const accountsWithHighestScore = scoredAccounts.slice(0, numberOfRecipients);
-    logger('Got reward recipients:', accountsWithHighestScore);
-    const winningAccounts = accountsWithHighestScore.map((accountScore) => Object.keys(accountScore)[0]);
-
-    if (accountsWithHighestScore.length > 0) {
-        logger('Awarding boost to accounts:', winningAccounts);
-        await handleTournamentWinners(boost, winningAccounts);
-    }
-
-    const remainingAccounts = accountIds.filter((accountId) => !winningAccounts.includes(accountId));
-    logger('Expiring accounts that did not win: ', remainingAccounts);
-    const resultOfUpdate = await expireAccountsForBoost(boost.boostId, remainingAccounts);
-    logger('Result of expiry: ', resultOfUpdate);
-    
-    return opsUtil.wrapResponse({ result: 'SUCCESS' });
-};
-
-/**
- * Expires all finished tournaments if no boost id is specified. If a boost id is specified then only that boost is expired.
- * @param {object} event
- * @property {string} boostId An optional boost id can be passed in to expire and end only this specific boost. 
- */
-module.exports.checkForBoostsToExpire = async (event) => {
+module.exports.checkForBoostsToExpire = async () => {
     try {
-        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId')) {
-            return opsUtil.wrapResponse({ }, statusCodes('forbidden'));
+        const expiredBoosts = await persistence.expireBoosts();
+        logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
+        if (expiredBoosts.length === 0) {
+            logger('No boosts to expire, returning');
+            return { result: 'NO_BOOSTS' };
         }
 
-        const { boostId } = opsUtil.extractParamsFromEvent(event);
-
-        if (boostId) {
-            const boost = await persistence.fetchBoost(boostId);
-            logger('Got boost for expiry:', boost);
-            if (util.isRandomReward(boost)) {
-                return handleRandomReward(boost);
-            }
-
-            if (!util.isBoostTournament(boost)) {
-                return opsUtil.wrapResponse({ result: 'INVALID_TOURNAMENT' });
-            }
-
-            const isTournamentFinished = await persistence.isTournamentFinished(boostId);
-            logger('Is tournament finished:', isTournamentFinished[boostId]);
-            if (!isTournamentFinished[boostId]) {
-                return opsUtil.wrapResponse({ result: 'TOURNAMENT_IN_PROGRESS' });
-            }
-        }
-
-        const resultOfExpire = await persistence.endFinishedTournaments(boostId);
-        logger('Result of expiring tournament(s):', resultOfExpire);
-        if (resultOfExpire.updatedTime) {
-            const scheduledCleanupInvocation = util.lambdaParameters({ specificOperations: ['EXPIRE_BOOSTS'] }, 'adminScheduled');
-            const resultOfInvocation = await lambda.invoke(scheduledCleanupInvocation).promise();
-            logger('Result of boost expiry invocation:', resultOfInvocation);
-        }
-
+        const resultOfBoostExpiry = await Promise.all(expiredBoosts.map((boostId) => exports.handleExpiredBoost(boostId)));
+        logger('Result of boost expiry:', resultOfBoostExpiry);
+        
+        const resultOfTournEnding = await persistence.endFinishedTournaments();
+        logger('Result of tournament ending:', resultOfTournEnding);
+        
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (error) {
         logger('FATAL_ERROR:', error);

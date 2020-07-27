@@ -93,7 +93,7 @@ module.exports.constructBoostContext = (boost) => ({
 module.exports.isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusConditions.REDEEMED && 
     boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N') || condition.startsWith('percent_destroyed_in_first_N'));
 
-module.exports.isRandomReward = (boost) => boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('randomly_chosen_first_N'));
+module.exports.isRandomAward = (boost) => boost.statusConditions.REDEEMED && boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('randomly_chosen_first_N'));
 
 module.exports.hasConditionType = (statusConditions, status, conditionType) => Array.isArray(statusConditions[status]) &&
     statusConditions[status].some((condition) => condition.startsWith(conditionType));

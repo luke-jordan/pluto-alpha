@@ -191,37 +191,6 @@ describe('** UNIT TEST SCHEDULED JOB HANDLER **', () => {
        expect(rdsExpireHangingTransactionsStub).to.have.been.calledOnce;
     });
 
-    it('should run regular job - expire boosts successfully when NO expired boosts exist', async () => {
-       const testEvent = {
-           specificOperations: ['EXPIRE_BOOSTS']
-       };
-       const emptyArray = [];
-       expireBoostsStub.withArgs().resolves(emptyArray);
-
-       const result = await handler.runRegularJobs(testEvent);
-       expect(result).to.exist;
-       expect(result).to.have.property('statusCode', 200);
-       expect(result.body).to.deep.equal([{ result: 'NO_BOOSTS' }]);
-       expect(expireBoostsStub).to.have.been.calledOnce;
-       expect(sendEventToQueueStub).to.not.have.been.called;
-    });
-
-    it('should run regular job - expire boosts successfully when boosts exist', async () => {
-       const testEvent = { specificOperations: ['EXPIRE_BOOSTS'] };
-       const testBoostId = uuid();
-       
-       expireBoostsStub.withArgs().resolves([testBoostId]);
-       lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 })});
-       
-       const result = await handler.runRegularJobs(testEvent);
-       expect(result).to.deep.equal({ statusCode: 200, body: [{ result: 'EXPIRED_BOOSTS', boostsExpired: 1 }]});
-       
-       expect(expireBoostsStub).to.have.been.calledOnce;
-       
-       const expectedQueuePayload = { boostId: testBoostId, eventType: 'BOOST_EXPIRED' };
-       expect(sendEventToQueueStub).to.have.been.calledOnceWithExactly('boost_process_queue', [expectedQueuePayload], true);
-    });
-
     it('should run regular job - check floats successfully', async () => {
        const testEvent = {
            specificOperations: ['CHECK_FLOATS']

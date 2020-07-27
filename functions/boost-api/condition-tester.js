@@ -26,7 +26,7 @@ const EVENT_TYPE_CONDITION_MAP = {
     'SAVING_PAYMENT_SUCCESSFUL': SAVE_CONDITIONS,
     'WITHDRAWAL_EVENT_CONFIRMED': ['balance_below', 'withdrawal_before'],
     'USER_GAME_COMPLETION': ['number_taps_greater_than', 'percent_destroyed_above'],
-    'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N'],
+    'BOOST_EXPIRED': ['number_taps_in_first_N', 'percent_destroyed_in_first_N', 'randomly_chosen_first_N'],
     'FRIEND_REQUEST_INITIATED_ACCEPTED': ['friends_added_since', 'total_number_friends'],
     'FRIEND_REQUEST_TARGET_ACCEPTED': ['friends_added_since', 'total_number_friends']
 };
@@ -110,6 +110,18 @@ const evaluateGameTournament = (event, parameterValue, responseValueKey) => {
 
     const topList = sortedList.slice(0, selectTop).map((response) => response.accountId);
     // logger('Tournament top accounts: ', topList, ' checked against the account ID in this event: ', event.accountId);
+    return topList.includes(event.accountId);
+};
+
+const evaluateRandomAward = (event, parameterValue, eventContext) => {
+    const selectTop = parameterValue;
+
+    const accountSorter = (accountA, accountB) => Object.values(accountB)[0] - Object.values(accountA)[0];
+    const sortedList = eventContext.accountScoreList.sort(accountSorter);
+    // logger('Sorted recipeients:', sortedList)
+
+    const topList = sortedList.slice(0, selectTop).map((scoredAccount) => Object.keys(scoredAccount)[0]);
+    // logger('Got top scorers:', topList)
     return topList.includes(event.accountId);
 };
 
@@ -251,6 +263,8 @@ module.exports.testCondition = (event, statusCondition) => {
             return evaluateGameResponse(eventContext, parameterValue, 'percentDestroyed');
         case 'percent_destroyed_in_first_N':
             return evaluateGameTournament(event, parameterValue, 'percentDestroyed');
+        case 'randomly_chosen_first_N':
+            return evaluateRandomAward(event, parameterValue, eventContext);
         
         // social conditions
         case 'friends_added_since':

@@ -1,8 +1,6 @@
 'use strict';
 
 // const logger = require('debug')('jupiter:boosts:test');
-
-const moment = require('moment');
 const uuid = require('uuid/v4');
 
 const testHelper = require('./boost.test.helper');
@@ -18,6 +16,7 @@ const findBoostLogsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const updateBoostRedeemedStub = sinon.stub();
 const insertBoostLogStub = sinon.stub();
+const expireBoostsStub = sinon.stub();
 
 const findPooledAccountsStub = sinon.stub();
 const updateBoostAmountStub = sinon.stub();
@@ -50,7 +49,8 @@ const handler = proxyquire('../boost-expiry-handler', {
         'updateBoostAmount': updateBoostAmountStub,
         'findAccountsForPooledReward': findPooledAccountsStub,
         'endFinishedTournaments': endTournamentStub,
-        'isTournamentFinished': isTournamentFinishedStub
+        'isTournamentFinished': isTournamentFinishedStub,
+        'expireBoosts': expireBoostsStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub,
@@ -332,7 +332,10 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             boostCategory: 'SIMPLE_SAVE',
             boostCurrency: 'USD',
             boostUnit: 'HUNDREDTH_CENT',
-            boostAmount: 50000
+            boostAmount: 50000,
+            statusConditions: {
+                REDEEMED: ['something']
+            }
         };
 
         fetchBoostStub.resolves(mockBoost);
@@ -434,46 +437,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
     });
 
-    it('Ends all finished tournaments', async () => {
-        endTournamentStub.resolves({ updatedTime: moment() });
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
-
-        const resultOfExpiry = await handler.checkForBoostsToExpire({});
-        const resultBody = testHelper.standardOkayChecks(resultOfExpiry, true);
-
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
-        expect(endTournamentStub).to.have.been.calledOnceWithExactly(undefined);
-
-        const expectedInvocation = testHelper.wrapLambdaInvoc('ops_admin_scheduled', false, { specificOperations: ['EXPIRE_BOOSTS'] });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
-    });
-
-    it('Expires a specified tournament', async () => {
-        const mockBoost = mockTournamentBoost('TAP_SCREEN', {
-            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
-            PENDING: ['number_taps_greater_than #{0::10000}'],
-            REDEEMED: ['number_taps_in_first_N #{2::10000}']
-        });
-
-        fetchBoostStub.resolves(mockBoost);
-        isTournamentFinishedStub.resolves({ [testBoostId]: true });
-
-        endTournamentStub.resolves({ updatedTime: moment() });
-        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
-
-        const resultOfExpiry = await handler.checkForBoostsToExpire({ boostId: testBoostId });
-        const resultBody = testHelper.standardOkayChecks(resultOfExpiry, true);
-
-        expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
-        expect(endTournamentStub).to.have.been.calledOnceWithExactly(testBoostId);
-
-        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
-        expect(isTournamentFinishedStub).to.have.been.calledOnceWithExactly(testBoostId);
-
-        const expectedInvocation = testHelper.wrapLambdaInvoc('ops_admin_scheduled', false, { specificOperations: ['EXPIRE_BOOSTS'] });
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedInvocation);
-    });
-
     it('Handles random reward user selection', async () => {
         const mockBoost = mockTournamentBoost('TAP_SCREEN', {
             UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
@@ -481,6 +444,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             REDEEMED: ['randomly_chosen_first_N #{3}']
         });
 
+        expireBoostsStub.resolves(['boost-id-1']);
         fetchBoostStub.resolves(mockBoost);
         findAccountsStub.onFirstCall().resolves(formAccountResponse({ // all
             'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
@@ -507,13 +471,13 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const resultBody = testHelper.standardOkayChecks(resultOfSelection, true);
 
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
-        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly('boost-id-1');
 
-        const winningAccounts = ['account-id-5', 'account-id-1', 'account-id-3'];
-        const remainingAccounts = ['account-id-2', 'account-id-4', 'account-id-6'];
+        const winningAccounts = ['account-id-1', 'account-id-3', 'account-id-5'];
+        // const remainingAccounts = ['account-id-2', 'account-id-4', 'account-id-6'];
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ['PENDING'] });
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: winningAccounts });
-        expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: remainingAccounts });
+        // expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: remainingAccounts });
 
         const expectedRedemptionUpdate = {
             boostId: testBoostId,
@@ -522,16 +486,16 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             logType: 'STATUS_CHANGE'
         };
 
-        const expectedExpiredUpdate = {
-            boostId: testBoostId,
-            accountIds: remainingAccounts,
-            newStatus: 'EXPIRED',
-            logType: 'STATUS_CHANGE'
-        };
+        // const expectedExpiredUpdate = {
+        //     boostId: testBoostId,
+        //     accountIds: remainingAccounts,
+        //     newStatus: 'EXPIRED',
+        //     logType: 'STATUS_CHANGE'
+        // };
 
-        expect(updateBoostAccountStub).to.have.been.calledTwice;
+        // expect(updateBoostAccountStub).to.have.been.calledTwice;
         expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedRedemptionUpdate]);
-        expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedExpiredUpdate]);
+        // expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedExpiredUpdate]);
     });
 
 });
