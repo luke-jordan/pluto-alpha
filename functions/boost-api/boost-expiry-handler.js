@@ -2,6 +2,7 @@
 
 const logger = require('debug')('jupiter:boosts:handler');
 const config = require('config');
+const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
 const persistence = require('./persistence/rds.boost');
@@ -239,7 +240,7 @@ module.exports.handleExpiredBoost = async (boostId) => {
 module.exports.checkForBoostsToExpire = async (event) => {
     try {
         if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId', true)) {
-            return opsUtil.wrapResponse({ }, 403);
+            return opsUtil.wrapResponse({ }, statusCodes('Forbidden'));
         }
         
         const expiredBoosts = await persistence.expireBoosts();

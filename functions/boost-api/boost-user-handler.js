@@ -15,7 +15,7 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
-const expireFinishedTournaments = async (boostId) => {
+const expireFinishedTournaments = async () => {
     const expiryInvocation = util.lambdaParameters({ }, 'boostsExpire', false);
     const resultOfInvocation = await lambda.invoke(expiryInvocation).promise();
     logger('Result of invocation: ', resultOfInvocation);
