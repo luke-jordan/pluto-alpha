@@ -162,18 +162,18 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
             }));
 
             const invokeBody = {
-                    identifier: testBoostId,
-                    floatId: testFloatId,
-                    fromId: testBonusPoolId,
-                    fromType: 'BONUS_POOL',
-                    transactionType,
-                    relatedEntityType: transactionType,
-                    currency: 'USD',
-                    unit: 'HUNDREDTH_CENT',
-                    settlementStatus: 'SETTLED',
-                    allocType: transactionType,
-                    allocState: 'SETTLED',
-                    recipients
+                identifier: testBoostId,
+                floatId: testFloatId,
+                fromId: testBonusPoolId,
+                fromType: 'BONUS_POOL',
+                transactionType,
+                relatedEntityType: transactionType,
+                currency: 'USD',
+                unit: 'HUNDREDTH_CENT',
+                settlementStatus: 'SETTLED',
+                allocType: transactionType,
+                allocState: 'SETTLED',
+                recipients
             };
 
             if (referenceAmounts) {

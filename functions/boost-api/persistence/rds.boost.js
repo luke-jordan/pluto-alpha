@@ -368,6 +368,22 @@ module.exports.updateBoostAmount = async (boostId, boostAmount) => {
     return resultOfUpdate;
 };
 
+module.exports.expireBoosts = async () => {
+    const boostMasterTable = config.get('tables.boostTable');
+    
+    const updateBoostQuery = `update ${boostMasterTable} set active = $1 where active = true and ` + 
+        `end_time < current_timestamp returning boost_id`;
+    const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
+    logger('Result of straight update boosts: ', updateBoostResult);
+    if (updateBoostResult.rowCount === 0) {
+        logger('No boosts expired, can exit');
+        return [];
+    }
+
+    return typeof updateBoostResult === 'object' && Array.isArray(updateBoostResult.rows) 
+        ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
+};
+
 // ///////////////////////////////////////////////////////////////
 // //////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
 // ///////////////////////////////////////////////////////////////
@@ -550,6 +566,45 @@ module.exports.getAccountIdForUser = async (systemWideUserId) => {
     const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
     const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
     return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
+};
+
+module.exports.isTournamentFinished = async (boostId) => {
+    const selectQuery = `select boost_status, count(*) from ${boostAccountJoinTable} where boost_id = $1`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [boostId]);
+    logger('Got tournament rows:', resultOfFetch);
+    const nonPendingRows = resultOfFetch.filter((row) => row['boost_status'] !== 'PENDING');
+    const pendingRows = resultOfFetch.filter((row) => row['boost_status'] === 'PENDING');
+    const isFinishedTournament = nonPendingRows.length > 0 && pendingRows.length === 0;
+    return { [boostId]: isFinishedTournament };
+};
+
+module.exports.endFinishedTournaments = async (boostId = null) => {
+    const finishedTournamentIds = boostId ? [boostId] : [];
+
+    if (!boostId) {
+        const findQuery = `select * from ${boostTable} where active = true and end_time > current_timestamp ` +
+            `and ($1 = any(flags))`;
+
+        const boostTournaments = await rdsConnection.selectQuery(findQuery, ['FRIEND_TOURNAMENT']);
+        logger('Got tournaments:', boostTournaments);
+        if (!boostTournaments || boostTournaments.length === 0) {
+            return 'NO_ACTIVE_TOURNAMENTS_FOUND';
+        }
+
+        const tournamentIds = boostTournaments.map((tournament) => tournament['boost_id']);
+        const tournamentDetails = await Promise.all(tournamentIds.map((tournamentId) => exports.isTournamentFinished(tournamentId)));
+        logger('Got tournament details:', tournamentDetails);
+        const tournamentStatusMap = tournamentDetails.reduce((obj, value) => ({ ...obj, ...value }), {});
+        finishedTournamentIds.push(...tournamentIds.filter((tournamentId) => tournamentStatusMap[tournamentId] === true));
+    }
+
+    logger('Got finished tournament ids:', finishedTournamentIds);
+    const updateQuery = `update ${boostTable} set end_time = current_timestamp where boost_id in (${extractArrayIndices(finishedTournamentIds)}) returning updated_time`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [...finishedTournamentIds]);
+    logger('Result of deactivating finished tournaments:', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && resultOfUpdate.rows
+        ? { updatedTime: moment(resultOfUpdate.rows[0]['updated_time']) } : {};
 };
 
 // ///////////////////////////////////////////////////////////////

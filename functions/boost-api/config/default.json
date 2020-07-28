@@ -43,7 +43,6 @@
         "audienceTable": "audience_data.audience",
         "audienceJoinTable": "audience_data.audience_account_join",
         "friendshipTable": "friend_data.core_friend_relationship",
-
         "profileTable": "UserProfileTable",
         "clientFloatTable": "ClientFloatTable"
     },
@@ -52,7 +51,8 @@
         "messageSend": "message_user_create_once",
         "messageInstruct": "message_instruct_create",
         "audienceHandle": "audience_selection",
-        "userHistory": "user_log_reader"
+        "userHistory": "user_log_reader",
+        "boostsExpire": "boost_expiry"
     },
     "seedrandom": {
         "active": true,

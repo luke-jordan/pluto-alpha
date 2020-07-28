@@ -202,37 +202,6 @@ describe('*** UNIT TEST RDS ACCOUNT FUNCTIONS ***', () => {
         expect(updateRecordStub).to.have.been.calledOnceWithExactly(expectedUpdateQuery, expectedValues);
     });
 
-    it('Expires boosts', async () => {
-        const firstUpdateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
-
-        updateRecordStub.onFirstCall().resolves({
-            'rows': [
-                { 'boost_id': 'boost-1' },
-                { 'boost_id': 'boost-2' },
-                { 'boost_id': 'boost-3' }
-            ],
-            rowCount: 3
-        });
-
-        const resultOfUpdate = await persistence.expireBoosts();
-        
-        expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal(['boost-1', 'boost-2', 'boost-3']);
-        expect(updateRecordStub).to.have.been.calledOnceWithExactly(firstUpdateQuery, [false]);
-    });
-
-    it('Boost culling exits where no boost found for update', async () => {
-        const updateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
-        updateRecordStub.onFirstCall().resolves({ rows: [], rowCount: 0 });
-
-        const resultOfUpdate = await persistence.expireBoosts();
-        logger('Result of boost cull:', resultOfUpdate);
-       
-        expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal([]);
-        expect(updateRecordStub).to.to.have.been.calledOnceWithExactly(updateQuery, [false]);
-    });
-
     it('Fetches IDs for accounts', async () => {
         const testUserId = uuid();
         const firstAccountId = uuid();
