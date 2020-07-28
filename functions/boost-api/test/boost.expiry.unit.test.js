@@ -437,12 +437,14 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
     });
 
-    it.skip('Handles random reward user selection', async () => {
+    it('Handles random reward user selection', async () => {
         const mockBoost = mockTournamentBoost('TAP_SCREEN', {
             UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
             PENDING: ['number_taps_greater_than #{0::10000}'],
             REDEEMED: ['randomly_chosen_first_N #{3}']
         });
+
+        sinon.stub(Math, 'random').returns(4);
 
         fetchBoostStub.resolves(mockBoost);
         expireBoostsStub.resolves(['boost-id-1']);
@@ -474,7 +476,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(resultBody).to.deep.equal({ result: 'SUCCESS' });
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly('boost-id-1');
 
-        const winningAccounts = ['account-id-1', 'account-id-3', 'account-id-5'];
+        const winningAccounts = ['account-id-1', 'account-id-2', 'account-id-3'];
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ['PENDING'] });
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: winningAccounts });
 
