@@ -199,7 +199,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
 
 // a simple version for when we absolutely know the boost id
 module.exports.fetchCurrentBoostStatus = async (boostId, accountId) => {
-    const selectQuery = `select * from ${boostAccountJoinTable} where boost_id = $1 and account_id = $2`;
+    const columns = `boost_id, account_id, boost_status, ${boostAccountJoinTable}.creation_time, ${boostAccountJoinTable}.updated_time`;
+    const endTime = '(case when expiry_time is not null then expiry_time else end_time end) as end_time';
+
+    const selectQuery = `select ${columns}, ${endTime} from ` +
+        `${boostAccountJoinTable} inner join ${boostTable} on ${boostAccountJoinTable}.boost_id = ${boostTable}.boost_id ` +
+        `where ${boostAccountJoinTable}.boost_id = $1 and account_id = $2`;
+    
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId]);
     return resultOfQuery.length > 0 ? camelizeKeys(resultOfQuery[0]) : null;
 };

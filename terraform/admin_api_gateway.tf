@@ -71,7 +71,6 @@ resource "aws_api_gateway_gateway_response" "admin_unauthorized_cors" {
 
 /////////////////////// API GW LOGGING ///////////////////////////////////////////////////////////////
 
-// note : also reusing a bunch from ops
 resource "aws_api_gateway_method_settings" "api_admin_settings" {
   rest_api_id = aws_api_gateway_rest_api.admin_api_gateway.id
   stage_name  = aws_api_gateway_deployment.admin_api_deployment.stage_name
