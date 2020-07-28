@@ -15,8 +15,8 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
-const expireTournamentIfFinished = async (boostId) => {
-    const expiryInvocation = util.lambdaParameters({ boostId }, 'tournamentExpiry', false);
+const expireFinishedTournaments = async (boostId) => {
+    const expiryInvocation = util.lambdaParameters({ }, 'boostsExpire', false);
     const resultOfInvocation = await lambda.invoke(expiryInvocation).promise();
     logger('Result of invocation: ', resultOfInvocation);
 
@@ -109,7 +109,7 @@ module.exports.processUserBoostResponse = async (event) => {
         
         if (statusResult.length === 0) {
             if (util.isBoostTournament(boost)) {
-                await expireTournamentIfFinished(boost.boostId);
+                await expireFinishedTournaments(boost.boostId);
                 return { statusCode: 200, body: JSON.stringify({ result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() }) };
             }
             return { statusCode: 200, body: JSON.stringify({ result: 'NO_CHANGE' })};

@@ -444,8 +444,9 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             REDEEMED: ['randomly_chosen_first_N #{3}']
         });
 
-        expireBoostsStub.resolves(['boost-id-1']);
         fetchBoostStub.resolves(mockBoost);
+        expireBoostsStub.resolves(['boost-id-1']);
+        
         findAccountsStub.onFirstCall().resolves(formAccountResponse({ // all
             'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
             'account-id-2': { userId: 'user-id-2', status: 'PENDING' },
@@ -474,10 +475,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly('boost-id-1');
 
         const winningAccounts = ['account-id-1', 'account-id-3', 'account-id-5'];
-        // const remainingAccounts = ['account-id-2', 'account-id-4', 'account-id-6'];
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ['PENDING'] });
         expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: winningAccounts });
-        // expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: remainingAccounts });
 
         const expectedRedemptionUpdate = {
             boostId: testBoostId,
@@ -486,16 +485,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             logType: 'STATUS_CHANGE'
         };
 
-        // const expectedExpiredUpdate = {
-        //     boostId: testBoostId,
-        //     accountIds: remainingAccounts,
-        //     newStatus: 'EXPIRED',
-        //     logType: 'STATUS_CHANGE'
-        // };
-
-        // expect(updateBoostAccountStub).to.have.been.calledTwice;
-        expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedRedemptionUpdate]);
-        // expect(updateBoostAccountStub).to.have.been.calledWithExactly([expectedExpiredUpdate]);
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedRedemptionUpdate]);
     });
 
 });

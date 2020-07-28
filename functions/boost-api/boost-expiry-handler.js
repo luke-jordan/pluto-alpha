@@ -153,7 +153,7 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
     await publisher.publishMultiUserEvent(winningUserIds, 'BOOST_TOURNAMENT_WON', { context: { boostId }});
 };
 
-const handleRandomReward = async (boost) => {
+const handleRandomAward = async (boost) => {
     const pendingParticipants = await persistence.findAccountsForBoost({ boostIds: [boost.boostId], status: ['PENDING'] });
     logger('Got pending participants:', pendingParticipants);
     const accountIds = Object.keys(pendingParticipants[0].accountUserMap);
@@ -167,7 +167,7 @@ const handleRandomReward = async (boost) => {
         await handleTournamentWinners(boost, winningAccounts);
     }
     
-    return { result: 'SUCCESS' };
+    return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
 module.exports.handleExpiredBoost = async (boostId) => {
@@ -191,7 +191,7 @@ module.exports.handleExpiredBoost = async (boostId) => {
 
     if (util.isRandomAward(boost)) {
         logger('Boost is random award, awarding accordingly');
-        return handleRandomReward(boost);
+        return handleRandomAward(boost);
     }
     
     const accountIdsThatResponded = [...new Set(boostGameLogs.map((log) => log.accountId))];
@@ -230,8 +230,18 @@ module.exports.handleExpiredBoost = async (boostId) => {
     return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
-module.exports.checkForBoostsToExpire = async () => {
+/**
+ * This function checks for boosts and tournaments to be expired. If a boost is to be expired the function
+ * asserts what time type of boost it is. If it is a game or random award then the winners are awarded the boost amounts
+ * and the boost is discarded/expired.
+ * @param {object} event An empty event
+ */
+module.exports.checkForBoostsToExpire = async (event) => {
     try {
+        if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId', true)) {
+            return opsUtil.wrapResponse({ }, 403);
+        }
+        
         const expiredBoosts = await persistence.expireBoosts();
         logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
         if (expiredBoosts.length === 0) {
@@ -241,7 +251,7 @@ module.exports.checkForBoostsToExpire = async () => {
 
         const resultOfBoostExpiry = await Promise.all(expiredBoosts.map((boostId) => exports.handleExpiredBoost(boostId)));
         logger('Result of boost expiry:', resultOfBoostExpiry);
-        
+
         const resultOfTournEnding = await persistence.endFinishedTournaments();
         logger('Result of tournament ending:', resultOfTournEnding);
         
