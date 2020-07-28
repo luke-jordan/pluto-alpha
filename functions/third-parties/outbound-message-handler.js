@@ -78,7 +78,7 @@ const dispatchSingleEmail = async (msg, sandbox, retryStatus) => {
         
         const debugMail = Mail.create(payload);
         const mailBody = debugMail.toJSON();
-        logger('API request body: ', JSON.stringify(mailBody));
+        // logger('API request body: ', JSON.stringify(mailBody));
 
         const options = {
             url: config.get('sendgrid.endpoint'),
@@ -169,7 +169,7 @@ module.exports.sendEmailMessages = async (event) => {
             validMessages = wrapHtmlinTemplate(validMessages, wrapperTemplate); 
         }
 
-        logger('Validated messages: ', validMessages);
+        // logger('Validated messages: ', validMessages);
         const validMessageIds = validMessages.map((msg) => msg.messageId);
         const messageChunks = chunkDispatchRecipients(validMessages);
         
@@ -248,7 +248,7 @@ module.exports.sendSmsMessage = async (event) => {
 
 module.exports.handleOutboundMessages = async (event) => {
     const params = opsUtil.extractParamsFromEvent(event);
-    logger('Sending outbound message, with event: ', event);
+    // logger('Sending outbound message, with event: ', event);
 
     if (Array.isArray(params.emailMessages) && params.emailMessages.length > 0) {
         return exports.sendEmailMessages(event);

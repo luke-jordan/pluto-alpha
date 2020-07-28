@@ -787,6 +787,40 @@ module "boost_admin_list_cors" {
   api_resource_id = "${aws_api_gateway_resource.boost_admin_list.id}"
 }
 
+/// BOOST DETAILS, INCLUDING YIELD COUNTS
+
+resource "aws_api_gateway_resource" "boost_admin_details" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  parent_id   = "${aws_api_gateway_resource.admin_boost_path_root.id}"
+  path_part   = "detail"
+}
+
+resource "aws_api_gateway_method" "boost_admin_details" {
+  rest_api_id   = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  resource_id   = "${aws_api_gateway_resource.boost_admin_details.id}"
+  http_method   = "GET"
+  authorization = "CUSTOM"
+  authorizer_id = "${aws_api_gateway_authorizer.admin_jwt_authorizer.id}"
+}
+
+resource "aws_lambda_permission" "boost_admin_details" {
+  action        = "lambda:InvokeFunction"
+  function_name = "${aws_lambda_function.boost_detail_fetch.function_name}"
+  principal     = "apigateway.amazonaws.com"
+  source_arn    = "arn:aws:execute-api:${var.aws_default_region[terraform.workspace]}:455943420663:${aws_api_gateway_rest_api.admin_api_gateway.id}/*/*/*"
+}
+
+resource "aws_api_gateway_integration" "boost_admin_details" {
+  rest_api_id = "${aws_api_gateway_rest_api.admin_api_gateway.id}"
+  resource_id = "${aws_api_gateway_method.boost_admin_details.resource_id}"
+  http_method = "${aws_api_gateway_method.boost_admin_details.http_method}"
+
+  integration_http_method = "POST"
+  type                    = "AWS_PROXY"
+  uri                     = "${aws_lambda_function.boost_detail_fetch.invoke_arn}"
+}
+
+
 /////////////////////// AUDIENCES /////////////////////////////////////////////////////////////////////
 
 // note: using new pattern here of limiting some admin profusion through use of path-based operation direction
