@@ -78,6 +78,21 @@ const calculateRandomBoostAmount = (boost) => {
     return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 
+const fetchConsolationDetails = (boost, affectedAccountDict) => {
+    logger('Calculating consolation amount and recipeints');
+    const { consolationAmount, consolationAwards } = boost.rewardParameters;
+    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
+    
+    if (consolationAwards.basis === 'ALL') {
+        const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
+        logger('Got consolation amount:', boostAmount, 'and recipients:', recipientAccounts);
+        return { 
+            referenceAmounts: { boostAmount, amountFromBonus: boost.boostAmount },
+            recipientAccounts
+        };
+    }
+};
+
 const triggerFloatTransfers = async (transferInstructions) => {
     const lambdaInvocation = {
         FunctionName: config.get('lambdas.floatTransfer'),
@@ -186,14 +201,18 @@ const handleTransferToBonusPool = async (affectedAccountDict, boost, pooledContr
 // note: this is only called for redeemed boosts, by definition. also means it is 'settled' by definition. it redeemes, no matter prior status
 // further note: if this is a revocation, the negative will work as required on sums, but test the hell out of this (and viz transfer-handler)
 const generateFloatTransferInstructions = async (affectedAccountDict, boost, revoke, pooledContributionMap = {}, event = {}) => {
-    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
     // if pooled reward handle initial transfers from accounts to bonus pool
     if (boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED') {
         const resultOfInitialTransfer = await handleTransferToBonusPool(affectedAccountDict, boost, pooledContributionMap, event);
         logger('Result of initial transfer to bonus pool:', resultOfInitialTransfer);
     }
 
-    const referenceAmounts = exports.calculateBoostAmount(boost, pooledContributionMap);
+    const isConsolation = boost.rewardParameters && boost.rewardParameters.rewardType === 'CONSOLATION';
+    const consolationDetails = isConsolation ? fetchConsolationDetails(boost, affectedAccountDict) : {};
+
+    const recipientAccounts = isConsolation ? consolationDetails.recipientAccounts : Object.keys(affectedAccountDict[boost.boostId]);
+    const referenceAmounts = isConsolation ? consolationDetails.referenceAmounts : exports.calculateBoostAmount(boost, pooledContributionMap);
+
     const { boostAmount } = referenceAmounts;
     logger('Calculated amounts for boost: ', boostAmount);
     
