@@ -26,20 +26,6 @@ const expireHangingTransactions = async () => {
     return resultOfExpiration.length;
 };
 
-const expireBoosts = async () => {
-    const expiredBoosts = await rdsAccount.expireBoosts();
-    logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
-    if (expiredBoosts.length === 0) {
-        logger('No boosts to expire, returning');
-        return { result: 'NO_BOOSTS' };
-    }
-
-    const boostProcessPayloads = expiredBoosts.map((boostId) => ({ boostId, eventType: 'BOOST_EXPIRED' }));
-    const sendToProcessResult = await publisher.sendToQueue(config.get('queues.boostProcess'), boostProcessPayloads, true);
-    logger('Boost expiry results: ', sendToProcessResult);
-    return { result: 'EXPIRED_BOOSTS', boostsExpired: expiredBoosts.length };
-};
-
 const obtainFloatBalance = async ({ clientId, floatId, currency }) => {
     const floatBalanceMap = await rdsFloat.getFloatBalanceAndFlows([floatId]);
     const floatBalanceCurr = floatBalanceMap.get(floatId);
@@ -259,7 +245,6 @@ const notifyAdminOfPendingTransactionsForAllUsers = async () => {
 const operationMap = {
     'ACRRUE_FLOAT': initiateFloatAccruals,
     'EXPIRE_HANGING': expireHangingTransactions,
-    'EXPIRE_BOOSTS': expireBoosts, 
     'CHECK_FLOATS': floatConsistency.checkAllFloats,
     'ALL_PENDING_TRANSACTIONS': notifyAdminOfPendingTransactionsForAllUsers
 };
