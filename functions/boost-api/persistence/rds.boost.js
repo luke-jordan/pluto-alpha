@@ -236,12 +236,19 @@ module.exports.findAccountsForPooledReward = async (boostId, logType) => {
 };
 
 // todo : validation / catching of status downgrade in here
-const updateAccountDefinition = (boostId, accountId, newStatus) => ({
-    table: boostAccountJoinTable,
-    key: { boostId, accountId },
-    value: { boostStatus: newStatus },
-    returnClause: 'updated_time'
-});
+const updateAccountDefinition = (boostId, accountId, newStatus, expiryTime) => {
+    const value = { boostStatus: newStatus };
+    if (expiryTime) {
+        value.expiryTime = expiryTime.format();
+    }
+    
+    return {
+        table: boostAccountJoinTable,
+        key: { boostId, accountId },
+        value,
+        returnClause: 'updated_time'
+    };
+};
 
 const constructLogDefinition = (columnKeys, rows) => ({
     query: `insert into ${boostLogTable} (${extractQueryClause(columnKeys)}) values %L returning log_id, creation_time`,
@@ -257,7 +264,7 @@ const constructLogDefinition = (columnKeys, rows) => ({
  * @param {string} logType The boost log type to use for the logs that will be inserted
  * @param {object} logContext An optional object to insert along with the logs (e.g., recording the transaction ID)
  */
-const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, stillActive, logType, logContext }) => {
+const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, expiryTime, stillActive, logType, logContext }) => {
     const updateDefinitions = [];
     const logInsertDefinitions = [];
     
@@ -266,7 +273,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, s
         logger('Handling account IDs: ', accountIds);
         const logRows = [];
         accountIds.forEach((accountId) => { 
-            updateDefinitions.push(updateAccountDefinition(boostId, accountId, newStatus));
+            updateDefinitions.push(updateAccountDefinition(boostId, accountId, newStatus, expiryTime));
             logRows.push({ boostId, accountId, logType, logContext });
         });
         const columnKeys = ['boostId', 'accountId', 'logType', 'logContext']; // must do this as Object.keys has unreliable ordering
@@ -498,15 +505,26 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
-// note : performs a cross join, i.e., all boost IDs, all accountIDs. in practice
-// almost always called (as should be case) with either one boost and many accounts
-// or one account and many boosts
-module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatus) => {
-    const boostAccountJoins = boostIds.map((boostId) => accountIds.map((accountId) => ({ boostId, accountId, boostStatus }))).
+// note : performs a cross join, i.e., all boost IDs, all accountIDs. in practice almost always 
+// called (as should be case) with either one boost and many accounts or one account and many boosts
+module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatus, expiryTime = null) => {
+    const joinCreator = (accountId, boostId) => (
+        expiryTime ? { accountId, boostId, boostStatus, expiryTime: expiryTime.format() } : { accountId, boostId, boostStatus }
+    );
+    
+    const boostAccountJoins = boostIds.map((boostId) => accountIds.map((accountId) => joinCreator(accountId, boostId))).
         reduce((fullList, thisList) => [...fullList, ...thisList], []);
+    
+    const columns = ['boostId', 'accountId', 'boostStatus'];
+    if (expiryTime) {
+        columns.push('expiryTime');
+    }
+
+    const columnClause = columns.map((column) => decamelize(column)).join(', ');
+
     const boostJoinQueryDef = {
-        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
-        columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
+        query: `insert into ${boostAccountJoinTable} (${columnClause}) values %L returning insertion_id, creation_time`,
+        columnTemplate: columns.map((column) => `$\{${column}}`).join(', '),
         rows: boostAccountJoins
     };
 
@@ -514,15 +532,7 @@ module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatu
     logger('Result of insertion:', resultOfInsertion);
 
     const persistedTime = moment(resultOfInsertion[0][0]['creation_time']);
-
-    const resultObject = {
-        persistedTimeMillis: persistedTime.valueOf(),
-        accountIds,
-        boostIds
-    };
-
-    logger('Returning:', resultObject);
-    return resultObject;
+    return { persistedTimeMillis: persistedTime.valueOf(), accountIds, boostIds };
 };
 
 /**

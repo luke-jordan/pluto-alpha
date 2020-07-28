@@ -113,7 +113,7 @@ const addOutcomeLogsToGameBoosts = async (gameBoosts, allBoosts, accountId) => {
 
 const obtainRedeemedOrActiveBoosts = async (accountId) => {
     // todo : make this pattern more sensible, also do some sorting
-    const changeCutOff = moment().subtract(config.get('time.changeCutOff.number'), config.get('time.changeCutOff.unit'));
+    const changeCutOff = moment().subtract(config.get('time.changeCutOff.value'), config.get('time.changeCutOff.unit'));
     const excludedForActive = ['CREATED', 'OFFERED', 'EXPIRED', 'FAILED'];
     
     const listActiveBoosts = await persistence.fetchUserBoosts(accountId, { changedSinceTime: changeCutOff, excludedStatus: excludedForActive });
@@ -125,7 +125,7 @@ const obtainRedeemedOrActiveBoosts = async (accountId) => {
 };
 
 const obtainExpiredOrFailedBoosts = async (accountId) => {
-    const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.number'), config.get('time.expiredCutOff.unit'));
+    const expiredCutOff = moment().subtract(config.get('time.expiredCutOff.value'), config.get('time.expiredCutOff.unit'));
     logger('Fetching boosts since: ', expiredCutOff);
 
     const excludedForExpired = ['CREATED', 'OFFERED', 'PENDING', 'UNLOCKED', 'REDEEMED'];

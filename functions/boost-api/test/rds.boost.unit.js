@@ -494,6 +494,28 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
     });
 
+    it('Includes expiry time in joins, if passed', async () => {
+        const testBoostStatus = 'OFFERED';
+        const expiryMoment = moment().add(24, 'hours');
+
+        const expectedQuery = `insert into ${boostUserTable} (boost_id, account_id, boost_status, expiry_time) values %L returning insertion_id, creation_time`;
+        const expectedColumns = '${boostId}, ${accountId}, ${boostStatus}, ${expiryTime}';
+        const expectedRow = (accountId) => ({ boostId: testBoostId, accountId, boostStatus: testBoostStatus, expiryTime: expiryMoment.format() });
+    
+        const boostQueryDef = { 
+            query: expectedQuery, 
+            columnTemplate: expectedColumns, 
+            rows: [expectedRow('account-1'), expectedRow('account-2')] 
+        };
+
+        multiTableStub.resolves([[{ 'creation_time': moment().format() }, { 'creation_time': moment().format() }]]);
+
+        const resultOfInsertion = await rds.insertBoostAccountJoins([testBoostId], ['account-1', 'account-2'], testBoostStatus, expiryMoment);
+
+        expect(resultOfInsertion).to.exist; // format is tested above
+        expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
+    });
+
     it('Ends finished tournaments', async () => {
         const findQuery = `select * from boost_data.boost where active = true and end_time > current_timestamp ` +
             `and ($1 = any(flags))`;

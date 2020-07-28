@@ -428,7 +428,7 @@ module.exports.createBoost = async (event) => {
 
     // start now if nothing provided
     const boostStartTime = params.startTimeMillis ? moment(params.startTimeMillis) : moment();
-    const boostEndTime = params.endTimeMillis ? moment(params.endTimeMillis) : moment().add(config.get('time.defaultEnd.number'), config.get('time.defaultEnd.unit'));
+    const boostEndTime = params.endTimeMillis ? moment(params.endTimeMillis) : moment().add(config.get('time.defaultEnd.value'), config.get('time.defaultEnd.unit'));
 
     logger(`Boost start time: ${boostStartTime.format()} and end time: ${boostEndTime.format()}`);
     logger('Boost source: ', params.boostSource, 'and creating user: ', params.creatingUserId);

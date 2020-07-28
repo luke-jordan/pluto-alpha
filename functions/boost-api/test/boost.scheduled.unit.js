@@ -30,6 +30,8 @@ const lambdaInvokeStub = sinon.stub();
 // const publishSingleEventStub = sinon.stub();
 const publishMultiEventStub = sinon.stub();
 
+const momentStub = sinon.stub();
+
 const handler = proxyquire('../boost-scheduled-handler', {
     './persistence/rds.boost': {
         'fetchBoostsWithDynamicAudiences': fetchActiveDynamicBoostStub,
@@ -55,14 +57,18 @@ const handler = proxyquire('../boost-scheduled-handler', {
             // eslint-disable-next-line brace-style
             constructor () { this.invoke = lambdaInvokeStub; }
         }
-    }
+    },
+    'moment': momentStub
 });
 
-const resetStubs = () => helper.resetStubs(
-    fetchActiveDynamicBoostStub, fetchActiveStandardBoostStub, findNewAudienceMembersStub, 
-    insertBoostAccountsStub, updateBoostStatusStub, redemptionHandlerStub,
-    fetchAccountsStub, fetchUserIdsStub, lambdaInvokeStub
-);
+const resetStubs = () => {
+    helper.resetStubs(
+        fetchActiveDynamicBoostStub, fetchActiveStandardBoostStub, findNewAudienceMembersStub, 
+        insertBoostAccountsStub, updateBoostStatusStub, redemptionHandlerStub,
+        fetchAccountsStub, fetchUserIdsStub, lambdaInvokeStub
+    );
+    momentStub.returns(moment());
+};
 
 describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
 
@@ -105,6 +111,9 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
     });
 
     it('Process dynamic boost, new audience members', async () => {
+        
+        const mockMoment = moment();
+        
         const mockBoost = {
             boostId: 'boost-id',
             creatingUserId: 'creator-id',
@@ -129,7 +138,12 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
             messageInstructions: [
                 { msgInstructionId: 'instruction-1', status: 'OFFERED', accountId: 'ALL' },
                 { msgInstructionId: 'instruction-2', status: 'OFFERED', accountId: 'ALL' }
-            ]
+            ],
+
+            expiryParameters: {
+                individualizedExpiry: true,
+                timeUntilExpiry: { unit: 'hours', value: 24 }
+            }
         };
 
         fetchActiveDynamicBoostStub.resolves([mockBoost]);
@@ -139,13 +153,16 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
         findNewAudienceMembersStub.resolves(['account-1', 'account-2']);
         fetchUserIdsStub.resolves(['user-2']);
 
+        momentStub.returns(mockMoment.clone()); // lots of mutations going to happen ...
+
         const resultOfProcess = await handler.refreshDynamicAudienceBoosts();
         expect(resultOfProcess).to.deep.equal({ result: 'BOOSTS_REFRESHED', boostsRefreshed: 1, newOffers: 2 });
 
         expect(lambdaInvokeStub).to.have.been.calledTwice;
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(refreshInvocation('audience-id'));
 
-        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly(['boost-id'], ['account-1', 'account-2'], 'OFFERED');
+        const expectedExpiry = mockMoment.add(24, 'hours');
+        expect(insertBoostAccountsStub).to.have.been.calledOnceWithExactly(['boost-id'], ['account-1', 'account-2'], 'OFFERED', expectedExpiry);
 
         expect(fetchUserIdsStub).to.have.been.calledOnceWithExactly(['account-1', 'account-2']);
 

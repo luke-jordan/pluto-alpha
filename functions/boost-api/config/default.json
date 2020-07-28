@@ -22,16 +22,20 @@
     },
     "time": {
         "defaultEnd": {
-            "number": "50",
+            "value": "50",
             "unit": "years"
         },
         "changeCutOff": {
-            "number": 1,
+            "value": 1,
             "unit": "days"
         },
         "expiredCutOff": {
-            "number": 3,
+            "value": 3,
             "unit": "days"
+        },
+        "offerToExpiryDefault": {
+            "value": 24,
+            "unit": "hours"
         }
     },
     "tables": {
