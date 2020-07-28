@@ -48,6 +48,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         'start_time': mockStartTime.format(),
         'end_time': mockEndTime.format(),
         'initial_status': 'CREATED',
+        'expiry_parameters': { individualizedExpiry: true },
         'message_instruction_ids': { instructions: [{ status: 'OFFERED', accountId: 'ALL', instructionId: 'some-id' }] }
     };
 
@@ -58,6 +59,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         boostStartTime: moment(mockStartTime.format()),
         boostEndTime: moment(mockEndTime.format()),
         defaultStatus: 'CREATED',
+        expiryParameters: { individualizedExpiry: true },
         messageInstructions: [{ status: 'OFFERED', accountId: 'ALL', instructionId: 'some-id' }] 
     };
 

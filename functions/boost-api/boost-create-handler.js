@@ -419,7 +419,6 @@ module.exports.createBoost = async (event) => {
     const { label, boostType, boostCategory } = splitBasicParams(params);
     const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
 
-    // todo : extensive validation
     const paramValidationResult = validateBoostParams(boostType, boostCategory, boostBudget, params);
     logger('Are parameters valid:', paramValidationResult);
 
@@ -474,7 +473,6 @@ module.exports.createBoost = async (event) => {
         instructionToRds.gameParams = params.gameParams;
     }
 
-    // todo : more validation & error throwing here, e.g., if neither exists
     logger('Game params: ', params.gameParams, ' and default status: ', params.initialStatus);
     if (params.gameParams) {
         instructionToRds.statusConditions = mergeStatusConditions(params.gameParams, params.statusConditions, params.initialStatus);
@@ -482,19 +480,17 @@ module.exports.createBoost = async (event) => {
         instructionToRds.statusConditions = params.statusConditions;
     }
 
-    if (params.rewardParameters) {
-        instructionToRds.rewardParameters = params.rewardParameters;
-    }
-
     if (Array.isArray(params.flags) && params.flags.length > 0) {
         logger('This boost is flagged, with: ', params.flags);
         instructionToRds.flags = params.flags;
     }
 
-    if (params.mlParameters) {
-        logger('Boost has machine learning pull parameters');
-        instructionToRds.mlParameters = params.mlParameters;
-    }
+    const optionalComplexKeys = ['rewardParameters', 'mlParameters', 'expiryParameters'];
+    
+    optionalComplexKeys.filter((key) => params[key]).forEach((key) => {
+        logger('Boost has :', key);
+        instructionToRds[key] = params[key];
+    });
 
     // logger('Sending to persistence: ', instructionToRds);
     const persistedBoost = await persistence.insertBoost(instructionToRds);

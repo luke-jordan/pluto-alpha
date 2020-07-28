@@ -429,6 +429,10 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             onlyOfferOnce: false, minIntervalBetweenRuns: { value: 7, unit: 'days' }
         };
 
+        const mockExpiryParams = {
+            individualizedExpiry: true, timeUntilExpiry: { unit: 'hours', value: 24 }
+        };
+
         const testInstruction = {
             creatingUserId: 'admin-user-id',
             label: 'Midweek arrow chase!',
@@ -449,6 +453,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             audienceId: testAudienceId,
             redemptionMsgInstructions: testRedemptionMsgs,
             mlParameters: mockMlParameters,
+            expiryParameters: mockExpiryParams,
             messageInstructionIds: []
         };
 

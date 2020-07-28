@@ -444,17 +444,9 @@ module.exports.insertBoost = async (boostDetails) => {
     };
 
     // some optionals here, for more complex boosts
-    if (boostDetails.gameParams) {
-        boostObject.gameParams = boostDetails.gameParams;
-    }
-
-    if (boostDetails.rewardParameters) {
-        boostObject.rewardParameters = boostDetails.rewardParameters;
-    }
-
-    if (boostDetails.mlParameters) {
-        boostObject.mlParameters = boostDetails.mlParameters;
-    }
+    const parameterDefinitionKeys = ['gameParams', 'rewardParameters', 'mlParameters', 'expiryParameters'];
+    // eslint-disable-next-line
+    parameterDefinitionKeys.filter((key) => boostDetails[key]).forEach((key) => { boostObject[key] = boostDetails[key] });
 
     // be careful here, array handling is a little more sensitive than most types in node-pg
     if (Array.isArray(boostDetails.flags) && boostDetails.flags.length > 0) {
