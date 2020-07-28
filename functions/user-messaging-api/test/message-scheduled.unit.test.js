@@ -110,7 +110,7 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         updateProcessedTimeStub.withArgs(mockInstructionId, testTime.format()).resolves({ updatedTime: mockUpdatedTime });
         lambdaInvokeStub.withArgs(argsForRefreshAudienceLambda).returns({ promise: () => testHelper.mockLambdaResponse(testRefreshAudienceResponse) });
 
-        const result = await handler.createFromPendingInstructions();
+        const result = await handler.createFromRecurringInstructions();
         logger('Result of pending instruction handling:', result);
 
         expect(result).to.exist;
@@ -124,8 +124,9 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
             expect(standardizedResult).to.have.property('creationTimeMillis', mockCreationTime);
             expect(standardizedResult).to.have.property('instructionUpdateTime', mockUpdatedTime);
         });
-        expect(getInstructionsByTypeStub).to.have.been.calledWith('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
+
         expect(getInstructionsByTypeStub).to.have.been.calledWith('RECURRING');
+
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(argsForRefreshAudienceLambda);
         expect(lambdaInvokeStub).to.have.been.callCount(2);
         expect(filterUserIdsForRecurrenceStub).to.have.been.calledTwice;
@@ -139,20 +140,22 @@ describe('*** UNIT TESTING PENDING INSTRUCTIONS HANDLER ***', () => {
         getInstructionsByTypeStub.resolves([mockInstruction, mockInstruction]);
         getUserIdsStub.resolves([]);
     
-        const result = await handler.createFromPendingInstructions();
+        const result = await handler.createFromRecurringInstructions();
         logger('Result of pending instruction handling:', result);
     });
 
     it('Catches thrown errors', async () => {
         getInstructionsByTypeStub.rejects(new Error('ProcessError'));
         
-        const result = await handler.createFromPendingInstructions();
+        const result = await handler.createFromRecurringInstructions();
         logger('Result on error:', result);
 
         expect(result).to.exist;
         expect(result).to.have.property('result', 'ERROR');
         expect(result).to.have.property('message', 'ProcessError');
-        expect(getInstructionsByTypeStub).to.have.been.calledOnceWithExactly('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
+
+        expect(getInstructionsByTypeStub).to.have.been.calledOnceWithExactly('RECURRING');
+
         expect(filterUserIdsForRecurrenceStub).to.have.not.been.called;
         expect(getUserIdsStub).to.have.not.been.called;
         expect(insertUserMessagesStub).to.have.not.been.called;
@@ -201,7 +204,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });
         updateProcessedTimeStub.withArgs(mockInstructionId, testTime.format()).resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await handler.createFromPendingInstructions();
+        const result = await handler.createFromRecurringInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(result).to.exist;
@@ -217,8 +220,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
             expect(standardizedResult).to.have.property('instructionUpdateTime', mockUpdatedTime);
         });
 
-        expect(getInstructionsByTypeStub).to.have.been.calledWith('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
-        expect(getInstructionsByTypeStub).to.have.been.calledWith('RECURRING');
+        expect(getInstructionsByTypeStub).to.have.been.calledOnceWithExactly('RECURRING');
         expect(filterUserIdsForRecurrenceStub).to.have.been.calledTwice;
         expect(getUserIdsStub).to.have.been.called;
 
@@ -255,7 +257,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
         updateInstructionStateStub.withArgs(mockInstructionId, 'MESSAGES_GENERATED').resolves({ updatedTime: mockUpdatedTime });        
         updateProcessedTimeStub.withArgs(mockInstructionId, testTime.format()).resolves({ updatedTime: mockUpdatedTime });
 
-        const result = await handler.createFromPendingInstructions();
+        const result = await handler.createFromRecurringInstructions();
         logger('Result of scheduled message handling:', JSON.stringify(result));
 
         expect(lambdaInvokeStub).to.have.been.calledWithExactly(argsForRefreshAudienceLambda);
@@ -275,7 +277,7 @@ describe('*** UNIT TEST MESSAGE SCHEDULING ***', () => {
                 expect(standardizedResult).to.have.property('processResult', 'INSTRUCTION_SCHEDULED');
             }
         });
-        expect(getInstructionsByTypeStub).to.have.been.calledWith('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
+
         expect(getInstructionsByTypeStub).to.have.been.calledWith('RECURRING');
         expect(filterUserIdsForRecurrenceStub).to.have.been.calledTwice;
         expect(getUserIdsStub).to.have.been.called;

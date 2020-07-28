@@ -54,8 +54,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
         const testRewardParameters = {
             rewardType: 'RANDOM',
             distribution: 'UNIFORM',
-            realizedRewardModuloZeroTarget: 5000, // HUNDREDTH_CENT (matches boostUnit)
-            minRewardAmountPerUser: { amount: 10000, unit: 'HUNDREDTH_CENT', currency: 'USD' } 
+            realizedRewardModuloZeroTarget: 5000, // HUNDREDTH_CENT (matches boostUnit),
+            minBoostAmountPerUser: { amount: '1000', unit: 'HUNDREDTH_CENT', currency: 'USD'}
         };
 
         const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, {

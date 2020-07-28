@@ -115,8 +115,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
     const testSavePendingBase = (amount = testAmounts[0]) => ({
         accountId: testAccountId,
-        initiationTimeEpochMillis: testTimeInitiated.valueOf(),
-        settlementStatus: 'PENDING',
         amount: amount,
         currency: 'USD',
         unit: 'HUNDREDTH_CENT'
@@ -174,8 +172,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
     it('Most common route, initiated payment, works as wrapper, happy path', async () => {
         const saveEventToWrapper = testSavePendingBase();
-        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
-        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
         momentStub.returns(testTimeInitiated);
 
         fetchInfoForBankRefStub.resolves(testBankRefInfo);
@@ -194,8 +190,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
     it('Blocks if account is frozen', async () => {
         const saveEventToWrapper = testSavePendingBase();
-        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
-        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
 
         findFloatOrIdStub.withArgs(testAccountId).resolves({ frozen: true });
         
@@ -214,8 +208,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         const mockPotId = uuid();
         saveEventToWrapper.tags = [`SAVING_POOL::${mockPotId}`];
 
-        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
-        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
         momentStub.returns(testTimeInitiated);
 
         const mockTxToRds = { ...wellFormedMinimalPendingRequestToRds };
@@ -242,8 +234,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
 
     it('Most common route, as wrapper, but with manual EFT as payment method', async () => {
         const saveEventToWrapper = testSavePendingBase();
-        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
-        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
         saveEventToWrapper.paymentProvider = 'MANUAL_EFT';
         momentStub.returns(testTimeInitiated);
 
@@ -270,13 +260,38 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         testHelper.expectNoCalls(getPaymentUrlStub);
     });
 
+    it('Reverts to manual EFT if payment URL fails', async () => {
+        const saveEventToWrapper = JSON.stringify(testSavePendingBase());
+        momentStub.returns(testTimeInitiated);
+
+        fetchInfoForBankRefStub.resolves(testBankRefInfo);
+
+        const paymentUrlFailedResult = {
+            paymentUrl: undefined,
+            paymentRef: undefined
+        };
+        getPaymentUrlStub.resolves(paymentUrlFailedResult);
+
+        const mockBankDetails = { bankName: 'FNB', beneficiaryName: 'Jupiter Stokvel' };
+        getFloatVarsStub.resolves({ bankDetails: mockBankDetails });
+
+        const resultOfWrapperCall = await handler.initiatePendingSave({ body: saveEventToWrapper, requestContext: testAuthContext });
+        const saveBody = testHelper.standardOkayChecks(resultOfWrapperCall);
+
+        expect(saveBody).to.deep.equal({ 
+            transactionDetails: mockTxDetails,
+            humanReference: 'JUPSAVER31-00001',
+            bankDetails: { ...mockBankDetails, useReference: 'JUPSAVER31-00001' }
+        });
+
+        expect(addPaymentInfoRdsStub).to.have.been.calledOnceWithExactly({ transactionId: testTransactionId, paymentProvider: 'MANUAL_EFT', bankRef: 'JUPSAVER31-00001' });
+    });
+
     // todo : actually use account owner (swtich in general)
     it('When called by admin, uses passed system wide user ID', async () => {
         const testUserSavingId = uuid();
 
         const saveEventToWrapper = testSavePendingBase();
-        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
-        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
         saveEventToWrapper.paymentProvider = 'MANUAL_EFT';
         saveEventToWrapper.systemWideUserId = testUserSavingId;
         momentStub.returns(testTimeInitiated);
@@ -348,7 +363,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         badRdsRequest.initiationTime = testHelper.momentMatcher(testTimeInitiated);
         
         findFloatOrIdStub.resolves({ frozen: false }); // just to simulate what is next
-        addSavingsRdsStub.withArgs(badRdsRequest).rejects(new Error('Error! Bad account ID'));
+        addSavingsRdsStub.rejects(new Error('Error! Bad account ID'));
         
         const expectedError2 = await handler.initiatePendingSave({ body: JSON.stringify(badEvent), requestContext: testAuthContext });
         
@@ -384,8 +399,6 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         };
 
         const saveEventToWrapper = testSavePendingBase();
-        Reflect.deleteProperty(saveEventToWrapper, 'settlementStatus');
-        Reflect.deleteProperty(saveEventToWrapper, 'initiationTimeEpochMillis');
         saveEventToWrapper.dummy = 'ON';
         momentStub.returns(testTimeInitiated);
 
@@ -421,6 +434,8 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         };
         
         fetchInfoForBankRefStub.resolves(testBankRefInfo);
+        momentStub.returns(testTimeInitiated.clone());
+        addSavingsRdsStub.resolves({ transactionDetails: mockTxDetails });
         getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));
@@ -448,6 +463,7 @@ describe('*** USER ACTIVITY *** UNIT TEST SAVING *** User initiates a save event
         };
 
         fetchInfoForBankRefStub.resolves(testBankRefInfo);
+        momentStub.returns(testTimeInitiated.clone());
         getPaymentUrlStub.resolves(expectedPaymentParams);
 
         const saveResult = await handler.initiatePendingSave(wrapTestEvent(saveEvent));

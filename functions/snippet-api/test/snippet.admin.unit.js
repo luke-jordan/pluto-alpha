@@ -13,8 +13,8 @@ chai.use(require('sinon-chai'));
 chai.use(require('chai-as-promised'));
 const expect = chai.expect;
 
-const addFactStub = sinon.stub();
-const updateFactStub = sinon.stub();
+const addSnippetStub = sinon.stub();
+const updateSnippetStub = sinon.stub();
 
 const fetchSnippetUserCountStub = sinon.stub();
 const fetchSnippetStub = sinon.stub();
@@ -25,8 +25,8 @@ const removePreviewUserStub = sinon.stub();
 
 const handler = proxyquire('../snippet-admin-handler', {
     './persistence/rds.snippets': {
-        'addSnippet': addFactStub,
-        'updateSnippet': updateFactStub,
+        'addSnippet': addSnippetStub,
+        'updateSnippet': updateSnippetStub,
         'fetchSnippetsAndUserCount': fetchSnippetUserCountStub,
         'fetchSnippetForAdmin': fetchSnippetStub,
         'countSnippetEvents': countSnippetEventsStub,
@@ -41,9 +41,9 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
     const testAdminId = 'admin-usr-id';
     const testSnippetId = 'snippet-id';
 
-    beforeEach(() => helper.resetStubs(addFactStub, updateFactStub));
+    beforeEach(() => helper.resetStubs(addSnippetStub, updateSnippetStub));
 
-    it('Creates a new snippet', async () => {
+    it('Happy path, creates a new snippet', async () => {
         const testCreationTime = moment();
 
         const expectedResult = { result: 'SUCCESS', creationTime: testCreationTime.format() };
@@ -58,7 +58,7 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
             previewMode: true
         };
 
-        addFactStub.resolves({ creationTime: testCreationTime.format() });
+        addSnippetStub.resolves({ creationTime: testCreationTime.format() });
 
         const eventBody = {
             title: 'Jupiter Snippet 51',
@@ -71,10 +71,10 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
 
         const body = helper.standardOkayChecks(creationResult);
         expect(body).to.deep.equal(expectedResult);
-        expect(addFactStub).to.have.been.calledOnceWithExactly(expectedSnippet);
+        expect(addSnippetStub).to.have.been.calledOnceWithExactly(expectedSnippet);
     });
 
-    it('Updates a snippet properly', async () => {
+    it('Happy path, pdates a snippet properly', async () => {
         const testUpdatedTime = moment();
 
         const expectedResult = { result: 'SUCCESS', updatedTime: testUpdatedTime.format() };
@@ -84,7 +84,7 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
             body: 'Jupiter gives you an annual interest rate of up to 5%.'
         };
 
-        updateFactStub.resolves({ updatedTime: testUpdatedTime.format() });
+        updateSnippetStub.resolves({ updatedTime: testUpdatedTime.format() });
 
         const eventBody = {
             snippetId: testSnippetId,
@@ -97,7 +97,18 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
 
         const body = helper.standardOkayChecks(resultOfUpdate);
         expect(body).to.deep.equal(expectedResult);
-        expect(updateFactStub).to.have.been.calledOnceWithExactly(expectedUpdateParams);
+        expect(updateSnippetStub).to.have.been.calledOnceWithExactly(expectedUpdateParams);
+    });
+
+    it('Snippet update returns errors where called for', async () => {
+        await expect(handler.updateSnippet({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
+        await expect(handler.updateSnippet({ })).to.eventually.deep.equal({
+            statusCode: 400,
+            body: `Error! 'snippetId' and a snippet property to be updated are required`
+        });
+        updateSnippetStub.throws(new Error('Error!'));
+        const testEvent = { snippetId: testSnippetId, active: false };
+        await expect(handler.updateSnippet(testEvent)).to.eventually.deep.equal(helper.wrapResponse({ error: 'Error!' }, 500));
     });
 
 });
@@ -105,12 +116,8 @@ describe('*** UNIT TEST ADMIN SNIPPET WRITE FUNCTIONS ***', () => {
 describe('*** UNIT TEST ADMIN SNIPPET READ FUNCTIONS ***', () => {
     const testSnippetId = uuid();
     const testAdminId = uuid();
-    const testSystemId = uuid();
 
-    const testCreationTime = moment().format();
-    const testUpdatedTime = moment().format();
-
-    beforeEach(() => helper.resetStubs(fetchSnippetUserCountStub, fetchSnippetStub, countSnippetEventsStub, insertPreviewUserStub, removePreviewUserStub));
+    beforeEach(() => helper.resetStubs(fetchSnippetUserCountStub, fetchSnippetStub, countSnippetEventsStub));
 
     it('Lists all active snippets', async () => {
         const mockSnippet = (snippetId) => ({
@@ -241,7 +248,18 @@ describe('*** UNIT TEST ADMIN SNIPPET READ FUNCTIONS ***', () => {
         expect(badEvent.headers).to.deep.equal(helper.expectedHeaders);
     });
 
-    it('Adds a user to preview list', async () => {
+});
+
+describe('*** UNIT TEST PREVIEW USER FUNCTIONS ***', () => {
+    const testAdminId = uuid();
+    const testSystemId = uuid();
+
+    const testCreationTime = moment().format();
+    const testUpdatedTime = moment().format();
+
+    beforeEach(() => helper.resetStubs(insertPreviewUserStub, removePreviewUserStub));
+
+    it('Happy path, adds a user to preview list', async () => {
         insertPreviewUserStub.resolves({ creationTime: testCreationTime });
         const testEvent = helper.wrapEvent({ systemWideUserId: testSystemId }, testAdminId, 'SYSTEM_ADMIN');
         const resultOfInsert = await handler.addUserToPreviewList(testEvent);
@@ -250,12 +268,26 @@ describe('*** UNIT TEST ADMIN SNIPPET READ FUNCTIONS ***', () => {
         expect(insertPreviewUserStub).to.have.been.calledOnceWithExactly(testSystemId);
     });
 
-    it('Removes user from preview list', async () => {
+    it('Happy path, removes user from preview list', async () => {
         removePreviewUserStub.resolves({ updatedTime: testUpdatedTime });
         const testEvent = helper.wrapEvent({ systemWideUserId: testSystemId }, testAdminId, 'SYSTEM_ADMIN');
         const resultOfInsert = await handler.removeUserFromPreviewList(testEvent);
         const body = helper.standardOkayChecks(resultOfInsert);
         expect(body).to.deep.equal({ result: 'SUCCESS' });
         expect(removePreviewUserStub).to.have.been.calledOnceWithExactly(testSystemId);
+    });
+
+    it('Throws/Catches errors during addition of new preview user', async () => {
+        const testEvent = helper.wrapEvent({ systemWideUserId: testSystemId }, testAdminId, 'SYSTEM_ADMIN');
+        await expect(handler.addUserToPreviewList({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
+        const persistenceError = helper.wrapResponse({ error: 'Error inserting new preview user' }, 500);
+        await expect(handler.addUserToPreviewList(testEvent)).to.eventually.deep.equal(persistenceError);
+    });
+
+    it('Throws/Catches errors on preview user removal', async () => {
+        const testEvent = helper.wrapEvent({ systemWideUserId: testSystemId }, testAdminId, 'SYSTEM_ADMIN');
+        await expect(handler.removeUserFromPreviewList({ httpMethod: 'POST' })).to.eventually.deep.equal({ statusCode: 403 });
+        const persistenceError = helper.wrapResponse({ error: 'Error removing preview user' }, 500);
+        await expect(handler.removeUserFromPreviewList(testEvent)).to.eventually.deep.equal(persistenceError);
     });
 });

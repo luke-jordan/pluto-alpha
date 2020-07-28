@@ -310,17 +310,10 @@ const generateRecurringMessages = async (recurringInstruction) => {
  * This runs on a scheduled job. It processes any recurring instructions that match the parameters.
  * Note : disabling the once off as at present that gets sent right away, and this is causing potential duplication
  */
-module.exports.createFromPendingInstructions = async () => {
+module.exports.createFromRecurringInstructions = async () => {
     try {
-        // this is just going to go in and find the pending instructions and then transform them
-        // first, simplest, go find once off that for some reason have not been processed yet (note: will need to avoid race condition here)
-        // include within a fail-safe check that once-off messages are not regenerated when they already exist (simple count should do)
-        const unprocessedOnceOffsReady = await msgPersistence.getInstructionsByType('ONCE_OFF', [], ['CREATED', 'READY_FOR_GENERATING']);
-        logger('Would process these once off messages: ', unprocessedOnceOffsReady);
-
-        // const onceOffPromises = unprocessedOnceOffsReady.map((instruction) => exports.createUserMessages({ instructions: [{ instructionId: instruction.instructionId }]}));
         
-        // second, the more complex, find the recurring instructions, and then for each of them determine which users should see them next
+        // find the recurring instructions, and then for each of them determine which users should see them next
         // which implies: first get the recurring instructions, then expire old messages, then add new to the queue; okay.
         const obtainRecurringMessages = await msgPersistence.getInstructionsByType('RECURRING');
         logger('Obtained recurring instruction: ', obtainRecurringMessages);

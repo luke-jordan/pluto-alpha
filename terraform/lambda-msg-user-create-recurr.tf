@@ -7,7 +7,7 @@ resource "aws_lambda_function" "message_user_create_recurr" {
 
   function_name                  = "${var.message_user_create_recurr_lambda_function_name}"
   role                           = "${aws_iam_role.message_user_create_recurr_role.arn}"
-  handler                        = "message-creating-handler.createFromPendingInstructions"
+  handler                        = "message-creating-handler.createFromRecurringInstructions"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
   timeout                        = 60

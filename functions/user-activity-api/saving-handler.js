@@ -67,7 +67,34 @@ const assemblePaymentInfo = async (saveInformation, transactionId) => {
 
   return { transactionId, accountInfo, amountDict };
 };
-  
+
+const handleManualEft = async (transactionId, saveInformation, paymentInfo, resultSoFar) => {
+  const clientFloatVars = await dynamo.fetchFloatVarsForBalanceCalc(saveInformation.clientId, saveInformation.floatId);
+  const humanReference = payment.generateBankRef(paymentInfo.accountInfo);
+  const bankDetails = { ...clientFloatVars.bankDetails, useReference: humanReference };
+  const detailsStash = await persistence.addPaymentInfoToTx({ transactionId, bankRef: humanReference, paymentProvider: 'MANUAL_EFT' });
+  logger('Result of stashing details: ', detailsStash);
+  return { ...resultSoFar, humanReference, bankDetails };
+};
+
+const handleInstantEft = async (transactionId, saveInformation, paymentInfo, resultSoFar) => {
+  const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
+  logger('Got payment link result: ', paymentLinkResult);
+  const urlToCompletePayment = paymentLinkResult.paymentUrl;
+  if (!urlToCompletePayment) {
+    logger('FATAL_ERROR: No URL from payment provider'); // so the right alarms go off
+    return handleManualEft(transactionId, saveInformation, paymentInfo, resultSoFar); // so we don't halt the save
+  }
+
+  logger('Returning with url to complete payment: ', urlToCompletePayment);
+  const paymentRedirectDetails = { urlToCompletePayment };
+  const humanReference = paymentLinkResult.bankRef;
+
+  const paymentStash = await persistence.addPaymentInfoToTx({ transactionId, ...paymentLinkResult });
+  logger('Result of stashing payment details: ', paymentStash);  
+  return { ...resultSoFar, paymentRedirectDetails, humanReference };
+};
+
 /** Wrapper method, calls the above, after verifying the user owns the account, event params are:
  * @param {string} accountId The account where the save is happening
  * @param {number} savedAmount The amount to be saved
@@ -135,7 +162,7 @@ module.exports.initiatePendingSave = async (event) => {
     }
 
     // todo : verify user account ownership
-    const initiationResult = await save(saveInformation);
+    let initiationResult = await save(saveInformation);
 
     logger('sending saveInfo:', initiationResult);
     
@@ -149,22 +176,9 @@ module.exports.initiatePendingSave = async (event) => {
     const paymentInfo = await assemblePaymentInfo(saveInformation, transactionId); // we need this anyway
 
     if (paymentProvider === 'OZOW') {
-      const paymentLinkResult = await payment.getPaymentLink(paymentInfo);
-      logger('Got payment link result: ', paymentLinkResult);
-      const urlToCompletePayment = paymentLinkResult.paymentUrl;
-
-      logger('Returning with url to complete payment: ', urlToCompletePayment);
-      initiationResult.paymentRedirectDetails = { urlToCompletePayment };
-      initiationResult.humanReference = paymentLinkResult.bankRef;
-
-      const paymentStash = await persistence.addPaymentInfoToTx({ transactionId, ...paymentLinkResult });
-      logger('Result of stashing payment details: ', paymentStash);  
+      initiationResult = await handleInstantEft(transactionId, saveInformation, paymentInfo, initiationResult);
     } else {
-      const clientFloatVars = await dynamo.fetchFloatVarsForBalanceCalc(saveInformation.clientId, saveInformation.floatId);
-      initiationResult.humanReference = payment.generateBankRef(paymentInfo.accountInfo);
-      initiationResult.bankDetails = { ...clientFloatVars.bankDetails, useReference: initiationResult.humanReference };
-      const detailsStash = await persistence.addPaymentInfoToTx({ transactionId, bankRef: initiationResult.humanReference, paymentProvider: 'MANUAL_EFT' });
-      logger('Result of stashing details: ', detailsStash);
+      initiationResult = await handleManualEft(transactionId, saveInformation, paymentInfo, initiationResult);
     }
 
     logger('Validated request, publishing user event');

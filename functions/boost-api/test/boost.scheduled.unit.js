@@ -126,9 +126,10 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
                 REDEEMED: ['total_number_friends #{5::INITIATED}']
             },
 
-            messageInstructionIds: {
-                OFFERED: ['instruction-1', 'instruction-2']
-            }
+            messageInstructions: [
+                { msgInstructionId: 'instruction-1', status: 'OFFERED', accountId: 'ALL' },
+                { msgInstructionId: 'instruction-2', status: 'OFFERED', accountId: 'ALL' }
+            ]
         };
 
         fetchActiveDynamicBoostStub.resolves([mockBoost]);
