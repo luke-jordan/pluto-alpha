@@ -54,10 +54,6 @@
         "userHistory": "user_log_reader",
         "boostsExpire": "boost_expiry"
     },
-    "seedrandom": {
-        "active": true,
-        "value": "JupiterSave"
-    },
     "mlSelection": {
         "enabled": true,
         "endpoint": "<insert here>"

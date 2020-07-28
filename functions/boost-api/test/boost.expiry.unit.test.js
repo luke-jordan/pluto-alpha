@@ -444,7 +444,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             REDEEMED: ['randomly_chosen_first_N #{3}']
         });
 
-        sinon.stub(Math, 'random').returns(4);
+        sinon.stub(Math, 'random').returns(0.89);
 
         fetchBoostStub.resolves(mockBoost);
         expireBoostsStub.resolves(['boost-id-1']);
