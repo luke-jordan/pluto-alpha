@@ -199,7 +199,7 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
 
 // a simple version for when we absolutely know the boost id
 module.exports.fetchCurrentBoostStatus = async (boostId, accountId) => {
-    const columns = `boost_id, account_id, boost_status, ${boostAccountJoinTable}.creation_time, ${boostAccountJoinTable}.updated_time`;
+    const columns = `${boostAccountJoinTable}.boost_id, account_id, boost_status, ${boostAccountJoinTable}.creation_time, ${boostAccountJoinTable}.updated_time`;
     const endTime = '(case when expiry_time is not null then expiry_time else end_time end) as end_time';
 
     const selectQuery = `select ${columns}, ${endTime} from ` +
@@ -374,27 +374,25 @@ module.exports.updateBoostAmount = async (boostId, boostAmount) => {
     return resultOfUpdate;
 };
 
-module.exports.expireBoosts = async () => {
-    const boostMasterTable = config.get('tables.boostTable');
-    
-    const updateBoostQuery = `update ${boostMasterTable} set active = $1 where active = true and ` + 
+module.exports.expireBoostsPastEndTime = async () => {
+    const updateBoostQuery = `update ${config.get('tables.boostTable')} set active = $1 where active = true and ` + 
         `end_time < current_timestamp returning boost_id`;
     const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
+    
     logger('Result of straight update boosts: ', updateBoostResult);
     if (updateBoostResult.rowCount === 0) {
         logger('No boosts expired, can exit');
         return [];
     }
 
-    return typeof updateBoostResult === 'object' && Array.isArray(updateBoostResult.rows) 
-        ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
+    return updateBoostResult && Array.isArray(updateBoostResult.rows) ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
 };
 
 // ///////////////////////////////////////////////////////////////
 // //////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
 // ///////////////////////////////////////////////////////////////
 
-// todo : turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
+// could turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
 module.exports.extractAccountIds = async (audienceId) => {
     const selectionQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
     

@@ -102,7 +102,13 @@ const sortAndRankBestScores = (boostGameLogs, accountIds) => {
     return accountIds.reduce((obj, accountId) => ({ ...obj, [accountId]: getAccountIdRanking(accountId) }), {});
 };
 
-const expireAccountsForBoost = async (boostId, specifiedAccountIds) => {
+const expireAccountsForBoost = async (boost, specifiedAccountIds) => {
+    const { boostId, expiryParameters } = boost;
+    if (expiryParameters && expiryParameters.individualizedExpiry) {
+        logger('Boost has expiry parameters, so exiting; expiry parameters are: ', JSON.stringify(expiryParameters));
+        return;
+    }
+
     const accountIds = specifiedAccountIds || null; // null makes it all of them
     logger('Expiring boost, fetching account IDs to expire: ', accountIds);
     const accountsToExpire = await persistence.findAccountsForBoost({ boostIds: [boostId], status: util.ACTIVE_BOOST_STATUS, accountIds });
@@ -176,17 +182,18 @@ module.exports.handleExpiredBoost = async (boostId) => {
     logger('Processing boost for expiry: ', boost);
 
     const isBoostGame = boost.boostType === 'GAME' && boostGameLogs && boostGameLogs.length > 0;
+
     if (!isBoostGame && !util.isRandomAward(boost)) {
         // just expire the boosts and be done
         logger('No game logs found, expiring all');
-        await expireAccountsForBoost(boostId);
+        await expireAccountsForBoost(boost);
         return { resultCode: 200, body: 'Not a game, or no responses' };
     }
 
     const { statusConditions } = boost;
     if (!statusConditions || !statusConditions.REDEEMED) {
         logger('No redemption conditions, exiting');
-        await expireAccountsForBoost(boostId);
+        await expireAccountsForBoost(boost);
         return { resultCode: 200, body: 'No redemption condition' };
     }
 
@@ -212,7 +219,7 @@ module.exports.handleExpiredBoost = async (boostId) => {
     
     const remainingAccounts = allAccountIds.filter((accountId) => !winningAccounts.includes(accountId));
     logger('Will expire these remaining accounts: ', remainingAccounts);
-    const resultOfUpdate = await expireAccountsForBoost(boostId, remainingAccounts);
+    const resultOfUpdate = await expireAccountsForBoost(boost, remainingAccounts);
     logger('Result of expiry update: ', resultOfUpdate);
 
     // as above, inefficient, but to neaten up later
@@ -243,7 +250,7 @@ module.exports.checkForBoostsToExpire = async (event) => {
             return opsUtil.wrapResponse({ }, statusCodes('Forbidden'));
         }
         
-        const expiredBoosts = await persistence.expireBoosts();
+        const expiredBoosts = await persistence.expireBoostsPastEndTime();
         logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
         if (expiredBoosts.length === 0) {
             logger('No boosts to expire, returning');
@@ -255,6 +262,8 @@ module.exports.checkForBoostsToExpire = async (event) => {
 
         const resultOfTournEnding = await persistence.endFinishedTournaments();
         logger('Result of tournament ending:', resultOfTournEnding);
+
+        // over here, expire individual-end-time boosts
         
         return opsUtil.wrapResponse({ result: 'SUCCESS' });
     } catch (error) {

@@ -532,7 +532,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             rowCount: 3
         });
 
-        const resultOfUpdate = await rds.expireBoosts();
+        const resultOfUpdate = await rds.expireBoostsPastEndTime();
         
         expect(resultOfUpdate).to.exist;
         expect(resultOfUpdate).to.deep.equal(['boost-1', 'boost-2', 'boost-3']);
@@ -543,7 +543,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
         const updateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
         updateStub.onFirstCall().resolves({ rows: [], rowCount: 0 });
 
-        const resultOfUpdate = await rds.expireBoosts();
+        const resultOfUpdate = await rds.expireBoostsPastEndTime();
         logger('Result of boost cull:', resultOfUpdate);
        
         expect(resultOfUpdate).to.exist;
