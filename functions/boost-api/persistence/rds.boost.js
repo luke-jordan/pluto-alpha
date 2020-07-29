@@ -619,6 +619,11 @@ module.exports.endFinishedTournaments = async (boostId = null) => {
         finishedTournamentIds.push(...tournamentIds.filter((tournamentId) => tournamentStatusMap[tournamentId] === true));
     }
 
+    if (finishedTournamentIds.length === 0) {
+        logger('None of open tournaments are open, so exit');
+        return {};
+    }
+
     logger('Got finished tournament ids:', finishedTournamentIds);
     const updateQuery = `update ${boostTable} set end_time = current_timestamp where boost_id in (${extractArrayIndices(finishedTournamentIds)}) returning updated_time`;
     const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [...finishedTournamentIds]);

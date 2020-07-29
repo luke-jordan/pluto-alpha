@@ -43,6 +43,9 @@ resource "aws_lambda_function" "boost_user_process" {
                 "hash": {
                   "key": "${var.log_hashing_secret[terraform.workspace]}"
                 }
+              },
+              "lambdas": {
+                "boostsExpire": aws_lambda_function.boost_expire.function_name
               }
           }
       )}"
@@ -102,6 +105,11 @@ resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_transfer_po
 resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_message_create_policy" {
   role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_boost_expiry_policy" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_boost_expiry_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "boost_user_process_user_event_publish_policy" {

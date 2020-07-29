@@ -176,7 +176,7 @@ const handleRandomScoring = async (boost) => {
  */
 module.exports.handleExpiredBoost = async (boostId) => {
     const [boost, boostGameLogs] = await Promise.all([persistence.fetchBoost(boostId), persistence.findLogsForBoost(boostId, GAME_RESPONSE)]);
-    logger('Processing boost for expiry: ', boost);
+    logger('Processing boost for expiry: ', JSON.stringify(boost));
 
     const isBoostGame = boost.boostType === 'GAME' && boostGameLogs && boostGameLogs.length > 0;
 

@@ -203,7 +203,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.not.have.been.called;
         expect(updateBoostRedeemedStub).to.not.have.been.called;
         
-        const expiryInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.boostsExpire'), true, { });
+        const expiryInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.boostExpire'), true, { });
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expiryInvocation);
     });
 

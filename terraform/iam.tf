@@ -291,6 +291,30 @@ resource "aws_iam_policy" "lambda_invoke_message_create_access" {
 EOF
 }
 
+resource "aws_iam_policy" "lambda_invoke_boost_expiry_access" {
+    name = "lambda_boost_expire_invoke_access_${terraform.workspace}"
+    path = "/"
+
+    policy = <<EOF
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Sid": "ExpireLambdaInvokeAccess",
+            "Effect": "Allow",
+            "Action": [
+                "lambda:InvokeFunction",
+                "lambda:InvokeAsync"
+            ],
+            "Resource": [
+                "${aws_lambda_function.boost_expire.arn}"
+            ]
+        }
+    ]
+}
+EOF
+}
+
 resource "aws_iam_policy" "lambda_invoke_message_process_access" {
     name = "lambda_message_user_process_invoke_access_${terraform.workspace}"
     path = "/"

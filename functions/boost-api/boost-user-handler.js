@@ -20,8 +20,11 @@ const expireFinishedTournaments = async (boost) => {
         return;
     }
 
-    const expiryInvocation = util.lambdaParameters({}, 'boostsExpire', false);
+    // the expiry handler will take care of the checks to see if everyone else has played, and if so, will end this
+    logger('Telling boost expiry to check ...');
+    const expiryInvocation = util.lambdaParameters({}, 'boostExpire', false);
     await lambda.invoke(expiryInvocation).promise();
+    logger('Dispatched');
 };
 
 const recordGameResult = async (params, boost, accountId) => {

@@ -56,7 +56,7 @@
         "messageInstruct": "message_instruct_create",
         "audienceHandle": "audience_selection",
         "userHistory": "user_log_reader",
-        "boostsExpire": "boost_expiry"
+        "boostExpire": "boost_expire"
     },
     "mlSelection": {
         "enabled": true,
