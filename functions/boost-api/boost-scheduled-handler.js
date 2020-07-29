@@ -81,13 +81,16 @@ const handleBoostWithDynamicAudience = async (boost) => {
         logger('Result of message dispatch: ', resultOfMsgSend);
     }
 
-    const logOptions = {
-        initiator: boost.creatingUserId,
-        context: boostUtil.constructBoostContext(boost)
-    };
-    
-    await publisher.publishMultiUserEvent(newAccountUserIds, `BOOST_CREATED_${boostType}`, logOptions);
+    logger('Triggering user logs for boost ... : user Ids: ', JSON.stringify(newAccountUserIds));
 
+    const statusToLog = boostUtil.getStatusPrior(defaultStatus);
+    const logOptions = { initiator: boost.creatingUserId, context: boostUtil.constructBoostContext(boost) };    
+
+    const promisePublicationMap = statusToLog.map((status) => `BOOST_${status}_${boostType}`).
+        map((eventType) => publisher.publishMultiUserEvent(newAccountUserIds, eventType, logOptions));
+
+    await Promise.all(promisePublicationMap);
+    
     return { newOffers: newAccounts.length };
 };
 

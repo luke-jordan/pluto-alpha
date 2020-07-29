@@ -27,6 +27,9 @@ module.exports.extractBoostIds = (boosts) => boosts.map((boost) => boost.boostId
 
 module.exports.statusSorter = (status1, status2) => exports.ALL_BOOST_STATUS_SORTED.indexOf(status2) - exports.ALL_BOOST_STATUS_SORTED.indexOf(status1);
 
+module.exports.getStatusPrior = (relevantStatus) => exports.ALL_BOOST_STATUS_SORTED.
+    filter((status) => exports.ALL_BOOST_STATUS_SORTED.indexOf(status) <= exports.ALL_BOOST_STATUS_SORTED.indexOf(relevantStatus));
+
 // these are time-based in the sense that they are triggered or not based on a sequence of events within a given time
 const timeBasedConditions = ['event_does_follow', 'event_does_not_follow'];
     

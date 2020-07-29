@@ -94,8 +94,8 @@ describe('*** UNIT TEST BOOST COMPLETION METHODS ***', async () => {
     it('Expires accounts past boost', async () => {
         // note: we do not expire CREATED, because those might be ML still (in practice, would be excluded anyway by expiry time 
         // not null, but better to do so here anyway)
-        const updateQuery = `update boost_data.boost_account_status set status = $1 where ` +
-            `expiry_time is not null and expiry_time < current_timestamp and status in ($2, $3, $4) ` +
+        const updateQuery = `update boost_data.boost_account_status set boost_status = $1 where ` +
+            `expiry_time is not null and expiry_time < current_timestamp and boost_status in ($2, $3, $4) ` +
             `returning boost_id, account_id`;
         
         updateStub.onFirstCall().resolves({ rows: [

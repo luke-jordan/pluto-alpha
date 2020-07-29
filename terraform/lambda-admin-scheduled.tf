@@ -143,7 +143,7 @@ resource "aws_cloudwatch_event_target" "trigger_ops_admin_scheduled_every_day" {
 
     input = jsonencode(
       {
-        specificOperations = ["ACRRUE_FLOAT", "EXPIRE_HANGING", "EXPIRE_BOOSTS", "CHECK_FLOATS"]
+        specificOperations = ["ACRRUE_FLOAT", "EXPIRE_HANGING", "CHECK_FLOATS"]
       }
     )
 }
@@ -176,26 +176,4 @@ resource "aws_lambda_permission" "allow_cloudwatch_daytime_to_call_ops_admin_sch
     function_name = aws_lambda_function.ops_admin_scheduled.function_name
     principal = "events.amazonaws.com"
     source_arn = aws_cloudwatch_event_rule.ops_admin_daytime.arn
-}
-
-/////////////////// CLOUD WATCH FOR FREQUENT BOOST EXPIRY ///////////////////////
-
-resource "aws_cloudwatch_event_target" "trigger_boost_expiry_frequent" {
-    rule = aws_cloudwatch_event_rule.ops_every_five_minutes.name
-    target_id = aws_lambda_function.ops_admin_scheduled.id
-    arn = aws_lambda_function.ops_admin_scheduled.arn
-
-    input = jsonencode(
-      {
-        specificOperations = ["EXPIRE_BOOSTS"]
-      }
-    )
-}
-
-resource "aws_lambda_permission" "allow_cloudwatch_regular_to_call_ops_admin_scheduled" {
-    statement_id = "AllowRegularAdminExecutionFromCloudWatch"
-    action = "lambda:InvokeFunction"
-    function_name = aws_lambda_function.ops_admin_scheduled.function_name
-    principal = "events.amazonaws.com"
-    source_arn = aws_cloudwatch_event_rule.ops_every_five_minutes.arn
 }

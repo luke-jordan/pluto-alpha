@@ -197,8 +197,9 @@ describe('*** UNIT TEST REFRESHING DYNAMIC BOOSTS ***', async () => {
             }
         };
 
-        expect(publishMultiEventStub).to.have.been.calledOnce;
-        expect(publishMultiEventStub).to.have.been.calledOnceWithExactly(['user-2'], 'BOOST_CREATED_SOCIAL', expectedUserLogOptions);
+        expect(publishMultiEventStub).to.have.been.calledTwice;
+        expect(publishMultiEventStub).to.have.been.calledWithExactly(['user-2'], 'BOOST_CREATED_SOCIAL', expectedUserLogOptions);
+        expect(publishMultiEventStub).to.have.been.calledWithExactly(['user-2'], 'BOOST_OFFERED_SOCIAL', expectedUserLogOptions);
     });
 
 });

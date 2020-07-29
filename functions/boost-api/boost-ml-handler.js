@@ -11,6 +11,7 @@ const boostUtil = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
+const { publishMultiUserEvent } = require('publish-common');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const invokeLambda = async (payload, functionKey, sync = false) => {
@@ -112,6 +113,9 @@ const selectUsersForBoostOffering = async (boost) => {
     logger('Got user ids for accounts:', accountUserIdMap);
     
     const userIdsForOffering = await obtainUsersForOffering(boost, Object.values(accountUserIdMap));
+    if (userIdsForOffering.length === 0) {
+        return { message: `No users selected for boost: ${boostId}` };
+    }
     
     const accountIdsForOffering = filteredAccountIds.filter((accountId) => userIdsForOffering.includes(accountUserIdMap[accountId]));
     // not the most pleasant on the eye but just ensuring some robustness to malformed boosts getting in
@@ -163,6 +167,10 @@ module.exports.processMlBoosts = async (event) => {
         logger('Got boosts and recipients:', resultOfSelection);
 
         const filteredSelectionResult = resultOfSelection.filter((result) => result.boostId && result.accountIds);
+        if (filteredSelectionResult.length === 0) {
+            return { result: 'NO_SELECTIONS' };
+        }
+
         const statusUpdateInstructions = filteredSelectionResult.map((selectionResult) => createUpdateInstruction(selectionResult));
         logger('Created boost status update instructions:', statusUpdateInstructions);
 
@@ -171,6 +179,17 @@ module.exports.processMlBoosts = async (event) => {
 
         const resultOfMsgInstructions = await triggerMsgInstructions(filteredSelectionResult);
         logger('triggering message instructions resulted in:', resultOfMsgInstructions);
+
+        const findBoost = (soughtBoostId) => mlBoosts.find((boost) => boost.boostId === soughtBoostId);
+        
+        const publishPromises = filteredSelectionResult.map((result) => {
+            const boost = findBoost(result.boostId);
+            const context = boostUtil.constructBoostContext(boost);
+            const eventType = `BOOST_OFFERED_${boost.boostType}`;
+            return publishMultiUserEvent(result.userIds, eventType, { context, initiator: 'BOOST_TARGET_MODEL' });
+        });
+
+        await Promise.all(publishPromises);
 
         return { result: 'SUCCESS' };
     } catch (err) {

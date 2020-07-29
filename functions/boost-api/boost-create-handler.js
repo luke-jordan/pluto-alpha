@@ -345,9 +345,7 @@ const publishBoostUserLogs = async (initiator, accountIds, boostContext, default
     const userIds = await persistence.findUserIdsForAccounts(accountIds);
     const options = { initiator, context: boostContext };
     
-    const { ALL_BOOST_STATUS_SORTED: allStatus } = boostUtil;
-    const statusToLog = allStatus.filter((status) => allStatus.indexOf(status) <= allStatus.indexOf(defaultStatus));
-
+    const statusToLog = boostUtil.getStatusPrior(defaultStatus);
     const promisePublicationMap = statusToLog.map((status) => `BOOST_${status}_${boostContext.boostType}`).
         map((eventType) => publisher.publishMultiUserEvent(userIds, eventType, options));
 
