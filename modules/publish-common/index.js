@@ -21,7 +21,7 @@ const s3 = new AWS.S3();
 const lambda = new AWS.Lambda();
 
 // this gets instantiated inside each function container individually, so will have this here as global for that function across calls
-const FUNCTION_NAME = config.util.getEnv('AWS_LAMBDA_FUNCTION_NAME');
+const FUNCTION_NAME = config.util.getEnv('AWS_LAMBDA_FUNCTION_NAME') || 'LOCAL';
 
 // config's biggest weakness is its handling of modules, which blows. there is a complex way
 // to set defaults but it requires a constructor pattern, so far as I can tell. hence, doing this. 
@@ -63,14 +63,8 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         };
 
         const msgAttributes = {
-            'eventType': {
-                DataType: 'String',
-                StringValue: eventType
-            },
-            'sourceFunction': {
-                DataType: 'String',
-                StringValue: FUNCTION_NAME
-            }
+            eventType: { DataType: 'String', StringValue: eventType },
+            sourceFunction: { DataType: 'String', StringValue: FUNCTION_NAME }
         };
     
         const messageForQueue = {
@@ -80,11 +74,9 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             TopicArn: config.get('publishing.userEvents.topicArn')
         };
 
-        // logger(`Logging ${eventType} for user ID ${userId}`);
         const resultOfPublish = await sns.publish(messageForQueue).promise();
 
         if (typeof resultOfPublish === 'object' && Reflect.has(resultOfPublish, 'MessageId')) {
-            // logger(`Completed publishing ${userId}::${eventType}, result: `, resultOfPublish);
             return { result: 'SUCCESS' };
         }
 
