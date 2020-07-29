@@ -378,6 +378,38 @@ describe('*** UNIT TEST BOOSTS RDS *** Unit test recording boost-user responses 
         expect(updateBoostResult).to.deep.equal(expectedResult);
     });
 
+    it('Updates single boost, multiple accounts, with expiry time', async () => {
+        const mockExpiryTime = moment().add(24, 'hours');
+        const mockLogContext = { selectionModel: 'some-model-identifier' };
+
+        const testInput = {
+            boostId: testBoostId,
+            accountIds: ['account-1', 'account-2'],
+            newStatus: 'OFFERED',
+            logType: 'ML_BOOST_OFFERED',
+            expiryTime: mockExpiryTime,
+            logContext: mockLogContext
+        };
+
+        const expectedUpdateDef = (accountId) => ({
+            table: boostUserTable,
+            key: { boostId: testBoostId, accountId },
+            value: { boostStatus: 'OFFERED', expiryTime: mockExpiryTime.format() },
+            returnClause: 'updated_time'
+        });
+
+        const logRowStatus = (accountId) => ({ boostId: testBoostId, logType: 'ML_BOOST_OFFERED', accountId, logContext: mockLogContext });
+        const logInsertDef = assembleLogInsertDef([logRowStatus('account-1'), logRowStatus('account-2')], true);
+
+        multiOpStub.resolves([[{ 'updated_time': moment().format() }]]);
+
+        const updateBoostResult = await rds.updateBoostAccountStatus([testInput]);
+
+        expect(updateBoostResult).to.exist; // update time not important here + tested above
+
+        expect(multiOpStub).to.have.been.calledWithExactly([expectedUpdateDef('account-1'), expectedUpdateDef('account-2')], [logInsertDef]);
+    });
+
     it('Updates multiple boosts at a time, handles errors', async () => {
         const testAccountId2 = uuid();
         const testLogContext = { newStatus: 'REDEEMED', transactionId: uuid() };
