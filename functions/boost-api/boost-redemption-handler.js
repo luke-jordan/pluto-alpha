@@ -75,16 +75,30 @@ const calculateRandomBoostAmount = (boost) => {
 const fetchConsolationDetails = (boost, affectedAccountDict) => {
     logger('Calculating consolation amount and recipeints');
     const { consolationAmount, consolationAwards } = boost.rewardParameters;
+
     const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
+    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
+    logger('Got consolation amount:', boostAmount, 'and recipients:', recipientAccounts);
+
+    const consolationDetails = {
+        referenceAmounts: { boostAmount, amountFromBonus: boost.boostAmount }
+    };
     
     if (consolationAwards.basis === 'ALL') {
-        const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
-        logger('Got consolation amount:', boostAmount, 'and recipients:', recipientAccounts);
-        return { 
-            referenceAmounts: { boostAmount, amountFromBonus: boost.boostAmount },
-            recipientAccounts
-        };
+        consolationDetails.recipientAccounts = recipientAccounts;
     }
+
+    if (consolationAwards.basis === 'ABSOLUTE') {
+        consolationDetails.recipientAccounts = recipientAccounts.slice(0, consolationAwards.recipients);
+    }
+
+    if (consolationAwards.basis === 'PROPORTION') {
+        const numberOfRecipients = Math.round(recipientAccounts.length * consolationAwards.recipients);
+        consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
+    }
+
+    logger('Got consolation details:', consolationDetails);
+    return consolationDetails;
 };
 
 const triggerFloatTransfers = async (transferInstructions) => {
