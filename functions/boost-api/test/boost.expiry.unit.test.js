@@ -384,18 +384,30 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
     });
 
-    it('Also if no one played', async () => {
-        const mockBoost = {
-            boostId: testBoostId,
-            boostType: 'GAME',
-            boostCategory: 'TAP_THE_SCREEN',
-            boostCurrency: 'USD',
-            boostUnit: 'HUNDREDTH_CENT',
-            boostAmount: 50000,
-            statusConditions: {
-                'OFFERED': ['something'],
-                'REDEEMED': ['number_taps_in_first_N #{2::10000}']   
-            }
+    it('Handles random reward user selection', async () => {
+        const mockBoost = mockTournamentBoost('TAP_SCREEN', {
+            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+            PENDING: ['number_taps_greater_than #{0::10000}'],
+            REDEEMED: ['randomly_chosen_first_N #{3}']
+        });
+
+        fetchBoostStub.resolves(mockBoost);
+        expireBoostsStub.resolves(['boost-id-1']);
+        flipBoostStatusStub.resolves([{ boostId: 'boost-id-2', accountId: 'account-id-7' }]);
+        findUsersForAccountsStub.resolves('user-id-7');
+
+        // Lazy loading because stubbing in this way seems to stub across test files. Avoiding interference with other Math.random consumers.
+        // May need another sinon.restore() at the end of this test suite.
+        sinon.restore();
+        const mathRandomStub = sinon.stub(Math, 'random');
+
+        const accountsForBoost = { // all
+            'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
+            'account-id-2': { userId: 'user-id-2', status: 'PENDING' },
+            'account-id-3': { userId: 'user-id-3', status: 'PENDING' },
+            'account-id-4': { userId: 'user-id-4', status: 'PENDING' },
+            'account-id-5': { userId: 'user-id-5', status: 'PENDING' },
+            'account-id-6': { userId: 'user-id-6', status: 'PENDING' }
         };
 
         fetchBoostStub.resolves(mockBoost);
@@ -409,9 +421,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             }
         }]);
 
-
-        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
-        expect(resultOfExpiry).to.exist;
+        const resultOfSelection = await handler.checkForBoostsToExpire({ boostId: testBoostId });
         
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
 
