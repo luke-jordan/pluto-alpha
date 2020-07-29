@@ -159,7 +159,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 PENDING: ['number_taps_greater_than #{0::10000}'],
                 REDEEMED: ['number_taps_in_first_N #{2::10000}']
-            }
+            },
+            flags: ['FRIEND_TOURNAMENT']
         };
 
         fetchBoostStub.resolves(boostAsRelevant);

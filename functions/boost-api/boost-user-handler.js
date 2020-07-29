@@ -16,7 +16,9 @@ AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
 const expireFinishedTournaments = async (boost) => {
-    if (!util.isBoostTournament(boost)) {
+    // for now, we only care enough if this is a friend tournament
+    const flags = boost.flags || []; // just as even small chance of accidental fragility here would be a really bad trade-off
+    if (!util.isBoostTournament(boost) || !flags.includes('FRIEND_TOURNAMENT')) {
         return;
     }
 
