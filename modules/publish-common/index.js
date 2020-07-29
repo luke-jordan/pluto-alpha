@@ -21,7 +21,8 @@ const s3 = new AWS.S3();
 const lambda = new AWS.Lambda();
 
 // this gets instantiated inside each function container individually, so will have this here as global for that function across calls
-const FUNCTION_NAME = config.util.getEnv('AWS_LAMBDA_FUNCTION_NAME') || 'LOCAL';
+// eslint-disable-next-line no-process-env
+const FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME || 'LOCAL';
 
 // config's biggest weakness is its handling of modules, which blows. there is a complex way
 // to set defaults but it requires a constructor pattern, so far as I can tell. hence, doing this. 
