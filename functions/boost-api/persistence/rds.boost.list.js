@@ -88,10 +88,12 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const boostAccountJoinTable = config.get('tables.boostAccountJoinTable');
     
     const columns = [
-        `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', `${boostAccountJoinTable}.updated_time`, 'active',
+        `${boostMainTable}.boost_id`, 'boost_status', 'label', 'start_time', `${boostAccountJoinTable}.updated_time`, 'active',
         'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
         'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', `${boostMainTable}.flags`
     ];
+
+    const endTimeColumn = '(case when expiry_time is not null then expiry_time else end_time end) as end_time';
 
     const excludedType = ['REFERRAL']; // for now
 
@@ -103,7 +105,7 @@ module.exports.fetchUserBoosts = async (accountId, { excludedStatus, changedSinc
     const flagRestriction = flags ? `and ${boostMainTable}.flags && $${typeIndex + excludedType.length + (changedSinceTime ? 1 : 0)} ` : '';
     const finalClause = `${updatedTimeRestriction}${flagRestriction}`;
 
-    const selectBoostQuery = `select ${columns} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
+    const selectBoostQuery = `select ${columns}, ${endTimeColumn} from ${boostMainTable} inner join ${boostAccountJoinTable} ` + 
        `on ${boostMainTable}.boost_id = ${boostAccountJoinTable}.boost_id where account_id = $1 and ` + 
        `boost_status not in (${extractArrayIndices(excludedStatus, statusIndex)}) and ` +
        `boost_type not in (${extractArrayIndices(excludedType, typeIndex)}) ${finalClause}` +

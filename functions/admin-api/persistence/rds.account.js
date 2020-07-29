@@ -147,22 +147,6 @@ module.exports.expireHangingTransactions = async () => {
         ? resultOfUpdate.rows.map((row) => camelCaseKeys(row)) : [];
 };
 
-module.exports.expireBoosts = async () => {
-    const boostMasterTable = config.get('tables.boostMasterTable');
-    
-    const updateBoostQuery = `update ${boostMasterTable} set active = $1 where active = true and ` + 
-        `end_time < current_timestamp returning boost_id`;
-    const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
-    logger('Result of straight update boosts: ', updateBoostResult);
-    if (updateBoostResult.rowCount === 0) {
-        logger('No boosts expired, can exit');
-        return [];
-    }
-
-    return typeof updateBoostResult === 'object' && Array.isArray(updateBoostResult.rows) 
-        ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
-};
-
 module.exports.fetchUserIdsForAccounts = async (accountIds) => {
     const accountTable = config.get('tables.accountTable');
 

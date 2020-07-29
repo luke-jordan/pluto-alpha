@@ -23,6 +23,7 @@ const fetchMlBoostsStub = sinon.stub();
 const fetchAudienceStub = sinon.stub();
 const accountStatusStub = sinon.stub();
 const extractAccountIdsStub = sinon.stub();
+const momentStub = sinon.stub();
 
 class MockLambdaClient {
     constructor () {
@@ -47,6 +48,7 @@ const handler = proxyquire('../boost-ml-handler', {
         'post': tinyPostStub,
         '@noCallThru': true
     },
+    'moment': momentStub,
     '@noCallThru': true
 });
 
@@ -83,6 +85,10 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         audienceId: testAudienceId,
         defaultStatus: 'CREATED',
         messageInstructions: [{ msgInstructionId: testInstructionId, status: 'OFFERED', accountId: 'ALL' }],
+        expiryParameters: {
+            individualizedExpiry: true,
+            timeUntilExpiry: { unit: 'hours', value: 24 }
+        },
         mlParameters
     });
 
@@ -113,10 +119,12 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const msgInstruction = { destinationUserId: 'user-id-1', instructionId: testInstructionId, parameters: mockMlBoostFromRds(mlParameters) };
         const msgInvocation = helper.wrapLambdaInvoc('message_user_create_once', true, { instructions: [msgInstruction] });
 
+        const mockMoment = moment();
         const expectedStatusUpdateInstruction = {
             boostId: testBoostId,
             accountIds: ['account-id-1'],
             newStatus: 'OFFERED',
+            expiryTime: mockMoment.clone().add(24, 'hours'), // as always, watch mutability
             logType: 'ML_BOOST_OFFERED'
         };
 
@@ -124,7 +132,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         extractAccountIdsStub.resolves(mockAccountIds);
         
         accountStatusStub.resolves([{ boostId: testBoostId, accountUserMap: mockAccountUserMap }]);
-        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1' });
+        findUserIdsStub.resolves({ 'account-id-1': 'user-id-1' });
 
         tinyPostStub.resolves({
             body: JSON.stringify([{ 'user_id': 'user-id-1', 'should_offer': true }])
@@ -132,6 +140,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
 
         lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 200 })});
 
+        momentStub.returns(mockMoment.clone());
         updateStatusStub.resolves([{ boostId: testBoostId, updatedTime: testUpdatedTime }]);
         
         const resultOfBoost = await handler.processMlBoosts({});
@@ -148,7 +157,9 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
         
         expect(extractAccountIdsStub).to.have.been.calledOnceWithExactly(testAudienceId);
+        
         expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
+        
         expect(findBoostLogStub).to.have.not.been.called;
     });
 
@@ -164,12 +175,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
             }
         };
 
-        const expectedStatusUpdateInstruction = {
-            boostId: testBoostId,
-            accountIds: ['account-id-1', 'account-id-3'],
-            newStatus: 'OFFERED',
-            logType: 'ML_BOOST_OFFERED'
-        };
+        const mockMoment = moment();
 
         const audiencePayload = { operation: 'refresh', params: { audienceId: testAudienceId }};
         const audienceInvocation = helper.wrapLambdaInvoc('audience_selection', false, audiencePayload);
@@ -194,6 +200,9 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         fetchMlBoostsStub.resolves([mockMlBoostFromRds(mlParameters)]);
         extractAccountIdsStub.resolves(mockAccountIds);
 
+        momentStub.returns(mockMoment.clone());
+        momentStub.withArgs(testCreationTime).returns(moment(testCreationTime));
+
         findBoostLogStub.onFirstCall().resolves(mockBoostLog('account-id-1'));
         findBoostLogStub.onSecondCall().resolves(mockBoostLog('account-id-2'));
         findBoostLogStub.onThirdCall().resolves({}); // i.e., not called before
@@ -201,7 +210,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const tooSoonLog = { ...mockBoostLog('account-id-4'), creationTime: moment().subtract(3, 'days') };
         findBoostLogStub.onCall(3).resolves(tooSoonLog);
 
-        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2', 'user-id-3': 'account-id-3' });
+        findUserIdsStub.resolves({ 'account-id-1': 'user-id-1', 'account-id-2': 'user-id-2', 'account-id-3': 'user-id-3' });
         
         const offerDecision = (userId, shouldOffer) => ({ 'user_id': userId, 'should_offer': shouldOffer });
         tinyPostStub.resolves({
@@ -231,6 +240,15 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(audienceInvocation);
         expect(lamdbaInvokeStub).to.have.been.calledWithExactly(msgInvocation);
         
+        const expectedStatusUpdateInstruction = {
+            boostId: testBoostId,
+            accountIds: ['account-id-1', 'account-id-3'],
+            newStatus: 'OFFERED',
+            expiryTime: mockMoment.clone().add(24, 'hours'),
+            logType: 'ML_BOOST_OFFERED'
+        };
+
+        // helper.logNestedMatches(expectedStatusUpdateInstruction, updateStatusStub.getCall(0).args[0][0]);
         expect(updateStatusStub).to.have.been.calledOnceWithExactly([expectedStatusUpdateInstruction]);
     });
 });

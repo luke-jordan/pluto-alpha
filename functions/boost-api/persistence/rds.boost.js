@@ -59,6 +59,12 @@ module.exports.fetchBoostsWithDynamicAudiences = async () => {
     return rawResult.map((rawBoost) => transformBoostFromRds(rawBoost));
 };
 
+module.exports.fetchActiveMlBoosts = async () => {
+    const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, []);
+    return resultOfQuery.map(transformBoostFromRds);
+};
+
 /**
  * Method that finds boost that may be relevant to a given account, filtering by whether the account is in a certain state related to the boost.
  * Most common use will be to find the boosts for which a given account (e.g., that just saved) is in a 'PENDING STATE'
@@ -199,7 +205,13 @@ module.exports.findAccountsForBoost = async ({ boostIds, accountIds, status }) =
 
 // a simple version for when we absolutely know the boost id
 module.exports.fetchCurrentBoostStatus = async (boostId, accountId) => {
-    const selectQuery = `select * from ${boostAccountJoinTable} where boost_id = $1 and account_id = $2`;
+    const columns = `${boostAccountJoinTable}.boost_id, account_id, boost_status, ${boostAccountJoinTable}.creation_time, ${boostAccountJoinTable}.updated_time`;
+    const endTime = '(case when expiry_time is not null then expiry_time else end_time end) as end_time';
+
+    const selectQuery = `select ${columns}, ${endTime} from ` +
+        `${boostAccountJoinTable} inner join ${boostTable} on ${boostAccountJoinTable}.boost_id = ${boostTable}.boost_id ` +
+        `where ${boostAccountJoinTable}.boost_id = $1 and account_id = $2`;
+    
     const resultOfQuery = await rdsConnection.selectQuery(selectQuery, [boostId, accountId]);
     return resultOfQuery.length > 0 ? camelizeKeys(resultOfQuery[0]) : null;
 };
@@ -230,12 +242,19 @@ module.exports.findAccountsForPooledReward = async (boostId, logType) => {
 };
 
 // todo : validation / catching of status downgrade in here
-const updateAccountDefinition = (boostId, accountId, newStatus) => ({
-    table: boostAccountJoinTable,
-    key: { boostId, accountId },
-    value: { boostStatus: newStatus },
-    returnClause: 'updated_time'
-});
+const updateAccountDefinition = (boostId, accountId, newStatus, expiryTime) => {
+    const value = { boostStatus: newStatus };
+    if (expiryTime) {
+        value.expiryTime = expiryTime.format();
+    }
+    
+    return {
+        table: boostAccountJoinTable,
+        key: { boostId, accountId },
+        value,
+        returnClause: 'updated_time'
+    };
+};
 
 const constructLogDefinition = (columnKeys, rows) => ({
     query: `insert into ${boostLogTable} (${extractQueryClause(columnKeys)}) values %L returning log_id, creation_time`,
@@ -251,7 +270,7 @@ const constructLogDefinition = (columnKeys, rows) => ({
  * @param {string} logType The boost log type to use for the logs that will be inserted
  * @param {object} logContext An optional object to insert along with the logs (e.g., recording the transaction ID)
  */
-const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, stillActive, logType, logContext }) => {
+const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, expiryTime, stillActive, logType, logContext }) => {
     const updateDefinitions = [];
     const logInsertDefinitions = [];
     
@@ -260,7 +279,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, s
         logger('Handling account IDs: ', accountIds);
         const logRows = [];
         accountIds.forEach((accountId) => { 
-            updateDefinitions.push(updateAccountDefinition(boostId, accountId, newStatus));
+            updateDefinitions.push(updateAccountDefinition(boostId, accountId, newStatus, expiryTime));
             logRows.push({ boostId, accountId, logType, logContext });
         });
         const columnKeys = ['boostId', 'accountId', 'logType', 'logContext']; // must do this as Object.keys has unreliable ordering
@@ -368,11 +387,7 @@ module.exports.updateBoostAmount = async (boostId, boostAmount) => {
     return resultOfUpdate;
 };
 
-// ///////////////////////////////////////////////////////////////
-// //////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
-// ///////////////////////////////////////////////////////////////
-
-// todo : turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
+// could turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
 module.exports.extractAccountIds = async (audienceId) => {
     const selectionQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
     
@@ -424,17 +439,9 @@ module.exports.insertBoost = async (boostDetails) => {
     };
 
     // some optionals here, for more complex boosts
-    if (boostDetails.gameParams) {
-        boostObject.gameParams = boostDetails.gameParams;
-    }
-
-    if (boostDetails.rewardParameters) {
-        boostObject.rewardParameters = boostDetails.rewardParameters;
-    }
-
-    if (boostDetails.mlParameters) {
-        boostObject.mlParameters = boostDetails.mlParameters;
-    }
+    const parameterDefinitionKeys = ['gameParams', 'rewardParameters', 'mlParameters', 'expiryParameters'];
+    // eslint-disable-next-line
+    parameterDefinitionKeys.filter((key) => boostDetails[key]).forEach((key) => { boostObject[key] = boostDetails[key] });
 
     // be careful here, array handling is a little more sensitive than most types in node-pg
     if (Array.isArray(boostDetails.flags) && boostDetails.flags.length > 0) {
@@ -486,15 +493,26 @@ module.exports.insertBoost = async (boostDetails) => {
 
 };
 
-// note : performs a cross join, i.e., all boost IDs, all accountIDs. in practice
-// almost always called (as should be case) with either one boost and many accounts
-// or one account and many boosts
-module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatus) => {
-    const boostAccountJoins = boostIds.map((boostId) => accountIds.map((accountId) => ({ boostId, accountId, boostStatus }))).
+// note : performs a cross join, i.e., all boost IDs, all accountIDs. in practice almost always 
+// called (as should be case) with either one boost and many accounts or one account and many boosts
+module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatus, expiryTime = null) => {
+    const joinCreator = (accountId, boostId) => (
+        expiryTime ? { accountId, boostId, boostStatus, expiryTime: expiryTime.format() } : { accountId, boostId, boostStatus }
+    );
+    
+    const boostAccountJoins = boostIds.map((boostId) => accountIds.map((accountId) => joinCreator(accountId, boostId))).
         reduce((fullList, thisList) => [...fullList, ...thisList], []);
+    
+    const columns = ['boostId', 'accountId', 'boostStatus'];
+    if (expiryTime) {
+        columns.push('expiryTime');
+    }
+
+    const columnClause = columns.map((column) => decamelize(column)).join(', ');
+
     const boostJoinQueryDef = {
-        query: `insert into ${boostAccountJoinTable} (boost_id, account_id, boost_status) values %L returning insertion_id, creation_time`,
-        columnTemplate: '${boostId}, ${accountId}, ${boostStatus}',
+        query: `insert into ${boostAccountJoinTable} (${columnClause}) values %L returning insertion_id, creation_time`,
+        columnTemplate: columns.map((column) => `$\{${column}}`).join(', '),
         rows: boostAccountJoins
     };
 
@@ -502,15 +520,7 @@ module.exports.insertBoostAccountJoins = async (boostIds, accountIds, boostStatu
     logger('Result of insertion:', resultOfInsertion);
 
     const persistedTime = moment(resultOfInsertion[0][0]['creation_time']);
-
-    const resultObject = {
-        persistedTimeMillis: persistedTime.valueOf(),
-        accountIds,
-        boostIds
-    };
-
-    logger('Returning:', resultObject);
-    return resultObject;
+    return { persistedTimeMillis: persistedTime.valueOf(), accountIds, boostIds };
 };
 
 /**
@@ -544,48 +554,100 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
     return { updatedTime };
 };
 
-
-module.exports.getAccountIdForUser = async (systemWideUserId) => {
-    const tableName = config.get('tables.accountLedger');
-    const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
-    const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
-    return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
-};
-
 // ///////////////////////////////////////////////////////////////
-// ////// SIMPLE AUX METHOD TO FIND MSG INSTRUCTION IDS //////////
+// //////////// BOOST ENDING (EXPIRY) METHODS ////////////////////
 // ///////////////////////////////////////////////////////////////
 
-module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
-    // find the most recent matching the flag (just in case);
-    const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
-        `flags && ARRAY[$1] order by creation_time desc limit 1`;
-    const result = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
-    logger('Got an instruction? : ', result);
-    if (Array.isArray(result) && result.length > 0) {
-        return result[0]['instruction_id'];
+module.exports.expireBoostsPastEndTime = async () => {
+    const updateBoostQuery = `update ${config.get('tables.boostTable')} set active = $1 where active = true and ` + 
+        `end_time < current_timestamp returning boost_id`;
+    const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
+    
+    logger('Result of straight update boosts: ', updateBoostResult);
+    if (updateBoostResult.rowCount === 0) {
+        logger('No boosts expired, can exit');
+        return [];
     }
 
-    return null;
+    return updateBoostResult && Array.isArray(updateBoostResult.rows) ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
+};
+
+module.exports.isTournamentFinished = async (boostId) => {
+    const selectQuery = `select boost_status, count(*) from ${boostAccountJoinTable} where boost_id = $1`;
+    const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [boostId]);
+    logger('Got tournament rows:', resultOfFetch);
+    const nonPendingRows = resultOfFetch.filter((row) => row['boost_status'] !== 'PENDING');
+    const pendingRows = resultOfFetch.filter((row) => row['boost_status'] === 'PENDING');
+    const isFinishedTournament = nonPendingRows.length > 0 && pendingRows.length === 0;
+    return { [boostId]: isFinishedTournament };
+};
+
+module.exports.endFinishedTournaments = async (boostId = null) => {
+    const finishedTournamentIds = boostId ? [boostId] : [];
+
+    if (!boostId) {
+        const findQuery = `select * from ${boostTable} where active = true and end_time > current_timestamp ` +
+            `and ($1 = any(flags))`;
+
+        const boostTournaments = await rdsConnection.selectQuery(findQuery, ['FRIEND_TOURNAMENT']);
+        logger('Got tournaments:', boostTournaments);
+        if (!boostTournaments || boostTournaments.length === 0) {
+            return 'NO_ACTIVE_TOURNAMENTS_FOUND';
+        }
+
+        const tournamentIds = boostTournaments.map((tournament) => tournament['boost_id']);
+        const tournamentDetails = await Promise.all(tournamentIds.map((tournamentId) => exports.isTournamentFinished(tournamentId)));
+        logger('Got tournament details:', tournamentDetails);
+        const tournamentStatusMap = tournamentDetails.reduce((obj, value) => ({ ...obj, ...value }), {});
+        finishedTournamentIds.push(...tournamentIds.filter((tournamentId) => tournamentStatusMap[tournamentId] === true));
+    }
+
+    logger('Got finished tournament ids:', finishedTournamentIds);
+    const updateQuery = `update ${boostTable} set end_time = current_timestamp where boost_id in (${extractArrayIndices(finishedTournamentIds)}) returning updated_time`;
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, [...finishedTournamentIds]);
+    logger('Result of deactivating finished tournaments:', resultOfUpdate);
+
+    return typeof resultOfUpdate === 'object' && resultOfUpdate.rows
+        ? { updatedTime: moment(resultOfUpdate.rows[0]['updated_time']) } : {};
+};
+
+module.exports.flipBoostStatusPastExpiry = async () => {
+    logger('Running update query to flip individual boosts to expiry');
+
+    const updateQuery = `update ${boostAccountJoinTable} set status = $1 where expiry_time is not null and ` +
+        `expiry_time < current_timestamp and status in ($2, $3, $4) returning boost_id, account_id`;
+
+    logger('Executing with query: ', updateQuery);
+    // see note in tests re CREATED
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, ['EXPIRED', 'OFFERED', 'UNLOCKED', 'PENDING']);
+    logger('Update result: ', JSON.stringify(resultOfUpdate));
+
+    return resultOfUpdate && resultOfUpdate.rows ? camelizeKeys(resultOfUpdate.rows) : [];
 };
 
 // ///////////////////////////////////////////////////////////////
-// ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS ////////////
+// ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS, ETC ///////
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds, returnMap = false) => {
     const query = `select owner_user_id, account_id from ${config.get('tables.accountLedger')} where ` +
         `account_id in (${extractArrayIndices(accountIds)})`;
     const result = await rdsConnection.selectQuery(query, accountIds);
-    logger('Result of query: ', result);
     
     if (Array.isArray(result) && result.length > 0) {
         return returnMap
-            ? result.reduce((obj, row) => ({ ...obj, [row['owner_user_id']]: row['account_id'] }), {})
+            ? result.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['owner_user_id'] }), {})
             : result.map((row) => row['owner_user_id']);
     }
 
     throw Error('Given non-existent or bad account IDs');
+};
+
+module.exports.getAccountIdForUser = async (systemWideUserId) => {
+    const tableName = config.get('tables.accountLedger');
+    const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
+    const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
 };
 
 module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
@@ -599,8 +661,15 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
     throw Error('Given non-existent or bad relationship IDs');
 };
 
-module.exports.fetchActiveMlBoosts = async () => {
-    const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, []);
-    return resultOfQuery.map(transformBoostFromRds);
+module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
+    // find the most recent matching the flag (just in case);
+    const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
+        `flags && ARRAY[$1] order by creation_time desc limit 1`;
+    const result = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
+    logger('Got an instruction? : ', result);
+    if (Array.isArray(result) && result.length > 0) {
+        return result[0]['instruction_id'];
+    }
+
+    return null;
 };

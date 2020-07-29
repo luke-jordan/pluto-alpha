@@ -114,6 +114,10 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
             maxPortionOfAudience: 0.2,
             minIntervalBetweenRuns: { unit: 'days', value: 30 }
         },
+        expiryParameters: {
+            individualizedExpiry: true,
+            timeUntilExpiry: { unit: 'hours', value: 24 }
+        },
         messageInstructionIds: { }
     };
 
@@ -161,7 +165,11 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
             mlParameters: {
                 maxPortionOfAudience: 0.20,
                 minIntervalBetweenRuns: { unit: 'days', value: 30 }
-            }
+            },
+            expiryParameters: {
+                individualizedExpiry: true,
+                timeUntilExpiry: { unit: 'hours', value: 24 }
+            }    
         };
 
         findUserIdsStub.resolves(['user-id-1', 'user-id-2']);
@@ -180,10 +188,7 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
             presentationType: 'MACHINE_DETERMINED',
             templates: {
                 template: {
-                    DEFAULT: {
-                        actionContext: { boostId: expectedFromRds.boostId },
-                        ...messageTemplates.UNLOCKED
-                    }
+                    DEFAULT: { actionContext: { boostId: expectedFromRds.boostId }, ...messageTemplates.UNLOCKED }
                 }
             }
         };
@@ -204,6 +209,7 @@ describe('*** UNIT TEST BOOST CREATION *** Persists ML params', () => {
                 rewardParameters: undefined, statusConditions: mockBoostToFromPersistence.statusConditions
             }
         };
+        
         expect(publishMultiStub).to.have.been.calledOnceWithExactly(['user-id-1', 'user-id-2'], 'BOOST_CREATED_GAME', expectedUserLogOptions);
     });
 

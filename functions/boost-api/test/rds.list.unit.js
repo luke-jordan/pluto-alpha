@@ -187,6 +187,12 @@ describe('*** UNIT TEST BOOST ADMIN RDS', () => {
 });
 
 describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
+
+    // as noted in the sql template, could have enforced expiry time on all rows in user-account-status, but would
+    // introduce a lot of fragility in updates etc for the majority of boosts where they are basically attached, and
+    // want to update or otherwise process -- and this is very far from the most complex of all sql clauses
+    const expiryTimeClause = '(case when expiry_time is not null then expiry_time else end_time end) as end_time';
+
     const testUserId = uuid();
     const testAccountId = uuid();
     const testBoostId = uuid();
@@ -224,12 +230,13 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         queryStub.resolves([boostFromPersistence, boostFromPersistence]);
 
         const expectedColumns = [
-            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'boost_data.boost_account_status.updated_time', 
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'boost_data.boost_account_status.updated_time', 
             'active', 'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
         ];
     
-        const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
+        const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} ` +
+            `from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
             `boost_status not in ($2) and boost_type not in ($3) ` +
             `order by boost_data.boost_account_status.creation_time desc`;
@@ -246,12 +253,12 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         const dummyTime = moment().subtract(2, 'minutes');
 
         const expectedColumns = [
-            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'boost_data.boost_account_status.updated_time', 'active',
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'boost_data.boost_account_status.updated_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
         ];
     
-        const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
+        const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
             `boost_status not in ($2, $3, $4) and boost_type not in ($5) and boost_data.boost_account_status.updated_time > $6 ` +
             `order by boost_data.boost_account_status.creation_time desc`;
@@ -268,12 +275,12 @@ describe('*** UNIT TEST BOOST LIST RDS FUNCTIONS ***', () => {
         queryStub.resolves([boostFromPersistence]);
 
         const expectedColumns = [
-            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'end_time', 'boost_data.boost_account_status.updated_time', 'active',
+            `boost_data.boost.boost_id`, 'boost_status', 'label', 'start_time', 'boost_data.boost_account_status.updated_time', 'active',
             'boost_type', 'boost_category', 'boost_amount', 'boost_unit', 'boost_currency', 'from_float_id',
             'status_conditions', 'message_instruction_ids', 'game_params', 'reward_parameters', 'boost_data.boost.flags'
         ];
     
-        const selectBoostQuery = `select ${expectedColumns} from boost_data.boost inner join boost_data.boost_account_status ` + 
+        const selectBoostQuery = `select ${expectedColumns}, ${expiryTimeClause} from boost_data.boost inner join boost_data.boost_account_status ` + 
             `on boost_data.boost.boost_id = boost_data.boost_account_status.boost_id where account_id = $1 and ` + 
             `boost_status not in ($2, $3, $4, $5) and boost_type not in ($6) and boost_data.boost.flags && $7 ` +
             `order by boost_data.boost_account_status.creation_time desc`;

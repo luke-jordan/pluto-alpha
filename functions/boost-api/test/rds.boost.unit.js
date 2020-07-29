@@ -1,7 +1,5 @@
 'use strict';
 
-// const logger = require('debug')('jupiter:boosts:test');
-
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
@@ -427,6 +425,10 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             onlyOfferOnce: false, minIntervalBetweenRuns: { value: 7, unit: 'days' }
         };
 
+        const mockExpiryParams = {
+            individualizedExpiry: true, timeUntilExpiry: { unit: 'hours', value: 24 }
+        };
+
         const testInstruction = {
             creatingUserId: 'admin-user-id',
             label: 'Midweek arrow chase!',
@@ -447,6 +449,7 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
             audienceId: testAudienceId,
             redemptionMsgInstructions: testRedemptionMsgs,
             mlParameters: mockMlParameters,
+            expiryParameters: mockExpiryParams,
             messageInstructionIds: []
         };
 
@@ -484,6 +487,28 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
         expect(resultOfInsertion).to.exist;
         expect(resultOfInsertion).to.deep.equal(expectedResult);
+        expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
+    });
+
+    it('Includes expiry time in joins, if passed', async () => {
+        const testBoostStatus = 'OFFERED';
+        const expiryMoment = moment().add(24, 'hours');
+
+        const expectedQuery = `insert into ${boostUserTable} (boost_id, account_id, boost_status, expiry_time) values %L returning insertion_id, creation_time`;
+        const expectedColumns = '${boostId}, ${accountId}, ${boostStatus}, ${expiryTime}';
+        const expectedRow = (accountId) => ({ boostId: testBoostId, accountId, boostStatus: testBoostStatus, expiryTime: expiryMoment.format() });
+    
+        const boostQueryDef = { 
+            query: expectedQuery, 
+            columnTemplate: expectedColumns, 
+            rows: [expectedRow('account-1'), expectedRow('account-2')] 
+        };
+
+        multiTableStub.resolves([[{ 'creation_time': moment().format() }, { 'creation_time': moment().format() }]]);
+
+        const resultOfInsertion = await rds.insertBoostAccountJoins([testBoostId], ['account-1', 'account-2'], testBoostStatus, expiryMoment);
+
+        expect(resultOfInsertion).to.exist; // format is tested above
         expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
     });
 
