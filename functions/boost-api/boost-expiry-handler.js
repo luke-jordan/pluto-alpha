@@ -1,7 +1,6 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:handler');
-const config = require('config');
 const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
@@ -12,12 +11,6 @@ const conditionTester = require('./condition-tester');
 
 const publisher = require('publish-common');
 const opsUtil = require('ops-util-common');
-
-if (config.get('seedrandom.active')) {
-    // eslint-disable-next-line global-require
-    const seedrandom = require('seedrandom');
-    seedrandom(config.get('seedrandom.value'), { global: true });
-}
 
 const GAME_RESPONSE = 'GAME_RESPONSE';
 

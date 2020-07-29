@@ -49,7 +49,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
     it('Handles random rewards', async () => {
         const testUserId = uuid();
         const testAccountId = uuid();
-        const testCalculatedAmount = 75000;
+        const testCalculatedAmount = 70000;
 
         const testRewardParameters = {
             rewardType: 'RANDOM',
@@ -85,6 +85,10 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
                 accountTxIds: [uuid()]
             }
         };
+
+        sinon.restore(); // restores Math.random() stubbed in another file. after and afterEach didn't cut it.
+        const mathRandomStub = sinon.stub(Math, 'random');
+        mathRandomStub.returns(0.55);
 
         lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
         momentStub.returns(moment());
