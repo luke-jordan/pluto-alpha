@@ -341,12 +341,18 @@ const retrieveBoostAmounts = (params) => {
     return { boostAmountDetails, boostBudget };
 };
 
-const publishBoostUserLogs = async (initiator, accountIds, boostContext) => {
-    const eventType = `BOOST_CREATED_${boostContext.boostType}`;    
-    const options = { initiator, context: boostContext };
+const publishBoostUserLogs = async (initiator, accountIds, boostContext, defaultStatus = 'CREATED') => {
     const userIds = await persistence.findUserIdsForAccounts(accountIds);
-    logger('Triggering user logs for boost ... : ', userIds);
-    const resultOfLogPublish = await publisher.publishMultiUserEvent(userIds, eventType, options);
+    const options = { initiator, context: boostContext };
+    
+    const { ALL_BOOST_STATUS_SORTED: allStatus } = boostUtil;
+    const statusToLog = allStatus.filter((status) => allStatus.indexOf(status) <= allStatus.indexOf(defaultStatus));
+
+    const promisePublicationMap = statusToLog.map((status) => `BOOST_${status}_${boostContext.boostType}`).
+        map((eventType) => publisher.publishMultiUserEvent(userIds, eventType, options));
+
+    logger('Triggering user logs for boost ... : user Ids: ', JSON.stringify(userIds));
+    const resultOfLogPublish = await Promise.all(promisePublicationMap);
     logger('Result of log publishing: ', resultOfLogPublish);
 };
 
@@ -416,13 +422,14 @@ module.exports.createBoost = async (event) => {
     const params = event;
     logger('Creating boost with parameters: ', JSON.stringify(params, null, 2));
 
+    const { creatingUserId } = params;
     const { label, boostType, boostCategory } = splitBasicParams(params);
     const { boostBudget, boostAmountDetails } = retrieveBoostAmounts(params);
 
     const paramValidationResult = validateBoostParams(boostType, boostCategory, boostBudget, params);
     logger('Are parameters valid:', paramValidationResult);
 
-    if (typeof params.creatingUserId !== 'string') {
+    if (typeof creatingUserId !== 'string') {
         throw new Error('Boost requires creating user ID');
     }
 
@@ -443,9 +450,11 @@ module.exports.createBoost = async (event) => {
 
     const { audienceId, boostAudienceType } = await obtainAudienceDetails(params);
     logger('Boost audience type: ', boostAudienceType, ' and audience ID: ', audienceId);
+    
+    const defaultStatus = params.initialStatus || 'CREATED';
 
     const instructionToRds = {
-        creatingUserId: params.creatingUserId,
+        creatingUserId,
         label,
         boostType,
         boostCategory,
@@ -458,7 +467,7 @@ module.exports.createBoost = async (event) => {
         fromBonusPoolId: params.boostSource.bonusPoolId,
         fromFloatId: params.boostSource.floatId,
         forClientId: params.boostSource.clientId,
-        defaultStatus: params.initialStatus || 'CREATED',
+        defaultStatus,
         audienceId,
         boostAudienceType,
         messageInstructionIds
@@ -501,7 +510,7 @@ module.exports.createBoost = async (event) => {
     if (Array.isArray(accountIds) && accountIds.length > 0) {
         const logParams = boostUtil.constructBoostContext({ boostId, ...instructionToRds });
         logger('Publishing user logs with params: ', logParams);
-        await publishBoostUserLogs(params.creatingUserId, accountIds, logParams);
+        await publishBoostUserLogs(creatingUserId, accountIds, logParams, defaultStatus);
     }
 
     // logger('Do we have messages ? :', params.messagesToCreate);
