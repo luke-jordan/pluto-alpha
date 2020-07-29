@@ -20,6 +20,10 @@ const sqs = new AWS.SQS();
 const s3 = new AWS.S3();
 const lambda = new AWS.Lambda();
 
+// this gets instantiated inside each function container individually, so will have this here as global for that function across calls
+// eslint-disable-next-line no-process-env
+const FUNCTION_NAME = process.env.AWS_LAMBDA_FUNCTION_NAME || 'LOCAL';
+
 // config's biggest weakness is its handling of modules, which blows. there is a complex way
 // to set defaults but it requires a constructor pattern, so far as I can tell. hence, doing this. 
 const getCryptoConfigOrDefault = (key, defaultValue) => (config.has(`publishing.hash.${key}`) 
@@ -60,10 +64,8 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
         };
 
         const msgAttributes = {
-            'eventType': {
-                DataType: 'String',
-                StringValue: eventType
-            }
+            eventType: { DataType: 'String', StringValue: eventType },
+            sourceFunction: { DataType: 'String', StringValue: FUNCTION_NAME }
         };
     
         const messageForQueue = {
@@ -73,11 +75,9 @@ module.exports.publishUserEvent = async (userId, eventType, options = {}) => {
             TopicArn: config.get('publishing.userEvents.topicArn')
         };
 
-        logger(`Logging ${eventType} for user ID ${userId}`);
         const resultOfPublish = await sns.publish(messageForQueue).promise();
 
         if (typeof resultOfPublish === 'object' && Reflect.has(resultOfPublish, 'MessageId')) {
-            logger(`Completed publishing ${userId}::${eventType}, result: `, resultOfPublish);
             return { result: 'SUCCESS' };
         }
 

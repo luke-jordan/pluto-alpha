@@ -1,5 +1,6 @@
 'use strict';
 
+const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
 
@@ -19,6 +20,14 @@ const insertBoostLogStub = sinon.stub();
 
 const redemptionHandlerStub = sinon.stub();
 
+const lamdbaInvokeStub = sinon.stub();
+
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
+    }
+}
+
 const proxyquire = require('proxyquire').noCallThru();
 
 const handler = proxyquire('../boost-user-handler', {
@@ -33,6 +42,11 @@ const handler = proxyquire('../boost-user-handler', {
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub
     },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient,
+         // eslint-disable-next-line no-empty-function
+         'config': { update: () => ({}) }
+    },
     '@noCallThru': true
 });
 
@@ -43,7 +57,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
     const testAccountId = uuid();
 
     beforeEach(() => testHelper.resetStubs(
-        fetchBoostStub, fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub
+        fetchBoostStub, fetchAccountStatusStub, updateBoostAccountStub, updateBoostRedeemedStub, getAccountIdForUserStub, redemptionHandlerStub, insertBoostLogStub, lamdbaInvokeStub
     ));
 
     it('Redeems when game is won', async () => {
@@ -145,12 +159,14 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
                 UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
                 PENDING: ['number_taps_greater_than #{0::10000}'],
                 REDEEMED: ['number_taps_in_first_N #{2::10000}']
-            }
+            },
+            flags: ['FRIEND_TOURNAMENT']
         };
 
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
 
         updateBoostAccountStub.resolves([{ boostId: testBoostId, updatedTime: moment().valueOf() }]);
 
@@ -188,6 +204,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(redemptionHandlerStub).to.not.have.been.called;
         expect(updateBoostRedeemedStub).to.not.have.been.called;
         
+        const expiryInvocation = testHelper.wrapLambdaInvoc(config.get('lambdas.boostExpire'), true, { });
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expiryInvocation);
     });
 
     it('Fails when not enough taps', async () => {
@@ -241,6 +259,7 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         fetchBoostStub.resolves(boostAsRelevant);
         getAccountIdForUserStub.resolves(testAccountId);
         fetchAccountStatusStub.withArgs(testBoostId, testAccountId).resolves({ boostStatus: 'UNLOCKED' });
+        lamdbaInvokeStub.returns({ promise: () => ({ StatusCode: 202 }) });
 
         const expectedResult = { 
             result: 'TOURNAMENT_ENTERED', 
@@ -264,7 +283,8 @@ describe('*** UNIT TEST USER BOOST RESPONSE ***', async () => {
         expect(updateBoostAccountStub).to.not.have.been.called;
         expect(redemptionHandlerStub).to.not.have.been.called;
         expect(updateBoostRedeemedStub).to.not.have.been.called;
-        
+
+        expect(lamdbaInvokeStub).to.not.have.been.called; // expiry will have no way to know
     });
 
     it('Fails on boost not unlocked', async () => {

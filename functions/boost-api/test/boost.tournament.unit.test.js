@@ -16,6 +16,9 @@ const findBoostLogsStub = sinon.stub();
 const updateBoostAccountStub = sinon.stub();
 const updateBoostRedeemedStub = sinon.stub();
 const insertBoostLogStub = sinon.stub();
+const expireBoostsStub = sinon.stub();
+const flipBoostStatusStub = sinon.stub();
+const findUsersForAccountsStub = sinon.stub();
 
 const findPooledAccountsStub = sinon.stub();
 const updateBoostAmountStub = sinon.stub();
@@ -23,11 +26,21 @@ const updateBoostAmountStub = sinon.stub();
 const redemptionHandlerStub = sinon.stub();
 const calculateAmountStub = sinon.stub();
 
+const isTournamentFinishedStub = sinon.stub();
+const endTournamentStub = sinon.stub();
+
 const publishMultiUserStub = sinon.stub();
+const lamdbaInvokeStub = sinon.stub();
+
+class MockLambdaClient {
+    constructor () {
+        this.invoke = lamdbaInvokeStub;
+    }
+}
 
 const proxyquire = require('proxyquire').noCallThru();
 
-const handler = proxyquire('../boost-event-handler', {
+const handler = proxyquire('../boost-expiry-handler', {
     './persistence/rds.boost': {
         'fetchBoost': fetchBoostStub,
         'findAccountsForBoost': findAccountsStub,
@@ -36,7 +49,12 @@ const handler = proxyquire('../boost-event-handler', {
         'updateBoostAmountRedeemed': updateBoostRedeemedStub,
         'insertBoostAccountLogs': insertBoostLogStub,
         'updateBoostAmount': updateBoostAmountStub,
-        'findAccountsForPooledReward': findPooledAccountsStub
+        'findAccountsForPooledReward': findPooledAccountsStub,
+        'endFinishedTournaments': endTournamentStub,
+        'isTournamentFinished': isTournamentFinishedStub,
+        'expireBoostsPastEndTime': expireBoostsStub,
+        'flipBoostStatusPastExpiry': flipBoostStatusStub,
+        'findUserIdsForAccounts': findUsersForAccountsStub
     },
     './boost-redemption-handler': {
         'redeemOrRevokeBoosts': redemptionHandlerStub,
@@ -45,6 +63,9 @@ const handler = proxyquire('../boost-event-handler', {
     'publish-common': {
         'publishMultiUserEvent': publishMultiUserStub
     },
+    'aws-sdk': {
+        'Lambda': MockLambdaClient  
+    },
     '@noCallThru': true
 });
 
@@ -52,19 +73,12 @@ const ACTIVE_BOOST_STATUS = ['CREATED', 'OFFERED', 'UNLOCKED', 'PENDING'];
 
 const testBoostId = uuid();
 
-// note: expiry event is not originally from SNS, hence only single-wrapper
-const wrapEventAsSqs = (event) => testHelper.composeSqsBatch([event]);
-
 describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
 
     beforeEach(() => (testHelper.resetStubs(
-        fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub
+        fetchBoostStub, findAccountsStub, findBoostLogsStub, updateBoostAccountStub, redemptionHandlerStub, publishMultiUserStub,
+        lamdbaInvokeStub, isTournamentFinishedStub, endTournamentStub, flipBoostStatusStub, findUsersForAccountsStub
     )));
-
-    const testEvent = wrapEventAsSqs({
-        eventType: 'BOOST_EXPIRED',
-        boostId: testBoostId
-    });
 
     const formAccountResponse = (accountUserMap) => [{ boostId: testBoostId, accountUserMap }];
     const mockTournamentBoost = (boostCategory, statusConditions) => ({
@@ -115,9 +129,9 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
             'account-id-4': { userId: 'some-user-id4', status: 'PENDING' }
         }));
 
-        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
+        const resultOfExpiry = await handler.handleExpiredBoost(testBoostId);
         expect(resultOfExpiry).to.exist;
-        expect(resultOfExpiry[0]).to.have.property('statusCode', 200);
+        expect(resultOfExpiry).to.have.property('statusCode', 200);
 
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
         expect(findBoostLogsStub).to.have.been.calledOnceWithExactly(testBoostId, 'GAME_RESPONSE');
@@ -194,9 +208,9 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         findAccountsStub.onSecondCall().resolves(formAccountResponse(mockAccountUserMap([1, 2, 3, 4], 'PENDING'))); // all
         findAccountsStub.onThirdCall().resolves(formAccountResponse(mockAccountUserMap([3, 4], 'PENDING')));
 
-        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
+        const resultOfExpiry = await handler.handleExpiredBoost(testBoostId);
         expect(resultOfExpiry).to.exist;
-        expect(resultOfExpiry[0]).to.have.property('statusCode', 200);
+        expect(resultOfExpiry).to.have.property('statusCode', 200);
 
         // just testing the most important things, rest covered above
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -288,8 +302,8 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         const expectedRewardAmount = 3 * mockPoolContrib * mockPercentAward;
         calculateAmountStub.returns({ boostAmount: expectedRewardAmount });
 
-        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
-        expect(resultOfExpiry).to.deep.equal([{ statusCode: 200, boostsRedeemed: 2 }]);
+        const resultOfExpiry = await handler.handleExpiredBoost(testBoostId);
+        expect(resultOfExpiry).to.deep.equal({ statusCode: 200, boostsRedeemed: 2 });
 
         // just testing the most important things, rest covered above
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -315,76 +329,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(updateBoostAmountStub).to.have.been.calledOnceWithExactly(testBoostId, expectedRewardAmount);
     });
 
-    it('Expires all accounts for non-game boost', async () => {
-        const mockBoost = {
-            boostId: testBoostId,
-            boostType: 'SIMPLE',
-            boostCategory: 'SIMPLE_SAVE',
-            boostCurrency: 'USD',
-            boostUnit: 'HUNDREDTH_CENT',
-            boostAmount: 50000
-        };
-
-        fetchBoostStub.resolves(mockBoost);
-        findAccountsStub.resolves([{
-            boostId: testBoostId,
-            accountUserMap: {
-                'account-id-1': { userId: 'some-user-id', status: 'OFFERED' },
-                'account-id-2': { userId: 'some-user-id2', status: 'OFFERED' }
-            }
-        }]);
-
-        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
-        expect(resultOfExpiry).to.exist;
-        
-        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
-
-        const expectedFindParams = { boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: null };
-        expect(findAccountsStub).to.have.been.calledOnceWithExactly(expectedFindParams);
-
-        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED', logType: 'STATUS_CHANGE' };
-        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedExpireInstruct]);
-
-        expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
-    });
-
-    it('And the same if no winner (no status conditions)', async () => {
-        const mockBoost = {
-            boostId: testBoostId,
-            boostType: 'GAME',
-            boostCategory: 'TAP_THE_SCREEN',
-            boostCurrency: 'USD',
-            boostUnit: 'HUNDREDTH_CENT',
-            boostAmount: 50000,
-            statusConditions: {
-                'OFFERED': ['something']
-            }
-        };
-
-        fetchBoostStub.resolves(mockBoost);
-        findAccountsStub.resolves([{
-            boostId: testBoostId,
-            accountUserMap: {
-                'account-id-1': { userId: 'some-user-id', status: 'OFFERED' },
-                'account-id-2': { userId: 'some-user-id2', status: 'OFFERED' }
-            }
-        }]);
-
-        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
-        expect(resultOfExpiry).to.exist;
-        
-        expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
-
-        const expectedFindParams = { boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: null };
-        expect(findAccountsStub).to.have.been.calledOnceWithExactly(expectedFindParams);
-
-        const expectedExpireInstruct = { boostId: testBoostId, accountIds: ['account-id-1', 'account-id-2'], newStatus: 'EXPIRED', logType: 'STATUS_CHANGE' };
-        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedExpireInstruct]);
-
-        expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
-    });
-
-    it('Also if no one played', async () => {
+    it('Handles case if no one played', async () => {
         const mockBoost = {
             boostId: testBoostId,
             boostType: 'GAME',
@@ -410,7 +355,7 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         }]);
 
 
-        const resultOfExpiry = await handler.handleBatchOfQueuedEvents(testEvent);
+        const resultOfExpiry = await handler.handleExpiredBoost(testBoostId);
         expect(resultOfExpiry).to.exist;
         
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
@@ -422,6 +367,72 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedExpireInstruct]);
 
         expect(publishMultiUserStub).to.have.been.calledOnceWithExactly(['some-user-id', 'some-user-id2'], 'BOOST_EXPIRED', { context: { boostId: testBoostId }});
+    });
+
+    it('Handles random reward user selection', async () => {
+        const mockBoost = mockTournamentBoost('TAP_SCREEN', {
+            UNLOCKED: ['save_event_greater_than #{100::WHOLE_CURRENCY::ZAR}'],
+            PENDING: ['number_taps_greater_than #{0::10000}'],
+            REDEEMED: ['randomly_chosen_first_N #{3}']
+        });
+
+        fetchBoostStub.resolves(mockBoost);
+        expireBoostsStub.resolves(['boost-id-1']);
+        flipBoostStatusStub.resolves([{ boostId: 'boost-id-1', accountId: 'account-id-7' }]);
+        findUsersForAccountsStub.resolves('user-id-7');
+
+        // Lazy loading because stubbing in this way seems to stub across test files. Avoiding interference with other Math.random consumers.
+        // May need another sinon.restore() at the end of this test suite.
+        sinon.restore();
+        const mathRandomStub = sinon.stub(Math, 'random');
+
+        const accountsForBoost = { // all
+            'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
+            'account-id-2': { userId: 'user-id-2', status: 'PENDING' },
+            'account-id-3': { userId: 'user-id-3', status: 'PENDING' },
+            'account-id-4': { userId: 'user-id-4', status: 'PENDING' },
+            'account-id-5': { userId: 'user-id-5', status: 'PENDING' },
+            'account-id-6': { userId: 'user-id-6', status: 'PENDING' }
+        };
+
+        const accountIds = Object.keys(accountsForBoost);
+
+        const randomFloor = 0.01;
+        [...Array(accountIds.length).keys()].map((index) => mathRandomStub.onCall(index).returns((index + randomFloor) / 10));
+        
+        findAccountsStub.onFirstCall().resolves(formAccountResponse(accountsForBoost));
+
+        findAccountsStub.onSecondCall().resolves(formAccountResponse({ // winners
+            'account-id-5': { userId: 'user-id-5', status: 'PENDING' },
+            'account-id-1': { userId: 'user-id-1', status: 'PENDING' },
+            'account-id-3': { userId: 'user-id-3', status: 'PENDING' }
+        }));
+
+        findAccountsStub.onThirdCall().resolves(formAccountResponse({ // losers
+            'account-id-2': { userId: 'user-id-2', status: 'PENDING' },
+            'account-id-4': { userId: 'user-id-4', status: 'PENDING' },
+            'account-id-6': { userId: 'user-id-6', status: 'PENDING' }
+        }));
+
+        const resultOfSelection = await handler.checkForBoostsToExpire({ boostId: testBoostId });
+        
+        expect(resultOfSelection).to.deep.equal({ result: 'SUCCESS' });
+        expect(fetchBoostStub).to.have.been.calledOnceWithExactly('boost-id-1');
+
+        const winningAccounts = ['account-id-4', 'account-id-5', 'account-id-6'];
+        expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ['PENDING'] });
+        expect(findAccountsStub).to.have.been.calledWithExactly({ boostIds: [testBoostId], status: ACTIVE_BOOST_STATUS, accountIds: winningAccounts });
+
+        const expectedRedemptionUpdate = {
+            boostId: testBoostId,
+            accountIds: winningAccounts,
+            newStatus: 'REDEEMED',
+            logType: 'STATUS_CHANGE'
+        };
+
+        expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([expectedRedemptionUpdate]);
+        expect(flipBoostStatusStub).to.have.been.calledOnceWithExactly();
+        expect(findUsersForAccountsStub).to.have.have.been.calledOnceWithExactly(['account-id-7'], true);
     });
 
 });

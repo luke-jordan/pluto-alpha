@@ -23,12 +23,12 @@ resource "aws_lambda_function" "boost_user_process" {
         jsonencode(
           {
               "aws": {
-                "region": "${var.aws_default_region[terraform.workspace]}"
+                "region": var.aws_default_region[terraform.workspace]
               },
               "db": {
-                "host": "${local.database_config.host}",
-                "database": "${local.database_config.database}",
-                "port" :"${local.database_config.port}"
+                "host": local.database_config.host,
+                "database": local.database_config.database,
+                "port": local.database_config.port
               },
               "secrets": {
                 "enabled": true,
@@ -38,11 +38,14 @@ resource "aws_lambda_function" "boost_user_process" {
               },
               "publishing": {
                 "userEvents": {
-                    "topicArn": "${var.user_event_topic_arn[terraform.workspace]}"
+                    "topicArn": var.user_event_topic_arn[terraform.workspace]
                 },
                 "hash": {
-                  "key": "${var.log_hashing_secret[terraform.workspace]}"
+                  "key": var.log_hashing_secret[terraform.workspace]
                 }
+              },
+              "lambdas": {
+                "boostsExpire": aws_lambda_function.boost_expire.function_name
               }
           }
       )}"
@@ -102,6 +105,11 @@ resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_transfer_po
 resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_message_create_policy" {
   role = "${aws_iam_role.boost_user_process_role.name}"
   policy_arn = "${aws_iam_policy.lambda_invoke_message_create_access.arn}"
+}
+
+resource "aws_iam_role_policy_attachment" "boost_user_process_invoke_boost_expiry_policy" {
+  role = "${aws_iam_role.boost_user_process_role.name}"
+  policy_arn = "${aws_iam_policy.lambda_invoke_boost_expiry_access.arn}"
 }
 
 resource "aws_iam_role_policy_attachment" "boost_user_process_user_event_publish_policy" {

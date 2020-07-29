@@ -28,6 +28,8 @@ const rds = proxyquire('../persistence/rds.boost', {
     '@noCallThru': true
 });
 
+const expiryTimeClause = '(case when expiry_time is not null then expiry_time else end_time end) as end_time';
+
 describe('*** UNIT TEST BOOST READING ***', () => {
 
     beforeEach(() => queryStub.reset());
@@ -46,6 +48,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         'start_time': mockStartTime.format(),
         'end_time': mockEndTime.format(),
         'initial_status': 'CREATED',
+        'expiry_parameters': { individualizedExpiry: true },
         'message_instruction_ids': { instructions: [{ status: 'OFFERED', accountId: 'ALL', instructionId: 'some-id' }] }
     };
 
@@ -56,6 +59,7 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         boostStartTime: moment(mockStartTime.format()),
         boostEndTime: moment(mockEndTime.format()),
         defaultStatus: 'CREATED',
+        expiryParameters: { individualizedExpiry: true },
         messageInstructions: [{ status: 'OFFERED', accountId: 'ALL', instructionId: 'some-id' }] 
     };
 
@@ -159,7 +163,11 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     });
 
     it('Fetches boost account join, single', async () => {
-        const expectedQuery = `select * from boost_data.boost_account_status where boost_id = $1 and account_id = $2`;
+        const expectedQuery = `select boost_data.boost_account_status.boost_id, account_id, boost_status, ` +
+            `boost_data.boost_account_status.creation_time, boost_data.boost_account_status.updated_time, ${expiryTimeClause} ` + 
+            `from boost_data.boost_account_status inner join boost_data.boost ` + 
+            `on boost_data.boost_account_status.boost_id = boost_data.boost.boost_id ` +
+            `where boost_data.boost_account_status.boost_id = $1 and account_id = $2`;
         queryStub.resolves([{ 'boost_id': 'some-id', 'boost_status': 'UNLOCKED' }]);
 
         const result = await rds.fetchCurrentBoostStatus('some-id', 'some-account');
@@ -169,7 +177,11 @@ describe('*** UNIT TEST BOOST READING ***', () => {
     });
 
     it('Handles empty boost account join', async () => {
-        const expectedQuery = `select * from boost_data.boost_account_status where boost_id = $1 and account_id = $2`;
+        const expectedQuery = `select boost_data.boost_account_status.boost_id, account_id, boost_status, ` +
+            `boost_data.boost_account_status.creation_time, boost_data.boost_account_status.updated_time, ${expiryTimeClause} ` + 
+            `from boost_data.boost_account_status inner join boost_data.boost ` + 
+            `on boost_data.boost_account_status.boost_id = boost_data.boost.boost_id ` +
+            `where boost_data.boost_account_status.boost_id = $1 and account_id = $2`;
         queryStub.resolves([]);
 
         const result = await rds.fetchCurrentBoostStatus('some-id', 'some-account');
@@ -210,5 +222,6 @@ describe('*** UNIT TEST BOOST READING ***', () => {
         expect(result).to.deep.equal([{ ...expectedBoostResult, mlParameters: { some: 'params' }}]);
         expect(queryStub).to.have.been.calledOnceWithExactly(expectedQuery, []);
     });
+    
 
 });

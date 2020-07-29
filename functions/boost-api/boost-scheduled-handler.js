@@ -16,6 +16,16 @@ const redemptionHandler = require('./boost-redemption-handler');
 const AWS = require('aws-sdk');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
+const extractExpiryTime = (boost) => {
+    const { boostEndTime, expiryParameters} = boost;
+    if (!expiryParameters || !expiryParameters.individualizedExpiry) {
+        return boostEndTime;
+    }
+
+    const timeUntilExpiry = expiryParameters.timeUntilExpiry || config.get('time.offerToExpiryDefault');
+    return moment().add(timeUntilExpiry.value, timeUntilExpiry.unit);
+};
+
 // may need to add more in future but for now should be enough
 const extractBoostMsgParameters = (boost) => ({
     boostAmount: opsUtil.formatAmountCurrency({ amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency })
@@ -47,7 +57,8 @@ const handleBoostWithDynamicAudience = async (boost) => {
     }
 
     const { boostType, defaultStatus } = boost;
-    const insertJoinResult = await persistence.insertBoostAccountJoins([boostId], newAccounts, defaultStatus);
+    const expiryTime = extractExpiryTime(boost);
+    const insertJoinResult = await persistence.insertBoostAccountJoins([boostId], newAccounts, defaultStatus, expiryTime);
     logger('Audience refresh, result of join insertion: ', insertJoinResult);
 
     const { messageInstructions } = boost;
@@ -70,13 +81,16 @@ const handleBoostWithDynamicAudience = async (boost) => {
         logger('Result of message dispatch: ', resultOfMsgSend);
     }
 
-    const logOptions = {
-        initiator: boost.creatingUserId,
-        context: boostUtil.constructBoostContext(boost)
-    };
-    
-    await publisher.publishMultiUserEvent(newAccountUserIds, `BOOST_CREATED_${boostType}`, logOptions);
+    logger('Triggering user logs for boost ... : user Ids: ', JSON.stringify(newAccountUserIds));
 
+    const statusToLog = boostUtil.getStatusPrior(defaultStatus);
+    const logOptions = { initiator: boost.creatingUserId, context: boostUtil.constructBoostContext(boost) };    
+
+    const promisePublicationMap = statusToLog.map((status) => `BOOST_${status}_${boostType}`).
+        map((eventType) => publisher.publishMultiUserEvent(newAccountUserIds, eventType, logOptions));
+
+    await Promise.all(promisePublicationMap);
+    
     return { newOffers: newAccounts.length };
 };
 

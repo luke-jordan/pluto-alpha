@@ -11,6 +11,7 @@ const boostUtil = require('./boost.util');
 const persistence = require('./persistence/rds.boost');
 
 const AWS = require('aws-sdk');
+const { publishMultiUserEvent } = require('publish-common');
 const lambda = new AWS.Lambda({ region: config.get('aws.region') });
 
 const invokeLambda = async (payload, functionKey, sync = false) => {
@@ -96,7 +97,7 @@ const filterAccountIds = async (boostId, mlParameters, accountIds) => {
 const selectUsersForBoostOffering = async (boost) => {
     await sendRequestToRefreshAudience(boost.audienceId);
 
-    const { boostId, audienceId, messageInstructions, mlParameters } = boost;
+    const { boostId, audienceId, messageInstructions, mlParameters, expiryParameters } = boost;
 
     const audienceAccountIds = await persistence.extractAccountIds(audienceId);
     logger('Got audience account ids:', audienceAccountIds);
@@ -111,10 +112,15 @@ const selectUsersForBoostOffering = async (boost) => {
     const accountUserIdMap = await persistence.findUserIdsForAccounts(filteredAccountIds, true);
     logger('Got user ids for accounts:', accountUserIdMap);
     
-    const userIds = Object.keys(accountUserIdMap);
-    const userIdsForOffering = await obtainUsersForOffering(boost, userIds);
+    const userIdsForOffering = await obtainUsersForOffering(boost, Object.values(accountUserIdMap));
+    if (userIdsForOffering.length === 0) {
+        return { message: `No users selected for boost: ${boostId}` };
+    }
     
-    const accountIdsForOffering = userIdsForOffering.map((userId) => accountUserIdMap[userId]);
+    const accountIdsForOffering = filteredAccountIds.filter((accountId) => userIdsForOffering.includes(accountUserIdMap[accountId]));
+    // not the most pleasant on the eye but just ensuring some robustness to malformed boosts getting in
+    const defaultUntilExpiry = config.get('time.offerToExpiryDefault');
+    const timeUntilExpiry = expiryParameters ? (expiryParameters.timeUntilExpiry || defaultUntilExpiry) : defaultUntilExpiry;
     
     logger('Now extracting instruction IDs from: ', messageInstructions);
     const instructionIds = messageInstructions 
@@ -124,12 +130,15 @@ const selectUsersForBoostOffering = async (boost) => {
         boostId,
         accountIds: accountIdsForOffering,
         userIds: userIdsForOffering,
+        expiryTime: moment().add(timeUntilExpiry.value, timeUntilExpiry.unit),
         instructionIds,
         parameters: boost
     };
 };
 
-const createUpdateInstruction = (boostId, accountIds) => ({ boostId, accountIds, newStatus: 'OFFERED', logType: 'ML_BOOST_OFFERED' });
+const createUpdateInstruction = ({ boostId, accountIds, expiryTime }) => (
+    { boostId, accountIds, newStatus: 'OFFERED', expiryTime, logType: 'ML_BOOST_OFFERED' }
+);
 
 /**
  * A scheduled job that pulls and processes active ML boosts.
@@ -157,15 +166,30 @@ module.exports.processMlBoosts = async (event) => {
         const resultOfSelection = await Promise.all(mlBoosts.map((boost) => selectUsersForBoostOffering(boost)));
         logger('Got boosts and recipients:', resultOfSelection);
 
-        const boostsAndRecipients = resultOfSelection.filter((result) => result.boostId && result.accountIds);
-        const statusUpdateInstructions = boostsAndRecipients.map((boost) => createUpdateInstruction(boost.boostId, boost.accountIds));
+        const filteredSelectionResult = resultOfSelection.filter((result) => result.boostId && result.accountIds);
+        if (filteredSelectionResult.length === 0) {
+            return { result: 'NO_SELECTIONS' };
+        }
+
+        const statusUpdateInstructions = filteredSelectionResult.map((selectionResult) => createUpdateInstruction(selectionResult));
         logger('Created boost status update instructions:', statusUpdateInstructions);
 
         const resultOfUpdate = await persistence.updateBoostAccountStatus(statusUpdateInstructions);
         logger('Result of boost account status update:', resultOfUpdate);
 
-        const resultOfMsgInstructions = await triggerMsgInstructions(boostsAndRecipients);
+        const resultOfMsgInstructions = await triggerMsgInstructions(filteredSelectionResult);
         logger('triggering message instructions resulted in:', resultOfMsgInstructions);
+
+        const findBoost = (soughtBoostId) => mlBoosts.find((boost) => boost.boostId === soughtBoostId);
+        
+        const publishPromises = filteredSelectionResult.map((result) => {
+            const boost = findBoost(result.boostId);
+            const context = boostUtil.constructBoostContext(boost);
+            const eventType = `BOOST_OFFERED_${boost.boostType}`;
+            return publishMultiUserEvent(result.userIds, eventType, { context, initiator: 'BOOST_TARGET_MODEL' });
+        });
+
+        await Promise.all(publishPromises);
 
         return { result: 'SUCCESS' };
     } catch (err) {

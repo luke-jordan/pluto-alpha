@@ -22,16 +22,20 @@
     },
     "time": {
         "defaultEnd": {
-            "number": "50",
+            "value": "50",
             "unit": "years"
         },
         "changeCutOff": {
-            "number": 1,
+            "value": 1,
             "unit": "days"
         },
         "expiredCutOff": {
-            "number": 3,
+            "value": 3,
             "unit": "days"
+        },
+        "offerToExpiryDefault": {
+            "value": 24,
+            "unit": "hours"
         }
     },
     "tables": {
@@ -43,7 +47,6 @@
         "audienceTable": "audience_data.audience",
         "audienceJoinTable": "audience_data.audience_account_join",
         "friendshipTable": "friend_data.core_friend_relationship",
-
         "profileTable": "UserProfileTable",
         "clientFloatTable": "ClientFloatTable"
     },
@@ -52,11 +55,8 @@
         "messageSend": "message_user_create_once",
         "messageInstruct": "message_instruct_create",
         "audienceHandle": "audience_selection",
-        "userHistory": "user_log_reader"
-    },
-    "seedrandom": {
-        "active": true,
-        "value": "JupiterSave"
+        "userHistory": "user_log_reader",
+        "boostExpire": "boost_expire"
     },
     "mlSelection": {
         "enabled": true,

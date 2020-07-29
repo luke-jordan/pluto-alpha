@@ -44,12 +44,6 @@ const calculatePooledBoostAmount = (boost, userCount) => {
 
 const generateMultiplier = (distribution) => {
     if (distribution === 'UNIFORM') {
-        if (config.get('seedrandom.active')) {
-            // eslint-disable-next-line global-require
-            const seedrandom = require('seedrandom');
-            seedrandom(config.get('seedrandom.value'), { global: true });
-        }
-    
         return (Math.random()).toFixed(2);
     }
 };

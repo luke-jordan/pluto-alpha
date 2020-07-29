@@ -1,6 +1,7 @@
 'use strict';
 
 const logger = require('debug')('jupiter:boosts:handler');
+const config = require('config');
 const statusCodes = require('statuses');
 
 const boostRedemptionHandler = require('./boost-redemption-handler');
@@ -9,8 +10,24 @@ const persistence = require('./persistence/rds.boost');
 const util = require('./boost.util');
 const conditionTester = require('./condition-tester');
 
-const isBoostTournament = (boost) => boost.boostType === 'GAME' && boost.statusConditions.REDEEMED && 
-    boost.statusConditions.REDEEMED.some((condition) => condition.startsWith('number_taps_in_first_N') || condition.startsWith('percent_destroyed_in_first_N'));
+const AWS = require('aws-sdk');
+
+AWS.config.update({ region: config.get('aws.region') });
+const lambda = new AWS.Lambda();
+
+const expireFinishedTournaments = async (boost) => {
+    // for now, we only care enough if this is a friend tournament
+    const flags = boost.flags || []; // just as even small chance of accidental fragility here would be a really bad trade-off
+    if (!util.isBoostTournament(boost) || !flags.includes('FRIEND_TOURNAMENT')) {
+        return;
+    }
+
+    // the expiry handler will take care of the checks to see if everyone else has played, and if so, will end this
+    logger('Telling boost expiry to check ...');
+    const expiryInvocation = util.lambdaParameters({}, 'boostExpire', false);
+    await lambda.invoke(expiryInvocation).promise();
+    logger('Dispatched');
+};
 
 const recordGameResult = async (params, boost, accountId) => {
     const gameLogContext = { 
@@ -94,7 +111,8 @@ module.exports.processUserBoostResponse = async (event) => {
         }
         
         if (statusResult.length === 0) {
-            const returnResult = isBoostTournament(boost) ? { result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() } : { result: 'NO_CHANGE' };
+            // only a malformed tournament would have no status change when user plays, but just in case
+            const returnResult = util.isBoostTournament(boost) ? { result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() } : { result: 'NO_CHANGE' };
             return { statusCode: 200, body: JSON.stringify(returnResult)};
         }
 
@@ -126,6 +144,10 @@ module.exports.processUserBoostResponse = async (event) => {
         if (statusResult.includes('REDEEMED')) {
             resultBody.amountAllocated = { amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency };
             await persistence.updateBoostAmountRedeemed([boostId]);
+        }
+
+        if (statusResult.includes('PENDING')) {
+            await expireFinishedTournaments(boost);
         }
 
         return {

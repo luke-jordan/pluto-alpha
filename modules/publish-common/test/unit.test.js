@@ -102,7 +102,8 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
     const wellFormedSnsPublish = (userId, eventType, options) => ({
         Message: stringify(wellFormedEvent(userId, eventType, options)),
         MessageAttributes: {
-            'eventType': { DataType: 'String', StringValue: eventType }
+            'eventType': { DataType: 'String', StringValue: eventType },
+            'sourceFunction': { DataType: 'String', StringValue: 'LOCAL' }
         },
         Subject: eventType,
         TopicArn: config.get('publishing.userEvents.topicArn')
@@ -300,7 +301,8 @@ describe('*** UNIT TEST PUBLISHING MODULE ***', () => {
                 userId: testUserId
             }),
             MessageAttributes: {
-                'eventType': { DataType: 'String', StringValue: 'USER_LOGIN' }
+                'eventType': { DataType: 'String', StringValue: 'USER_LOGIN' },
+                'sourceFunction': { DataType: 'String', StringValue: 'LOCAL' }
             },
             Subject: 'USER_LOGIN',
             TopicArn: config.get('publishing.userEvents.topicArn')
