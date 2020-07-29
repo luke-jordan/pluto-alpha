@@ -172,6 +172,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
 
         expect(findUserIdsStub).to.have.been.calledWithExactly([testReferringUser, testReferredUser]);
         const expectedBoostAmount = { boostAmount: 100000, boostUnit: 'HUNDREDTH_CENT', boostCurrency: 'USD' };
+
         const expectedUserLogOptions = {
             initiator: testCreatingUserId,
             context: {
@@ -180,7 +181,7 @@ describe('*** UNIT TEST BOOSTS *** Individual or limited users', () => {
                 rewardParameters: undefined, statusConditions: mockBoostToFromPersistence.statusConditions
             }
         };
-        expect(publishMultiStub).to.have.been.calledOnceWithExactly(['user-id-1', 'user-id-2'], 'BOOST_CREATED_REFERRAL', expectedUserLogOptions);
+        expect(publishMultiStub).to.have.been.calledWithExactly(['user-id-1', 'user-id-2'], 'BOOST_CREATED_REFERRAL', expectedUserLogOptions);
     });
 });
 

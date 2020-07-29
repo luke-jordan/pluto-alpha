@@ -124,7 +124,6 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
     };
 
     const testStatusConditions = {
-        OFFERED: ['message_instruction_created'],
         UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
         REDEEMED: ['number_taps_greater_than #{20::20000}']
     };
@@ -141,6 +140,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
             floatId: 'primary_cash'
         },
         endTimeMillis: testEndTime.valueOf(),
+        initialStatus: 'OFFERED',
         boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
         messagesToCreate: [messageReqBody],
@@ -164,7 +164,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         statusConditions: testStatusConditions,
         boostAudienceType: 'GENERAL',
         audienceId: testAudienceId,
-        defaultStatus: 'CREATED',
+        defaultStatus: 'OFFERED',
         gameParams,
         messageInstructionIds: { } 
     };
@@ -240,6 +240,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+
+        expect(publishMultiStub).to.have.been.calledTwice; // for both creation and offering
     });
 
     it('Happy path creates a game boost, with default status unlocked', async () => {
@@ -279,6 +281,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const lambdaPayload = JSON.parse(lambdaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+
+        expect(publishMultiStub).to.have.been.calledThrice; // we emit OFFERED as well, because we need it included
     });
 
     it('Happy path creates a game boost, with default status offered, but does not overwrite existing status conditions', async () => {
@@ -315,6 +319,8 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         const lambdaPayload = JSON.parse(lambdaInvokeStub.getCall(0).args[0].Payload);
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
+
+        expect(publishMultiStub).to.have.been.calledTwice;
     });
 
     it('Happy path creates a game boost, and sets up conditions for tournament', async () => {
@@ -351,7 +357,6 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         // then set up invocation checks
         const expectedBoost = { ...mockBoostToFromPersistence, gameParams: tournParams };
         expectedBoost.statusConditions = { 
-            OFFERED: ['message_instruction_created'],
             UNLOCKED: ['save_event_greater_than #{100000:HUNDREDTH_CENT:USD}'],
             PENDING: ['number_taps_greater_than #{0::20000}'],
             REDEEMED: ['number_taps_in_first_N #{20::20000}']
@@ -363,7 +368,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(lambdaPayload).to.deep.equal(expectedMsgInstruct);
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, true);
 
-        expect(publishMultiStub).to.have.been.called;
+        expect(publishMultiStub).to.have.been.calledTwice;
     });
 
     it('Happy path creates a game boost, which is triggered later', async () => {
@@ -428,6 +433,7 @@ describe('*** UNIT TEST BOOSTS *** Happy path game based boost', () => {
         expect(alterBoostStub).to.have.been.calledOnceWithExactly(testBoostId, mockMsgIdDict, false);
 
         expect(findAccountsStub).to.not.have.been.called;
-        expect(publishMultiStub).to.not.have.been.called;
+        
+        expect(publishMultiStub).to.not.have.been.calledOnce; // because _not_ published for multi etc
     });
 });
