@@ -15,15 +15,13 @@ const AWS = require('aws-sdk');
 AWS.config.update({ region: config.get('aws.region') });
 const lambda = new AWS.Lambda();
 
-const expireFinishedTournaments = async () => {
-    const expiryInvocation = util.lambdaParameters({ }, 'boostsExpire', false);
-    const resultOfInvocation = await lambda.invoke(expiryInvocation).promise();
-    logger('Result of invocation: ', resultOfInvocation);
+const expireFinishedTournaments = async (boost) => {
+    if (!util.isBoostTournament(boost)) {
+        return;
+    }
 
-    const resultPayload = JSON.parse(resultOfInvocation['Payload']);
-    const resultBody = JSON.parse(resultPayload.body);
-
-    return resultBody;
+    const expiryInvocation = util.lambdaParameters({}, 'boostsExpire', false);
+    await lambda.invoke(expiryInvocation).promise();
 };
 
 const recordGameResult = async (params, boost, accountId) => {
@@ -108,11 +106,9 @@ module.exports.processUserBoostResponse = async (event) => {
         }
         
         if (statusResult.length === 0) {
-            if (util.isBoostTournament(boost)) {
-                await expireFinishedTournaments(boost.boostId);
-                return { statusCode: 200, body: JSON.stringify({ result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() }) };
-            }
-            return { statusCode: 200, body: JSON.stringify({ result: 'NO_CHANGE' })};
+            // only a malformed tournament would have no status change when user plays, but just in case
+            const returnResult = util.isBoostTournament(boost) ? { result: 'TOURNAMENT_ENTERED', endTime: boost.boostEndTime.valueOf() } : { result: 'NO_CHANGE' };
+            return { statusCode: 200, body: JSON.stringify(returnResult)};
         }
 
         const accountDict = { [boostId]: { [accountId]: { userId: systemWideUserId } }};
@@ -143,6 +139,10 @@ module.exports.processUserBoostResponse = async (event) => {
         if (statusResult.includes('REDEEMED')) {
             resultBody.amountAllocated = { amount: boost.boostAmount, unit: boost.boostUnit, currency: boost.boostCurrency };
             await persistence.updateBoostAmountRedeemed([boostId]);
+        }
+
+        if (statusResult.includes('PENDING')) {
+            await expireFinishedTournaments(boost);
         }
 
         return {

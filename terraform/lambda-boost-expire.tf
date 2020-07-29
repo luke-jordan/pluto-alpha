@@ -10,8 +10,8 @@ resource "aws_lambda_function" "boost_expire" {
   handler                        = "boost-expiry-handler.checkForBoostsToExpire"
   memory_size                    = 256
   runtime                        = "nodejs12.x"
-  timeout                        = 30
-  tags                           = {"environment"  = "${terraform.workspace}"}
+  timeout                        = 60
+  tags                           = {"environment"  = terraform.workspace}
   
   s3_bucket = "pluto.lambda.${terraform.workspace}"
   s3_key = "boost_api/${var.deploy_code_commit_hash}.zip"

@@ -68,10 +68,10 @@ const sortAndRankBestScores = (boostGameLogs, accountIds) => {
         }
     });
 
-    logger('High score map: ', highScoreMap);
+    logger('High score map: ', JSON.stringify(highScoreMap));
 
     const sortedEntries = [...highScoreMap.values()].sort((score1, score2) => score2 - score1);
-    logger('Entry scores, sorted: ', sortedEntries);
+    logger('Entry scores, sorted: ', JSON.stringify(sortedEntries));
 
     const getAccountIdRanking = (accountId) => {
         const accountScore = highScoreMap.get(accountId);
@@ -153,7 +153,7 @@ const handleTournamentWinners = async (boost, winningAccounts) => {
     await publisher.publishMultiUserEvent(winningUserIds, 'BOOST_TOURNAMENT_WON', { context: { boostId }});
 };
 
-const handleRandomAward = async (boost) => {
+const handleRandomScoring = async (boost) => {
     const pendingParticipants = await persistence.findAccountsForBoost({ boostIds: [boost.boostId], status: ['PENDING'] });
     logger('Got pending participants:', pendingParticipants);
     const accountIds = Object.keys(pendingParticipants[0].accountUserMap);
@@ -196,10 +196,10 @@ module.exports.handleExpiredBoost = async (boostId) => {
 
     if (util.isRandomAward(boost)) {
         logger('Boost is random award, awarding accordingly');
-        return handleRandomAward(boost);
+        return handleRandomScoring(boost);
     }
     
-    // from here on
+    // from here on, must be in a game tournament
     const accountIdsThatResponded = [...new Set(boostGameLogs.map((log) => log.accountId))];
     
     logger('Account IDs with responses: ', accountIdsThatResponded);

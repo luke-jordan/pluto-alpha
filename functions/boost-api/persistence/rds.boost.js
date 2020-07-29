@@ -589,12 +589,13 @@ module.exports.expireBoostsPastEndTime = async () => {
 };
 
 module.exports.isTournamentFinished = async (boostId) => {
-    const selectQuery = `select boost_status, count(*) from ${boostAccountJoinTable} where boost_id = $1`;
+    const selectQuery = `select boost_status, count(*) from ${boostAccountJoinTable} where boost_id = $1 group by boost_status`;
     const resultOfFetch = await rdsConnection.selectQuery(selectQuery, [boostId]);
-    logger('Got tournament rows:', resultOfFetch);
-    const nonPendingRows = resultOfFetch.filter((row) => row['boost_status'] !== 'PENDING');
-    const pendingRows = resultOfFetch.filter((row) => row['boost_status'] === 'PENDING');
-    const isFinishedTournament = nonPendingRows.length > 0 && pendingRows.length === 0;
+    logger('Got tournament rows:', JSON.stringify(resultOfFetch));
+    const nonPendingCount = resultOfFetch.filter((row) => row['boost_status'] !== 'PENDING').reduce((sum, row) => sum + row['count'], 0);
+    const pendingRow = resultOfFetch.find((row) => row['boost_status'] === 'PENDING');
+    const pendingCount = pendingRow ? pendingRow['count'] : 0;
+    const isFinishedTournament = pendingCount > 0 && nonPendingCount === 0;
     return { [boostId]: isFinishedTournament };
 };
 
