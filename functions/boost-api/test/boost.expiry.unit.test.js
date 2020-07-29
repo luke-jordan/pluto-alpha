@@ -413,17 +413,6 @@ describe('*** UNIT TEST BOOST EXPIRY HANDLING', () => {
         fetchBoostStub.resolves(mockBoost);
         findBoostLogsStub.resolves([]);
 
-<<<<<<< Updated upstream:functions/boost-api/test/boost.expiry.unit.test.js
-        findAccountsStub.resolves([{
-            boostId: testBoostId,
-            accountUserMap: {
-                'account-id-1': { userId: 'some-user-id', status: 'OFFERED' },
-                'account-id-2': { userId: 'some-user-id2', status: 'OFFERED' }
-            }
-        }]);
-
-=======
->>>>>>> Stashed changes:functions/boost-api/test/boost.tournament.unit.test.js
         const resultOfSelection = await handler.checkForBoostsToExpire({ boostId: testBoostId });
         
         expect(fetchBoostStub).to.have.been.calledOnceWithExactly(testBoostId);
