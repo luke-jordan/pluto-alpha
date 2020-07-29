@@ -1,7 +1,5 @@
 'use strict';
 
-const logger = require('debug')('jupiter:boosts:test');
-
 const config = require('config');
 const uuid = require('uuid/v4');
 const moment = require('moment');
@@ -18,7 +16,6 @@ chai.use(require('chai-as-promised'));
 const proxyquire = require('proxyquire').noCallThru();
 
 const queryStub = sinon.stub();
-const updateStub = sinon.stub();
 const multiTableStub = sinon.stub();
 
 const uuidStub = sinon.stub();
@@ -26,7 +23,6 @@ const uuidStub = sinon.stub();
 class MockRdsConnection {
     constructor () {
         this.selectQuery = queryStub;
-        this.updateRecord = updateStub;
         this.largeMultiTableInsert = multiTableStub;
     }
 }
@@ -37,7 +33,7 @@ const rds = proxyquire('../persistence/rds.boost', {
     '@noCallThru': true
 });
 
-const resetStubs = () => testHelper.resetStubs(queryStub, updateStub, multiTableStub, uuidStub);
+const resetStubs = () => testHelper.resetStubs(queryStub, multiTableStub, uuidStub);
 const extractColumnTemplate = (keys) => keys.map((key) => `$\{${key}}`).join(', ');
 const extractQueryClause = (keys) => keys.map((key) => decamelize(key)).join(', ');
 
@@ -514,68 +510,6 @@ describe('*** UNIT TEST BOOSTS RDS *** Inserting boost instruction and boost-use
 
         expect(resultOfInsertion).to.exist; // format is tested above
         expect(multiTableStub).to.have.been.calledOnceWithExactly([boostQueryDef]);
-    });
-
-    it('Ends finished tournaments', async () => {
-        const findQuery = `select * from boost_data.boost where active = true and end_time > current_timestamp ` +
-            `and ($1 = any(flags))`;
-        const selectQuery = `select boost_status, count(*) from boost_data.boost_account_status where boost_id = $1`;
-        const updateQuery = `update boost_data.boost set end_time = current_timestamp where boost_id in ($1) returning updated_time`;
-
-        const testUpdatedTime = moment().format();
-
-        const mockTournamentFromRds = (boostId) => ({
-            'boost_id': boostId,
-            'active': true,
-            'flags': ['FRIEND_TOURNAMENT']
-        });
-
-        const firstTournament = mockTournamentFromRds('boost-id-1');
-        const secondTournament = mockTournamentFromRds('boost-id-2');
-
-        queryStub.withArgs(findQuery, ['FRIEND_TOURNAMENT']).resolves([firstTournament, secondTournament]);
-        queryStub.withArgs(selectQuery, ['boost-id-1']).resolves([{ 'boost_status': 'PENDING', 'count': 8 }, { 'boost_status': 'REDEEMED', 'count': 8 }]);
-        queryStub.withArgs(selectQuery, ['boost-id-2']).resolves([{ 'boost_status': 'REDEEMED', 'count': 55 }, { 'boost_status': 'REDEEMED', 'count': 55 }]);
-        updateStub.resolves({ rows: [{ 'updated_time': testUpdatedTime }]});
-
-        const resultOfOperations = await rds.endFinishedTournaments();
-
-        expect(resultOfOperations).to.exist;
-        expect(resultOfOperations).to.deep.equal({ updatedTime: moment(testUpdatedTime) });
-        expect(queryStub).to.have.been.calledWithExactly(findQuery, ['FRIEND_TOURNAMENT']);
-        ['boost-id-1', 'boost-id-2'].map((boostId) => expect(queryStub).to.have.been.calledWithExactly(selectQuery, [boostId]));
-        expect(updateStub).to.have.been.calledOnceWithExactly(updateQuery, ['boost-id-2']);
-    });
-
-    it('Expires boosts', async () => {
-        const firstUpdateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
-
-        updateStub.onFirstCall().resolves({
-            'rows': [
-                { 'boost_id': 'boost-1' },
-                { 'boost_id': 'boost-2' },
-                { 'boost_id': 'boost-3' }
-            ],
-            rowCount: 3
-        });
-
-        const resultOfUpdate = await rds.expireBoostsPastEndTime();
-        
-        expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal(['boost-1', 'boost-2', 'boost-3']);
-        expect(updateStub).to.have.been.calledOnceWithExactly(firstUpdateQuery, [false]);
-    });
-
-    it('Boost culling exits where no boost found for update', async () => {
-        const updateQuery = 'update boost_data.boost set active = $1 where active = true and end_time < current_timestamp returning boost_id';
-        updateStub.onFirstCall().resolves({ rows: [], rowCount: 0 });
-
-        const resultOfUpdate = await rds.expireBoostsPastEndTime();
-        logger('Result of boost cull:', resultOfUpdate);
-       
-        expect(resultOfUpdate).to.exist;
-        expect(resultOfUpdate).to.deep.equal([]);
-        expect(updateStub).to.to.have.been.calledOnceWithExactly(updateQuery, [false]);
     });
 
 });

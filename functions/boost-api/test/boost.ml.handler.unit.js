@@ -132,7 +132,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         extractAccountIdsStub.resolves(mockAccountIds);
         
         accountStatusStub.resolves([{ boostId: testBoostId, accountUserMap: mockAccountUserMap }]);
-        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1' });
+        findUserIdsStub.resolves({ 'account-id-1': 'user-id-1' });
 
         tinyPostStub.resolves({
             body: JSON.stringify([{ 'user_id': 'user-id-1', 'should_offer': true }])
@@ -210,7 +210,7 @@ describe('*** UNIT TEST BOOST ML HANDLER ***', () => {
         const tooSoonLog = { ...mockBoostLog('account-id-4'), creationTime: moment().subtract(3, 'days') };
         findBoostLogStub.onCall(3).resolves(tooSoonLog);
 
-        findUserIdsStub.resolves({ 'user-id-1': 'account-id-1', 'user-id-2': 'account-id-2', 'user-id-3': 'account-id-3' });
+        findUserIdsStub.resolves({ 'account-id-1': 'user-id-1', 'account-id-2': 'user-id-2', 'account-id-3': 'user-id-3' });
         
         const offerDecision = (userId, shouldOffer) => ({ 'user_id': userId, 'should_offer': shouldOffer });
         tinyPostStub.resolves({

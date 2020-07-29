@@ -119,7 +119,7 @@ const expireAccountsForBoost = async (boost, specifiedAccountIds) => {
     logger('Result of expiring boosts: ', resultOfExpiration);
 
     const userIds = [...new Set(Object.values(accountMap).map((entry) => entry.userId))];
-    publisher.publishMultiUserEvent(userIds, 'BOOST_EXPIRED', { context: { boostId }});
+    await publisher.publishMultiUserEvent(userIds, 'BOOST_EXPIRED', { context: { boostId }});
 };
 
 const handleTournamentWinners = async (boost, winningAccounts) => {
@@ -177,6 +177,10 @@ const handleRandomAward = async (boost) => {
     return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
+/**
+ * Not called by the Lambda, but is the heart of things, so exposed for testing
+ * @param {string} boostId The ID of the boost to expire
+ */
 module.exports.handleExpiredBoost = async (boostId) => {
     const [boost, boostGameLogs] = await Promise.all([persistence.fetchBoost(boostId), persistence.findLogsForBoost(boostId, GAME_RESPONSE)]);
     logger('Processing boost for expiry: ', boost);
@@ -202,6 +206,7 @@ module.exports.handleExpiredBoost = async (boostId) => {
         return handleRandomAward(boost);
     }
     
+    // from here on
     const accountIdsThatResponded = [...new Set(boostGameLogs.map((log) => log.accountId))];
     
     logger('Account IDs with responses: ', accountIdsThatResponded);
@@ -218,10 +223,10 @@ module.exports.handleExpiredBoost = async (boostId) => {
     const allAccountIds = Object.keys(allAccountMap[0].accountUserMap);
     
     const remainingAccounts = allAccountIds.filter((accountId) => !winningAccounts.includes(accountId));
+    
     logger('Will expire these remaining accounts: ', remainingAccounts);
-    const resultOfUpdate = await expireAccountsForBoost(boost, remainingAccounts);
-    logger('Result of expiry update: ', resultOfUpdate);
-
+    await expireAccountsForBoost(boost, remainingAccounts);
+    
     // as above, inefficient, but to neaten up later
     const sortedAndRankedAccounts = sortAndRankBestScores(boostGameLogs, accountIdsThatResponded);
     logger('Sorted and ranked accounts: ', sortedAndRankedAccounts); 
@@ -238,6 +243,36 @@ module.exports.handleExpiredBoost = async (boostId) => {
     return { statusCode: 200, boostsRedeemed: winningAccounts.length };
 };
 
+// this will find and flip the status of boosts that are past their expiry time but still active, i.e.,
+// for that class of boosts where the offer-expiry period is different to the overall boost expiry (dynamic audience + ML)
+// for now, we just process these as not-redeemed, therefore do not need to worry about redemption etc
+module.exports.expireIndividualizedBoosts = async () => {
+    const expiredBoostAccountPairs = await persistence.flipBoostStatusPastExpiry();
+    logger('Expired boost account pairs, of length: ', expiredBoostAccountPairs.length);
+
+    if (expiredBoostAccountPairs.length === 0) {
+        logger('No boost-account pairs expired, exiting');
+        return { result: 'NOTHING_TO_EXPIRE' };
+    }
+
+    const accountIds = expiredBoostAccountPairs.map(({ accountId }) => accountId);
+    const userIds = await persistence.findUserIdsForAccounts(accountIds, true);
+
+    const rawBoostIds = expiredBoostAccountPairs.map(({ boostId }) => boostId);
+    const boostIds = [...new Set(rawBoostIds)];
+    logger('Boost IDs expired: ', boostIds);
+
+    const eventPromises = boostIds.map((boostIdExpired) => {
+        const context = { boostId: boostIdExpired };
+        const rawUserIds = expiredBoostAccountPairs.filter(({ boostId }) => boostId === boostIdExpired).map(({ accountId }) => userIds[accountId]);
+        const uniqueUserIds = [...new Set(rawUserIds)];
+        return publisher.publishMultiUserEvent(uniqueUserIds, 'BOOST_EXPIRED', { context });
+    });
+
+    await Promise.all(eventPromises);
+    return { result: 'SUCCESS', boostsExpired: boostIds.length, offersExpired: expiredBoostAccountPairs.length };
+};
+
 /**
  * This function checks for boosts and tournaments to be expired. If a boost is to be expired the function
  * asserts what time type of boost it is. If it is a game or random award then the winners are awarded the boost amounts
@@ -249,25 +284,25 @@ module.exports.checkForBoostsToExpire = async (event) => {
         if (!opsUtil.isDirectInvokeAdminOrSelf(event, 'systemWideUserId', true)) {
             return opsUtil.wrapResponse({ }, statusCodes('Forbidden'));
         }
-        
-        const expiredBoosts = await persistence.expireBoostsPastEndTime();
-        logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
-        if (expiredBoosts.length === 0) {
-            logger('No boosts to expire, returning');
-            return { result: 'NO_BOOSTS' };
-        }
 
-        const resultOfBoostExpiry = await Promise.all(expiredBoosts.map((boostId) => exports.handleExpiredBoost(boostId)));
-        logger('Result of boost expiry:', resultOfBoostExpiry);
-
+        // if any tournaments should end, then end them
         const resultOfTournEnding = await persistence.endFinishedTournaments();
         logger('Result of tournament ending:', resultOfTournEnding);
 
-        // over here, expire individual-end-time boosts
+        const expiredBoosts = await persistence.expireBoostsPastEndTime();
+        logger('Expired boosts for ', expiredBoosts.length, ' account-boost pairs');
+        if (expiredBoosts.length > 0) {
+            const resultOfBoostExpiry = await Promise.all(expiredBoosts.map((boostId) => exports.handleExpiredBoost(boostId)));
+            logger('Result of boost expiry:', resultOfBoostExpiry);
+        }
+
+        // Finally, expire individual-end-time boosts (do this _after_ the others, in case they flip status)
+        await exports.expireIndividualizedBoosts();
+        logger('Completed all expiry tasks');
         
-        return opsUtil.wrapResponse({ result: 'SUCCESS' });
+        return { result: 'SUCCESS' };
     } catch (error) {
         logger('FATAL_ERROR:', error);
-        return opsUtil.wrapResponse({ result: 'FAILURE' });
+        return { result: 'FAILURE' };
     }
 };

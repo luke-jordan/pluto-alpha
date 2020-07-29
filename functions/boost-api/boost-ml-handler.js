@@ -111,10 +111,9 @@ const selectUsersForBoostOffering = async (boost) => {
     const accountUserIdMap = await persistence.findUserIdsForAccounts(filteredAccountIds, true);
     logger('Got user ids for accounts:', accountUserIdMap);
     
-    const userIds = Object.keys(accountUserIdMap);
-    const userIdsForOffering = await obtainUsersForOffering(boost, userIds);
+    const userIdsForOffering = await obtainUsersForOffering(boost, Object.values(accountUserIdMap));
     
-    const accountIdsForOffering = userIdsForOffering.map((userId) => accountUserIdMap[userId]);
+    const accountIdsForOffering = filteredAccountIds.filter((accountId) => userIdsForOffering.includes(accountUserIdMap[accountId]));
     // not the most pleasant on the eye but just ensuring some robustness to malformed boosts getting in
     const defaultUntilExpiry = config.get('time.offerToExpiryDefault');
     const timeUntilExpiry = expiryParameters ? (expiryParameters.timeUntilExpiry || defaultUntilExpiry) : defaultUntilExpiry;

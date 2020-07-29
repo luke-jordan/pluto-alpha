@@ -59,6 +59,12 @@ module.exports.fetchBoostsWithDynamicAudiences = async () => {
     return rawResult.map((rawBoost) => transformBoostFromRds(rawBoost));
 };
 
+module.exports.fetchActiveMlBoosts = async () => {
+    const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
+    const resultOfQuery = await rdsConnection.selectQuery(query, []);
+    return resultOfQuery.map(transformBoostFromRds);
+};
+
 /**
  * Method that finds boost that may be relevant to a given account, filtering by whether the account is in a certain state related to the boost.
  * Most common use will be to find the boosts for which a given account (e.g., that just saved) is in a 'PENDING STATE'
@@ -381,24 +387,6 @@ module.exports.updateBoostAmount = async (boostId, boostAmount) => {
     return resultOfUpdate;
 };
 
-module.exports.expireBoostsPastEndTime = async () => {
-    const updateBoostQuery = `update ${config.get('tables.boostTable')} set active = $1 where active = true and ` + 
-        `end_time < current_timestamp returning boost_id`;
-    const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
-    
-    logger('Result of straight update boosts: ', updateBoostResult);
-    if (updateBoostResult.rowCount === 0) {
-        logger('No boosts expired, can exit');
-        return [];
-    }
-
-    return updateBoostResult && Array.isArray(updateBoostResult.rows) ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
-};
-
-// ///////////////////////////////////////////////////////////////
-// //////////// BOOST MEMBER SELECTION STARTS HERE ///////////////
-// ///////////////////////////////////////////////////////////////
-
 // could turn this into a single insert using freeFormInsert (on the other hand the subsequent insert below is one query, so not a huge gain)
 module.exports.extractAccountIds = async (audienceId) => {
     const selectionQuery = `select account_id from ${config.get('tables.audienceJoinTable')} where audience_id = $1 and active = $2`;
@@ -566,12 +554,22 @@ module.exports.setBoostMessages = async (boostId, messageInstructionIdDefs, setA
     return { updatedTime };
 };
 
+// ///////////////////////////////////////////////////////////////
+// //////////// BOOST ENDING (EXPIRY) METHODS ////////////////////
+// ///////////////////////////////////////////////////////////////
 
-module.exports.getAccountIdForUser = async (systemWideUserId) => {
-    const tableName = config.get('tables.accountLedger');
-    const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
-    const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
-    return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
+module.exports.expireBoostsPastEndTime = async () => {
+    const updateBoostQuery = `update ${config.get('tables.boostTable')} set active = $1 where active = true and ` + 
+        `end_time < current_timestamp returning boost_id`;
+    const updateBoostResult = await rdsConnection.updateRecord(updateBoostQuery, [false]);
+    
+    logger('Result of straight update boosts: ', updateBoostResult);
+    if (updateBoostResult.rowCount === 0) {
+        logger('No boosts expired, can exit');
+        return [];
+    }
+
+    return updateBoostResult && Array.isArray(updateBoostResult.rows) ? updateBoostResult.rows.map((row) => row['boost_id']) : [];
 };
 
 module.exports.isTournamentFinished = async (boostId) => {
@@ -613,40 +611,43 @@ module.exports.endFinishedTournaments = async (boostId = null) => {
         ? { updatedTime: moment(resultOfUpdate.rows[0]['updated_time']) } : {};
 };
 
-// ///////////////////////////////////////////////////////////////
-// ////// SIMPLE AUX METHOD TO FIND MSG INSTRUCTION IDS //////////
-// ///////////////////////////////////////////////////////////////
+module.exports.flipBoostStatusPastExpiry = async () => {
+    logger('Running update query to flip individual boosts to expiry');
 
-module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
-    // find the most recent matching the flag (just in case);
-    const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
-        `flags && ARRAY[$1] order by creation_time desc limit 1`;
-    const result = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
-    logger('Got an instruction? : ', result);
-    if (Array.isArray(result) && result.length > 0) {
-        return result[0]['instruction_id'];
-    }
+    const updateQuery = `update ${boostAccountJoinTable} set status = $1 where expiry_time is not null and ` +
+        `expiry_time < current_timestamp and status in ($2, $3, $4) returning boost_id, account_id`;
 
-    return null;
+    logger('Executing with query: ', updateQuery);
+    // see note in tests re CREATED
+    const resultOfUpdate = await rdsConnection.updateRecord(updateQuery, ['EXPIRED', 'OFFERED', 'UNLOCKED', 'PENDING']);
+    logger('Update result: ', JSON.stringify(resultOfUpdate));
+
+    return resultOfUpdate && resultOfUpdate.rows ? camelizeKeys(resultOfUpdate.rows) : [];
 };
 
 // ///////////////////////////////////////////////////////////////
-// ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS ////////////
+// ////// ANOTHER SIMPLE AUX METHOD TO FIND OWNER IDS, ETC ///////
 // ///////////////////////////////////////////////////////////////
 
 module.exports.findUserIdsForAccounts = async (accountIds, returnMap = false) => {
     const query = `select owner_user_id, account_id from ${config.get('tables.accountLedger')} where ` +
         `account_id in (${extractArrayIndices(accountIds)})`;
     const result = await rdsConnection.selectQuery(query, accountIds);
-    logger('Result of query: ', result);
     
     if (Array.isArray(result) && result.length > 0) {
         return returnMap
-            ? result.reduce((obj, row) => ({ ...obj, [row['owner_user_id']]: row['account_id'] }), {})
+            ? result.reduce((obj, row) => ({ ...obj, [row['account_id']]: row['owner_user_id'] }), {})
             : result.map((row) => row['owner_user_id']);
     }
 
     throw Error('Given non-existent or bad account IDs');
+};
+
+module.exports.getAccountIdForUser = async (systemWideUserId) => {
+    const tableName = config.get('tables.accountLedger');
+    const query = `select account_id from ${tableName} where owner_user_id = $1 order by creation_time desc limit 1`;
+    const accountRow = await rdsConnection.selectQuery(query, [systemWideUserId]);
+    return Array.isArray(accountRow) && accountRow.length > 0 ? accountRow[0]['account_id'] : null;
 };
 
 module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
@@ -660,8 +661,15 @@ module.exports.fetchUserIdsForRelationships = async (relationshipIds) => {
     throw Error('Given non-existent or bad relationship IDs');
 };
 
-module.exports.fetchActiveMlBoosts = async () => {
-    const query = `select * from ${boostTable} where ml_parameters is not null and active = true and end_time > current_timestamp`;
-    const resultOfQuery = await rdsConnection.selectQuery(query, []);
-    return resultOfQuery.map(transformBoostFromRds);
+module.exports.findMsgInstructionByFlag = async (msgInstructionFlag) => {
+    // find the most recent matching the flag (just in case);
+    const query = `select instruction_id from ${config.get('tables.msgInstructionTable')} where ` +
+        `flags && ARRAY[$1] order by creation_time desc limit 1`;
+    const result = await rdsConnection.selectQuery(query, [msgInstructionFlag]);
+    logger('Got an instruction? : ', result);
+    if (Array.isArray(result) && result.length > 0) {
+        return result[0]['instruction_id'];
+    }
+
+    return null;
 };
