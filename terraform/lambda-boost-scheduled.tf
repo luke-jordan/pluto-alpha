@@ -85,6 +85,24 @@ resource "aws_cloudwatch_log_group" "boost_scheduled" {
   }
 }
 
+/////////////////// CLOUD WATCH FOR SCHEDULED RUN ///////////////////////
+
+resource "aws_cloudwatch_event_target" "trigger_boost_ml_regular" {
+    rule = aws_cloudwatch_event_rule.daily_boost_jobs.name
+    target_id = aws_lambda_function.boost_scheduled.id
+    arn = aws_lambda_function.boost_scheduled.arn
+
+    input = jsonencode({})
+}
+
+resource "aws_lambda_permission" "allow_cloudwatch_regular_to_call_boost_ml" {
+    statement_id = "AllowRegularAdminExecutionFromCloudWatch"
+    action = "lambda:InvokeFunction"
+    function_name = aws_lambda_function.boost_scheduled.function_name
+    principal = "events.amazonaws.com"
+    source_arn = aws_cloudwatch_event_rule.daily_boost_jobs.arn
+}
+
 /////////////////// IAM CONFIG //////////////////////////////////////////////////////////////////////////////////////
 
 resource "aws_iam_role_policy_attachment" "boost_scheduled_basic_execution_policy" {
@@ -150,27 +168,4 @@ resource "aws_cloudwatch_metric_alarm" "fatal_metric_alarm_boost_scheduled" {
   threshold = 0
   statistic = "Sum"
   alarm_actions = [aws_sns_topic.fatal_errors_topic.arn]
-}
-
-resource "aws_cloudwatch_log_metric_filter" "security_metric_filter_boost_scheduled" {
-  log_group_name = aws_cloudwatch_log_group.boost_scheduled.name
-  metric_transformation {
-    name = "${var.boost_scheduled_lambda_function_name}_security_api_alarm"
-    namespace = "lambda_errors"
-    value = "1"
-  }
-  name = "${var.boost_scheduled_lambda_function_name}_security_api_alarm"
-  pattern = "SECURITY_ERROR"
-}
-
-resource "aws_cloudwatch_metric_alarm" "security_metric_alarm_boost_scheduled" {
-  alarm_name = "${var.boost_scheduled_lambda_function_name}_security_api_alarm"
-  comparison_operator = "GreaterThanThreshold"
-  evaluation_periods = 1
-  metric_name = aws_cloudwatch_log_metric_filter.security_metric_filter_boost_scheduled.name
-  namespace = "lambda_errors"
-  period = 60
-  threshold = 0
-  statistic = "Sum"
-  alarm_actions = [aws_sns_topic.security_errors_topic.arn]
 }

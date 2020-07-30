@@ -23,8 +23,8 @@ resource "aws_cloudwatch_event_rule" "ops_admin_daytime" {
 }
 
 # This is for dynamic and ML boosts which run at ~10am
-resource "aws_cloudwatch_event_rule" "daily_boost_triggers" {
+resource "aws_cloudwatch_event_rule" "daily_boost_jobs" {
     name = "ops_boost_daily"
     description = "Fires once a day in the morning, to do dynamic-ML-etc boost offers"
-    schedule_expression = "cron(0 8 * * ? *)"
+    schedule_expression = "cron(0 7 * * ? *)"
 }
