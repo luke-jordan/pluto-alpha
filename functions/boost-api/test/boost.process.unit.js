@@ -30,6 +30,7 @@ const findPooledAccountsStub = sinon.stub();
 const momentStub = sinon.stub();
 
 const publishStub = sinon.stub();
+const publishMultiStub = sinon.stub();
 
 const proxyquire = require('proxyquire').noCallThru();
 
@@ -52,7 +53,8 @@ const handler = proxyquire('../boost-event-handler', {
         'redeemOrRevokeBoosts': redemptionHandlerStub
     },
     'publish-common': {
-        'publishUserEvent': publishStub
+        'publishUserEvent': publishStub,
+        'publishMultiUserEvent': publishMultiStub
     },
     'moment': momentStub,
     '@noCallThru': true
@@ -343,6 +345,7 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
         expect(getAccountIdForUserStub).to.have.been.calledOnceWithExactly(testUserId);
         
         expect(findBoostStub).to.have.been.calledOnceWithExactly(expectedKey);
+        
         expect(updateBoostAccountStub).to.have.been.calledOnceWithExactly([{
             boostId: testBoostId,
             accountIds: [testAccountId],
@@ -352,6 +355,12 @@ describe('*** UNIT TEST BOOSTS *** General audience', () => {
             logContext: { boostAmount: boostCreatedByEvent.boostAmount, newStatus: 'UNLOCKED', oldStatus: 'CREATED' }
         }]);
 
+        expect(publishStub).to.have.been.calledOnce; // for created
+        expect(publishStub).to.have.been.calledWith(testUserId, 'BOOST_CREATED_SIMPLE');
+        
+        expect(publishMultiStub).to.have.been.calledTwice; // because multiple users may be triggered
+        expect(publishMultiStub).to.have.been.calledWith([testUserId], 'BOOST_OFFERED_SIMPLE');
+        expect(publishMultiStub).to.have.been.calledWith([testUserId], 'BOOST_UNLOCKED_SIMPLE');
     });
 
     it('Does not create boost where it is the wrong event (even if other conditions pass)', async () => {

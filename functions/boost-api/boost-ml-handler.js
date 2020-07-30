@@ -26,9 +26,8 @@ const assembleListOfMsgInstructions = ({ userIds, instructionIds, parameters }) 
     reduce((assembledInstructions, instruction) => [...assembledInstructions, ...instruction]);
 
 const triggerMsgInstructions = async (boostsAndRecipients) => {
-    logger('Assembling instructions from:', boostsAndRecipients);
     const instructions = boostsAndRecipients.map((boostDetails) => assembleListOfMsgInstructions(boostDetails))[0];
-    logger('Assembled instructions:', instructions);
+    logger(`Assembled ${instructions.length} instructions, first one: `, instructions[0]);
     return invokeLambda({ instructions }, 'messageSend');
 };
 
@@ -112,12 +111,21 @@ const selectUsersForBoostOffering = async (boost) => {
     const accountUserIdMap = await persistence.findUserIdsForAccounts(filteredAccountIds, true);
     logger('Got user ids for accounts:', accountUserIdMap);
     
-    const userIdsForOffering = await obtainUsersForOffering(boost, Object.values(accountUserIdMap));
-    if (userIdsForOffering.length === 0) {
+    const userIdsFromMl = await obtainUsersForOffering(boost, Object.values(accountUserIdMap));
+    if (userIdsFromMl.length === 0) {
         return { message: `No users selected for boost: ${boostId}` };
     }
     
+    let maxNumberToOffer = userIdsFromMl.length;
+    if (mlParameters.maxUsersPerOfferRun) {
+        const { basis, value } = mlParameters.maxUsersPerOfferRun;
+        maxNumberToOffer = basis === 'PROPORTION' ? Math.floor(value * audienceAccountIds.length) : value;
+        logger('Restricting offer to only', maxNumberToOffer, 'users');
+    }
+
+    const userIdsForOffering = userIdsFromMl.slice(0, maxNumberToOffer);
     const accountIdsForOffering = filteredAccountIds.filter((accountId) => userIdsForOffering.includes(accountUserIdMap[accountId]));
+    
     // not the most pleasant on the eye but just ensuring some robustness to malformed boosts getting in
     const defaultUntilExpiry = config.get('time.offerToExpiryDefault');
     const timeUntilExpiry = expiryParameters ? (expiryParameters.timeUntilExpiry || defaultUntilExpiry) : defaultUntilExpiry;
@@ -191,7 +199,8 @@ module.exports.processMlBoosts = async (event) => {
 
         await Promise.all(publishPromises);
 
-        return { result: 'SUCCESS' };
+        const offersMade = resultOfSelection.reduce((sum, selection) => sum + selection.accountIds.length, 0);
+        return { result: 'SUCCESS', boostsProcessed: mlBoosts.length, offersMade };
     } catch (err) {
         logger('FATAL_ERROR:', err);
         return { result: 'FAILURE' };
