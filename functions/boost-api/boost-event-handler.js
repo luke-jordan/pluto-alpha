@@ -50,7 +50,7 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
         if (restrictToInitiator) {
             findAccountsParams.accountIds = [initiatingAccountId];
         }
-        logger('Assembled params: ', findAccountsParams);
+        logger('Assembled parameters for finding accounts: ', findAccountsParams);
         try {
             return persistence.findAccountsForBoost(findAccountsParams);
         } catch (err) {
@@ -60,7 +60,7 @@ const extractPendingAccountsAndUserIds = async (initiatingAccountId, boosts) => 
     });
 
     const affectedAccountArray = await Promise.all(selectPromises);
-    logger('Affected accounts: ', affectedAccountArray);
+    logger('Affected accounts: ', JSON.stringify(affectedAccountArray));
     return affectedAccountArray.map((result) => result[0]).
         reduce((obj, item) => ({ ...obj, [item.boostId]: item.accountUserMap }), {});
 };
@@ -126,7 +126,7 @@ const safeExtractWholeCurrencyAmount = (savedAmount) => {
 };
 
 const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affectedAccountsUsersDict, logContextBase = {}) => {
-    logger('Generating update instructions, with affected accounts map: ', affectedAccountsUsersDict);
+    logger('Generating update instructions, with boost status to change: ', JSON.stringify(boostStatusChangeDict));
     return alteredBoosts.map((boost) => {
         const boostId = boost.boostId;
         const boostStatusSorted = boostStatusChangeDict[boostId].sort(util.statusSorter);
@@ -169,6 +169,7 @@ const generateUpdateInstructions = (alteredBoosts, boostStatusChangeDict, affect
     });
 };
 
+// used in friend pools
 const checkAndMarkSaveForPool = async (boostsForStatusChange, event) => {
     const boostsWithPooledReward = boostsForStatusChange.filter((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'POOLED');
     const { transactionTags } = event.eventContext;
@@ -184,6 +185,25 @@ const checkAndMarkSaveForPool = async (boostsForStatusChange, event) => {
             logger('Result of log insertion: ', resultOfLogInsertion);    
         }
     }
+};
+
+// some publishing methods
+
+const publishStatusTriggered = (status, boost, userIds) => 
+    publisher.publishMultiUserEvent(userIds, `BOOST_${status}_${boost.boostType}`, { context: util.constructBoostContext(boost) });
+
+const publishStatusLogs = async (offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict) => {
+    const boostIds = Object.keys(boostStatusChangeDict);
+    const publishPromises = boostIds.filter((boostId) => Array.isArray(boostStatusChangeDict[boostId])).map((boostId) => {
+        const relevantBoost = offeredOrPendingBoosts.find((boost) => boost.boostId === boostId);
+        // expiry, redemption, etc., taken care of in their dedicated handlers (though may adjust that)
+        const activeStatussesTriggered = boostStatusChangeDict[boostId].filter((status) => util.ACTIVE_BOOST_STATUS.includes(status));
+        const userIds = Object.values(affectedAccountsDict[boostId]).map(({ userId }) => userId);
+        return activeStatussesTriggered.map((status) => publishStatusTriggered(status, relevantBoost, userIds));
+    }).reduce((allList, thisList) => [...allList, ...thisList], []);
+    logger('Assembled status log publication promises, about to trigger');
+    await Promise.all(publishPromises);
+    logger('Completed dispatching status log events');
 };
 
 const publishWithdrawalLog = async (boost, newStatus, accountMap) => {
@@ -299,7 +319,7 @@ const processEventForExistingBoosts = async (event) => {
             redemptionCall.pooledContributionMap = await fetchAccountIdsForPooledRewards(boostsToRedeem);
         }
 
-        logger('REDEMPTION CALL: ', redemptionCall);
+        logger('Sending to redemption: ', JSON.stringify(redemptionCall));
         resultOfTransfers = await boostRedemptionHandler.redeemOrRevokeBoosts(redemptionCall);
         logContextBase.transferResults = resultOfTransfers;
     }
@@ -322,6 +342,9 @@ const processEventForExistingBoosts = async (event) => {
     if (withdrawalRelatedBoosts.length > 0) {
         await Promise.all(withdrawalRelatedBoosts.map((boost) => publishWithdrawalLog(boost, boostStatusChangeDict[boost.boostId][0], affectedAccountsDict[boost.boostId])));
     }
+
+    logger('Completed processing, publish status changes made');
+    await publishStatusLogs(offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict);
 
     return {
         result: 'SUCCESS',

@@ -301,7 +301,7 @@ const processBoostUpdateInstruction = async ({ boostId, accountIds, newStatus, e
     let resultOfOperations = [];
     try {
         resultOfOperations = await rdsConnection.multiTableUpdateAndInsert(updateDefinitions, logInsertDefinitions);
-        logger('Result from RDS: ', resultOfOperations);
+        // logger('Result from RDS: ', resultOfOperations);
     } catch (error) {
         logger(`Error updating boost ${boostId}: ${error.message}`);
         return { boostId, error: error.message };
@@ -333,7 +333,7 @@ module.exports.updateBoostAccountStatus = async (instructions) => {
 
 module.exports.insertBoostAccountLogs = async (boostLogs) => {
     const queryDef = constructLogDefinition(['boostId', 'accountId', 'logType', 'logContext'], boostLogs);
-    logger('Inserting boost log using: ', queryDef);
+    logger('Inserting boost log using: ', JSON.stringify(queryDef));
     const resultOfQuery = await rdsConnection.insertRecords(queryDef.query, queryDef.columnTemplate, queryDef.rows);
     // logger('And with this result: ', resultOfQuery);
     if (!resultOfQuery || !resultOfQuery.rows) {

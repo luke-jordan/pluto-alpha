@@ -363,8 +363,9 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         expect(publishEventStub).to.have.been.calledOnce;
         expect(publishEventStub).to.have.been.calledWith(mockUserId, 'BOOST_CREATED_WITHDRAWAL');
 
-        expect(publishMultiStub).to.have.been.calledOnce;
-        expect(publishMultiStub).to.have.been.calledWith([mockUserId], 'WITHDRAWAL_BOOST_OFFERED');
+        expect(publishMultiStub).to.have.been.calledTwice;
+        expect(publishMultiStub).to.have.been.calledWith([mockUserId], 'WITHDRAWAL_BOOST_OFFERED'); // see note below
+        expect(publishMultiStub).to.have.been.calledWith([mockUserId], 'BOOST_OFFERED_WITHDRAWAL');
         expect(lambdaInvokeStub).to.not.have.been.called;
     });
 
@@ -415,7 +416,11 @@ describe('UNIT TEST WITHDRAWAL BOOST', () => {
         const expectedLogContext = { boostAmount: testPersistedBoost.boostAmount, oldStatus: 'OFFERED', newStatus: 'PENDING' };
         expect(updateBoostStatusStub).to.have.been.calledOnceWithExactly(expectedStatusUpdate('PENDING', 'account-1', expectedLogContext));
 
-        expect(publishMultiStub).to.have.been.calledOnceWith([mockUserId], 'WITHDRAWAL_BOOST_PENDING');
+        // this is a little redundant but they serve different purposes, one is generic so format like the rest, the other is for
+        // specific actions specific to withdrawal boosts
+        expect(publishMultiStub).to.have.been.calledTwice;
+        expect(publishMultiStub).to.have.been.calledWith([mockUserId], 'WITHDRAWAL_BOOST_PENDING');
+        expect(publishMultiStub).to.have.been.calledWith([mockUserId], 'BOOST_PENDING_WITHDRAWAL');
 
         helper.expectNoCalls(lambdaInvokeStub, redeemBoostStub, updateBoostRedeemedStub);
     });
