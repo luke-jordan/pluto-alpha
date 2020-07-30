@@ -354,8 +354,11 @@ const processEventForExistingBoosts = async (event) => {
         await Promise.all(withdrawalRelatedBoosts.map((boost) => publishWithdrawalLog(boost, boostStatusChangeDict[boost.boostId][0], affectedAccountsDict[boost.boostId])));
     }
 
-    logger('Completed processing, publish status changes made');
-    await publishStatusLogs(offeredOrPendingBoosts, boostStatusChangeDict, affectedAccountsDict);
+    const nonRedemptionBoosts = boostsForStatusChange.filter((boost) => !boostStatusChangeDict[boost.boostId].includes('REDEEMED'));
+    if (nonRedemptionBoosts.length > 0) {
+        logger('Completed processing, publish status changes made');
+        await publishStatusLogs(nonRedemptionBoosts, boostStatusChangeDict, affectedAccountsDict);    
+    }
 
     return {
         result: 'SUCCESS',
