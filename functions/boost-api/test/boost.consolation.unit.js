@@ -39,10 +39,31 @@ const handler = proxyquire('../boost-redemption-handler', {
 
 describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
     const testBoostId = uuid();
+    
     const testFloatId = 'some-float';
     const testBonusPoolId = 'some-pool';
+    
     const testBoostAmount = 10000;
     const testConsolationAmount = 100;
+
+    const createAllocationPayload = (recipients) => ({ instructions: [{
+        identifier: testBoostId,
+        floatId: testFloatId,
+        fromId: testBonusPoolId,
+        fromType: 'BONUS_POOL',
+        transactionType: 'BOOST_REDEMPTION',
+        relatedEntityType: 'BOOST_REDEMPTION',
+        currency: 'USD',
+        unit: 'HUNDREDTH_CENT',
+        settlementStatus: 'SETTLED',
+        allocType: 'BOOST_REDEMPTION',
+        allocState: 'SETTLED',
+        recipients,
+        referenceAmounts: {
+            boostAmount: recipients[0].amount,
+            amountFromBonus: testBoostAmount
+        } 
+    }]});
 
     beforeEach(() => {
         helper.resetStubs(lamdbaInvokeStub, publishMultiStub, publishStub, momentStub);
@@ -55,25 +76,6 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             consolationAwards: { basis: 'ALL' }
         };
-
-        const createAllocationPayload = (recipients) => ({ instructions: [{
-            identifier: testBoostId,
-            floatId: testFloatId,
-            fromId: testBonusPoolId,
-            fromType: 'BONUS_POOL',
-            transactionType: 'BOOST_REDEMPTION',
-            relatedEntityType: 'BOOST_REDEMPTION',
-            currency: 'USD',
-            unit: 'HUNDREDTH_CENT',
-            settlementStatus: 'SETTLED',
-            allocType: 'BOOST_REDEMPTION',
-            allocState: 'SETTLED',
-            recipients,
-            referenceAmounts: {
-                boostAmount: recipients[0].amount,
-                amountFromBonus: testBoostAmount
-            } 
-        }]});
 
         const boostRecipients = [
             { recipientId: 'account-id-1', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
@@ -161,25 +163,6 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             consolationAwards: { basis: 'ABSOLUTE', recipients: 2 }
         };
 
-        const createAllocationPayload = (recipients) => ({ instructions: [{
-            identifier: testBoostId,
-            floatId: testFloatId,
-            fromId: testBonusPoolId,
-            fromType: 'BONUS_POOL',
-            transactionType: 'BOOST_REDEMPTION',
-            relatedEntityType: 'BOOST_REDEMPTION',
-            currency: 'USD',
-            unit: 'HUNDREDTH_CENT',
-            settlementStatus: 'SETTLED',
-            allocType: 'BOOST_REDEMPTION',
-            allocState: 'SETTLED',
-            recipients,
-            referenceAmounts: {
-                boostAmount: recipients[0].amount,
-                amountFromBonus: testBoostAmount
-            } 
-        }]});
-
         const boostRecipients = [
             { recipientId: 'account-id-3', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
         ];
@@ -261,25 +244,6 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             consolationAwards: { basis: 'PROPORTION', recipients: 0.25 }
         };
-
-        const createAllocationPayload = (recipients) => ({ instructions: [{
-            identifier: testBoostId,
-            floatId: testFloatId,
-            fromId: testBonusPoolId,
-            fromType: 'BONUS_POOL',
-            transactionType: 'BOOST_REDEMPTION',
-            relatedEntityType: 'BOOST_REDEMPTION',
-            currency: 'USD',
-            unit: 'HUNDREDTH_CENT',
-            settlementStatus: 'SETTLED',
-            allocType: 'BOOST_REDEMPTION',
-            allocState: 'SETTLED',
-            recipients,
-            referenceAmounts: {
-                boostAmount: recipients[0].amount,
-                amountFromBonus: testBoostAmount
-            } 
-        }]});
 
         const boostRecipients = [
             { recipientId: 'account-id-4', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }

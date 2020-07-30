@@ -346,7 +346,7 @@ const fetchConsolationDetails = (boost, affectedAccountDict) => {
     const accountIds = Object.keys(accountUserMap);
     const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].status !== 'REDEEMED');
     const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
-    logger('Got consolation amount:', boostAmount, 'and possible recipients:', recipientAccounts);
+    logger('Got consolation amount: ', boostAmount, 'and possible recipients: ', recipientAccounts);
 
     const consolationDetails = {
         referenceAmounts: { boostAmount, amountFromBonus: boost.boostAmount }
@@ -365,7 +365,7 @@ const fetchConsolationDetails = (boost, affectedAccountDict) => {
         consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
     }
 
-    logger('Got consolation details:', consolationDetails);
+    logger('Got consolation details: ', consolationDetails);
     return consolationDetails;
 };
 
@@ -447,9 +447,9 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
 
     if (boostConsolations.length > 0) {
         const consolationInstructions = await Promise.all(boostConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict)));
-        logger('***** Consolation instructions:', consolationInstructions);
+        logger('***** Consolation instructions: ', consolationInstructions);
         const resultOfConsolations = await triggerFloatTransfers(consolationInstructions);
-        logger('Result of consolations:', resultOfConsolations);
+        logger('Result of consolations: ', resultOfConsolations);
     }
 
     // then: construct & send redemption messages
