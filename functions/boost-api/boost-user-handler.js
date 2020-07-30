@@ -155,3 +155,20 @@ module.exports.processUserBoostResponse = async (event) => {
         return { statusCode: statusCodes('Internal Server Error'), body: JSON.stringify(err.message) };
     }
 };
+
+module.exports.cacheGameResponse = async () => {
+    try {
+        // log partial results and time recieved
+
+        // wrap up logic, on game end or game timeout
+
+        // min time interval between partial responses
+
+        // award via consolation, subject to cap (e.g., 10c/match, max R5)
+
+        // see issue note on game awards 
+    } catch (err) {
+        logger('FATAL_ERROR:', err);
+        return { statusCode: 500, body: JSON.stringify(err.message) };
+    }
+};

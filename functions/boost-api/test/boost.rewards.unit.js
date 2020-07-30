@@ -108,7 +108,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, status: 'REDEEMED' }
             }
         };
 
@@ -221,7 +221,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, status: 'REDEEMED' }
             }
         };
 

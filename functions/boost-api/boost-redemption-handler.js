@@ -72,35 +72,6 @@ const calculateRandomBoostAmount = (boost) => {
     return opsUtil.convertToUnit(calculatedBoostAmount, DEFAULT_UNIT, boost.boostUnit);
 };
 
-const fetchConsolationDetails = (boost, affectedAccountDict) => {
-    logger('Calculating consolation amount and recipeints');
-    const { consolationAmount, consolationAwards } = boost.rewardParameters;
-
-    const recipientAccounts = Object.keys(affectedAccountDict[boost.boostId]);
-    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
-    logger('Got consolation amount:', boostAmount, 'and recipients:', recipientAccounts);
-
-    const consolationDetails = {
-        referenceAmounts: { boostAmount, amountFromBonus: boost.boostAmount }
-    };
-    
-    if (consolationAwards.basis === 'ALL') {
-        consolationDetails.recipientAccounts = recipientAccounts;
-    }
-
-    if (consolationAwards.basis === 'ABSOLUTE') {
-        consolationDetails.recipientAccounts = recipientAccounts.slice(0, consolationAwards.recipients);
-    }
-
-    if (consolationAwards.basis === 'PROPORTION') {
-        const numberOfRecipients = Math.round(recipientAccounts.length * consolationAwards.recipients);
-        consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
-    }
-
-    logger('Got consolation details:', consolationDetails);
-    return consolationDetails;
-};
-
 const triggerFloatTransfers = async (transferInstructions) => {
     const lambdaInvocation = {
         FunctionName: config.get('lambdas.floatTransfer'),
@@ -215,12 +186,12 @@ const generateFloatTransferInstructions = async (affectedAccountDict, boost, rev
         logger('Result of initial transfer to bonus pool:', resultOfInitialTransfer);
     }
 
-    const isConsolation = boost.rewardParameters && boost.rewardParameters.rewardType === 'CONSOLATION';
-    const consolationDetails = isConsolation ? fetchConsolationDetails(boost, affectedAccountDict) : {};
+    const accountUserMap = affectedAccountDict[boost.boostId];
+    const accountIds = Object.keys(accountUserMap);
 
-    const recipientAccounts = isConsolation ? consolationDetails.recipientAccounts : Object.keys(affectedAccountDict[boost.boostId]);
-    const referenceAmounts = isConsolation ? consolationDetails.referenceAmounts : exports.calculateBoostAmount(boost, pooledContributionMap);
+    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].status === 'REDEEMED');
 
+    const referenceAmounts = exports.calculateBoostAmount(boost, pooledContributionMap);
     const { boostAmount } = referenceAmounts;
     logger('Calculated amounts for boost: ', boostAmount);
     
@@ -367,6 +338,66 @@ const createPublishEventPromises = (parameters) => {
     return publishPromises;
 };
 
+const fetchConsolationDetails = (boost, affectedAccountDict) => {
+    logger('Calculating consolation amount and recipeints');
+    const { consolationAmount, consolationAwards } = boost.rewardParameters;
+
+    const accountUserMap = affectedAccountDict[boost.boostId];
+    const accountIds = Object.keys(accountUserMap);
+    const recipientAccounts = accountIds.filter((accountId) => accountUserMap[accountId].status !== 'REDEEMED');
+    const boostAmount = opsUtil.convertToUnit(consolationAmount.amount, consolationAmount.unit, boost.boostUnit);
+    logger('Got consolation amount:', boostAmount, 'and possible recipients:', recipientAccounts);
+
+    const consolationDetails = {
+        referenceAmounts: { boostAmount, amountFromBonus: boost.boostAmount }
+    };
+    
+    if (consolationAwards.basis === 'ALL') {
+        consolationDetails.recipientAccounts = recipientAccounts;
+    }
+
+    if (consolationAwards.basis === 'ABSOLUTE') {
+        consolationDetails.recipientAccounts = recipientAccounts.slice(0, consolationAwards.recipients);
+    }
+
+    if (consolationAwards.basis === 'PROPORTION') {
+        const numberOfRecipients = Math.round(recipientAccounts.length * consolationAwards.recipients);
+        consolationDetails.recipientAccounts = recipientAccounts.slice(0, numberOfRecipients);
+    }
+
+    logger('Got consolation details:', consolationDetails);
+    return consolationDetails;
+};
+
+const generateConsolationInstructions = async (boost, affectedAccountDict) => {
+    const consolationDetails = fetchConsolationDetails(boost, affectedAccountDict);
+
+    const { recipientAccounts, referenceAmounts } = consolationDetails;
+
+    const { boostAmount } = referenceAmounts;
+
+    const recipients = recipientAccounts.map((recipientId) => ({ 
+        recipientId, amount: boostAmount, recipientType: 'END_USER_ACCOUNT'
+    }));
+
+    return {
+        floatId: boost.fromFloatId,
+        clientId: boost.forClientId,
+        fromId: boost.fromBonusPoolId,
+        fromType: 'BONUS_POOL',
+        currency: boost.boostCurrency,
+        unit: boost.boostUnit,
+        identifier: boost.boostId,
+        relatedEntityType: 'BOOST_REDEMPTION',
+        allocType: 'BOOST_REDEMPTION',
+        allocState: 'SETTLED',
+        transactionType: 'BOOST_REDEMPTION',
+        settlementStatus: 'SETTLED',
+        referenceAmounts,
+        recipients
+    };
+};
+
 /** Used also in expiry handler to set the boost amount once this is done, so exporting */
 module.exports.calculateBoostAmount = (boost, pooledContributionMap) => {
     const rewardType = boost.rewardParameters ? boost.rewardParameters.rewardType : 'STANDARD';
@@ -411,6 +442,15 @@ module.exports.redeemOrRevokeBoosts = async ({ redemptionBoosts, revocationBoost
     const transferInstructions = redeemInstructions.concat(revokeInstructions);
     const resultOfTransfers = await (transferInstructions.length === 0 ? {} : triggerFloatTransfers(transferInstructions));
     logger('Result of transfers: ', resultOfTransfers);
+
+    const boostConsolations = boostsToRedeem.filter((boost) => boost.rewardParameters && boost.rewardParameters.rewardType === 'CONSOLATION');
+
+    if (boostConsolations.length > 0) {
+        const consolationInstructions = await Promise.all(boostConsolations.map((boost) => generateConsolationInstructions(boost, affectedAccountsDict)));
+        logger('***** Consolation instructions:', consolationInstructions);
+        const resultOfConsolations = await triggerFloatTransfers(consolationInstructions);
+        logger('Result of consolations:', resultOfConsolations);
+    }
 
     // then: construct & send redemption messages
     const messageInstructionsNested = boostsToRedeem.map((boost) => assembleMessageInstructions(boost, affectedAccountsDict[boost.boostId]));

@@ -97,7 +97,7 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testAccountId]: { userId: testUserId, status: 'OFFERED' }
+                [testAccountId]: { userId: testUserId, status: 'REDEEMED' }
             }
         };
 
@@ -239,8 +239,8 @@ describe('*** UNIT TEST BOOST REDEMPTION OPERATIONS', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                [testReferredAccountId]: { userId: testReferredUserId, status: 'PENDING' },
-                [testReferringAccountId]: { userId: testReferringUserId, status: 'PENDING' }
+                [testReferredAccountId]: { userId: testReferredUserId, status: 'REDEEMED' },
+                [testReferringAccountId]: { userId: testReferringUserId, status: 'REDEEMED' }
             }
         };
 

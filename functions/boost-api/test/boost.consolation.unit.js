@@ -49,14 +49,14 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         momentStub.returns(moment());
     });
 
-    it('Awards consolation prize to all participating users', async () => {
+    it('Awards consolation prize to all participating users who did not win', async () => {
         const rewardParameters = {
             rewardType: 'CONSOLATION',
             consolationAmount: { amount: 100, unit: 'HUNDREDTH_CENT', currency: 'USD' },
             consolationAwards: { basis: 'ALL' }
         };
 
-        const allocationPayload = { instructions: [{
+        const createAllocationPayload = (recipients) => ({ instructions: [{
             identifier: testBoostId,
             floatId: testFloatId,
             fromId: testBonusPoolId,
@@ -68,26 +68,45 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             settlementStatus: 'SETTLED',
             allocType: 'BOOST_REDEMPTION',
             allocState: 'SETTLED',
-            recipients: [
-                { recipientId: 'account-id-1', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
-                { recipientId: 'account-id-2', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
-                { recipientId: 'account-id-3', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
-                { recipientId: 'account-id-4', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
-            ],
-            referenceAmounts: { boostAmount: testConsolationAmount, amountFromBonus: testBoostAmount } 
-        }]};
+            recipients,
+            referenceAmounts: {
+                boostAmount: recipients[0].amount,
+                amountFromBonus: testBoostAmount
+            } 
+        }]});
 
-        const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, allocationPayload);
+        const boostRecipients = [
+            { recipientId: 'account-id-1', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
+        ];
 
-        const mockAllocationResult = {
+        const consolationRecipients = [
+            { recipientId: 'account-id-2', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
+            { recipientId: 'account-id-3', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
+            { recipientId: 'account-id-4', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
+        ];
+
+        const expectedBoostAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(boostRecipients));
+        const expectedConsolationAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(consolationRecipients));
+
+        const mockBoostAllocationResult = {
             [testBoostId]: {
                 result: 'SUCCESS',
-                floatTxIds: [uuid(), uuid(), uuid(), uuid()],
-                accountTxIds: [uuid(), uuid(), uuid(), uuid()]
+                floatTxIds: [uuid()],
+                accountTxIds: [uuid()]
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult) });
+        const mockConsolationAllocResult = {
+            [testBoostId]: {
+                result: 'SUCCESS',
+                floatTxIds: [uuid(), uuid(), uuid()],
+                accountTxIds: [uuid(), uuid(), uuid()]
+            }
+        };
+
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockBoostAllocationResult)});
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
+
         publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
@@ -102,7 +121,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
 
         const mockAccountMap = {
             [testBoostId]: {
-                'account-id-1': { userId: 'user-id-1', status: 'OFFERED' },
+                'account-id-1': { userId: 'user-id-1', status: 'REDEEMED' },
                 'account-id-2': { userId: 'user-id-2', status: 'OFFERED' },
                 'account-id-3': { userId: 'user-id-3', status: 'OFFERED' },
                 'account-id-4': { userId: 'user-id-4', status: 'OFFERED' }
@@ -120,14 +139,18 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
 
         const expectedResult = {
             [testBoostId]: {
-                ...mockAllocationResult[testBoostId], 
-                boostAmount: testConsolationAmount, 
+                ...mockBoostAllocationResult[testBoostId], 
+                boostAmount: testBoostAmount, 
                 amountFromBonus: testBoostAmount
             }
         };
 
         expect(resultOfConsolation).to.deep.equal(expectedResult);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+
         expect(publishStub.callCount).to.equal(4);
     });
 
@@ -138,7 +161,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             consolationAwards: { basis: 'ABSOLUTE', recipients: 2 }
         };
 
-        const allocationPayload = { instructions: [{
+        const createAllocationPayload = (recipients) => ({ instructions: [{
             identifier: testBoostId,
             floatId: testFloatId,
             fromId: testBonusPoolId,
@@ -150,16 +173,34 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             settlementStatus: 'SETTLED',
             allocType: 'BOOST_REDEMPTION',
             allocState: 'SETTLED',
-            recipients: [
-                { recipientId: 'account-id-1', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
-                { recipientId: 'account-id-2', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
-            ],
-            referenceAmounts: { boostAmount: testConsolationAmount, amountFromBonus: testBoostAmount } 
-        }]};
+            recipients,
+            referenceAmounts: {
+                boostAmount: recipients[0].amount,
+                amountFromBonus: testBoostAmount
+            } 
+        }]});
 
-        const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, allocationPayload);
+        const boostRecipients = [
+            { recipientId: 'account-id-3', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
+        ];
 
-        const mockAllocationResult = {
+        const consolationRecipients = [
+            { recipientId: 'account-id-1', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' },
+            { recipientId: 'account-id-2', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
+        ];
+
+        const expectedBoostAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(boostRecipients));
+        const expectedConsolationAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(consolationRecipients));
+
+        const mockBoostAllocationResult = {
+            [testBoostId]: {
+                result: 'SUCCESS',
+                floatTxIds: [uuid()],
+                accountTxIds: [uuid()]
+            }
+        };
+
+        const mockConsolationAllocResult = {
             [testBoostId]: {
                 result: 'SUCCESS',
                 floatTxIds: [uuid(), uuid()],
@@ -167,7 +208,8 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             }
         };
 
-        lamdbaInvokeStub.returns({ promise: () => helper.mockLambdaResponse(mockAllocationResult)});
+        lamdbaInvokeStub.onFirstCall().returns({ promise: () => helper.mockLambdaResponse(mockBoostAllocationResult)});
+        lamdbaInvokeStub.onSecondCall().returns({ promise: () => helper.mockLambdaResponse(mockConsolationAllocResult) });
         publishStub.resolves({ result: 'SUCCESS' });
 
         const mockBoost = {
@@ -184,7 +226,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             [testBoostId]: {
                 'account-id-1': { userId: 'user-id-1', status: 'OFFERED' },
                 'account-id-2': { userId: 'user-id-2', status: 'OFFERED' },
-                'account-id-3': { userId: 'user-id-3', status: 'OFFERED' },
+                'account-id-3': { userId: 'user-id-3', status: 'REDEEMED' },
                 'account-id-4': { userId: 'user-id-4', status: 'OFFERED' }
             }
         };
@@ -200,14 +242,16 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
 
         const expectedResult = {
             [testBoostId]: {
-                ...mockAllocationResult[testBoostId], 
-                boostAmount: testConsolationAmount, 
+                ...mockBoostAllocationResult[testBoostId], 
+                boostAmount: testBoostAmount, 
                 amountFromBonus: testBoostAmount
             }
         };
 
         expect(resultOfConsolation).to.deep.equal(expectedResult);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
         expect(publishStub.callCount).to.equal(4);
     });
 
@@ -218,7 +262,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             consolationAwards: { basis: 'PROPORTION', recipients: 0.25 }
         };
 
-        const allocationPayload = { instructions: [{
+        const createAllocationPayload = (recipients) => ({ instructions: [{
             identifier: testBoostId,
             floatId: testFloatId,
             fromId: testBonusPoolId,
@@ -230,13 +274,23 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
             settlementStatus: 'SETTLED',
             allocType: 'BOOST_REDEMPTION',
             allocState: 'SETTLED',
-            recipients: [
-                { recipientId: 'account-id-1', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
-            ],
-            referenceAmounts: { boostAmount: testConsolationAmount, amountFromBonus: testBoostAmount } 
-        }]};
+            recipients,
+            referenceAmounts: {
+                boostAmount: recipients[0].amount,
+                amountFromBonus: testBoostAmount
+            } 
+        }]});
 
-        const expectedAllocationInvocation = helper.wrapLambdaInvoc('float_transfer', false, allocationPayload);
+        const boostRecipients = [
+            { recipientId: 'account-id-4', amount: testBoostAmount, recipientType: 'END_USER_ACCOUNT' }
+        ];
+
+        const consolationRecipients = [
+            { recipientId: 'account-id-1', amount: testConsolationAmount, recipientType: 'END_USER_ACCOUNT' }
+        ];
+
+        const expectedBoostAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(boostRecipients));
+        const expectedConsolationAllocInvocation = helper.wrapLambdaInvoc('float_transfer', false, createAllocationPayload(consolationRecipients));
 
         const mockAllocationResult = {
             [testBoostId]: {
@@ -265,7 +319,7 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
                 'account-id-1': { userId: 'user-id-1', status: 'OFFERED' },
                 'account-id-2': { userId: 'user-id-2', status: 'OFFERED' },
                 'account-id-3': { userId: 'user-id-3', status: 'OFFERED' },
-                'account-id-4': { userId: 'user-id-4', status: 'OFFERED' }
+                'account-id-4': { userId: 'user-id-4', status: 'REDEEMED' }
             }
         };
 
@@ -281,13 +335,16 @@ describe('*** UNIT TEST BOOST CONSOLATION ***', () => {
         const expectedResult = {
             [testBoostId]: {
                 ...mockAllocationResult[testBoostId], 
-                boostAmount: testConsolationAmount, 
+                boostAmount: testBoostAmount, 
                 amountFromBonus: testBoostAmount
             }
         };
-
         expect(resultOfConsolation).to.deep.equal(expectedResult);
-        expect(lamdbaInvokeStub).to.have.been.calledOnceWithExactly(expectedAllocationInvocation);
+
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedBoostAllocInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledWithExactly(expectedConsolationAllocInvocation);
+        expect(lamdbaInvokeStub).to.have.been.calledTwice;
+
         expect(publishStub.callCount).to.equal(4);
     });
 
